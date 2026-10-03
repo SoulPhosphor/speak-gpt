@@ -73,6 +73,10 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.assistant.ui.activities.SystemPromptsListActivity
 import org.teslasoft.assistant.ui.widgets.AppDropdown
+import org.teslasoft.assistant.ui.activities.SummarizerPromptsActivity
+import org.teslasoft.assistant.preferences.dto.CompanionPromptVariant
+import org.teslasoft.assistant.util.summarizer.SummarizerPromptSession
+import org.teslasoft.assistant.util.summarizer.SummarizerPromptSets
 import org.teslasoft.assistant.ui.widgets.SamplingParameterControl
 import org.teslasoft.assistant.ui.widgets.SamplingParameterSpec
 
@@ -131,7 +135,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var fieldSeed: TextInputEditText? = null
     private var btnSaveToProfile: MaterialButton? = null
     private var switchChatMemory: MaterialSwitch? = null
-    private var rowChatMemory: View? = null
     private var switchChatExcluded: MaterialSwitch? = null
     // Per-chat lore books on/off, independent of the memory switch. QUICK
     // SETTINGS IS AUTHORITATIVE (owner ruling, July 10 2026): these two
@@ -163,6 +166,17 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var switchUseSummarizer: MaterialSwitch? = null
     private var fieldSummarizerWindow: TextInputEditText? = null
     private var suppressSummarizerWindowWatcher = false
+
+    // Summary / Compaction / Image prompt rows (owner ruling, Oct 3 2026): the
+    // prompt each one shows is this chat screen's choice, held in memory by
+    // SummarizerPromptSession and reset whenever a chat screen opens.
+    private class SummarizerPromptRow(
+        val kind: SummarizerPromptSets.Kind,
+        val row: View,
+        val value: TextView,
+        val gear: View
+    )
+    private var summarizerPromptRows: List<SummarizerPromptRow> = emptyList()
 
     private var textModel: TextView? = null
     private var textHost: TextView? = null
@@ -455,6 +469,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     // and the Glamour list reloaded - cheaply, from prefs, plus one off-main
     // store read for glamours. Selection itself is done by the dropdowns, not
     // here, so this never changes what's chosen.
+    // Returning from Summarizer Prompts: prompts may have been added, renamed,
+    // or deleted, so each row re-resolves the prompt it shows.
+    private val summarizerPromptsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (!isAdded) return@registerForActivityResult
+        refreshSummarizerPromptRows()
+    }
+
     private val managerRefreshLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (!isAdded) return@registerForActivityResult
         updatePersonaLabel(preferences?.getPersonaId() ?: "")
@@ -1027,7 +1048,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // Archive pause. The durable bookmark hides a paused chat without
         // consuming its already-queued or subsequently captured turns.
         switchChatMemory = view.findViewById(R.id.switch_chat_memory)
-        rowChatMemory = view.findViewById(R.id.row_chat_memory)
         switchChatExcluded = view.findViewById(R.id.switch_chat_excluded)
         textChatWorld = view.findViewById(R.id.text_chat_world)
         textChatCampaign = view.findViewById(R.id.text_chat_campaign)
@@ -1039,6 +1059,26 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         rowSummarizerWindow = view.findViewById(R.id.row_summarizer_window)
         switchUseSummarizer = view.findViewById(R.id.switch_use_summarizer)
         fieldSummarizerWindow = view.findViewById(R.id.field_summarizer_window)
+        summarizerPromptRows = listOf(
+            SummarizerPromptRow(
+                SummarizerPromptSets.Kind.SUMMARY,
+                view.findViewById(R.id.row_summary_prompt),
+                view.findViewById(R.id.text_summary_prompt),
+                view.findViewById(R.id.btn_edit_summary_prompt)
+            ),
+            SummarizerPromptRow(
+                SummarizerPromptSets.Kind.COMPACTION,
+                view.findViewById(R.id.row_compaction_prompt),
+                view.findViewById(R.id.text_compaction_prompt),
+                view.findViewById(R.id.btn_edit_compaction_prompt)
+            ),
+            SummarizerPromptRow(
+                SummarizerPromptSets.Kind.IMAGE,
+                view.findViewById(R.id.row_image_prompt),
+                view.findViewById(R.id.text_image_prompt),
+                view.findViewById(R.id.btn_edit_image_prompt)
+            )
+        )
         setupModelRulesRow()
         setupSummarizerControls()
         switchChatMemory?.isChecked = preferences?.getChatMemoryEnabled() ?: true
@@ -1366,18 +1406,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             false
         }
         cardSummarizer?.visibility = if (configured) View.VISIBLE else View.GONE
-        rowChatMemory?.setBackgroundResource(
-            if (configured) R.drawable.bg_quick_settings_segment_middle
-            else R.drawable.bg_quick_settings_segment_top
-        )
-        (rowChatMemory?.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
-            params.topMargin = resources.getDimensionPixelSize(
-                if (configured) R.dimen.quick_settings_segment_gap
-                else R.dimen.quick_settings_section_gap
-            )
-            rowChatMemory?.layoutParams = params
-        }
+        summarizerPromptRows.forEach { it.row.visibility = if (configured) View.VISIBLE else View.GONE }
         if (!configured) return
+        setupSummarizerPromptRows()
 
         val on = preferences?.getChatUseSummarizer() == true
         switchUseSummarizer?.isChecked = on
@@ -1409,6 +1440,56 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 shouldForceUpdate = true
             }
         }
+    }
+
+    private fun setupSummarizerPromptRows() {
+        for (promptRow in summarizerPromptRows) {
+            promptRow.value.setOnClickListener { onSummarizerPromptTapped(promptRow) }
+            promptRow.gear.setOnClickListener { openSummarizerPrompts(promptRow.kind) }
+        }
+        refreshSummarizerPromptRows()
+    }
+
+    /** The collection's prompts and the index this chat screen uses. */
+    private fun summarizerPromptChoices(
+        kind: SummarizerPromptSets.Kind
+    ): Pair<List<CompanionPromptVariant>, Int> {
+        val prefs = preferences ?: return emptyList<CompanionPromptVariant>() to 0
+        val variants = SummarizerPromptSets.load(prefs, kind)
+        val index = SummarizerPromptSets.selectedIndex(
+            variants,
+            SummarizerPromptSession.chosenId(chatId, kind)
+        )
+        return variants to index
+    }
+
+    private fun refreshSummarizerPromptRows() {
+        for (promptRow in summarizerPromptRows) {
+            val (variants, index) = summarizerPromptChoices(promptRow.kind)
+            promptRow.value.text = variants.getOrNull(index)?.name.orEmpty()
+        }
+    }
+
+    /** More than one prompt: an inline dropdown that changes only this chat
+     *  screen's choice. A single prompt is not a choice, so the value opens
+     *  the prompt editor instead. */
+    private fun onSummarizerPromptTapped(promptRow: SummarizerPromptRow) {
+        val (variants, index) = summarizerPromptChoices(promptRow.kind)
+        if (variants.size <= 1) {
+            openSummarizerPrompts(promptRow.kind)
+            return
+        }
+        AppDropdown.show(promptRow.value, variants.map { it.name }, index) { picked ->
+            SummarizerPromptSession.choose(chatId, promptRow.kind, variants[picked].id)
+            refreshSummarizerPromptRows()
+        }
+    }
+
+    private fun openSummarizerPrompts(kind: SummarizerPromptSets.Kind) {
+        val (variants, index) = summarizerPromptChoices(kind)
+        summarizerPromptsLauncher.launch(
+            SummarizerPromptsActivity.createIntent(requireContext(), kind, variants.getOrNull(index)?.id)
+        )
     }
 
     private fun setSummarizerWindowFieldText(text: String) {

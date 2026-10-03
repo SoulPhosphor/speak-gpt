@@ -381,7 +381,11 @@ class SummarizerController(
         )
         if (routingResolution.block != RoutingBlock.NONE) return null
 
-        val instruction = SummarizerPromptSets.activeText(prefs, SummarizerPromptSets.Kind.IMAGE)
+        val instruction = SummarizerPromptSets.activeText(
+            prefs,
+            SummarizerPromptSets.Kind.IMAGE,
+            chatIdProvider()
+        )
         val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
         return try {
             withContext(Dispatchers.IO) {
@@ -694,7 +698,7 @@ class SummarizerController(
             model = model,
             providerJson = routingResolution.providerJson,
             prompt = SummarizerPrompts.render(
-                SummarizerPromptSets.activeText(prefs, promptKind),
+                SummarizerPromptSets.activeText(prefs, promptKind, chatIdProvider()),
                 lengthWords
             ),
             lengthWords = lengthWords

@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowInsets
@@ -105,7 +107,12 @@ class SummarizerPromptsActivity : FragmentActivity() {
             )
             showKindText()
         } else {
-            openCollection(SummarizerPromptSets.Kind.SUMMARY)
+            val requested = intent.getStringExtra(EXTRA_KIND)
+                ?.let { name -> SummarizerPromptSets.Kind.entries.firstOrNull { it.name == name } }
+            openCollection(
+                requested ?: SummarizerPromptSets.Kind.SUMMARY,
+                intent.getStringExtra(EXTRA_PROMPT_ID)
+            )
         }
 
         textKind?.setOnClickListener { showKindDropdown() }
@@ -152,13 +159,14 @@ class SummarizerPromptsActivity : FragmentActivity() {
         textKindHint?.text = kindIntro(openKind) + "\n\n" + getString(R.string.summarizer_prompts_how_it_works)
     }
 
-    private fun openCollection(kind: SummarizerPromptSets.Kind) {
+    /** Opens [kind] on [promptId] when given and present, else on its default. */
+    private fun openCollection(kind: SummarizerPromptSets.Kind, promptId: String? = null) {
         val prefs = preferences ?: return
         val variants = SummarizerPromptSets.load(prefs, kind)
         openKind = kind
         chosenKind = kind
         savedJson = CompanionPromptVariant.toJson(variants)
-        editor?.load(variants, variants.indexOfFirst { it.isDefault }.coerceAtLeast(0))
+        editor?.load(variants, SummarizerPromptSets.selectedIndex(variants, promptId))
         showKindText()
     }
 
@@ -227,11 +235,23 @@ class SummarizerPromptsActivity : FragmentActivity() {
         } catch (_: Exception) { /* unused */ }
     }
 
-    private companion object {
-        const val STATE_OPEN_KIND = "state_open_kind"
-        const val STATE_CHOSEN_KIND = "state_chosen_kind"
-        const val STATE_SAVED_JSON = "state_saved_json"
-        const val STATE_EDITOR_JSON = "state_editor_json"
-        const val STATE_ACTIVE_INDEX = "state_active_index"
+    companion object {
+        private const val EXTRA_KIND = "summarizer_prompt_kind"
+        private const val EXTRA_PROMPT_ID = "summarizer_prompt_id"
+
+        /** Opens the [kind] collection on [promptId] (Quick Settings gear). */
+        fun createIntent(
+            context: Context,
+            kind: SummarizerPromptSets.Kind,
+            promptId: String?
+        ): Intent = Intent(context, SummarizerPromptsActivity::class.java)
+            .putExtra(EXTRA_KIND, kind.name)
+            .putExtra(EXTRA_PROMPT_ID, promptId)
+
+        private const val STATE_OPEN_KIND = "state_open_kind"
+        private const val STATE_CHOSEN_KIND = "state_chosen_kind"
+        private const val STATE_SAVED_JSON = "state_saved_json"
+        private const val STATE_EDITOR_JSON = "state_editor_json"
+        private const val STATE_ACTIVE_INDEX = "state_active_index"
     }
 }

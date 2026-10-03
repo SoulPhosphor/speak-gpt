@@ -321,6 +321,7 @@ import org.teslasoft.assistant.util.providerLimitMessage
 import org.teslasoft.assistant.util.reachedServer
 import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
 import org.teslasoft.assistant.util.summarizer.CondensedBoundaryRealignment
+import org.teslasoft.assistant.util.summarizer.SummarizerPromptSession
 import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
@@ -2537,6 +2538,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Build the chat screen only after its encrypted startup data is ready. */
     private fun initializeChatUi(prepared: PreparedChatStartup, savedInstanceState: Bundle?) {
         chatId = prepared.chatId
+        // Opening a chat screen starts every Summarizer prompt from its
+        // collection's default. A Quick Settings rebuild of this same screen
+        // carries the choices over, and so does recreation.
+        if (savedInstanceState == null &&
+            !intent.getBooleanExtra(SummarizerPromptSession.EXTRA_KEEP_CHOICES, false)
+        ) {
+            SummarizerPromptSession.reset(chatId)
+        }
         chatName = prepared.chatName
         preferences = prepared.preferences
         apiEndpointPreferences = prepared.apiEndpointPreferences
@@ -6686,6 +6695,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             .putExtra("chatId", chatId)
                             .putExtra("name", chatName)
                             .putExtra("pendingConversation", pendingConversation)
+                            .putExtra(SummarizerPromptSession.EXTRA_KEEP_CHOICES, true)
                             .setAction(Intent.ACTION_VIEW)
                     )
                     finishActivity()

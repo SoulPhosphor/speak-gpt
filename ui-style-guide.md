@@ -776,7 +776,8 @@ Quick Settings layout or its Kotlin controller.
 
 The current vertical order is intentional: identity and character choices;
 model/provider/endpoint routing; memory controls; independent roleplay context;
-generation parameters; Logit Bias and Seed; usage/cost; Save to Profile. Keep
+the summarizer and its Summary, Compaction, and Image prompts (owner ruling,
+Oct 3 2026); generation parameters; Logit Bias and Seed; usage/cost; Save to Profile. Keep
 that order unless the owner explicitly changes it.
 
 The Lorebooks segment may expand internally. While lorebooks are enabled, its

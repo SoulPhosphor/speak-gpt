@@ -95,14 +95,28 @@ object SummarizerPromptSets {
     }
 
     /**
-     * The prompt text a request uses: the collection's default prompt. A
-     * blank default falls back to the first built-in prompt, so a request can
-     * never run on empty instructions.
+     * The prompt text a request for [chatId] uses: the prompt chosen in Quick
+     * Settings for this chat screen when it still exists, otherwise the
+     * collection's default prompt. A blank prompt falls back to the first
+     * built-in prompt, so a request can never run on empty instructions.
      */
-    fun activeText(prefs: Preferences, kind: Kind): String = activeTextOf(kind, load(prefs, kind))
+    fun activeText(prefs: Preferences, kind: Kind, chatId: String = ""): String =
+        activeTextOf(kind, load(prefs, kind), SummarizerPromptSession.chosenId(chatId, kind))
 
-    internal fun activeTextOf(kind: Kind, variants: List<CompanionPromptVariant>): String =
-        CompanionPromptVariant.defaultPrompt(variants).ifBlank { builtIns(kind).first().text }
+    /** Index of the prompt in use: the chosen prompt when present, else the default. */
+    fun selectedIndex(variants: List<CompanionPromptVariant>, chosenId: String?): Int {
+        val chosen = chosenId?.let { id -> variants.indexOfFirst { it.id == id } } ?: -1
+        if (chosen >= 0) return chosen
+        return variants.indexOfFirst { it.isDefault }.coerceAtLeast(0)
+    }
+
+    internal fun activeTextOf(
+        kind: Kind,
+        variants: List<CompanionPromptVariant>,
+        chosenId: String? = null
+    ): String =
+        variants.getOrNull(selectedIndex(variants, chosenId))?.text.orEmpty()
+            .ifBlank { builtIns(kind).first().text }
 
     private fun legacySlots(prefs: Preferences): List<CompanionPromptVariant> = fromLegacySlots(
         selectedSlot = prefs.getSummarizerSelectedSlot(),

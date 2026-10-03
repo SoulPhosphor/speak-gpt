@@ -112,4 +112,26 @@ class SummarizerPromptSetsTest {
         assertEquals(2, carried.size)
         assertEquals("Two lines, please.", SummarizerPromptSets.activeTextOf(Kind.IMAGE, carried))
     }
+
+    @Test
+    fun aQuickSettingsChoiceWinsWhileItStillExists() {
+        val variants = legacy(prompts = mapOf(2 to "Custom."))
+        val custom = variants.single { it.id == "legacy_slot_2" }
+        assertEquals("Custom.", SummarizerPromptSets.activeTextOf(Kind.SUMMARY, variants, custom.id))
+        assertEquals(2, SummarizerPromptSets.selectedIndex(variants, custom.id))
+        // A deleted choice falls back to the default prompt.
+        assertEquals(SummarizerPrompts.STORYTELLER, SummarizerPromptSets.activeTextOf(Kind.SUMMARY, variants, "gone"))
+        assertEquals(0, SummarizerPromptSets.selectedIndex(variants, null))
+    }
+
+    @Test
+    fun sessionChoicesAreHeldPerChatAndResetWhenTheChatScreenOpens() {
+        SummarizerPromptSession.reset("chat-a")
+        SummarizerPromptSession.choose("chat-a", Kind.COMPACTION, SummarizerPromptSets.REPORTER_ID)
+        assertEquals(SummarizerPromptSets.REPORTER_ID, SummarizerPromptSession.chosenId("chat-a", Kind.COMPACTION))
+        assertEquals(null, SummarizerPromptSession.chosenId("chat-a", Kind.SUMMARY))
+        assertEquals(null, SummarizerPromptSession.chosenId("chat-b", Kind.COMPACTION))
+        SummarizerPromptSession.reset("chat-a")
+        assertEquals(null, SummarizerPromptSession.chosenId("chat-a", Kind.COMPACTION))
+    }
 }

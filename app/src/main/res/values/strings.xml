@@ -3539,6 +3539,7 @@
     <string name="summarizer_prompts_image_intro">This single prompt tells the Summarizer Model how to shorten an image prompt. The short version is what the AI receives each turn as a reminder of the image, instead of the full prompt.</string>
     <string name="summarizer_prompts_how_it_works">Only one prompt can be active at a time. The first two prompts are suggested styles.\n\nPresets one and two can always be reverted back to the original preset. Presets 3 through 5 will revert to the last saved prompt text.</string>
     <string name="summarizer_prompts_field_hint">Write your prompt here…</string>
+    <string name="summarizer_prompts_edit_desc">Edit Summarizer Prompts</string>
 
     <!-- Quick Settings (decision 3): toggle and number box, no hints. -->
     <string name="summarizer_use_toggle">Use Summarizer</string>
