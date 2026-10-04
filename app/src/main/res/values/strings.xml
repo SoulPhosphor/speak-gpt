@@ -3560,10 +3560,10 @@
     <string name="compaction_icon_desc">Compaction Summary</string>
     <string name="compaction_summary_intro">This is the compacted text from your conversation that is sent instead of the full messages to save on token use.</string>
     <string name="compaction_summary_in_progress">Compacting in Progress…</string>
-    <string name="compaction_summary_read_only">Compacted text is read only while the compactor is in progress.</string>
+    <string name="compaction_summary_read_only">Compacted text is read only while the compactor is in progress. The text below will update when the process is finished.</string>
     <string name="compaction_summary_success">Compaction Successful!</string>
     <string name="compaction_summary_summarizing">Summarizing in Progress…</string>
-    <string name="compaction_summary_read_only_summarizing">Summary text is read only while the summarizer is in progress.</string>
+    <string name="compaction_summary_read_only_summarizing">Summary text is read only while the summarizer is in progress. The text below will update when the process is finished.</string>
     <string name="compaction_summary_summarized">Summary Successful!</string>
     <string name="compaction_uncompact_desc">Uncompact Conversation</string>
     <string name="compaction_recompact_desc">Recompact Conversation</string>
