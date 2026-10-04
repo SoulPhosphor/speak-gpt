@@ -90,6 +90,7 @@ object SummarizerPromptSets {
     private fun priorBuiltInTexts(id: String): Set<String> = when (id) {
         STORYTELLER_ID -> setOf(
             SummarizerPrompts.STORYTELLER,
+            SummarizerPrompts.SECTION_STORYTELLER,
             SummarizerPrompts.STORYTELLER.replace(
                 "Write in clear, compact prose, preserving the information needed for conversation continuity.",
                 "Write in clear, compact prose under {length} words."
@@ -101,6 +102,7 @@ object SummarizerPromptSets {
         )
         REPORTER_ID -> setOf(
             SummarizerPrompts.REPORTER,
+            SummarizerPrompts.SECTION_REPORTER,
             SummarizerPrompts.REPORTER.replace(
                 "Preserve the information needed for conversation continuity without repetition.",
                 "Keep the complete list under {length} words."

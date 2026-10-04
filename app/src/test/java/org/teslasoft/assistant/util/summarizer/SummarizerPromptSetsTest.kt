@@ -157,4 +157,10 @@ class SummarizerPromptSetsTest {
         }
     }
 
+    @Test fun copyingUntouchedSummaryBuiltInsIntoCompactUsesTheRollingPrompt() {
+        val copied = SummarizerPromptSets.normalize(Kind.COMPACTION, SummarizerPromptSets.builtIns(Kind.SUMMARY))
+        assertEquals(SummarizerPrompts.STORYTELLER, copied[0].text)
+        assertEquals(SummarizerPrompts.REPORTER, copied[1].text)
+    }
+
 }
