@@ -237,26 +237,6 @@ object SummarizerErrorClassifier {
 }
 
 /**
- * Word-count policy for saved summaries (owner ruling, July 29 2026): the
- * configured Summary Length is not a hard limit because models count words
- * unreliably. The app counts the returned words itself, tolerates up to 10%
- * over, and beyond that saves the text unchanged but flags it over-length so
- * the next regular fold-in compresses it back toward the limit. Never a
- * separate corrective call, never truncation, never a discard.
- */
-object SummarizerLengthPolicy {
-
-    fun wordCount(text: String): Int =
-        text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-
-    fun allowedWords(configuredLength: Int): Int =
-        configuredLength + configuredLength / 10
-
-    fun isOverLength(text: String, configuredLength: Int): Boolean =
-        wordCount(text) > allowedWords(configuredLength)
-}
-
-/**
  * Strips credential-shaped material from provider/technical detail before it
  * is stored in a Summarizer Errors entry or the app-wide Error Log (errors
  * doc §1: never display or copy an API key, authorization header, complete

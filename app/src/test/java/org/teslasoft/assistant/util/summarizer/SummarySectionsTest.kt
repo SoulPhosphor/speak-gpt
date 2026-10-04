@@ -188,4 +188,38 @@ class SummarySectionsTest {
         assertTrue(SummarySections.newlyAffected(listOf(kept), SummarySections.reconcile(listOf(kept), edited).sections).isEmpty())
         assertEquals(listOf(kept), SummarySections.fromJson(SummarySections.toJson(listOf(kept))))
     }
+    @Test fun changedSourcesDuringARequestRejectItsFrozenResultButAppendingIsAllowed() {
+        val messages = chat(12)
+        val owned = messages.subList(2, 10).toList()
+        val context = messages.subList(0, 2).toList()
+        assertTrue(SummarySections.sourceStillCurrent(owned, context, messages + chat(2).map { it.copy(id = "new${it.id}") }))
+        for (id in listOf("m0", "m3", "m9")) {
+            val edited = messages.map { if (it.id == id) it.copy(text = "canonical replacement") else it }
+            assertFalse(SummarySections.sourceStillCurrent(owned, context, edited))
+        }
+        assertFalse(SummarySections.sourceStillCurrent(owned, context, messages.filterNot { it.id == "m4" }))
+        assertFalse(SummarySections.sourceStillCurrent(owned, context, messages.reversed()))
+        assertFalse(SummarySections.sourceStillCurrent(owned, context, messages.map { if (it.id == "m5") it.copy(isBot = false) else it }))
+    }
+
+    @Test fun inFlightReplacementRespectsKeepChoicesManualEditsAndChangedOwnership() {
+        val messages = chat(10)
+        val started = SummarySections.newSection(messages, emptyList(), "old").copy(needsUpdate = true)
+        assertTrue(SummarySections.canCommitReplacement(started, started))
+        assertFalse(SummarySections.canCommitReplacement(started, started.copy(kept = true)))
+        assertFalse(SummarySections.canCommitReplacement(started, started.copy(edited = true, text = "mine")))
+        assertFalse(SummarySections.canCommitReplacement(started, started.copy(messageIds = started.messageIds.dropLast(1))))
+        assertFalse(SummarySections.canCommitReplacement(started, null))
+    }
+
+    @Test fun aLaterEditOfAnAlreadyStaleSectionStillNeedsItsOwnDecision() {
+        val messages = chat(10)
+        val kept = SummarySections.newSection(messages, emptyList(), "mine").copy(needsUpdate = true, kept = true)
+        val changed = messages.map { if (it.id == "m3") it.copy(text = "changed again") else it }
+        val reconciled = SummarySections.reconcile(listOf(kept), changed).sections
+        assertEquals(listOf(kept.id), SummarySections.newlyAffected(listOf(kept), reconciled).map { it.id })
+        assertTrue(reconciled.single().kept)
+        assertFalse(reconciled.single().awaitsRegeneration)
+    }
+
 }

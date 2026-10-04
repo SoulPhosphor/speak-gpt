@@ -1266,7 +1266,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // shown version is already canonical; resume when it is not, tapping
             // which makes the shown version the canonical response.
             btnVersionPromote?.let { promote ->
-                if (regenerationLockKind(position) != null) {
+                if (regenerationLockKind(position) == CondensedRegenerationLock.Kind.COMPACTION) {
                     promote.visibility = View.GONE
                     promote.setOnClickListener(null)
                     promote.isClickable = false
@@ -3276,9 +3276,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 .referencedFileHash(dataArray[position])
         deleteMessage(position)
 
-        if (chatId !== "") {
-            ChatPreferences.getChatPreferences().deleteMessage(context, chatId, position)
-        }
+        // The host saves the replacement turn. This temporary removal must
+        // not delete its ownership or shrink saved summary/Compact boundaries.
         if (deletedImageHash != null) {
             org.teslasoft.assistant.imagegen.GeneratedImageFiles
                 .deleteIfUnreferenced(context, listOf(deletedImageHash))

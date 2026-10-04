@@ -52,7 +52,7 @@ import java.util.Locale
 /**
  * Summarizer Settings (conversation-summary-plan.md decision 2): the Summary
  * Model endpoint/model pickers (Memory Assistant interaction shape), the
- * Complete Messages default, the new-chats toggle, Summary Length, and the
+ * Complete Messages default, the new-chats toggle, and the
  * Customize Prompt Summaries row. Values save as they are changed. Prompts
  * are edited on the Summarizer Prompts screen (owner ruling, Oct 3 2026).
  */
@@ -72,7 +72,6 @@ class SummarizerSettingsActivity : FragmentActivity() {
     private var textRoutingValue: TextView? = null
     private var fieldCompleteMessages: TextInputEditText? = null
     private var switchNewChats: MaterialSwitch? = null
-    private var fieldSummaryLength: TextInputEditText? = null
 
     private var suppressWatchers = false
 
@@ -137,7 +136,6 @@ class SummarizerSettingsActivity : FragmentActivity() {
         textRoutingValue = findViewById(R.id.text_summarizer_routing_value)
         fieldCompleteMessages = findViewById(R.id.field_complete_messages)
         switchNewChats = findViewById(R.id.switch_summarizer_new_chats)
-        fieldSummaryLength = findViewById(R.id.field_summary_length)
     }
 
     private fun applyTheme() {
@@ -168,7 +166,6 @@ class SummarizerSettingsActivity : FragmentActivity() {
 
         suppressWatchers = true
         fieldCompleteMessages?.setText(preferences?.getSummarizerDefaultWindow()?.toString() ?: "20")
-        fieldSummaryLength?.setText(preferences?.getSummarizerLength()?.toString() ?: "300")
         suppressWatchers = false
 
         fieldCompleteMessages?.addTextChangedListener(object : TextWatcher {
@@ -178,16 +175,6 @@ class SummarizerSettingsActivity : FragmentActivity() {
                 if (suppressWatchers) return
                 val parsed = s?.toString()?.trim()?.toIntOrNull()
                 if (parsed != null && parsed >= 1) preferences?.setSummarizerDefaultWindow(parsed)
-            }
-        })
-
-        fieldSummaryLength?.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (suppressWatchers) return
-                val parsed = s?.toString()?.trim()?.toIntOrNull()
-                if (parsed != null && parsed >= 10) preferences?.setSummarizerLength(parsed)
             }
         })
 

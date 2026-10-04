@@ -24,10 +24,24 @@ import org.junit.Test
 class SummarizerPromptsTest {
 
     @Test
-    fun lengthPlaceholderIsReplacedEverywhere() {
-        val rendered = SummarizerPrompts.render(SummarizerPrompts.STORYTELLER, 250)
+    fun conversationPromptsAreContentDrivenWithoutWordCeilings() {
+        for (prompt in listOf(SummarizerPrompts.STORYTELLER, SummarizerPrompts.REPORTER,
+            SummarizerPrompts.SECTION_STORYTELLER, SummarizerPrompts.SECTION_REPORTER)) {
+            assertFalse(prompt.contains("{length}"))
+            assertFalse(prompt.contains(" words"))
+            assertTrue(prompt.contains("conversation continuity"))
+        }
+    }
+
+    @Test
+    fun savedSettingDrivenCeilingsAreRetiredWithoutChangingOtherCustomInstructions() {
+        val custom = "Preserve names. Stay under {length} words. Reply in bullets."
+        val rendered = SummarizerPrompts.render(custom)
         assertFalse(rendered.contains("{length}"))
-        assertTrue(rendered.contains("under 250 words"))
+        assertFalse(rendered.contains("under"))
+        assertTrue(rendered.contains("Preserve names."))
+        assertTrue(rendered.contains("Reply in bullets."))
+        assertEquals("Use two paragraphs.", SummarizerPrompts.render("Use two paragraphs."))
     }
 
     @Test

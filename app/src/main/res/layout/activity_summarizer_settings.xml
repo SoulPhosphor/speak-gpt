@@ -18,7 +18,7 @@
 -->
 <!-- Summarizer Settings (conversation-summary-plan.md decision 2): Summary
      Model endpoint/model pickers, the Complete Messages default, the
-     new-chats toggle, Summary Length, and the Customize Prompt Summaries row
+     new-chats toggle and the Customize Prompt Summaries row
      that opens Summarizer Prompts. Composed from the shared style families
      only. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -107,38 +107,6 @@
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_summarizer_always_resummarize"
                     style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <!-- ============ Summary Length ============ -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:paddingEnd="12dp">
-
-                    <TextView
-                        style="@style/Widget.App.Field.Label"
-                        android:text="@string/summarizer_length" />
-
-                    <TextView
-                        style="@style/Widget.App.Field.Hint"
-                        android:text="@string/summarizer_length_hint" />
-                </LinearLayout>
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_summary_length"
-                    style="@style/Widget.App.Field.NumberBlank"
-                    android:ems="5"
-                    android:maxLength="5"
-                    android:singleLine="true" />
             </LinearLayout>
 
             <!-- ============ Complete Messages (default for new chats) ============

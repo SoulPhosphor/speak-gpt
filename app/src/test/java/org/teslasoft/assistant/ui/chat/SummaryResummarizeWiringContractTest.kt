@@ -27,7 +27,11 @@ class SummaryResummarizeWiringContractTest {
 
     @Test
     fun editAndRegenerateBothAskBeforeResummarizing() {
-        assertTrue(activity.contains("if (!askToResummarizeEditedSection()) summarizerCycle()"))
+        val edit = activity.substring(activity.indexOf("override fun onMessageEdited()"),
+            activity.indexOf("private fun askToResummarizeEditedSection"))
+        assertTrue(edit.indexOf(".fromJson(") < edit.indexOf("syncChatProjection()"))
+        assertTrue(edit.contains("cancelSummarizingAndWait()"))
+        assertTrue(edit.contains("askToResummarizeEditedSection(before)"))
         assertTrue(activity.contains("withResummarizeDecision(position) { onRetryClick() }"))
         assertTrue(activity.contains("if (regenerateLockKind(position) != null) return"))
     }
@@ -64,7 +68,7 @@ class SummaryResummarizeWiringContractTest {
         val controller = source("src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt")
         assertFalse(controller.contains("finishReason?.value == \"length\""))
         // A failed compaction keeps the batches that finished.
-        assertTrue(controller.contains("prefs.commitManualCompaction(summary, folded, overLength, folded)"))
+        assertTrue(controller.contains("prefs.commitManualCompaction(summary, folded, false, folded)"))
         assertTrue(controller.contains("partialSavedMessages = folded - operationStartFolded"))
     }
 
@@ -75,4 +79,35 @@ class SummaryResummarizeWiringContractTest {
         assertTrue(activity.contains(".setNeutralButton(R.string.compaction_edit_summary)"))
         assertTrue(activity.contains("startManualCompaction(snapshot.copy(entries = snapshot.entries.take(boundary)), fromScratch = true)"))
     }
+    @Test fun makeCurrentUsesTheEditDecisionPathAndSummaryOnlyLocksDoNotBlockIt() {
+        val change = activity.substring(activity.indexOf("override fun onMakeVersionCurrent"),
+            activity.indexOf("private fun promoteVersionAt"))
+        assertTrue(change.contains("changeCanonicalVersion(position, display"))
+        assertTrue(change.contains("finishSummarySourceChange(before)"))
+        assertTrue(change.contains("cancelSummarizingAndWait()"))
+        assertFalse(change.contains("if (condensedRegenerationLockKind(position) != null)"))
+        val adapter = source("src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt")
+        val promote = adapter.substring(adapter.indexOf("btnVersionPromote?.let"), adapter.indexOf("private fun showVersion"))
+        assertTrue(promote.contains("== CondensedRegenerationLock.Kind.COMPACTION"))
+    }
+
+    @Test fun branchRegenerateMarksAnAffectedCompactRangeAndAsksWhenTheReplyFinishes() {
+        val branch = activity.substring(activity.indexOf("override fun onRegenerate"), activity.indexOf("private fun truncateAfter"))
+        assertTrue(branch.contains("if (position < boundary)"))
+        assertTrue(branch.contains("setCompactionStale(true)"))
+        assertTrue(branch.contains("pendingRecompactBoundary = boundary"))
+        assertTrue(activity.contains("askToRecompactAfterDelete(boundary, sourceChanged = true)"))
+        assertTrue(activity.contains("realignCondensedBoundaries(index + 1, end)"))
+        assertTrue(activity.contains("pendingRetryMessageId?.let { last[org.teslasoft.assistant.preferences.MessageIdentity.KEY] = it }"))
+    }
+
+    @Test fun inFlightGuardStopsInsteadOfRestartingBeforeTheChangeDecision() {
+        val controller = source("src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt")
+        assertTrue(controller.contains("!SummarySections.sourceStillCurrent(owned, context, latest)\n        ) return false"))
+        assertTrue(controller.contains("!SummarySections.canCommitReplacement(replacing, target)"))
+        assertTrue(activity.contains("if (summarySourceChangePending || pendingRetryMessageId != null) return"))
+        val answer = activity.substring(activity.indexOf("private fun saveResummarizeAnswer"), activity.indexOf("private fun showResummarizeDialog"))
+        assertTrue(answer.contains("val updated = live.map"))
+    }
+
 }

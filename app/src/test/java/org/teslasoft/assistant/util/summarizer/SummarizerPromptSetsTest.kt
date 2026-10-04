@@ -145,4 +145,16 @@ class SummarizerPromptSetsTest {
         SummarizerPromptSession.reset("chat-a")
         assertEquals(null, SummarizerPromptSession.chosenId("chat-a", Kind.COMPACTION))
     }
+    @Test fun oldLengthLimitedBuiltInsUpgradeButCustomTextSurvives() {
+        for (kind in listOf(SummarizerPromptSets.Kind.SUMMARY, SummarizerPromptSets.Kind.COMPACTION)) {
+            val builtIn = SummarizerPromptSets.builtIns(kind).first()
+            val old = builtIn.copy(text = if (kind == SummarizerPromptSets.Kind.SUMMARY)
+                SummarizerPrompts.SECTION_STORYTELLER.replace(" Preserve the information needed for conversation continuity.", " Stay under {length} words.")
+                else SummarizerPrompts.STORYTELLER.replace("Write in clear, compact prose, preserving the information needed for conversation continuity.", "Write in clear, compact prose under {length} words."))
+            assertEquals(builtIn.text, SummarizerPromptSets.normalize(kind, listOf(old)).first().text)
+            val custom = builtIn.copy(text = "Preserve all names and exact quotations.")
+            assertEquals(custom.text, SummarizerPromptSets.normalize(kind, listOf(custom)).first().text)
+        }
+    }
+
 }

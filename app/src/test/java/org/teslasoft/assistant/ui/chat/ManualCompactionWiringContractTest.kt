@@ -74,7 +74,7 @@ class ManualCompactionWiringContractTest {
         assertTrue(adapter.contains("promote.visibility = View.GONE"))
         assertTrue(adapter.contains("position + 1 == summaryRegenerationLockBoundary"))
         assertTrue(source("src/main/res/values/strings.xml").contains("──────── Summarized ────────"))
-        assertTrue(activity.contains("if (condensedRegenerationLockKind(position) != null) return"))
+        assertTrue(activity.contains("if (condensedRegenerationLockKind(position) == CondensedRegenerationLock.Kind.COMPACTION) return"))
     }
 
     @Test

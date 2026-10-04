@@ -5550,6 +5550,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the fold-in bookmark; blank entries advance it without being sent. */
     private fun summarizerSnapshot(): org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? {
         if (isFinishing || isDestroyed || chatStorageUnavailable || chatId.isEmpty()) return null
+        // Retry briefly removes the old row before inserting its replacement.
+        // Do not reconcile ownership against that temporary absence.
+        if (pendingRetryMessageId?.let { id ->
+                messages.none { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == id }
+            } == true
+        ) return null
         // A message that just received its permanent ID is saved at once, so
         // a section (or a backup) never refers to an ID that was never stored.
         if (org.teslasoft.assistant.preferences.MessageIdentity.ensure(messages)) saveSettings()
@@ -5645,6 +5651,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Set when an update was held back because the summary or compacted
      *  text was open for review; it runs when the review screen closes. */
     private var summarizerCycleHeld = false
+    private var summarySourceChangePending = false
+    private var pendingRetryMessageId: String? = null
+    private var pendingRecompactBoundary: Int? = null
 
     /** Runs the held-back update once no review screen is open. */
     private fun releaseHeldSummarizerCycle() {
@@ -5675,6 +5684,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun summarizerCycle(force: Boolean = false, allowLarge: Boolean = false) {
+        if (summarySourceChangePending || pendingRetryMessageId != null) return
         if (org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.isOpen(chatId)) {
             summarizerCycleHeld = true
             return
@@ -10202,7 +10212,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         map["message"] = message
         map["isBot"] = isBot
         map[org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection.MESSAGE_ID_KEY] =
-            java.util.UUID.randomUUID().toString()
+            (if (isBot) pendingRetryMessageId else null) ?: java.util.UUID.randomUUID().toString()
 
         // When this message was created, for the Message Details popup. Stored
         // as a string so it round-trips through the generic Gson history map
@@ -10381,7 +10391,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         last[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(history)
         last[ChatAdapter.KEY_CANONICAL_VARIANT] = (history.size - 1).toString()
         last[ChatAdapter.KEY_DISPLAY_VARIANT] = (history.size - 1).toString()
+        pendingRetryMessageId?.let { last[org.teslasoft.assistant.preferences.MessageIdentity.KEY] = it }
+        pendingRetryMessageId = null
         adapter?.notifyItemChanged(messages.size - 1)
+        pendingRecompactBoundary?.let { boundary ->
+            pendingRecompactBoundary = null
+            askToRecompactAfterDelete(boundary, sourceChanged = true)
+        }
     }
 
     /** Mark the last assistant reply as completed normally. The caller's
@@ -13151,6 +13167,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // reply) BEFORE it is removed; the regenerated reply is folded in as the
         // newest version once it finishes.
         val last = messages.lastOrNull()
+        pendingRetryMessageId = last?.takeIf { it["isBot"] == true }
+            ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }?.ifBlank { null }
         pendingRetryVariants = if (last != null && last["isBot"] == true) {
             val existing = ChatAdapter.parseVariants(last[ChatAdapter.KEY_VARIANTS]?.toString())
             if (existing.isNotEmpty()) existing
@@ -13195,6 +13213,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // this position is the last one, so the normal regenerate path
                 // applies and keeps this turn's version history.
                 withResummarizeDecision(position) {
+                    val boundary = preferences?.getManualCompactionBoundary() ?: 0
+                    if (position < boundary) {
+                        preferences?.setCompactionStale(true)
+                        pendingRecompactBoundary = boundary
+                    }
                     truncateAfter(position)
                     onRetryClick()
                 }
@@ -13212,21 +13235,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @SuppressLint("NotifyDataSetChanged")
     private fun truncateAfter(index: Int) {
         if (index < 0 || index >= messages.size - 1) return
-        while (messages.size > index + 1) {
-            messages.removeAt(messages.size - 1)
-        }
-        val manualBoundary = preferences?.getManualCompactionBoundary() ?: 0
-        if (manualBoundary > messages.size) {
-            preferences?.setManualCompactionBoundary(messages.size)
-        }
-        // Regeneration locks never reach past the shortened thread, so the
-        // replies that follow are not shown as part of a summary.
-        if ((preferences?.getSummaryRegenerationLockBoundary() ?: 0) > messages.size) {
-            preferences?.setSummaryRegenerationLockBoundary(messages.size)
-        }
-        if ((preferences?.getCompactionRegenerationLockBoundary() ?: 0) > messages.size) {
-            preferences?.setCompactionRegenerationLockBoundary(messages.size)
-        }
+        val end = messages.size
+        messages.subList(index + 1, end).clear()
+        realignCondensedBoundaries(index + 1, end)
         // Rebuild the projections to the shortened thread before rebinding so
         // the adapter never reads a selection slot that no longer exists.
         syncChatProjection()
@@ -13243,7 +13254,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     override fun onMakeVersionCurrent(position: Int) {
         if (position < 0 || position >= messages.size) return
-        if (condensedRegenerationLockKind(position) != null) return
+        if (condensedRegenerationLockKind(position) == CondensedRegenerationLock.Kind.COMPACTION) return
         val msg = messages[position]
         if (msg["isBot"] != true) return
         val variants = ChatAdapter.parseVariants(msg[ChatAdapter.KEY_VARIANTS]?.toString())
@@ -13255,7 +13266,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         if (position == messages.size - 1) {
             // Newest turn: nothing after it to destroy, so switch silently.
-            promoteVersionAt(position, display)
+            changeCanonicalVersion(position, display, discardFollowing = false)
             return
         }
 
@@ -13264,10 +13275,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .setMessage(R.string.make_current_body)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.make_current_confirm) { _, _ ->
-                promoteVersionAt(position, display)
-                truncateAfter(position)
+                changeCanonicalVersion(position, display, discardFollowing = true)
             }
             .show()
+    }
+
+    private fun changeCanonicalVersion(position: Int, display: Int, discardFollowing: Boolean) {
+        val before = org.teslasoft.assistant.util.summarizer.SummarySections
+            .fromJson(preferences?.getSummarySections().orEmpty())
+        summarySourceChangePending = true
+        lifecycleScope.launch {
+            summarizerController?.cancelSummarizingAndWait()
+            val boundary = preferences?.getManualCompactionBoundary() ?: 0
+            promoteVersionAt(position, display)
+            if (discardFollowing) truncateAfter(position)
+            finishSummarySourceChange(before)
+            if (position < boundary) {
+                preferences?.setCompactionStale(true)
+                askToRecompactAfterDelete(boundary, sourceChanged = true)
+            }
+        }
     }
 
     /** Make version [index] of the turn at [position] canonical: mirror it into
@@ -13304,13 +13331,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     override fun onMessageEdited() {
-        syncChatProjection()
-        // An edit stops a running summary update. When the edited message is
-        // already in a summary section, the user chooses whether to rewrite
-        // that section (owner ruling, Oct 4 2026).
+        // Capture before projection readers reconcile away the evidence of this edit.
+        val before = org.teslasoft.assistant.util.summarizer.SummarySections
+            .fromJson(preferences?.getSummarySections().orEmpty())
+        summarySourceChangePending = true
         lifecycleScope.launch {
             summarizerController?.cancelSummarizingAndWait()
-            if (!askToResummarizeEditedSection()) summarizerCycle()
+            finishSummarySourceChange(before)
+        }
+    }
+
+    private fun finishSummarySourceChange(
+        before: List<org.teslasoft.assistant.util.summarizer.SummarySections.Section>
+    ) {
+        syncChatProjection()
+        if (!askToResummarizeEditedSection(before)) {
+            summarySourceChangePending = false
+            summarizerCycle()
         }
     }
 
@@ -13321,22 +13358,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * without asking; otherwise "Resummarize Conversation Section?" asks.
      * True when the question was shown (it then starts summarizing itself).
      */
-    private fun askToResummarizeEditedSection(): Boolean {
+    private fun askToResummarizeEditedSection(
+        before: List<org.teslasoft.assistant.util.summarizer.SummarySections.Section>
+    ): Boolean {
         val prefs = preferences ?: return false
         if (!prefs.getChatUseSummarizer()) return false
         val sources = summarizerSnapshot()?.sources() ?: return false
-        val before = org.teslasoft.assistant.util.summarizer.SummarySections.fromJson(prefs.getSummarySections())
         val reconciled = org.teslasoft.assistant.util.summarizer.SummarySections.reconcile(before, sources).sections
         val affected = org.teslasoft.assistant.util.summarizer.SummarySections.newlyAffected(before, reconciled)
         if (affected.isEmpty()) return false
         val affectedIds = affected.map { it.id }.toSet()
         val known = resummarizeAnswer(prefs)
         if (known != null) {
-            saveResummarizeAnswer(prefs, reconciled, affectedIds, known, asked = false)
+            saveResummarizeAnswer(prefs, affectedIds, known, asked = false)
             return false
         }
         showResummarizeDialog(prefs, affected.first(), sources) { yes ->
-            saveResummarizeAnswer(prefs, reconciled, affectedIds, yes, asked = true)
+            saveResummarizeAnswer(prefs, affectedIds, yes, asked = true)
+            summarySourceChangePending = false
             refreshSummarizerIcons()
             summarizerCycle()
         }
@@ -13349,22 +13388,38 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * outside every section regenerates without asking.
      */
     private fun withResummarizeDecision(position: Int, proceed: () -> Unit) {
-        val prefs = preferences
-        val messageId = messages.getOrNull(position)
-            ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }.orEmpty()
-        if (prefs == null || !prefs.getChatUseSummarizer() || messageId.isBlank()) return proceed()
-        val sections = org.teslasoft.assistant.util.summarizer.SummarySections.fromJson(prefs.getSummarySections())
-        val owner = org.teslasoft.assistant.util.summarizer.SummarySections.owner(sections, messageId)
-            ?: return proceed()
-        val known = resummarizeAnswer(prefs)
-        if (known != null) {
-            saveResummarizeAnswer(prefs, sections, setOf(owner.id), known, asked = false)
-            return proceed()
-        }
-        val sources = summarizerSnapshot()?.sources().orEmpty()
-        showResummarizeDialog(prefs, owner, sources) { yes ->
-            saveResummarizeAnswer(prefs, sections, setOf(owner.id), yes, asked = true)
-            proceed()
+        summarySourceChangePending = true
+        lifecycleScope.launch {
+            summarizerController?.cancelSummarizingAndWait()
+            fun continueChange() {
+                proceed()
+                summarySourceChangePending = false
+            }
+            val prefs = preferences
+            val messageId = messages.getOrNull(position)
+                ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }.orEmpty()
+            if (prefs == null || !prefs.getChatUseSummarizer() || messageId.isBlank()) {
+                continueChange()
+                return@launch
+            }
+            val sections = org.teslasoft.assistant.util.summarizer.SummarySections.fromJson(prefs.getSummarySections())
+            val affected = sections.filter { messageId in it.messageIds || messageId in it.contextIds }
+            if (affected.isEmpty()) {
+                continueChange()
+                return@launch
+            }
+            val ids = affected.map { it.id }.toSet()
+            val known = resummarizeAnswer(prefs)
+            if (known != null) {
+                saveResummarizeAnswer(prefs, ids, known, asked = false)
+                continueChange()
+                return@launch
+            }
+            val sources = summarizerSnapshot()?.sources().orEmpty()
+            showResummarizeDialog(prefs, affected.first(), sources) { yes ->
+                saveResummarizeAnswer(prefs, ids, yes, asked = true)
+                continueChange()
+            }
         }
     }
 
@@ -13386,12 +13441,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun saveResummarizeAnswer(
         prefs: Preferences,
-        sections: List<org.teslasoft.assistant.util.summarizer.SummarySections.Section>,
         affectedIds: Set<String>,
         yes: Boolean,
         asked: Boolean
     ) {
-        val updated = sections.map {
+        val sources = summarizerSnapshot()?.sources()
+        val live = if (sources != null) {
+            org.teslasoft.assistant.util.summarizer.SummarySectionStore.load(prefs, sources) ?: return
+        } else {
+            org.teslasoft.assistant.util.summarizer.SummarySections.fromJson(prefs.getSummarySections())
+        }
+        val updated = live.map {
             when {
                 it.id !in affectedIds -> it
                 yes && asked -> it.copy(edited = false, legacy = false, kept = false, needsUpdate = true)
@@ -13504,11 +13564,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * hand; No keeps the text. Until it is rewritten or saved, the
      * Compaction Summary screen notes that the messages changed.
      */
-    private fun askToRecompactAfterDelete(compactedBefore: Int) {
+    private fun askToRecompactAfterDelete(compactedBefore: Int, sourceChanged: Boolean = false) {
         val prefs = preferences ?: return
         if (prefs.getChatUseSummarizer()) return
         val compactedAfter = prefs.getManualCompactionBoundary()
-        if (compactedBefore <= 0 || compactedAfter <= 0 || compactedAfter >= compactedBefore) return
+        if (compactedBefore <= 0 || compactedAfter <= 0 ||
+            (!sourceChanged && compactedAfter >= compactedBefore)
+        ) return
         if (prefs.getSummarizerSummary().isBlank()) return
         if (isFinishing || isDestroyed) return
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)

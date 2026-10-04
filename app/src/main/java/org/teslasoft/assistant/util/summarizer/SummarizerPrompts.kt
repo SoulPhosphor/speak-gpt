@@ -21,8 +21,8 @@ import org.teslasoft.assistant.preferences.includes.SummarizerSafeIncludeProject
 /**
  * The two shipped summarizer prompts (conversation-summary-plan.md §5,
  * decision 5 — owner-authored, July 29 2026) and the fold-in request
- * scaffolding. `{length}` is replaced at runtime with the Summary Length
- * value from Summarizer Settings. The texts are the revert targets for
+ * scaffolding. Length follows the content needed for continuity. The texts
+ * are the revert targets for
  * slots one and two; slots three to five ship empty.
  */
 object SummarizerPrompts {
@@ -46,7 +46,7 @@ Preserve:
 
 Remove repetition, casual filler, and details that no longer affect the conversation. When newer information replaces or corrects older information, update the recap rather than preserving both versions. Do not present suggestions, guesses, or possibilities as settled facts.
 
-Write in clear, compact prose under {length} words. Reply only with the updated recap.
+Write in clear, compact prose, preserving the information needed for conversation continuity. Reply only with the updated recap.
     """.trimIndent()
 
     val REPORTER = """
@@ -64,7 +64,7 @@ Keep only information that may be needed later, including:
 
 Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an assistant suggestion into a decision. If newer information corrects, replaces, completes, or cancels an older item, revise or remove the older item.
 
-Use brief bullet points, with one fact per bullet. Keep the complete list under {length} words. Reply only with the updated list.
+Use brief bullet points, with one fact per bullet. Preserve the information needed for conversation continuity without repetition. Reply only with the updated list.
     """.trimIndent()
 
     /**
@@ -88,7 +88,7 @@ Preserve:
 
 Remove repetition, casual filler, and details that no longer affect the conversation. When newer information in the section replaces or corrects older information, keep only the newer version. Do not present suggestions, guesses, or possibilities as settled facts.
 
-Write in clear, compact prose. Be as brief as the section allows; a simple section may need only a sentence or two. Stay under {length} words. Reply only with the summary.
+Write in clear, compact prose. Be as brief as the section allows; a simple section may need only a sentence or two. Preserve the information needed for conversation continuity. Reply only with the summary.
     """.trimIndent()
 
     val SECTION_REPORTER = """
@@ -106,7 +106,7 @@ Keep only information that may be needed later, including:
 
 Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an assistant suggestion into a decision. If newer information in the section corrects, replaces, completes, or cancels an older item, keep only the newer version.
 
-Use brief bullet points, with one fact per bullet. Keep the list as short as the section allows, and under {length} words. Reply only with the list.
+Use brief bullet points, with one fact per bullet. Keep the list as short as the section allows while preserving information needed for conversation continuity. Reply only with the list.
     """.trimIndent()
 
     /**
@@ -165,9 +165,11 @@ Use brief bullet points, with one fact per bullet. Keep the list as short as the
         else -> ""
     }
 
-    /** Replaces the `{length}` placeholder with the configured word limit. */
-    fun render(prompt: String, lengthWords: Int): String =
-        prompt.replace("{length}", lengthWords.toString())
+    /** Retires the old setting-driven word ceiling in saved custom prompts. */
+    fun render(prompt: String): String = prompt
+        .replace(Regex("""(?i)(?:Stay|Keep[^.\n]*?|Write[^.\n]*?)\s+under\s+\{length}\s+words\.?"""),
+            "Preserve information needed for conversation continuity; remove repetition and unnecessary wording.")
+        .replace("{length}", "the length needed for conversation continuity")
 
     /**
      * Owner-authored (Aug 29 2026). Added to a fold-in call only when the

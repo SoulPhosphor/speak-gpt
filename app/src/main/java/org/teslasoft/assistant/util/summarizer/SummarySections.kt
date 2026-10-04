@@ -176,8 +176,8 @@ object SummarySections {
     /** Sections that [reconciled] newly marks as needing an update compared
      *  with [before]: the sections an edit just affected. */
     fun newlyAffected(before: List<Section>, reconciled: List<Section>): List<Section> {
-        val wasMarked = before.associate { it.id to it.needsUpdate }
-        return reconciled.filter { it.needsUpdate && wasMarked[it.id] == false }
+        val byId = before.associateBy { it.id }
+        return reconciled.filter { it.needsUpdate && it != byId[it.id] }
     }
 
     /** The section owning [messageId], if any. */
@@ -254,8 +254,16 @@ object SummarySections {
         current: List<SourceMessage>
     ): Boolean {
         val byId = current.associateBy { it.id }
-        return (owned + context).all { m -> byId[m.id]?.text == m.text }
+        if (current.map { it.id }.distinct().size != current.size) return false
+        val start = current.indexOfFirst { it.id == owned.firstOrNull()?.id }
+        if (start < 0 || current.drop(start).take(owned.size) != owned) return false
+        return contextBefore(current, start) == context &&
+            (owned + context).all { m -> byId[m.id] == m }
     }
+
+    /** A changed decision or a manual edit invalidates an in-flight rewrite. */
+    fun canCommitReplacement(started: Section, current: Section?): Boolean =
+        current != null && current == started && current.awaitsRegeneration
 
     /**
      * An old single summary, from before sections, becomes one legacy block

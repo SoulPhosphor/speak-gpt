@@ -479,3 +479,15 @@ reduction, more the longer the chat runs.
 - Qvink MessageSummarize: https://github.com/qvink/SillyTavern-MessageSummarize
 - LangChain ConversationSummaryBufferMemory (progressive summary-buffer
   pattern); Claude Code auto-compaction (same pattern, coarser grain).
+
+
+## Cleanup completion — October 4, 2026
+
+These owner instructions supersede the older Summary Length rules above:
+
+- Summary Sections and Compact use content-driven length, preserving continuity while removing repetition. There is no configured word ceiling, output token cap, 10% over-length flag, or length-triggered shortening pass. The unused Summary Length control is removed; its legacy preference and backup keys remain compatible. The image-prompt summary keeps its separate 200-token cap. Untouched saved built-ins upgrade; saved `{length}` instructions no longer use the retired setting.
+- A Section request checks its owned message IDs, exact source content, order, roles, and preceding context before committing. A replacement also checks that its section and resummarization decision have not changed. Source changes discard the in-flight result and defer to the existing resummarization choice. Projection refreshes cannot consume the edit evidence before that choice is handled.
+- Make Current on summarized replies uses the same section-change decision as editing. Automatic or remembered Yes protects manual edits; an explicit Yes may replace them. No keeps the summary marked changed. Regenerate keeps the reply's permanent message ID across its temporary row replacement.
+- Branch regenerate realigns the existing saved boundaries. A replacement inside a manual Compact source range marks Compact stale and offers the existing Recompact handling when the replacement finishes. Changes outside the range leave Compact alone.
+
+Compact cancellation and partial-failure persistence are unchanged. Usage & Cost and error/log routing are separate work.

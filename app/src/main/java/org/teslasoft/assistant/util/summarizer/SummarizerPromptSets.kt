@@ -86,10 +86,31 @@ object SummarizerPromptSets {
 
     fun isBuiltIn(kind: Kind, id: String): Boolean = builtIns(kind).any { it.id == id }
 
-    private fun rollingVersionOf(id: String): String? = when (id) {
-        STORYTELLER_ID -> SummarizerPrompts.STORYTELLER
-        REPORTER_ID -> SummarizerPrompts.REPORTER
-        else -> null
+    /** Recognizes untouched shipped prompts saved before length limits were removed. */
+    private fun priorBuiltInTexts(id: String): Set<String> = when (id) {
+        STORYTELLER_ID -> setOf(
+            SummarizerPrompts.STORYTELLER,
+            SummarizerPrompts.STORYTELLER.replace(
+                "Write in clear, compact prose, preserving the information needed for conversation continuity.",
+                "Write in clear, compact prose under {length} words."
+            ),
+            SummarizerPrompts.SECTION_STORYTELLER.replace(
+                " Preserve the information needed for conversation continuity.",
+                " Stay under {length} words."
+            )
+        )
+        REPORTER_ID -> setOf(
+            SummarizerPrompts.REPORTER,
+            SummarizerPrompts.REPORTER.replace(
+                "Preserve the information needed for conversation continuity without repetition.",
+                "Keep the complete list under {length} words."
+            ),
+            SummarizerPrompts.SECTION_REPORTER.replace(
+                "Keep the list as short as the section allows while preserving information needed for conversation continuity.",
+                "Keep the list as short as the section allows, and under {length} words."
+            )
+        )
+        else -> emptySet()
     }
 
     /** A built-in prompt's shipped text, or null for the user's own prompts. */
@@ -158,9 +179,8 @@ object SummarizerPromptSets {
                 result.add(index.coerceAtMost(result.size), builtIn.copy(isDefault = false))
             } else {
                 existing.name = builtIn.name
-                // An untouched older Summarizer built-in (written for one
-                // rolling recap) becomes its section version.
-                if (kind == Kind.SUMMARY && existing.text == rollingVersionOf(builtIn.id)) {
+                // Update only untouched shipped text; user-authored prompts stay intact.
+                if (kind != Kind.IMAGE && existing.text in priorBuiltInTexts(builtIn.id)) {
                     existing.text = builtIn.text
                 }
             }

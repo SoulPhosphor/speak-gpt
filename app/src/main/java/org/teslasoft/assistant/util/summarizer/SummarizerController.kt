@@ -143,15 +143,13 @@ class SummarizerController(
         val endpoint: ApiEndpointObject,
         val model: String,
         val providerJson: com.google.gson.JsonObject?,
-        val prompt: String,
-        val lengthWords: Int
+        val prompt: String
     )
 
     private sealed interface FoldBatchResult {
         data class Advanced(
             val summary: String,
-            val foldedCount: Int,
-            val overLength: Boolean
+            val foldedCount: Int
         ) : FoldBatchResult
 
         data object Failed : FoldBatchResult
@@ -493,7 +491,6 @@ class SummarizerController(
         finishedCompactionCheckpoint = null
         val startingSummary = prefs.getSummarizerSummary()
         val startingFolded = prefs.getSummarizerFoldedCount()
-        val startingOverLength = prefs.getSummarizerOverLength()
         val startingVersion = prefs.getSummarizerProjectionVersion()
         val operationStartFolded = if (fromScratch) 0 else startingFolded.coerceAtMost(target)
 
@@ -508,7 +505,6 @@ class SummarizerController(
 
         var summary = if (fromScratch) "" else startingSummary
         var folded = operationStartFolded
-        var overLength = if (fromScratch) false else startingOverLength
 
         try {
             if (folded < target) {
@@ -520,13 +516,11 @@ class SummarizerController(
                         entries = snapshot.entries,
                         folded = folded,
                         pending = target - folded,
-                        summary = summary,
-                        priorOverLength = overLength
+                        summary = summary
                     )) {
                         is FoldBatchResult.Advanced -> {
                             summary = result.summary
                             folded = result.foldedCount
-                            overLength = result.overLength
                             if (!prefs.advanceCompactionRegenerationLockBoundary(folded)) {
                                 recordFailure(
                                     prefs,
@@ -557,9 +551,8 @@ class SummarizerController(
                                 stillCurrent() &&
                                 prefs.getSummarizerSummary() == startingSummary &&
                                 prefs.getSummarizerFoldedCount() == startingFolded &&
-                                prefs.getSummarizerOverLength() == startingOverLength &&
                                 prefs.getSummarizerProjectionVersion() == startingVersion &&
-                                prefs.commitManualCompaction(summary, folded, overLength, folded)
+                                prefs.commitManualCompaction(summary, folded, false, folded)
                             ) {
                                 partialSavedMessages = folded - operationStartFolded
                                 notifyStateChanged()
@@ -573,7 +566,7 @@ class SummarizerController(
             val completedThisRun = folded - startingFolded.coerceAtMost(target)
             val saved = if (savePartialOnCancel && completedThisRun > 0 && stillCurrent()) {
                 withContext(NonCancellable) {
-                    prefs.commitManualCompaction(summary, folded, overLength, folded)
+                    prefs.commitManualCompaction(summary, folded, false, folded)
                 }
             } else {
                 // Nothing from the run is kept, including the regeneration
@@ -599,7 +592,6 @@ class SummarizerController(
             !stillCurrent() ||
             prefs.getSummarizerSummary() != startingSummary ||
             prefs.getSummarizerFoldedCount() != startingFolded ||
-            prefs.getSummarizerOverLength() != startingOverLength ||
             prefs.getSummarizerProjectionVersion() != startingVersion
         ) {
             val configuredModel = prefs.getSummarizerModel()
@@ -616,7 +608,7 @@ class SummarizerController(
             return false
         }
 
-        if (!prefs.commitManualCompaction(summary, target, overLength, target)) {
+        if (!prefs.commitManualCompaction(summary, target, false, target)) {
             val configuredModel = prefs.getSummarizerModel()
             recordFailure(
                 prefs,
@@ -639,8 +631,8 @@ class SummarizerController(
      * Writes one summary section: first any unedited section whose messages
      * changed, otherwise the next new section past the Complete Messages
      * window. [snapshotProvider] is read live, before the request and again
-     * when it returns; a result whose messages changed meanwhile is discarded
-     * and the loop starts over from the current conversation.
+     * when it returns; a result whose messages changed meanwhile is discarded.
+     * The source-change handler decides whether to start another cycle.
      *
      * @return true to keep looping.
      */
@@ -689,11 +681,13 @@ class SummarizerController(
 
         // Never save a summary written from messages that changed meanwhile.
         val latest = snapshotProvider()?.sources() ?: return false
-        if (!SummarySections.sourceStillCurrent(owned, context, latest)) return true
+        if (chatIdProvider() != chatId ||
+            !SummarySections.sourceStillCurrent(owned, context, latest)
+        ) return false
         val fresh = SummarySectionStore.load(prefs, latest) ?: return false
         val updated = if (replacing != null) {
             val target = fresh.firstOrNull { it.id == replacing.id }
-            if (target == null || target.edited) return true
+            if (!SummarySections.canCommitReplacement(replacing, target)) return false
             fresh.map {
                 if (it.id == replacing.id) SummarySections.newSection(owned, context, text, it.id) else it
             }
@@ -718,9 +712,7 @@ class SummarizerController(
     }
 
     /**
-     * One section summary call. The response budget is generous so the prompt,
-     * not a token ceiling, decides the length; a reply the provider reports
-     * as stopped at its length limit is a failure and is never saved.
+     * One section summary call with no app-imposed response length ceiling.
      * @return the summary text, or null after recording the failure.
      */
     private suspend fun requestSection(
@@ -780,7 +772,6 @@ class SummarizerController(
         prefs: Preferences,
         promptKind: SummarizerPromptSets.Kind
     ): FoldRuntime? {
-        val lengthWords = prefs.getSummarizerLength()
         val endpointId = prefs.getSummarizerEndpointId()
         val endpoint = if (endpointId.isBlank()) null else try {
             ApiEndpointPreferences.getApiEndpointPreferences(appContext)
@@ -840,10 +831,8 @@ class SummarizerController(
             model = model,
             providerJson = routingResolution.providerJson,
             prompt = SummarizerPrompts.render(
-                SummarizerPromptSets.activeText(prefs, promptKind, chatIdProvider()),
-                lengthWords
-            ),
-            lengthWords = lengthWords
+                SummarizerPromptSets.activeText(prefs, promptKind, chatIdProvider())
+            )
         )
     }
 
@@ -853,8 +842,7 @@ class SummarizerController(
         entries: List<Entry>,
         folded: Int,
         pending: Int,
-        summary: String,
-        priorOverLength: Boolean
+        summary: String
     ): FoldBatchResult {
         var batch = pending.coerceAtMost(BATCH_SIZE)
 
@@ -868,8 +856,7 @@ class SummarizerController(
             if (departing.isEmpty()) {
                 return FoldBatchResult.Advanced(
                     summary,
-                    folded + batch,
-                    priorOverLength
+                    folded + batch
                 )
             }
 
@@ -929,15 +916,7 @@ class SummarizerController(
                 return FoldBatchResult.Failed
             }
 
-            // Owner ruling: count the words ourselves, allow 10% over, and
-            // beyond that save unchanged but flag for compression on the
-            // next regular fold-in. Never truncated, never discarded, never
-            // a separate corrective call.
-            val overLength = SummarizerLengthPolicy.isOverLength(
-                text,
-                runtime.lengthWords
-            )
-            return FoldBatchResult.Advanced(text, folded + batch, overLength)
+            return FoldBatchResult.Advanced(text, folded + batch)
         }
     }
 
