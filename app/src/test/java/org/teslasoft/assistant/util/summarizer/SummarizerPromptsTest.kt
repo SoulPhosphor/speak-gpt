@@ -42,6 +42,8 @@ class SummarizerPromptsTest {
         assertTrue(rendered.contains("Preserve names."))
         assertTrue(rendered.contains("Reply in bullets."))
         assertEquals("Use two paragraphs.", SummarizerPrompts.render("Use two paragraphs."))
+        assertTrue(SummarizerPrompts.render("Write bullet points under {length} words.")
+            .startsWith("Write bullet points"))
     }
 
     @Test

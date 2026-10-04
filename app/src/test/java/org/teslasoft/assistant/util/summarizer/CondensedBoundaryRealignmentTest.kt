@@ -39,4 +39,11 @@ class CondensedBoundaryRealignmentTest {
         assertEquals(0, after(boundary = 0, start = 0, end = 10))
         assertEquals(30, after(boundary = 30, start = 10, end = 10))
     }
+    @Test fun branchRegenerateRetainsItsTurnInsideCompactButDropsTheDiscardedTail() {
+        // Canonical reply 11 is replaced with the same ID; messages 12..29 disappear.
+        assertEquals(12, CondensedBoundaryRealignment.afterRangeRemoval(20, 12, 30))
+        // A branch entirely after Compact does not affect the source range.
+        assertEquals(10, CondensedBoundaryRealignment.afterRangeRemoval(10, 12, 30))
+    }
+
 }

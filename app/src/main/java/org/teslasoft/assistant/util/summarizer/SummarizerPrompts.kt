@@ -167,8 +167,8 @@ Use brief bullet points, with one fact per bullet. Keep the list as short as the
 
     /** Retires the old setting-driven word ceiling in saved custom prompts. */
     fun render(prompt: String): String = prompt
-        .replace(Regex("""(?i)(?:Stay|Keep[^.\n]*?|Write[^.\n]*?)\s+under\s+\{length}\s+words\.?"""),
-            "Preserve information needed for conversation continuity; remove repetition and unnecessary wording.")
+        .replace(Regex("""(?i)\bunder\s+\{length}\s+words"""),
+            "at the length needed for conversation continuity")
         .replace("{length}", "the length needed for conversation continuity")
 
     /**
