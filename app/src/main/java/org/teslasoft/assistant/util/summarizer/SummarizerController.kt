@@ -48,6 +48,7 @@ import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.util.GenerationErrorClassifier
+import org.teslasoft.assistant.util.reachedServer
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.observer.ResponseObserver
@@ -710,7 +711,8 @@ class SummarizerController(
                 classified.httpStatus,
                 SummarizerDetailSanitizer.sanitize(SummarizerErrorDetail.readable(e)),
                 rawProviderError = e.message,
-                rawResponseBody = rawResponse.get()
+                rawResponseBody = rawResponse.get(),
+                providerAnswered = classified.reachedServer()
             )
             return null
         }
@@ -718,7 +720,8 @@ class SummarizerController(
             recordFailure(
                 runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
                 runtime.endpoint.label, runtime.model, null,
-                "The summary stopped at the response length limit before it was finished, so it was not saved."
+                "The summary stopped at the response length limit before it was finished, so it was not saved.",
+                providerAnswered = true
             )
             return null
         }
@@ -726,7 +729,8 @@ class SummarizerController(
         if (text.isBlank()) {
             recordFailure(
                 runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
-                runtime.endpoint.label, runtime.model, null, null
+                runtime.endpoint.label, runtime.model, null, null,
+                providerAnswered = true
             )
             return null
         }
@@ -870,7 +874,8 @@ class SummarizerController(
                     runtime.prefs, category, runtime.endpoint.label, runtime.model,
                     classified.httpStatus, SummarizerDetailSanitizer.sanitize(detail),
                     rawProviderError = e.message,
-                    rawResponseBody = rawResponse.get()
+                    rawResponseBody = rawResponse.get(),
+                    providerAnswered = classified.reachedServer()
                 )
                 return FoldBatchResult.Failed
             }
@@ -882,7 +887,8 @@ class SummarizerController(
                     runtime.endpoint.label,
                     runtime.model,
                     null,
-                    null
+                    null,
+                    providerAnswered = true
                 )
                 return FoldBatchResult.Failed
             }
@@ -907,7 +913,10 @@ class SummarizerController(
         httpStatus: Int?,
         detail: String?,
         rawProviderError: String? = null,
-        rawResponseBody: String? = null
+        rawResponseBody: String? = null,
+        /** The AI service answered: with an error, or with a reply the app
+         *  couldn't use. Decides which app-wide log gets the entry. */
+        providerAnswered: Boolean = false
     ) {
         lastFailureCategory = category
         val decorated = if (httpStatus != null) {
@@ -926,22 +935,23 @@ class SummarizerController(
         // as an alert until they view the errors list (owner ruling, Aug 31 2026).
         prefs.setSummarizerErrorsUnseen(true)
 
+        // Owner ruling (Oct 4 2026, replacing July 29): a failure the AI
+        // service caused goes to the Provider Failure Log with what was being
+        // done (Summarizing or Compacting); any other failure goes to the
+        // Error Log.
         val running = operationState as? OperationState.Running
-        if (running?.kind == OperationKind.COMPACTING) {
-            recordCompactionDiagnostics(
+        if (running != null) {
+            recordAppLogEntry(
                 prefs = prefs,
                 state = running,
                 category = category,
                 model = model,
+                providerAnswered = providerAnswered,
                 rawProviderError = rawProviderError,
                 technicalDetail = decorated,
                 rawResponseBody = rawResponseBody
             )
         }
-
-        // Owner ruling (July 29 2026): summarizer failures are recorded ONLY
-        // in the per-chat Summarizer Errors log. No app-wide Error Log entry
-        // is written for this feature.
 
         if (result.newEpisode) {
             listener?.onSummarizerErrorEpisode()
@@ -949,15 +959,18 @@ class SummarizerController(
         notifyStateChanged()
     }
 
-    private fun recordCompactionDiagnostics(
+    private fun recordAppLogEntry(
         prefs: Preferences,
         state: OperationState.Running,
         category: SummarizerErrorCategory,
         model: String,
+        providerAnswered: Boolean,
         rawProviderError: String?,
         technicalDetail: String?,
         rawResponseBody: String? = null
     ) {
+        val compacting = state.kind == OperationKind.COMPACTING
+        val function = if (compacting) "Compacting" else "Summarizing"
         val endpointId = prefs.getSummarizerEndpointId()
         val endpoint = try {
             ApiEndpointPreferences.getApiEndpointPreferences(appContext)
@@ -973,16 +986,47 @@ class SummarizerController(
             else -> "Automatic"
         }
         val outcome = if (state.successfulMessages > 0) "Partially Failed" else "Failed Completely"
-        val explanation = when (category) {
-            SummarizerErrorCategory.RESPONSE_TIMEOUT,
-            SummarizerErrorCategory.CONNECT_TIMEOUT -> "The configured timeout expired before a usable compacted summary was saved."
-            SummarizerErrorCategory.SERVICE_UNREACHABLE -> "The app could not reach the configured compaction endpoint."
-            SummarizerErrorCategory.REQUEST_TOO_LARGE -> "The compaction request exceeded a provider or model input limit."
-            SummarizerErrorCategory.SAVE_FAILED -> "The model returned usable work, but the app could not save the compacted state."
-            else -> "The compaction operation stopped before the requested range could be committed."
+        if (providerAnswered) {
+            if (!prefs.getLogChatFailures()) return
+            val providerLogMessage = buildString {
+                append(rawProviderError?.ifBlank { null } ?: technicalDetail?.ifBlank { null } ?: "Not Reported")
+                SummarizerDetailSanitizer.sanitize(rawResponseBody)?.takeIf { it.isNotBlank() }?.let {
+                    append("\nRaw Response: ").append(it)
+                }
+            }
+            scope.launch(Dispatchers.IO) {
+                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                    appContext,
+                    endpoint?.label.orEmpty().ifBlank { "Not Reported" },
+                    provider,
+                    model,
+                    function,
+                    providerLogMessage
+                )
+            }
+            return
+        }
+        val explanation = if (compacting) {
+            when (category) {
+                SummarizerErrorCategory.RESPONSE_TIMEOUT,
+                SummarizerErrorCategory.CONNECT_TIMEOUT -> "The configured timeout expired before a usable compacted summary was saved."
+                SummarizerErrorCategory.SERVICE_UNREACHABLE -> "The app could not reach the configured compaction endpoint."
+                SummarizerErrorCategory.REQUEST_TOO_LARGE -> "The compaction request exceeded a provider or model input limit."
+                SummarizerErrorCategory.SAVE_FAILED -> "The model returned usable work, but the app could not save the compacted state."
+                else -> "The compaction operation stopped before the requested range could be committed."
+            }
+        } else {
+            when (category) {
+                SummarizerErrorCategory.RESPONSE_TIMEOUT,
+                SummarizerErrorCategory.CONNECT_TIMEOUT -> "The configured timeout expired before a usable summary section was saved."
+                SummarizerErrorCategory.SERVICE_UNREACHABLE -> "The app could not reach the configured summarizer endpoint."
+                SummarizerErrorCategory.REQUEST_TOO_LARGE -> "The summary request exceeded a provider or model input limit."
+                SummarizerErrorCategory.SAVE_FAILED -> "The model returned usable work, but the app could not save the summary section."
+                else -> "The summary update stopped before its section could be saved."
+            }
         }
         val body = buildString {
-            append("Function: Compacting\n")
+            append("Function: ").append(function).append('\n')
             append("Conversation: ").append(state.chatName.ifBlank { "Untitled chat" }).append('\n')
             append("Summarizer Model: ").append(model).append('\n')
             append("Summarizer Endpoint: ")
@@ -1010,26 +1054,8 @@ class SummarizerController(
             append("Explanation: ").append(explanation)
         }
         org.teslasoft.assistant.preferences.Logger.logAsync(
-            appContext, "crash", "Compaction", "error", body
+            appContext, "crash", if (compacting) "Compaction" else "Summarizer", "error", body
         )
-        if ((rawProviderError != null || rawResponseBody != null) && prefs.getLogChatFailures()) {
-            val providerLogMessage = buildString {
-                append(rawProviderError.orEmpty().ifBlank { "Not Reported" })
-                SummarizerDetailSanitizer.sanitize(rawResponseBody)?.takeIf { it.isNotBlank() }?.let {
-                    append("\nRaw Response: ").append(it)
-                }
-            }
-            scope.launch(Dispatchers.IO) {
-                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
-                    appContext,
-                    endpoint?.label.orEmpty().ifBlank { "Not Reported" },
-                    provider,
-                    model,
-                    "Compacting",
-                    providerLogMessage
-                )
-            }
-        }
     }
 
     private fun notifyStateChanged() {
