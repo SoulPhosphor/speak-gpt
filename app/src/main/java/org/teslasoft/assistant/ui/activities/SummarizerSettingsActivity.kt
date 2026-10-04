@@ -72,7 +72,6 @@ class SummarizerSettingsActivity : FragmentActivity() {
     private var textRoutingValue: TextView? = null
     private var fieldCompleteMessages: TextInputEditText? = null
     private var switchNewChats: MaterialSwitch? = null
-    private var radioCompactingCancelBehavior: android.widget.RadioGroup? = null
     private var fieldSummaryLength: TextInputEditText? = null
 
     private var suppressWatchers = false
@@ -138,7 +137,6 @@ class SummarizerSettingsActivity : FragmentActivity() {
         textRoutingValue = findViewById(R.id.text_summarizer_routing_value)
         fieldCompleteMessages = findViewById(R.id.field_complete_messages)
         switchNewChats = findViewById(R.id.switch_summarizer_new_chats)
-        radioCompactingCancelBehavior = findViewById(R.id.radio_compacting_cancel_behavior)
         fieldSummaryLength = findViewById(R.id.field_summary_length)
     }
 
@@ -198,15 +196,11 @@ class SummarizerSettingsActivity : FragmentActivity() {
             preferences?.setSummarizerOnForNewChats(checked)
         }
 
-        radioCompactingCancelBehavior?.check(
-            if (preferences?.getSavePartialCompactionOnCancel() == true) {
-                R.id.radio_compacting_cancel_save
-            } else R.id.radio_compacting_cancel_discard
-        )
-        radioCompactingCancelBehavior?.setOnCheckedChangeListener { _, checkedId ->
-            preferences?.setSavePartialCompactionOnCancel(
-                checkedId == R.id.radio_compacting_cancel_save
-            )
+        findViewById<MaterialSwitch>(R.id.switch_summarizer_always_resummarize)?.apply {
+            isChecked = preferences?.getSummarizerAlwaysResummarize() ?: true
+            setOnCheckedChangeListener { _, checked ->
+                preferences?.setSummarizerAlwaysResummarize(checked)
+            }
         }
     }
 

@@ -175,4 +175,17 @@ class SummarySectionsTest {
         assertEquals("October 1, 2026 · 1:00 PM–3:15 PM", SummarySectionTime.format(start, end, utc, Locale.US))
         assertEquals("October 3, 2026 · 10:42 AM", SummarySectionTime.format(at(3, 10, 42), at(3, 10, 42), utc, Locale.US))
     }
+
+    @Test
+    fun aKeptSectionIsMarkedButNotRewrittenAndAnEditIsDetectedOnce() {
+        val messages = chat(10)
+        val section = SummarySections.newSection(messages, emptyList(), "summary")
+        val edited = messages.map { if (it.id == "m2") it.copy(text = "changed") else it }
+        val reconciled = SummarySections.reconcile(listOf(section), edited).sections
+        assertEquals(listOf(section.id), SummarySections.newlyAffected(listOf(section), reconciled).map { it.id })
+        val kept = reconciled.single().copy(kept = true)
+        assertFalse(kept.awaitsRegeneration)
+        assertTrue(SummarySections.newlyAffected(listOf(kept), SummarySections.reconcile(listOf(kept), edited).sections).isEmpty())
+        assertEquals(listOf(kept), SummarySections.fromJson(SummarySections.toJson(listOf(kept))))
+    }
 }

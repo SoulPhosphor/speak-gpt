@@ -47,11 +47,14 @@ object SummarySections {
         /** Its source messages changed since the text was written. */
         val needsUpdate: Boolean = false,
         /** A summary from before sections existed, carried over as one block. */
-        val legacy: Boolean = false
+        val legacy: Boolean = false,
+        /** The user chose to keep this text after its messages changed. */
+        val kept: Boolean = false
     ) {
-        /** Rewritten automatically: only unedited, non-legacy sections. A
-         *  user's edit or a legacy block is never silently replaced. */
-        val awaitsRegeneration: Boolean get() = needsUpdate && !edited && !legacy
+        /** Rewritten automatically: only unedited, non-legacy sections the
+         *  user did not choose to keep. A user's edit, a legacy block, or a
+         *  kept summary is never silently replaced. */
+        val awaitsRegeneration: Boolean get() = needsUpdate && !edited && !legacy && !kept
     }
 
     fun fingerprint(text: String): Int = text.hashCode()
@@ -72,6 +75,7 @@ object SummarySections {
                     .put("edited", s.edited)
                     .put("needsUpdate", s.needsUpdate)
                     .put("legacy", s.legacy)
+                    .put("kept", s.kept)
             )
         }
         return array.toString()
@@ -107,7 +111,8 @@ object SummarySections {
                     text = o.optString("text"),
                     edited = o.optBoolean("edited"),
                     needsUpdate = o.optBoolean("needsUpdate"),
-                    legacy = o.optBoolean("legacy")
+                    legacy = o.optBoolean("legacy"),
+                    kept = o.optBoolean("kept")
                 )
             }
         } catch (_: Exception) {
@@ -166,6 +171,13 @@ object SummarySections {
         var count = 0
         while (count < current.size && current[count].id in owned) count++
         return count
+    }
+
+    /** Sections that [reconciled] newly marks as needing an update compared
+     *  with [before]: the sections an edit just affected. */
+    fun newlyAffected(before: List<Section>, reconciled: List<Section>): List<Section> {
+        val wasMarked = before.associate { it.id to it.needsUpdate }
+        return reconciled.filter { it.needsUpdate && wasMarked[it.id] == false }
     }
 
     /** The section owning [messageId], if any. */

@@ -2697,6 +2697,23 @@ class Preferences internal constructor(
         putGlobalString("summarizer_on_new_chats", value.toString())
     }
 
+    /** Editing or regenerating a summarized message rewrites its summary
+     *  section without asking (owner ruling, Oct 4 2026). Default on. */
+    fun getSummarizerAlwaysResummarize(): Boolean =
+        getGlobalString("summarizer_always_resummarize", "true") == "true"
+
+    fun setSummarizerAlwaysResummarize(value: Boolean) {
+        putGlobalString("summarizer_always_resummarize", value.toString())
+    }
+
+    /** This chat's remembered answer to "Resummarize Conversation Section?":
+     *  "" = ask, "yes" = always rewrite, "no" = always keep. */
+    fun getSummaryResummarizeChoice(): String = getString("summary_resummarize_choice", "")
+
+    fun setSummaryResummarizeChoice(value: String) {
+        putString("summary_resummarize_choice", value)
+    }
+
     /** Selected prompt slot, 0–4 (decision 6). */
     fun getSummarizerSelectedSlot(): Int =
         getGlobalString("summarizer_selected_slot", "0").toIntOrNull()?.coerceIn(0, 4) ?: 0
@@ -2750,15 +2767,6 @@ class Preferences internal constructor(
 
     fun setSummarizerPromptSet(kind: String, json: String) {
         putGlobalString("summarizer_prompt_set_$kind", json)
-    }
-
-    /** Manual compaction cancellation policy. False is the conservative,
-     * atomic default: cancelling discards every result from that operation. */
-    fun getSavePartialCompactionOnCancel(): Boolean =
-        getGlobalString("save_partial_compaction_on_cancel", "false") == "true"
-
-    fun setSavePartialCompactionOnCancel(value: Boolean) {
-        putGlobalString("save_partial_compaction_on_cancel", value.toString())
     }
 
     /** Per-chat Use Summarizer state: "" = never stamped, else "true"/"false".

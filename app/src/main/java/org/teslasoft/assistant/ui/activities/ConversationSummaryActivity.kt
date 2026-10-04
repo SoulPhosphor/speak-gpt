@@ -323,7 +323,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         val changes = panel.changedTexts()
         if (changes.isEmpty()) return true
         val updated = storedSections().map { section ->
-            changes[section.id]?.let { section.copy(text = it, edited = true, needsUpdate = false) } ?: section
+            changes[section.id]?.let { section.copy(text = it, edited = true, needsUpdate = false, kept = false) } ?: section
         }
         return SummarySectionStore.save(prefs, updated)
     }
@@ -363,7 +363,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
                 dialog.dismiss()
                 val prefs = preferences ?: return@setOnClickListener
                 val updated = storedSections().map {
-                    if (it.id == sectionId) it.copy(edited = false, legacy = false, needsUpdate = true) else it
+                    if (it.id == sectionId) it.copy(edited = false, legacy = false, kept = false, needsUpdate = true) else it
                 }
                 if (SummarySectionStore.save(prefs, updated)) {
                     prefs.setSummarizerCatchUpPending(true)

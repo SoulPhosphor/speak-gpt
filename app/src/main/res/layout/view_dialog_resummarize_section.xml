@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Resummarize Conversation Section?" (owner ruling, Oct 4 2026): the
+     approved No / Yes pair, then the "Remember my choice" checkbox at the
+     bottom of the dialog. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <include layout="@layout/dialog_two_actions_cancel_first" />
+
+    <com.google.android.material.checkbox.MaterialCheckBox
+        android:id="@+id/check_resummarize_remember"
+        style="@style/Widget.App.CheckOption.CheckBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginBottom="12dp"
+        android:text="@string/summary_section_resummarize_remember" />
+</LinearLayout>

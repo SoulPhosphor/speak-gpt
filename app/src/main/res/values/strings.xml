@@ -3520,9 +3520,6 @@
 
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
-    <string name="compacting_cancel_behavior_title">Compacting Cancel Behavior</string>
-    <string name="compacting_cancel_discard">Don’t Save Already Summarized Messages</string>
-    <string name="compacting_cancel_save">Save Already Summarized Messages</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
     <string name="summarizer_length">Summary Length</string>
     <string name="summarizer_length_hint">Maximum amount of words the summary can become.</string>
@@ -3561,6 +3558,12 @@
     <string name="summary_section_menu">Summary Section</string>
     <string name="summary_section_stale_note">The messages in this part of the conversation changed after this summary was written.</string>
     <string name="summary_section_rewrite">Rewrite Summary</string>
+    <string name="summary_section_resummarize_title">Resummarize Conversation Section?</string>
+    <string name="summary_section_resummarize_body">This will only change the messages from %1$s.</string>
+    <string name="summary_section_resummarize_remember">Remember my choice for future summarized messages in this chat.</string>
+    <string name="summarizer_always_resummarize_toggle">When editing or regenerating a message always resummarize that section.</string>
+    <string name="summarizer_always_resummarize_hint">When off you will be prompted if you would like to resummarize the changed text segment.</string>
+    <string name="compaction_dialog_complete">Compaction complete!</string>
     <string name="summary_section_rewrite_title">Replace this summary with a new one written from the current messages?</string>
     <string name="conversation_preview_title">Conversation Preview</string>
     <string name="conversation_preview_start">Summary starts here</string>

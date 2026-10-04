@@ -151,6 +151,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var summarySectionStarts: Map<String, String> = emptyMap()
     private var summarySectionOwners: Map<String, String> = emptyMap()
     private var compactionRegenerationLockBoundary = 0
+    /** Summarized replies regenerate in a chat that uses the Summarizer. */
+    private var summaryRegenerateAllowed = false
 
     // Assistant-side picture, already cascaded by ChatActivity off the main
     // thread (the active Companion's own picture, else the Default AI Avatar).
@@ -416,15 +418,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
      */
     fun setCondensedRegenerationLockBoundaries(
         summaryBoundary: Int,
-        compactionBoundary: Int
+        compactionBoundary: Int,
+        summaryRegenerateAllowed: Boolean = false
     ) {
         val nextSummary = summaryBoundary.coerceAtLeast(0)
         val nextCompaction = compactionBoundary.coerceAtLeast(0)
         if (summaryRegenerationLockBoundary == nextSummary &&
-            compactionRegenerationLockBoundary == nextCompaction
+            compactionRegenerationLockBoundary == nextCompaction &&
+            this.summaryRegenerateAllowed == summaryRegenerateAllowed
         ) return
         summaryRegenerationLockBoundary = nextSummary
         compactionRegenerationLockBoundary = nextCompaction
+        this.summaryRegenerateAllowed = summaryRegenerateAllowed
         notifyDataSetChanged()
     }
 
@@ -1861,7 +1866,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val isLast = position == dataArray.size - 1
             if (isBot && (!isImage || isLast)) {
                 btnRetry.visibility = View.VISIBLE
-                val lockKind = regenerationLockKind(position)
+                // A summarized reply regenerates in a Summarizer chat; its
+                // section is then resummarized or kept (owner ruling, Oct 4 2026).
+                val lockKind = regenerationLockKind(position)?.takeUnless {
+                    it == CondensedRegenerationLock.Kind.SUMMARY && summaryRegenerateAllowed
+                }
                 if (lockKind != null) {
                     btnRetry.setImageResource(R.drawable.ic_rule_settings)
                     btnRetry.contentDescription =
