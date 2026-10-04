@@ -171,15 +171,6 @@ class SummarizerController(
         /** Internal fold-in batch size (decision 15) — not a user setting. */
         const val BATCH_SIZE = 10
 
-        /** Response budget for one section: roomy, so the prompt decides the
-         *  length and a cut-off is the rare failure it reports. */
-        const val SECTION_RESPONSE_TOKENS = 8192
-
-        /** Response-token budget for a summary call: roomy enough that a
-         *  summary near the word limit is never cut off mid-sentence. */
-        fun responseTokenBudget(lengthWords: Int): Int =
-            (lengthWords * 3).coerceIn(300, 4096)
-
         /** True when a summarizer endpoint profile and model resolve — the
          *  gate for showing the Quick Settings toggle (decision 8). */
         fun isConfigured(context: Context): Boolean = try {
@@ -750,7 +741,6 @@ class SummarizerController(
                 client.chatCompletion(
                     ChatCompletionRequest(
                         model = ModelId(runtime.model),
-                        maxTokens = SECTION_RESPONSE_TOKENS,
                         messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
                 ).choices.firstOrNull()
@@ -895,7 +885,6 @@ class SummarizerController(
                     val client = buildClient(runtime.endpoint, runtime.providerJson, rawResponse)
                     val request = ChatCompletionRequest(
                         model = ModelId(runtime.model),
-                        maxTokens = responseTokenBudget(runtime.lengthWords),
                         messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
                     client.chatCompletion(request)
