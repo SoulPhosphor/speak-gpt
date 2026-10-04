@@ -252,11 +252,41 @@ object SummarizerDetailSanitizer {
         Regex("""sk-[A-Za-z0-9._\-]{8,}""")
     )
 
-    fun sanitize(raw: String?): String? {
+    /** Remove payload fields even inside client exception JSON dumps. */
+    private val privateFields = setOf("messages", "choices", "content", "text", "input", "output", "prompt",
+        "summary", "request", "request_body", "body", "headers", "authorization", "api_key", "api-key", "x-api-key", "token", "access_token", "password", "secret")
+
+    fun sanitize(raw: String?, secrets: List<String> = emptyList(), maxChars: Int = MAX_DETAIL_CHARS): String? {
         if (raw.isNullOrBlank()) return null
         var out: String = raw
+        // Exact request-known secrets/private text are removed before truncation.
+        secrets.filter { it.isNotBlank() }.sortedByDescending { it.length }.forEach { out = out.replace(it, "[removed]") }
+        fun clean(value: com.google.gson.JsonElement) {
+            if (value.isJsonObject) {
+                value.asJsonObject.entrySet().toList().forEach { (key, child) ->
+                    if (key.lowercase() in privateFields) value.asJsonObject.addProperty(key, "[removed]") else clean(child)
+                }
+            } else if (value.isJsonArray) value.asJsonArray.forEach { clean(it) }
+        }
+        // Client exceptions can prefix/suffix an otherwise valid JSON envelope.
+        val start = out.indexOf('{')
+        val end = out.lastIndexOf('}')
+        if (start >= 0 && end > start) {
+            try {
+                val parsed = com.google.gson.JsonParser.parseString(out.substring(start, end + 1))
+                clean(parsed)
+                out = out.substring(0, start) + parsed.toString() + out.substring(end + 1)
+            } catch (_: Exception) {
+                // Broken JSON must not leak a partial request/completion dump.
+                if (Regex("\"(?i:messages|choices|content|prompt|summary|headers)\"\\s*:").containsMatchIn(out.substring(start)))
+                    out = out.substring(0, start) + "[payload removed]"
+            }
+        }
         for (p in patterns) out = out.replace(p, "[removed]")
-        if (out.length > MAX_DETAIL_CHARS) out = out.take(MAX_DETAIL_CHARS) + "…"
+        out = out.replace(Regex("""(?i)["']?(authorization|x-api-key|api-key|api_key)["']?\s*[:=]\s*["']?[^\s,"'}]+"""), "[removed]")
+        out = out.replace(Regex("""(?i)(https?://)[^/\s@]+@"""), "$1[removed]@")
+        out = out.replace(Regex("""(?i)([?&](?:key|api_key|token|access_token)=)[^&\s]+"""), "$1[removed]")
+        if (out.length > maxChars) out = out.take(maxChars) + "…"
         return out.trim().ifBlank { null }
     }
 }

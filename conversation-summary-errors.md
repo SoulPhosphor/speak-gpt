@@ -274,13 +274,25 @@ in.
 
 ## 5. Relationship to the main Error Log
 
-The per-chat Summarizer Errors dialog is the user-facing record for this
-feature. The same failure may also write a concise diagnostic entry to the
-app-wide Error Log, using the app's existing network, authentication, model,
-quota, server, and unknown classifiers where they apply.
+The per-chat Summarizer Errors dialog remains the user-facing status record.
+Diagnostic ownership depends on the actual cause, never on whether a provider
+answered. External HTTP/provider/request/transport failures go to the existing
+Provider Failure Log when Log Chat Failures is enabled. Local persistence,
+bookkeeping, serialization, and unexpected app exceptions go to the Error Log,
+with sanitized exception type, cause chain, stack trace, and operation. A false
+SharedPreferences commit is recorded explicitly as a storage failure.
 
-The app-wide log must not replace the per-chat record: the user needs to know
-which conversation is currently sending unsummarized messages in full. The
-per-chat record must not replace the app-wide diagnostic log: developers need
-the shared technical context when troubleshooting provider or transport
-failures.
+Configuration gaps and deliberate cancellation do not enter either diagnostic
+log. Failure of cancellation cleanup is a separate local storage failure.
+Storage methods retain the original exception while keeping their Boolean APIs;
+they log at the failure site, including callers outside the background engine.
+The controller does not duplicate those storage failures in a second entry.
+
+Each Section/Compact request captures its own endpoint, routing choice, attempt
+ID, HTTP status and response evidence. Shared provider diagnostic parsing and
+classification preserve upstream statuses, codes, types, filter side and actual
+serving provider when supplied. A decoder exception is attributed externally
+only when captured response evidence is demonstrably incompatible; an app parser
+or state exception after a valid response remains a local failure. Request and
+completion payload fields, credentials and known source/summary text are removed
+before diagnostic text is persisted. Ordinary chat logging is unchanged.

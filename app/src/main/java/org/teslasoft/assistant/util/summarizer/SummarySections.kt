@@ -81,7 +81,7 @@ object SummarySections {
         return array.toString()
     }
 
-    fun fromJson(json: String): List<Section> {
+    fun fromJson(json: String, onFailure: ((Exception) -> Unit)? = null): List<Section> {
         if (json.isBlank()) return emptyList()
         return try {
             val array = JSONArray(json)
@@ -115,7 +115,8 @@ object SummarySections {
                     kept = o.optBoolean("kept")
                 )
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            onFailure?.invoke(e)
             emptyList()
         }
     }

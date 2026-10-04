@@ -3565,34 +3565,34 @@
     <string name="summarizer_always_resummarize_hint">When off you will be prompted if you would like to resummarize the changed text segment.</string>
     <string name="compaction_dialog_complete">Compaction complete!</string>
     <!-- Compact error box (owner-approved wording, Oct 4 2026). -->
-    <string name="compaction_err_model_missing_title">Model Gone</string>
+    <string name="compaction_err_model_missing_title">Summary Model Configuration Needed</string>
     <string name="compaction_err_model_missing">The Summarizer Model is no longer available.</string>
     <string name="compaction_err_unreachable_title">Can\'t Connect</string>
     <string name="compaction_err_unreachable">Couldn\'t reach the AI service.</string>
-    <string name="compaction_err_connect_timeout_title">Connection Too Slow</string>
+    <string name="compaction_err_connect_timeout_title">Connection Timed Out</string>
     <string name="compaction_err_connect_timeout">Couldn\'t connect to the AI service in time.</string>
-    <string name="compaction_err_response_timeout_title">Model Too Slow</string>
+    <string name="compaction_err_response_timeout_title">Response Timed Out</string>
     <string name="compaction_err_response_timeout">The model didn\'t respond in time.</string>
-    <string name="compaction_err_access_rejected_title">Key or Account Refused</string>
+    <string name="compaction_err_access_rejected_title">Access Rejected</string>
     <string name="compaction_err_access_rejected">The AI service rejected the API key or account.</string>
-    <string name="compaction_err_model_unavailable_title">Model Refused</string>
+    <string name="compaction_err_model_unavailable_title">Model Unavailable</string>
     <string name="compaction_err_model_unavailable">The AI service can\'t use this model.</string>
-    <string name="compaction_err_rate_limit_title">Rate Limited</string>
+    <string name="compaction_err_rate_limit_title">Rate Limit Reached</string>
     <string name="compaction_err_rate_limit">The AI service is limiting requests right now.</string>
-    <string name="compaction_err_quota_title">Out of Credits</string>
-    <string name="compaction_err_quota">The AI account is out of credits or over its spending limit.</string>
-    <string name="compaction_err_too_large_title">Too Big</string>
+    <string name="compaction_err_quota_title">Quota or Spending Limit Reached</string>
+    <string name="compaction_err_quota">The AI account reached a quota, spending, or credit limit. Check the provider account\'s usage and billing.</string>
+    <string name="compaction_err_too_large_title">Request Too Large</string>
     <string name="compaction_err_too_large">The conversation is too large for this model.</string>
-    <string name="compaction_err_rejected_title">Content Refused</string>
+    <string name="compaction_err_rejected_title">Content Rejected</string>
     <string name="compaction_err_rejected">The AI service refused the request because of its content rules.</string>
-    <string name="compaction_err_service_title">Service Error</string>
+    <string name="compaction_err_service_title">Provider Error</string>
     <string name="compaction_err_service">The AI service returned an error.</string>
     <string name="compaction_err_unreadable_title">Unusable Reply</string>
     <string name="compaction_err_unreadable">The model\'s reply couldn\'t be used.</string>
     <string name="compaction_err_save_title">Couldn\'t Save</string>
-    <string name="compaction_err_save">The compacted text couldn\'t be saved on this device.</string>
-    <string name="compaction_err_unexpected_title">Unknown</string>
-    <string name="compaction_err_unexpected">Compaction failed for an unknown reason.</string>
+    <string name="compaction_err_save">The app couldn\'t save the compacted state. Technical details were recorded in the Error Log.</string>
+    <string name="compaction_err_unexpected_title">Internal Compaction Error</string>
+    <string name="compaction_err_unexpected">An internal compaction error occurred. Technical details were recorded in the Error Log.</string>
     <string name="compaction_err_unchanged">Your conversation was not changed.</string>
     <string name="compaction_err_partial_saved">%1$d messages were compacted and saved before this error. Retry to compact the rest.</string>
     <string name="compaction_err_provider">Provider error: %1$s</string>
@@ -3633,7 +3633,7 @@
     <string name="summarizer_status_complete">Summary updated</string>
     <string name="compaction_status_complete">Compaction complete</string>
     <string name="summarizer_status_timeout">Summarization model took too long to respond</string>
-    <string name="compaction_status_timeout">Compaction model took too long to respond</string>
+    <string name="compaction_status_timeout">Compaction request timed out</string>
     <string name="summarizer_status_unreachable">Couldn’t reach the summarization model</string>
     <string name="compaction_status_unreachable">Couldn’t reach the compaction model</string>
     <string name="summarizer_status_too_large">Conversation was too large to summarize</string>
@@ -3680,8 +3680,8 @@
     <string name="summarizer_unknown_model">(unknown)</string>
 
     <!-- Failure categories — exact normative wording (errors addendum §2). -->
-    <string name="summarizer_err_model_missing_title">Summary Model Missing</string>
-    <string name="summarizer_err_model_missing">The selected Summary Model is no longer available. Choose another model in Summarizer Settings.</string>
+    <string name="summarizer_err_model_missing_title">Summary Model Configuration Needed</string>
+    <string name="summarizer_err_model_missing">Summary Model configuration is missing or incomplete. Check the model, endpoint, and routing in Summarizer Settings.</string>
     <string name="summarizer_routing_not_configured_detail">Provider routing for this Summary Model is incomplete. Choose Automatic or finish Preferred or Only setup in Summarizer Settings.</string>
     <string name="summarizer_err_unreachable_title">AI Service Unreachable</string>
     <string name="summarizer_err_unreachable">The summarizer couldn\'t reach the selected AI service. Check your connection and the selected endpoint, then try again.</string>
@@ -3695,20 +3695,20 @@
     <string name="summarizer_err_model_unavailable">The selected AI service couldn\'t use the Summary Model. Check the model name and access, or choose another model in Summarizer Settings.</string>
     <string name="summarizer_err_rate_limit_title">Rate Limit Reached</string>
     <string name="summarizer_err_rate_limit">The selected AI service temporarily limited summary requests. The app will try again automatically. If it continues, wait or choose another Summary Model.</string>
-    <string name="summarizer_err_quota_title">Quota Reached</string>
+    <string name="summarizer_err_quota_title">Quota or Spending Limit Reached</string>
     <string name="summarizer_err_quota">The selected AI account reached its quota or spending limit. Check the provider account\'s usage and billing, or choose another Summary Model.</string>
     <string name="summarizer_err_too_large_title">Summary Request Too Large</string>
-    <string name="summarizer_err_too_large">The current summary or one or more messages are too large for the selected Summary Model to process. Shorten the summary, choose a model or endpoint with a larger input limit, or turn off the summarizer for this chat.</string>
+    <string name="summarizer_err_too_large">The source messages or context for this Summary Section exceed the selected model or provider\'s input limit. Choose a model or endpoint with a larger input limit, or turn off the summarizer for this chat.</string>
     <string name="summarizer_err_rejected_title">Summary Request Rejected</string>
     <string name="summarizer_err_rejected">The selected AI service rejected the summary request because of its content rules. Choose another Summary Model or turn off the summarizer for this chat.</string>
-    <string name="summarizer_err_service_title">AI Service Error</string>
-    <string name="summarizer_err_service">The selected AI service returned an error while updating the summary. The app will try again automatically. If it continues, check the endpoint or choose another Summary Model.</string>
+    <string name="summarizer_err_service_title">Provider Error</string>
+    <string name="summarizer_err_service">The AI service returned an error while generating a Summary Section. The app will try again automatically. If it continues, check the endpoint or choose another Summary Model.</string>
     <string name="summarizer_err_unreadable_title">Summary Response Unreadable</string>
-    <string name="summarizer_err_unreadable">The Summary Model returned a response the app couldn\'t use. The previous summary was kept unchanged. Try another model or check whether the endpoint supports chat completions.</string>
-    <string name="summarizer_err_save_title">Summary Couldn\'t Be Saved</string>
-    <string name="summarizer_err_save">The model returned an updated summary, but the app couldn\'t save it on this device. The previous summary and bookmark were kept. Check available storage and try again.</string>
-    <string name="summarizer_err_unexpected_title">Unexpected Summarizer Error</string>
-    <string name="summarizer_err_unexpected">The summary update failed for an unknown reason. The previous summary and bookmark were kept. Copy this error when reporting the problem.</string>
+    <string name="summarizer_err_unreadable">The AI service returned an unusable response for this Summary Section. Existing sections were not replaced by that response. Try another model or check whether the endpoint supports chat completions.</string>
+    <string name="summarizer_err_save_title">Couldn\'t Save Summary</string>
+    <string name="summarizer_err_save">The app couldn\'t save Summary Section state on this device. Technical details were recorded in the Error Log. Check available storage and try again.</string>
+    <string name="summarizer_err_unexpected_title">Internal Summarizer Error</string>
+    <string name="summarizer_err_unexpected">An internal Summary Section error occurred. Technical details were recorded in the Error Log.</string>
 
     <!-- Model-facing label for the injected summary (decision 14; approved
          July 29 2026). Sent as its own system message, never shown in chat. -->

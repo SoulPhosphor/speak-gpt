@@ -48,7 +48,6 @@ import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.util.GenerationErrorClassifier
-import org.teslasoft.assistant.util.reachedServer
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.observer.ResponseObserver
@@ -143,6 +142,7 @@ class SummarizerController(
         val endpoint: ApiEndpointObject,
         val model: String,
         val providerJson: com.google.gson.JsonObject?,
+        val requestedProvider: String,
         val prompt: String
     )
 
@@ -294,6 +294,8 @@ class SummarizerController(
                         (operationState as? OperationState.Running)?.successfulMessages ?: 0
                     )
                 )
+            } catch (e: Exception) {
+                recordUnexpectedFailure(e, OperationKind.SUMMARIZING, chatName)
             } finally {
                 if (operationState is OperationState.Running) {
                     setOperationState(
@@ -359,6 +361,8 @@ class SummarizerController(
                 )
             } catch (_: CancellationException) {
                 // compactSnapshot owns the optional partial commit.
+            } catch (e: Exception) {
+                recordUnexpectedFailure(e, OperationKind.COMPACTING, chatName)
             } finally {
                 manualCompactionRunning = false
                 if (operationState is OperationState.Running) {
@@ -649,10 +653,16 @@ class SummarizerController(
         // Summary state saved before the Include payload migration may hold
         // old inline payload material. A failed compatibility commit leaves
         // canonical history intact and simply postpones this cycle.
-        if (!prefs.ensureSummarizerProjectionCompatibility()) return false
+        if (!prefs.ensureSummarizerProjectionCompatibility()) {
+            recordStorageFailure(prefs, chatName, "Could not migrate Summary Section storage.")
+            return false
+        }
         val current = snapshot.sources()
         if (current.any { it.id.isBlank() }) return false
-        val sections = SummarySectionStore.load(prefs, current) ?: return false
+        val sections = SummarySectionStore.load(prefs, current) ?: run {
+            recordStorageFailure(prefs, chatName, "Could not load Summary Sections.")
+            return false
+        }
 
         val replacing = sections.firstOrNull { it.awaitsRegeneration }
         val owned: List<SummarySections.SourceMessage> = if (replacing != null) {
@@ -684,7 +694,10 @@ class SummarizerController(
         if (chatIdProvider() != chatId ||
             !SummarySections.sourceStillCurrent(owned, context, latest)
         ) return false
-        val fresh = SummarySectionStore.load(prefs, latest) ?: return false
+        val fresh = SummarySectionStore.load(prefs, latest) ?: run {
+            recordStorageFailure(prefs, chatName, "Could not load Summary Sections before saving.")
+            return false
+        }
         val updated = if (replacing != null) {
             val target = fresh.firstOrNull { it.id == replacing.id }
             if (!SummarySections.canCommitReplacement(replacing, target)) return false
@@ -702,7 +715,11 @@ class SummarizerController(
             )
             return false
         }
-        prefs.advanceSummaryRegenerationLockBoundary(SummarySections.coveredCount(updated, latest))
+        if (!prefs.advanceSummaryRegenerationLockBoundary(SummarySections.coveredCount(updated, latest))) {
+            recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, runtime.endpoint.label,
+                runtime.model, null, "Could not save the Summary Section regeneration boundary. Technical details were recorded in the Error Log.")
+            return false
+        }
         notifyStateChanged()
         val running = operationState as? OperationState.Running
         if (running?.kind == OperationKind.SUMMARIZING) {
@@ -726,10 +743,12 @@ class SummarizerController(
             context.filter { it.text.isNotBlank() }.map { role(it) to it.text },
             owned.filter { it.text.isNotBlank() }.map { role(it) to it.text }
         )
-        val rawResponse = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val evidence = SummarizerDiagnostics.RequestEvidence()
+        val privateValues = (owned + context).map { it.text } + listOf(body, runtime.endpoint.apiKey)
         val choice = try {
             withContext(Dispatchers.IO) {
-                val client = buildClient(runtime.endpoint, runtime.providerJson, rawResponse)
+                val client = buildClient(runtime.endpoint, runtime.providerJson, evidence)
+                evidence.dispatched = true
                 client.chatCompletion(
                     ChatCompletionRequest(
                         model = ModelId(runtime.model),
@@ -740,17 +759,24 @@ class SummarizerController(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            val classified = GenerationErrorClassifier.classify(e)
+            val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
+            if (classified.code == org.teslasoft.assistant.util.GenErrorCode.C1) throw CancellationException("Request cancelled", e)
+            val owner = SummarizerDiagnostics.owner(e, classified, evidence)
             recordFailure(
                 runtime.prefs,
-                SummarizerErrorClassifier.categorize(classified),
+                if (owner == SummarizerDiagnostics.Owner.LOCAL) SummarizerErrorCategory.UNEXPECTED else SummarizerErrorClassifier.categorize(classified),
                 runtime.endpoint.label,
                 runtime.model,
                 classified.httpStatus,
-                SummarizerDetailSanitizer.sanitize(SummarizerErrorDetail.readable(e)),
+                SummarizerErrorDetail.readable(e),
                 rawProviderError = e.message,
-                rawResponseBody = rawResponse.get(),
-                providerAnswered = classified.reachedServer()
+                rawResponseBody = evidence.body,
+                failureOwner = owner,
+                exception = e,
+                providerEvidence = evidence.snapshot(),
+                requestEndpoint = runtime.endpoint,
+                requestedProvider = runtime.requestedProvider,
+                privateValues = privateValues
             )
             return null
         }
@@ -759,7 +785,12 @@ class SummarizerController(
             recordFailure(
                 runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
                 runtime.endpoint.label, runtime.model, null, null,
-                providerAnswered = true
+                failureOwner = SummarizerDiagnostics.Owner.EXTERNAL,
+                providerEvidence = evidence.snapshot(),
+                requestEndpoint = runtime.endpoint,
+                requestedProvider = runtime.requestedProvider,
+                privateValues = privateValues,
+                rawResponseBody = evidence.body
             )
             return null
         }
@@ -776,8 +807,11 @@ class SummarizerController(
         val endpoint = if (endpointId.isBlank()) null else try {
             ApiEndpointPreferences.getApiEndpointPreferences(appContext)
                 .getApiEndpoint(appContext, endpointId)
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            recordUnexpectedFailure(e, (operationState as? OperationState.Running)?.kind ?: OperationKind.SUMMARIZING,
+                (operationState as? OperationState.Running)?.chatName.orEmpty())
+            return null
         }
         // The Summary Model is an explicit selection. Endpoint changes clear
         // it to "Select"; never fall back to the profile's chat model behind
@@ -830,6 +864,11 @@ class SummarizerController(
             endpoint = endpoint,
             model = model,
             providerJson = routingResolution.providerJson,
+            requestedProvider = when (routingMode) {
+                org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_ONLY -> savedFavorite?.selectedProvider.orEmpty().ifBlank { "Not Reported" }
+                org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_PREFERRED -> savedFavorite?.providerOrder?.joinToString(", ").orEmpty().ifBlank { "Automatic" }
+                else -> "Automatic"
+            },
             prompt = SummarizerPrompts.render(
                 SummarizerPromptSets.activeText(prefs, promptKind, chatIdProvider())
             )
@@ -865,23 +904,27 @@ class SummarizerController(
                 summary,
                 departing
             )
-            val rawResponse = java.util.concurrent.atomic.AtomicReference<String?>(null)
+            val evidence = SummarizerDiagnostics.RequestEvidence()
+            val privateValues = departing.map { it.second } + listOf(summary, body, runtime.endpoint.apiKey)
             val text: String
             try {
                 text = withContext(Dispatchers.IO) {
-                    val client = buildClient(runtime.endpoint, runtime.providerJson, rawResponse)
+                    val client = buildClient(runtime.endpoint, runtime.providerJson, evidence)
                     val request = ChatCompletionRequest(
                         model = ModelId(runtime.model),
                         messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
+                    evidence.dispatched = true
                     client.chatCompletion(request)
                         .choices.firstOrNull()?.message?.content?.toString().orEmpty()
                 }.trim()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val classified = GenerationErrorClassifier.classify(e)
-                val category = SummarizerErrorClassifier.categorize(classified)
+                val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
+                if (classified.code == org.teslasoft.assistant.util.GenErrorCode.C1) throw CancellationException("Request cancelled", e)
+                val owner = SummarizerDiagnostics.owner(e, classified, evidence)
+                val category = if (owner == SummarizerDiagnostics.Owner.LOCAL) SummarizerErrorCategory.UNEXPECTED else SummarizerErrorClassifier.categorize(classified)
                 if (category == SummarizerErrorCategory.REQUEST_TOO_LARGE && batch > 1) {
                     batch = (batch / 2).coerceAtLeast(1)
                     continue
@@ -895,10 +938,15 @@ class SummarizerController(
                 val detail = SummarizerErrorDetail.readable(e)
                 recordFailure(
                     runtime.prefs, category, runtime.endpoint.label, runtime.model,
-                    classified.httpStatus, SummarizerDetailSanitizer.sanitize(detail),
+                    classified.httpStatus, detail,
                     rawProviderError = e.message,
-                    rawResponseBody = rawResponse.get(),
-                    providerAnswered = classified.reachedServer()
+                    rawResponseBody = evidence.body,
+                    failureOwner = owner,
+                    exception = e,
+                    providerEvidence = evidence.snapshot(),
+                    requestEndpoint = runtime.endpoint,
+                    requestedProvider = runtime.requestedProvider,
+                    privateValues = privateValues
                 )
                 return FoldBatchResult.Failed
             }
@@ -911,7 +959,12 @@ class SummarizerController(
                     runtime.model,
                     null,
                     null,
-                    providerAnswered = true
+                    failureOwner = SummarizerDiagnostics.Owner.EXTERNAL,
+                    providerEvidence = evidence.snapshot(),
+                    requestEndpoint = runtime.endpoint,
+                    requestedProvider = runtime.requestedProvider,
+                    privateValues = privateValues,
+                    rawResponseBody = evidence.body
                 )
                 return FoldBatchResult.Failed
             }
@@ -929,47 +982,66 @@ class SummarizerController(
         detail: String?,
         rawProviderError: String? = null,
         rawResponseBody: String? = null,
-        /** The AI service answered: with an error, or with a reply the app
-         *  couldn't use. Decides which app-wide log gets the entry. */
-        providerAnswered: Boolean = false
+        failureOwner: SummarizerDiagnostics.Owner = if (category == SummarizerErrorCategory.MODEL_MISSING)
+            SummarizerDiagnostics.Owner.CONFIGURATION else SummarizerDiagnostics.Owner.LOCAL,
+        exception: Throwable? = null,
+        providerEvidence: org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot? = null,
+        requestEndpoint: ApiEndpointObject? = null,
+        requestedProvider: String? = null,
+        privateValues: List<String> = emptyList(),
+        diagnosticRecorded: Boolean = false
     ) {
+        if (failureOwner == SummarizerDiagnostics.Owner.CANCELLED) return
         lastFailureCategory = category
-        lastFailureProviderError = if (providerAnswered) rawProviderError?.trim()?.ifBlank { null } else null
+        lastFailureProviderError = if (failureOwner == SummarizerDiagnostics.Owner.EXTERNAL)
+            SummarizerDetailSanitizer.sanitize(providerEvidence?.errorMessages?.joinToString("\n")
+                ?.ifBlank { null } ?: rawProviderError, privateValues) else null
+        val safeDetail = SummarizerDetailSanitizer.sanitize(lastFailureProviderError ?: detail, privateValues)
         val decorated = if (httpStatus != null) {
-            "HTTP status: $httpStatus" + (detail?.let { "\n$it" } ?: "")
+            "HTTP status: $httpStatus" + (safeDetail?.let { "\n$it" } ?: "")
         } else {
-            detail
+            safeDetail
         }
-        val current = SummarizerErrorLog.fromJson(prefs.getSummarizerErrors())
-        val result = SummarizerErrorLog.record(
-            current, prefs.getSummarizerEpisode(), category,
-            System.currentTimeMillis(), profile, model, decorated
-        )
-        prefs.setSummarizerErrors(SummarizerErrorLog.toJson(result.entries))
-        prefs.setSummarizerEpisode(category.name)
-        // A fresh failure the user has not opened yet — the top-bar badge shows
-        // as an alert until they view the errors list (owner ruling, Aug 31 2026).
-        prefs.setSummarizerErrorsUnseen(true)
-
         // Owner ruling (Oct 4 2026, replacing July 29): a failure the AI
         // service caused goes to the Provider Failure Log with what was being
         // done (Summarizing or Compacting); any other failure goes to the
         // Error Log.
         val running = operationState as? OperationState.Running
-        if (running != null) {
+        if (running != null && !diagnosticRecorded) {
             recordAppLogEntry(
                 prefs = prefs,
                 state = running,
                 category = category,
                 model = model,
-                providerAnswered = providerAnswered,
+                failureOwner = failureOwner,
+                exception = exception,
+                providerEvidence = providerEvidence,
+                requestEndpoint = requestEndpoint,
+                requestedProvider = requestedProvider,
+                privateValues = privateValues,
                 rawProviderError = rawProviderError,
                 technicalDetail = decorated,
                 rawResponseBody = rawResponseBody
             )
         }
 
-        if (result.newEpisode) {
+        var newEpisode = false
+        try {
+        val current = SummarizerErrorLog.fromJson(prefs.getSummarizerErrors())
+        val result = SummarizerErrorLog.record(
+            current, prefs.getSummarizerEpisode(), category,
+            System.currentTimeMillis(), profile, model, decorated
+        )
+        newEpisode = result.newEpisode
+            prefs.setSummarizerErrors(SummarizerErrorLog.toJson(result.entries))
+            prefs.setSummarizerEpisode(category.name)
+            prefs.setSummarizerErrorsUnseen(true)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            prefs.reportSummarizerStorageFailure("Summarizer/Compact: persist error status", e)
+        }
+
+        if (newEpisode) {
             listener?.onSummarizerErrorEpisode()
         }
         notifyStateChanged()
@@ -980,98 +1052,83 @@ class SummarizerController(
         state: OperationState.Running,
         category: SummarizerErrorCategory,
         model: String,
-        providerAnswered: Boolean,
+        failureOwner: SummarizerDiagnostics.Owner,
+        exception: Throwable?,
+        providerEvidence: org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot?,
+        requestEndpoint: ApiEndpointObject?,
+        requestedProvider: String?,
+        privateValues: List<String>,
         rawProviderError: String?,
         technicalDetail: String?,
         rawResponseBody: String? = null
     ) {
-        val compacting = state.kind == OperationKind.COMPACTING
-        val function = if (compacting) "Compacting" else "Summarizing"
-        val endpointId = prefs.getSummarizerEndpointId()
-        val endpoint = try {
-            ApiEndpointPreferences.getApiEndpointPreferences(appContext)
-                .getApiEndpoint(appContext, endpointId)
-        } catch (_: Exception) { null }
-        val favorite = FavoriteModelsPreferences.getPreferences(appContext)
-            .getFavorite(model, endpointId)
-        val provider = when (prefs.getSummarizerRoutingType()) {
-            org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_ONLY ->
-                favorite?.selectedProvider.orEmpty().ifBlank { "Not Reported" }
-            org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_PREFERRED ->
-                favorite?.providerOrder?.joinToString(", ").orEmpty().ifBlank { "Automatic" }
-            else -> "Automatic"
-        }
-        val outcome = if (state.successfulMessages > 0) "Partially Failed" else "Failed Completely"
-        if (providerAnswered) {
-            if (!prefs.getLogChatFailures()) return
-            val providerLogMessage = buildString {
-                append(rawProviderError?.ifBlank { null } ?: technicalDetail?.ifBlank { null } ?: "Not Reported")
-                SummarizerDetailSanitizer.sanitize(rawResponseBody)?.takeIf { it.isNotBlank() }?.let {
-                    append("\nRaw Response: ").append(it)
+        val function = if (state.kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
+        when (failureOwner) {
+            SummarizerDiagnostics.Owner.CANCELLED,
+            SummarizerDiagnostics.Owner.CONFIGURATION -> return
+            SummarizerDiagnostics.Owner.LOCAL -> {
+                // Storage APIs record the original exception at the failure site,
+                // including when used outside this controller. Do not duplicate it.
+                if (category == SummarizerErrorCategory.SAVE_FAILED && prefs.summarizerStorageFailure != null) return
+                val error = exception ?: IllegalStateException(technicalDetail ?: "Local $function failure: $category")
+                org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
+                    SummarizerDiagnostics.localDetail(function, error, privateValues))
+            }
+            SummarizerDiagnostics.Owner.EXTERNAL -> {
+                if (!prefs.getLogChatFailures()) return
+                val endpoint = requestEndpoint
+                val requested = requestedProvider
+                val message = buildString {
+                    append(SummarizerDetailSanitizer.sanitize(providerEvidence?.errorMessages?.joinToString("\n")
+                        ?.ifBlank { null } ?: rawProviderError ?: technicalDetail, privateValues) ?: "Provider returned no usable completion")
+                    // Strip completion and request payload fields before keeping wire evidence.
+                    SummarizerDetailSanitizer.sanitize(rawResponseBody, privateValues)?.let { append("\nResponse evidence: ").append(it) }
+                }
+                scope.launch(Dispatchers.IO) {
+                    org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                        appContext, SummarizerDetailSanitizer.sanitize(endpoint?.label, privateValues) ?: "Not Reported",
+                        SummarizerDetailSanitizer.sanitize(providerEvidence?.actualServingProvider, privateValues) ?: "Not Reported",
+                        SummarizerDetailSanitizer.sanitize(model, privateValues) ?: "Not Reported", function, message,
+                        requestedRoutedProvider = SummarizerDetailSanitizer.sanitize(requested, privateValues),
+                        outerHttpStatus = providerEvidence?.outerHttpStatus,
+                        embeddedProviderStatus = providerEvidence?.embeddedHttpStatus,
+                        providerCode = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerCode, privateValues),
+                        providerType = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerType, privateValues),
+                        providerErrorType = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerErrorType, privateValues),
+                        contentFilterSide = providerEvidence?.contentFilterSide?.wire,
+                        attemptId = providerEvidence?.attemptId
+                    )
                 }
             }
-            scope.launch(Dispatchers.IO) {
-                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
-                    appContext,
-                    endpoint?.label.orEmpty().ifBlank { "Not Reported" },
-                    provider,
-                    model,
-                    function,
-                    providerLogMessage
-                )
-            }
-            return
         }
-        val explanation = if (compacting) {
-            when (category) {
-                SummarizerErrorCategory.RESPONSE_TIMEOUT,
-                SummarizerErrorCategory.CONNECT_TIMEOUT -> "The configured timeout expired before a usable compacted summary was saved."
-                SummarizerErrorCategory.SERVICE_UNREACHABLE -> "The app could not reach the configured compaction endpoint."
-                SummarizerErrorCategory.REQUEST_TOO_LARGE -> "The compaction request exceeded a provider or model input limit."
-                SummarizerErrorCategory.SAVE_FAILED -> "The model returned usable work, but the app could not save the compacted state."
-                else -> "The compaction operation stopped before the requested range could be committed."
-            }
-        } else {
-            when (category) {
-                SummarizerErrorCategory.RESPONSE_TIMEOUT,
-                SummarizerErrorCategory.CONNECT_TIMEOUT -> "The configured timeout expired before a usable summary section was saved."
-                SummarizerErrorCategory.SERVICE_UNREACHABLE -> "The app could not reach the configured summarizer endpoint."
-                SummarizerErrorCategory.REQUEST_TOO_LARGE -> "The summary request exceeded a provider or model input limit."
-                SummarizerErrorCategory.SAVE_FAILED -> "The model returned usable work, but the app could not save the summary section."
-                else -> "The summary update stopped before its section could be saved."
-            }
+    }
+
+    private fun recordStorageFailure(prefs: Preferences, chatName: String, detail: String) {
+        if (operationState !is OperationState.Running)
+            setOperationState(OperationState.Running(OperationKind.SUMMARIZING, chatName, 0, 0))
+        recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, "Not Reported",
+            prefs.getSummarizerModel(), null, "$detail Technical details were recorded in the Error Log.")
+    }
+
+    private fun recordUnexpectedFailure(error: Exception, kind: OperationKind, chatName: String) {
+        val function = if (kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
+        org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
+            SummarizerDiagnostics.localDetail(function, error))
+        lastFailureCategory = SummarizerErrorCategory.UNEXPECTED
+        if (operationState !is OperationState.Running)
+            setOperationState(OperationState.Running(kind, chatName, 0, 0))
+        try {
+            val prefs = Preferences.getPreferences(appContext, chatIdProvider())
+            recordFailure(prefs, SummarizerErrorCategory.UNEXPECTED, "Not Reported",
+                prefs.getSummarizerModel(), null, "Technical details were recorded in the Error Log.",
+                exception = error, diagnosticRecorded = true)
+        } catch (statusError: Exception) {
+            if (statusError is CancellationException) throw statusError
+            // A broken local store must not erase the original diagnostic or
+            // leave the operation falsely reported as successful.
+            org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
+                SummarizerDiagnostics.localDetail("$function: record failure status", statusError))
         }
-        val body = buildString {
-            append("Function: ").append(function).append('\n')
-            append("Conversation: ").append(state.chatName.ifBlank { "Untitled chat" }).append('\n')
-            append("Summarizer Model: ").append(model).append('\n')
-            append("Summarizer Endpoint: ")
-                .append(endpoint?.label.orEmpty().ifBlank { "Not Reported" })
-                .append(" (").append(endpoint?.host.orEmpty().ifBlank { "Not Reported" }).append(")\n")
-            append("Summarizer Provider: ").append(provider).append('\n')
-            append("Messages Requested: ").append(state.requestedMessages).append('\n')
-            append("Outcome: ").append(outcome).append('\n')
-            if (state.successfulMessages > 0) {
-                append("Messages Successfully Processed: ").append(state.successfulMessages).append('\n')
-            }
-            rawProviderError?.takeIf { it.isNotBlank() }?.let {
-                append("Provider Error: ").append(it).append('\n')
-            }
-            technicalDetail?.takeIf { it.isNotBlank() && it != rawProviderError }?.let {
-                append("Technical Detail: ").append(it).append('\n')
-            }
-            // Owner-approved diagnostic (Aug 31 2026): the exact raw response
-            // body the provider returned, so a one-shot summary/compaction call
-            // that failed to parse shows what the AI service actually sent —
-            // e.g. an error notice returned in place of a completion.
-            SummarizerDetailSanitizer.sanitize(rawResponseBody)?.takeIf { it.isNotBlank() }?.let {
-                append("Raw Response: ").append(it).append('\n')
-            }
-            append("Explanation: ").append(explanation)
-        }
-        org.teslasoft.assistant.preferences.Logger.logAsync(
-            appContext, "crash", if (compacting) "Compaction" else "Summarizer", "error", body
-        )
     }
 
     private fun notifyStateChanged() {
@@ -1120,7 +1177,7 @@ class SummarizerController(
         // exact raw response body the provider returned for this call is stored
         // here, so a failure can log what the AI service actually sent back —
         // e.g. an error notice returned in place of a completion.
-        rawResponseSink: java.util.concurrent.atomic.AtomicReference<String?>? = null
+        rawResponseSink: SummarizerDiagnostics.RequestEvidence? = null
     ): OpenAI {
         val isBearerAuth = endpoint.authType == ApiEndpointObject.AUTH_BEARER
         val extraHeaders: Map<String, String> = when (endpoint.authType) {
@@ -1149,13 +1206,8 @@ class SummarizerController(
                     if (rawResponseSink != null) {
                         install(ResponseObserver) {
                             onResponse { response ->
-                                rawResponseSink.set(
-                                    try {
-                                        response.bodyAsText()
-                                    } catch (_: Exception) {
-                                        null
-                                    }
-                                )
+                                rawResponseSink.status = response.status.value
+                                rawResponseSink.body = response.bodyAsText()
                             }
                         }
                     }

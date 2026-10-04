@@ -30,7 +30,8 @@ class Preferences internal constructor(
     private var gp: SharedPreferences,
     private var chatId: String,
     private var defaultPreferences: SharedPreferences? = preferences,
-    private val ttsVoicePreferences: AppTtsVoicePreferences = AppTtsVoicePreferences(gp)
+    private val ttsVoicePreferences: AppTtsVoicePreferences = AppTtsVoicePreferences(gp),
+    private val diagnosticContext: Context? = null
 ) {
     companion object {
         fun getPreferences(context: Context, xchatId: String) : Preferences {
@@ -50,7 +51,8 @@ class Preferences internal constructor(
                     // Keep it available until every such value has migrated.
                     SecurePrefs.get(context, "settings.")
                 },
-                AppTtsVoicePreferences.getPreferences(context)
+                AppTtsVoicePreferences.getPreferences(context),
+                context.applicationContext
             )
         }
 
@@ -2831,16 +2833,37 @@ class Preferences internal constructor(
         putString("hide_resummarize_hint", hide.toString())
     }
 
+    /** Retained without changing the Boolean storage APIs used by existing callers. */
+    var summarizerStorageFailure: Throwable? = null
+        private set
+
+    fun reportSummarizerStorageFailure(operation: String, error: Throwable) {
+        summarizerStorageFailure = error
+        diagnosticContext?.let {
+            Logger.logAsync(it, "crash", "Summarizer storage", "error",
+                org.teslasoft.assistant.util.summarizer.SummarizerDiagnostics.localDetail(operation, error))
+        }
+    }
+
+    private fun summarizerStorageCommit(operation: String, action: () -> Boolean): Boolean = try {
+        val saved = action()
+        if (!saved) reportSummarizerStorageFailure(operation,
+            java.io.IOException("SharedPreferences.commit() returned false"))
+        saved
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        reportSummarizerStorageFailure(operation, e)
+        false
+    }
+
     /** The automatic Summarizer's sections (SummarySections JSON). Separate
      *  from the single summary that Compact keeps in summarizer_summary. */
     fun getSummarySections(): String = getString("summary_sections", "")
 
     /** Committed synchronously: a section is conversation state that must
      *  survive a process kill once written. */
-    fun commitSummarySections(json: String): Boolean = try {
+    fun commitSummarySections(json: String): Boolean = summarizerStorageCommit("Summarizing: commitSummarySections") {
         preferences.edit().putString("summary_sections", json).commit()
-    } catch (_: Exception) {
-        false
     }
 
     fun getSummarizerCatchUpPending(): Boolean =
@@ -2896,14 +2919,12 @@ class Preferences internal constructor(
             getString("compaction_regeneration_lock_boundary", "0").toIntOrNull() ?: 0,
             getManualCompactionBoundary()
         )
-        return try {
+        return summarizerStorageCommit("Summarizing/Compacting: ensureCondensedRegenerationLockMigration") {
             preferences.edit()
                 .putString("summary_regeneration_lock_boundary", summaryBoundary.toString())
                 .putString("compaction_regeneration_lock_boundary", compactionBoundary.toString())
                 .putString("condensed_regeneration_lock_migrated", "true")
                 .commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
@@ -2936,22 +2957,24 @@ class Preferences internal constructor(
         val current = getString(key, "0").toIntOrNull()?.coerceAtLeast(0) ?: 0
         val next = maxOf(current, value.coerceAtLeast(0))
         if (next == current) return true
-        return try {
+        return summarizerStorageCommit("${if (key.startsWith("compaction")) "Compacting" else "Summarizing"}: advanceCondensedRegenerationLockBoundary") {
             preferences.edit().putString(key, next.toString()).commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
     /** Direct realignment after canonical messages inside a locked prefix are deleted. */
     fun setSummaryRegenerationLockBoundary(value: Int) {
         ensureCondensedRegenerationLockMigration()
-        putString("summary_regeneration_lock_boundary", value.coerceAtLeast(0).toString())
+        summarizerStorageCommit("Summarizing: setSummaryRegenerationLockBoundary") {
+            preferences.edit().putString("summary_regeneration_lock_boundary", value.coerceAtLeast(0).toString()).commit()
+        }
     }
 
     fun setCompactionRegenerationLockBoundary(value: Int) {
         ensureCondensedRegenerationLockMigration()
-        putString("compaction_regeneration_lock_boundary", value.coerceAtLeast(0).toString())
+        summarizerStorageCommit("Compacting: setCompactionRegenerationLockBoundary") {
+            preferences.edit().putString("compaction_regeneration_lock_boundary", value.coerceAtLeast(0).toString()).commit()
+        }
     }
 
     /**
@@ -2969,7 +2992,7 @@ class Preferences internal constructor(
         if (getSummarizerProjectionVersion() == SummarizerProjectionContract.VERSION) {
             return true
         }
-        return try {
+        return summarizerStorageCommit("Summarizing/Compacting: ensureSummarizerProjectionCompatibility") {
             preferences.edit()
                 .putString("summarizer_summary", "")
                 .putString("summarizer_folded", "0")
@@ -2981,8 +3004,6 @@ class Preferences internal constructor(
                     SummarizerProjectionContract.VERSION.toString()
                 )
                 .commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
@@ -3037,7 +3058,7 @@ class Preferences internal constructor(
      *         fold-in as unsaved and leave its in-memory state unchanged.
      */
     fun commitSummarizerFoldIn(summary: String, foldedCount: Int, overLength: Boolean): Boolean {
-        return try {
+        return summarizerStorageCommit("Summarizing: commitSummarizerFoldIn") {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
@@ -3049,8 +3070,6 @@ class Preferences internal constructor(
                     SummarizerProjectionContract.VERSION.toString()
                 )
                 .commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
@@ -3061,7 +3080,7 @@ class Preferences internal constructor(
         overLength: Boolean,
         episode: String,
         condensedKind: String
-    ): Boolean = try {
+    ): Boolean = summarizerStorageCommit("Summarizing: restoreSummarizerState") {
         preferences.edit()
             .putString("summarizer_summary", summary)
             .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
@@ -3073,8 +3092,6 @@ class Preferences internal constructor(
                 SummarizerProjectionContract.VERSION.toString()
             )
             .commit()
-    } catch (_: Exception) {
-        false
     }
 
     /**
@@ -3088,7 +3105,7 @@ class Preferences internal constructor(
         overLength: Boolean,
         boundaryCount: Int
     ): Boolean {
-        return try {
+        return summarizerStorageCommit("Compacting: commitManualCompaction") {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
@@ -3102,8 +3119,6 @@ class Preferences internal constructor(
                     SummarizerProjectionContract.VERSION.toString()
                 )
                 .commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
@@ -3116,14 +3131,12 @@ class Preferences internal constructor(
         }
 
     fun restoreCompactionCheckpoint(state: Map<String, String?>): Boolean {
-        return try {
+        return summarizerStorageCommit("Compacting: restoreCompactionCheckpoint") {
             val editor = preferences.edit()
             state.forEach { (key, value) ->
                 if (value == null) editor.remove(key) else editor.putString(key, value)
             }
             editor.commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
@@ -3157,7 +3170,7 @@ class Preferences internal constructor(
             ensureSummarizerProjectionCompatibility()
             return false
         }
-        return try {
+        return summarizerStorageCommit("Summarizing: commitSummarizerSummaryEdit") {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_over_length", "false")
@@ -3166,8 +3179,6 @@ class Preferences internal constructor(
                     SummarizerProjectionContract.VERSION.toString()
                 )
                 .commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
