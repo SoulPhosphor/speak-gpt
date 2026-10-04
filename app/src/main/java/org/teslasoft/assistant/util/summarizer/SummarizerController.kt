@@ -95,7 +95,11 @@ class SummarizerController(
         data class Failed(
             val kind: OperationKind,
             val chatName: String,
-            val category: SummarizerErrorCategory
+            val category: SummarizerErrorCategory,
+            /** The AI service's own error text, when it sent one. */
+            val providerError: String? = null,
+            /** The model's reply stopped at the length limit. */
+            val cutOff: Boolean = false
         ) : OperationState
         data class Cancelled(
             val kind: OperationKind,
@@ -160,6 +164,8 @@ class SummarizerController(
     private var manualCompactionRunning = false
     @Volatile private var operationState: OperationState = OperationState.Idle
     private var lastFailureCategory: SummarizerErrorCategory? = null
+    private var lastFailureProviderError: String? = null
+    private var lastFailureCutOff = false
     private var terminalClearJob: Job? = null
 
     companion object {
@@ -236,6 +242,16 @@ class SummarizerController(
     /** Okay after "Compaction complete!": the compaction stays. */
     fun keepFinishedCompaction() {
         finishedCompactionCheckpoint = null
+    }
+
+    /** The compaction regeneration lock when the current run started. */
+    private var runStartLock: Int? = null
+
+    /** Puts back the regeneration lock a stopped run's finished batches
+     *  advanced. Never raises it, so a deletion's realignment stands. */
+    private fun restoreRunLock(prefs: Preferences, startLock: Int) {
+        val current = prefs.getCompactionRegenerationLockBoundary()
+        if (current > startLock) prefs.setCompactionRegenerationLockBoundary(startLock)
     }
 
     /**
@@ -326,6 +342,9 @@ class SummarizerController(
         cancel()
         manualCompactionRunning = true
         lastFailureCategory = null
+        lastFailureProviderError = null
+        lastFailureCutOff = false
+        runStartLock = null
         setOperationState(
             OperationState.Running(
                 OperationKind.COMPACTING,
@@ -348,6 +367,15 @@ class SummarizerController(
             } finally {
                 manualCompactionRunning = false
                 if (operationState is OperationState.Running) {
+                    // A failed run keeps nothing either, so the conversation
+                    // is exactly as it was before compacting.
+                    if (!committed) {
+                        val chatId = chatIdProvider()
+                        val startLock = runStartLock
+                        if (chatId.isNotBlank() && startLock != null) {
+                            restoreRunLock(Preferences.getPreferences(appContext, chatId), startLock)
+                        }
+                    }
                     setOperationState(
                         if (committed) {
                             OperationState.Succeeded(OperationKind.COMPACTING, chatName)
@@ -355,7 +383,9 @@ class SummarizerController(
                             OperationState.Failed(
                                 OperationKind.COMPACTING,
                                 chatName,
-                                lastFailureCategory ?: SummarizerErrorCategory.UNEXPECTED
+                                lastFailureCategory ?: SummarizerErrorCategory.UNEXPECTED,
+                                lastFailureProviderError,
+                                lastFailureCutOff
                             )
                         }
                     )
@@ -460,6 +490,8 @@ class SummarizerController(
         val target = snapshot.entries.size
         // Cancel, during the run or after it finishes, puts this back.
         val checkpoint = prefs.compactionCheckpoint()
+        val startingLock = prefs.getCompactionRegenerationLockBoundary()
+        runStartLock = startingLock
         finishedCompactionCheckpoint = null
         val startingSummary = prefs.getSummarizerSummary()
         val startingFolded = prefs.getSummarizerFoldedCount()
@@ -531,7 +563,7 @@ class SummarizerController(
             } else {
                 // Nothing from the run is kept, including the regeneration
                 // lock its finished batches advanced.
-                withContext(NonCancellable) { prefs.restoreCompactionCheckpoint(checkpoint) }
+                withContext(NonCancellable) { restoreRunLock(prefs, startingLock) }
                 false
             }
             setOperationState(
@@ -723,6 +755,7 @@ class SummarizerController(
                 "The summary stopped at the response length limit before it was finished, so it was not saved.",
                 providerAnswered = true
             )
+            lastFailureCutOff = true
             return null
         }
         val text = choice?.message?.content?.toString().orEmpty().trim()
@@ -851,9 +884,22 @@ class SummarizerController(
                         maxTokens = responseTokenBudget(runtime.lengthWords),
                         messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
-                    client.chatCompletion(request)
-                        .choices.firstOrNull()?.message?.content?.toString().orEmpty()
-                }.trim()
+                    val choice = client.chatCompletion(request).choices.firstOrNull()
+                    // A reply stopped at the length limit is unfinished and
+                    // is never saved (owner ruling, Oct 4 2026).
+                    if (choice?.finishReason?.value == "length") null
+                    else choice?.message?.content?.toString().orEmpty()
+                }?.trim() ?: run {
+                    recordFailure(
+                        runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
+                        runtime.endpoint.label, runtime.model, null,
+                        "The compacted summary stopped at the response length limit before it was finished, so it was not saved.",
+                        rawResponseBody = rawResponse.get(),
+                        providerAnswered = true
+                    )
+                    lastFailureCutOff = true
+                    return FoldBatchResult.Failed
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -919,6 +965,8 @@ class SummarizerController(
         providerAnswered: Boolean = false
     ) {
         lastFailureCategory = category
+        lastFailureProviderError = if (providerAnswered) rawProviderError?.trim()?.ifBlank { null } else null
+        lastFailureCutOff = false
         val decorated = if (httpStatus != null) {
             "HTTP status: $httpStatus" + (detail?.let { "\n$it" } ?: "")
         } else {

@@ -51,6 +51,15 @@ class SummaryResummarizeWiringContractTest {
         assertTrue(activity.contains("summarizerController?.discardFinishedCompaction()"))
         assertTrue(activity.contains("summarizerController?.keepFinishedCompaction()"))
         val controller = source("src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt")
-        assertTrue(controller.contains("withContext(NonCancellable) { prefs.restoreCompactionCheckpoint(checkpoint) }"))
+        assertTrue(controller.contains("withContext(NonCancellable) { restoreRunLock(prefs, startingLock) }"))
+    }
+
+    @Test
+    fun aCompactFailureShowsTheErrorBoxAndACutOffReplyIsNeverSaved() {
+        assertTrue(activity.contains("if (watching) showCompactionFailure(state)"))
+        assertTrue(activity.contains(".setNeutralButton(R.string.title_summarizer_settings)"))
+        assertTrue(activity.contains(".setNegativeButton(R.string.btn_msg_retry)"))
+        val controller = source("src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt")
+        assertTrue(controller.contains("if (choice?.finishReason?.value == \"length\") null"))
     }
 }

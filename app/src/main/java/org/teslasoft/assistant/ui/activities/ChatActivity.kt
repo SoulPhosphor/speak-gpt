@@ -561,6 +561,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var condenseJob: Job? = null
     private var condenseDialog: AlertDialog? = null
     private var compactionDialog: AlertDialog? = null
+    /** The messages the last Compact froze, so Retry compacts them again. */
+    private var lastCompactionRequest: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null
     private var reduceJob: Job? = null
     private var reduceDialog: AlertDialog? = null
     private val artifactJobs: MutableMap<String, Job> = HashMap()
@@ -5052,12 +5054,85 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                 }
             }
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed -> {
+                // The error box replaces the progress dialog the user is
+                // watching; reopening the chat later does not show it again.
+                val watching = compactionDialog?.isShowing == true
+                compactionDialog?.dismiss()
+                compactionDialog = null
+                if (watching) showCompactionFailure(state)
+            }
             else -> {
                 compactionDialog?.dismiss()
                 compactionDialog = null
             }
         }
         return true
+    }
+
+    /**
+     * Compact's error box (owner-approved wording, Oct 4 2026): the cause as
+     * the title, one plain reason, that the conversation was not changed,
+     * and the AI service's own error when it sent one. Summarizer Settings
+     * opens the Summarizer page, Retry compacts the same messages again, and
+     * Okay closes it.
+     */
+    private fun showCompactionFailure(
+        state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed
+    ) {
+        val (title, reason) = if (state.cutOff) {
+            R.string.compaction_err_cut_off_title to R.string.compaction_err_cut_off
+        } else when (state.category) {
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.MODEL_MISSING ->
+                R.string.compaction_err_model_missing_title to R.string.compaction_err_model_missing
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.SERVICE_UNREACHABLE ->
+                R.string.compaction_err_unreachable_title to R.string.compaction_err_unreachable
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.CONNECT_TIMEOUT ->
+                R.string.compaction_err_connect_timeout_title to R.string.compaction_err_connect_timeout
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.RESPONSE_TIMEOUT ->
+                R.string.compaction_err_response_timeout_title to R.string.compaction_err_response_timeout
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.ACCESS_REJECTED ->
+                R.string.compaction_err_access_rejected_title to R.string.compaction_err_access_rejected
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.MODEL_UNAVAILABLE ->
+                R.string.compaction_err_model_unavailable_title to R.string.compaction_err_model_unavailable
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.RATE_LIMIT ->
+                R.string.compaction_err_rate_limit_title to R.string.compaction_err_rate_limit
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.QUOTA ->
+                R.string.compaction_err_quota_title to R.string.compaction_err_quota
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.REQUEST_TOO_LARGE ->
+                R.string.compaction_err_too_large_title to R.string.compaction_err_too_large
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.CONTENT_REJECTED ->
+                R.string.compaction_err_rejected_title to R.string.compaction_err_rejected
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.SERVICE_ERROR ->
+                R.string.compaction_err_service_title to R.string.compaction_err_service
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.RESPONSE_UNREADABLE ->
+                R.string.compaction_err_unreadable_title to R.string.compaction_err_unreadable
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.SAVE_FAILED ->
+                R.string.compaction_err_save_title to R.string.compaction_err_save
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.UNEXPECTED ->
+                R.string.compaction_err_unexpected_title to R.string.compaction_err_unexpected
+        }
+        val message = buildString {
+            append(getString(reason))
+            append("\n\n")
+            append(getString(R.string.compaction_err_unchanged))
+            state.providerError?.let {
+                append("\n\n")
+                append(getString(R.string.compaction_err_provider, it))
+            }
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(title)
+            .setMessage(message)
+            .setCancelable(false)
+            .setNeutralButton(R.string.title_summarizer_settings) { _, _ ->
+                startActivity(Intent(this, SummarizerSettingsActivity::class.java))
+            }
+            .setNegativeButton(R.string.btn_msg_retry) { _, _ ->
+                lastCompactionRequest?.let { startManualCompactionConfirmed(it) }
+            }
+            .setPositiveButton(R.string.okay, null)
+            .show()
     }
 
     /**
@@ -5360,6 +5435,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val controller = summarizerController ?: return
         val frozenEntries = snapshot.entries.toList()
         val frozen = snapshot.copy(entries = frozenEntries)
+        lastCompactionRequest = frozen
         val frozenChatId = chatId
         val frozenRows = org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard
             .rows(messages)
