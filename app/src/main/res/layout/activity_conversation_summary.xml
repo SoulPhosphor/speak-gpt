@@ -16,10 +16,11 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- Compaction Summary (owner ruling, Oct 3 2026): the chat's compacted text,
-     editable and saved through the header Save icon, with Uncompact /
-     Recompact beside it. Read only while a compaction is running. Composed
-     from shared style families only. -->
+<!-- Summary / Compaction review (owner ruling, Oct 3 2026): the chat's
+     summary or compacted text, editable and saved through the header Save
+     icon, with Unsummarize/Uncompact and Resummarize/Recompact beside it.
+     The screen sets its title and intro for its mode. Read only while the
+     summarizer or compactor runs. Composed from shared style families only. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -37,11 +38,10 @@
         <TextView
             android:id="@+id/activity_title"
             style="@style/Widget.App.ActionBar.Title.NearBack"
-            android:text="@string/title_compaction_summary"
-            app:layout_constraintEnd_toStartOf="@+id/btn_toggle_compaction" />
+            app:layout_constraintEnd_toStartOf="@+id/btn_toggle_condensed" />
 
         <ImageButton
-            android:id="@+id/btn_toggle_compaction"
+            android:id="@+id/btn_toggle_condensed"
             style="@style/Widget.App.ActionBar.ChainedButton"
             android:contentDescription="@string/compaction_uncompact_desc"
             android:src="@drawable/ic_docs_add_on"
@@ -77,13 +77,13 @@
             android:paddingTop="16dp">
 
             <TextView
-                style="@style/Widget.App.Screen.Intro"
-                android:text="@string/compaction_summary_intro" />
+                android:id="@+id/text_condensed_intro"
+                style="@style/Widget.App.Screen.Intro" />
 
             <!-- Compaction status: a spinner with "in progress" while the
                  compactor runs, then the success line. Hidden otherwise. -->
             <LinearLayout
-                android:id="@+id/row_compaction_status"
+                android:id="@+id/row_condensed_status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
@@ -92,7 +92,7 @@
                 android:visibility="gone">
 
                 <com.google.android.material.progressindicator.CircularProgressIndicator
-                    android:id="@+id/spinner_compaction"
+                    android:id="@+id/spinner_condensed"
                     style="@style/Widget.Material3.CircularProgressIndicator.ExtraSmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -100,20 +100,20 @@
                     android:indeterminate="true" />
 
                 <TextView
-                    android:id="@+id/text_compaction_status"
+                    android:id="@+id/text_condensed_status"
                     style="@style/Widget.App.Screen.Intro"
                     android:layout_width="0dp"
                     android:layout_weight="1" />
             </LinearLayout>
 
             <TextView
-                android:id="@+id/text_compaction_read_only"
+                android:id="@+id/text_condensed_read_only"
                 style="@style/Widget.App.Section.Hint"
                 android:text="@string/compaction_summary_read_only"
                 android:visibility="gone" />
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_compaction_text"
+                android:id="@+id/field_condensed_text"
                 style="@style/Widget.App.Field.Box"
                 android:layout_marginTop="16dp"
                 android:gravity="top"
@@ -122,7 +122,7 @@
 
             <!-- Appears only while the text differs from its last save. -->
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_revert_compaction"
+                android:id="@+id/btn_revert_condensed"
                 style="@style/AppButton.Destructive.Inline"
                 android:layout_gravity="end"
                 android:layout_marginTop="8dp"

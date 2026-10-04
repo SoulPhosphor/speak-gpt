@@ -475,8 +475,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // then the subject summary icon. The controller runs the background
     // fold-ins; it is cancelled deliberately (never an error) when this
     // screen goes away.
-    private var btnSummary: ImageButton? = null
-    private var btnCompaction: ImageButton? = null
+    private var btnConversationSummary: ImageButton? = null
     private var btnSummarizerErrors: ImageButton? = null
     private var summarizerErrorBadge: TextView? = null
     private var summarizerController: org.teslasoft.assistant.util.summarizer.SummarizerController? = null
@@ -1497,8 +1496,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatStartupComplete && chatId != "") {
             refreshSummarizerIcons()
             refreshComposerTools()
-            // Compaction Summary may have just closed: run any held update.
+            // The summary / compaction review may have just closed: run any
+            // held update, or the catch-up owed after Resummarize.
             releaseHeldSummarizerCycle()
+            if (!summarizerCycleHeld && preferences?.getSummarizerCatchUpPending() == true) {
+                summarizerCycle(force = true)
+            }
             // Appearance may have changed while Settings covered this screen.
             // Rebind existing rows so Staggered Responses takes effect at once.
             adapter?.notifyDataSetChanged()
@@ -2992,8 +2995,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnQuickSettings = findViewById(R.id.btn_quick_settings)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
-        btnSummary = findViewById(R.id.btn_summary)
-        btnCompaction = findViewById(R.id.btn_compaction)
+        btnConversationSummary = findViewById(R.id.btn_conversation_summary)
         btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
         summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
         summarizerOperationChip = findViewById(R.id.summarizer_operation_chip)
@@ -4911,14 +4913,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         summarizerOperationCancel?.setOnClickListener {
             org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
         }
-        btnSummary?.setOnClickListener { showSummaryView() }
-        btnCompaction?.setOnClickListener {
-            if (chatId.isBlank()) return@setOnClickListener
+        btnConversationSummary?.setOnClickListener {
+            val mode = conversationSummaryMode() ?: return@setOnClickListener
             runSummaryDueBeforeReview()
             org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.open(
-                chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.COMPACTION_SUMMARY
+                chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.CONVERSATION_SUMMARY
             )
-            startActivity(CompactionSummaryActivity.createIntent(this, chatId))
+            startActivity(ConversationSummaryActivity.createIntent(this, chatId, mode))
         }
         btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
         refreshSummarizerIcons()
@@ -4930,7 +4931,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun renderSummarizerOperation(
         state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
     ) {
-        applySummaryViewLock(state)
         val preserveProjectionNotice = projectionStatusVisible &&
             (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Idle ||
                 state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled)
@@ -4995,20 +4995,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  subject while the summarizer is on for this chat (decisions 11/16). */
     private fun refreshSummarizerIcons() {
         refreshCondensedRegenerationLocks()
-        val summarizerOn = preferences?.getChatUseSummarizer() == true
-        val hasCondensedConversation =
-            (preferences?.getManualCompactionBoundary() ?: 0) > 0 ||
-                preferences?.getSummarizerSummary().orEmpty().isNotBlank()
-        btnSummary?.visibility =
-            if (summarizerOn || hasCondensedConversation) View.VISIBLE else View.GONE
-        // Compaction Summary: only once a compaction has completed. The icon
-        // shows whether the compacted form is currently in use.
-        val compacted = (preferences?.getManualCompactionBoundary() ?: 0) > 0
-        btnCompaction?.visibility = if (compacted) View.VISIBLE else View.GONE
-        btnCompaction?.setImageResource(
+        // Summary / Compaction review: only once a summary or compaction has
+        // been saved. The icon shows whether that condensed form is in use.
+        val summaryMode = conversationSummaryMode()
+        btnConversationSummary?.visibility = if (summaryMode != null) View.VISIBLE else View.GONE
+        btnConversationSummary?.setImageResource(
             if (preferences?.getUseSummarizedConversationProjection() != false) R.drawable.ic_topic
             else R.drawable.ic_docs_add_on
         )
+        if (summaryMode != null) {
+            val desc = getString(summaryMode.titleRes)
+            btnConversationSummary?.contentDescription = desc
+            btnConversationSummary?.tooltipText = desc
+        }
 
         val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
             .fromJson(preferences?.getSummarizerErrors())
@@ -5036,6 +5035,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
                 }
             }
+        }
+    }
+
+    /** Which review the top-bar icon opens: the summary while this chat uses
+     *  the summarizer (or kept a summary without a compaction), otherwise the
+     *  compaction once one has completed. Null before either exists. */
+    private fun conversationSummaryMode(): ConversationSummaryActivity.Mode? {
+        val prefs = preferences ?: return null
+        if (chatId.isBlank()) return null
+        val hasSummaryText = prefs.getSummarizerSummary().isNotBlank()
+        return when {
+            prefs.getChatUseSummarizer() ->
+                if (hasSummaryText) ConversationSummaryActivity.Mode.SUMMARY else null
+            prefs.getManualCompactionBoundary() > 0 -> ConversationSummaryActivity.Mode.COMPACTION
+            hasSummaryText -> ConversationSummaryActivity.Mode.SUMMARY
+            else -> null
         }
     }
 
@@ -5070,9 +5085,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Show only configured composer tools; hide the gear when none are usable. */
     private fun refreshComposerTools() {
+        // A chat that uses the summarizer is not compacted (owner ruling,
+        // Oct 3 2026): Compact is offered only while Use Summarizer is off.
         val compactAvailable =
             org.teslasoft.assistant.util.summarizer.SummarizerController
-                .isConfigured(this)
+                .isConfigured(this) && preferences?.getChatUseSummarizer() != true
         val imageAvailable = imageGeneratorConfigured()
         btnToolCompact?.visibility = if (compactAvailable) View.VISIBLE else View.GONE
         btnToolCreateImage?.visibility = if (imageAvailable) View.VISIBLE else View.GONE
@@ -5114,6 +5131,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Freeze one reference-only conversation prefix and compact it atomically. */
     private fun startManualCompaction(requestedSnapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null) {
+        // A chat that uses the summarizer is not compacted; /compact says so.
+        if (preferences?.getChatUseSummarizer() == true) {
+            Toast.makeText(this, R.string.compact_unavailable_with_summarizer, Toast.LENGTH_LONG).show()
+            return
+        }
         if (!org.teslasoft.assistant.util.summarizer.SummarizerController
                 .isConfigured(this)
         ) {
@@ -5406,145 +5428,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         summarizerController?.runCycle(force, chatName, { frozen }) { succeeded ->
             if (succeeded) cyclePreferences?.setSummarizerCatchUpPending(false)
         }
-    }
-
-    /** Summary view (decision 11): the editable summary and Update Now.
-     *  Edits save automatically when the view closes; Update Now saves them
-     *  first, then folds everything up to the current window edge. */
-    // The open summary view's text field and read-only note, so a summarizer
-    // or compactor run can lock it and then load the newest text.
-    private var summaryViewField: com.google.android.material.textfield.TextInputEditText? = null
-    private var summaryViewNote: TextView? = null
-    private var summaryViewLocked = false
-
-    private fun applySummaryViewLock(
-        state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
-    ) {
-        val field = summaryViewField ?: return
-        val running = state as? org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running
-        val wasLocked = summaryViewLocked
-        summaryViewLocked = running != null
-        if (running != null) {
-            summaryViewNote?.setText(
-                org.teslasoft.assistant.util.summarizer.SummarizerOperationMessages.readOnlyRes(running.kind)
-            )
-        }
-        summaryViewNote?.visibility = if (running != null) View.VISIBLE else View.GONE
-        field.isFocusable = running == null
-        field.isFocusableInTouchMode = running == null
-        if (running != null) field.clearFocus()
-        if (wasLocked && running == null) {
-            field.setText(preferences?.getSummarizerSummary().orEmpty())
-        }
-    }
-
-    private fun showSummaryView() {
-        runSummaryDueBeforeReview()
-        org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.open(
-            chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.SUMMARY_VIEW
-        )
-        val view = layoutInflater.inflate(R.layout.dialog_summary_view, null)
-        val field = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.field_summary_text)
-        val update = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_primary_action)
-        val projection = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_destructive_action)
-        update?.setText(R.string.summarizer_update_now)
-        val usingCondensed = preferences?.getUseSummarizedConversationProjection() != false
-        projection?.setText(
-            if (usingCondensed) R.string.summarizer_send_entire_chat
-            else if (preferences?.getCondensedConversationKind() ==
-                org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
-            ) R.string.summarizer_use_compacted
-            else R.string.summarizer_use_summary
-        )
-        val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true
-        field?.setText(if (compatible) preferences?.getSummarizerSummary().orEmpty() else "")
-
-        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.summarizer_summary_title)
-            .setView(view)
-            .create()
-
-        fun saveEditsIfChanged() {
-            // A locked view shows text the running operation is replacing.
-            if (summaryViewLocked) return
-            val edited = field?.text?.toString().orEmpty()
-            if (edited != preferences?.getSummarizerSummary().orEmpty()) {
-                preferences?.commitSummarizerSummaryEdit(edited)
-            }
-        }
-        summaryViewField = field
-        summaryViewNote = view.findViewById(R.id.text_summary_read_only)
-        summaryViewLocked = false
-        summarizerController?.currentOperationState()?.let { applySummaryViewLock(it) }
-        dialog.setOnDismissListener {
-            saveEditsIfChanged()
-            summaryViewField = null
-            summaryViewNote = null
-            summaryViewLocked = false
-            closeSummaryViewGate()
-        }
-        update?.setOnClickListener {
-            saveEditsIfChanged()
-            closeSummaryViewGate()
-            dialog.dismiss()
-            summarizerCycle(force = true)
-        }
-        projection?.setOnClickListener {
-            saveEditsIfChanged()
-            val enableCondensed = preferences?.getUseSummarizedConversationProjection() == false
-            preferences?.setUseSummarizedConversationProjection(enableCondensed)
-            if (!enableCondensed) {
-                // Entire-chat transmission is also a true pause for automatic
-                // summarization. Preserve the already committed summary and
-                // bookmark, and remember to catch up when condensed mode is
-                // deliberately restored. Manual compaction is a separate,
-                // explicit operation and is allowed to keep running.
-                preferences?.setSummarizerCatchUpPending(true)
-                val state = summarizerController?.currentOperationState()
-                if (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running &&
-                    state.kind == org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.SUMMARIZING
-                ) {
-                    summarizerController?.cancel()
-                }
-            }
-            showProjectionStatus(enableCondensed)
-            dialog.dismiss()
-            // The dismiss listener runs later; close the gate now so the
-            // catch-up below is not held back.
-            closeSummaryViewGate()
-            if (enableCondensed) {
-                if (preferences?.getCondensedConversationKind() !=
-                    org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
-                ) {
-                    summarizerCycle(force = true)
-                }
-            }
-        }
-        dialog.show()
-    }
-
-    private fun closeSummaryViewGate() {
-        org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.close(
-            chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.SUMMARY_VIEW
-        )
-        releaseHeldSummarizerCycle()
-    }
-
-    private fun showProjectionStatus(enableCondensed: Boolean) {
-        projectionStatusVisible = true
-        summarizerOperationChip?.visibility = View.VISIBLE
-        summarizerOperationSpinner?.visibility = View.GONE
-        summarizerOperationSuccess?.visibility = View.VISIBLE
-        summarizerOperationCancel?.visibility = View.GONE
-        summarizerOperationText?.setText(
-            if (!enableCondensed) R.string.summarizer_now_entire_chat
-            else if (preferences?.getCondensedConversationKind() ==
-                org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
-            ) R.string.summarizer_now_compacted
-            else R.string.summarizer_now_summary
-        )
-        summarizerStatusHandler.removeCallbacks(hideSummarizerStatus)
-        summarizerStatusHandler.postDelayed(hideSummarizerStatus, 4000L)
     }
 
     /** Summarizer Errors dialog (decision 16 + errors doc §1, owner ruling

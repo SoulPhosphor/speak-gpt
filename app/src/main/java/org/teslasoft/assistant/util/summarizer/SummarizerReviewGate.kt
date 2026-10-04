@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * No summary update starts while the user is reviewing a chat's summary or
- * compacted text (owner ruling, Oct 3 2026). The summary view and Compaction
- * Summary hold the gate open for their chat. An update that would have run
+ * compacted text (owner ruling, Oct 3 2026). The Summary / Compaction
+ * review screen holds the gate open for its chat. An update that would have run
  * by the next exchange runs as the screen opens instead, so the user reviews
  * current text; any update held back runs once the screen closes.
  */
@@ -39,6 +39,5 @@ object SummarizerReviewGate {
         return pending > 0 && pending + MESSAGES_PER_EXCHANGE >= SummarizerController.BATCH_SIZE
     }
 
-    const val SUMMARY_VIEW = "summary_view"
-    const val COMPACTION_SUMMARY = "compaction_summary"
+    const val CONVERSATION_SUMMARY = "conversation_summary"
 }

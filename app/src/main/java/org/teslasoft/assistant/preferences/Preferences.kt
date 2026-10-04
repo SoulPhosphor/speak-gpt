@@ -2787,8 +2787,8 @@ class Preferences internal constructor(
         putString("use_summarized_conversation_projection", enabled.toString())
     }
 
-    /** Compaction Summary hints (owner ruling, Oct 3 2026): once hidden, the
-     *  Uncompact / Recompact confirmation is skipped for the rest of this chat. */
+    /** Summary / Compaction review hints (owner ruling, Oct 3 2026): once
+     *  hidden, that confirmation is skipped for the rest of this chat. */
     fun getHideUncompactHint(): Boolean = getString("hide_uncompact_hint", "false") == "true"
 
     fun setHideUncompactHint(hide: Boolean) {
@@ -2799,6 +2799,18 @@ class Preferences internal constructor(
 
     fun setHideRecompactHint(hide: Boolean) {
         putString("hide_recompact_hint", hide.toString())
+    }
+
+    fun getHideUnsummarizeHint(): Boolean = getString("hide_unsummarize_hint", "false") == "true"
+
+    fun setHideUnsummarizeHint(hide: Boolean) {
+        putString("hide_unsummarize_hint", hide.toString())
+    }
+
+    fun getHideResummarizeHint(): Boolean = getString("hide_resummarize_hint", "false") == "true"
+
+    fun setHideResummarizeHint(hide: Boolean) {
+        putString("hide_resummarize_hint", hide.toString())
     }
 
     fun getSummarizerCatchUpPending(): Boolean =

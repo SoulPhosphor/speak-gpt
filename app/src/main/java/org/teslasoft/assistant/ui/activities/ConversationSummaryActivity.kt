@@ -45,14 +45,56 @@ import org.teslasoft.assistant.util.summarizer.SummarizerOperationMessages
 import org.teslasoft.assistant.util.summarizer.SummarizerReviewGate
 
 /**
- * Compaction Summary (owner ruling, Oct 3 2026), opened from the chat's top
- * bar once the chat has been compacted at least once. Shows the compacted
- * text the AI receives in place of the compacted messages, lets the user
- * edit and save it, and switches the chat between its compacted and full
- * (uncompacted) form without deleting the compacted text. While the
- * summarizer or compactor runs for this chat, the text is read only.
+ * Summary / Compaction review (owner ruling, Oct 3 2026), opened from the
+ * chat's top bar once the chat has a saved summary or a completed
+ * compaction. One screen serves both, in summarizer or compaction wording.
+ * It shows the condensed text the AI receives in place of the condensed
+ * messages, lets the user edit and save it, and switches the chat between
+ * its condensed and full form without deleting the condensed text. While
+ * the summarizer or compactor runs for this chat, the text is read only.
  */
-class CompactionSummaryActivity : FragmentActivity() {
+class ConversationSummaryActivity : FragmentActivity() {
+
+    /** The wording set: summarizer and summaries, or compactor and compaction. */
+    enum class Mode(
+        val titleRes: Int,
+        val introRes: Int,
+        val turnOffDescRes: Int,
+        val turnOnDescRes: Int,
+        val turnOffTitleRes: Int,
+        val turnOffBodyRes: Int,
+        val turnOffHideRes: Int,
+        val turnOnTitleRes: Int,
+        val turnOnBodyRes: Int,
+        val turnOnHideRes: Int
+    ) {
+        SUMMARY(
+            R.string.title_conversation_summary,
+            R.string.summary_review_intro,
+            R.string.summary_unsummarize_desc,
+            R.string.summary_resummarize_desc,
+            R.string.summary_unsummarize_title,
+            R.string.summary_unsummarize_body,
+            R.string.compaction_uncompact_hide,
+            R.string.summary_resummarize_title,
+            R.string.summary_resummarize_body,
+            R.string.compaction_recompact_hide
+        ),
+        COMPACTION(
+            R.string.title_compaction_summary,
+            R.string.compaction_summary_intro,
+            R.string.compaction_uncompact_desc,
+            R.string.compaction_recompact_desc,
+            R.string.compaction_uncompact_title,
+            R.string.compaction_uncompact_body,
+            R.string.compaction_uncompact_hide,
+            R.string.compaction_recompact_title,
+            R.string.compaction_recompact_body,
+            R.string.compaction_recompact_hide
+        )
+    }
+
+    private var mode = Mode.COMPACTION
 
     private var preferences: Preferences? = null
     private var chatId = ""
@@ -82,7 +124,7 @@ class CompactionSummaryActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
-        setContentView(R.layout.activity_compaction_summary)
+        setContentView(R.layout.activity_conversation_summary)
 
         chatId = intent.getStringExtra(EXTRA_CHAT_ID).orEmpty()
         if (chatId.isBlank()) {
@@ -90,20 +132,25 @@ class CompactionSummaryActivity : FragmentActivity() {
             return
         }
         preferences = Preferences.getPreferences(this, chatId)
+        mode = intent.getStringExtra(EXTRA_MODE)
+            ?.let { name -> Mode.entries.firstOrNull { it.name == name } }
+            ?: Mode.COMPACTION
         // No summary update starts while this screen is open; the chat runs
         // any held-back update when it resumes.
-        SummarizerReviewGate.open(chatId, SummarizerReviewGate.COMPACTION_SUMMARY)
+        SummarizerReviewGate.open(chatId, SummarizerReviewGate.CONVERSATION_SUMMARY)
 
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
-        btnToggle = findViewById(R.id.btn_toggle_compaction)
+        btnToggle = findViewById(R.id.btn_toggle_condensed)
         btnSave = findViewById(R.id.btn_save)
-        rowStatus = findViewById(R.id.row_compaction_status)
-        spinner = findViewById(R.id.spinner_compaction)
-        textStatus = findViewById(R.id.text_compaction_status)
-        textReadOnly = findViewById(R.id.text_compaction_read_only)
-        field = findViewById(R.id.field_compaction_text)
-        btnRevert = findViewById(R.id.btn_revert_compaction)
+        rowStatus = findViewById(R.id.row_condensed_status)
+        spinner = findViewById(R.id.spinner_condensed)
+        textStatus = findViewById(R.id.text_condensed_status)
+        textReadOnly = findViewById(R.id.text_condensed_read_only)
+        field = findViewById(R.id.field_condensed_text)
+        btnRevert = findViewById(R.id.btn_revert_condensed)
+        findViewById<TextView>(R.id.activity_title)?.setText(mode.titleRes)
+        findViewById<TextView>(R.id.text_condensed_intro)?.setText(mode.introRes)
         ScreenChrome.apply(this, actionBar, btnBack, btnToggle, btnSave)
 
         val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true
@@ -114,7 +161,7 @@ class CompactionSummaryActivity : FragmentActivity() {
         btnBack?.setOnClickListener { attemptLeave() }
         btnSave?.setOnClickListener { save() }
         btnRevert?.setOnClickListener { field?.setText(savedText) }
-        btnToggle?.setOnClickListener { onToggleCompaction() }
+        btnToggle?.setOnClickListener { onToggleCondensed() }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 attemptLeave()
@@ -130,11 +177,11 @@ class CompactionSummaryActivity : FragmentActivity() {
      *  (which runs before this screen is destroyed) see the gate closed. */
     override fun onPause() {
         super.onPause()
-        if (isFinishing) SummarizerReviewGate.close(chatId, SummarizerReviewGate.COMPACTION_SUMMARY)
+        if (isFinishing) SummarizerReviewGate.close(chatId, SummarizerReviewGate.CONVERSATION_SUMMARY)
     }
 
     override fun onDestroy() {
-        if (isFinishing) SummarizerReviewGate.close(chatId, SummarizerReviewGate.COMPACTION_SUMMARY)
+        if (isFinishing) SummarizerReviewGate.close(chatId, SummarizerReviewGate.CONVERSATION_SUMMARY)
         SummarizerControllerRegistry.removeAppListener(operationListener)
         super.onDestroy()
     }
@@ -144,7 +191,7 @@ class CompactionSummaryActivity : FragmentActivity() {
         outState.putString(STATE_DRAFT, field?.text?.toString().orEmpty())
     }
 
-    /* ------------------------------ compaction status ------------------------------ */
+    /* ------------------------------ run status ------------------------------ */
 
     /** While the summarizer or compactor runs for this chat the text is read
      *  only; when the run ends the newest saved text is loaded for editing. */
@@ -238,38 +285,31 @@ class CompactionSummaryActivity : FragmentActivity() {
     private fun refreshToggle() {
         val compacted = usingCompacted()
         btnToggle?.setImageResource(if (compacted) R.drawable.ic_docs_add_on else R.drawable.ic_topic)
-        val desc = getString(if (compacted) R.string.compaction_uncompact_desc else R.string.compaction_recompact_desc)
+        val desc = getString(if (compacted) mode.turnOffDescRes else mode.turnOnDescRes)
         btnToggle?.contentDescription = desc
         btnToggle?.tooltipText = desc
     }
 
-    private fun onToggleCompaction() {
+    private fun onToggleCondensed() {
         val prefs = preferences ?: return
+        val summary = mode == Mode.SUMMARY
         if (usingCompacted()) {
-            if (prefs.getHideUncompactHint()) {
+            val hidden = if (summary) prefs.getHideUnsummarizeHint() else prefs.getHideUncompactHint()
+            if (hidden) {
                 uncompact()
             } else {
-                HintConfirmDialog.show(
-                    this,
-                    R.string.compaction_uncompact_title,
-                    R.string.compaction_uncompact_body,
-                    R.string.compaction_uncompact_hide
-                ) { hide ->
-                    prefs.setHideUncompactHint(hide)
+                HintConfirmDialog.show(this, mode.turnOffTitleRes, mode.turnOffBodyRes, mode.turnOffHideRes) { hide ->
+                    if (summary) prefs.setHideUnsummarizeHint(hide) else prefs.setHideUncompactHint(hide)
                     uncompact()
                 }
             }
         } else {
-            if (prefs.getHideRecompactHint()) {
+            val hidden = if (summary) prefs.getHideResummarizeHint() else prefs.getHideRecompactHint()
+            if (hidden) {
                 recompact()
             } else {
-                HintConfirmDialog.show(
-                    this,
-                    R.string.compaction_recompact_title,
-                    R.string.compaction_recompact_body,
-                    R.string.compaction_recompact_hide
-                ) { hide ->
-                    prefs.setHideRecompactHint(hide)
+                HintConfirmDialog.show(this, mode.turnOnTitleRes, mode.turnOnBodyRes, mode.turnOnHideRes) { hide ->
+                    if (summary) prefs.setHideResummarizeHint(hide) else prefs.setHideRecompactHint(hide)
                     recompact()
                 }
             }
@@ -325,9 +365,12 @@ class CompactionSummaryActivity : FragmentActivity() {
 
     companion object {
         private const val EXTRA_CHAT_ID = "chatId"
-        private const val STATE_DRAFT = "state_compaction_draft"
+        private const val EXTRA_MODE = "mode"
+        private const val STATE_DRAFT = "state_condensed_draft"
 
-        fun createIntent(context: Context, chatId: String): Intent =
-            Intent(context, CompactionSummaryActivity::class.java).putExtra(EXTRA_CHAT_ID, chatId)
+        fun createIntent(context: Context, chatId: String, mode: Mode): Intent =
+            Intent(context, ConversationSummaryActivity::class.java)
+                .putExtra(EXTRA_CHAT_ID, chatId)
+                .putExtra(EXTRA_MODE, mode.name)
     }
 }

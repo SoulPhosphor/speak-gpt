@@ -255,7 +255,7 @@ Use `SaveIconFlash.flash(button)` (`org.teslasoft.assistant.ui.util`) after a su
 
 ### Confirmation with a "hide this hint" switch
 
-Use `HintConfirmDialog.show(...)` (`org.teslasoft.assistant.ui.util`) for an explanatory, non-destructive confirmation that the user may choose to stop seeing. Title and message use the standard dialog, the actions use `dialog_two_actions_cancel_first.xml` (Cancel left, Okay right), and the shared `layout/view_dialog_hint_toggle.xml` puts the hide switch on its own line beneath the buttons in ordinary body text (`Widget.App.CheckOption.Label`), on by default (owner ruling, Oct 3 2026). Current users: Compaction Summary's Uncompact and Recompact.
+Use `HintConfirmDialog.show(...)` (`org.teslasoft.assistant.ui.util`) for an explanatory, non-destructive confirmation that the user may choose to stop seeing. Title and message use the standard dialog, the actions use `dialog_two_actions_cancel_first.xml` (Cancel left, Okay right), and the shared `layout/view_dialog_hint_toggle.xml` puts the hide switch on its own line beneath the buttons in ordinary body text (`Widget.App.CheckOption.Label`), on by default (owner ruling, Oct 3 2026). Current users: the Conversation Summary / Compaction Summary screen's Unsummarize/Uncompact and Resummarize/Recompact.
 
 ### Standard discard-changes dialog
 

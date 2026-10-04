@@ -331,9 +331,9 @@
         </activity>
 
         <activity
-            android:name=".ui.activities.CompactionSummaryActivity"
+            android:name=".ui.activities.ConversationSummaryActivity"
             android:exported="false"
-            android:label="@string/title_compaction_summary">
+            android:label="@string/title_conversation_summary">
         </activity>
 
         <activity

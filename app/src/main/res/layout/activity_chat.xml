@@ -393,11 +393,12 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_more_vert" />
 
-            <!-- Compaction Summary (owner ruling, Oct 3 2026): visible once the
-                 chat has been compacted. Topic while the compacted form is in
-                 use; Docs Add On while the full conversation is sent. -->
+            <!-- Summary / Compaction review (owner ruling, Oct 3 2026): visible
+                 once the chat has a saved summary or a completed compaction.
+                 Topic while that condensed form is in use; Docs Add On while
+                 the full conversation is sent. -->
             <ImageButton
-                android:id="@+id/btn_compaction"
+                android:id="@+id/btn_conversation_summary"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginEnd="8dp"
@@ -420,7 +421,7 @@
                 android:tooltipText="@string/btn_settings"
                 android:transitionName="settings"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_compaction"
+                app:layout_constraintEnd_toStartOf="@+id/btn_conversation_summary"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_settings" />
 
@@ -437,23 +438,6 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_history_edu" />
 
-            <!-- Summary view (decision 11): visible only while the
-                 summarizer is on for this chat. -->
-            <ImageButton
-                android:id="@+id/btn_summary"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/btn_accent_tonal_v4"
-                android:contentDescription="@string/summarizer_icon_summary_desc"
-                android:tooltipText="@string/summarizer_icon_summary_desc"
-                android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
-                app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/ic_subject"
-                tools:visibility="visible" />
-
             <!-- Summarizer Errors (decision 16): first in the icon row,
                  visible while this chat's error log has entries. The badge
                  shows the stored-error count (1–5). -->
@@ -467,7 +451,7 @@
                 android:tooltipText="@string/summarizer_icon_errors_desc"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_summary"
+                app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_report"
                 tools:visibility="visible" />
@@ -496,7 +480,7 @@
                 android:layout_height="wrap_content"
                 app:barrierAllowsGoneWidgets="false"
                 app:barrierDirection="start"
-                app:constraint_referenced_ids="btn_summarizer_errors,btn_summary,btn_quick_settings,btn_settings,btn_compaction,btn_chat_menu" />
+                app:constraint_referenced_ids="btn_summarizer_errors,btn_quick_settings,btn_settings,btn_conversation_summary,btn_chat_menu" />
 
             <ImageButton
                 android:id="@+id/btn_back"

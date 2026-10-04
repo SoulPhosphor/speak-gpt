@@ -27,13 +27,13 @@ class SummarizerReviewGateTest {
 
     @Test
     fun theGateIsHeldPerChatAndScreen() {
-        SummarizerReviewGate.open("chat-a", SummarizerReviewGate.SUMMARY_VIEW)
-        SummarizerReviewGate.open("chat-a", SummarizerReviewGate.COMPACTION_SUMMARY)
+        SummarizerReviewGate.open("chat-a", SummarizerReviewGate.CONVERSATION_SUMMARY)
+        SummarizerReviewGate.open("chat-a", "other_screen")
         assertTrue(SummarizerReviewGate.isOpen("chat-a"))
         assertFalse(SummarizerReviewGate.isOpen("chat-b"))
-        SummarizerReviewGate.close("chat-a", SummarizerReviewGate.SUMMARY_VIEW)
+        SummarizerReviewGate.close("chat-a", SummarizerReviewGate.CONVERSATION_SUMMARY)
         assertTrue(SummarizerReviewGate.isOpen("chat-a"))
-        SummarizerReviewGate.close("chat-a", SummarizerReviewGate.COMPACTION_SUMMARY)
+        SummarizerReviewGate.close("chat-a", "other_screen")
         assertFalse(SummarizerReviewGate.isOpen("chat-a"))
     }
 }

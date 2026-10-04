@@ -351,6 +351,15 @@ reduction, more the longer the chat runs.
     editable again, so an edit can never be overwritten by a run that started
     from older text.
 
+    **Superseded (owner ruling, Oct 3 2026):** the summary view pop-up and
+    its "subject" icon are replaced by a full-screen Conversation Summary,
+    the same screen as Compaction Summary in summarizer wording, opened
+    from one top-bar icon (Topic while the condensed form is in use, Docs
+    Add On while the full conversation is sent) once a summary has been
+    saved. Unsummarize / Resummarize replace Send Entire Chat. A chat that
+    uses the summarizer is not compacted: Compact is hidden and /compact
+    explains why while Use Summarizer is on.
+
 12. **Scope (owner, July 29 2026).** Regular chat requests only. The
     Playground, image-generation commands, and the function-calling /
     fine-tuned-model paths are excluded — they keep today's full-history

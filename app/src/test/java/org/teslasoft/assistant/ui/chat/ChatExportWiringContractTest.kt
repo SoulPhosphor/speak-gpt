@@ -23,7 +23,7 @@ class ChatExportWiringContractTest {
         assertTrue(layout.contains("app:layout_constraintEnd_toStartOf=\"@+id/btn_chat_menu\""))
         assertTrue(
             layout.contains(
-                "btn_summarizer_errors,btn_summary,btn_quick_settings,btn_settings,btn_compaction,btn_chat_menu"
+                "btn_summarizer_errors,btn_quick_settings,btn_settings,btn_conversation_summary,btn_chat_menu"
             )
         )
         assertFalse(layout.contains("btn_debug_log"))

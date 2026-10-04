@@ -130,6 +130,8 @@ object PerChatSettingKeys {
         "use_summarized_conversation_projection",
         "hide_uncompact_hint",
         "hide_recompact_hint",
+        "hide_unsummarize_hint",
+        "hide_resummarize_hint",
         "condensed_conversation_kind",
         "summarizer_catch_up_pending",
         "summary_regeneration_lock_boundary",
