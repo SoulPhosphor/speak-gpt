@@ -130,7 +130,9 @@ class ApiEndpointObject(
      */
     var reasoningRejectedLevelsByModel: String = "",
     /** Independent speech request path. Trailing for positional-call compatibility. */
-    var speechEndpoint: String = DEFAULT_SPEECH_ENDPOINT
+    var speechEndpoint: String = DEFAULT_SPEECH_ENDPOINT,
+    /** PDF input capability is independent from image/vision capability. */
+    var pdfCapabilityByModel: String = ""
 ) {
     /** True when this endpoint carries OpenRouter routing identity. */
     fun isOpenRouterRouting(): Boolean = identity == IDENTITY_OPENROUTER

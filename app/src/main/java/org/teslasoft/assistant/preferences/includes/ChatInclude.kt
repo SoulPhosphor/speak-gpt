@@ -77,7 +77,19 @@ data class ChatInclude(
      *  document. Drives the ~N tokens estimate; also displayed in Details. */
     val imageWidth: Int = 0,
     /** Pixel height of the transmitted (post-downsample) image, or 0. */
-    val imageHeight: Int = 0
+    val imageHeight: Int = 0,
+    /** Content hash of an app-owned PDF copy. Deliberately separate from image storage. */
+    val pdfFileHash: String? = null,
+    /** Always application/pdf while [pdfFileHash] is live. */
+    val pdfMimeType: String? = null,
+    /** Size of the original app-owned PDF bytes. */
+    val pdfByteSize: Long = 0L,
+    /** Number of pages discovered while validating the PDF, or zero when unavailable. */
+    val pdfPageCount: Int = 0,
+    /** Completed local text fallback, cached by content hash and mirrored here for portability. */
+    val pdfFallbackText: String? = null,
+    /** How [pdfFallbackText] was produced. */
+    val pdfFallbackProvenance: PdfFallbackProvenance? = null
 ) {
     /** Estimated tokens of what would be SENT for this include right now. */
     fun currentTokens(): Int = when {
@@ -96,7 +108,7 @@ data class ChatInclude(
      * bookmark line.
      */
     fun modelText(): String = when {
-        form == IncludeForm.FULL && kind.isImage() -> ""
+        form == IncludeForm.FULL && (kind.isImage() || kind == IncludeKind.PDF) -> ""
         form == IncludeForm.FULL -> fullText
         form == IncludeForm.CONDENSED -> condensedText ?: fullText
         else -> artifactLine ?: IncludeTextPolicy.fallbackArtifactLine(fileName)
@@ -108,6 +120,10 @@ data class ChatInclude(
     /** True while the include's bytes-on-disk still need to accompany a send. */
     fun hasLiveImageBytes(): Boolean =
         kind.isImage() && form == IncludeForm.FULL && !imageFileHash.isNullOrEmpty()
+
+    /** True while the original PDF is the canonical payload for this include. */
+    fun hasLivePdfBytes(): Boolean =
+        kind == IncludeKind.PDF && form == IncludeForm.FULL && !pdfFileHash.isNullOrEmpty()
 
     /** Snapshot this pending include into sent history without its source key. */
     fun forSentMessage(): ChatInclude =
@@ -125,6 +141,16 @@ data class ChatInclude(
         imageHeight = 0
     )
 
+    /** Clear only the original PDF representation after a successful state transition. */
+    fun withoutPdfBytes(): ChatInclude = copy(
+        pdfFileHash = null,
+        pdfMimeType = null,
+        pdfByteSize = 0L,
+        pdfPageCount = 0,
+        pdfFallbackText = null,
+        pdfFallbackProvenance = null
+    )
+
     fun toJson(): JSONObject = JSONObject().apply {
         put(KEY_ID, id)
         put(KEY_NAME, fileName)
@@ -140,6 +166,12 @@ data class ChatInclude(
         if (imageMimeType != null) put(KEY_IMAGE_MIME_TYPE, imageMimeType)
         if (imageWidth > 0) put(KEY_IMAGE_WIDTH, imageWidth)
         if (imageHeight > 0) put(KEY_IMAGE_HEIGHT, imageHeight)
+        if (pdfFileHash != null) put(KEY_PDF_FILE_HASH, pdfFileHash)
+        if (pdfMimeType != null) put(KEY_PDF_MIME_TYPE, pdfMimeType)
+        if (pdfByteSize > 0L) put(KEY_PDF_BYTE_SIZE, pdfByteSize)
+        if (pdfPageCount > 0) put(KEY_PDF_PAGE_COUNT, pdfPageCount)
+        if (pdfFallbackText != null) put(KEY_PDF_FALLBACK_TEXT, pdfFallbackText)
+        if (pdfFallbackProvenance != null) put(KEY_PDF_FALLBACK_PROVENANCE, pdfFallbackProvenance.key)
     }
 
     companion object {
@@ -157,6 +189,12 @@ data class ChatInclude(
         private const val KEY_IMAGE_MIME_TYPE = "imageMimeType"
         private const val KEY_IMAGE_WIDTH = "imageWidth"
         private const val KEY_IMAGE_HEIGHT = "imageHeight"
+        private const val KEY_PDF_FILE_HASH = "pdfFileHash"
+        private const val KEY_PDF_MIME_TYPE = "pdfMimeType"
+        private const val KEY_PDF_BYTE_SIZE = "pdfByteSize"
+        private const val KEY_PDF_PAGE_COUNT = "pdfPageCount"
+        private const val KEY_PDF_FALLBACK_TEXT = "pdfFallbackText"
+        private const val KEY_PDF_FALLBACK_PROVENANCE = "pdfFallbackProvenance"
 
         fun fromJson(o: JSONObject): ChatInclude? {
             val id = o.optString(KEY_ID).takeIf { it.isNotEmpty() } ?: return null
@@ -182,7 +220,17 @@ data class ChatInclude(
                     o.optString(KEY_IMAGE_MIME_TYPE).takeIf { it.isNotEmpty() }
                 } else null,
                 imageWidth = o.optInt(KEY_IMAGE_WIDTH, 0),
-                imageHeight = o.optInt(KEY_IMAGE_HEIGHT, 0)
+                imageHeight = o.optInt(KEY_IMAGE_HEIGHT, 0),
+                pdfFileHash = o.optString(KEY_PDF_FILE_HASH).takeIf { it.isNotEmpty() },
+                pdfMimeType = o.optString(KEY_PDF_MIME_TYPE).takeIf { it.isNotEmpty() },
+                pdfByteSize = o.optLong(KEY_PDF_BYTE_SIZE, 0L),
+                pdfPageCount = o.optInt(KEY_PDF_PAGE_COUNT, 0),
+                pdfFallbackText = if (o.has(KEY_PDF_FALLBACK_TEXT)) {
+                    o.optString(KEY_PDF_FALLBACK_TEXT)
+                } else null,
+                pdfFallbackProvenance = PdfFallbackProvenance.fromKey(
+                    o.optString(KEY_PDF_FALLBACK_PROVENANCE)
+                )
             )
         }
 
@@ -220,6 +268,7 @@ enum class IncludeKind(val key: String) {
     CSV("csv"),
     DOCX("docx"),
     XLSX("xlsx"),
+    PDF("pdf"),
     JPEG("jpeg"),
     PNG("png");
 
@@ -242,10 +291,23 @@ enum class IncludeKind(val key: String) {
                 "csv" -> CSV
                 "docx" -> DOCX
                 "xlsx" -> XLSX
+                "pdf" -> PDF
                 "jpg", "jpeg" -> JPEG
                 "png" -> PNG
                 else -> null
             }
+    }
+}
+
+/** Provenance of a complete, page-ordered local PDF text fallback. */
+enum class PdfFallbackProvenance(val key: String) {
+    EMBEDDED_TEXT("embedded_text"),
+    OCR("ocr"),
+    MIXED("mixed");
+
+    companion object {
+        fun fromKey(key: String?): PdfFallbackProvenance? =
+            entries.firstOrNull { it.key == key }
     }
 }
 

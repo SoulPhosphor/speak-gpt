@@ -85,11 +85,30 @@ object IncludeRenderer {
         return out
     }
 
+    /** FULL PDFs stay out of the text projection. Delivery is selected at the
+     * final provider boundary, using either these original bytes or a local
+     * extracted/OCR representation. */
+    fun pdfPartsFor(includes: List<ChatInclude>): List<RenderedPdfPart> {
+        if (includes.isEmpty()) return emptyList()
+        return includes.mapNotNull { include ->
+            if (!include.hasLivePdfBytes()) return@mapNotNull null
+            RenderedPdfPart(
+                includeId = include.id,
+                pdfFileHash = include.pdfFileHash ?: return@mapNotNull null,
+                fileName = include.fileName,
+                byteSize = include.pdfByteSize,
+                pageCount = include.pdfPageCount,
+                cachedFallbackText = include.pdfFallbackText,
+                fallbackProvenance = include.pdfFallbackProvenance
+            )
+        }
+    }
+
     /** Text-side rendering of one include, or null if this include has no
      *  text-side representation (a FULL image is delivered as bytes, not text). */
     private fun renderInline(include: ChatInclude): String? = when {
         include.form == IncludeForm.ARTIFACT -> renderBookmark(include)
-        include.form == IncludeForm.FULL && include.kind.isImage() -> null
+        include.form == IncludeForm.FULL && (include.kind.isImage() || include.kind == IncludeKind.PDF) -> null
         include.kind.isImage() -> renderImage(include)
         else -> renderDocument(include)
     }
@@ -185,4 +204,14 @@ data class RenderedImagePart(
     /** Display file name (not used to look up the file — the hash is — but
      *  useful for logging and for diagnostics if the file has gone missing). */
     val fileName: String
+)
+
+data class RenderedPdfPart(
+    val includeId: String,
+    val pdfFileHash: String,
+    val fileName: String,
+    val byteSize: Long,
+    val pageCount: Int,
+    val cachedFallbackText: String?,
+    val fallbackProvenance: PdfFallbackProvenance?
 )

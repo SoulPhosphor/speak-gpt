@@ -213,6 +213,15 @@ import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
 import org.teslasoft.assistant.preferences.includes.IncludeRenderer
 import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
+import org.teslasoft.assistant.preferences.includes.PdfAttachmentStore
+import org.teslasoft.assistant.preferences.includes.PdfFallbackExtractor
+import org.teslasoft.assistant.preferences.includes.PdfImporter
+import org.teslasoft.assistant.preferences.includes.NativePdfPayload
+import org.teslasoft.assistant.preferences.includes.PdfCapability
+import org.teslasoft.assistant.preferences.includes.PdfCapabilityProvider
+import org.teslasoft.assistant.preferences.includes.PdfCapabilityResolver
+import org.teslasoft.assistant.preferences.includes.PdfRequestSerializer
+import org.teslasoft.assistant.preferences.includes.PdfRoutingConfig
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
 import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
 import org.teslasoft.assistant.preferences.includes.SummarizerSafeIncludeProjectionBuilder
@@ -407,6 +416,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         /** How much of a document the bookmark-writing request sees. Enough
          *  to say what the file IS, without paying to send it all again. */
         private const val ARTIFACT_EXCERPT_CHARS = 2000
+        /** Conservative inline/base64 preflight below documented provider request ceilings. */
+        private const val MAX_INLINE_NATIVE_PDF_BYTES = 20L * 1024L * 1024L
 
         /** Pins a split raw response to the lifecycle recorder for that exact request. */
         private val responseLifecycleRecorderAttribute =
@@ -693,13 +704,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val request: ChatCompletionRequest,
         val payload: FrozenChatPayload,
         val activeMemoryReferences: List<ActiveMemoryReference>,
-        val contextDecision: ModelContextDecision
+        val contextDecision: ModelContextDecision,
+        val nativePdfs: List<NativePdfPayload>
     )
 
     private data class FrozenRegularRequest(
         val request: ChatCompletionRequest,
         val payload: FrozenChatPayload,
-        val activeMemoryReferences: List<ActiveMemoryReference>
+        val activeMemoryReferences: List<ActiveMemoryReference>,
+        val nativePdfs: List<NativePdfPayload>
     )
 
     /** One fully resolved conversation snapshot shared by measurement/send. */
@@ -707,7 +720,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val persistentIncludes: List<ChatMessage>,
         val conversation: List<ChatMessage>,
         val summaryInjection: String?,
-        val hasFullImages: Boolean
+        val hasFullImages: Boolean,
+        val nativePdfs: List<NativePdfPayload>
     )
 
     // Auto-naming attempts this screen instance. Used to be a one-shot
@@ -2969,6 +2983,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             loadPendingIncludes()
             reconcileChatImages()
+            reconcileChatPdfs()
 
             updateMessagesSelectionProjection()
 
@@ -3812,6 +3827,40 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun importDocument(uri: Uri, sourceFingerprint: String) {
         val scope = CoroutineScope(Dispatchers.Main)
         scope.launch {
+            if (PdfImporter.isPdfSelection(this@ChatActivity, uri)) {
+                val pdfResult = withContext(Dispatchers.IO) {
+                    PdfImporter.import(this@ChatActivity, uri, chatId)
+                }
+                pendingDocumentImports.remove(sourceFingerprint)
+                if (isFinishing || isDestroyed) {
+                    if (pdfResult is PdfImporter.Result.Success) {
+                        withContext(Dispatchers.IO) { PdfAttachmentStore.deleteOrphanFile(pdfResult.onDiskFile) }
+                    }
+                    return@launch
+                }
+                when (pdfResult) {
+                    is PdfImporter.Result.Success -> {
+                        pendingIncludes.add(pdfResult.include)
+                        savePendingIncludes()
+                        refreshIncludeStrip()
+                    }
+                    is PdfImporter.Result.PasswordProtected ->
+                        showIncludeProblem(R.string.include_error_password_protected, pdfResult.fileName)
+                    is PdfImporter.Result.Corrupt ->
+                        showIncludeProblem(R.string.include_error_corrupted, pdfResult.fileName)
+                    is PdfImporter.Result.Empty ->
+                        showIncludeProblem(R.string.include_error_empty, pdfResult.fileName)
+                    is PdfImporter.Result.NotPdf ->
+                        showIncludeProblem(R.string.include_error_content_mismatch, pdfResult.fileName)
+                    is PdfImporter.Result.TooLarge ->
+                        showIncludeCapacityProblem(R.string.document_attach_failed_title, R.string.document_attach_memory_body)
+                    is PdfImporter.Result.Unavailable ->
+                        showIncludeProblem(R.string.include_error_source_unavailable, pdfResult.fileName)
+                    is PdfImporter.Result.Unreadable ->
+                        showIncludeProblem(R.string.include_error_unknown, pdfResult.fileName)
+                }
+                return@launch
+            }
             val result = withContext(Dispatchers.IO) {
                 try {
                     DocumentImporter.import(this@ChatActivity, uri)
@@ -3962,6 +4011,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             savePendingIncludes(synchronous = true)
             refreshIncludeStrip()
             if (removed.kind.isImage()) maybeDeleteImageBytes(removed)
+            if (removed.kind == IncludeKind.PDF) maybeDeletePdfBytes(removed)
             return
         }
 
@@ -3990,6 +4040,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             job.invokeOnCompletion {
                 if (artifactJobs[include.id] === job) artifactJobs.remove(include.id)
             }
+            return
+        }
+
+        if (include.kind == IncludeKind.PDF) {
+            // Sent removal is local and immediate. A provider failure can never
+            // resurrect the original PDF or block the bookmark transition.
+            updateInclude(
+                include.copy(
+                    form = IncludeForm.ARTIFACT,
+                    artifactLine = fallback,
+                    notice = IncludeNotice.None
+                ).withoutPdfBytes()
+            )
+            maybeDeletePdfBytes(include)
             return
         }
 
@@ -4075,6 +4139,40 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ) return true
         }
         return false
+    }
+
+    private fun maybeDeletePdfBytes(include: ChatInclude) {
+        val hash = include.pdfFileHash?.takeIf { it.isNotBlank() } ?: return
+        val referenced = pdfBytesStillReferenced(hash, include.id)
+        val cid = chatId
+        CoroutineScope(Dispatchers.IO).launch {
+            PdfAttachmentStore.deletePdfIfUnreferenced(
+                this@ChatActivity, cid, include,
+                stillReferenced = referenced,
+                fallbackStillReferenced = referenced
+            )
+        }
+    }
+
+    private fun pdfBytesStillReferenced(hash: String, excludingId: String): Boolean {
+        if (pendingIncludes.any { it.id != excludingId && it.pdfFileHash == hash && it.hasLivePdfBytes() }) return true
+        return messages.any { message ->
+            includesOf(message).any {
+                it.id != excludingId && it.pdfFileHash == hash && it.hasLivePdfBytes()
+            }
+        }
+    }
+
+    private fun reconcileChatPdfs() {
+        val referenced = buildSet {
+            pendingIncludes.filter { it.hasLivePdfBytes() }.mapNotNullTo(this) { it.pdfFileHash }
+            messages.flatMap(::includesOf).filter { it.hasLivePdfBytes() }
+                .mapNotNullTo(this) { it.pdfFileHash }
+        }
+        val cid = chatId
+        CoroutineScope(Dispatchers.IO).launch {
+            PdfAttachmentStore.reconcileChatPdfs(this@ChatActivity, cid, referenced)
+        }
     }
 
     /**
@@ -4293,12 +4391,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                     getString(R.string.include_condense_failed)
                 }
-                condensed.isBlank() || condensedTokens >= sourceTokens ->
+                condensed.isBlank() || (include.kind != IncludeKind.PDF && condensedTokens >= sourceTokens) ->
                     getString(R.string.include_condense_not_shorter)
                 !stillCurrent ->
                     getString(R.string.include_condense_failed)
                 else -> {
-                    updateInclude(latest!!.withCondensedText(condensed))
+                    if (include.kind == IncludeKind.PDF) {
+                        updateInclude(latest!!.withCondensedText(condensed).withoutPdfBytes())
+                        maybeDeletePdfBytes(include)
+                    } else {
+                        updateInclude(latest!!.withCondensedText(condensed))
+                    }
                     getString(R.string.include_condense_complete)
                 }
             }
@@ -4326,8 +4429,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         return try {
             val text = withContext(Dispatchers.IO) {
+                val endpoint = apiEndpointObject
+                val routing = endpoint?.let {
+                    PdfRoutingConfig.from(it, favoriteForActiveEndpoint(condenseModel))
+                }
+                val nativePdf = include.kind == IncludeKind.PDF && endpoint != null && routing != null &&
+                    PdfCapabilityResolver.resolve(endpoint, condenseModel, routing) == PdfCapability.SUPPORTED &&
+                    routing.provider in setOf(PdfCapabilityProvider.OPENAI, PdfCapabilityProvider.OPENROUTER)
+                val sourceInclude = if (include.kind == IncludeKind.PDF && !nativePdf) {
+                    val fallback = PdfFallbackExtractor.extract(this@ChatActivity, chatId, include)
+                    include.copy(fullText =
+                        "This is locally extracted PDF text. Diagrams and page layout may not be preserved.\n\n" + fallback.text)
+                } else include
                 val spec = IncludeAuxiliaryRequestPolicy.condense(
-                    include = include,
+                    include = sourceInclude,
                     selectedModel = condenseModel,
                     configuredMaxTokens = outputLimit
                 )
@@ -4341,7 +4456,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         )
                     )
                 )
-                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+                if (nativePdf) {
+                    val file = PdfAttachmentStore.pdfFile(this@ChatActivity, chatId, include)
+                        ?.takeIf { it.isFile } ?: error("PDF is unavailable")
+                    if (file.length() > MAX_INLINE_NATIVE_PDF_BYTES) error("PDF exceeds inline provider limit")
+                    val nativePayload = NativePdfPayload(
+                        include.id, include.fileName,
+                        Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+                    )
+                    val nativeRequest = ChatCompletionRequest(
+                        model = ModelId(spec.model),
+                        maxTokens = spec.maxTokens,
+                        messages = listOf(ChatMessage(
+                            role = ChatRole.User,
+                            content = StableAttachmentReference.serialize(include) + "\n\n" + spec.prompt
+                        ))
+                    )
+                    val previous = currentTurnNativePdfs
+                    currentTurnNativePdfs = listOf(nativePayload)
+                    try {
+                        withGenerationRequestContext { client.chatCompletion(nativeRequest) }
+                            .choices.firstOrNull()?.message?.content?.trim()
+                    } finally {
+                        currentTurnNativePdfs = previous
+                    }
+                } else {
+                    client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+                }
             }
             if (text.isNullOrBlank()) {
                 Result.failure(IllegalStateException("Condense returned no text"))
@@ -7161,6 +7302,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /** Attach original PDFs only to the exact frozen generation request that owns them. */
+    private fun augmentRequestWithNativePdfs(request: HttpRequestBuilder) {
+        val payloads = generationRequestContext.get()?.nativePdfs.orEmpty()
+        if (payloads.isEmpty()) return
+        val provider = apiEndpointObject?.let { PdfCapabilityProvider.forEndpoint(it) } ?: return
+        if (provider != PdfCapabilityProvider.OPENAI && provider != PdfCapabilityProvider.OPENROUTER) return
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val augmented = PdfRequestSerializer.augmentOpenAiChatBody(
+            content.text,
+            payloads,
+            openRouterNative = provider == PdfCapabilityProvider.OPENROUTER
+        )
+        request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
+    }
+
     /**
      * The reasoning capability of the active endpoint for [model], layering the
      * §7.7 confidence ladder over this endpoint's persisted capability store.
@@ -7679,6 +7836,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             } catch (_: Exception) {
                                 // Non-fatal: send without a reasoning instruction.
                             }
+                            // Unlike optional reasoning, a native PDF must not
+                            // be silently omitted. Any mutation failure aborts
+                            // before dispatch and reaches the normal readable
+                            // failed-request path.
+                            augmentRequestWithNativePdfs(request)
                             proceed(request)
                         }
                     })
@@ -8973,12 +9135,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * this remains correct if two attempts ever overlap on different jobs. */
     private data class GenerationRequestContext(
         val usageAttempt: ProviderUsageAttempt?,
-        val lifecycle: ResponseLifecycleRecorder?
+        val lifecycle: ResponseLifecycleRecorder?,
+        val nativePdfs: List<NativePdfPayload>
     )
     private val generationRequestContext = ThreadLocal<GenerationRequestContext?>()
+    private var currentTurnNativePdfs: List<NativePdfPayload> = emptyList()
 
     private suspend fun <T> withGenerationRequestContext(block: suspend () -> T): T {
-        val context = GenerationRequestContext(currentProviderUsageAttempt, currentLifecycle)
+        val context = GenerationRequestContext(
+            currentProviderUsageAttempt, currentLifecycle, currentTurnNativePdfs
+        )
         return try {
             kotlinx.coroutines.withContext(generationRequestContext.asContextElement(context)) {
                 block()
@@ -9515,7 +9681,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     withContext(Dispatchers.Default) {
                         val conversationProjection = freezeConversationProjection(
                             canonical,
-                            summarizerState
+                            summarizerState,
+                            selectedModel
                         )
                         val frozen = buildFrozenRegularRequest(
                             conversationProjection = conversationProjection,
@@ -9579,7 +9746,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     request = frozen.request,
                     payload = frozen.payload,
                     activeMemoryReferences = frozen.activeMemoryReferences,
-                    contextDecision = decision
+                    contextDecision = decision,
+                    nativePdfs = frozen.nativePdfs
                 )
                 val hasFullImages = preparedRequest.first.second
 
@@ -10668,17 +10836,54 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private suspend fun freezeConversationProjection(
         canonical: List<CanonicalConversationMessage>,
-        summarizerState: FrozenSummarizerState
+        summarizerState: FrozenSummarizerState,
+        selectedModel: String
     ): FrozenConversationProjection = withContext(Dispatchers.IO) {
         val projected = SummarizerSafeIncludeProjectionBuilder.build(
             messages = canonical,
             foldedCount = summarizerState.foldedCount
         )
         val cid = chatId
+        val nativePdfs = ArrayList<NativePdfPayload>()
+        val endpoint = apiEndpointObject
+        val pdfRouting = endpoint?.let {
+            PdfRoutingConfig.from(it, favoriteForActiveEndpoint(selectedModel))
+        }
         val persistent = projected.persistentIncludes.map { unit ->
             val include = unit.include
+            val persistentText = if (include.hasLivePdfBytes()) {
+                val capability = if (endpoint != null && pdfRouting != null) {
+                    PdfCapabilityResolver.resolve(endpoint, selectedModel, pdfRouting)
+                } else PdfCapability.UNKNOWN
+                val nativeTransportAvailable = pdfRouting?.provider == PdfCapabilityProvider.OPENAI ||
+                    pdfRouting?.provider == PdfCapabilityProvider.OPENROUTER
+                if (capability == PdfCapability.SUPPORTED && nativeTransportAvailable) {
+                    val file = PdfAttachmentStore.pdfFile(this@ChatActivity, chatId, include)
+                        ?.takeIf { it.isFile } ?: error("PDF ${include.fileName} is unavailable")
+                    if (file.length() > MAX_INLINE_NATIVE_PDF_BYTES) {
+                        error("PDF ${include.fileName} exceeds this provider's inline request limit")
+                    }
+                    nativePdfs += NativePdfPayload(
+                        include.id,
+                        include.fileName,
+                        Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+                    )
+                    StableAttachmentReference.renderPersistentPayload(include)
+                } else {
+                    val fallback = PdfFallbackExtractor.extract(this@ChatActivity, chatId, include)
+                    val local = include.copy(
+                        fullText = "This is locally extracted PDF text. Page layout, diagrams, charts, and other visual details may not be preserved.\n\n" + fallback.text,
+                        pdfFallbackText = fallback.text,
+                        pdfFallbackProvenance = fallback.provenance
+                    )
+                    StableAttachmentReference.serialize(include) + "\n\n" +
+                        IncludeRenderer.renderUserMessage("", listOf(local))
+                }
+            } else {
+                StableAttachmentReference.renderPersistentPayload(include)
+            }
             val content = ProjectedUserMessage(
-                text = StableAttachmentReference.renderPersistentPayload(include),
+                text = persistentText,
                 imageParts = IncludeRenderer.imagePartsFor(listOf(include))
             )
             buildMultiPartUserMessage(content, cid)
@@ -10700,7 +10905,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             summaryInjection = summarizerState.summaryInjection,
             hasFullImages = canonical.any { message ->
                 message.includes.any { it.hasLiveImageBytes() }
-            }
+            },
+            nativePdfs = nativePdfs.toList()
         )
     }
 
@@ -12120,7 +12326,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             memoryAssemblyResult?.memoryIds.orEmpty(),
             injectedLoreMatches.map { it.entry.id }
         )
-        return FrozenRegularRequest(request, payload, activeMemoryReferences)
+        return FrozenRegularRequest(
+            request, payload, activeMemoryReferences, conversationProjection.nativePdfs
+        )
     }
 
     // streamOptions (include-usage) is beta-gated in the client library, like
@@ -12187,7 +12395,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             legacyConversationProjection = try {
                 freezeConversationProjection(
                     legacyCanonical.orEmpty(),
-                    legacySummarizerState ?: FrozenSummarizerState(false, 0, null)
+                    legacySummarizerState ?: FrozenSummarizerState(false, 0, null),
+                    model
                 )
             } finally {
                 releaseRequestImagePayloads()
@@ -12483,6 +12692,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
         attachActiveMemoryAttribution(activeMemoryReferences)
         }
+
+        currentTurnNativePdfs = preparedTurn?.nativePdfs
+            ?: legacyConversationProjection?.nativePdfs.orEmpty()
 
         // §8 retry support: remembered so a failure of THIS request can be
         // judged as a tools rejection by the wrapper in generateResponse.

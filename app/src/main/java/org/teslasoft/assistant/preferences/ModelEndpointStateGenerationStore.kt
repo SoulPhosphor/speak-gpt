@@ -198,6 +198,7 @@ internal class ModelEndpointStateGenerationStore private constructor(
                 ?.takeIf { it > 0 && contextModel == model },
             contextWindowModelId = contextModel.takeIf { it == model }.orEmpty(),
             imageCapabilityByModel = value("_image_capability_by_model"),
+            pdfCapabilityByModel = value("_pdf_capability_by_model"),
             toolCapabilityByModel = value("_tool_capability_by_model"),
             reasoningCapabilityByModel = value("_reasoning_capability_by_model"),
             reasoningRejectedLevelsByModel = value("_reasoning_rejected_levels_by_model"),

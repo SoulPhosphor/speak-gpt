@@ -240,7 +240,8 @@ class ApiEndpointPreferences private constructor(
         identity = identity,
         reasoningCapabilityByModel = reasoningCapabilityByModel,
         reasoningRejectedLevelsByModel = reasoningRejectedLevelsByModel,
-        speechEndpoint = speechEndpoint
+        speechEndpoint = speechEndpoint,
+        pdfCapabilityByModel = pdfCapabilityByModel
     )
 
     private fun ApiEndpointObject.toPortable(
@@ -272,6 +273,9 @@ class ApiEndpointPreferences private constructor(
             contextWindowModelId = if (contextWindow == null) "" else model,
             imageCapabilityByModel = imageCapabilityByModel.takeUnless {
                 it.isBlank() || it == ImageCapabilityStore.EMPTY
+            }.orEmpty(),
+            pdfCapabilityByModel = pdfCapabilityByModel.takeUnless {
+                it.isBlank() || it == org.teslasoft.assistant.preferences.includes.PdfCapabilityStore.EMPTY
             }.orEmpty(),
             toolCapabilityByModel = toolCapabilityByModel.takeUnless {
                 it.isBlank() || it == ToolCapabilityStore.EMPTY

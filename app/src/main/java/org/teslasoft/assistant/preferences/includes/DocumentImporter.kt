@@ -130,6 +130,7 @@ object DocumentImporter {
         "text/csv",
         "text/comma-separated-values",
         "application/csv",
+        PdfImporter.MIME_TYPE,
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         GoogleExport.NATIVE_DOCUMENT,
@@ -271,7 +272,7 @@ object DocumentImporter {
                         return readFailure(fileName, export != null)
                     }
                 }
-                IncludeKind.JPEG, IncludeKind.PNG ->
+                IncludeKind.PDF, IncludeKind.JPEG, IncludeKind.PNG ->
                     return Result.Unsupported(fileName)
             }
 
