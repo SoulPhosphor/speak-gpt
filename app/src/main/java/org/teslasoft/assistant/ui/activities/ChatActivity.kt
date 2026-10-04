@@ -5072,11 +5072,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
-     * Compact's error box (owner-approved wording, Oct 4 2026): the cause as
-     * the title, one plain reason, that the conversation was not changed,
-     * and the AI service's own error when it sent one. Summarizer Settings
-     * opens the Summarizer page, Retry compacts the same messages again, and
-     * Okay closes it.
+     * Compact's error box: show the cause, whether any completed batches were
+     * saved, and the AI service's own error when it sent one. Retry continues
+     * from saved partial work; when nothing was saved, the conversation is
+     * explicitly reported as unchanged.
      */
     private fun showCompactionFailure(
         state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed
@@ -5115,8 +5114,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (state.savedMessages > 0) lastCompactionFromScratch = false
         val message = buildString {
             append(getString(reason))
-            if (state.savedMessages == 0) {
-                append("\n\n")
+            append("\n\n")
+            if (state.savedMessages > 0) {
+                append(getString(R.string.compaction_err_partial_saved, state.savedMessages))
+            } else {
                 append(getString(R.string.compaction_err_unchanged))
             }
             state.providerError?.let {
