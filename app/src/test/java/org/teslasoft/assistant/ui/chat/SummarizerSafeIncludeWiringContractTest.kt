@@ -88,7 +88,12 @@ class SummarizerSafeIncludeWiringContractTest {
         val controller = source(
             "src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt"
         )
-        assertTrue(controller.contains("if (!prefs.ensureSummarizerProjectionCompatibility()) return false"))
+        val sectionBuild = controller.substringAfter("private suspend fun buildOneSection(")
+        val incompatible = sectionBuild.substringAfter("if (!prefs.ensureSummarizerProjectionCompatibility()) {")
+            .substringBefore("val current = snapshot.sources()")
+        assertTrue(incompatible.contains("recordStorageFailure(prefs, chatName,"))
+        assertTrue(incompatible.contains("return false"))
+        assertFalse(incompatible.contains("requestSection("))
         // The summary / compaction review screen loads only compatible text.
         val review = source(
             "src/main/java/org/teslasoft/assistant/ui/activities/ConversationSummaryActivity.kt"
