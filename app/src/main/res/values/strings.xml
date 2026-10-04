@@ -3428,6 +3428,8 @@
     <string name="document_export_incomplete_body">The source app did not finish exporting the complete document. No part of the document was attached. Check that you are online and signed in to the source app, then try again.</string>
     <string name="request_prepare_failed_title">Request could not be prepared</string>
     <string name="request_prepare_failed_body">The complete request is too large for this device to assemble safely with the current conversation and attachments. Nothing was sent or shortened. Remove some content or attachments, or start a new chat.</string>
+    <string name="pdf_request_failed_title">PDF could not be prepared</string>
+    <string name="pdf_request_failed_body">%1$s could not be prepared for the selected model. Nothing was sent, and the original PDF remains attached. %2$s</string>
     <string name="response_limit_too_high_title">Response limit is too high</string>
     <string name="response_limit_too_high_body">This chat is configured to request up to %1$s response tokens, but the selected model supports a maximum of %2$s. Nothing was sent. Lower the response-token setting or choose another model.</string>
     <string name="request_context_exceeded_title">Request exceeds this model’s context limit</string>

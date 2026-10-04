@@ -69,10 +69,9 @@ object PdfRequestSerializer {
             .put("data", pdf.base64Data))
 
     fun geminiDocumentPart(pdf: NativePdfPayload): JSONObject = JSONObject()
-        .put("type", "document")
-        .put("data", pdf.base64Data)
-        .put("mime_type", "application/pdf")
-        .put("filename", pdf.fileName)
+        .put("inline_data", JSONObject()
+            .put("mime_type", "application/pdf")
+            .put("data", pdf.base64Data))
 
     fun xAiInputFile(fileId: String): JSONObject = JSONObject()
         .put("type", "input_file")

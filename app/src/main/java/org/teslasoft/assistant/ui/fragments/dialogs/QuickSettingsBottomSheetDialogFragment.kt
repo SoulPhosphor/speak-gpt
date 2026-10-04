@@ -1731,6 +1731,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             contextWindowTokens = currentProfile.contextWindowTokens,
             contextWindowModelId = currentProfile.contextWindowModelId,
             imageCapabilityByModel = currentProfile.imageCapabilityByModel,
+            pdfCapabilityByModel = currentProfile.pdfCapabilityByModel,
             toolCapabilityByModel = currentProfile.toolCapabilityByModel,
             identity = currentProfile.identity,
             reasoningCapabilityByModel = currentProfile.reasoningCapabilityByModel,

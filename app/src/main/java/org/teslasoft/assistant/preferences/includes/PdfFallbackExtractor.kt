@@ -16,6 +16,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -44,7 +45,7 @@ object PdfFallbackExtractor {
     suspend fun extract(context: Context, chatId: String, include: ChatInclude): Completed =
         withContext(Dispatchers.IO) {
             val hash = requireNotNull(include.pdfFileHash) { "PDF bytes are no longer live" }
-            readCache(context, hash)?.let { return@withContext it.copy(cacheHit = true) }
+            readCache(context, chatId, hash)?.let { return@withContext it.copy(cacheHit = true) }
             val file = PdfAttachmentStore.pdfFile(context, chatId, include)
                 ?.takeIf { it.isFile } ?: error("The original PDF is unavailable")
 
@@ -95,8 +96,11 @@ object PdfFallbackExtractor {
                 usedEmbedded -> PdfFallbackProvenance.EMBEDDED_TEXT
                 else -> PdfFallbackProvenance.OCR
             }
+            if (output.none { block -> block.substringAfter('\n').any { it.isLetterOrDigit() } }) {
+                error("No readable text was found in the PDF")
+            }
             val completed = Completed(output.joinToString("\n\n"), provenance, output.size, false)
-            writeCacheAtomically(context, hash, completed)
+            writeCacheAtomically(context, chatId, hash, completed)
             completed
         }
 
@@ -120,15 +124,17 @@ object PdfFallbackExtractor {
                 }
             }
             out
-        } catch (_: Throwable) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
             // Page-content APIs require a sufficiently new platform extension.
             // OCR remains the correct local fallback on older supported devices.
             out
         }
     }
 
-    private fun readCache(context: Context, hash: String): Completed? = try {
-        val metadataFile = PdfAttachmentStore.fallbackMetadataFile(context, hash)
+    private fun readCache(context: Context, chatId: String, hash: String): Completed? = try {
+        val metadataFile = PdfAttachmentStore.fallbackMetadataFile(context, chatId, hash)
         if (!metadataFile.isFile) return null
         val metadata = JSONObject(metadataFile.readText())
         Completed(
@@ -139,8 +145,8 @@ object PdfFallbackExtractor {
         )
     } catch (_: Exception) { null }
 
-    private fun writeCacheAtomically(context: Context, hash: String, completed: Completed) {
-        val metadataFile = PdfAttachmentStore.fallbackMetadataFile(context, hash)
+    private fun writeCacheAtomically(context: Context, chatId: String, hash: String, completed: Completed) {
+        val metadataFile = PdfAttachmentStore.fallbackMetadataFile(context, chatId, hash)
         val metadataTemp = File.createTempFile("$hash-", ".json.tmp", metadataFile.parentFile)
         try {
             FileOutputStream(metadataTemp).use {

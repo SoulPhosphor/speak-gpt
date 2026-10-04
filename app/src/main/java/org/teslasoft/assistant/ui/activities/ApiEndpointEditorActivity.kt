@@ -220,6 +220,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var btnClearImageCapability: MaterialButton? = null
     private var imageCapabilityExpanded: Boolean = false
     private var currentCapabilityJson: String = ""
+    private var currentPdfCapabilityJson: String = ""
 
     /** Learned tool capability (image-generation-rebuild-plan.md §8);
      *  cleared here so a provider upgrade is never treated as permanent. */
@@ -427,6 +428,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         }
 
         currentCapabilityJson = endpoint.imageCapabilityByModel
+        currentPdfCapabilityJson = endpoint.pdfCapabilityByModel
         populateCapabilitySection()
         currentToolCapabilityJson = endpoint.toolCapabilityByModel
         refreshToolCapabilityReset()
@@ -653,6 +655,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
                 selectedModel
             },
             imageCapabilityByModel = if (effectivePathChanged) "" else currentCapabilityJson,
+            pdfCapabilityByModel = if (effectivePathChanged) "" else currentPdfCapabilityJson,
             toolCapabilityByModel = if (effectivePathChanged) "" else currentToolCapabilityJson,
             reasoningCapabilityByModel = if (effectivePathChanged) "" else currentReasoningCapabilityJson,
             reasoningRejectedLevelsByModel = if (effectivePathChanged) "" else currentReasoningRejectedJson,
@@ -916,6 +919,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             if (keyChanged) "key_changed" else "key_same",
             fieldProviderDiscoveryPath?.text.toString(),
             currentCapabilityJson,
+            currentPdfCapabilityJson,
             currentToolCapabilityJson,
             // Choose Provider choices count as unsaved edits once made, so the
             // discard-changes guard offers to save them.

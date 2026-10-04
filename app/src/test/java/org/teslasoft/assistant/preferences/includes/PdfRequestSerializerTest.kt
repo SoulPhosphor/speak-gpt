@@ -27,7 +27,8 @@ class PdfRequestSerializerTest {
         assertEquals("document", PdfRequestSerializer.anthropicDocumentBlock(payload).getString("type"))
         assertEquals("base64", PdfRequestSerializer.anthropicDocumentBlock(payload)
             .getJSONObject("source").getString("type"))
-        assertEquals("application/pdf", PdfRequestSerializer.geminiDocumentPart(payload).getString("mime_type"))
+        assertEquals("application/pdf", PdfRequestSerializer.geminiDocumentPart(payload)
+            .getJSONObject("inline_data").getString("mime_type"))
         assertEquals("input_file", PdfRequestSerializer.xAiInputFile("file-1").getString("type"))
     }
 }

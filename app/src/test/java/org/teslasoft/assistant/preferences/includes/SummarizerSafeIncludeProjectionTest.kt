@@ -439,4 +439,26 @@ class SummarizerSafeIncludeProjectionTest {
         assertEquals("", entries[2].text)
         assertEquals("reply", entries.last().text)
     }
+
+    @Test
+    fun pdfSummarizerProjectionCarriesOnlyStableDocumentReference() {
+        val pdf = ChatInclude(
+            id = "pdf-1",
+            fileName = "evidence.pdf",
+            kind = IncludeKind.PDF,
+            form = IncludeForm.FULL,
+            fullText = "",
+            pdfFileHash = "hash",
+            pdfMimeType = "application/pdf",
+            pdfFallbackText = "LOCALLY EXTRACTED SECRET BODY",
+            pdfFallbackProvenance = PdfFallbackProvenance.MIXED
+        )
+        val entry = SummarizerSafeIncludeProjectionBuilder.summarizerConversation(
+            listOf(CanonicalConversationMessage(false, "Review it", listOf(pdf)))
+        ).single().text
+
+        assertTrue(entry.contains("\"type\":\"document\""))
+        assertTrue(entry.contains("\"kind\":\"pdf\""))
+        assertFalse(entry.contains("LOCALLY EXTRACTED SECRET BODY"))
+    }
 }

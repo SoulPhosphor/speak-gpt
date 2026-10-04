@@ -41,8 +41,14 @@ object PdfImporter {
 
     fun import(context: Context, uri: Uri, chatId: String): Result {
         val name = displayName(context, uri)
-        val dir = PdfAttachmentStore.chatPdfsDir(context, chatId)
-        val temp = File.createTempFile("pdf-import-", ".tmp", dir)
+        val dir: File
+        val temp: File
+        try {
+            dir = PdfAttachmentStore.chatPdfsDir(context, chatId)
+            temp = File.createTempFile("pdf-import-", ".tmp", dir)
+        } catch (_: Exception) {
+            return Result.Unreadable(name)
+        }
         var size = 0L
         val digest = MessageDigest.getInstance("SHA-256")
         try {

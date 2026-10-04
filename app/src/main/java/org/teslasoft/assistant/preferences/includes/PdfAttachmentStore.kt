@@ -24,12 +24,15 @@ object PdfAttachmentStore {
     fun pdfFile(context: Context, chatId: String, include: ChatInclude): File? =
         pdfFile(context, chatId, include.pdfFileHash)
 
-    /** Cache is process-wide by content hash so duplicate PDFs never repeat OCR. */
-    fun fallbackFile(context: Context, hash: String): File =
-        File(context.filesDir, CACHE_ROOT).apply { mkdirs() }.resolve("$hash.txt")
+    /** Cache is content-addressed within the owning chat, matching byte ownership. */
+    fun fallbackFile(context: Context, chatId: String, hash: String): File =
+        fallbackDir(context, chatId).resolve("$hash.txt")
 
-    fun fallbackMetadataFile(context: Context, hash: String): File =
-        File(context.filesDir, CACHE_ROOT).apply { mkdirs() }.resolve("$hash.json")
+    fun fallbackMetadataFile(context: Context, chatId: String, hash: String): File =
+        fallbackDir(context, chatId).resolve("$hash.json")
+
+    private fun fallbackDir(context: Context, chatId: String): File =
+        File(File(context.filesDir, CACHE_ROOT), ImageImporter.sanitizeChatId(chatId)).apply { mkdirs() }
 
     fun deletePdfIfUnreferenced(
         context: Context,
@@ -41,8 +44,8 @@ object PdfAttachmentStore {
         if (!stillReferenced) pdfFile(context, chatId, include)?.delete()
         val hash = include.pdfFileHash ?: return
         if (!fallbackStillReferenced) {
-            fallbackFile(context, hash).delete()
-            fallbackMetadataFile(context, hash).delete()
+            fallbackFile(context, chatId, hash).delete()
+            fallbackMetadataFile(context, chatId, hash).delete()
         }
     }
 
@@ -57,9 +60,11 @@ object PdfAttachmentStore {
     fun deleteChatPdfs(context: Context, chatId: String): Boolean {
         val root = context.getExternalFilesDir(ROOT) ?: File(context.filesDir, ROOT)
         val dir = File(root, ImageImporter.sanitizeChatId(chatId))
-        if (!dir.exists()) return true
-        dir.listFiles()?.forEach { it.delete() }
-        dir.delete()
+        if (dir.exists()) {
+            dir.listFiles()?.forEach { it.delete() }
+            dir.delete()
+        }
+        fallbackDir(context, chatId).deleteRecursively()
         return !dir.exists()
     }
 
@@ -75,5 +80,24 @@ object PdfAttachmentStore {
             src.delete()
         }
         from.delete()
+        val cacheRoot = File(context.filesDir, CACHE_ROOT)
+        val oldCache = File(cacheRoot, ImageImporter.sanitizeChatId(oldChatId))
+        val newCache = File(cacheRoot, ImageImporter.sanitizeChatId(newChatId))
+        if (oldCache.exists() && !newCache.exists()) oldCache.renameTo(newCache)
     }
+
+    fun replaceAllFromStaging(context: Context, stagedRoot: File): Boolean = try {
+        require(stagedRoot.isDirectory)
+        val root = context.getExternalFilesDir(ROOT) ?: File(context.filesDir, ROOT)
+        if (root.exists() && !root.deleteRecursively()) return false
+        root.mkdirs()
+        stagedRoot.listFiles()?.filter(File::isDirectory)?.forEach { stagedChat ->
+            val destination = File(root, stagedChat.name).apply { mkdirs() }
+            stagedChat.listFiles()?.filter { it.isFile && it.extension == "pdf" }?.forEach { source ->
+                source.copyTo(File(destination, source.name), overwrite = false)
+            }
+        }
+        File(context.filesDir, CACHE_ROOT).deleteRecursively()
+        true
+    } catch (_: Exception) { false }
 }

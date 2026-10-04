@@ -8,6 +8,8 @@ package org.teslasoft.assistant.preferences.backup.portable
 import android.content.Context
 import java.io.File
 import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
+import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.preferences.includes.PdfAttachmentStore
 
 /** Chats adapter for the selected-category outer transaction. */
 class ChatRestoreParticipant internal constructor(
@@ -17,7 +19,8 @@ class ChatRestoreParticipant internal constructor(
     private val folderResolutions: Map<String, ChatMergePlanner.FolderResolution>,
     private val stagingRoot: File,
     private val precomputed: PortableChatRestoreCoordinator.Prepared? = null,
-    private val precomputedCurrent: PortableChatRestorePlan.Plan? = null
+    private val precomputedCurrent: PortableChatRestorePlan.Plan? = null,
+    private val incomingPdfAssets: Map<String, File> = emptyMap()
 ) : SelectedCategoryRestoreTransaction.Participant {
     private val app = context.applicationContext
     private var prepared: PortableChatRestoreCoordinator.Prepared? = null
@@ -43,13 +46,14 @@ class ChatRestoreParticipant internal constructor(
         mode: PortableRestoreMode,
         folderResolutions: Map<String, ChatMergePlanner.FolderResolution>,
         stagingRoot: File
-    ) : this(context, incoming, mode, folderResolutions, stagingRoot, null, null)
+    ) : this(context, incoming, mode, folderResolutions, stagingRoot, null, null, emptyMap())
 
     internal constructor(
         context: Context,
         prepared: PortableChatRestoreCoordinator.Prepared,
         current: PortableChatRestorePlan.Plan,
-        stagingRoot: File
+        stagingRoot: File,
+        incomingPdfAssets: Map<String, File> = emptyMap()
     ) : this(
         context,
         null,
@@ -57,7 +61,8 @@ class ChatRestoreParticipant internal constructor(
         emptyMap(),
         stagingRoot,
         prepared,
-        current
+        current,
+        incomingPdfAssets
     ) {
         this.prepared = prepared
         mergeReport = prepared.mergeReport
@@ -127,8 +132,15 @@ class ChatRestoreParticipant internal constructor(
             if (!ConvertedChatRecoveryArchive.write(app, current, currentArchive) || !currentArchive.isFile) {
                 return note.fail("staged_write_failed: $CURRENT_ARCHIVE")
             }
-            ConvertedChatRecoveryArchive.write(app, desired.plan, desiredArchive) &&
-                desiredArchive.isFile || note.fail("staged_write_failed: $DESIRED_ARCHIVE")
+            if (!stagePdfTree(current, File(stagingRoot, CURRENT_PDFS), emptyMap())) {
+                return note.fail("staged_write_failed: $CURRENT_PDFS")
+            }
+            val available = incomingPdfAssets + localPdfAssets(current)
+            if (!stagePdfTree(desired.plan, File(stagingRoot, DESIRED_PDFS), available)) {
+                return note.fail("staged_write_failed: $DESIRED_PDFS")
+            }
+            ConvertedChatRecoveryArchive.write(app, desired.plan, desiredArchive) && desiredArchive.isFile ||
+                note.fail("staged_write_failed: $DESIRED_ARCHIVE")
         } catch (e: Exception) {
             note.unexpected(e)
         }
@@ -136,33 +148,72 @@ class ChatRestoreParticipant internal constructor(
 
     override fun apply(): Boolean {
         note.reset()
-        return restore(File(stagingRoot, DESIRED_ARCHIVE))
+        return restore(File(stagingRoot, DESIRED_ARCHIVE), File(stagingRoot, DESIRED_PDFS))
     }
 
     override fun rollback(): Boolean {
         note.reset()
-        return restore(File(stagingRoot, CURRENT_ARCHIVE))
+        return restore(File(stagingRoot, CURRENT_ARCHIVE), File(stagingRoot, CURRENT_PDFS))
     }
 
     override fun cleanup() {
         stagingRoot.deleteRecursively()
     }
 
-    private fun restore(archive: File): Boolean {
+    private fun restore(archive: File, pdfRoot: File): Boolean {
         if (!archive.isFile) return note.fail("staged_copy_unreadable: ${archive.name}")
         return try {
             val result = ChatRestoreManager.restoreFromArchive(app, archive)
-            if (result.ok) true
+            if (result.ok && PdfAttachmentStore.replaceAllFromStaging(app, pdfRoot)) true
             else note.fail(
-                "chat_write_failed: " + (result.detail ?: "no_reason_given")
+                "chat_write_failed: " + (result.detail ?: "PDF attachment restore failed")
             )
         } catch (e: Exception) {
             note.unexpected(e)
         }
     }
 
+    private fun localPdfAssets(plan: PortableChatRestorePlan.Plan): Map<String, File> {
+        val out = LinkedHashMap<String, File>()
+        plan.chats.forEach { chat ->
+            includes(chat).filter(ChatInclude::hasLivePdfBytes).forEach { include ->
+                val hash = include.pdfFileHash ?: return@forEach
+                PdfAttachmentStore.pdfFile(app, chat.chatId, include)?.takeIf(File::isFile)?.let {
+                    out.putIfAbsent(hash, it)
+                }
+            }
+        }
+        return out
+    }
+
+    private fun stagePdfTree(
+        plan: PortableChatRestorePlan.Plan,
+        root: File,
+        supplied: Map<String, File>
+    ): Boolean = try {
+        root.mkdirs()
+        val local = localPdfAssets(plan)
+        plan.chats.forEach { chat ->
+            val destination = File(root, sanitize(chat.chatId))
+            includes(chat).filter(ChatInclude::hasLivePdfBytes).forEach { include ->
+                val hash = include.pdfFileHash ?: error("missing PDF hash")
+                val source = supplied[hash] ?: local[hash] ?: error("missing PDF asset")
+                destination.mkdirs()
+                source.copyTo(File(destination, "$hash.pdf"), overwrite = false)
+            }
+        }
+        true
+    } catch (_: Exception) { false }
+
+    private fun includes(chat: ChatLogicalImportPlan.ChatPlan): List<ChatInclude> =
+        PdfAttachmentPortableBackup.includes(chat)
+
+    private fun sanitize(value: String): String = value.replace(Regex("[^A-Za-z0-9_-]"), "_")
+
     private companion object {
         const val CURRENT_ARCHIVE = "current.zip"
         const val DESIRED_ARCHIVE = "desired.zip"
+        const val CURRENT_PDFS = "current_pdfs"
+        const val DESIRED_PDFS = "desired_pdfs"
     }
 }
