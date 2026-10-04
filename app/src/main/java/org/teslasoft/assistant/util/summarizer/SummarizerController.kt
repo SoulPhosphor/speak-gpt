@@ -577,6 +577,10 @@ class SummarizerController(
         if (chatId.isBlank()) return false
         val prefs = Preferences.getPreferences(appContext, chatId)
         if (!prefs.getChatUseSummarizer()) return false
+        // Summary state saved before the Include payload migration may hold
+        // old inline payload material. A failed compatibility commit leaves
+        // canonical history intact and simply postpones this cycle.
+        if (!prefs.ensureSummarizerProjectionCompatibility()) return false
         val current = snapshot.sources()
         if (current.any { it.id.isBlank() }) return false
         val sections = SummarySectionStore.load(prefs, current) ?: return false
