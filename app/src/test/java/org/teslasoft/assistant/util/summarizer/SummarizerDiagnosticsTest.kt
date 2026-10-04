@@ -91,6 +91,19 @@ class SummarizerDiagnosticsTest {
         assertFalse(result.contains("custom-secret-value"))
     }
 
+    @Test fun routingWritesExactlyOneCorrectLogOrNeither() {
+        for (owner in SummarizerDiagnostics.Owner.entries) {
+            for (enabled in listOf(true, false)) {
+                var providerWrites = 0
+                var errorWrites = 0
+                SummarizerDiagnostics.record(owner, enabled,
+                    external = { providerWrites++ }, local = { errorWrites++ })
+                assertEquals(if (owner == SummarizerDiagnostics.Owner.EXTERNAL && enabled) 1 else 0, providerWrites)
+                assertEquals(if (owner == SummarizerDiagnostics.Owner.LOCAL) 1 else 0, errorWrites)
+            }
+        }
+    }
+
     companion object {
         private const val validResponse = """{"id":"response-id","created":1,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"valid reply"},"finish_reason":"stop"}]}"""
     }

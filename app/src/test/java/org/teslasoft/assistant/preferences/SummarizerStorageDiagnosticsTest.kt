@@ -61,4 +61,14 @@ class SummarizerStorageDiagnosticsTest {
         assertNotNull(prefs.summarizerStorageFailure)
         assertEquals("{broken JSON", prefs.getSummarySections())
     }
+    @Test fun invalidSectionOwnershipIsDiagnosedWithoutDiscardingStoredState() {
+        val backing = FakeSharedPreferences()
+        val corrupt = "[{\"messageIds\":[\"a\"],\"fingerprints\":[]}]"
+        backing.edit().putString("summary_sections", corrupt).commit()
+        val prefs = Preferences(backing, FakeSharedPreferences(), "chat")
+        assertNull(SummarySectionStore.load(prefs, emptyList()))
+        assertTrue(prefs.summarizerStorageFailure is IllegalStateException)
+        assertEquals(corrupt, prefs.getSummarySections())
+    }
+
 }

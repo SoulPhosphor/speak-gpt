@@ -86,7 +86,10 @@ object SummarySections {
         return try {
             val array = JSONArray(json)
             (0 until array.length()).mapNotNull { index ->
-                val o = array.optJSONObject(index) ?: return@mapNotNull null
+                val o = array.optJSONObject(index) ?: run {
+                    if (onFailure != null) throw IllegalStateException("Invalid Summary Section record at index $index")
+                    return@mapNotNull null
+                }
                 fun strings(key: String): List<String> {
                     val a = o.optJSONArray(key) ?: return emptyList()
                     return (0 until a.length()).map { a.optString(it) }
@@ -100,6 +103,7 @@ object SummarySections {
                 val contextIds = strings("contextIds")
                 val contextPrints = ints("contextFingerprints")
                 if (ids.isEmpty() || ids.size != prints.size || contextIds.size != contextPrints.size) {
+                    if (onFailure != null) throw IllegalStateException("Invalid Summary Section ownership at index $index")
                     return@mapNotNull null
                 }
                 Section(

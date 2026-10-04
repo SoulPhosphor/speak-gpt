@@ -12,6 +12,15 @@ import java.util.UUID
 object SummarizerDiagnostics {
     enum class Owner { EXTERNAL, LOCAL, CONFIGURATION, CANCELLED }
 
+    /** Exactly one diagnostic channel; status UI is handled separately. */
+    fun record(owner: Owner, logProviders: Boolean, external: () -> Unit, local: () -> Unit) {
+        when (owner) {
+            Owner.EXTERNAL -> if (logProviders) external()
+            Owner.LOCAL -> local()
+            Owner.CONFIGURATION, Owner.CANCELLED -> Unit
+        }
+    }
+
     class RequestEvidence {
         val attemptId: String = UUID.randomUUID().toString()
         @Volatile var dispatched = false

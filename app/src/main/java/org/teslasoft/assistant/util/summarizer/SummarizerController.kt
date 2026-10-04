@@ -1027,12 +1027,12 @@ class SummarizerController(
 
         var newEpisode = false
         try {
-        val current = SummarizerErrorLog.fromJson(prefs.getSummarizerErrors())
-        val result = SummarizerErrorLog.record(
-            current, prefs.getSummarizerEpisode(), category,
-            System.currentTimeMillis(), profile, model, decorated
-        )
-        newEpisode = result.newEpisode
+            val current = SummarizerErrorLog.fromJson(prefs.getSummarizerErrors())
+            val result = SummarizerErrorLog.record(
+                current, prefs.getSummarizerEpisode(), category,
+                System.currentTimeMillis(), profile, model, decorated
+            )
+            newEpisode = result.newEpisode
             prefs.setSummarizerErrors(SummarizerErrorLog.toJson(result.entries))
             prefs.setSummarizerEpisode(category.name)
             prefs.setSummarizerErrorsUnseen(true)
@@ -1063,19 +1063,19 @@ class SummarizerController(
         rawResponseBody: String? = null
     ) {
         val function = if (state.kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
-        when (failureOwner) {
-            SummarizerDiagnostics.Owner.CANCELLED,
-            SummarizerDiagnostics.Owner.CONFIGURATION -> return
-            SummarizerDiagnostics.Owner.LOCAL -> {
+        SummarizerDiagnostics.record(
+            failureOwner,
+            logProviders = failureOwner != SummarizerDiagnostics.Owner.EXTERNAL || prefs.getLogChatFailures(),
+            local = {
                 // Storage APIs record the original exception at the failure site,
                 // including when used outside this controller. Do not duplicate it.
-                if (category == SummarizerErrorCategory.SAVE_FAILED && prefs.summarizerStorageFailure != null) return
+                if (category != SummarizerErrorCategory.SAVE_FAILED || prefs.summarizerStorageFailure == null) {
                 val error = exception ?: IllegalStateException(technicalDetail ?: "Local $function failure: $category")
                 org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
                     SummarizerDiagnostics.localDetail(function, error, privateValues))
-            }
-            SummarizerDiagnostics.Owner.EXTERNAL -> {
-                if (!prefs.getLogChatFailures()) return
+                }
+            },
+            external = {
                 val endpoint = requestEndpoint
                 val requested = requestedProvider
                 val message = buildString {
@@ -1100,7 +1100,7 @@ class SummarizerController(
                     )
                 }
             }
-        }
+        )
     }
 
     private fun recordStorageFailure(prefs: Preferences, chatName: String, detail: String) {
