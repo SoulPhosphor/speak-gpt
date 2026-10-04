@@ -13172,7 +13172,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // reply) BEFORE it is removed; the regenerated reply is folded in as the
         // newest version once it finishes.
         val last = messages.lastOrNull()
-        pendingRetryMessageId = last?.takeIf { it["isBot"] == true }
+        val imageRetry = last?.get("message")?.toString()?.startsWith("~file:") == true ||
+            (preferences?.getImagineCommandGlobal() == true &&
+                ImagineCommand.isImagineAttempt(findLastUserMessage()["message"].toString()))
+        pendingRetryMessageId = last?.takeIf { it["isBot"] == true && !imageRetry }
             ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }?.ifBlank { null }
         pendingRetryVariants = if (last != null && last["isBot"] == true) {
             val existing = ChatAdapter.parseVariants(last[ChatAdapter.KEY_VARIANTS]?.toString())

@@ -120,4 +120,10 @@ class SummaryResummarizeWiringContractTest {
         assertTrue(merge.contains("summarizerCycle()"))
     }
 
+    @Test fun imageRetryDoesNotEnterTheTextReplyReplacementHold() {
+        val retry = activity.substring(activity.indexOf("override fun onRetryClick"), activity.indexOf("override fun onRegenerate"))
+        assertTrue(retry.contains("val imageRetry ="))
+        assertTrue(retry.contains("it[\"isBot\"] == true && !imageRetry"))
+    }
+
 }
