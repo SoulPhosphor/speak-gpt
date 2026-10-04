@@ -5081,9 +5081,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun showCompactionFailure(
         state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed
     ) {
-        val (title, reason) = if (state.cutOff) {
-            R.string.compaction_err_cut_off_title to R.string.compaction_err_cut_off
-        } else when (state.category) {
+        val (title, reason) = when (state.category) {
             org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.MODEL_MISSING ->
                 R.string.compaction_err_model_missing_title to R.string.compaction_err_model_missing
             org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.SERVICE_UNREACHABLE ->
@@ -5113,10 +5111,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.UNEXPECTED ->
                 R.string.compaction_err_unexpected_title to R.string.compaction_err_unexpected
         }
+        // Retry continues from what a partly finished run saved.
+        if (state.savedMessages > 0) lastCompactionFromScratch = false
         val message = buildString {
             append(getString(reason))
-            append("\n\n")
-            append(getString(R.string.compaction_err_unchanged))
+            if (state.savedMessages == 0) {
+                append("\n\n")
+                append(getString(R.string.compaction_err_unchanged))
+            }
             state.providerError?.let {
                 append("\n\n")
                 append(getString(R.string.compaction_err_provider, it))

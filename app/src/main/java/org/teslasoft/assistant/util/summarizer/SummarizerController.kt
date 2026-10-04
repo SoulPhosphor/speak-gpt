@@ -98,8 +98,8 @@ class SummarizerController(
             val category: SummarizerErrorCategory,
             /** The AI service's own error text, when it sent one. */
             val providerError: String? = null,
-            /** The model's reply stopped at the length limit. */
-            val cutOff: Boolean = false
+            /** Messages a failed compaction still compacted and saved. */
+            val savedMessages: Int = 0
         ) : OperationState
         data class Cancelled(
             val kind: OperationKind,
@@ -165,7 +165,6 @@ class SummarizerController(
     @Volatile private var operationState: OperationState = OperationState.Idle
     private var lastFailureCategory: SummarizerErrorCategory? = null
     private var lastFailureProviderError: String? = null
-    private var lastFailureCutOff = false
     private var terminalClearJob: Job? = null
 
     companion object {
@@ -246,6 +245,9 @@ class SummarizerController(
 
     /** The compaction regeneration lock when the current run started. */
     private var runStartLock: Int? = null
+
+    /** Messages the current run compacted and saved before it failed. */
+    private var partialSavedMessages = 0
 
     /** Puts back the regeneration lock a stopped run's finished batches
      *  advanced. Never raises it, so a deletion's realignment stands. */
@@ -346,8 +348,8 @@ class SummarizerController(
         manualCompactionRunning = true
         lastFailureCategory = null
         lastFailureProviderError = null
-        lastFailureCutOff = false
         runStartLock = null
+        partialSavedMessages = 0
         setOperationState(
             OperationState.Running(
                 OperationKind.COMPACTING,
@@ -371,9 +373,9 @@ class SummarizerController(
             } finally {
                 manualCompactionRunning = false
                 if (operationState is OperationState.Running) {
-                    // A failed run keeps nothing either, so the conversation
-                    // is exactly as it was before compacting.
-                    if (!committed) {
+                    // A failed run that saved nothing puts back the lock its
+                    // finished batches advanced.
+                    if (!committed && partialSavedMessages == 0) {
                         val chatId = chatIdProvider()
                         val startLock = runStartLock
                         if (chatId.isNotBlank() && startLock != null) {
@@ -389,7 +391,7 @@ class SummarizerController(
                                 chatName,
                                 lastFailureCategory ?: SummarizerErrorCategory.UNEXPECTED,
                                 lastFailureProviderError,
-                                lastFailureCutOff
+                                partialSavedMessages
                             )
                         }
                     )
@@ -555,7 +557,24 @@ class SummarizerController(
                                 )
                             )
                         }
-                        FoldBatchResult.Failed -> return false
+                        FoldBatchResult.Failed -> {
+                            // A failure keeps the batches that finished (owner
+                            // ruling, Oct 4 2026), when the messages and saved
+                            // state they came from are unchanged.
+                            if (folded > operationStartFolded &&
+                                chatIdProvider() == chatId &&
+                                stillCurrent() &&
+                                prefs.getSummarizerSummary() == startingSummary &&
+                                prefs.getSummarizerFoldedCount() == startingFolded &&
+                                prefs.getSummarizerOverLength() == startingOverLength &&
+                                prefs.getSummarizerProjectionVersion() == startingVersion &&
+                                prefs.commitManualCompaction(summary, folded, overLength, folded)
+                            ) {
+                                partialSavedMessages = folded - operationStartFolded
+                                notifyStateChanged()
+                            }
+                            return false
+                        }
                     }
                 }
             }
@@ -753,16 +772,6 @@ class SummarizerController(
             )
             return null
         }
-        if (choice?.finishReason?.value == "length") {
-            recordFailure(
-                runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
-                runtime.endpoint.label, runtime.model, null,
-                "The summary stopped at the response length limit before it was finished, so it was not saved.",
-                providerAnswered = true
-            )
-            lastFailureCutOff = true
-            return null
-        }
         val text = choice?.message?.content?.toString().orEmpty().trim()
         if (text.isBlank()) {
             recordFailure(
@@ -889,22 +898,9 @@ class SummarizerController(
                         maxTokens = responseTokenBudget(runtime.lengthWords),
                         messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
-                    val choice = client.chatCompletion(request).choices.firstOrNull()
-                    // A reply stopped at the length limit is unfinished and
-                    // is never saved (owner ruling, Oct 4 2026).
-                    if (choice?.finishReason?.value == "length") null
-                    else choice?.message?.content?.toString().orEmpty()
-                }?.trim() ?: run {
-                    recordFailure(
-                        runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
-                        runtime.endpoint.label, runtime.model, null,
-                        "The compacted summary stopped at the response length limit before it was finished, so it was not saved.",
-                        rawResponseBody = rawResponse.get(),
-                        providerAnswered = true
-                    )
-                    lastFailureCutOff = true
-                    return FoldBatchResult.Failed
-                }
+                    client.chatCompletion(request)
+                        .choices.firstOrNull()?.message?.content?.toString().orEmpty()
+                }.trim()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -971,7 +967,6 @@ class SummarizerController(
     ) {
         lastFailureCategory = category
         lastFailureProviderError = if (providerAnswered) rawProviderError?.trim()?.ifBlank { null } else null
-        lastFailureCutOff = false
         val decorated = if (httpStatus != null) {
             "HTTP status: $httpStatus" + (detail?.let { "\n$it" } ?: "")
         } else {

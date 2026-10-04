@@ -3587,8 +3587,6 @@
     <string name="compaction_err_rejected">The AI service refused the request because of its content rules.</string>
     <string name="compaction_err_service_title">Service Error</string>
     <string name="compaction_err_service">The AI service returned an error.</string>
-    <string name="compaction_err_cut_off_title">Reply Cut Off</string>
-    <string name="compaction_err_cut_off">The model\'s reply was cut off before it finished.</string>
     <string name="compaction_err_unreadable_title">Unusable Reply</string>
     <string name="compaction_err_unreadable">The model\'s reply couldn\'t be used.</string>
     <string name="compaction_err_save_title">Couldn\'t Save</string>

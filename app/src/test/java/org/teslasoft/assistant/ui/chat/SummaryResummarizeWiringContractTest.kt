@@ -55,12 +55,17 @@ class SummaryResummarizeWiringContractTest {
     }
 
     @Test
-    fun aCompactFailureShowsTheErrorBoxAndACutOffReplyIsNeverSaved() {
+    fun aCompactFailureShowsTheErrorBoxAndLengthIsNeverAFailure() {
         assertTrue(activity.contains("if (watching) showCompactionFailure(state)"))
         assertTrue(activity.contains(".setNeutralButton(R.string.title_summarizer_settings)"))
         assertTrue(activity.contains(".setNegativeButton(R.string.btn_msg_retry)"))
+        // A reply that reached the length limit is saved as it is (owner
+        // ruling, Oct 4 2026): length is never treated as a failure.
         val controller = source("src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt")
-        assertTrue(controller.contains("if (choice?.finishReason?.value == \"length\") null"))
+        assertFalse(controller.contains("finishReason?.value == \"length\""))
+        // A failed compaction keeps the batches that finished.
+        assertTrue(controller.contains("prefs.commitManualCompaction(summary, folded, overLength, folded)"))
+        assertTrue(controller.contains("partialSavedMessages = folded - operationStartFolded"))
     }
 
     @Test
