@@ -115,6 +115,11 @@ class SummarizerDiagnosticsTest {
             SummarizerDiagnostics.privateSectionValues("[{\"text\":\"secret\"}]"))
     }
 
+    @Test fun localExceptionWithHttpLookingTextIsStillLocalAfterDispatch() {
+        assertEquals(SummarizerDiagnostics.Owner.LOCAL,
+            owner(IllegalStateException("internal invariant broken; prior HTTP 500"), request()))
+    }
+
     companion object {
         private const val validResponse = """{"id":"response-id","created":1,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"valid reply"},"finish_reason":"stop"}]}"""
     }

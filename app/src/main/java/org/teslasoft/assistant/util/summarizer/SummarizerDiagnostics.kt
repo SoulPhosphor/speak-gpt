@@ -46,10 +46,25 @@ object SummarizerDiagnostics {
         if (result.code == GenErrorCode.C1) return Owner.CANCELLED
         if (!request.dispatched) return Owner.LOCAL
         val evidence = request.snapshot()
-        if (evidence.errorEvents.isNotEmpty() || result.httpStatus?.let { it >= 400 } == true)
+        val chain = generateSequence(error) { it.cause }.take(16).toList()
+        // The shared classifier also understands status-like prose. Diagnostic
+        // ownership needs actual HTTP/provider evidence, not just that prose.
+        val typedHttpFailure = chain.any { cause ->
+            (cause.javaClass.name.startsWith("com.aallam.openai.") || cause.javaClass.name.startsWith("io.ktor.")) &&
+                cause.javaClass.methods.any { method ->
+                    method.parameterCount == 0 && method.name in listOf("getStatusCode", "getStatus") &&
+                        runCatching {
+                            val value = method.invoke(cause)
+                            val status = (value as? Number)?.toInt()
+                                ?: value?.javaClass?.methods?.firstOrNull { it.name == "getValue" && it.parameterCount == 0 }
+                                    ?.invoke(value)?.let { (it as? Number)?.toInt() }
+                            status?.let { it >= 400 } == true
+                        }.getOrDefault(false)
+                }
+        }
+        if (evidence.errorEvents.isNotEmpty() || request.status?.let { it >= 400 } == true || typedHttpFailure)
             return Owner.EXTERNAL
         // Concrete transport causes, not status-like prose in a local exception.
-        val chain = generateSequence(error) { it.cause }.take(16).toList()
         if (chain.any {
                 it is java.net.SocketTimeoutException || it is java.net.UnknownHostException ||
                     it is java.net.ConnectException || it is java.net.SocketException ||
