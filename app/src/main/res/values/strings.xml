@@ -3594,6 +3594,7 @@
     <string name="compaction_err_unexpected_title">Unknown</string>
     <string name="compaction_err_unexpected">Compaction failed for an unknown reason.</string>
     <string name="compaction_err_unchanged">Your conversation was not changed.</string>
+    <string name="compaction_err_partial_saved">%1$d messages were compacted and saved before this error. Retry to compact the rest.</string>
     <string name="compaction_err_provider">Provider error: %1$s</string>
     <string name="compaction_recompact_after_delete_title">Recompact Conversation?</string>
     <string name="compaction_edit_summary">Edit Summary</string>
