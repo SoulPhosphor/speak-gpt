@@ -277,8 +277,8 @@ object ModelEndpointPortableCodec {
         "response_timeout_seconds", "context_window_tokens", "context_window_model_id",
         "image_capability_by_model", "tool_capability_by_model",
         "reasoning_capability_by_model", "reasoning_rejected_levels_by_model",
-        "provider_discovery_path", "identity", "rejected_tts_voices"
-        , "pdf_capability_by_model"
+        "provider_discovery_path", "identity", "rejected_tts_voices",
+        "pdf_capability_by_model"
     )
     private val LEGACY_ENDPOINT_KEYS = ENDPOINT_KEYS - "pdf_capability_by_model"
     private val FAVORITE_KEYS = setOf(
