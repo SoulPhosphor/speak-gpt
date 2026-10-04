@@ -62,4 +62,12 @@ class SummaryResummarizeWiringContractTest {
         val controller = source("src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt")
         assertTrue(controller.contains("if (choice?.finishReason?.value == \"length\") null"))
     }
+
+    @Test
+    fun deletingCompactedMessagesAsksToRecompact() {
+        assertTrue(activity.contains("askToRecompactAfterDelete(compactedBefore)"))
+        assertTrue(activity.contains("askToRecompactAfterDelete(manualBoundaryBefore)"))
+        assertTrue(activity.contains(".setNeutralButton(R.string.compaction_edit_summary)"))
+        assertTrue(activity.contains("startManualCompaction(snapshot.copy(entries = snapshot.entries.take(boundary)), fromScratch = true)"))
+    }
 }

@@ -3597,6 +3597,8 @@
     <string name="compaction_err_unexpected">Compaction failed for an unknown reason.</string>
     <string name="compaction_err_unchanged">Your conversation was not changed.</string>
     <string name="compaction_err_provider">Provider error: %1$s</string>
+    <string name="compaction_recompact_after_delete_title">Recompact Conversation?</string>
+    <string name="compaction_edit_summary">Edit Summary</string>
     <string name="summary_section_rewrite_title">Replace this summary with a new one written from the current messages?</string>
     <string name="conversation_preview_title">Conversation Preview</string>
     <string name="conversation_preview_start">Summary starts here</string>

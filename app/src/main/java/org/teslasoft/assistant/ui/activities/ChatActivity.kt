@@ -563,6 +563,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var compactionDialog: AlertDialog? = null
     /** The messages the last Compact froze, so Retry compacts them again. */
     private var lastCompactionRequest: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null
+    private var lastCompactionFromScratch = false
     private var reduceJob: Job? = null
     private var reduceDialog: AlertDialog? = null
     private val artifactJobs: MutableMap<String, Job> = HashMap()
@@ -5129,7 +5130,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 startActivity(Intent(this, SummarizerSettingsActivity::class.java))
             }
             .setNegativeButton(R.string.btn_msg_retry) { _, _ ->
-                lastCompactionRequest?.let { startManualCompactionConfirmed(it) }
+                lastCompactionRequest?.let { startManualCompactionConfirmed(it, lastCompactionFromScratch) }
             }
             .setPositiveButton(R.string.okay, null)
             .show()
@@ -5381,7 +5382,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /** Freeze one reference-only conversation prefix and compact it atomically. */
-    private fun startManualCompaction(requestedSnapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null) {
+    private fun startManualCompaction(
+        requestedSnapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null,
+        /** Rewrite the compacted text from the first message (Recompact). */
+        fromScratch: Boolean = false
+    ) {
         // A chat that uses the summarizer is not compacted; /compact says so.
         if (preferences?.getChatUseSummarizer() == true) {
             Toast.makeText(this, R.string.compact_unavailable_with_summarizer, Toast.LENGTH_LONG).show()
@@ -5401,11 +5406,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // that text once, then only the raw messages that compaction will
         // actually send after its existing bookmark; otherwise a partially
         // condensed long chat can produce a wildly inflated cost warning.
-        val alreadyFolded = (preferences?.getSummarizerFoldedCount() ?: 0)
+        val alreadyFolded = if (fromScratch) 0 else (preferences?.getSummarizerFoldedCount() ?: 0)
             .coerceIn(0, snapshot.entries.size)
         val estimatedTokens = org.teslasoft.assistant.util.summarizer
             .LargeSummarizerOperationPolicy.estimateInputTokens(
-                preferences?.getSummarizerSummary().orEmpty(),
+                if (fromScratch) "" else preferences?.getSummarizerSummary().orEmpty(),
                 snapshot.entries.drop(alreadyFolded)
             )
         if (org.teslasoft.assistant.util.summarizer.LargeSummarizerOperationPolicy
@@ -5421,21 +5426,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
                 .setNegativeButton(R.string.btn_cancel, null)
                 .setPositiveButton(R.string.compact_anyway) { _, _ ->
-                    startManualCompactionConfirmed(snapshot)
+                    startManualCompactionConfirmed(snapshot, fromScratch)
                 }
                 .show()
             return
         }
-        startManualCompactionConfirmed(snapshot)
+        startManualCompactionConfirmed(snapshot, fromScratch)
     }
 
     private fun startManualCompactionConfirmed(
-        snapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot
+        snapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot,
+        fromScratch: Boolean = false
     ) {
         val controller = summarizerController ?: return
         val frozenEntries = snapshot.entries.toList()
         val frozen = snapshot.copy(entries = frozenEntries)
         lastCompactionRequest = frozen
+        lastCompactionFromScratch = fromScratch
         val frozenChatId = chatId
         val frozenRows = org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard
             .rows(messages)
@@ -5455,7 +5462,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard.rows(stored)
                     )
             },
-            onFinished = { /* registry listener refreshes any attached screen */ }
+            onFinished = { /* registry listener refreshes any attached screen */ },
+            fromScratch = fromScratch
         )
     }
 
@@ -13463,6 +13471,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // Deleting stops a running summary update before the bookmark is
             // realigned; its unfinished batch is discarded.
             summarizerController?.cancelSummarizingAndWait()
+            val compactedBefore = preferences?.getManualCompactionBoundary() ?: 0
             val currentPosition = messages.indexOfFirst { it === target }
             if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@launch
             val end = if (deleteFollowing) messages.size else currentPosition + 1
@@ -13479,7 +13488,44 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             deselectAll()
             // Resume summarizing from the corrected bookmark.
             summarizerCycle()
+            askToRecompactAfterDelete(compactedBefore)
         }
+    }
+
+    /**
+     * Deleting messages that were already compacted leaves compacted text
+     * that still describes them, so the chat asks (owner ruling, Oct 4
+     * 2026): "Recompact Conversation?" with Edit Summary, No, and Yes. Yes
+     * compacts the remaining messages up to the marker again from scratch;
+     * Edit Summary opens the Compaction Summary screen to fix the text by
+     * hand; No keeps the text. Until it is rewritten or saved, the
+     * Compaction Summary screen notes that the messages changed.
+     */
+    private fun askToRecompactAfterDelete(compactedBefore: Int) {
+        val prefs = preferences ?: return
+        if (prefs.getChatUseSummarizer()) return
+        val compactedAfter = prefs.getManualCompactionBoundary()
+        if (compactedBefore <= 0 || compactedAfter <= 0 || compactedAfter >= compactedBefore) return
+        if (prefs.getSummarizerSummary().isBlank()) return
+        if (isFinishing || isDestroyed) return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.compaction_recompact_after_delete_title)
+            .setCancelable(false)
+            .setNeutralButton(R.string.compaction_edit_summary) { _, _ ->
+                prefs.setCompactionStale(true)
+                openConversationSummary()
+            }
+            .setNegativeButton(R.string.no) { _, _ ->
+                prefs.setCompactionStale(true)
+            }
+            .setPositiveButton(R.string.yes) { _, _ ->
+                prefs.setCompactionStale(true)
+                val snapshot = summarizerSnapshot() ?: return@setPositiveButton
+                val boundary = prefs.getManualCompactionBoundary().coerceAtMost(snapshot.entries.size)
+                if (boundary <= 0) return@setPositiveButton
+                startManualCompaction(snapshot.copy(entries = snapshot.entries.take(boundary)), fromScratch = true)
+            }
+            .show()
     }
 
     /** Shrinks the summary bookmark, manual compaction marker, and both
@@ -13778,6 +13824,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         updateMessagesSelectionProjection()
         deselectAll()
         calculateCost()
+        askToRecompactAfterDelete(manualBoundaryBefore)
     }
 
     private fun copySelectedMessages() {

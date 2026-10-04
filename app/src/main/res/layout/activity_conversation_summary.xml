@@ -122,6 +122,14 @@
                 android:orientation="vertical"
                 android:visibility="gone" />
 
+            <!-- Compaction mode: compacted messages were deleted and the
+                 text was kept, so it still describes them. -->
+            <TextView
+                android:id="@+id/text_compaction_stale"
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/summary_section_stale_note"
+                android:visibility="gone" />
+
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_condensed_text"
                 style="@style/Widget.App.Field.Box"

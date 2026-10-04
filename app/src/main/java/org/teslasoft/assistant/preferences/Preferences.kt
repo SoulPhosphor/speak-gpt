@@ -82,7 +82,8 @@ class Preferences internal constructor(
             "summarizer_episode",
             "manual_compaction_boundary",
             "condensed_conversation_kind",
-            "compaction_regeneration_lock_boundary"
+            "compaction_regeneration_lock_boundary",
+            "compaction_stale"
         )
 
         private const val LAST_SUCCESS_ENDPOINT_ID = "last_success_endpoint_id"
@@ -3095,6 +3096,7 @@ class Preferences internal constructor(
                 .putString("summarizer_episode", "")
                 .putString("manual_compaction_boundary", boundaryCount.coerceAtLeast(0).toString())
                 .putString("condensed_conversation_kind", CONDENSED_KIND_COMPACTION)
+                .putString("compaction_stale", "false")
                 .putString(
                     "summarizer_projection_version",
                     SummarizerProjectionContract.VERSION.toString()
@@ -3123,6 +3125,15 @@ class Preferences internal constructor(
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** Compacted messages were deleted and the user kept the compacted
+     *  text; the Compaction Summary screen says the messages changed until
+     *  it is recompacted or saved (owner ruling, Oct 4 2026). */
+    fun getCompactionStale(): Boolean = getString("compaction_stale", "false") == "true"
+
+    fun setCompactionStale(value: Boolean) {
+        putString("compaction_stale", value.toString())
     }
 
     /** Number of oldest canonical messages through the latest manual marker. */

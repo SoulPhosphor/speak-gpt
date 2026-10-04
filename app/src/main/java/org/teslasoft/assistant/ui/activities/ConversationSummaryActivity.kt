@@ -185,6 +185,8 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
             savedText = if (compatible) preferences?.getSummarizerSummary().orEmpty() else ""
             field?.setText(savedInstanceState?.getString(STATE_DRAFT) ?: savedText)
             field?.addTextChangedListener { refreshRevert() }
+            findViewById<View>(R.id.text_compaction_stale)?.visibility =
+                if (preferences?.getCompactionStale() == true) View.VISIBLE else View.GONE
         }
 
         btnBack?.setOnClickListener { attemptLeave() }
@@ -401,6 +403,9 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
             return
         }
         savedText = text
+        // Saving the user's own wording answers the "messages changed" note.
+        preferences?.setCompactionStale(false)
+        findViewById<View>(R.id.text_compaction_stale)?.visibility = View.GONE
         refreshRevert()
         btnSave?.let { SaveIconFlash.flash(it) }
         Toast.makeText(this, R.string.companion_editor_saved_toast, Toast.LENGTH_SHORT).show()

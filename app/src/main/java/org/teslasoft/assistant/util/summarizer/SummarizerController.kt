@@ -336,7 +336,10 @@ class SummarizerController(
         chatName: String,
         savePartialOnCancel: Boolean,
         stillCurrent: () -> Boolean,
-        onFinished: (Boolean) -> Unit
+        onFinished: (Boolean) -> Unit,
+        /** Rewrite the compacted text from the first message instead of
+         *  adding to it (Recompact after compacted messages were deleted). */
+        fromScratch: Boolean = false
     ) {
         if (manualCompactionRunning) return
         cancel()
@@ -360,7 +363,8 @@ class SummarizerController(
                     snapshot,
                     chatName,
                     savePartialOnCancel,
-                    stillCurrent
+                    stillCurrent,
+                    fromScratch
                 )
             } catch (_: CancellationException) {
                 // compactSnapshot owns the optional partial commit.
@@ -467,7 +471,8 @@ class SummarizerController(
         snapshot: Snapshot,
         chatName: String,
         savePartialOnCancel: Boolean,
-        stillCurrent: () -> Boolean
+        stillCurrent: () -> Boolean,
+        fromScratch: Boolean = false
     ): Boolean {
         val chatId = chatIdProvider()
         if (chatId.isBlank() || snapshot.entries.isEmpty()) return false
@@ -497,7 +502,7 @@ class SummarizerController(
         val startingFolded = prefs.getSummarizerFoldedCount()
         val startingOverLength = prefs.getSummarizerOverLength()
         val startingVersion = prefs.getSummarizerProjectionVersion()
-        val operationStartFolded = startingFolded.coerceAtMost(target)
+        val operationStartFolded = if (fromScratch) 0 else startingFolded.coerceAtMost(target)
 
         setOperationState(
             OperationState.Running(
@@ -508,9 +513,9 @@ class SummarizerController(
             )
         )
 
-        var summary = startingSummary
+        var summary = if (fromScratch) "" else startingSummary
         var folded = operationStartFolded
-        var overLength = startingOverLength
+        var overLength = if (fromScratch) false else startingOverLength
 
         try {
             if (folded < target) {
