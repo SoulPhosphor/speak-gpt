@@ -146,6 +146,10 @@ android {
         targetCompatibility JavaVersion.VERSION_21
     }
 
+    kotlinOptions {
+        jvmTarget = '21'
+    }
+
     externalNativeBuild {
         cmake {
             path file('src/main/cpp/CMakeLists.txt')

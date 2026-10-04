@@ -133,17 +133,21 @@ object PdfFallbackExtractor {
         }
     }
 
-    private fun readCache(context: Context, chatId: String, hash: String): Completed? = try {
-        val metadataFile = PdfAttachmentStore.fallbackMetadataFile(context, chatId, hash)
-        if (!metadataFile.isFile) return null
-        val metadata = JSONObject(metadataFile.readText())
-        Completed(
-            text = metadata.getString("text"),
-            provenance = PdfFallbackProvenance.fromKey(metadata.optString("provenance")) ?: return null,
-            pageCount = metadata.optInt("pageCount", 0),
-            cacheHit = true
-        )
-    } catch (_: Exception) { null }
+    private fun readCache(context: Context, chatId: String, hash: String): Completed? {
+        return try {
+            val metadataFile = PdfAttachmentStore.fallbackMetadataFile(context, chatId, hash)
+            if (!metadataFile.isFile) return null
+            val metadata = JSONObject(metadataFile.readText())
+            Completed(
+                text = metadata.getString("text"),
+                provenance = PdfFallbackProvenance.fromKey(metadata.optString("provenance")) ?: return null,
+                pageCount = metadata.optInt("pageCount", 0),
+                cacheHit = true
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     private fun writeCacheAtomically(context: Context, chatId: String, hash: String, completed: Completed) {
         val metadataFile = PdfAttachmentStore.fallbackMetadataFile(context, chatId, hash)

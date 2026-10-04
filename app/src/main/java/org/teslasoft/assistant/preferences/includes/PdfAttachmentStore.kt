@@ -86,18 +86,22 @@ object PdfAttachmentStore {
         if (oldCache.exists() && !newCache.exists()) oldCache.renameTo(newCache)
     }
 
-    fun replaceAllFromStaging(context: Context, stagedRoot: File): Boolean = try {
-        require(stagedRoot.isDirectory)
-        val root = context.getExternalFilesDir(ROOT) ?: File(context.filesDir, ROOT)
-        if (root.exists() && !root.deleteRecursively()) return false
-        root.mkdirs()
-        stagedRoot.listFiles()?.filter(File::isDirectory)?.forEach { stagedChat ->
-            val destination = File(root, stagedChat.name).apply { mkdirs() }
-            stagedChat.listFiles()?.filter { it.isFile && it.extension == "pdf" }?.forEach { source ->
-                source.copyTo(File(destination, source.name), overwrite = false)
+    fun replaceAllFromStaging(context: Context, stagedRoot: File): Boolean {
+        return try {
+            require(stagedRoot.isDirectory)
+            val root = context.getExternalFilesDir(ROOT) ?: File(context.filesDir, ROOT)
+            if (root.exists() && !root.deleteRecursively()) return false
+            root.mkdirs()
+            stagedRoot.listFiles()?.filter(File::isDirectory)?.forEach { stagedChat ->
+                val destination = File(root, stagedChat.name).apply { mkdirs() }
+                stagedChat.listFiles()?.filter { it.isFile && it.extension == "pdf" }?.forEach { source ->
+                    source.copyTo(File(destination, source.name), overwrite = false)
+                }
             }
+            File(context.filesDir, CACHE_ROOT).deleteRecursively()
+            true
+        } catch (_: Exception) {
+            false
         }
-        File(context.filesDir, CACHE_ROOT).deleteRecursively()
-        true
-    } catch (_: Exception) { false }
+    }
 }

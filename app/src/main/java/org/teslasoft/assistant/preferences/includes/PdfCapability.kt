@@ -120,10 +120,11 @@ object PdfCapabilityResolver {
         PdfCapabilityProvider.FEATHERLESS -> PdfCapability.UNSUPPORTED
         PdfCapabilityProvider.ANTHROPIC -> if (model.startsWith("claude", true)) PdfCapability.SUPPORTED else PdfCapability.UNKNOWN
         PdfCapabilityProvider.GEMINI -> if (model.startsWith("gemini", true)) PdfCapability.SUPPORTED else PdfCapability.UNKNOWN
-        PdfCapabilityProvider.OPENAI -> if (listOf("gpt-4o", "gpt-4.1", "gpt-5", "o1", "o3", "o4")
+        PdfCapabilityProvider.OPENAI -> if (listOf("gpt-4o", "gpt-4.1", "gpt-5", "gpt-6", "o1", "o3", "o4")
                 .any { model.startsWith(it, true) }) PdfCapability.SUPPORTED else PdfCapability.UNKNOWN
-        // Current xAI file input is an agentic Responses feature. Do not infer it for ordinary Grok chat models.
-        PdfCapabilityProvider.XAI -> if (model.startsWith("grok-4.20", true)) PdfCapability.SUPPORTED else PdfCapability.UNKNOWN
+        // xAI documents file input only for agentic Responses-capable Grok 4 models.
+        PdfCapabilityProvider.XAI -> if (listOf("grok-4.20", "grok-4.5", "grok-4.6", "grok-4.7")
+                .any { model.startsWith(it, true) }) PdfCapability.SUPPORTED else PdfCapability.UNKNOWN
         else -> PdfCapability.UNKNOWN
     }
 

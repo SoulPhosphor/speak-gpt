@@ -69,9 +69,9 @@ object PdfRequestSerializer {
             .put("data", pdf.base64Data))
 
     fun geminiDocumentPart(pdf: NativePdfPayload): JSONObject = JSONObject()
-        .put("inline_data", JSONObject()
-            .put("mime_type", "application/pdf")
-            .put("data", pdf.base64Data))
+        .put("type", "document")
+        .put("data", pdf.base64Data)
+        .put("mime_type", "application/pdf")
 
     fun xAiInputFile(fileId: String): JSONObject = JSONObject()
         .put("type", "input_file")
@@ -81,7 +81,7 @@ object PdfRequestSerializer {
         val marker = "\"id\":\"" + includeId.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
         for (i in 0 until messages.length()) {
             val message = messages.optJSONObject(i) ?: continue
-            if (message.opt("content").toString().contains(marker)) return message
+            if (message.opt("content")?.toString()?.contains(marker) == true) return message
         }
         return null
     }

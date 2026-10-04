@@ -13,6 +13,8 @@ class PdfCapabilityResolverTest {
         assertEquals(PdfCapability.SUPPORTED,
             PdfCapabilityResolver.resolve(endpoint("https://api.openai.com/v1"), "gpt-5"))
         assertEquals(PdfCapability.SUPPORTED,
+            PdfCapabilityResolver.resolve(endpoint("https://api.openai.com/v1"), "gpt-6.1-sol"))
+        assertEquals(PdfCapability.SUPPORTED,
             PdfCapabilityResolver.resolve(endpoint("https://api.anthropic.com"), "claude-sonnet-4"))
         assertEquals(PdfCapability.SUPPORTED,
             PdfCapabilityResolver.resolve(endpoint("https://generativelanguage.googleapis.com"), "gemini-3-pro"))
@@ -20,6 +22,8 @@ class PdfCapabilityResolverTest {
             PdfCapabilityResolver.resolve(endpoint("https://api.featherless.ai/v1"), "vision-model"))
         assertEquals(PdfCapability.UNKNOWN,
             PdfCapabilityResolver.resolve(endpoint("https://custom.example/v1"), "vision-model"))
+        assertEquals(PdfCapability.SUPPORTED,
+            PdfCapabilityResolver.resolve(endpoint("https://api.x.ai/v1"), "grok-4.7"))
     }
 
     @Test fun `NanoGPT does not infer PDF from model name or vision`() {

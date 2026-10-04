@@ -45,4 +45,30 @@ class PdfIncludeTest {
         assertFalse(full.withoutPdfBytes().hasLivePdfBytes())
         assertNull(full.withoutPdfBytes().pdfFallbackText)
     }
+
+    @Test fun `failed Condense preserves FULL state and original bytes`() {
+        val full = livePdf()
+        assertEquals(full, PdfIncludeLifecycle.afterCondenseAttempt(full, null))
+        assertEquals(full, PdfIncludeLifecycle.afterCondenseAttempt(full, "   "))
+    }
+
+    @Test fun `successful Condense and sent Remove discard original bytes`() {
+        val full = livePdf()
+        val condensed = PdfIncludeLifecycle.afterCondenseAttempt(full, "short version")
+        assertEquals(IncludeForm.CONDENSED, condensed.form)
+        assertEquals("short version", condensed.condensedText)
+        assertNull(condensed.pdfFileHash)
+
+        val removed = PdfIncludeLifecycle.removePreviouslySent(full, "User sent paper.pdf.")
+        assertEquals(IncludeForm.ARTIFACT, removed.form)
+        assertEquals("User sent paper.pdf.", removed.artifactLine)
+        assertNull(removed.pdfFileHash)
+    }
+
+    private fun livePdf() = ChatInclude(
+        id = "live", fileName = "paper.pdf", kind = IncludeKind.PDF,
+        form = IncludeForm.FULL, fullText = "", pdfFileHash = "hash",
+        pdfMimeType = "application/pdf", pdfByteSize = 99, pdfPageCount = 2,
+        pdfFallbackText = "fallback", pdfFallbackProvenance = PdfFallbackProvenance.OCR
+    )
 }

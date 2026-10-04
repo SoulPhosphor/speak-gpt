@@ -6,6 +6,7 @@
 package org.teslasoft.assistant.preferences.includes
 
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -63,6 +64,8 @@ object PdfCapabilityMetadataClient {
                 }
             }
             LivePdfCapabilityEvidence(model, pinned)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             LivePdfCapabilityEvidence()
         }

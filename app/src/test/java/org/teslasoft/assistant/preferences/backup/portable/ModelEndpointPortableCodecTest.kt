@@ -92,6 +92,7 @@ class ModelEndpointPortableCodecTest {
                 contextWindowTokens = 131072,
                 contextWindowModelId = "example/model",
                 imageCapabilityByModel = "{}",
+                pdfCapabilityByModel = "{\"@metadata:example/model\":\"supported\"}",
                 toolCapabilityByModel = "{}",
                 reasoningCapabilityByModel = "{}",
                 reasoningRejectedLevelsByModel = "{}",

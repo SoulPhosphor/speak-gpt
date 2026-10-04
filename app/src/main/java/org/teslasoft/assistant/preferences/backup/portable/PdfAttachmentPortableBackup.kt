@@ -20,15 +20,16 @@ object PdfAttachmentPortableBackup {
         data class Failed(val detail: String) : Result()
     }
 
-    fun buildArtifacts(context: Context, chatsJson: String): Result = try {
-        val root = JSONObject(chatsJson)
-        val chats = root.getJSONArray("chats")
-        val artifacts = ArrayList<PortablePackage.Artifact>()
-        val seen = HashSet<String>()
-        for (index in 0 until chats.length()) {
-            val chat = chats.getJSONObject(index)
-            val chatId = chat.getString("chat_id")
-            for (include in includes(chat)) {
+    fun buildArtifacts(context: Context, chatsJson: String): Result {
+        return try {
+            val root = JSONObject(chatsJson)
+            val chats = root.getJSONArray("chats")
+            val artifacts = ArrayList<PortablePackage.Artifact>()
+            val seen = HashSet<String>()
+            for (index in 0 until chats.length()) {
+                val chat = chats.getJSONObject(index)
+                val chatId = chat.getString("chat_id")
+                for (include in includes(chat)) {
                     if (!include.hasLivePdfBytes()) continue
                     val hash = include.pdfFileHash ?: return Result.Failed("live PDF has no hash")
                     val identity = "$chatId/$hash"
@@ -46,11 +47,12 @@ object PdfAttachmentPortableBackup {
                         keySemantics = null,
                         schemaVersion = 1
                     )
+                }
             }
+            Result.Ok(artifacts)
+        } catch (e: Exception) {
+            Result.Failed(e.javaClass.simpleName)
         }
-        Result.Ok(artifacts)
-    } catch (e: Exception) {
-        Result.Failed(e.javaClass.simpleName)
     }
 
     fun prepareRestore(
