@@ -217,6 +217,26 @@ class SummarizerController(
         job = null
     }
 
+    /** The chat's state from before the last finished compaction, held
+     *  until the user answers Cancel or Okay in its dialog. */
+    private var finishedCompactionCheckpoint: Pair<Map<String, String?>, String>? = null
+
+    /** Cancel after "Compaction complete!": puts the chat back exactly as it
+     *  was before compacting (owner ruling, Oct 4 2026). */
+    fun discardFinishedCompaction(): Boolean {
+        val (checkpoint, chatId) = finishedCompactionCheckpoint ?: return false
+        finishedCompactionCheckpoint = null
+        if (chatId != chatIdProvider()) return false
+        val restored = Preferences.getPreferences(appContext, chatId).restoreCompactionCheckpoint(checkpoint)
+        if (restored) notifyStateChanged()
+        return restored
+    }
+
+    /** Okay after "Compaction complete!": the compaction stays. */
+    fun keepFinishedCompaction() {
+        finishedCompactionCheckpoint = null
+    }
+
     /**
      * Stops an automatic summary update and waits until its cancellation
      * cleanup has finished, so the caller can change the stored messages
@@ -437,6 +457,9 @@ class SummarizerController(
         }
 
         val target = snapshot.entries.size
+        // Cancel, during the run or after it finishes, puts this back.
+        val checkpoint = prefs.compactionCheckpoint()
+        finishedCompactionCheckpoint = null
         val startingSummary = prefs.getSummarizerSummary()
         val startingFolded = prefs.getSummarizerFoldedCount()
         val startingOverLength = prefs.getSummarizerOverLength()
@@ -504,7 +527,12 @@ class SummarizerController(
                 withContext(NonCancellable) {
                     prefs.commitManualCompaction(summary, folded, overLength, folded)
                 }
-            } else false
+            } else {
+                // Nothing from the run is kept, including the regeneration
+                // lock its finished batches advanced.
+                withContext(NonCancellable) { prefs.restoreCompactionCheckpoint(checkpoint) }
+                false
+            }
             setOperationState(
                 OperationState.Cancelled(
                     OperationKind.COMPACTING,
@@ -554,6 +582,7 @@ class SummarizerController(
             )
             return false
         }
+        finishedCompactionCheckpoint = checkpoint to chatId
         notifyStateChanged()
         return true
     }

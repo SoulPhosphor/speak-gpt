@@ -75,6 +75,15 @@ class Preferences internal constructor(
         const val LOG_DEFAULT_MAX_DAYS = 7
         const val CONDENSED_KIND_SUMMARY = "summary"
         const val CONDENSED_KIND_COMPACTION = "compaction"
+        private val COMPACTION_STATE_KEYS = listOf(
+            "summarizer_summary",
+            "summarizer_folded",
+            "summarizer_over_length",
+            "summarizer_episode",
+            "manual_compaction_boundary",
+            "condensed_conversation_kind",
+            "compaction_regeneration_lock_boundary"
+        )
 
         private const val LAST_SUCCESS_ENDPOINT_ID = "last_success_endpoint_id"
         private const val LAST_SUCCESS_MODEL = "last_success_model"
@@ -3091,6 +3100,26 @@ class Preferences internal constructor(
                     SummarizerProjectionContract.VERSION.toString()
                 )
                 .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Everything a compaction run writes, as stored (null = absent), so a
+     *  compaction the user cancels can be put back exactly (owner ruling,
+     *  Oct 4 2026: Cancel gets rid of the whole thing). */
+    fun compactionCheckpoint(): Map<String, String?> =
+        COMPACTION_STATE_KEYS.associateWith { key ->
+            if (preferences.contains(key)) preferences.getString(key, null) else null
+        }
+
+    fun restoreCompactionCheckpoint(state: Map<String, String?>): Boolean {
+        return try {
+            val editor = preferences.edit()
+            state.forEach { (key, value) ->
+                if (value == null) editor.remove(key) else editor.putString(key, value)
+            }
+            editor.commit()
         } catch (_: Exception) {
             false
         }

@@ -4979,11 +4979,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /**
      * Compact shows its progress in a dialog (owner ruling, Oct 4 2026): a
-     * spinner, the status text and a single Cancel. Cancel stops compacting
+     * spinner, the status text and a single Cancel, which stops compacting
      * and keeps nothing from the run. On success the spinner goes away, the
-     * text reads "Compaction complete!" and the button becomes Okay. A
-     * failure closes the dialog; it is recorded in Summarizer Errors like
-     * every other summarizer failure. True when [state] belongs to Compact.
+     * text reads "Compaction complete!" and the buttons become Cancel and
+     * Okay: Cancel puts the chat back exactly as it was before compacting,
+     * Okay keeps the compaction. A failure closes the dialog; it is recorded
+     * in Summarizer Errors like every other summarizer failure. True when
+     * [state] belongs to Compact.
      */
     private fun renderCompactionDialog(
         state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
@@ -5002,13 +5004,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         when (state) {
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running -> {
                 if (compactionDialog?.isShowing == true) return true
-                val view = layoutInflater.inflate(R.layout.dialog_include_condense_progress, null)
-                view.findViewById<TextView>(R.id.include_condense_status)
-                    ?.setText(R.string.compaction_status_running)
+                val view = layoutInflater.inflate(R.layout.dialog_compaction_progress, null)
                 val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                     .setView(view)
                     .setCancelable(false)
                     .create()
+                (view.findViewById<View>(R.id.btn_dialog_primary_action)?.parent as? View)
+                    ?.visibility = View.GONE
                 view.findViewById<MaterialButton>(R.id.btn_dialog_action)?.apply {
                     setText(R.string.btn_cancel)
                     setOnClickListener {
@@ -5022,14 +5024,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded -> {
                 val dialog = compactionDialog ?: return true
-                dialog.findViewById<View>(R.id.include_condense_progress)?.visibility = View.GONE
-                dialog.findViewById<TextView>(R.id.include_condense_status)
+                dialog.findViewById<View>(R.id.compaction_progress)?.visibility = View.GONE
+                dialog.findViewById<TextView>(R.id.compaction_status)
                     ?.setText(R.string.compaction_dialog_complete)
-                dialog.findViewById<MaterialButton>(R.id.btn_dialog_action)?.apply {
+                (dialog.findViewById<View>(R.id.btn_dialog_action)?.parent as? View)
+                    ?.visibility = View.GONE
+                (dialog.findViewById<View>(R.id.btn_dialog_primary_action)?.parent as? View)
+                    ?.visibility = View.VISIBLE
+                fun close() {
+                    dialog.dismiss()
+                    if (compactionDialog === dialog) compactionDialog = null
+                }
+                dialog.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)?.apply {
+                    setText(R.string.btn_cancel)
+                    setOnClickListener {
+                        close()
+                        summarizerController?.discardFinishedCompaction()
+                        refreshManualCompactionMarker()
+                        refreshSummarizerIcons()
+                    }
+                }
+                dialog.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)?.apply {
                     setText(R.string.okay)
                     setOnClickListener {
-                        dialog.dismiss()
-                        if (compactionDialog === dialog) compactionDialog = null
+                        close()
+                        summarizerController?.keepFinishedCompaction()
                     }
                 }
             }

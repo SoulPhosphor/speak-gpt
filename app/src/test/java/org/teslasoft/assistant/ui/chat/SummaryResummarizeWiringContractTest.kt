@@ -47,5 +47,10 @@ class SummaryResummarizeWiringContractTest {
         assertTrue(activity.contains("savePartialOnCancel = false,"))
         assertFalse(source("src/main/res/layout/activity_summarizer_settings.xml").contains("compacting_cancel"))
         assertTrue(activity.contains("if (renderCompactionDialog(state)) return"))
+        // After "Compaction complete!", Cancel undoes the compaction; Okay keeps it.
+        assertTrue(activity.contains("summarizerController?.discardFinishedCompaction()"))
+        assertTrue(activity.contains("summarizerController?.keepFinishedCompaction()"))
+        val controller = source("src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt")
+        assertTrue(controller.contains("withContext(NonCancellable) { prefs.restoreCompactionCheckpoint(checkpoint) }"))
     }
 }
