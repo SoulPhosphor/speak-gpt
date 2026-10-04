@@ -5365,7 +5365,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the fold-in bookmark; blank entries advance it without being sent. */
     private fun summarizerSnapshot(): org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? {
         if (isFinishing || isDestroyed || chatStorageUnavailable || chatId.isEmpty()) return null
-        org.teslasoft.assistant.preferences.MessageIdentity.ensure(messages)
+        // A message that just received its permanent ID is saved at once, so
+        // a section (or a backup) never refers to an ID that was never stored.
+        if (org.teslasoft.assistant.preferences.MessageIdentity.ensure(messages)) saveSettings()
         val storedMessages = messages
             .filterNot {
                 it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||

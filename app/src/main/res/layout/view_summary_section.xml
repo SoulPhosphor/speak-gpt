@@ -28,6 +28,21 @@
             style="@style/Widget.App.SummarySection.Header" />
     </LinearLayout>
 
+    <!-- Shown when this section's messages changed after its text was
+         written and the text was kept (your edit, or an older summary). -->
+    <TextView
+        android:id="@+id/summary_section_stale_note"
+        style="@style/Widget.App.Section.Hint"
+        android:text="@string/summary_section_stale_note"
+        android:visibility="gone" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/summary_section_rewrite"
+        style="@style/AppButton.Primary.Inline"
+        android:layout_marginTop="4dp"
+        android:text="@string/summary_section_rewrite"
+        android:visibility="gone" />
+
     <com.google.android.material.textfield.TextInputEditText
         android:id="@+id/summary_section_text"
         style="@style/Widget.App.Field.Box"

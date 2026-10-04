@@ -167,9 +167,13 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
             btnRevert?.visibility = View.GONE
             val container = findViewById<android.widget.LinearLayout>(R.id.summary_sections)
             container.visibility = View.VISIBLE
-            sectionsPanel = SummarySectionsPanel(this, container, onEdited = {}) { sectionId ->
-                openConversationPreview(sectionId)
-            }
+            sectionsPanel = SummarySectionsPanel(
+                this,
+                container,
+                onEdited = {},
+                onHeaderTapped = { sectionId -> openConversationPreview(sectionId) },
+                onRewrite = { sectionId -> confirmRewrite(sectionId) }
+            )
             bindSections(savedInstanceState?.getString(STATE_DRAFT)?.let { decodeDrafts(it) }.orEmpty())
             if (savedInstanceState == null) {
                 intent.getStringExtra(EXTRA_SECTION_ID)?.let { target ->
@@ -342,6 +346,36 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
             finish()
         }
         if (isDirty() && !locked) DiscardChangesDialog.show(this) { go() } else go()
+    }
+
+    /** A kept section (the user's edit or an older summary) whose messages
+     *  changed: on confirmation it is queued to be rewritten from its current
+     *  messages, which happens once this screen closes. */
+    private fun confirmRewrite(sectionId: String) {
+        val actions = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.summary_section_rewrite_title)
+            .setView(actions)
+            .create()
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.btn_ok)
+            setOnClickListener {
+                dialog.dismiss()
+                val prefs = preferences ?: return@setOnClickListener
+                val updated = storedSections().map {
+                    if (it.id == sectionId) it.copy(edited = false, legacy = false, needsUpdate = true) else it
+                }
+                if (SummarySectionStore.save(prefs, updated)) {
+                    prefs.setSummarizerCatchUpPending(true)
+                    bindSections(sectionsPanel?.drafts().orEmpty().filterKeys { it != sectionId })
+                }
+            }
+        }
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        dialog.show()
     }
 
     private fun openConversationPreview(sectionId: String) {

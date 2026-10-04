@@ -29,7 +29,10 @@ class SummarySectionsPanel(
     private val activity: Activity,
     private val container: LinearLayout,
     private val onEdited: () -> Unit,
-    private val onHeaderTapped: (sectionId: String) -> Unit
+    private val onHeaderTapped: (sectionId: String) -> Unit,
+    /** Rewrite a kept section (user-edited or older summary) from its
+     *  current messages. */
+    private val onRewrite: (sectionId: String) -> Unit = {}
 ) {
     private class Row(
         val sectionId: String,
@@ -37,6 +40,9 @@ class SummarySectionsPanel(
         val flag: View,
         val field: TextInputEditText,
         val revert: View,
+        val staleNote: View,
+        val rewrite: View,
+        val stale: Boolean,
         var savedText: String
     )
 
@@ -61,8 +67,12 @@ class SummarySectionsPanel(
                 view.findViewById(R.id.summary_section_flag),
                 field,
                 view.findViewById(R.id.summary_section_revert),
+                view.findViewById(R.id.summary_section_stale_note),
+                view.findViewById(R.id.summary_section_rewrite),
+                section.needsUpdate && !section.awaitsRegeneration,
                 section.text
             )
+            row.rewrite.setOnClickListener { if (!locked) onRewrite(section.id) }
             val label = SummarySections.timeSpan(section, messages)
                 ?.let { (start, end) -> SummarySectionTime.format(start, end) }
                 ?: activity.getString(R.string.summary_section_time_unknown)
@@ -134,6 +144,8 @@ class SummarySectionsPanel(
 
     private fun applyLock() {
         rows.forEach {
+            it.staleNote.visibility = if (it.stale) View.VISIBLE else View.GONE
+            it.rewrite.visibility = if (it.stale && !locked) View.VISIBLE else View.GONE
             it.field.isFocusable = !locked
             it.field.isFocusableInTouchMode = !locked
             if (locked) it.field.clearFocus()
