@@ -89,7 +89,11 @@ class SummarizerSafeIncludeWiringContractTest {
             "src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt"
         )
         assertTrue(controller.contains("if (!prefs.ensureSummarizerProjectionCompatibility()) return false"))
-        assertTrue(activity.contains("val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true"))
+        // The summary / compaction review screen loads only compatible text.
+        val review = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/ConversationSummaryActivity.kt"
+        )
+        assertTrue(review.contains("val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true"))
     }
 
     @Test
