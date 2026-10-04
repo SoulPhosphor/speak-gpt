@@ -110,4 +110,14 @@ class SummaryResummarizeWiringContractTest {
         assertTrue(answer.contains("val updated = live.map"))
     }
 
+    @Test fun aPreDispatchFailureAlsoFinishesTheReplyReplacementAndReleasesSummarizing() {
+        val terminal = activity.substring(activity.indexOf("private fun showTerminalFailure"),
+            activity.indexOf("private fun modelFacingContent"))
+        assertTrue(terminal.contains("mergePendingRetryVariants()"))
+        val merge = activity.substring(activity.indexOf("private fun mergePendingRetryVariants"),
+            activity.indexOf("private suspend fun markLastAssistantDone"))
+        assertTrue(merge.contains("pendingRetryMessageId = null"))
+        assertTrue(merge.contains("summarizerCycle()"))
+    }
+
 }

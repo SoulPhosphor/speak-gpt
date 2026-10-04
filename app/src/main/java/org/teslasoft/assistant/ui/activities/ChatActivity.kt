@@ -10394,9 +10394,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pendingRetryMessageId?.let { last[org.teslasoft.assistant.preferences.MessageIdentity.KEY] = it }
         pendingRetryMessageId = null
         adapter?.notifyItemChanged(messages.size - 1)
-        pendingRecompactBoundary?.let { boundary ->
-            pendingRecompactBoundary = null
-            askToRecompactAfterDelete(boundary, sourceChanged = true)
+        val recompactBoundary = pendingRecompactBoundary
+        pendingRecompactBoundary = null
+        lifecycleScope.launch {
+            // Terminal callers persist the new canonical reply before we read it.
+            kotlinx.coroutines.yield()
+            recompactBoundary?.let { askToRecompactAfterDelete(it, sourceChanged = true) }
+            summarizerCycle()
         }
     }
 
@@ -10584,6 +10588,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         }
+        mergePendingRetryVariants()
         saveSettings()
         if (logAsError) {
             try {
