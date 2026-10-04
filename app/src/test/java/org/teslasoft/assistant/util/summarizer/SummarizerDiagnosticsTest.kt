@@ -120,6 +120,17 @@ class SummarizerDiagnosticsTest {
             owner(IllegalStateException("internal invariant broken; prior HTTP 500"), request()))
     }
 
+    @Test fun malformedSuccessBodyCannotLeakSummaryTextThroughDiagnostics() {
+        val text = "private summary returned as plain text instead of a completion envelope"
+        val evidence = request(200, text)
+        val privateValues = evidence.privateResponseValues()
+        assertFalse(SummarizerDetailSanitizer.sanitize(evidence.body, privateValues)!!.contains(text))
+        assertFalse(SummarizerDetailSanitizer.sanitize("decoder error. JSON input: ${text.take(30)}")!!.contains(text.take(30)))
+        val providerError = request(401, "API access rejected")
+        assertTrue(providerError.privateResponseValues().isEmpty())
+        assertEquals("API access rejected", SummarizerDetailSanitizer.sanitize(providerError.body))
+    }
+
     companion object {
         private const val validResponse = """{"id":"response-id","created":1,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"valid reply"},"finish_reason":"stop"}]}"""
     }

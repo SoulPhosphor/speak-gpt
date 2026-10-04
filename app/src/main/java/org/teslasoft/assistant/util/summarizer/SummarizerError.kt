@@ -259,6 +259,8 @@ object SummarizerDetailSanitizer {
     fun sanitize(raw: String?, secrets: List<String> = emptyList(), maxChars: Int = MAX_DETAIL_CHARS): String? {
         if (raw.isNullOrBlank()) return null
         var out: String = raw
+        // Decoder exceptions can append a full or truncated private body.
+        out = out.replace(Regex("""(?is)JSON input:.*"""), "JSON input: [payload removed]")
         // Exact request-known secrets/private text are removed before truncation.
         secrets.filter { it.isNotBlank() }.sortedByDescending { it.length }.forEach { out = out.replace(it, "[removed]") }
         fun clean(value: com.google.gson.JsonElement) {

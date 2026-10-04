@@ -776,7 +776,7 @@ class SummarizerController(
                 providerEvidence = evidence.snapshot(),
                 requestEndpoint = runtime.endpoint,
                 requestedProvider = runtime.requestedProvider,
-                privateValues = privateValues
+                privateValues = privateValues + evidence.privateResponseValues()
             )
             return null
         }
@@ -789,7 +789,7 @@ class SummarizerController(
                 providerEvidence = evidence.snapshot(),
                 requestEndpoint = runtime.endpoint,
                 requestedProvider = runtime.requestedProvider,
-                privateValues = privateValues,
+                privateValues = privateValues + evidence.privateResponseValues(),
                 rawResponseBody = evidence.body
             )
             return null
@@ -946,7 +946,7 @@ class SummarizerController(
                     providerEvidence = evidence.snapshot(),
                     requestEndpoint = runtime.endpoint,
                     requestedProvider = runtime.requestedProvider,
-                    privateValues = privateValues
+                    privateValues = privateValues + evidence.privateResponseValues()
                 )
                 return FoldBatchResult.Failed
             }
@@ -963,7 +963,7 @@ class SummarizerController(
                     providerEvidence = evidence.snapshot(),
                     requestEndpoint = runtime.endpoint,
                     requestedProvider = runtime.requestedProvider,
-                    privateValues = privateValues,
+                    privateValues = privateValues + evidence.privateResponseValues(),
                     rawResponseBody = evidence.body
                 )
                 return FoldBatchResult.Failed
@@ -1084,7 +1084,7 @@ class SummarizerController(
                     append(SummarizerDetailSanitizer.sanitize(providerEvidence?.errorMessages?.joinToString("\n")
                         ?.ifBlank { null } ?: rawProviderError ?: technicalDetail, privateValues) ?: "Provider returned no usable completion")
                     // Strip completion and request payload fields before keeping wire evidence.
-                    SummarizerDetailSanitizer.sanitize(rawResponseBody, privateValues)?.let { append("\nResponse evidence: ").append(it) }
+                    SummarizerDetailSanitizer.sanitize(rawResponseBody, privateValues)?.let { append("\nResponse evidence (").append(rawResponseBody?.length ?: 0).append(" characters): ").append(it) }
                 }
                 scope.launch(Dispatchers.IO) {
                     org.teslasoft.assistant.preferences.Logger.logProviderFailure(

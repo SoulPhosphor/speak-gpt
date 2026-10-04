@@ -27,6 +27,12 @@ object SummarizerDiagnostics {
         @Volatile var status: Int? = null
         @Volatile var body: String? = null
 
+        /** An incompatible success body might itself be conversation-derived
+         * summary text. Its shape/length is evidence; that text is private. */
+        fun privateResponseValues(): List<String> =
+            if (status?.let { it in 200..299 } == true && snapshot().errorEvents.isEmpty() && unusableResponse(body))
+                listOfNotNull(body?.takeIf { it.isNotBlank() }) else emptyList()
+
         fun snapshot(): ProviderDiagnosticSnapshot {
             val events = if (status?.let { it >= 400 } == true)
                 ProviderDiagnosticParser.parseHttpBody(body, status!!)
