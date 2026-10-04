@@ -1015,7 +1015,9 @@ class SummarizerController(
                 model = model,
                 failureOwner = failureOwner,
                 exception = exception,
-                providerEvidence = providerEvidence,
+                providerEvidence = providerEvidence?.let {
+                    it.copy(outerHttpStatus = it.outerHttpStatus ?: httpStatus)
+                },
                 requestEndpoint = requestEndpoint,
                 requestedProvider = requestedProvider,
                 privateValues = privateValues,

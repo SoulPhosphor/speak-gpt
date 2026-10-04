@@ -14,6 +14,7 @@ class SummarizerDiagnosticWiringTest {
     @Test fun ownershipControlsExactlyOneDiagnosticChannel() {
         val controller = source("util/summarizer/SummarizerController.kt")
         assertFalse(controller.contains("providerAnswered"))
+        assertTrue(controller.contains("outerHttpStatus = it.outerHttpStatus ?: httpStatus"))
         val routing = controller.substringAfter("private fun recordAppLogEntry").substringBefore("private fun recordStorageFailure")
         assertTrue(routing.contains("SummarizerDiagnostics.record("))
         assertTrue(routing.contains("logProviders = failureOwner != SummarizerDiagnostics.Owner.EXTERNAL || prefs.getLogChatFailures()"))
