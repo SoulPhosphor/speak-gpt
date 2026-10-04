@@ -80,7 +80,25 @@ object SummarizerDiagnostics {
         } catch (_: Exception) { true }
     }
 
-    fun localDetail(operation: String, error: Throwable, privateValues: List<String> = emptyList()): String =
-        "Function/Operation: $operation\n" +
-            SummarizerDetailSanitizer.sanitize(error.stackTraceToString(), privateValues, maxChars = 16000)
+    /** Exception messages and frames are sanitized separately so a malformed
+     * payload in a message cannot remove the diagnostic stack/cause chain. */
+    fun localDetail(operation: String, error: Throwable, privateValues: List<String> = emptyList()): String {
+        val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
+        val chain = generateSequence(error) { it.cause }.takeWhile { seen.add(it) }.take(16).toList()
+        val messages = chain.joinToString("\nCaused by: ") {
+            it.javaClass.name + ": " + (SummarizerDetailSanitizer.sanitize(it.message, privateValues) ?: "(no message)")
+        }
+        val frames = chain.joinToString("\n") { cause ->
+            cause.javaClass.name + "\n" + cause.stackTrace.take(40).joinToString("\n") { "    at $it" }
+        }
+        return "Function/Operation: $operation\n$messages\n$frames".take(16000)
+    }
+
+    /** Storage errors can quote the value being written. Keep only text values
+     * in memory for redaction, never as diagnostic context. */
+    fun privateSectionValues(json: String): List<String> = try {
+        listOf(json) + JsonParser.parseString(json).asJsonArray.mapNotNull { element ->
+            element.asJsonObject.get("text")?.takeIf { it.isJsonPrimitive }?.asString
+        }
+    } catch (_: Exception) { listOf(json) }
 }

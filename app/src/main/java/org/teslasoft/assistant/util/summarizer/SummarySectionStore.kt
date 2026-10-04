@@ -24,7 +24,7 @@ object SummarySectionStore {
             var decodeFailure: Exception? = null
             var sections = SummarySections.fromJson(stored) { decodeFailure = it }
             decodeFailure?.let {
-                prefs.reportSummarizerStorageFailure("Summarizing: decode Summary Sections", it)
+                prefs.reportSummarizerStorageFailure("Summarizing: decode Summary Sections", it, SummarizerDiagnostics.privateSectionValues(stored))
                 return null
             }
             var changed = false
@@ -55,7 +55,7 @@ object SummarySectionStore {
         prefs.commitSummarySections(SummarySections.toJson(sections))
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
-        prefs.reportSummarizerStorageFailure("Summarizing: encode Summary Sections", e)
+        prefs.reportSummarizerStorageFailure("Summarizing: encode Summary Sections", e, sections.map { it.text })
         false
     }
 }

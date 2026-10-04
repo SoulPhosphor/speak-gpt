@@ -2837,22 +2837,22 @@ class Preferences internal constructor(
     var summarizerStorageFailure: Throwable? = null
         private set
 
-    fun reportSummarizerStorageFailure(operation: String, error: Throwable) {
+    fun reportSummarizerStorageFailure(operation: String, error: Throwable, privateValues: List<String> = emptyList()) {
         summarizerStorageFailure = error
         diagnosticContext?.let {
             Logger.logAsync(it, "crash", "Summarizer storage", "error",
-                org.teslasoft.assistant.util.summarizer.SummarizerDiagnostics.localDetail(operation, error))
+                org.teslasoft.assistant.util.summarizer.SummarizerDiagnostics.localDetail(operation, error, privateValues))
         }
     }
 
-    private fun summarizerStorageCommit(operation: String, action: () -> Boolean): Boolean = try {
+    private fun summarizerStorageCommit(operation: String, privateValues: List<String> = emptyList(), action: () -> Boolean): Boolean = try {
         val saved = action()
         if (!saved) reportSummarizerStorageFailure(operation,
-            java.io.IOException("SharedPreferences.commit() returned false"))
+            java.io.IOException("SharedPreferences.commit() returned false"), privateValues)
         saved
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
-        reportSummarizerStorageFailure(operation, e)
+        reportSummarizerStorageFailure(operation, e, privateValues)
         false
     }
 
@@ -2862,7 +2862,8 @@ class Preferences internal constructor(
 
     /** Committed synchronously: a section is conversation state that must
      *  survive a process kill once written. */
-    fun commitSummarySections(json: String): Boolean = summarizerStorageCommit("Summarizing: commitSummarySections") {
+    fun commitSummarySections(json: String): Boolean = summarizerStorageCommit("Summarizing: commitSummarySections",
+        org.teslasoft.assistant.util.summarizer.SummarizerDiagnostics.privateSectionValues(json)) {
         preferences.edit().putString("summary_sections", json).commit()
     }
 
@@ -3058,7 +3059,7 @@ class Preferences internal constructor(
      *         fold-in as unsaved and leave its in-memory state unchanged.
      */
     fun commitSummarizerFoldIn(summary: String, foldedCount: Int, overLength: Boolean): Boolean {
-        return summarizerStorageCommit("Summarizing: commitSummarizerFoldIn") {
+        return summarizerStorageCommit("Summarizing: commitSummarizerFoldIn", listOf(summary)) {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
@@ -3080,7 +3081,7 @@ class Preferences internal constructor(
         overLength: Boolean,
         episode: String,
         condensedKind: String
-    ): Boolean = summarizerStorageCommit("Summarizing: restoreSummarizerState") {
+    ): Boolean = summarizerStorageCommit("Summarizing: restoreSummarizerState", listOf(summary)) {
         preferences.edit()
             .putString("summarizer_summary", summary)
             .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
@@ -3105,7 +3106,7 @@ class Preferences internal constructor(
         overLength: Boolean,
         boundaryCount: Int
     ): Boolean {
-        return summarizerStorageCommit("Compacting: commitManualCompaction") {
+        return summarizerStorageCommit("Compacting: commitManualCompaction", listOf(summary)) {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
@@ -3131,7 +3132,7 @@ class Preferences internal constructor(
         }
 
     fun restoreCompactionCheckpoint(state: Map<String, String?>): Boolean {
-        return summarizerStorageCommit("Compacting: restoreCompactionCheckpoint") {
+        return summarizerStorageCommit("Compacting: restoreCompactionCheckpoint", listOfNotNull(state["summarizer_summary"])) {
             val editor = preferences.edit()
             state.forEach { (key, value) ->
                 if (value == null) editor.remove(key) else editor.putString(key, value)
@@ -3170,7 +3171,7 @@ class Preferences internal constructor(
             ensureSummarizerProjectionCompatibility()
             return false
         }
-        return summarizerStorageCommit("Summarizing: commitSummarizerSummaryEdit") {
+        return summarizerStorageCommit("Summarizing: commitSummarizerSummaryEdit", listOf(summary)) {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_over_length", "false")

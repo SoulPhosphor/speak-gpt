@@ -104,6 +104,17 @@ class SummarizerDiagnosticsTest {
         }
     }
 
+    @Test fun storageTraceRedactsPlainSummaryTextAndRetainsFrames() {
+        val summary = "this is the private summary being saved"
+        val error = IllegalStateException("could not store: $summary", java.io.IOException("disk failure"))
+        val detail = SummarizerDiagnostics.localDetail("Summarizing", error, listOf(summary))
+        assertFalse(detail.contains(summary))
+        assertTrue(detail.contains("disk failure"))
+        assertTrue(detail.contains("SummarizerDiagnosticsTest"))
+        assertEquals(listOf("[{\"text\":\"secret\"}]", "secret"),
+            SummarizerDiagnostics.privateSectionValues("[{\"text\":\"secret\"}]"))
+    }
+
     companion object {
         private const val validResponse = """{"id":"response-id","created":1,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"valid reply"},"finish_reason":"stop"}]}"""
     }
