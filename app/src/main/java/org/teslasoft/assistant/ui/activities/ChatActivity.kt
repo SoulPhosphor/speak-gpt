@@ -5508,8 +5508,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
             showProjectionStatus(enableCondensed)
-            closeSummaryViewGate()
             dialog.dismiss()
+            // The dismiss listener runs later; close the gate now so the
+            // catch-up below is not held back.
+            closeSummaryViewGate()
             if (enableCondensed) {
                 if (preferences?.getCondensedConversationKind() !=
                     org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
