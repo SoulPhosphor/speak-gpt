@@ -36,7 +36,9 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run unit tests
-        run: ./gradlew --no-daemon test
+        # The three app variants have a large Android/PDF/OCR classpath. Keep
+        # their Kotlin compilation and JVM test workers inside runner memory.
+        run: ./gradlew --no-daemon --max-workers=1 test
 
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug
