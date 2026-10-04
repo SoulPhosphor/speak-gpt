@@ -3566,15 +3566,15 @@
     <string name="compaction_dialog_complete">Compaction complete!</string>
     <!-- Compact error box (owner-approved wording, Oct 4 2026). -->
     <string name="compaction_err_model_missing_title">Summary Model Configuration Needed</string>
-    <string name="compaction_err_model_missing">The Summarizer Model is no longer available.</string>
+    <string name="compaction_err_model_missing">Summary Model configuration is missing or incomplete. Check the model, endpoint, and routing in Summarizer Settings.</string>
     <string name="compaction_err_unreachable_title">Can\'t Connect</string>
     <string name="compaction_err_unreachable">Couldn\'t reach the AI service.</string>
     <string name="compaction_err_connect_timeout_title">Connection Timed Out</string>
     <string name="compaction_err_connect_timeout">Couldn\'t connect to the AI service in time.</string>
     <string name="compaction_err_response_timeout_title">Response Timed Out</string>
-    <string name="compaction_err_response_timeout">The model didn\'t respond in time.</string>
+    <string name="compaction_err_response_timeout">The response did not complete before the response timeout expired.</string>
     <string name="compaction_err_access_rejected_title">Access Rejected</string>
-    <string name="compaction_err_access_rejected">The AI service rejected the API key or account.</string>
+    <string name="compaction_err_access_rejected">The AI service rejected access. Check the endpoint\'s authentication and model access.</string>
     <string name="compaction_err_model_unavailable_title">Model Unavailable</string>
     <string name="compaction_err_model_unavailable">The AI service can\'t use this model.</string>
     <string name="compaction_err_rate_limit_title">Rate Limit Reached</string>
@@ -3582,7 +3582,7 @@
     <string name="compaction_err_quota_title">Quota or Spending Limit Reached</string>
     <string name="compaction_err_quota">The AI account reached a quota, spending, or credit limit. Check the provider account\'s usage and billing.</string>
     <string name="compaction_err_too_large_title">Request Too Large</string>
-    <string name="compaction_err_too_large">The conversation is too large for this model.</string>
+    <string name="compaction_err_too_large">The compaction request exceeded a model or provider\'s input limit.</string>
     <string name="compaction_err_rejected_title">Content Rejected</string>
     <string name="compaction_err_rejected">The AI service refused the request because of its content rules.</string>
     <string name="compaction_err_service_title">Provider Error</string>
@@ -3688,7 +3688,7 @@
     <string name="summarizer_err_connect_timeout_title">Connection Timed Out</string>
     <string name="summarizer_err_connect_timeout">The summarizer couldn\'t connect before the endpoint\'s Connection Timeout expired. The app will try again automatically. Check your connection or increase Connection Timeout for the selected endpoint.</string>
     <string name="summarizer_err_response_timeout_title">Response Timed Out</string>
-    <string name="summarizer_err_response_timeout">The summarizer connected, but the model didn\'t respond before the endpoint\'s Response Time expired. The app will try again automatically. You can also choose another Summary Model or increase Response Time for the selected endpoint.</string>
+    <string name="summarizer_err_response_timeout">The summary response did not complete before the endpoint\'s Response Time expired. The app will try again automatically. You can also choose another Summary Model or increase Response Time for the selected endpoint.</string>
     <string name="summarizer_err_access_rejected_title">Access Rejected</string>
     <string name="summarizer_err_access_rejected">The selected AI service rejected access. Check the endpoint\'s API key, authentication mode, and model access.</string>
     <string name="summarizer_err_model_unavailable_title">Model Unavailable</string>
