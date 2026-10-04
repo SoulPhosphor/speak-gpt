@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One read-only message in the conversation preview. Tapping it goes to
+     that exact message in the chat. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingVertical="10dp">
+
+    <TextView
+        android:id="@+id/preview_speaker"
+        style="@style/Widget.App.Field.Label" />
+
+    <TextView
+        android:id="@+id/preview_text"
+        style="@style/Widget.App.Screen.Intro"
+        android:paddingTop="4dp" />
+</LinearLayout>

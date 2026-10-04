@@ -2813,6 +2813,18 @@ class Preferences internal constructor(
         putString("hide_resummarize_hint", hide.toString())
     }
 
+    /** The automatic Summarizer's sections (SummarySections JSON). Separate
+     *  from the single summary that Compact keeps in summarizer_summary. */
+    fun getSummarySections(): String = getString("summary_sections", "")
+
+    /** Committed synchronously: a section is conversation state that must
+     *  survive a process kill once written. */
+    fun commitSummarySections(json: String): Boolean = try {
+        preferences.edit().putString("summary_sections", json).commit()
+    } catch (_: Exception) {
+        false
+    }
+
     fun getSummarizerCatchUpPending(): Boolean =
         getString("summarizer_catch_up_pending", "false") == "true"
 

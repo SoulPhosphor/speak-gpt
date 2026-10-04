@@ -46,7 +46,21 @@ object SummarizerPromptSets {
 
     /** The shipped prompts of a collection, in display order. */
     fun builtIns(kind: Kind): List<CompanionPromptVariant> = when (kind) {
-        Kind.SUMMARY, Kind.COMPACTION -> listOf(
+        Kind.SUMMARY -> listOf(
+            CompanionPromptVariant(
+                id = STORYTELLER_ID,
+                name = SummarizerPrompts.STORYTELLER_NAME,
+                text = SummarizerPrompts.SECTION_STORYTELLER,
+                isDefault = true
+            ),
+            CompanionPromptVariant(
+                id = REPORTER_ID,
+                name = SummarizerPrompts.REPORTER_NAME,
+                text = SummarizerPrompts.SECTION_REPORTER,
+                isDefault = false
+            )
+        )
+        Kind.COMPACTION -> listOf(
             CompanionPromptVariant(
                 id = STORYTELLER_ID,
                 name = SummarizerPrompts.STORYTELLER_NAME,
@@ -71,6 +85,12 @@ object SummarizerPromptSets {
     }
 
     fun isBuiltIn(kind: Kind, id: String): Boolean = builtIns(kind).any { it.id == id }
+
+    private fun rollingVersionOf(id: String): String? = when (id) {
+        STORYTELLER_ID -> SummarizerPrompts.STORYTELLER
+        REPORTER_ID -> SummarizerPrompts.REPORTER
+        else -> null
+    }
 
     /** A built-in prompt's shipped text, or null for the user's own prompts. */
     fun originalText(kind: Kind, id: String): String? = builtIns(kind).firstOrNull { it.id == id }?.text
@@ -138,6 +158,11 @@ object SummarizerPromptSets {
                 result.add(index.coerceAtMost(result.size), builtIn.copy(isDefault = false))
             } else {
                 existing.name = builtIn.name
+                // An untouched older Summarizer built-in (written for one
+                // rolling recap) becomes its section version.
+                if (kind == Kind.SUMMARY && existing.text == rollingVersionOf(builtIn.id)) {
+                    existing.text = builtIn.text
+                }
             }
         }
         val defaultIndex = result.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0

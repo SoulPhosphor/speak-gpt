@@ -120,9 +120,18 @@ class SummarizerController(
      * [text] is the model-facing content ("" for messages the projection
      * skips — they still advance the bookmark but are not sent).
      */
-    data class Entry(val isBot: Boolean, val text: String)
+    data class Entry(
+        val isBot: Boolean,
+        val text: String,
+        /** The stored message's permanent ID (MessageIdentity). */
+        val id: String = "",
+        val timeMillis: Long? = null
+    )
 
-    data class Snapshot(val entries: List<Entry>, val window: Int)
+    data class Snapshot(val entries: List<Entry>, val window: Int) {
+        fun sources(): List<SummarySections.SourceMessage> =
+            entries.map { SummarySections.SourceMessage(it.id, it.isBot, it.text, it.timeMillis) }
+    }
 
     private data class FoldRuntime(
         val prefs: Preferences,
@@ -155,6 +164,10 @@ class SummarizerController(
     companion object {
         /** Internal fold-in batch size (decision 15) — not a user setting. */
         const val BATCH_SIZE = 10
+
+        /** Response budget for one section: roomy, so the prompt decides the
+         *  length and a cut-off is the rare failure it reports. */
+        const val SECTION_RESPONSE_TOKENS = 8192
 
         /** Response-token budget for a summary call: roomy enough that a
          *  summary near the word limit is never cut off mid-sentence. */
@@ -236,38 +249,16 @@ class SummarizerController(
         if (manualCompactionRunning || isRunning()) return
         job = scope.launch {
             var advancedAny = false
-            val initialSnapshot = snapshotProvider()
-            val initialPrefs = chatIdProvider().takeIf { it.isNotBlank() }?.let {
-                Preferences.getPreferences(appContext, it)
-            }
-            val initialSummary = initialPrefs?.getSummarizerSummary().orEmpty()
-            val initialFolded = initialPrefs?.getSummarizerFoldedCount() ?: 0
-            val initialOverLength = initialPrefs?.getSummarizerOverLength() == true
-            val initialEpisode = initialPrefs?.getSummarizerEpisode().orEmpty()
-            val initialKind = initialPrefs?.getCondensedConversationKind().orEmpty()
             try {
                 while (true) {
-                    val advanced = foldOneBatch(force, chatName, snapshotProvider)
+                    val advanced = buildOneSection(force, chatName, snapshotProvider)
                     if (!advanced) break
                     advancedAny = true
                 }
             } catch (_: CancellationException) {
-                // Deliberate cancellation — not a Summarizer Error (§4).
-                val running = operationState as? OperationState.Running
-                if (running?.requestedMessages?.let { it >= 21 } == true &&
-                    initialPrefs?.getSavePartialCompactionOnCancel() != true
-                ) {
-                    withContext(NonCancellable) {
-                        initialPrefs?.restoreSummarizerState(
-                            initialSummary,
-                            initialFolded.coerceAtMost(initialSnapshot?.entries?.size ?: initialFolded),
-                            initialOverLength,
-                            initialEpisode,
-                            initialKind
-                        )
-                    }
-                    notifyStateChanged()
-                }
+                // Deliberate cancellation — not a Summarizer Error (§4). Each
+                // section is saved on its own, so finished sections stay and
+                // the unfinished one is simply discarded.
                 setOperationState(
                     OperationState.Cancelled(
                         OperationKind.SUMMARIZING,
@@ -567,8 +558,16 @@ class SummarizerController(
         return true
     }
 
-    /** @return true when a batch was folded and committed (keep looping). */
-    private suspend fun foldOneBatch(
+    /**
+     * Writes one summary section: first any unedited section whose messages
+     * changed, otherwise the next new section past the Complete Messages
+     * window. [snapshotProvider] is read live, before the request and again
+     * when it returns; a result whose messages changed meanwhile is discarded
+     * and the loop starts over from the current conversation.
+     *
+     * @return true to keep looping.
+     */
+    private suspend fun buildOneSection(
         force: Boolean,
         chatName: String,
         snapshotProvider: () -> Snapshot?
@@ -578,74 +577,127 @@ class SummarizerController(
         if (chatId.isBlank()) return false
         val prefs = Preferences.getPreferences(appContext, chatId)
         if (!prefs.getChatUseSummarizer()) return false
-        // Phase 6.2: never fold onto or advance from a rolling summary that
-        // may already contain old inline Include payload material. A failed
-        // compatibility commit leaves canonical history intact and simply
-        // postpones this cycle.
-        if (!prefs.ensureSummarizerProjectionCompatibility()) return false
+        val current = snapshot.sources()
+        if (current.any { it.id.isBlank() }) return false
+        val sections = SummarySectionStore.load(prefs, current) ?: return false
 
-        val entries = snapshot.entries
-        val folded = prefs.getSummarizerFoldedCount().coerceAtMost(entries.size)
-        val windowEdge = (entries.size - snapshot.window.coerceAtLeast(1)).coerceAtLeast(0)
-        val pending = windowEdge - folded
-        if (pending <= 0) return false
-        if (!force && pending < BATCH_SIZE) return false
+        val replacing = sections.firstOrNull { it.awaitsRegeneration }
+        val owned: List<SummarySections.SourceMessage> = if (replacing != null) {
+            val byId = current.associateBy { it.id }
+            replacing.messageIds.mapNotNull { byId[it] }
+        } else {
+            val covered = SummarySections.coveredCount(sections, current)
+            val windowEdge = (current.size - snapshot.window.coerceAtLeast(1)).coerceAtLeast(0)
+            val range = SummarySections.nextRange(current, covered, windowEdge, BATCH_SIZE, force)
+                ?: return false
+            current.subList(range.first, range.last + 1).toList()
+        }
+        if (owned.isEmpty()) return false
+        val start = current.indexOfFirst { it.id == owned.first().id }
+        val context = SummarySections.contextBefore(current, start).toList()
 
         if (operationState !is OperationState.Running) {
             lastFailureCategory = null
             setOperationState(
-                OperationState.Running(OperationKind.SUMMARIZING, chatName, pending, 0)
+                OperationState.Running(OperationKind.SUMMARIZING, chatName, owned.size, 0)
             )
         }
 
         val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.SUMMARY) ?: return false
-        val result = foldBatch(
-            runtime = runtime,
-            entries = entries,
-            folded = folded,
-            pending = pending,
-            summary = prefs.getSummarizerSummary(),
-            priorOverLength = prefs.getSummarizerOverLength()
-        )
-        if (result !is FoldBatchResult.Advanced) return false
-        // A usable batch permanently fixes the processed prefix even if the
-        // user later discards, pauses, or otherwise undoes its derived summary.
-        if (!prefs.advanceSummaryRegenerationLockBoundary(result.foldedCount)) {
+        val text = requestSection(runtime, owned, context) ?: return false
+
+        // Never save a summary written from messages that changed meanwhile.
+        val latest = snapshotProvider()?.sources() ?: return false
+        if (!SummarySections.sourceStillCurrent(owned, context, latest)) return true
+        val fresh = SummarySectionStore.load(prefs, latest) ?: return false
+        val updated = if (replacing != null) {
+            val target = fresh.firstOrNull { it.id == replacing.id }
+            if (target == null || target.edited) return true
+            fresh.map {
+                if (it.id == replacing.id) SummarySections.newSection(owned, context, text, it.id) else it
+            }
+        } else {
+            if (SummarySections.coveredCount(fresh, latest) != start) return true
+            fresh + SummarySections.newSection(owned, context, text)
+        }
+        if (!SummarySectionStore.save(prefs, updated)) {
             recordFailure(
-                prefs,
-                SummarizerErrorCategory.SAVE_FAILED,
-                runtime.endpoint.label,
-                runtime.model,
-                null,
-                "The summary batch was usable, but its permanent regeneration lock could not be saved."
+                prefs, SummarizerErrorCategory.SAVE_FAILED, runtime.endpoint.label, runtime.model,
+                httpStatus = null, detail = null
             )
             return false
         }
-        if (!prefs.commitSummarizerFoldIn(
-                result.summary,
-                result.foldedCount,
-                result.overLength
-            )
-        ) {
-            recordFailure(
-                prefs,
-                SummarizerErrorCategory.SAVE_FAILED,
-                runtime.endpoint.label,
-                runtime.model,
-                null,
-                null
-            )
-            return false
-        }
+        prefs.advanceSummaryRegenerationLockBoundary(SummarySections.coveredCount(updated, latest))
         notifyStateChanged()
         val running = operationState as? OperationState.Running
         if (running?.kind == OperationKind.SUMMARIZING) {
-            setOperationState(
-                running.copy(successfulMessages = running.successfulMessages +
-                    (result.foldedCount - folded))
-            )
+            setOperationState(running.copy(successfulMessages = running.successfulMessages + owned.size))
         }
         return true
+    }
+
+    /**
+     * One section summary call. The response budget is generous so the prompt,
+     * not a token ceiling, decides the length; a reply the provider reports
+     * as stopped at its length limit is a failure and is never saved.
+     * @return the summary text, or null after recording the failure.
+     */
+    private suspend fun requestSection(
+        runtime: FoldRuntime,
+        owned: List<SummarySections.SourceMessage>,
+        context: List<SummarySections.SourceMessage>
+    ): String? {
+        fun role(m: SummarySections.SourceMessage) = if (m.isBot) "Assistant" else "User"
+        val body = SummarizerPrompts.sectionRequestBody(
+            runtime.prompt,
+            context.filter { it.text.isNotBlank() }.map { role(it) to it.text },
+            owned.filter { it.text.isNotBlank() }.map { role(it) to it.text }
+        )
+        val rawResponse = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val choice = try {
+            withContext(Dispatchers.IO) {
+                val client = buildClient(runtime.endpoint, runtime.providerJson, rawResponse)
+                client.chatCompletion(
+                    ChatCompletionRequest(
+                        model = ModelId(runtime.model),
+                        maxTokens = SECTION_RESPONSE_TOKENS,
+                        messages = listOf(ChatMessage(role = ChatRole.User, content = body))
+                    )
+                ).choices.firstOrNull()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val classified = GenerationErrorClassifier.classify(e)
+            recordFailure(
+                runtime.prefs,
+                SummarizerErrorClassifier.categorize(classified),
+                runtime.endpoint.label,
+                runtime.model,
+                classified.httpStatus,
+                SummarizerDetailSanitizer.sanitize(SummarizerErrorDetail.readable(e)),
+                rawProviderError = e.message,
+                rawResponseBody = rawResponse.get()
+            )
+            return null
+        }
+        if (choice?.finishReason?.value == "length") {
+            recordFailure(
+                runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
+                runtime.endpoint.label, runtime.model, null,
+                "The summary stopped at the response length limit before it was finished, so it was not saved."
+            )
+            return null
+        }
+        val text = choice?.message?.content?.toString().orEmpty().trim()
+        if (text.isBlank()) {
+            recordFailure(
+                runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
+                runtime.endpoint.label, runtime.model, null, null
+            )
+            return null
+        }
+        return text
     }
 
     /** Resolve the configured Summary Model, routing, and the [promptKind]

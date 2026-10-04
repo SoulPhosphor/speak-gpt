@@ -3553,6 +3553,15 @@
     <string name="summary_unsummarize_body">This will not delete the summary and you can return to the screen at any time to resummarize using the previous summary.</string>
     <string name="summary_resummarize_title">Resummarize this Conversation?</string>
     <string name="summary_resummarize_body">The AI will no longer receive the summarized messages in full and instead will receive the summary text below.</string>
+    <!-- Summary sections (owner-approved design, Oct 4 2026). -->
+    <string name="summary_section_current_bookmark_desc">Current summary bookmark</string>
+    <string name="summary_section_header_desc">%1$s. Opens conversation preview.</string>
+    <string name="summary_section_time_unknown">Date Not Recorded</string>
+    <string name="summary_section_open_desc">Open summary section</string>
+    <string name="summary_section_menu">Summary Section</string>
+    <string name="conversation_preview_title">Conversation Preview</string>
+    <string name="conversation_preview_start">Summary starts here</string>
+    <string name="conversation_preview_close_desc">Close conversation preview</string>
     <string name="compact_unavailable_with_summarizer">Compact isn\'t available while the Summarizer is on for this chat.</string>
 
     <!-- Compaction Summary screen (owner ruling, Oct 3 2026). -->
@@ -3664,6 +3673,9 @@
     <!-- Model-facing label for the injected summary (decision 14; approved
          July 29 2026). Sent as its own system message, never shown in chat. -->
     <string name="summarizer_injection_header">Summary of the earlier conversation so far:</string>
+    <!-- Model-facing direction ahead of the Summarizer's sections (owner-approved
+         design, Oct 4 2026). Never shown to the user; no dates or IDs follow. -->
+    <string name="summarizer_sections_injection_header">The following conversation summaries are ordered chronologically from oldest to newest. Later summaries describe later parts of the conversation and may update or supersede earlier information.</string>
 
     <!-- Chat redesign: Appearance destination and companion name-style override. -->
     <string name="appearance_title">Appearance</string>

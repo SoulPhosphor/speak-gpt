@@ -33,7 +33,14 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.MessageIdentity
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
+import org.teslasoft.assistant.ui.fragments.dialogs.ConversationPreviewSheet
+import org.teslasoft.assistant.ui.util.SummarySectionsPanel
+import org.teslasoft.assistant.util.summarizer.SummarySectionStore
+import org.teslasoft.assistant.util.summarizer.SummarySections
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 import org.teslasoft.assistant.ui.util.HintConfirmDialog
@@ -53,7 +60,7 @@ import org.teslasoft.assistant.util.summarizer.SummarizerReviewGate
  * its condensed and full form without deleting the condensed text. While
  * the summarizer or compactor runs for this chat, the text is read only.
  */
-class ConversationSummaryActivity : FragmentActivity() {
+class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet.Host {
 
     /** The wording set: summarizer and summaries, or compactor and compaction. */
     enum class Mode(
@@ -109,6 +116,7 @@ class ConversationSummaryActivity : FragmentActivity() {
     private var textReadOnly: TextView? = null
     private var field: TextInputEditText? = null
     private var btnRevert: MaterialButton? = null
+    private var sectionsPanel: SummarySectionsPanel? = null
 
     /** The text as last saved — the Revert target and unsaved-changes baseline. */
     private var savedText = ""
@@ -153,10 +161,27 @@ class ConversationSummaryActivity : FragmentActivity() {
         findViewById<TextView>(R.id.text_condensed_intro)?.setText(mode.introRes)
         ScreenChrome.apply(this, actionBar, btnBack, btnToggle, btnSave)
 
-        val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true
-        savedText = if (compatible) preferences?.getSummarizerSummary().orEmpty() else ""
-        field?.setText(savedInstanceState?.getString(STATE_DRAFT) ?: savedText)
-        field?.addTextChangedListener { refreshRevert() }
+        if (mode == Mode.SUMMARY) {
+            // The Summarizer's sections replace the single text box.
+            field?.visibility = View.GONE
+            btnRevert?.visibility = View.GONE
+            val container = findViewById<android.widget.LinearLayout>(R.id.summary_sections)
+            container.visibility = View.VISIBLE
+            sectionsPanel = SummarySectionsPanel(this, container, onEdited = {}) { sectionId ->
+                openConversationPreview(sectionId)
+            }
+            bindSections(savedInstanceState?.getString(STATE_DRAFT)?.let { decodeDrafts(it) }.orEmpty())
+            if (savedInstanceState == null) {
+                intent.getStringExtra(EXTRA_SECTION_ID)?.let { target ->
+                    sectionsPanel?.target(target, findViewById(R.id.scroll))
+                }
+            }
+        } else {
+            val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true
+            savedText = if (compatible) preferences?.getSummarizerSummary().orEmpty() else ""
+            field?.setText(savedInstanceState?.getString(STATE_DRAFT) ?: savedText)
+            field?.addTextChangedListener { refreshRevert() }
+        }
 
         btnBack?.setOnClickListener { attemptLeave() }
         btnSave?.setOnClickListener { save() }
@@ -188,7 +213,11 @@ class ConversationSummaryActivity : FragmentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putString(STATE_DRAFT, field?.text?.toString().orEmpty())
+        val panel = sectionsPanel
+        outState.putString(
+            STATE_DRAFT,
+            if (panel != null) encodeDrafts(panel.drafts()) else field?.text?.toString().orEmpty()
+        )
     }
 
     /* ------------------------------ run status ------------------------------ */
@@ -234,9 +263,14 @@ class ConversationSummaryActivity : FragmentActivity() {
         }
 
         if (wasLocked && !locked) {
-            savedText = preferences?.getSummarizerSummary().orEmpty()
-            field?.setText(savedText)
+            if (sectionsPanel != null) {
+                bindSections()
+            } else {
+                savedText = preferences?.getSummarizerSummary().orEmpty()
+                field?.setText(savedText)
+            }
         }
+        sectionsPanel?.setLocked(locked)
 
         field?.isFocusable = !locked
         field?.isFocusableInTouchMode = !locked
@@ -248,14 +282,85 @@ class ConversationSummaryActivity : FragmentActivity() {
 
     /* ------------------------------ edit / save ------------------------------ */
 
-    private fun isDirty(): Boolean = (field?.text?.toString() ?: savedText) != savedText
+    private fun isDirty(): Boolean = sectionsPanel?.isDirty()
+        ?: ((field?.text?.toString() ?: savedText) != savedText)
 
     private fun refreshRevert() {
+        if (sectionsPanel != null) return
         btnRevert?.visibility = if (isDirty() && !locked) View.VISIBLE else View.GONE
+    }
+
+    /* ------------------------------ summary sections ------------------------------ */
+
+    /** The chat's stored messages as the panel needs them: identity, role,
+     *  and time (for the date/time headers). */
+    private fun storedMessages(): List<SummarySections.SourceMessage> =
+        ChatPreferences.getChatPreferences().getChatById(this, chatId).map {
+            SummarySections.SourceMessage(
+                MessageIdentity.idOf(it),
+                it["isBot"] == true,
+                "",
+                it[ChatAdapter.KEY_MESSAGE_TIME]?.toString()?.toLongOrNull()
+            )
+        }
+
+    private fun storedSections(): List<SummarySections.Section> =
+        SummarySections.fromJson(preferences?.getSummarySections().orEmpty())
+
+    private fun bindSections(drafts: Map<String, String> = emptyMap()) {
+        sectionsPanel?.bind(storedSections(), storedMessages(), drafts)
+        sectionsPanel?.setLocked(locked)
+    }
+
+    /** Saves each changed section by its stable ID: the user's text becomes
+     *  that section's summary and is never silently replaced. */
+    private fun saveSections(panel: SummarySectionsPanel): Boolean {
+        val prefs = preferences ?: return false
+        val changes = panel.changedTexts()
+        if (changes.isEmpty()) return true
+        val updated = storedSections().map { section ->
+            changes[section.id]?.let { section.copy(text = it, edited = true, needsUpdate = false) } ?: section
+        }
+        return SummarySectionStore.save(prefs, updated)
+    }
+
+    private fun encodeDrafts(drafts: Map<String, String>): String =
+        org.json.JSONObject(drafts as Map<*, *>).toString()
+
+    private fun decodeDrafts(json: String): Map<String, String> = try {
+        val o = org.json.JSONObject(json)
+        o.keys().asSequence().associateWith { o.optString(it) }
+    } catch (_: Exception) {
+        emptyMap()
+    }
+
+    /** From the preview: go to that exact message in the chat, where editing
+     *  and deleting stay. Unsaved summary edits are confirmed first. */
+    override fun onPreviewMessageChosen(messageId: String) {
+        val go = {
+            setResult(RESULT_OK, Intent().putExtra(RESULT_MESSAGE_ID, messageId))
+            finish()
+        }
+        if (isDirty() && !locked) DiscardChangesDialog.show(this) { go() } else go()
+    }
+
+    private fun openConversationPreview(sectionId: String) {
+        ConversationPreviewSheet.newInstance(chatId, sectionId)
+            .show(supportFragmentManager, ConversationPreviewSheet.TAG)
     }
 
     private fun save() {
         if (locked) return
+        sectionsPanel?.let { panel ->
+            if (!saveSections(panel)) {
+                Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                return
+            }
+            panel.markSaved()
+            btnSave?.let { SaveIconFlash.flash(it) }
+            Toast.makeText(this, R.string.companion_editor_saved_toast, Toast.LENGTH_SHORT).show()
+            return
+        }
         val text = field?.text?.toString().orEmpty()
         if (preferences?.commitSummarizerSummaryEdit(text) != true) {
             Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
@@ -366,11 +471,17 @@ class ConversationSummaryActivity : FragmentActivity() {
     companion object {
         private const val EXTRA_CHAT_ID = "chatId"
         private const val EXTRA_MODE = "mode"
+        private const val EXTRA_SECTION_ID = "sectionId"
+
+        /** Result extra: the chat message the user chose in the preview. */
+        const val RESULT_MESSAGE_ID = "goToMessageId"
         private const val STATE_DRAFT = "state_condensed_draft"
 
-        fun createIntent(context: Context, chatId: String, mode: Mode): Intent =
+        /** [sectionId], when given, is scrolled to, flagged, and highlighted. */
+        fun createIntent(context: Context, chatId: String, mode: Mode, sectionId: String? = null): Intent =
             Intent(context, ConversationSummaryActivity::class.java)
                 .putExtra(EXTRA_CHAT_ID, chatId)
                 .putExtra(EXTRA_MODE, mode.name)
+                .putExtra(EXTRA_SECTION_ID, sectionId)
     }
 }

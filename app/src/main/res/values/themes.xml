@@ -896,6 +896,32 @@
          Row.Subtitle (13sp, muted text_subtitle) - this is normal-weight
          body text at full text_title strength, for a screen-level
          explanation that isn't paired with a heading. -->
+    <!-- Summary section date/time header (owner-approved design, Oct 4 2026):
+         protected, generated metadata in a low-emphasis rounded surface,
+         left-aligned and tappable to open the conversation preview. Not a
+         button and not disabled-looking. -->
+    <style name="Widget.App.SummarySection.Header" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/bg_summary_section_header</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingTop">6dp</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- The bookmark flag beside the summary section reached from the chat. -->
+    <style name="Widget.App.SummarySection.Flag" parent="">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:src">@drawable/ic_bookmark_flag</item>
+    </style>
+
     <style name="Widget.App.Screen.Intro" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

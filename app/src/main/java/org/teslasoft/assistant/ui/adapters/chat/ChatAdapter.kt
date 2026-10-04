@@ -144,6 +144,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var bulkActionMode = false
     private var manualCompactionBoundary = 0
     private var summaryRegenerationLockBoundary = 0
+
+    // Summarizer Bookmarks (owner-approved design, Oct 4 2026), by message
+    // ID: replies that begin a summary section show the bookmark flag, and
+    // every reply inside a section offers Summary Section in its menu.
+    private var summarySectionStarts: Map<String, String> = emptyMap()
+    private var summarySectionOwners: Map<String, String> = emptyMap()
     private var compactionRegenerationLockBoundary = 0
 
     // Assistant-side picture, already cascaded by ChatActivity off the main
@@ -218,6 +224,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val MENU_MESSAGE_EDIT = 104
         private const val MENU_MESSAGE_SHARE = 105
         private const val MENU_MESSAGE_DELETE = 106
+        private const val MENU_SUMMARY_SECTION = 107
 
         // Transient inline image-confirmation card row
         // (image-generation-rebuild-plan.md §5). These rows live only in
@@ -418,6 +425,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         ) return
         summaryRegenerationLockBoundary = nextSummary
         compactionRegenerationLockBoundary = nextCompaction
+        notifyDataSetChanged()
+    }
+
+    /** [starts]: section-opening reply ID → section ID. [owners]: every reply
+     *  ID inside a section → its section ID. */
+    fun setSummarySections(starts: Map<String, String>, owners: Map<String, String>) {
+        if (summarySectionStarts == starts && summarySectionOwners == owners) return
+        summarySectionStarts = starts
+        summarySectionOwners = owners
         notifyDataSetChanged()
     }
 
@@ -691,6 +707,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Message Details action on both layouts. Active Memories may precede
         // it on assistant responses whose request carried memory context.
         private val btnDetails: ImageButton = itemView.findViewById(R.id.btn_details)
+        // Summarizer Bookmark flag, right of the info button; assistant only.
+        private val btnSummaryBookmark: ImageButton? = itemView.findViewById(R.id.btn_summary_bookmark)
         // User-only derived persistent-Includes action. It is absent from the
         // assistant layout and is reset on every bind to survive recycling.
         private val btnPersistentIncludes: ImageButton? =
@@ -799,6 +817,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             btnDetails.setOnClickListener { anchor ->
                 if (!bulkActionMode) showMessageDetailsPopup(anchor, display)
+            }
+
+            val bookmarkSection = summarySectionStarts[
+                org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
+            ]
+            btnSummaryBookmark?.visibility = if (bookmarkSection != null) View.VISIBLE else View.GONE
+            btnSummaryBookmark?.setOnClickListener {
+                if (!bulkActionMode && bookmarkSection != null) listener?.onOpenSummarySection(bookmarkSection)
             }
 
             btnMore?.setOnClickListener { anchor ->
@@ -2315,6 +2341,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (!isGeneratedImage) {
                 popup.menu.add(0, MENU_MESSAGE_EDIT, 0, R.string.btn_msg_edit)
             }
+            // Directly below Edit: open the summary section this reply is in.
+            val owningSection = summarySectionOwners[
+                org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
+            ]
+            if (owningSection != null) {
+                popup.menu.add(0, MENU_SUMMARY_SECTION, 0, R.string.summary_section_menu)
+            }
             popup.menu.add(0, MENU_MESSAGE_SHARE, 1, R.string.message_share_action)
             popup.menu.add(0, MENU_MESSAGE_DELETE, 2, R.string.btn_delete)
             popup.setOnMenuItemClickListener { item ->
@@ -2325,6 +2358,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     }
                     MENU_MESSAGE_SHARE -> {
                         btnShare.callOnClick()
+                        true
+                    }
+                    MENU_SUMMARY_SECTION -> {
+                        owningSection?.let { listener?.onOpenSummarySection(it) }
                         true
                     }
                     MENU_MESSAGE_DELETE -> {
@@ -3257,6 +3294,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         fun onMessageEdited()
         fun onMessageDeleted()
+
+        /** Open the Summary screen at this summary section. */
+        fun onOpenSummarySection(sectionId: String) {}
 
         fun onMessageDeleteRequested(position: Int)
         fun onIncludeEdit(includeId: String)

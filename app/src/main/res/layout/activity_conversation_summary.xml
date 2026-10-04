@@ -112,6 +112,16 @@
                 android:text="@string/compaction_summary_read_only"
                 android:visibility="gone" />
 
+            <!-- Summarizer mode: one view_summary_section per section, in
+                 chronological order. Compaction mode uses the single field
+                 below instead. -->
+            <LinearLayout
+                android:id="@+id/summary_sections"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_condensed_text"
                 style="@style/Widget.App.Field.Box"

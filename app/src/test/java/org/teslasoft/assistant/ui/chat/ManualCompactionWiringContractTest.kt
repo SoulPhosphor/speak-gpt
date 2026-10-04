@@ -48,7 +48,7 @@ class ManualCompactionWiringContractTest {
         )
         val manual = controller.substring(
             controller.indexOf("private suspend fun compactSnapshot"),
-            controller.indexOf("private suspend fun foldOneBatch")
+            controller.indexOf("private suspend fun buildOneSection")
         )
         assertTrue(manual.contains("prefs.commitManualCompaction("))
         assertFalse(manual.contains("prefs.commitSummarizerFoldIn("))

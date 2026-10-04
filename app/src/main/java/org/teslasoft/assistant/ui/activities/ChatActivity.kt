@@ -2510,8 +2510,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 historyResult.messages
             ).succeeded
         }
+        // Every stored message gets its permanent ID once (MessageIdentity);
+        // older chats receive them here, the first time they are opened.
         if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
-            LegacyReasoningRepair.repairHistory(historyResult.messages)
+            (LegacyReasoningRepair.repairHistory(historyResult.messages) or
+                org.teslasoft.assistant.preferences.MessageIdentity.ensure(historyResult.messages))
         ) {
             // This method already runs on the startup storage worker. Update
             // the encrypted preference before binding, but let SharedPreferences
@@ -4913,14 +4916,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         summarizerOperationCancel?.setOnClickListener {
             org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
         }
-        btnConversationSummary?.setOnClickListener {
-            val mode = conversationSummaryMode() ?: return@setOnClickListener
-            runSummaryDueBeforeReview()
-            org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.open(
-                chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.CONVERSATION_SUMMARY
-            )
-            startActivity(ConversationSummaryActivity.createIntent(this, chatId, mode))
-        }
+        btnConversationSummary?.setOnClickListener { openConversationSummary() }
         btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
         refreshSummarizerIcons()
         // The next eligible cycle (errors doc §3): opening the chat retries
@@ -5008,6 +5004,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             btnConversationSummary?.contentDescription = desc
             btnConversationSummary?.tooltipText = desc
         }
+        refreshSummarySectionAnchors(summaryMode)
 
         val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
             .fromJson(preferences?.getSummarizerErrors())
@@ -5038,13 +5035,95 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /**
+     * Summarizer Bookmarks in the chat: the reply that opens each summary
+     * section (the first reply after the section's first user prompt) shows
+     * the bookmark flag, and every reply inside a section offers Summary
+     * Section in its menu. Shown only while the Summary review applies.
+     */
+    private fun refreshSummarySectionAnchors(mode: ConversationSummaryActivity.Mode?) {
+        val prefs = preferences
+        if (prefs == null || mode != ConversationSummaryActivity.Mode.SUMMARY) {
+            adapter?.setSummarySections(emptyMap(), emptyMap())
+            return
+        }
+        val byId = messages.associateBy { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }
+        val starts = HashMap<String, String>()
+        val owners = HashMap<String, String>()
+        for (section in org.teslasoft.assistant.util.summarizer.SummarySections.fromJson(prefs.getSummarySections())) {
+            val owned = section.messageIds.mapNotNull { byId[it] }
+            val firstPrompt = owned.indexOfFirst { it["isBot"] != true }
+            val opening = (if (firstPrompt >= 0) owned.drop(firstPrompt + 1) else owned)
+                .firstOrNull { it["isBot"] == true }
+            opening?.let { starts[org.teslasoft.assistant.preferences.MessageIdentity.idOf(it)] = section.id }
+            owned.filter { it["isBot"] == true }
+                .forEach { owners[org.teslasoft.assistant.preferences.MessageIdentity.idOf(it)] = section.id }
+        }
+        adapter?.setSummarySections(starts, owners)
+    }
+
+    override fun onOpenSummarySection(sectionId: String) {
+        openConversationSummary(sectionId)
+    }
+
+    /** The preview's "go to this message" comes back here. */
+    private val conversationSummaryLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            val messageId = result.data?.getStringExtra(ConversationSummaryActivity.RESULT_MESSAGE_ID)
+            if (result.resultCode == RESULT_OK && !messageId.isNullOrBlank()) jumpToMessage(messageId)
+        }
+
+    /** Opens the Summary / Compaction review; [sectionId] (Summarizer only)
+     *  is scrolled to, flagged, and highlighted there. */
+    private fun openConversationSummary(sectionId: String? = null) {
+        val mode = conversationSummaryMode() ?: return
+        runSummaryDueBeforeReview()
+        org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.open(
+            chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.CONVERSATION_SUMMARY
+        )
+        conversationSummaryLauncher.launch(
+            ConversationSummaryActivity.createIntent(
+                this, chatId, mode,
+                sectionId.takeIf { mode == ConversationSummaryActivity.Mode.SUMMARY }
+            )
+        )
+    }
+
+    /** Scrolls the chat to that exact message and briefly emphasizes it. */
+    private fun jumpToMessage(messageId: String) {
+        val target = SearchTargetResolver.resolve(
+            messages = messages,
+            messageId = messageId,
+            legacyOrdinal = null,
+            legacyRole = null,
+            fingerprint = null
+        ) ?: return
+        (chat?.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
+            target,
+            (chat?.height ?: 0) / 4
+        ) ?: chat?.scrollToPosition(target)
+        adapter?.emphasizeSearchTarget(target)
+    }
+
     /** Which review the top-bar icon opens: the summary while this chat uses
      *  the summarizer (or kept a summary without a compaction), otherwise the
      *  compaction once one has completed. Null before either exists. */
     private fun conversationSummaryMode(): ConversationSummaryActivity.Mode? {
         val prefs = preferences ?: return null
         if (chatId.isBlank()) return null
-        val hasSummaryText = prefs.getSummarizerSummary().isNotBlank()
+        // Sections are only loaded (and an older summary carried over) while
+        // the chat uses the summarizer; otherwise only saved sections count.
+        // Never reconcile against a chat that is not readable right now: an
+        // empty message list would look like every section's messages were
+        // deleted. Without a snapshot, only already-saved sections count.
+        val snapshot = if (prefs.getChatUseSummarizer()) summarizerSnapshot() else null
+        val hasSummaryText = if (snapshot != null) {
+            (org.teslasoft.assistant.util.summarizer.SummarySectionStore
+                .load(prefs, snapshot.sources()) ?: emptyList()).isNotEmpty()
+        } else {
+            org.teslasoft.assistant.util.summarizer.SummarySections
+                .fromJson(prefs.getSummarySections()).isNotEmpty()
+        }
         return when {
             prefs.getChatUseSummarizer() ->
                 if (hasSummaryText) ConversationSummaryActivity.Mode.SUMMARY else null
@@ -5249,6 +5328,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (!prefs.ensureSummarizerProjectionCompatibility()) {
             return FrozenSummarizerState(true, 0, null)
         }
+        // The automatic Summarizer sends every summary section, in order,
+        // exactly as the Summary screen shows them, then the messages after
+        // the last section in full. Compact keeps its single summary below.
+        if (prefs.getChatUseSummarizer()) {
+            val sources = summarizerSnapshot()?.sources() ?: return FrozenSummarizerState(true, 0, null)
+            val sections = org.teslasoft.assistant.util.summarizer.SummarySectionStore.load(prefs, sources)
+                ?: return FrozenSummarizerState(true, 0, null)
+            return FrozenSummarizerState(
+                true,
+                org.teslasoft.assistant.util.summarizer.SummarySections.coveredCount(sections, sources),
+                org.teslasoft.assistant.util.summarizer.SummarySections.injection(
+                    getString(R.string.summarizer_sections_injection_header),
+                    sections
+                )
+            )
+        }
         val folded = prefs.getSummarizerFoldedCount()
         val summary = prefs.getSummarizerSummary()
         val injection = summary.takeIf { it.isNotBlank() }?.let {
@@ -5270,11 +5365,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the fold-in bookmark; blank entries advance it without being sent. */
     private fun summarizerSnapshot(): org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? {
         if (isFinishing || isDestroyed || chatStorageUnavailable || chatId.isEmpty()) return null
-        val storedCanonical = messages
+        org.teslasoft.assistant.preferences.MessageIdentity.ensure(messages)
+        val storedMessages = messages
             .filterNot {
                 it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
                     it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
             }
+        val storedCanonical = storedMessages
             .map { message ->
                 CanonicalConversationMessage(
                     isBot = message["isBot"] == true,
@@ -5288,10 +5385,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         val entries = SummarizerSafeIncludeProjectionBuilder
             .summarizerConversation(storedCanonical)
-            .map {
+            .mapIndexed { index, it ->
+            val stored = storedMessages.getOrNull(index)
             org.teslasoft.assistant.util.summarizer.SummarizerController.Entry(
                 isBot = it.isBot,
-                text = it.text
+                text = it.text,
+                id = stored?.let { m -> org.teslasoft.assistant.preferences.MessageIdentity.idOf(m) }.orEmpty(),
+                timeMillis = stored?.get(ChatAdapter.KEY_MESSAGE_TIME)?.toString()?.toLongOrNull()
             )
         }
         return org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot(
@@ -5373,10 +5473,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (preferences?.getChatUseSummarizer() != true) return
         if (preferences?.getUseSummarizedConversationProjection() == false) return
         val snapshot = summarizerSnapshot() ?: return
-        if (org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.runsBeforeReview(
+        val prefs = preferences ?: return
+        val sources = snapshot.sources()
+        val sections = org.teslasoft.assistant.util.summarizer.SummarySectionStore.load(prefs, sources) ?: return
+        if (sections.any { it.awaitsRegeneration } ||
+            org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.runsBeforeReview(
                 snapshot.entries.size,
                 snapshot.window,
-                preferences?.getSummarizerFoldedCount() ?: 0
+                org.teslasoft.assistant.util.summarizer.SummarySections.coveredCount(sections, sources)
             )
         ) {
             summarizerCycle(force = true)
@@ -5391,20 +5495,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (preferences?.getChatUseSummarizer() != true) return
         if (preferences?.getUseSummarizedConversationProjection() == false) return
         val frozen = summarizerSnapshot() ?: return
-        val folded = preferences?.getSummarizerFoldedCount() ?: 0
+        val prefs = preferences ?: return
+        val sources = frozen.sources()
+        val sections = org.teslasoft.assistant.util.summarizer.SummarySectionStore.load(prefs, sources) ?: return
+        val covered = org.teslasoft.assistant.util.summarizer.SummarySections.coveredCount(sections, sources)
         val edge = (frozen.entries.size - frozen.window.coerceAtLeast(1)).coerceAtLeast(0)
-        val pending = if (edge > folded) frozen.entries.subList(folded, edge) else emptyList()
-        if (pending.isEmpty()) {
-            preferences?.setSummarizerCatchUpPending(false)
+        val repairs = sections.filter { it.awaitsRegeneration }
+        val nextRange = org.teslasoft.assistant.util.summarizer.SummarySections.nextRange(
+            sources, covered, edge,
+            org.teslasoft.assistant.util.summarizer.SummarizerController.BATCH_SIZE, force
+        )
+        if (repairs.isEmpty() && nextRange == null) {
+            if (covered >= edge) preferences?.setSummarizerCatchUpPending(false)
             return
         }
+        // Only the messages that will be summarized are sent, never earlier
+        // summaries, so the estimate counts just those.
+        val repairIds = repairs.flatMapTo(HashSet()) { it.messageIds }
+        val pending = frozen.entries.filterIndexed { index, entry ->
+            entry.id in repairIds || (index in covered until edge)
+        }
         val estimatedTokens = org.teslasoft.assistant.util.summarizer
-            .LargeSummarizerOperationPolicy.estimateInputTokens(
-                preferences?.getSummarizerSummary().orEmpty(),
-                pending
-            )
-        val wouldRun = pending.isNotEmpty() &&
-            (force || pending.size >= org.teslasoft.assistant.util.summarizer.SummarizerController.BATCH_SIZE)
+            .LargeSummarizerOperationPolicy.estimateInputTokens("", pending)
+        val wouldRun = true
         if (!allowLarge && wouldRun &&
             org.teslasoft.assistant.util.summarizer.LargeSummarizerOperationPolicy
                 .needsConfirmation(estimatedTokens)
@@ -5425,7 +5538,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         val cyclePreferences = preferences
-        summarizerController?.runCycle(force, chatName, { frozen }) { succeeded ->
+        // Read live: a section is saved only if its messages are unchanged
+        // when the summary comes back.
+        summarizerController?.runCycle(force, chatName, { summarizerSnapshot() }) { succeeded ->
             if (succeeded) cyclePreferences?.setSummarizerCatchUpPending(false)
         }
     }
@@ -7653,6 +7768,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             row[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
                 row[ChatAdapter.KEY_IMAGE_PROGRESS] == true
         }
+        // New messages receive their permanent ID before they are first saved.
+        org.teslasoft.assistant.preferences.MessageIdentity.ensure(messages)
         val persistableMessages =
             if (messages.any(isTransientImageRow)) {
                 ArrayList(messages.filterNot(isTransientImageRow))
@@ -12991,6 +13108,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     override fun onMessageEdited() {
         syncChatProjection()
+        // An edit stops a running summary update; the section that owned the
+        // edited message is then rewritten from the current text.
+        lifecycleScope.launch {
+            summarizerController?.cancelSummarizingAndWait()
+            summarizerCycle()
+        }
     }
 
     override fun onMessageDeleteRequested(position: Int) {

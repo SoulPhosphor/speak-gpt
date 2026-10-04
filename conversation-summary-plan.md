@@ -360,6 +360,28 @@ reduction, more the longer the chat runs.
     uses the summarizer is not compacted: Compact is hidden and /compact
     explains why while Use Summarizer is on.
 
+    **Superseded (owner-approved design, Oct 4 2026): Summarizer Bookmarks
+    and sections.** The automatic Summarizer no longer rewrites one rolling
+    summary. It keeps chronological summary sections, each owning specific
+    messages by their permanent message ID and written only from those
+    messages plus the exchange just before them (context only). A section
+    forms at about ten messages on a turn boundary (a prompt is never split
+    from its reply), or earlier when the user returns on a later calendar
+    date. The chat AI receives a short chronological direction and every
+    section's text in order, exactly as the Conversation Summary screen
+    shows it; there is no hidden digest. Editing or deleting a message stops
+    a running update and affects only the section that owns it (and one
+    that used it as context): an unedited section is rewritten, a section
+    the user edited (or an older single summary carried over as a legacy
+    block) is kept and marked as needing an update. A summary is saved only
+    if its messages are unchanged when it returns, and a reply stopped at
+    the length limit is never saved. The screen shows each section with a
+    protected date/time header (tap: read-only conversation preview opened
+    at the section's start; tap a message to go to it in the chat). The
+    reply that opens a section shows the bookmark flag beside its info
+    button, and replies inside a section offer Summary Section in their
+    menu. Compact is unchanged and keeps its own single summary.
+
 12. **Scope (owner, July 29 2026).** Regular chat requests only. The
     Playground, image-generation commands, and the function-calling /
     fine-tuned-model paths are excluded — they keep today's full-history

@@ -68,6 +68,78 @@ Use brief bullet points, with one fact per bullet. Keep the complete list under 
     """.trimIndent()
 
     /**
+     * Storyteller and Reporter for the automatic Summarizer's sections (owner
+     * ruling, Oct 4 2026): each section is summarized on its own from its own
+     * messages, so these no longer receive or rewrite an existing recap. The
+     * originals above stay the Compact prompts, which still fold into one
+     * running summary.
+     */
+    val SECTION_STORYTELLER = """
+You write a concise narrative summary of one section of this conversation. Below are the messages in that section. The exchange just before the section may also be included, for context only; do not summarize it.
+
+Preserve:
+
+- the main events and their order;
+- the user's goals and concerns;
+- important reasoning or context behind decisions;
+- decisions that were made;
+- unresolved questions, problems, or next steps;
+- the current state of active topics.
+
+Remove repetition, casual filler, and details that no longer affect the conversation. When newer information in the section replaces or corrects older information, keep only the newer version. Do not present suggestions, guesses, or possibilities as settled facts.
+
+Write in clear, compact prose. Be as brief as the section allows; a simple section may need only a sentence or two. Stay under {length} words. Reply only with the summary.
+    """.trimIndent()
+
+    val SECTION_REPORTER = """
+You write compact reference notes for one section of this conversation. Below are the messages in that section. The exchange just before the section may also be included, for context only; do not take notes on it.
+
+Keep only information that may be needed later, including:
+
+- names and relevant identifying details;
+- explicit preferences, requirements, and constraints;
+- decisions that were actually made;
+- current plans and commitments;
+- unresolved tasks or questions;
+- important facts stated by the user;
+- the present status of active work.
+
+Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an assistant suggestion into a decision. If newer information in the section corrects, replaces, completes, or cancels an older item, keep only the newer version.
+
+Use brief bullet points, with one fact per bullet. Keep the list as short as the section allows, and under {length} words. Reply only with the list.
+    """.trimIndent()
+
+    /**
+     * The complete user-message body of one section summary call: the
+     * rendered prompt, the preceding exchange marked as context only, and the
+     * section's own messages. No dates or IDs are sent.
+     */
+    fun sectionRequestBody(
+        renderedPrompt: String,
+        context: List<Pair<String, String>>,
+        sectionMessages: List<Pair<String, String>>
+    ): String {
+        val sb = StringBuilder(renderedPrompt)
+        if ((context + sectionMessages).any { (_, text) ->
+                SummarizerSafeIncludeProjectionBuilder.containsAttachmentReference(text)
+            }
+        ) {
+            sb.append("\n\n").append(ATTACHMENT_RULE)
+        }
+        if (context.isNotEmpty()) {
+            sb.append("\n\nEarlier exchange (context only, do not summarize):\n")
+            for ((role, text) in context) {
+                sb.append('\n').append(role).append(": ").append(text).append('\n')
+            }
+        }
+        sb.append("\n\nMessages in this section:\n")
+        for ((role, text) in sectionMessages) {
+            sb.append('\n').append(role).append(": ").append(text).append('\n')
+        }
+        return sb.toString()
+    }
+
+    /**
      * The shipped Image Summary Prompt (owner-authored, Aug 16 2026). Sent to
      * the Summary Model with a single image prompt so the model receives a
      * short reminder of the image each turn instead of the full prompt. Unlike

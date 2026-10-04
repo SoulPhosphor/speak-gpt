@@ -604,6 +604,14 @@ The required order is:
 
 The user must receive the explanation before reaching the control that depends on it. Do not place explanatory text beneath the button, switch, field, or other control it explains.
 
+## Summary sections
+
+`Widget.App.SummarySection.Header` — a summary section's protected, generated date/time header on the Conversation Summary screen: left-aligned text in a quiet rounded surface (`bg_summary_section_header`, theme colors only), tappable to open the conversation preview. It is metadata, not a button, and never looks disabled.
+
+`Widget.App.SummarySection.Flag` — the Material bookmark flag (`ic_bookmark_flag`) beside the header of the section reached from the chat, and in the conversation preview at a section's starting point. In the chat it sits directly right of a reply's info button (`btn_summary_bookmark`) on the reply that opens a section.
+
+Each section is `layout/view_summary_section.xml`; the shared editing behaviors (Save disc, Revert, read-only lock, Unsummarize/Resummarize) are the screen's existing ones. The conversation preview is `layout/sheet_conversation_preview.xml`, a nearly full-height bottom sheet closed by the double chevron down or a swipe.
+
 ## Screen intro text
 
 ### Standalone top-of-screen paragraph
