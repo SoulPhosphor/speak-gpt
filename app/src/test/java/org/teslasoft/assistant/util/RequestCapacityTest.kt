@@ -82,6 +82,34 @@ class RequestCapacityTest {
         )
     }
 
+
+    @Test
+    fun `native documents count toward serialized size and input tokens`() {
+        val without = payload()
+        val withDocument = without.copy(
+            nativeDocuments = listOf(
+                FrozenNativeDocumentPayload(
+                    base64Characters = 4_000L,
+                    estimatedDocumentTokens = 1_500
+                )
+            )
+        )
+
+        val withoutMeasurement = RequestCapacity.measure(without)
+        val withMeasurement = RequestCapacity.measure(withDocument)
+        assertEquals(
+            withoutMeasurement.requestCharacters + 4_256L,
+            withMeasurement.requestCharacters
+        )
+        assertEquals(
+            withoutMeasurement.serializedUtf8Bytes + 4_256L,
+            withMeasurement.serializedUtf8Bytes
+        )
+        val withoutTokens = RequestCapacity.approximateInputTokens(without) as TokenMeasurement.Approximate
+        val withTokens = RequestCapacity.approximateInputTokens(withDocument) as TokenMeasurement.Approximate
+        assertEquals(withoutTokens.value + 1_500, withTokens.value)
+    }
+
     @Test
     fun `request heap rule includes both character copies bytes overhead and reserve`() {
         val measurement = SerializedRequestMeasurement(
