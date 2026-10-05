@@ -18,6 +18,9 @@ data class NativePdfPayload(
 
 /** Provider syntax lives here, after the canonical conversation has frozen. */
 object PdfRequestSerializer {
+    internal fun canInline(byteSize: Long, maxBytes: Long): Boolean =
+        byteSize in 0..maxBytes
+
     fun augmentOpenAiChatBody(
         body: String,
         pdfs: List<NativePdfPayload>,
