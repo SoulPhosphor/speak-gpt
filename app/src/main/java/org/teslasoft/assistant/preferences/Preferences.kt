@@ -2421,16 +2421,35 @@ class Preferences internal constructor(
     }
 
     fun setPendingIncludes(json: String, synchronous: Boolean = false): Boolean {
-        return runCatching {
-            if (synchronous) {
-                val editor = preferences.edit()
-                editor.putString("pending_includes", json)
-                editor.commit()
-            } else {
+        if (!synchronous) {
+            return runCatching {
                 putString("pending_includes", json)
                 true
-            }
+            }.getOrDefault(false)
+        }
+
+        val key = "pending_includes"
+        val hadPrevious = runCatching { preferences.contains(key) }.getOrDefault(false)
+        val previous = runCatching { preferences.getString(key, null) }.getOrNull()
+
+        val committed = runCatching {
+            val editor = preferences.edit()
+            editor.putString(key, json)
+            editor.commit()
         }.getOrDefault(false)
+        if (committed) return true
+
+        // SharedPreferences updates its process-local map before waiting for
+        // the disk write. A false commit result therefore still needs a
+        // compensating edit so this process cannot observe the rejected
+        // attachment transition. Even if that second disk write also fails,
+        // it restores the previous in-memory value before returning.
+        runCatching {
+            val rollback = preferences.edit()
+            if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
+            rollback.commit()
+        }
+        return false
     }
 
     /**

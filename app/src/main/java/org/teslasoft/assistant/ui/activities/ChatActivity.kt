@@ -3802,6 +3802,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             previousJson.forEach { (message, original) ->
                 message[INCLUDES_KEY] = original
             }
+            // Android may return commit=false after already updating the
+            // process-local SharedPreferences map. Re-save the restored
+            // history to roll that map back as well; even another false disk
+            // result installs the old value in memory before returning.
+            saveSettings(synchronous = true)
             return false
         }
         refreshAfterIncludeChange()

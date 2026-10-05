@@ -13,17 +13,22 @@ import org.junit.Test
 class PendingIncludesPersistenceTest {
     @Test fun synchronousPendingIncludeSaveReportsCommitFailure() {
         val backing = FakeSharedPreferences()
+        backing.edit().putString("pending_includes", "old").commit()
         val failing = object : SharedPreferences by backing {
             override fun edit(): SharedPreferences.Editor {
                 val editor = backing.edit()
                 return object : SharedPreferences.Editor by editor {
-                    override fun commit(): Boolean = false
+                    override fun commit(): Boolean {
+                        editor.commit()
+                        return false
+                    }
                 }
             }
         }
         val preferences = Preferences(failing, FakeSharedPreferences(), "chat")
 
         assertFalse(preferences.setPendingIncludes("[]", synchronous = true))
+        assertTrue(preferences.getPendingIncludes() == "old")
     }
 
     @Test fun synchronousPendingIncludeSaveReportsSuccess() {
