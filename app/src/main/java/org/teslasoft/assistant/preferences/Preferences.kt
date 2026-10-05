@@ -2420,14 +2420,17 @@ class Preferences internal constructor(
         return getString("pending_includes", "")
     }
 
-    fun setPendingIncludes(json: String, synchronous: Boolean = false) {
-        if (synchronous) {
-            preferences.edit(commit = true) {
+    fun setPendingIncludes(json: String, synchronous: Boolean = false): Boolean {
+        return runCatching {
+            if (synchronous) {
+                val editor = preferences.edit()
+                editor.putString("pending_includes", json)
+                editor.commit()
+            } else {
                 putString("pending_includes", json)
+                true
             }
-        } else {
-            putString("pending_includes", json)
-        }
+        }.getOrDefault(false)
     }
 
     /**

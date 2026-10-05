@@ -45,6 +45,27 @@ class PdfAttachmentStoreInstrumentedTest {
         assertFalse(file.exists())
     }
 
+    @Test fun abandonedDuplicateImportDoesNotDeleteSharedBytes() {
+        val include = ChatInclude(
+            id = "abandoned", fileName = "same.pdf", kind = IncludeKind.PDF,
+            form = IncludeForm.FULL, fullText = "", pdfFileHash = "b".repeat(64),
+            pdfMimeType = "application/pdf", pdfByteSize = 9, pdfPageCount = 1
+        )
+        val file = requireNotNull(PdfAttachmentStore.pdfFile(context, chatId, include))
+        file.parentFile?.mkdirs()
+        file.writeText("%PDF-test")
+
+        PdfAttachmentStore.deletePdfIfUnreferenced(
+            context, chatId, include, stillReferenced = true
+        )
+        assertTrue(file.isFile)
+
+        PdfAttachmentStore.deletePdfIfUnreferenced(
+            context, chatId, include, stillReferenced = false
+        )
+        assertFalse(file.exists())
+    }
+
     @Test fun stagedRestoreReplacesLiveTreeAndClearsDiscardedBytes() {
         val old = File(PdfAttachmentStore.chatPdfsDir(context, chatId), "old.pdf")
             .apply { writeText("old") }

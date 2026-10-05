@@ -49,8 +49,6 @@ object PdfAttachmentStore {
         }
     }
 
-    fun deleteOrphanFile(file: File?) { file?.delete() }
-
     fun reconcileChatPdfs(context: Context, chatId: String, referencedHashes: Set<String>) {
         chatPdfsDir(context, chatId).listFiles()?.forEach { file ->
             if (file.extension == "pdf" && file.nameWithoutExtension !in referencedHashes) file.delete()

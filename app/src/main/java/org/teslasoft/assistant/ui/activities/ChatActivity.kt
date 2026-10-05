@@ -3714,11 +3714,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun includesOf(message: HashMap<String, Any>): List<ChatInclude> =
         ChatInclude.listFromJson(message[INCLUDES_KEY]?.toString())
 
-    private fun savePendingIncludes(synchronous: Boolean = false) {
-        preferences?.setPendingIncludes(
+    private fun savePendingIncludes(synchronous: Boolean = false): Boolean {
+        return preferences?.setPendingIncludes(
             if (pendingIncludes.isEmpty()) "" else ChatInclude.listToJson(pendingIncludes),
             synchronous = synchronous
-        )
+        ) ?: false
     }
 
     private fun loadPendingIncludes() {
@@ -3763,6 +3763,52 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         if (!changed) return
         saveSettings()
+        refreshAfterIncludeChange()
+    }
+
+    /**
+     * Applies a PDF transition only when its owning durable store accepts the
+     * synchronous write. The caller may release the original bytes only after
+     * this returns true. On failure the in-memory include is restored too, so
+     * a later unrelated save cannot accidentally persist a transition whose
+     * cleanup was never completed.
+     */
+    private fun commitPdfIncludeUpdate(updated: ChatInclude): Boolean {
+        val pendingIndex = pendingIncludes.indexOfFirst { it.id == updated.id }
+        if (pendingIndex >= 0) {
+            val previous = pendingIncludes[pendingIndex]
+            pendingIncludes[pendingIndex] = updated
+            if (!savePendingIncludes(synchronous = true)) {
+                pendingIncludes[pendingIndex] = previous
+                return false
+            }
+            refreshAfterIncludeChange()
+            return true
+        }
+
+        val previousJson = ArrayList<Pair<HashMap<String, Any>, String>>()
+        for (message in messages) {
+            val existing = includesOf(message)
+            if (existing.none { it.id == updated.id }) continue
+            val original = message[INCLUDES_KEY]?.toString().orEmpty()
+            previousJson.add(message to original)
+            message[INCLUDES_KEY] = ChatInclude.listToJson(
+                existing.map { if (it.id == updated.id) updated else it }
+            )
+        }
+        if (previousJson.isEmpty()) return false
+
+        if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
+            previousJson.forEach { (message, original) ->
+                message[INCLUDES_KEY] = original
+            }
+            return false
+        }
+        refreshAfterIncludeChange()
+        return true
+    }
+
+    private fun refreshAfterIncludeChange() {
         rebuildModelProjection()
         refreshIncludeStrip()
         refreshPersistentIncludeControls()
@@ -3844,7 +3890,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 pendingDocumentImports.remove(sourceFingerprint)
                 if (isFinishing || isDestroyed) {
                     if (pdfResult is PdfImporter.Result.Success) {
-                        withContext(Dispatchers.IO) { PdfAttachmentStore.deleteOrphanFile(pdfResult.onDiskFile) }
+                        // The target is content-addressed and may already be
+                        // owned by another include or an in-flight request.
+                        // Use the normal reference/protection path instead of
+                        // treating every successful import as a new orphan.
+                        maybeDeletePdfBytes(pdfResult.include)
                     }
                     return@launch
                 }
@@ -4018,7 +4068,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val removed = pendingIncludes.removeAt(pendingIndex)
             // Persist the removal BEFORE touching bytes, so a crash mid-delete
             // never leaves a saved include pointing at bytes that are gone.
-            savePendingIncludes(synchronous = true)
+            if (!savePendingIncludes(synchronous = true)) {
+                pendingIncludes.add(pendingIndex, removed)
+                Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                return
+            }
             refreshIncludeStrip()
             if (removed.kind.isImage()) maybeDeleteImageBytes(removed)
             if (removed.kind == IncludeKind.PDF) maybeDeletePdfBytes(removed)
@@ -4056,8 +4110,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (include.kind == IncludeKind.PDF) {
             // Sent removal is local and immediate. A provider failure can never
             // resurrect the original PDF or block the bookmark transition.
-            updateInclude(PdfIncludeLifecycle.removePreviouslySent(include, fallback))
-            maybeDeletePdfBytes(include)
+            if (commitPdfIncludeUpdate(PdfIncludeLifecycle.removePreviouslySent(include, fallback))) {
+                maybeDeletePdfBytes(include)
+            } else {
+                Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+            }
             return
         }
 
@@ -4412,12 +4469,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     getString(R.string.include_condense_failed)
                 else -> {
                     if (include.kind == IncludeKind.PDF) {
-                        updateInclude(PdfIncludeLifecycle.afterCondenseAttempt(latest!!, condensed))
-                        maybeDeletePdfBytes(include)
+                        val committed = commitPdfIncludeUpdate(
+                            PdfIncludeLifecycle.afterCondenseAttempt(latest!!, condensed)
+                        )
+                        if (!committed) {
+                            getString(R.string.include_condense_failed)
+                        } else {
+                            maybeDeletePdfBytes(include)
+                            getString(R.string.include_condense_complete)
+                        }
                     } else {
                         updateInclude(latest!!.withCondensedText(condensed))
+                        getString(R.string.include_condense_complete)
                     }
-                    getString(R.string.include_condense_complete)
                 }
             }
 
