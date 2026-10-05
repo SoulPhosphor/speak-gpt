@@ -22,6 +22,7 @@ class SummarizerStorageDiagnosticsTest {
                     }
                     override fun commit(): Boolean {
                         if (error != null) throw error
+                        editor.commit()
                         return false
                     }
                 }
@@ -46,10 +47,32 @@ class SummarizerStorageDiagnosticsTest {
     }
 
     @Test fun falseCommitHasConcreteDiagnostic() {
-        val prefs = failingPreferences()
+        val backing = FakeSharedPreferences()
+        backing.edit().putString("summary_sections", "old").commit()
+        val failing = object : SharedPreferences by backing {
+            override fun edit(): SharedPreferences.Editor {
+                val editor = backing.edit()
+                return object : SharedPreferences.Editor by editor {
+                    override fun putString(key: String?, value: String?): SharedPreferences.Editor {
+                        editor.putString(key, value)
+                        return this
+                    }
+                    override fun remove(key: String?): SharedPreferences.Editor {
+                        editor.remove(key)
+                        return this
+                    }
+                    override fun commit(): Boolean {
+                        editor.commit()
+                        return false
+                    }
+                }
+            }
+        }
+        val prefs = Preferences(failing, FakeSharedPreferences(), "chat")
         assertFalse(prefs.commitSummarySections("[]"))
         assertTrue(prefs.summarizerStorageFailure is java.io.IOException)
         assertEquals("SharedPreferences.commit() returned false", prefs.summarizerStorageFailure?.message)
+        assertEquals("old", prefs.getSummarySections())
     }
 
     @Test fun migrationAndCheckpointFailuresRetainEvidence() {

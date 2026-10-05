@@ -2884,9 +2884,37 @@ class Preferences internal constructor(
 
     /** Committed synchronously: a section is conversation state that must
      *  survive a process kill once written. */
-    fun commitSummarySections(json: String): Boolean = summarizerStorageCommit("Summarizing: commitSummarySections",
-        org.teslasoft.assistant.util.summarizer.SummarizerDiagnostics.privateSectionValues(json)) {
-        preferences.edit().putString("summary_sections", json).commit()
+    fun commitSummarySections(json: String): Boolean {
+        val key = "summary_sections"
+        val hadPrevious = runCatching { preferences.contains(key) }.getOrDefault(false)
+        val previous = runCatching { preferences.getString(key, null) }.getOrNull()
+        return summarizerStorageCommit(
+            "Summarizing: commitSummarySections",
+            org.teslasoft.assistant.util.summarizer.SummarizerDiagnostics.privateSectionValues(json)
+        ) {
+            try {
+                val committed = preferences.edit().putString(key, json).commit()
+                if (!committed) {
+                    // Android installs an edit in the process-local map before
+                    // it knows whether the disk write succeeded. Restore the
+                    // prior value so rejected sections cannot affect model
+                    // projection or be persisted by an unrelated later edit.
+                    runCatching {
+                        val rollback = preferences.edit()
+                        if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
+                        rollback.commit()
+                    }
+                }
+                committed
+            } catch (error: Exception) {
+                runCatching {
+                    val rollback = preferences.edit()
+                    if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
+                    rollback.commit()
+                }
+                throw error
+            }
+        }
     }
 
     fun getSummarizerCatchUpPending(): Boolean =

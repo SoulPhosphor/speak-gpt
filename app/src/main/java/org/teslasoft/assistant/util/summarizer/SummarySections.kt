@@ -214,8 +214,8 @@ object SummarySections {
         var lastUserCut = -1
         for (i in covered + 1..edge) {
             if (i == edge) {
-                if (!force) return null
                 val cut = if (i == current.size || !current[i].isBot) i else lastUserCut
+                if (!force && (cut <= covered || cut - covered < batchSize)) return null
                 return if (cut > covered) covered until cut else null
             }
             val message = current[i]

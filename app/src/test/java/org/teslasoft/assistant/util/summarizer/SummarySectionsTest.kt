@@ -34,6 +34,13 @@ class SummarySectionsTest {
     }
 
     @Test
+    fun aSectionFormsWhenTheWindowEdgeIsExactlyTheBatchSize() {
+        val messages = chat(12)
+        val range = SummarySections.nextRange(messages, 0, windowEdge = 10, batchSize = 10, force = false, zone = utc)
+        assertEquals(0 until 10, range)
+    }
+
+    @Test
     fun aPromptIsNeverSeparatedFromItsReply() {
         // m0 user, m1 bot, m2 bot (two replies), m3 user ... batch 2 must not cut at m2.
         val messages = listOf(
