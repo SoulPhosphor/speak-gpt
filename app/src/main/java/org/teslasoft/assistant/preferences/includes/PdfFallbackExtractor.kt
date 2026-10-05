@@ -67,10 +67,7 @@ object PdfFallbackExtractor {
                             } else {
                                 usedOcr = true
                                 renderer.openPage(index).use { page ->
-                                    val scale = minOf(
-                                        3f,
-                                        MAX_RENDER_EDGE.toFloat() / max(page.width, page.height).coerceAtLeast(1)
-                                    ).coerceAtLeast(1f)
+                                    val scale = renderScale(page.width, page.height)
                                     val bitmap = Bitmap.createBitmap(
                                         max(1, (page.width * scale).toInt()),
                                         max(1, (page.height * scale).toInt()),
@@ -110,6 +107,16 @@ object PdfFallbackExtractor {
 
     internal fun isMeaningful(text: String): Boolean =
         text.count { it.isLetterOrDigit() } >= MIN_MEANINGFUL_CHARS
+
+    /**
+     * Render small pages at up to 3x for OCR clarity, while bounding oversized
+     * pages so the longest bitmap edge never exceeds [MAX_RENDER_EDGE].
+     */
+    internal fun renderScale(width: Int, height: Int): Float =
+        minOf(
+            3f,
+            MAX_RENDER_EDGE.toFloat() / max(width, height).coerceAtLeast(1)
+        )
 
     private suspend fun embeddedPages(context: Context, file: File, expected: Int): List<String> {
         val out = MutableList(expected.coerceAtLeast(0)) { "" }
