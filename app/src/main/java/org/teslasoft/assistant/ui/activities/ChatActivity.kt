@@ -298,6 +298,7 @@ import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.FrozenChatPayload
+import org.teslasoft.assistant.util.FrozenNativeDocumentPayload
 import org.teslasoft.assistant.util.GenErrorCode
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.imagegen.CreateImageTool
@@ -4546,8 +4547,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         ?.takeIf { it.isFile } ?: error("PDF is unavailable")
                     if (file.length() > MAX_INLINE_NATIVE_PDF_BYTES) error("PDF exceeds inline provider limit")
                     val nativePayload = NativePdfPayload(
-                        include.id, include.fileName,
-                        Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+                        include.id,
+                        include.fileName,
+                        Base64.encodeToString(file.readBytes(), Base64.NO_WRAP),
+                        originalByteSize = file.length(),
+                        pageCount = include.pdfPageCount
                     )
                     val nativeRequest = ChatCompletionRequest(
                         model = ModelId(spec.model),
@@ -10999,7 +11003,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         nativePdfs += NativePdfPayload(
                             include.id,
                             include.fileName,
-                            Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+                            Base64.encodeToString(file.readBytes(), Base64.NO_WRAP),
+                            originalByteSize = file.length(),
+                            pageCount = include.pdfPageCount
                         )
                         StableAttachmentReference.renderPersistentPayload(include)
                     } else {
@@ -12458,7 +12464,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             frequencyPenalty = frequencyPenalty,
             presencePenalty = presencePenalty,
             seed = seed,
-            logitBias = logitBias
+            logitBias = logitBias,
+            nativeDocuments = conversationProjection.nativePdfs.map { pdf ->
+                FrozenNativeDocumentPayload(
+                    base64Characters = pdf.base64Data.length.toLong(),
+                    // Native providers tokenize extracted text and page imagery,
+                    // not the transport base64. Use a conservative estimate
+                    // from both page count and uncompressed source size.
+                    estimatedDocumentTokens = maxOf(
+                        pdf.pageCount.toLong().coerceAtLeast(1L) * 1_500L,
+                        (pdf.originalByteSize + 3L) / 4L
+                    ).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                )
+            }
         )
         val activeMemoryReferences = ActiveMemoryAttribution.fromFinalSelection(
             memoryAssemblyResult?.memoryIds.orEmpty(),
