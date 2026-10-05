@@ -17,4 +17,10 @@ class PdfFallbackExtractorTest {
         assertFalse(PdfFallbackExtractor.isMeaningful("page 1"))
         assertTrue(PdfFallbackExtractor.isMeaningful("Meaningful embedded text 123"))
     }
+
+    @Test fun `render scale downsizes oversized pages and caps small pages`() {
+        assertEquals(0.5f, PdfFallbackExtractor.renderScale(4400, 2200), 0.0001f)
+        assertEquals(3f, PdfFallbackExtractor.renderScale(100, 200), 0.0001f)
+        assertEquals(1f, PdfFallbackExtractor.renderScale(2200, 1100), 0.0001f)
+    }
 }
