@@ -3786,7 +3786,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return true
         }
 
-        val previousJson = ArrayList<Pair<HashMap<String, Any>, String>>()
+        val previousJson = ArrayList<kotlin.Pair<HashMap<String, Any>, String>>()
         for (message in messages) {
             val existing = includesOf(message)
             if (existing.none { it.id == updated.id }) continue
