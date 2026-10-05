@@ -30,7 +30,11 @@ class SummarizerDiagnosticWiringTest {
         val prefs = source("preferences/Preferences.kt")
         assertTrue(prefs.contains("summarizerStorageFailure = error"))
         assertTrue(prefs.contains("SummarizerDiagnostics.localDetail(operation, error, privateValues)"))
-        assertTrue(prefs.contains("fun commitSummarySections(json: String): Boolean = summarizerStorageCommit"))
+        assertTrue(
+            prefs.substringAfter("fun commitSummarySections(json: String): Boolean")
+                .substringBefore("fun getSummarizerCatchUpPending")
+                .contains("summarizerStorageCommit")
+        )
         assertTrue(prefs.substringAfter("fun commitManualCompaction(").substringBefore("fun compactionCheckpoint").contains("summarizerStorageCommit"))
     }
 }
