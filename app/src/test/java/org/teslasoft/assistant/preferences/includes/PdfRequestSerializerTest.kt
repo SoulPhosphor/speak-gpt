@@ -5,6 +5,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PdfRequestSerializerTest {
+    @Test
+    fun `inline size limit routes oversized PDFs to local fallback`() {
+        val limit = 20L * 1024L * 1024L
+        assertTrue(PdfRequestSerializer.canInline(limit, limit))
+        assertFalse(PdfRequestSerializer.canInline(limit + 1L, limit))
+    }
+
     private val payload = NativePdfPayload("inc-1", "report.pdf", "QUJD")
     private val body = """{"model":"m","messages":[{"role":"user","content":"<attachment-reference>{\"id\":\"inc-1\",\"type\":\"document\",\"kind\":\"pdf\",\"name\":\"report.pdf\"}</attachment-reference>"}]}"""
 
