@@ -4518,9 +4518,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val resolvedPdf = if (include.kind == IncludeKind.PDF && endpoint != null) {
                     resolvePdfCapability(condenseModel)
                 } else null
+                val pdfFile = if (include.kind == IncludeKind.PDF) {
+                    PdfAttachmentStore.pdfFile(this@ChatActivity, chatId, include)
+                        ?.takeIf { it.isFile } ?: error("PDF is unavailable")
+                } else null
                 val nativePdf = resolvedPdf?.capability == PdfCapability.SUPPORTED &&
                     resolvedPdf.routing.provider in setOf(
                         PdfCapabilityProvider.OPENAI, PdfCapabilityProvider.OPENROUTER
+                    ) && pdfFile != null && PdfRequestSerializer.canInline(
+                        pdfFile.length(), MAX_INLINE_NATIVE_PDF_BYTES
                     )
                 val sourceInclude = if (include.kind == IncludeKind.PDF && !nativePdf) {
                     val fallback = PdfFallbackExtractor.extract(this@ChatActivity, chatId, include)
@@ -4543,9 +4549,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
                 )
                 if (nativePdf) {
-                    val file = PdfAttachmentStore.pdfFile(this@ChatActivity, chatId, include)
-                        ?.takeIf { it.isFile } ?: error("PDF is unavailable")
-                    if (file.length() > MAX_INLINE_NATIVE_PDF_BYTES) error("PDF exceeds inline provider limit")
+                    val file = requireNotNull(pdfFile)
                     val nativePayload = NativePdfPayload(
                         include.id,
                         include.fileName,
@@ -10994,12 +10998,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     val capability = resolvedPdf?.capability ?: PdfCapability.UNKNOWN
                     val nativeTransportAvailable = resolvedPdf?.routing?.provider == PdfCapabilityProvider.OPENAI ||
                         resolvedPdf?.routing?.provider == PdfCapabilityProvider.OPENROUTER
-                    if (capability == PdfCapability.SUPPORTED && nativeTransportAvailable) {
-                        val file = PdfAttachmentStore.pdfFile(this@ChatActivity, chatId, include)
-                            ?.takeIf { it.isFile } ?: error("PDF ${include.fileName} is unavailable")
-                        if (file.length() > MAX_INLINE_NATIVE_PDF_BYTES) {
-                            error("PDF ${include.fileName} exceeds this provider's inline request limit")
-                        }
+                    val file = PdfAttachmentStore.pdfFile(this@ChatActivity, chatId, include)
+                        ?.takeIf { it.isFile } ?: error("PDF ${include.fileName} is unavailable")
+                    val useNative = capability == PdfCapability.SUPPORTED &&
+                        nativeTransportAvailable && PdfRequestSerializer.canInline(
+                            file.length(), MAX_INLINE_NATIVE_PDF_BYTES
+                        )
+                    if (useNative) {
                         nativePdfs += NativePdfPayload(
                             include.id,
                             include.fileName,
