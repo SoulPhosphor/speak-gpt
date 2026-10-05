@@ -11,7 +11,9 @@ import org.json.JSONObject
 data class NativePdfPayload(
     val includeId: String,
     val fileName: String,
-    val base64Data: String
+    val base64Data: String,
+    val originalByteSize: Long = base64Data.length.toLong() * 3L / 4L,
+    val pageCount: Int = 0
 )
 
 /** Provider syntax lives here, after the canonical conversation has frozen. */
