@@ -26,6 +26,12 @@ data class FrozenImagePayloadPart(
     val detail: String? = null
 ) : FrozenPayloadPart
 
+/** Native document bytes injected at the final provider serialization boundary. */
+data class FrozenNativeDocumentPayload(
+    val base64Characters: Long,
+    val estimatedDocumentTokens: Int
+)
+
 /** Immutable, provider-neutral message in a frozen chat request. */
 data class FrozenPayloadMessage(
     val role: String,
@@ -75,10 +81,12 @@ data class FrozenChatPayload(
     val frequencyPenalty: Double?,
     val presencePenalty: Double?,
     val seed: Int?,
-    val logitBias: Map<String, Int>?
+    val logitBias: Map<String, Int>?,
+    val nativeDocuments: List<FrozenNativeDocumentPayload> = emptyList()
 ) {
     val frozenMessages: List<FrozenPayloadMessage> = messages.toList()
     val frozenLogitBias: Map<String, Int>? = logitBias?.toMap()
+    val frozenNativeDocuments: List<FrozenNativeDocumentPayload> = nativeDocuments.toList()
 }
 
 data class SerializedRequestMeasurement(
@@ -203,7 +211,18 @@ object RequestCapacity {
         counter.fieldName("stream")
         counter.literal("true")
         counter.ascii('}')
-        return counter.measurement()
+        val base = counter.measurement()
+        // Native PDFs are injected after the typed request has frozen. Count
+        // their base64 plus conservative file-part/data-URL framing here so
+        // heap preflight measures the request that will actually serialize.
+        var extra = 0L
+        for (document in payload.frozenNativeDocuments) {
+            extra = saturatedAdd(extra, saturatedAdd(document.base64Characters, 256L))
+        }
+        return SerializedRequestMeasurement(
+            requestCharacters = saturatedAdd(base.requestCharacters, extra),
+            serializedUtf8Bytes = saturatedAdd(base.serializedUtf8Bytes, extra)
+        )
     }
 
     fun estimatedAdditionalMemory(
@@ -249,6 +268,9 @@ object RequestCapacity {
             total += IncludeTextPolicy.estimateTokens(message.role).toLong() + 4L
         }
         total += IncludeTextPolicy.estimateTokens(payload.model).toLong() + 3L
+        for (document in payload.frozenNativeDocuments) {
+            total = saturatedAdd(total, document.estimatedDocumentTokens.toLong().coerceAtLeast(0L))
+        }
         return TokenMeasurement.Approximate(total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
     }
 
