@@ -30,22 +30,18 @@ object PdfRequestSerializer {
         val root = JSONObject(body)
         val messages = root.getJSONArray("messages")
         for (pdf in pdfs) {
-            val message = findOwningMessage(messages, pdf.includeId)
+            // The slot is the marker text part the request builder placed
+            // right after the PDF's label; the file takes exactly its place.
+            val (parts, index) = findSlot(messages, pdf.includeId)
                 ?: throw IllegalStateException("PDF attachment slot is missing")
-            val prior = message.opt("content")
-            val parts = when (prior) {
-                is JSONArray -> prior
-                is String -> JSONArray().put(JSONObject().put("type", "text").put("text", prior))
-                else -> JSONArray()
-            }
             parts.put(
+                index,
                 JSONObject().put("type", "file").put(
                     "file", JSONObject()
                         .put("filename", pdf.fileName)
                         .put("file_data", "data:application/pdf;base64,${pdf.base64Data}")
                 )
             )
-            message.put("content", parts)
         }
         if (openRouterNative) {
             // An explicit native engine prevents OpenRouter from silently
@@ -82,12 +78,27 @@ object PdfRequestSerializer {
         .put("type", "input_file")
         .put("file_id", fileId)
 
-    private fun findOwningMessage(messages: JSONArray, includeId: String): JSONObject? {
-        val marker = "\"id\":\"" + includeId.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    private fun findSlot(messages: JSONArray, includeId: String): Pair<JSONArray, Int>? {
         for (i in 0 until messages.length()) {
-            val message = messages.optJSONObject(i) ?: continue
-            if (message.opt("content")?.toString()?.contains(marker) == true) return message
+            val parts = messages.optJSONObject(i)?.opt("content") as? JSONArray ?: continue
+            for (j in 0 until parts.length()) {
+                val part = parts.optJSONObject(j) ?: continue
+                if (part.optString("type") != "text") continue
+                if (markerId(part.optString("text")) == includeId) return parts to j
+            }
         }
         return null
+    }
+
+    /** The include id of a text part that is exactly one attachment marker. */
+    private fun markerId(text: String): String? {
+        val open = StableAttachmentReference.OPEN_TAG
+        val close = "</attachment-reference>"
+        if (!text.startsWith(open) || !text.endsWith(close)) return null
+        return try {
+            JSONObject(text.substring(open.length, text.length - close.length)).optString("id")
+        } catch (_: Exception) {
+            null
+        }
     }
 }

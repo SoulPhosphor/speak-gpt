@@ -30,6 +30,7 @@ class ChatRequestOrderingSourceTest {
         assertOrdered(
             body,
             "if (conversationProjection.summaryInjection != null)",
+            "msgs.addAll(conversationProjection.foldedIncludes)",
             "val resolvedHistory = conversationProjection.conversation",
             "msgs.addAll(resolvedHistory.dropLast(1))",
             "msgs.add(ChatMessage(role = ChatRole.System, content = assembly.prompt))",
@@ -49,6 +50,7 @@ class ChatRequestOrderingSourceTest {
         assertOrdered(
             body,
             "if (legacyConversationProjection?.summaryInjection != null)",
+            "legacyConversationProjection?.foldedIncludes?.let(msgs::addAll)",
             "val legacyResolvedHistory = legacyConversationProjection?.conversation.orEmpty()",
             "msgs.addAll(legacyResolvedHistory.dropLast(1))",
             "content = assembly.prompt",
@@ -62,7 +64,7 @@ class ChatRequestOrderingSourceTest {
         val body = between(
             source,
             "private suspend fun freezeConversationProjection(",
-            "private fun buildMultiPartUserMessage("
+            "private suspend fun buildUserMessage("
         )
 
         assertTrue(

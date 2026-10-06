@@ -13,15 +13,33 @@ class PdfRequestSerializerTest {
     }
 
     private val payload = NativePdfPayload("inc-1", "report.pdf", "QUJD")
-    private val body = """{"model":"m","messages":[{"role":"user","content":"<attachment-reference>{\"id\":\"inc-1\",\"type\":\"document\",\"kind\":\"pdf\",\"name\":\"report.pdf\"}</attachment-reference>"}]}"""
+    private val marker = """<attachment-reference>{\"id\":\"inc-1\",\"type\":\"document\",\"kind\":\"pdf\",\"name\":\"report.pdf\"}</attachment-reference>"""
+    private val body = """{"model":"m","messages":[""" +
+        """{"role":"user","content":"Earlier text mentioning $marker"},""" +
+        """{"role":"user","content":[{"type":"text","text":"Read this.\n\nUploaded PDF (report.pdf):"},""" +
+        """{"type":"text","text":"$marker"},{"type":"text","text":"Thanks"}]}]}"""
 
-    @Test fun `OpenAI file part uses inline PDF data`() {
+    @Test fun `OpenAI file part replaces the marker slot right after its label`() {
         val root = JSONObject(PdfRequestSerializer.augmentOpenAiChatBody(body, listOf(payload), false))
-        val file = root.getJSONArray("messages").getJSONObject(0)
-            .getJSONArray("content").getJSONObject(1).getJSONObject("file")
+        val messages = root.getJSONArray("messages")
+        assertTrue(messages.getJSONObject(0).get("content") is String)
+        val parts = messages.getJSONObject(1).getJSONArray("content")
+        assertEquals(3, parts.length())
+        assertEquals("Read this.\n\nUploaded PDF (report.pdf):", parts.getJSONObject(0).getString("text"))
+        val file = parts.getJSONObject(1).getJSONObject("file")
         assertEquals("report.pdf", file.getString("filename"))
         assertEquals("data:application/pdf;base64,QUJD", file.getString("file_data"))
+        assertEquals("Thanks", parts.getJSONObject(2).getString("text"))
         assertFalse(root.has("plugins"))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun `missing slot fails instead of sending without the PDF`() {
+        PdfRequestSerializer.augmentOpenAiChatBody(
+            """{"model":"m","messages":[{"role":"user","content":"no slot"}]}""",
+            listOf(payload),
+            false
+        )
     }
 
     @Test fun `OpenRouter forces native parser`() {

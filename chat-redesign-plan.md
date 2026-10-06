@@ -272,6 +272,8 @@ The purpose of these controls is transparency and cost/context management: a use
 
 ### 6.5 Summarizer-safe persistent Includes projection — Phase 6.2
 
+> **Superseded placement (owner ruling, Oct 6 2026).** Each Include's current model-facing content now rides inside the user message it was sent with, after the user's words, introduced by a label naming its type, file name and form (for example "Summary of original uploaded Word document (resume.docx):"). Condense, Reduce, Edit and Remove replace that content in the same position, so the provider cache is lost from that message onward for one turn only, and unchanged attachments stay cached every turn. Includes whose owning message has been folded into the summary travel together, in activation order, immediately after the summary and before the retained history. The rules below about the Summarizer seeing only stable references, never transforming Includes, counting each payload exactly once, and user-origin authority still apply; the separate persistent-layer placement does not.
+
 The conversation Summarizer and the Includes ladder control different things. The Summarizer compresses **conversation history**. Includes control the model-facing form of persistent documents/images. Conversation folding must never silently transform, absorb, move, duplicate, or drop an Include.
 
 Canonical storage does not change: every Include remains owned by the original user message where it entered the chat, and the UI/history continues to present it there. Phase 6.2 changes only the **model-facing projection while Summarizer transmission is active**.

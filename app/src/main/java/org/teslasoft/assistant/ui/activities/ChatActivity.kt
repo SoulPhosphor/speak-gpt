@@ -211,7 +211,8 @@ import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
 import org.teslasoft.assistant.preferences.includes.IncludeRenderer
-import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
+import org.teslasoft.assistant.preferences.includes.RenderedImagePart
+import org.teslasoft.assistant.preferences.includes.RenderedSegment
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import org.teslasoft.assistant.preferences.includes.PdfAttachmentStore
 import org.teslasoft.assistant.preferences.includes.PdfFallbackExtractor
@@ -726,8 +727,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** One fully resolved conversation snapshot shared by measurement/send. */
     private data class FrozenConversationProjection(
-        val persistentIncludes: List<ChatMessage>,
+        /** Attachments whose owning message was folded into the summary. */
+        val foldedIncludes: List<ChatMessage>,
+        /** Retained history; each user message carries its own attachments. */
         val conversation: List<ChatMessage>,
+        /** [conversation] as words and attachment markers only, for memory recall. */
+        val memoryContext: List<ChatMessage>,
         val summaryInjection: String?,
         val hasFullImages: Boolean,
         val nativePdfs: List<NativePdfPayload>
@@ -4601,9 +4606,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     val nativeRequest = ChatCompletionRequest(
                         model = ModelId(spec.model),
                         maxTokens = spec.maxTokens,
+                        // The marker part is the slot the provider boundary
+                        // replaces with the PDF file itself.
                         messages = listOf(ChatMessage(
                             role = ChatRole.User,
-                            content = StableAttachmentReference.serialize(include) + "\n\n" + spec.prompt
+                            content = listOf(
+                                TextPart(StableAttachmentReference.serialize(include)),
+                                TextPart(spec.prompt)
+                            )
                         ))
                     )
                     val previous = currentTurnNativePdfs
@@ -11013,9 +11023,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
-     * Resolves every text/image payload immediately from one canonical
-     * snapshot. The returned ChatMessages own their encoded image bytes, so
-     * later Include edits can only affect a later request.
+     * Resolves every text/image/PDF payload immediately from one canonical
+     * snapshot. The returned ChatMessages own their encoded bytes, so later
+     * Include edits can only affect a later request.
+     *
+     * Each attachment is placed inside the user message it was sent with,
+     * after the user's words and introduced by its label (owner ruling,
+     * Oct 6 2026). Attachments whose message was folded into the summary
+     * travel together in [FrozenConversationProjection.foldedIncludes].
      */
     private suspend fun freezeConversationProjection(
         canonical: List<CanonicalConversationMessage>,
@@ -11029,69 +11044,44 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val cid = chatId
         val nativePdfs = ArrayList<NativePdfPayload>()
         val endpoint = apiEndpointObject
-        val resolvedPdf = if (endpoint != null && projected.persistentIncludes.any {
-                it.include.hasLivePdfBytes()
-            }) resolvePdfCapability(selectedModel) else null
-        val persistent = projected.persistentIncludes.map { unit ->
-            val include = unit.include
-            val persistentText = try {
-                if (include.hasLivePdfBytes()) {
-                    val capability = resolvedPdf?.capability ?: PdfCapability.UNKNOWN
-                    val nativeTransportAvailable = resolvedPdf?.routing?.provider == PdfCapabilityProvider.OPENAI ||
-                        resolvedPdf?.routing?.provider == PdfCapabilityProvider.OPENROUTER
-                    val file = PdfAttachmentStore.pdfFile(this@ChatActivity, chatId, include)
-                        ?.takeIf { it.isFile } ?: error("PDF ${include.fileName} is unavailable")
-                    val useNative = capability == PdfCapability.SUPPORTED &&
-                        nativeTransportAvailable && PdfRequestSerializer.canInline(
-                            file.length(), MAX_INLINE_NATIVE_PDF_BYTES
-                        )
-                    if (useNative) {
-                        nativePdfs += NativePdfPayload(
-                            include.id,
-                            include.fileName,
-                            Base64.encodeToString(file.readBytes(), Base64.NO_WRAP),
-                            originalByteSize = file.length(),
-                            pageCount = include.pdfPageCount
-                        )
-                        StableAttachmentReference.renderPersistentPayload(include)
-                    } else {
-                        val fallback = PdfFallbackExtractor.extract(this@ChatActivity, chatId, include)
-                        val local = include.copy(
-                            fullText = "This is locally extracted PDF text. Page layout, diagrams, charts, and other visual details may not be preserved.\n\n" + fallback.text,
-                            pdfFallbackText = fallback.text,
-                            pdfFallbackProvenance = fallback.provenance
-                        )
-                        StableAttachmentReference.serialize(include) + "\n\n" +
-                            IncludeRenderer.renderUserMessage("", listOf(local))
-                    }
-                } else {
-                    StableAttachmentReference.renderPersistentPayload(include)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                throw PdfPreparationException(include.fileName, e)
-            }
-            val content = ProjectedUserMessage(
-                text = persistentText,
-                imageParts = IncludeRenderer.imagePartsFor(listOf(include))
+        val anyLivePdf = projected.foldedIncludes.any { it.include.hasLivePdfBytes() } ||
+            projected.conversation.any { message -> message.inlineIncludes.any { it.hasLivePdfBytes() } }
+        val resolvedPdf = if (endpoint != null && anyLivePdf) resolvePdfCapability(selectedModel) else null
+
+        val folded = projected.foldedIncludes.map { unit ->
+            buildUserMessage(
+                IncludeRenderer.segmentsFor("", listOf(unit.include)),
+                cid, resolvedPdf, nativePdfs
             )
-            buildMultiPartUserMessage(content, cid)
         }
         val conversation = projected.conversation.map { message ->
             if (message.isBot) {
                 ChatMessage(role = ChatRole.Assistant, content = message.text)
             } else {
-                val content = ProjectedUserMessage(
-                    text = message.text,
-                    imageParts = IncludeRenderer.imagePartsFor(message.inlineIncludes)
+                buildUserMessage(
+                    IncludeRenderer.segmentsFor(message.text, message.inlineIncludes),
+                    cid, resolvedPdf, nativePdfs
                 )
-                buildMultiPartUserMessage(content, cid)
+            }
+        }
+        // Memory recall reads recent turns as words plus attachment markers,
+        // never attachment contents.
+        val memoryContext = projected.conversation.map { message ->
+            if (message.isBot) {
+                ChatMessage(role = ChatRole.Assistant, content = message.text)
+            } else {
+                ChatMessage(
+                    role = ChatRole.User,
+                    content = StableAttachmentReference.renderUserMessage(
+                        message.text, message.inlineIncludes
+                    )
+                )
             }
         }
         FrozenConversationProjection(
-            persistentIncludes = persistent.toList(),
+            foldedIncludes = folded.toList(),
             conversation = conversation.toList(),
+            memoryContext = memoryContext.toList(),
             summaryInjection = summarizerState.summaryInjection,
             hasFullImages = canonical.any { message ->
                 message.includes.any { it.hasLiveImageBytes() }
@@ -11100,51 +11090,110 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
     }
 
-    private fun buildMultiPartUserMessage(
-        projection: ProjectedUserMessage,
-        cid: String
+    /**
+     * Builds one user message from its ordered segments. Adjacent text is
+     * joined; each image part and each native PDF slot stays at its own
+     * position, right after its label. A native PDF is represented here by
+     * its stable marker as a separate text part, which the provider boundary
+     * replaces with the file itself ([PdfRequestSerializer.augmentOpenAiChatBody]).
+     */
+    private suspend fun buildUserMessage(
+        segments: List<RenderedSegment>,
+        cid: String,
+        resolvedPdf: ResolvedPdfCapabilityCheck?,
+        nativePdfs: MutableList<NativePdfPayload>
     ): ChatMessage {
         val parts = ArrayList<ContentPart>()
-        if (projection.text.isNotBlank()) {
-            parts.add(TextPart(projection.text))
+        val pendingText = StringBuilder()
+        fun appendText(text: String) {
+            if (text.isEmpty()) return
+            if (pendingText.isNotEmpty()) pendingText.append("\n\n")
+            pendingText.append(text)
         }
-        for (ref in projection.imageParts) {
-            val include = ChatInclude(
-                id = ref.includeId,
-                fileName = ref.fileName,
-                kind = if (ref.imageMimeType == "image/png") IncludeKind.PNG else IncludeKind.JPEG,
-                form = IncludeForm.FULL,
-                fullText = "",
-                imageFileHash = ref.imageFileHash,
-                imageMimeType = ref.imageMimeType
+        fun flushText() {
+            if (pendingText.isNotBlank()) parts.add(TextPart(pendingText.toString()))
+            pendingText.setLength(0)
+        }
+        for (segment in segments) {
+            when (segment) {
+                is RenderedSegment.Text -> appendText(segment.text)
+                is RenderedSegment.Image -> {
+                    flushText()
+                    parts.add(ImagePart(encodeOutboundImage(segment.part, cid)))
+                }
+                is RenderedSegment.Pdf -> {
+                    val include = segment.include
+                    try {
+                        val capability = resolvedPdf?.capability ?: PdfCapability.UNKNOWN
+                        val nativeTransportAvailable =
+                            resolvedPdf?.routing?.provider == PdfCapabilityProvider.OPENAI ||
+                                resolvedPdf?.routing?.provider == PdfCapabilityProvider.OPENROUTER
+                        val file = PdfAttachmentStore.pdfFile(this@ChatActivity, cid, include)
+                            ?.takeIf { it.isFile } ?: error("PDF ${include.fileName} is unavailable")
+                        val useNative = capability == PdfCapability.SUPPORTED &&
+                            nativeTransportAvailable && PdfRequestSerializer.canInline(
+                                file.length(), MAX_INLINE_NATIVE_PDF_BYTES
+                            )
+                        if (useNative) {
+                            nativePdfs += NativePdfPayload(
+                                include.id,
+                                include.fileName,
+                                Base64.encodeToString(file.readBytes(), Base64.NO_WRAP),
+                                originalByteSize = file.length(),
+                                pageCount = include.pdfPageCount
+                            )
+                            flushText()
+                            parts.add(TextPart(StableAttachmentReference.serialize(include)))
+                        } else {
+                            val fallback = PdfFallbackExtractor.extract(this@ChatActivity, cid, include)
+                            appendText(IncludeRenderer.renderLocalPdf(include, fallback.text))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        throw PdfPreparationException(include.fileName, e)
+                    }
+                }
+            }
+        }
+        flushText()
+        return when {
+            parts.isEmpty() -> ChatMessage(role = ChatRole.User, content = "")
+            parts.size == 1 && parts[0] is TextPart ->
+                ChatMessage(role = ChatRole.User, content = (parts[0] as TextPart).text)
+            else -> ChatMessage(role = ChatRole.User, content = parts)
+        }
+    }
+
+    private fun encodeOutboundImage(ref: RenderedImagePart, cid: String): String {
+        val include = ChatInclude(
+            id = ref.includeId,
+            fileName = ref.fileName,
+            kind = if (ref.imageMimeType == "image/png") IncludeKind.PNG else IncludeKind.JPEG,
+            form = IncludeForm.FULL,
+            fullText = "",
+            imageFileHash = ref.imageFileHash,
+            imageMimeType = ref.imageMimeType
+        )
+        val file = ImageImporter.imageFile(this, cid, include)
+            ?: throw IllegalStateException(
+                "Include ${ref.includeId} is visible but has no outbound image file"
             )
-            val file = ImageImporter.imageFile(this, cid, include)
-                ?: throw IllegalStateException(
-                    "Include ${ref.includeId} is visible but has no outbound image file"
-                )
-            if (!file.exists()) {
-                throw IllegalStateException(
-                    "Include ${ref.includeId} is visible but its outbound image file is missing"
-                )
-            }
-            val bytes = try {
-                file.readBytes()
-            } catch (error: Exception) {
-                throw IllegalStateException(
-                    "Include ${ref.includeId} is visible but its outbound image file is unreadable",
-                    error
-                )
-            }
-            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            parts.add(ImagePart("data:${ref.imageMimeType};base64,$encoded"))
+        if (!file.exists()) {
+            throw IllegalStateException(
+                "Include ${ref.includeId} is visible but its outbound image file is missing"
+            )
         }
-        return if (parts.isEmpty()) {
-            ChatMessage(role = ChatRole.User, content = "")
-        } else if (parts.size == 1 && parts[0] is TextPart) {
-            ChatMessage(role = ChatRole.User, content = projection.text)
-        } else {
-            ChatMessage(role = ChatRole.User, content = parts)
+        val bytes = try {
+            file.readBytes()
+        } catch (error: Exception) {
+            throw IllegalStateException(
+                "Include ${ref.includeId} is visible but its outbound image file is unreadable",
+                error
+            )
         }
+        val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        return "data:${ref.imageMimeType};base64,$encoded"
     }
 
     private fun conversationHasFullImages(
@@ -12363,7 +12412,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 personaId = personaId,
                                 userMessage = loreQuery,
                                 recentContext = recentTurnsContext(
-                                    conversationProjection.conversation
+                                    conversationProjection.memoryContext
                                 ),
                                 modelTag = selectedModel,
                                 // Lore is frozen as its own complete request
@@ -12404,6 +12453,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
 
+        // Attachments whose original message was folded away follow the
+        // summary that replaced it, ahead of the retained history.
+        msgs.addAll(conversationProjection.foldedIncludes)
+
         // Conversation history, all active attachments embedded in their user
         // turns, and the current input have already been frozen in this list.
         // Image bytes are loaded from disk and base64-encoded here (IO thread)
@@ -12414,17 +12467,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // regenerated every turn (owner ruling, Aug 15 2026 — memory and lore
         // used to sit ahead of the whole history and broke prefix caching for
         // it on every single turn).
+        // Each attachment rides in the message it was sent with (owner ruling,
+        // Oct 6 2026), so unchanged attachments stay in the cached prefix every
+        // turn. Memory and Lorebook follow, since those are rebuilt every turn.
         val resolvedHistory = conversationProjection.conversation
         msgs.addAll(resolvedHistory.dropLast(1))
-
-        // One payload unit per attachment, in original activation order,
-        // carrying whatever form the user has it in right now. It sits AFTER
-        // the history on purpose (owner ruling, Aug 29 2026): the history above
-        // it only carries permanent markers, so reducing, condensing, editing
-        // or removing an attachment can no longer rewrite the conversation the
-        // provider has already cached. Memory and Lorebook follow, since those
-        // are rebuilt every turn regardless.
-        msgs.addAll(conversationProjection.persistentIncludes)
 
         memoryAssemblyResult?.let { assembly ->
             msgs.add(ChatMessage(role = ChatRole.System, content = assembly.prompt))
@@ -12783,9 +12830,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
-        // Retry/voice uses the same immutable Phase 6.2 conversation snapshot
-        // as typed Send: persistent user-authority Includes are already above;
-        // only the summary and reference-only conversation remain here.
+        // Retry/voice uses the same immutable conversation snapshot as typed
+        // Send, with the same layout: summary, attachments of folded messages,
+        // then history whose user messages carry their own attachments.
         if (legacyConversationProjection?.summaryInjection != null) {
             msgs.add(
                 ChatMessage(
@@ -12794,6 +12841,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
             )
         }
+        legacyConversationProjection?.foldedIncludes?.let(msgs::addAll)
 
         // Resolved as one ordered list, then split so memory/lore land right
         // before only the newest message: the retained history above them
@@ -12802,10 +12850,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // same fix as the frozen path above).
         val legacyResolvedHistory = legacyConversationProjection?.conversation.orEmpty()
         msgs.addAll(legacyResolvedHistory.dropLast(1))
-
-        // Attachment payloads after the history, before memory and Lorebook —
-        // the same placement as the frozen builder above.
-        legacyConversationProjection?.persistentIncludes?.let(msgs::addAll)
 
         memoryAssemblyResult?.let { assembly ->
             msgs.add(
