@@ -85,18 +85,37 @@ object PdfAttachmentStore {
     }
 
     fun replaceAllFromStaging(context: Context, stagedRoot: File): Boolean {
+        val root = context.getExternalFilesDir(ROOT) ?: File(context.filesDir, ROOT)
+        if (!replaceTreeFromStaging(root, stagedRoot)) return false
+        File(context.filesDir, CACHE_ROOT).deleteRecursively()
+        return true
+    }
+
+    /**
+     * Replaces [root] with the staged chat directories. The whole staged tree is
+     * enumerated before the live root is touched, so an unreadable listing
+     * fails the restore while the existing bytes are still intact.
+     */
+    internal fun replaceTreeFromStaging(
+        root: File,
+        stagedRoot: File,
+        list: (File) -> Array<File>? = { it.listFiles() }
+    ): Boolean {
         return try {
             require(stagedRoot.isDirectory)
-            val root = context.getExternalFilesDir(ROOT) ?: File(context.filesDir, ROOT)
+            val stagedChats = list(stagedRoot) ?: return false
+            val staged = stagedChats.filter(File::isDirectory).map { stagedChat ->
+                val files = list(stagedChat) ?: return false
+                stagedChat.name to files.filter { it.isFile && it.extension == "pdf" }
+            }
             if (root.exists() && !root.deleteRecursively()) return false
             root.mkdirs()
-            stagedRoot.listFiles()?.filter(File::isDirectory)?.forEach { stagedChat ->
-                val destination = File(root, stagedChat.name).apply { mkdirs() }
-                stagedChat.listFiles()?.filter { it.isFile && it.extension == "pdf" }?.forEach { source ->
+            staged.forEach { (chatName, files) ->
+                val destination = File(root, chatName).apply { mkdirs() }
+                files.forEach { source ->
                     source.copyTo(File(destination, source.name), overwrite = false)
                 }
             }
-            File(context.filesDir, CACHE_ROOT).deleteRecursively()
             true
         } catch (_: Exception) {
             false

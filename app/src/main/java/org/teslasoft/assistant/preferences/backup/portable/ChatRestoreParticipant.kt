@@ -191,29 +191,43 @@ class ChatRestoreParticipant internal constructor(
         root: File,
         supplied: Map<String, File>
     ): Boolean = try {
-        root.mkdirs()
         val local = localPdfAssets(plan)
-        plan.chats.forEach { chat ->
-            val destination = File(root, sanitize(chat.chatId))
-            includes(chat).filter(ChatInclude::hasLivePdfBytes).forEach { include ->
-                val hash = include.pdfFileHash ?: error("missing PDF hash")
-                val source = supplied[hash] ?: local[hash] ?: error("missing PDF asset")
-                destination.mkdirs()
-                source.copyTo(File(destination, "$hash.pdf"), overwrite = false)
+        val entries = plan.chats.flatMap { chat ->
+            includes(chat).filter(ChatInclude::hasLivePdfBytes).map { include ->
+                chat.chatId to (include.pdfFileHash ?: error("missing PDF hash"))
             }
         }
-        true
+        stagePdfFiles(root, entries) { hash -> supplied[hash] ?: local[hash] }
     } catch (_: Exception) { false }
 
     private fun includes(chat: ChatLogicalImportPlan.ChatPlan): List<ChatInclude> =
         PdfAttachmentPortableBackup.includes(chat)
 
-    private fun sanitize(value: String): String = value.replace(Regex("[^A-Za-z0-9_-]"), "_")
+    internal companion object {
+        private const val CURRENT_ARCHIVE = "current.zip"
+        private const val DESIRED_ARCHIVE = "desired.zip"
+        private const val CURRENT_PDFS = "current_pdfs"
+        private const val DESIRED_PDFS = "desired_pdfs"
 
-    private companion object {
-        const val CURRENT_ARCHIVE = "current.zip"
-        const val DESIRED_ARCHIVE = "desired.zip"
-        const val CURRENT_PDFS = "current_pdfs"
-        const val DESIRED_PDFS = "desired_pdfs"
+        private fun sanitize(value: String): String = value.replace(Regex("[^A-Za-z0-9_-]"), "_")
+
+        /**
+         * Copies each chat's content-addressed PDF into [root] once. A chat may
+         * hold several live includes of the same PDF content; they share one
+         * staged file, matching the live store.
+         */
+        internal fun stagePdfFiles(
+            root: File,
+            entries: List<kotlin.Pair<String, String>>,
+            sourceFor: (String) -> File?
+        ): Boolean {
+            root.mkdirs()
+            entries.map { (chatId, hash) -> sanitize(chatId) to hash }.distinct().forEach { (chatDir, hash) ->
+                val source = sourceFor(hash) ?: error("missing PDF asset")
+                val destination = File(root, chatDir).apply { mkdirs() }
+                source.copyTo(File(destination, "$hash.pdf"), overwrite = false)
+            }
+            return true
+        }
     }
 }
