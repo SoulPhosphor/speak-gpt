@@ -36,6 +36,14 @@ class XaiPdfFilesTest {
         assertTrue(XaiPdfFiles.TTL_SECONDS in 3_600L..2_592_000L)
     }
 
+    @Test fun `files address sits beside the chat endpoint`() {
+        assertEquals("https://api.x.ai/v1/files", XaiPdfFiles.filesUrl(endpoint))
+        val versionInPath = ApiEndpointObject(
+            "xAI", "https://api.x.ai", "secret", chatEndpoint = "/v1/chat/completions"
+        )
+        assertEquals("https://api.x.ai/v1/files", XaiPdfFiles.filesUrl(versionInPath))
+    }
+
     @Test fun `file id is read from the upload response`() {
         assertEquals("file_abc", XaiPdfFiles.parseFileId("""{"id":"file_abc","object":"file"}"""))
         assertNull(XaiPdfFiles.parseFileId("""{"object":"file"}"""))

@@ -122,11 +122,15 @@ object PdfCapabilityResolver {
         PdfCapabilityProvider.GEMINI -> if (model.startsWith("gemini", true)) PdfCapability.SUPPORTED else PdfCapability.UNKNOWN
         PdfCapabilityProvider.OPENAI -> if (listOf("gpt-4o", "gpt-4.1", "gpt-5", "gpt-6", "o1", "o3", "o4")
                 .any { model.startsWith(it, true) }) PdfCapability.SUPPORTED else PdfCapability.UNKNOWN
-        // xAI documents file input only for agentic Responses-capable Grok 4 models.
-        PdfCapabilityProvider.XAI -> if (listOf("grok-4.20", "grok-4.5", "grok-4.6", "grok-4.7")
-                .any { model.startsWith(it, true) }) PdfCapability.SUPPORTED else PdfCapability.UNKNOWN
+        // xAI publishes no per-model file-input flag (its model metadata lists
+        // only text/image input). These are the models xAI's own SDK and
+        // cookbook attach files to; every other Grok model stays on local text.
+        PdfCapabilityProvider.XAI -> if (model.trim().lowercase() in XAI_FILE_INPUT_MODELS)
+            PdfCapability.SUPPORTED else PdfCapability.UNKNOWN
         else -> PdfCapability.UNKNOWN
     }
+
+    private val XAI_FILE_INPUT_MODELS = setOf("grok-4.20", "grok-4.7")
 
     private fun first(vararg values: PdfCapability) =
         values.firstOrNull { it != PdfCapability.UNKNOWN } ?: PdfCapability.UNKNOWN

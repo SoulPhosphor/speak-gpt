@@ -65,8 +65,11 @@ class PdfDeliveryPolicyTest {
         assertTrue(PdfDeliveryPolicy.usesUploadedFile(PdfCapabilityProvider.XAI))
         assertTrue(native("https://api.x.ai/v1", "grok-4.7", bytes = XaiPdfFiles.MAX_BYTES))
         assertFalse(native("https://api.x.ai/v1", "grok-4.7", bytes = XaiPdfFiles.MAX_BYTES + 1))
+        assertTrue(native("https://api.x.ai/v1", "grok-4.20"))
         // A Grok model without confirmed file input stays on local text.
         assertFalse(native("https://api.x.ai/v1", "grok-3"))
+        assertFalse(native("https://api.x.ai/v1", "grok-4.5"))
+        assertFalse(native("https://api.x.ai/v1", "grok-4.20-non-reasoning"))
     }
 
     @Test fun `PDF header may follow leading bytes within the first kilobyte`() {

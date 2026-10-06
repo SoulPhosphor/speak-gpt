@@ -153,8 +153,19 @@ object XaiPdfFiles {
             .build()
     }
 
-    internal fun filesUrl(endpoint: ApiEndpointObject): String =
-        endpoint.host.trim().trimEnd('/') + "/files"
+    /**
+     * The Files API beside the chat endpoint, composed the same way the chat
+     * request's base URL is: `<base>/chat/completions` becomes `<base>/files`.
+     */
+    internal fun filesUrl(endpoint: ApiEndpointObject): String {
+        var base = endpoint.host.trim()
+        if (!base.endsWith("/")) base += "/"
+        val chat = endpoint.chatEndpoint.ifBlank { ApiEndpointObject.DEFAULT_CHAT_ENDPOINT }
+            .trim().trimStart('/')
+        val full = base + chat
+        val apiBase = if (full.endsWith("chat/completions")) full.removeSuffix("chat/completions") else base
+        return apiBase + "files"
+    }
 
     internal fun parseFileId(body: String): String? = try {
         JSONObject(body).optString("id").takeIf { it.isNotBlank() }
