@@ -71,7 +71,7 @@ class PdfAttachmentStoreInstrumentedTest {
         val imported = PdfImporter.import(context, Uri.fromFile(source), chatId)
             as PdfImporter.Result.Success
 
-        val reloaded = ChatInclude.fromJson(imported.include.toJson())
+        val reloaded = requireNotNull(ChatInclude.fromJson(imported.include.toJson()))
         val file = requireNotNull(PdfAttachmentStore.pdfFile(context, chatId, reloaded))
 
         assertTrue(reloaded.hasLivePdfBytes())
