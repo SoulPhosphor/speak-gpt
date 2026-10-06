@@ -19,28 +19,35 @@ package org.teslasoft.assistant.preferences.includes
  * - Anthropic: its OpenAI-compatible endpoint documents `file` parts as
  *   ignored, which would silently drop the PDF.
  * - Gemini: its OpenAI-compatible endpoint rejects `file` parts.
- * - xAI: file input is documented for its Files and Responses APIs, not this
- *   Chat Completions path.
+ * - xAI: its Chat Completions accepts a `file` part referencing a PDF
+ *   uploaded to its Files API ([XaiPdfFiles]), up to 50 MB.
  * - NanoGPT: its PDF request format for this endpoint is not verified.
  * - Featherless and generic endpoints: no documented PDF transport.
  *
  * UNKNOWN or UNSUPPORTED capability always means local text.
  */
 object PdfDeliveryPolicy {
-    private val NATIVE_TRANSPORTS = setOf(
-        PdfCapabilityProvider.OPENAI,
-        PdfCapabilityProvider.OPENROUTER
-    )
+    /** OpenAI and OpenRouter receive the PDF inline in the request body. */
+    const val MAX_INLINE_BYTES = 20L * 1024L * 1024L
 
-    fun hasNativeTransport(provider: PdfCapabilityProvider?): Boolean =
-        provider in NATIVE_TRANSPORTS
+    fun hasNativeTransport(provider: PdfCapabilityProvider?): Boolean = maxNativeBytes(provider) > 0
+
+    /** The largest PDF this route can carry natively; zero when it cannot. */
+    fun maxNativeBytes(provider: PdfCapabilityProvider?): Long = when (provider) {
+        PdfCapabilityProvider.OPENAI, PdfCapabilityProvider.OPENROUTER -> MAX_INLINE_BYTES
+        PdfCapabilityProvider.XAI -> XaiPdfFiles.MAX_BYTES
+        else -> 0L
+    }
+
+    /** xAI references an uploaded copy; the others carry the bytes inline. */
+    fun usesUploadedFile(provider: PdfCapabilityProvider?): Boolean =
+        provider == PdfCapabilityProvider.XAI
 
     fun useNative(
         provider: PdfCapabilityProvider?,
         capability: PdfCapability,
-        byteSize: Long,
-        maxInlineBytes: Long
+        byteSize: Long
     ): Boolean = capability == PdfCapability.SUPPORTED &&
         hasNativeTransport(provider) &&
-        PdfRequestSerializer.canInline(byteSize, maxInlineBytes)
+        PdfRequestSerializer.canInline(byteSize, maxNativeBytes(provider))
 }

@@ -11,7 +11,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 class PdfDeliveryPolicyTest {
     @get:Rule val temp = TemporaryFolder()
 
-    private val limit = 20L * 1024L * 1024L
+    private val limit = PdfDeliveryPolicy.MAX_INLINE_BYTES
 
     private fun endpoint(host: String) = ApiEndpointObject("test", host, "key")
 
@@ -20,7 +20,7 @@ class PdfDeliveryPolicyTest {
         val ep = endpoint(host)
         val provider = PdfCapabilityProvider.forEndpoint(ep)
         return PdfDeliveryPolicy.useNative(
-            provider, PdfCapabilityResolver.resolve(ep, model), bytes, limit
+            provider, PdfCapabilityResolver.resolve(ep, model), bytes
         )
     }
 
@@ -33,32 +33,40 @@ class PdfDeliveryPolicyTest {
     }
 
     @Test fun `unknown and unsupported capability always use local text`() {
-        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.OPENAI, PdfCapability.UNKNOWN, 1, limit))
-        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.OPENROUTER, PdfCapability.UNKNOWN, 1, limit))
-        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.OPENAI, PdfCapability.UNSUPPORTED, 1, limit))
+        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.OPENAI, PdfCapability.UNKNOWN, 1))
+        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.OPENROUTER, PdfCapability.UNKNOWN, 1))
+        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.OPENAI, PdfCapability.UNSUPPORTED, 1))
     }
 
     @Test fun `confirmed OpenRouter route sends the original PDF`() {
-        assertTrue(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.OPENROUTER, PdfCapability.SUPPORTED, 1, limit))
+        assertTrue(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.OPENROUTER, PdfCapability.SUPPORTED, 1))
     }
 
     @Test fun `NanoGPT uses local text even with native PDF evidence until its transport is verified`() {
         assertFalse(native("https://nano-gpt.com/api/v1", "vision-model"))
-        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.NANOGPT, PdfCapability.SUPPORTED, 1, limit))
+        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.NANOGPT, PdfCapability.SUPPORTED, 1))
     }
 
     @Test fun `Featherless and generic endpoints use local text`() {
         assertFalse(native("https://api.featherless.ai/v1", "vision-model"))
         assertFalse(native("https://custom.example/v1", "vision-model"))
-        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.GENERIC, PdfCapability.SUPPORTED, 1, limit))
+        assertFalse(PdfDeliveryPolicy.useNative(PdfCapabilityProvider.GENERIC, PdfCapability.SUPPORTED, 1))
     }
 
-    @Test fun `OpenAI-compatible Anthropic Gemini and xAI endpoints never drop a PDF into an unsupported part`() {
+    @Test fun `OpenAI-compatible Anthropic and Gemini endpoints never drop a PDF into an unsupported part`() {
         // The model can read PDFs, but these endpoints ignore or reject the
         // file part, so the PDF must arrive as local text instead.
         assertFalse(native("https://api.anthropic.com/v1", "claude-sonnet-4"))
         assertFalse(native("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-3-pro"))
-        assertFalse(native("https://api.x.ai/v1", "grok-4.7"))
+    }
+
+    @Test fun `confirmed xAI file-capable model uploads the original PDF up to 50 MB`() {
+        assertTrue(native("https://api.x.ai/v1", "grok-4.7"))
+        assertTrue(PdfDeliveryPolicy.usesUploadedFile(PdfCapabilityProvider.XAI))
+        assertTrue(native("https://api.x.ai/v1", "grok-4.7", bytes = XaiPdfFiles.MAX_BYTES))
+        assertFalse(native("https://api.x.ai/v1", "grok-4.7", bytes = XaiPdfFiles.MAX_BYTES + 1))
+        // A Grok model without confirmed file input stays on local text.
+        assertFalse(native("https://api.x.ai/v1", "grok-3"))
     }
 
     @Test fun `PDF header may follow leading bytes within the first kilobyte`() {

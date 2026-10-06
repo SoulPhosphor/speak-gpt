@@ -31,6 +31,10 @@ object PdfAttachmentStore {
     fun fallbackMetadataFile(context: Context, chatId: String, hash: String): File =
         fallbackDir(context, chatId).resolve("$hash.json")
 
+    /** Provider-side copies of this chat's PDFs (transport cache, never canonical). */
+    fun remoteFilesRecord(context: Context, chatId: String): File =
+        fallbackDir(context, chatId).resolve("remote-files.json")
+
     private fun fallbackDir(context: Context, chatId: String): File =
         File(File(context.filesDir, CACHE_ROOT), ImageImporter.sanitizeChatId(chatId)).apply { mkdirs() }
 

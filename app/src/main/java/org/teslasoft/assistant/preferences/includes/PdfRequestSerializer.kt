@@ -11,9 +11,12 @@ import org.json.JSONObject
 data class NativePdfPayload(
     val includeId: String,
     val fileName: String,
+    /** Inline PDF bytes; empty when the provider receives [fileId] instead. */
     val base64Data: String,
     val originalByteSize: Long = base64Data.length.toLong() * 3L / 4L,
-    val pageCount: Int = 0
+    val pageCount: Int = 0,
+    /** A provider-side uploaded copy (xAI Files API), referenced by id. */
+    val fileId: String? = null
 )
 
 /** Provider syntax lives here, after the canonical conversation has frozen. */
@@ -34,14 +37,14 @@ object PdfRequestSerializer {
             // right after the PDF's label; the file takes exactly its place.
             val (parts, index) = findSlot(messages, pdf.includeId)
                 ?: throw IllegalStateException("PDF attachment slot is missing")
-            parts.put(
-                index,
-                JSONObject().put("type", "file").put(
-                    "file", JSONObject()
-                        .put("filename", pdf.fileName)
-                        .put("file_data", "data:application/pdf;base64,${pdf.base64Data}")
-                )
-            )
+            val file = if (pdf.fileId != null) {
+                JSONObject().put("file_id", pdf.fileId)
+            } else {
+                JSONObject()
+                    .put("filename", pdf.fileName)
+                    .put("file_data", "data:application/pdf;base64,${pdf.base64Data}")
+            }
+            parts.put(index, JSONObject().put("type", "file").put("file", file))
         }
         if (openRouterNative) {
             // An explicit native engine prevents OpenRouter from silently

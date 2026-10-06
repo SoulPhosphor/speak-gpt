@@ -222,6 +222,7 @@ import org.teslasoft.assistant.preferences.includes.NativePdfPayload
 import org.teslasoft.assistant.preferences.includes.PdfCapability
 import org.teslasoft.assistant.preferences.includes.PdfCapabilityProvider
 import org.teslasoft.assistant.preferences.includes.PdfDeliveryPolicy
+import org.teslasoft.assistant.preferences.includes.XaiPdfFiles
 import org.teslasoft.assistant.preferences.includes.PdfCapabilityMetadataClient
 import org.teslasoft.assistant.preferences.includes.PdfCapabilityResolver
 import org.teslasoft.assistant.preferences.includes.PdfCapabilityStore
@@ -423,7 +424,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
          *  to say what the file IS, without paying to send it all again. */
         private const val ARTIFACT_EXCERPT_CHARS = 2000
         /** Conservative inline/base64 preflight below documented provider request ceilings. */
-        private const val MAX_INLINE_NATIVE_PDF_BYTES = 20L * 1024L * 1024L
 
         /** Pins a split raw response to the lifecycle recorder for that exact request. */
         private val responseLifecycleRecorderAttribute =
@@ -4263,12 +4263,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         val referenced = pdfBytesStillReferenced(hash, include.id)
         val cid = chatId
+        val appContext = applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             PdfAttachmentStore.deletePdfIfUnreferenced(
-                this@ChatActivity, cid, include,
+                appContext, cid, include,
                 stillReferenced = referenced,
                 fallbackStillReferenced = referenced
             )
+            // The provider-side copy goes with the local bytes it was made from.
+            if (!referenced) {
+                XaiPdfFiles.deleteForHash(appContext, cid, hash) { id ->
+                    ApiEndpointPreferences.getApiEndpointPreferences(appContext)
+                        .getApiEndpoint(appContext, id)
+                }
+            }
         }
     }
 
@@ -4586,8 +4594,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val nativePdf = resolvedPdf != null && pdfFile != null && PdfDeliveryPolicy.useNative(
                     resolvedPdf.routing.provider,
                     resolvedPdf.capability,
-                    pdfFile.length(),
-                    MAX_INLINE_NATIVE_PDF_BYTES
+                    pdfFile.length()
                 )
                 val sourceInclude = if (include.kind == IncludeKind.PDF && !nativePdf) {
                     val fallback = PdfFallbackExtractor.extract(this@ChatActivity, chatId, include)
@@ -4610,13 +4617,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
                 )
                 if (nativePdf) {
-                    val file = requireNotNull(pdfFile)
-                    val nativePayload = NativePdfPayload(
-                        include.id,
-                        include.fileName,
-                        Base64.encodeToString(file.readBytes(), Base64.NO_WRAP),
-                        originalByteSize = file.length(),
-                        pageCount = include.pdfPageCount
+                    val nativePayload = nativePdfPayload(
+                        include, requireNotNull(pdfFile), resolvedPdf?.routing?.provider, chatId
                     )
                     val nativeRequest = ChatCompletionRequest(
                         model = ModelId(spec.model),
@@ -11141,20 +11143,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     try {
                         val file = PdfAttachmentStore.pdfFile(this@ChatActivity, cid, include)
                             ?.takeIf { it.isFile } ?: error("PDF ${include.fileName} is unavailable")
+                        val provider = resolvedPdf?.routing?.provider
                         val useNative = PdfDeliveryPolicy.useNative(
-                            resolvedPdf?.routing?.provider,
+                            provider,
                             resolvedPdf?.capability ?: PdfCapability.UNKNOWN,
-                            file.length(),
-                            MAX_INLINE_NATIVE_PDF_BYTES
+                            file.length()
                         )
                         if (useNative) {
-                            nativePdfs += NativePdfPayload(
-                                include.id,
-                                include.fileName,
-                                Base64.encodeToString(file.readBytes(), Base64.NO_WRAP),
-                                originalByteSize = file.length(),
-                                pageCount = include.pdfPageCount
-                            )
+                            nativePdfs += nativePdfPayload(include, file, provider, cid)
                             flushText()
                             parts.add(TextPart(StableAttachmentReference.serialize(include)))
                         } else {
@@ -11176,6 +11172,32 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 ChatMessage(role = ChatRole.User, content = (parts[0] as TextPart).text)
             else -> ChatMessage(role = ChatRole.User, content = parts)
         }
+    }
+
+    /** The original PDF for a native route: inline bytes, or xAI's uploaded copy. */
+    private suspend fun nativePdfPayload(
+        include: ChatInclude,
+        file: java.io.File,
+        provider: PdfCapabilityProvider?,
+        cid: String
+    ): NativePdfPayload = if (PdfDeliveryPolicy.usesUploadedFile(provider)) {
+        val endpoint = apiEndpointObject ?: error("No selected AI endpoint")
+        NativePdfPayload(
+            include.id,
+            include.fileName,
+            base64Data = "",
+            originalByteSize = file.length(),
+            pageCount = include.pdfPageCount,
+            fileId = XaiPdfFiles.fileIdFor(this, cid, endpoint, include, file)
+        )
+    } else {
+        NativePdfPayload(
+            include.id,
+            include.fileName,
+            Base64.encodeToString(file.readBytes(), Base64.NO_WRAP),
+            originalByteSize = file.length(),
+            pageCount = include.pdfPageCount
+        )
     }
 
     private fun encodeOutboundImage(ref: RenderedImagePart, cid: String): String {
