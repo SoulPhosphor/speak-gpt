@@ -98,7 +98,7 @@ class SummaryResummarizeWiringContractTest {
         assertTrue(branch.contains("pendingRecompactBoundary = boundary"))
         assertTrue(activity.contains("askToRecompactAfterDelete(boundary, sourceChanged = true)"))
         assertTrue(activity.contains("realignCondensedBoundaries(index + 1, end)"))
-        assertTrue(activity.contains("pendingRetryMessageId?.let { last[org.teslasoft.assistant.preferences.MessageIdentity.KEY] = it }"))
+        assertTrue(activity.contains("RegenerationRecovery.foldInto(last, history, pendingRetryMessageId)"))
     }
 
     @Test fun inFlightGuardStopsInsteadOfRestartingBeforeTheChangeDecision() {

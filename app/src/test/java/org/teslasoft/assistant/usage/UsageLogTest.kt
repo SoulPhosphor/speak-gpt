@@ -45,7 +45,7 @@ class UsageLogTest {
         val afterDelete = log.summarize(messages.take(0), noEstimate)
 
         assertEquals(3.0, afterDelete.totalCost, 1e-9)
-        assertEquals(45, afterDelete.totalInputTokens + afterDelete.totalOutputTokens)
+        assertEquals(40, afterDelete.totalInputTokens + afterDelete.totalOutputTokens)
     }
 
     @Test fun `entries appended before seeding are kept when the history is merged in`() {

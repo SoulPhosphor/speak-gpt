@@ -50,7 +50,7 @@ class SummarizerRoutingWiringTest {
         assertTrue(controller.contains("DedicatedModelRoutingPolicy.favoriteForRequest"))
         assertTrue(controller.contains("ProviderRoutingResolver.resolve"))
         assertTrue(controller.contains("ProviderRoutingSerializer.augmentBody"))
-        assertTrue(controller.contains("buildClient(endpoint, routingResolution.providerJson)"))
+        assertTrue(controller.contains("buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)"))
     }
 
     @Test
