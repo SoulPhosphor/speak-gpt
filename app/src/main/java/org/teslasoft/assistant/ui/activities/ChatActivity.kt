@@ -4116,10 +4116,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (include.kind == IncludeKind.PDF) {
             // Sent removal is local and immediate. A provider failure can never
             // resurrect the original PDF or block the bookmark transition.
-            if (commitPdfIncludeUpdate(PdfIncludeLifecycle.removePreviouslySent(include, fallback))) {
-                maybeDeletePdfBytes(include)
-            } else {
+            if (!commitPdfIncludeUpdate(PdfIncludeLifecycle.removePreviouslySent(include, fallback))) {
                 Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                return
+            }
+            // Like other documents, the model-written reminder replaces the
+            // fallback when/if it arrives. A FULL PDF has no stored text, so
+            // its bytes are released only after the reminder has read them.
+            artifactJobs.remove(include.id)?.cancel()
+            val pdfInclude = include
+            val job = CoroutineScope(Dispatchers.Main).launch {
+                val written = try {
+                    requestPdfArtifactLine(pdfInclude)
+                } finally {
+                    maybeDeletePdfBytes(pdfInclude)
+                }
+                if (isFinishing || isDestroyed || written == null) return@launch
+                val latest = findIncludeById(pdfInclude.id) ?: return@launch
+                if (latest.form == IncludeForm.ARTIFACT && latest.artifactLine == fallback) {
+                    updateInclude(latest.copy(artifactLine = written))
+                }
+            }
+            artifactJobs[include.id] = job
+            job.invokeOnCompletion {
+                if (artifactJobs[include.id] === job) artifactJobs.remove(include.id)
             }
             return
         }
@@ -4290,7 +4310,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * for a removed attachment. The caller has already applied a usable
      * filename fallback, so a failed request remains silent.
      */
-    private suspend fun requestArtifactLine(include: ChatInclude): String? {
+    private suspend fun requestArtifactLine(
+        include: ChatInclude,
+        sourceText: String = include.modelText()
+    ): String? {
         val client = ai ?: return null
         val lineModel = model.ifBlank { preferences?.getModel() ?: "" }
         if (lineModel.isBlank()) return null
@@ -4300,7 +4323,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val spec = IncludeAuxiliaryRequestPolicy.artifact(
                     include = include,
                     selectedModel = lineModel,
-                    excerptCharacters = ARTIFACT_EXCERPT_CHARS
+                    excerptCharacters = ARTIFACT_EXCERPT_CHARS,
+                    sourceText = sourceText
                 )
                 val request = ChatCompletionRequest(
                     model = ModelId(spec.model),
@@ -4318,6 +4342,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * Reminder for a removed PDF. A CONDENSED PDF already carries its notes; a
+     * FULL PDF is read through the local extraction/OCR fallback while its
+     * bytes are still on disk. Extraction failure keeps the filename fallback.
+     */
+    private suspend fun requestPdfArtifactLine(include: ChatInclude): String? {
+        if (!include.hasLivePdfBytes()) return requestArtifactLine(include)
+        val text = include.pdfFallbackText?.takeIf { it.isNotBlank() } ?: try {
+            PdfFallbackExtractor.extract(this, chatId, include).text
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return null
+        }
+        return requestArtifactLine(include, text)
     }
 
     private suspend fun requestImageArtifactLine(include: ChatInclude): String? {

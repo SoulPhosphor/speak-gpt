@@ -62,10 +62,16 @@ object IncludeAuxiliaryRequestPolicy {
         """.trimIndent()
     )
 
+    /**
+     * [sourceText] defaults to the include's model-facing text. A FULL PDF has
+     * none (its payload is the original file), so its caller passes the
+     * locally extracted text instead.
+     */
     fun artifact(
         include: ChatInclude,
         selectedModel: String,
-        excerptCharacters: Int
+        excerptCharacters: Int,
+        sourceText: String = include.modelText()
     ): RequestSpec = RequestSpec(
         model = selectedModel,
         maxTokens = ARTIFACT_MAX_TOKENS,
@@ -77,7 +83,7 @@ object IncludeAuxiliaryRequestPolicy {
             File name: ${include.fileName}
 
             <document>
-            ${include.modelText().take(excerptCharacters)}
+            ${sourceText.take(excerptCharacters)}
             </document>
         """.trimIndent()
     )
