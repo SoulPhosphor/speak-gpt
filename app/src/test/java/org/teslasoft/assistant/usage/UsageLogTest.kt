@@ -82,7 +82,7 @@ class UsageLogTest {
         val logged = reply("m1", record("a", 10, 5, 1.0))
         val log = UsageLog.EMPTY.seed(listOf(logged, legacy), 1L)
 
-        val summary = log.summarize(listOf(logged, legacy)) { TokenCounts(4, 2, 6) }
+        val summary = log.summarize(listOf(logged, legacy), legacyEstimate = { TokenCounts(4, 2, 6) })
 
         assertEquals(2, summary.groups.sumOf { it.recordCount })
         assertTrue(summary.groups.any { it.containsEstimatedTokens })
