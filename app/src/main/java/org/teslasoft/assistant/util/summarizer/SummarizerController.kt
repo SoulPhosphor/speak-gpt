@@ -34,7 +34,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -48,6 +50,14 @@ import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.util.GenerationErrorClassifier
+import org.teslasoft.assistant.providers.ReportedProviderParser
+import org.teslasoft.assistant.usage.AuxiliaryUsage
+import org.teslasoft.assistant.usage.ProviderUsageAttempt
+import org.teslasoft.assistant.usage.TokenPricingCatalogClient
+import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.UsageCategory
+import org.teslasoft.assistant.usage.UsageLog
+import org.teslasoft.assistant.usage.UsageLogStore
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.observer.ResponseObserver
@@ -446,14 +456,18 @@ class SummarizerController(
         val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
         return try {
             withContext(Dispatchers.IO) {
-                val client = buildClient(endpoint, routingResolution.providerJson)
                 val request = ChatCompletionRequest(
                     model = ModelId(model),
                     maxTokens = 200,
                     messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                 )
-                client.chatCompletion(request)
-                    .choices.firstOrNull()?.message?.content?.toString().orEmpty()
+                withSummarizerUsage(
+                    Preferences.getPreferences(appContext, chatIdProvider()),
+                    endpoint, model, requestFavorite?.selectedProvider.orEmpty()
+                ) { attempt ->
+                    buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
+                        .chatCompletion(request)
+                }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
             }.trim().ifBlank { null }
         } catch (e: CancellationException) {
             throw e
@@ -747,14 +761,18 @@ class SummarizerController(
         val privateValues = (owned + context).map { it.text } + listOf(body, runtime.endpoint.apiKey)
         val choice = try {
             withContext(Dispatchers.IO) {
-                val client = buildClient(runtime.endpoint, runtime.providerJson, evidence)
-                evidence.dispatched = true
-                client.chatCompletion(
-                    ChatCompletionRequest(
-                        model = ModelId(runtime.model),
-                        messages = listOf(ChatMessage(role = ChatRole.User, content = body))
+                withSummarizerUsage(
+                    runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider
+                ) { attempt ->
+                    val client = buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)
+                    evidence.dispatched = true
+                    client.chatCompletion(
+                        ChatCompletionRequest(
+                            model = ModelId(runtime.model),
+                            messages = listOf(ChatMessage(role = ChatRole.User, content = body))
+                        )
                     )
-                ).choices.firstOrNull()
+                }.choices.firstOrNull()
             }
         } catch (e: CancellationException) {
             throw e
@@ -909,14 +927,17 @@ class SummarizerController(
             val text: String
             try {
                 text = withContext(Dispatchers.IO) {
-                    val client = buildClient(runtime.endpoint, runtime.providerJson, evidence)
                     val request = ChatCompletionRequest(
                         model = ModelId(runtime.model),
                         messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
-                    evidence.dispatched = true
-                    client.chatCompletion(request)
-                        .choices.firstOrNull()?.message?.content?.toString().orEmpty()
+                    withSummarizerUsage(
+                        runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider
+                    ) { attempt ->
+                        val client = buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)
+                        evidence.dispatched = true
+                        client.chatCompletion(request)
+                    }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
                 }.trim()
             } catch (e: CancellationException) {
                 throw e
@@ -1166,6 +1187,51 @@ class SummarizerController(
     }
 
     /**
+     * Runs one Summarizer or Compact request and logs what it cost to the
+     * chat's usage log under summarization. Counts and charges come only from
+     * the provider's response; a failed request is logged only when the
+     * provider reported usage.
+     */
+    private suspend fun <T> withSummarizerUsage(
+        prefs: Preferences,
+        endpoint: ApiEndpointObject,
+        model: String,
+        requestedProvider: String,
+        block: suspend (ProviderUsageAttempt) -> T
+    ): T = coroutineScope {
+        val attempt = ProviderUsageAttempt(
+            requestedModel = model,
+            fallbackProvider = requestedProvider.trim()
+                .ifBlank { TokenUsageAccounting.PROVIDER_NOT_REPORTED },
+            apiEndpoint = endpoint.host
+        )
+        // The response observer runs beside the client; wait for it before
+        // reading the attempt.
+        attempt.beginObservation()
+        val pricing = async(Dispatchers.IO) { TokenPricingCatalogClient.load(endpoint, model) }
+        var succeeded = false
+        try {
+            val result = block(attempt)
+            succeeded = true
+            result
+        } finally {
+            withContext(NonCancellable) {
+                val record = AuxiliaryUsage.record(attempt, pricing, succeeded) { reportedModel ->
+                    TokenPricingCatalogClient.load(endpoint, reportedModel)
+                }
+                if (record != null) {
+                    withContext(Dispatchers.IO) {
+                        UsageLogStore.append(
+                            prefs,
+                            listOf(UsageLog.entry(UsageCategory.SUMMARIZATION, null, record))
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Same auth handling as the chat funnel and the Memory Assistant, but
      * with THIS endpoint's own Connection Timeout and Response Time — the
      * error wording tells the user to raise exactly those values (§2.3/2.4).
@@ -1179,7 +1245,10 @@ class SummarizerController(
         // exact raw response body the provider returned for this call is stored
         // here, so a failure can log what the AI service actually sent back —
         // e.g. an error notice returned in place of a completion.
-        rawResponseSink: SummarizerDiagnostics.RequestEvidence? = null
+        rawResponseSink: SummarizerDiagnostics.RequestEvidence? = null,
+        // Usage capture: the provider's reported counts and charge for this
+        // call, read from the same response body.
+        usageAttempt: ProviderUsageAttempt? = null
     ): OpenAI {
         val isBearerAuth = endpoint.authType == ApiEndpointObject.AUTH_BEARER
         val extraHeaders: Map<String, String> = when (endpoint.authType) {
@@ -1205,11 +1274,24 @@ class SummarizerController(
                 proxy = null,
                 retry = RetryStrategy(maxRetries = 0),
                 httpClientConfig = {
-                    if (rawResponseSink != null) {
+                    if (rawResponseSink != null || usageAttempt != null) {
                         install(ResponseObserver) {
                             onResponse { response ->
-                                rawResponseSink.status = response.status.value
-                                rawResponseSink.body = response.bodyAsText()
+                                try {
+                                    val body = response.bodyAsText()
+                                    rawResponseSink?.status = response.status.value
+                                    rawResponseSink?.body = body
+                                    if (usageAttempt != null) {
+                                        if (response.status.value in 200..299) {
+                                            ReportedProviderParser.observeCompletedBody(body)
+                                                ?.let(usageAttempt::noteRawObservation)
+                                        } else {
+                                            usageAttempt.noteHttpResponse(response.status.value, body)
+                                        }
+                                    }
+                                } finally {
+                                    usageAttempt?.finishObservation()
+                                }
                             }
                         }
                     }

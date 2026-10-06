@@ -132,6 +132,8 @@ object PerChatSettingKeys {
         "hide_recompact_hint",
         "hide_unsummarize_hint",
         "hide_resummarize_hint",
+        "usage_log",
+        "pending_regeneration",
         "summary_sections",
         "summary_resummarize_choice",
         "compaction_stale",

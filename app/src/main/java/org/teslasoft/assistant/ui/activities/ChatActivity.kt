@@ -279,6 +279,9 @@ import org.teslasoft.assistant.usage.TokenPricingCatalogClient
 import org.teslasoft.assistant.usage.TokenPricingSnapshot
 import org.teslasoft.assistant.usage.TokenUsageAccounting
 import org.teslasoft.assistant.usage.TurnUsageRecord
+import org.teslasoft.assistant.usage.UsageCategory
+import org.teslasoft.assistant.usage.UsageLog
+import org.teslasoft.assistant.usage.UsageLogStore
 import org.teslasoft.assistant.ui.chat.ChatComposerLayout
 import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportFormatter
@@ -1190,9 +1193,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         prefixTokens += count
                     }
                 }
-                TokenUsageAccounting.summarizeMessages(
-                    snapshot
-                ) { index -> legacyCounts[index] ?: TokenCounts(null, null, null) }
+                val estimate: (Int) -> TokenCounts = { index ->
+                    legacyCounts[index] ?: TokenCounts(null, null, null)
+                }
+                val log = preferences?.let { UsageLogStore.read(it) }
+                if (log != null && log.seeded) {
+                    log.summarize(snapshot, estimate)
+                } else {
+                    TokenUsageAccounting.summarizeMessages(snapshot, estimate)
+                }
         }
         conversationUsageSummary = summary
         usageIn = summary.totalInputTokens
@@ -2561,6 +2570,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 historyResult.messages,
                 synchronous = false
             )
+        }
+        // A regeneration the app closed during: put the removed reply back,
+        // or fold the new reply into its versions, then forget it.
+        if (ChatStorageHealth.isAuthoritative(historyResult.state)) {
+            recoverPendingRegeneration(preparedPreferences, chatPreferences, preparedChatId, historyResult.messages)
+        }
+        // Copy the usage already stored in messages into the chat's usage log
+        // once, before any delete or regeneration in this session can drop it.
+        if (ChatStorageHealth.isAuthoritative(historyResult.state)) {
+            UsageLogStore.seed(preparedPreferences, historyResult.messages)
         }
 
         return ChatStartupResult(
@@ -4364,7 +4383,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         )
                     )
                 )
-                client.chatCompletion(request).choices.firstOrNull()?.message?.content
+                withAttachmentUsage(spec.model, include.id) { client.chatCompletion(request) }
+                    .choices.firstOrNull()?.message?.content
             }
             IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
         } catch (_: Exception) {
@@ -4420,7 +4440,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         ChatMessage(role = ChatRole.User, content = parts)
                     )
                 )
-                val raw = client.chatCompletion(request)
+                val raw = withAttachmentUsage(lineModel, include.id) { client.chatCompletion(request) }
                     .choices.firstOrNull()?.message?.content
                 IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
             }
@@ -4633,16 +4653,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             )
                         ))
                     )
-                    val previous = currentTurnNativePdfs
-                    currentTurnNativePdfs = listOf(nativePayload)
-                    try {
-                        withGenerationRequestContext { client.chatCompletion(nativeRequest) }
-                            .choices.firstOrNull()?.message?.content?.trim()
-                    } finally {
-                        currentTurnNativePdfs = previous
-                    }
+                    withAttachmentUsage(spec.model, include.id, listOf(nativePayload)) {
+                        client.chatCompletion(nativeRequest)
+                    }.choices.firstOrNull()?.message?.content?.trim()
                 } else {
-                    client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+                    withAttachmentUsage(spec.model, include.id) { client.chatCompletion(request) }
+                        .choices.firstOrNull()?.message?.content?.trim()
                 }
             }
             if (text.isNullOrBlank()) {
@@ -4800,7 +4816,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         ChatMessage(role = ChatRole.User, content = parts)
                     )
                 )
-                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+                withAttachmentUsage(spec.model, include.id) { client.chatCompletion(request) }
+                    .choices.firstOrNull()?.message?.content?.trim()
             }
             if (text.isNullOrBlank()) {
                 Result.failure(IllegalStateException("Reduce returned no text"))
@@ -7403,6 +7420,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } catch (_: Exception) {
             false
         }
+        if (!isGenerationRequest && boundContext?.auxiliaryUsage == true) {
+            boundContext.usageAttempt?.let {
+                request.attributes.put(providerUsageAttemptAttribute, it)
+            }
+            return
+        }
         if (isGenerationRequest) {
             recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
             (boundContext?.usageAttempt ?: currentProviderUsageAttempt)?.let {
@@ -8334,6 +8357,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // No sends into a chat whose stored history is locked or preserved-
         // corrupt (Round 4) — the blocking dialog owns this screen.
         if (chatStorageUnavailable) return
+        // A new turn never starts with a regeneration left unsettled.
+        if (shouldAdd) settlePendingRegeneration()
         if (preparedTurn != null) {
             // Intentionally do not re-read historical Include state here.
             // Phase 6.2 freezes that state for this dispatch; an edit/reduce/
@@ -9297,7 +9322,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private data class GenerationRequestContext(
         val usageAttempt: ProviderUsageAttempt?,
         val lifecycle: ResponseLifecycleRecorder?,
-        val nativePdfs: List<NativePdfPayload>
+        val nativePdfs: List<NativePdfPayload>,
+        /** A Condense/Reduce/reminder request: capture its usage only, with no
+         *  chat-turn diagnostics attached. */
+        val auxiliaryUsage: Boolean = false
     )
     private val generationRequestContext = ThreadLocal<GenerationRequestContext?>()
     private var currentTurnNativePdfs: List<NativePdfPayload> = emptyList()
@@ -9769,6 +9797,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         ) {
             return
         }
+        settlePendingRegeneration()
 
         // A send action always closes the software keyboard. Capacity or
         // capability checks may continue asynchronously, but the tap has
@@ -10752,6 +10781,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  reply, which is never versioned. */
     private var pendingRetryVariants: MutableList<HashMap<String, String>>? = null
 
+    /** The reply a Retry removed, kept (and saved) until the regeneration
+     *  settles so it can be put back when no new reply is produced. Null for
+     *  a generated-image reply, whose file is deleted with it. */
+    private var pendingRetryOriginal: org.teslasoft.assistant.ui.chat.RegenerationRecovery.Pending? = null
+
     /**
      * Fold the just-finished regenerated reply into its turn's version list as
      * the newest version and make it the canonical one, preserving every prior
@@ -10761,22 +10795,103 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun mergePendingRetryVariants() {
         val history = pendingRetryVariants ?: return
-        pendingRetryVariants = null
         val last = messages.lastOrNull() ?: return
         if (last["isBot"] != true) return
+        pendingRetryVariants = null
 
-        history.add(ChatAdapter.snapshotVariant(last))
-        last[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(history)
-        last[ChatAdapter.KEY_CANONICAL_VARIANT] = (history.size - 1).toString()
-        last[ChatAdapter.KEY_DISPLAY_VARIANT] = (history.size - 1).toString()
-        pendingRetryMessageId?.let { last[org.teslasoft.assistant.preferences.MessageIdentity.KEY] = it }
-        pendingRetryMessageId = null
+        org.teslasoft.assistant.ui.chat.RegenerationRecovery.foldInto(last, history, pendingRetryMessageId)
         adapter?.notifyItemChanged(messages.size - 1)
+        finishPendingRegeneration()
+    }
+
+    /**
+     * A Retry that ends without a reply of its own (stopped before it began,
+     * blocked before it was sent, or a tool-only turn with no text) puts the
+     * removed reply back with every earlier version, instead of leaving the
+     * turn with no reply. A reply that does exist is folded in as usual.
+     */
+    private fun settlePendingRegeneration() {
+        if (pendingRetryVariants == null) return
+        val last = messages.lastOrNull()
+        // An image card still on screen means the turn has not finished.
+        if (last?.get(ChatAdapter.KEY_IMAGE_CONFIRMATION) == true ||
+            last?.get(ChatAdapter.KEY_IMAGE_PROGRESS) == true
+        ) return
+        if (last?.get("isBot") == true) {
+            mergePendingRetryVariants()
+            saveSettings()
+            return
+        }
+        pendingRetryVariants = null
+        val original = pendingRetryOriginal?.original
+        if (original != null && last != null &&
+            org.teslasoft.assistant.preferences.MessageIdentity.idOf(last) == pendingRetryOriginal?.precedingMessageId
+        ) {
+            putRestoredReply(original)
+        }
+        finishPendingRegeneration()
+    }
+
+    /** Startup worker: settles a regeneration saved by a run that ended
+     *  before it could. The history is written before the marker is cleared. */
+    private fun recoverPendingRegeneration(
+        prefs: Preferences,
+        chatPreferences: ChatPreferences,
+        chatId: String,
+        history: ArrayList<HashMap<String, Any>>
+    ) {
+        val pending = org.teslasoft.assistant.ui.chat.RegenerationRecovery
+            .decode(prefs.getPendingRegeneration())
+        if (pending == null) {
+            if (prefs.getPendingRegeneration().isNotEmpty()) prefs.clearPendingRegeneration()
+            return
+        }
+        val changed = when (val outcome = org.teslasoft.assistant.ui.chat.RegenerationRecovery.resolve(history, pending)) {
+            is org.teslasoft.assistant.ui.chat.RegenerationRecovery.Outcome.Restore -> {
+                history.add(outcome.original)
+                true
+            }
+            is org.teslasoft.assistant.ui.chat.RegenerationRecovery.Outcome.Fold -> {
+                // Reconcile a reply the app closed during before it is saved
+                // as a version, as the history loader does for every reply.
+                MessageCompletionState.reconcileOnLoad(
+                    outcome.reply[MessageCompletionState.KEY_STATE]?.toString()
+                )?.let {
+                    outcome.reply[MessageCompletionState.KEY_STATE] = it
+                    outcome.reply[MessageCompletionState.KEY_STATE_DETAIL] = MessageCompletionState.DETAIL_PROCESS_DEATH
+                }
+                org.teslasoft.assistant.ui.chat.RegenerationRecovery.foldInto(
+                    outcome.reply,
+                    org.teslasoft.assistant.ui.chat.RegenerationRecovery.historyOf(pending.original),
+                    org.teslasoft.assistant.preferences.MessageIdentity.idOf(pending.original)
+                )
+                true
+            }
+            org.teslasoft.assistant.ui.chat.RegenerationRecovery.Outcome.Unchanged -> false
+        }
+        val saved = !changed || chatPreferences.saveChatHistory(
+            this, chatId, history, synchronous = true
+        ) == ChatStorageHealth.WriteOutcome.OK
+        if (saved) prefs.clearPendingRegeneration()
+    }
+
+    private fun putRestoredReply(original: HashMap<String, Any>) {
+        messages.add(original)
+        adapter?.notifyItemInserted(messages.size - 1)
+        syncChatProjection()
+        saveSettings()
+    }
+
+    private fun finishPendingRegeneration() {
+        pendingRetryMessageId = null
+        pendingRetryOriginal = null
         val recompactBoundary = pendingRecompactBoundary
         pendingRecompactBoundary = null
         lifecycleScope.launch {
             // Terminal callers persist the new canonical reply before we read it.
             kotlinx.coroutines.yield()
+            // A Retry started meanwhile has saved its own reply; keep it.
+            if (pendingRetryVariants == null) preferences?.clearPendingRegeneration()
             recompactBoundary?.let { askToRecompactAfterDelete(it, sourceChanged = true) }
             summarizerCycle()
         }
@@ -10815,12 +10930,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Attach only completed requests. Usage-only tool calls use the initiating
      * user message as a durable carrier; visible completions use their assistant
      * message and may mirror compact display metadata. */
-    private fun attachUsageRecords(
+    private suspend fun attachUsageRecords(
         message: HashMap<String, Any>,
         newRecords: List<TurnUsageRecord>,
         mirrorCompactMetadata: Boolean = true
     ) {
         if (newRecords.isEmpty()) return
+        // The chat's usage log is the lasting account: deleting or
+        // regenerating this message later never removes what was spent.
+        appendUsageLog(
+            UsageCategory.CHAT,
+            org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
+            newRecords
+        )
         val records = TokenUsageAccounting.decodeRecords(
             message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString()
         ) + newRecords
@@ -10837,6 +10959,77 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // never an output/completion-token field and stays absent if incomplete.
         records.mapNotNull { it.totalTokens }.takeIf { it.size == records.size }
             ?.sum()?.let { message[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+    }
+
+    /**
+     * Runs one Condense, Reduce or removal-reminder request and logs what it
+     * cost under Attachments. Usage is read from the provider's own response;
+     * a request that fails is logged only when the provider reported usage.
+     */
+    private suspend fun <T> withAttachmentUsage(
+        requestModel: String,
+        includeId: String,
+        nativePdfs: List<NativePdfPayload> = emptyList(),
+        block: suspend () -> T
+    ): T {
+        val endpoint = apiEndpointObject
+        val attempt = ProviderUsageAttempt(
+            requestedModel = requestModel,
+            fallbackProvider = fallbackServingProvider(),
+            apiEndpoint = endpoint?.host.orEmpty()
+        )
+        val pricing = lifecycleScope.async(Dispatchers.IO) {
+            TokenPricingCatalogClient.load(endpoint, requestModel)
+        }
+        val context = GenerationRequestContext(attempt, null, nativePdfs, auxiliaryUsage = true)
+        var succeeded = false
+        try {
+            val result = kotlinx.coroutines.withContext(
+                generationRequestContext.asContextElement(context)
+            ) { block() }
+            succeeded = true
+            return result
+        } finally {
+            withContext(kotlinx.coroutines.NonCancellable) {
+                val record = auxiliaryUsageRecord(attempt, pricing, succeeded)
+                if (record != null) {
+                    appendUsageLog(UsageCategory.ATTACHMENTS, includeOwnerMessageId(includeId), listOf(record))
+                }
+            }
+        }
+    }
+
+    private suspend fun auxiliaryUsageRecord(
+        attempt: ProviderUsageAttempt,
+        pricingDeferred: Deferred<TokenPricingCatalog>,
+        succeeded: Boolean
+    ): TurnUsageRecord? = org.teslasoft.assistant.usage.AuxiliaryUsage.record(
+        attempt, pricingDeferred, succeeded
+    ) { reportedModel -> TokenPricingCatalogClient.load(apiEndpointObject, reportedModel) }
+
+    /** The permanent id of the message an attachment was sent with, if sent. */
+    private fun includeOwnerMessageId(includeId: String): String? =
+        messages.firstOrNull { message -> includesOf(message).any { it.id == includeId } }
+            ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }
+            ?.ifBlank { null }
+
+    /** Adds requests to this chat's usage log. Seeding first is a no-op once
+     *  the chat has opened, and runs before [messages] gains these records. */
+    private suspend fun appendUsageLog(
+        category: UsageCategory,
+        messageId: String?,
+        records: List<TurnUsageRecord>
+    ) {
+        val prefs = preferences ?: return
+        if (records.isEmpty() || chatStorageUnavailable) return
+        val snapshot = messages.map { HashMap(it) }
+        withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
+            UsageLogStore.seed(prefs, snapshot)
+            UsageLogStore.append(
+                prefs,
+                records.map { UsageLog.entry(category, messageId?.ifBlank { null }, it) }
+            )
+        }
     }
 
     private suspend fun completePendingUsageRecord(): TurnUsageRecord? {
@@ -11292,6 +11485,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         request: String,
         shouldPronounce: Boolean,
         preparedTurn: PreparedRegularTurn? = null
+    ) {
+        try {
+            generateResponseUnsettled(request, shouldPronounce, preparedTurn)
+        } finally {
+            // Every way a regeneration can end passes here; one that produced
+            // no reply puts the removed reply back.
+            settlePendingRegeneration()
+        }
+    }
+
+    private suspend fun generateResponseUnsettled(
+        request: String,
+        shouldPronounce: Boolean,
+        preparedTurn: PreparedRegularTurn?
     ) {
         // The single generation funnel is also the single guard point: no
         // generation into a chat whose stored history is locked or
@@ -13664,6 +13871,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // assistant turn's existing version list (or wrap its single current
         // reply) BEFORE it is removed; the regenerated reply is folded in as the
         // newest version once it finishes.
+        settlePendingRegeneration()
         val last = messages.lastOrNull()
         val imageRetry = last?.get("message")?.toString()?.startsWith("~file:") == true ||
             (preferences?.getImagineCommandGlobal() == true &&
@@ -13676,6 +13884,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             else mutableListOf(ChatAdapter.snapshotVariant(last))
         } else {
             null
+        }
+        // Saved before the reply is removed, so a regeneration that never
+        // produces a reply (or an app closed mid-way) can put it back.
+        pendingRetryOriginal = if (pendingRetryMessageId != null &&
+            org.teslasoft.assistant.imagegen.GeneratedImageMetadata.referencedFileHash(last!!) == null
+        ) {
+            org.teslasoft.assistant.ui.chat.RegenerationRecovery.pendingFor(messages)
+        } else {
+            null
+        }
+        pendingRetryOriginal?.let {
+            preferences?.commitPendingRegeneration(org.teslasoft.assistant.ui.chat.RegenerationRecovery.encode(it))
         }
 
         removeLastAssistantMessageIfAvailable()

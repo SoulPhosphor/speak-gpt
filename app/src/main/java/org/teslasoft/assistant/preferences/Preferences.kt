@@ -2878,6 +2878,46 @@ class Preferences internal constructor(
         false
     }
 
+    /** This chat's usage log (UsageLog JSON). Entries are only ever added, so
+     *  usage already spent survives message deletes and regenerations. */
+    fun getUsageLog(): String = getString("usage_log", "")
+
+    /** The reply a regeneration removed (RegenerationRecovery JSON), kept
+     *  until the regeneration settles so it can be put back. */
+    fun getPendingRegeneration(): String = getString("pending_regeneration", "")
+
+    /** Committed synchronously, before the reply is removed from history. */
+    fun commitPendingRegeneration(json: String): Boolean = try {
+        preferences.edit().putString("pending_regeneration", json).commit()
+    } catch (_: Exception) {
+        false
+    }
+
+    fun clearPendingRegeneration() {
+        putString("pending_regeneration", "")
+    }
+
+    /** Committed synchronously: a recorded charge must survive a process kill.
+     *  A rejected write restores the previous value in the process map. */
+    fun commitUsageLog(json: String): Boolean {
+        val key = "usage_log"
+        val hadPrevious = runCatching { preferences.contains(key) }.getOrDefault(false)
+        val previous = runCatching { preferences.getString(key, null) }.getOrNull()
+        return try {
+            val committed = preferences.edit().putString(key, json).commit()
+            if (!committed) {
+                runCatching {
+                    val rollback = preferences.edit()
+                    if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
+                    rollback.commit()
+                }
+            }
+            committed
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /** The automatic Summarizer's sections (SummarySections JSON). Separate
      *  from the single summary that Compact keeps in summarizer_summary. */
     fun getSummarySections(): String = getString("summary_sections", "")

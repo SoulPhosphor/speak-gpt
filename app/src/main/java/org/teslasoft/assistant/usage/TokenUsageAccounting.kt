@@ -548,43 +548,54 @@ object TokenUsageAccounting {
     ): ConversationUsageSummary {
         val records = mutableListOf<TurnUsageRecord>()
         messages.forEachIndexed { index, message ->
-            val variantRecords = decodeVariantRecords(message[KEY_VARIANTS]?.toString())
-            val stored = if (variantRecords.isNotEmpty()) {
-                variantRecords
-            } else {
-                decodeRecords(message[KEY_USAGE_RECORDS]?.toString())
-            }
+            val stored = durableRecordsOf(message)
             if (stored.isNotEmpty()) {
                 records.addAll(stored)
                 return@forEachIndexed
             }
-            if (message["isBot"] != true && message["isBot"]?.toString() != "true") return@forEachIndexed
-            if (!MessageCompletionState.isComplete(
-                    message[MessageCompletionState.KEY_STATE]?.toString()
-                )
-            ) return@forEachIndexed
-
-            // Compatibility path: responseTokens is legacy provider TOTAL, so
-            // it is deliberately not treated as output. Reconstruct the old
-            // CL100K in/out behavior and label it estimated.
-            val model = message["responseModel"]?.toString()?.trim()?.ifBlank { null }
-                ?: MODEL_NOT_REPORTED
-            val counts = legacyEstimate(index).withDerivedTotal()
-            records.add(
-                createRecord(
-                    model = model,
-                    provider = message["responseProvider"]?.toString()?.trim()?.ifBlank { null }
-                        ?: PROVIDER_NOT_REPORTED,
-                    apiEndpoint = null,
-                    counts = counts,
-                    source = TokenCountSource.ESTIMATED_CL100K,
-                    // Old messages contain no frozen price snapshot. Applying
-                    // current or nominal pricing would fabricate history.
-                    pricing = TokenPricingSnapshot()
-                )
-            )
+            legacyRecordOf(message, index, legacyEstimate)?.let(records::add)
         }
         return aggregate(records)
+    }
+
+    /** A message's frozen request records: its version list when that holds
+     * durable records, otherwise its own records. */
+    fun durableRecordsOf(message: Map<String, Any>): List<TurnUsageRecord> {
+        val variantRecords = decodeVariantRecords(message[KEY_VARIANTS]?.toString())
+        return variantRecords.ifEmpty { decodeRecords(message[KEY_USAGE_RECORDS]?.toString()) }
+    }
+
+    /** The estimated record for a completed reply saved before durable usage
+     * records existed, or null when [message] is not such a reply. */
+    fun legacyRecordOf(
+        message: Map<String, Any>,
+        index: Int,
+        legacyEstimate: (assistantIndex: Int) -> TokenCounts
+    ): TurnUsageRecord? {
+        if (durableRecordsOf(message).isNotEmpty()) return null
+        if (message["isBot"] != true && message["isBot"]?.toString() != "true") return null
+        if (!MessageCompletionState.isComplete(
+                message[MessageCompletionState.KEY_STATE]?.toString()
+            )
+        ) return null
+
+        // Compatibility path: responseTokens is legacy provider TOTAL, so
+        // it is deliberately not treated as output. Reconstruct the old
+        // CL100K in/out behavior and label it estimated.
+        val model = message["responseModel"]?.toString()?.trim()?.ifBlank { null }
+            ?: MODEL_NOT_REPORTED
+        val counts = legacyEstimate(index).withDerivedTotal()
+        return createRecord(
+            model = model,
+            provider = message["responseProvider"]?.toString()?.trim()?.ifBlank { null }
+                ?: PROVIDER_NOT_REPORTED,
+            apiEndpoint = null,
+            counts = counts,
+            source = TokenCountSource.ESTIMATED_CL100K,
+            // Old messages contain no frozen price snapshot. Applying
+            // current or nominal pricing would fabricate history.
+            pricing = TokenPricingSnapshot()
+        )
     }
 
     private fun List<Double>.distinctPriceValues(): List<Double> =
