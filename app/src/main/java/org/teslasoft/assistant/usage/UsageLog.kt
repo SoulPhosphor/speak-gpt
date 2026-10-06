@@ -12,16 +12,41 @@ import com.google.gson.JsonParser
 import java.util.UUID
 import org.teslasoft.assistant.preferences.MessageIdentity
 
-/** What a model request was for. Stored as [key]; never shown as-is. */
+/**
+ * Which Usage & Cost section a request belongs to (owner ruling, October 6
+ * 2026). Declaration order is the screen's top-to-bottom order. Stored as
+ * [key]; never shown as-is.
+ */
 enum class UsageCategory(val key: String) {
     CHAT("chat"),
-    ATTACHMENTS("attachments"),
-    SUMMARIZATION("summarization"),
+    IMAGE_GENERATION("image_generation"),
+    SUMMARIZING("summarizing"),
+    STT("stt"),
     TTS("tts");
 
     companion object {
-        fun fromKey(key: String?): UsageCategory =
-            entries.firstOrNull { it.key == key } ?: CHAT
+        fun fromKey(key: String?): UsageCategory = when (key) {
+            // Keys written before the sections were named.
+            "summarization", "attachments" -> SUMMARIZING
+            else -> entries.firstOrNull { it.key == key } ?: CHAT
+        }
+    }
+}
+
+/**
+ * What a Summarizing request did, listed under its model on the screen.
+ * Declaration order is the order the list is shown in.
+ */
+enum class UsageFunction(val key: String) {
+    SUMMARIZING("summarizing"),
+    COMPACTING("compacting"),
+    CONDENSING("condensing"),
+    REDUCING("reducing"),
+    IMAGE_DESCRIPTION("image_description"),
+    REMOVAL("removal");
+
+    companion object {
+        fun fromKey(key: String?): UsageFunction? = entries.firstOrNull { it.key == key }
     }
 }
 
@@ -35,7 +60,18 @@ data class UsageLogEntry(
     val category: UsageCategory,
     val messageId: String?,
     val recordedAtMs: Long,
-    val record: TurnUsageRecord
+    val record: TurnUsageRecord,
+    val function: UsageFunction? = null
+)
+
+/**
+ * One Usage & Cost section: its requests, and for Summarizing, what each
+ * model was used for (keyed by the model name in lower case).
+ */
+data class UsageSection(
+    val category: UsageCategory,
+    val summary: ConversationUsageSummary,
+    val functionsByModel: Map<String, List<UsageFunction>> = emptyMap()
 )
 
 /**
@@ -84,6 +120,21 @@ data class UsageLogState(
         }
         return TokenUsageAccounting.aggregate(records)
     }
+
+    /** The screen's sections, top to bottom, leaving out any with no requests. */
+    fun sections(
+        messages: List<Map<String, Any>>,
+        legacyEstimate: (assistantIndex: Int) -> TokenCounts
+    ): List<UsageSection> = UsageCategory.entries.mapNotNull { category ->
+        val summary = summarize(messages, legacyEstimate, setOf(category))
+        if (summary.groups.isEmpty()) return@mapNotNull null
+        val functions = entries.filter { it.category == category && it.function != null }
+            .groupBy { it.record.model.trim().lowercase(java.util.Locale.ROOT) }
+            .mapValues { (_, inModel) ->
+                inModel.mapNotNull { it.function }.distinct().sortedBy { it.ordinal }
+            }
+        UsageSection(category, summary, functions)
+    }
 }
 
 object UsageLog {
@@ -96,8 +147,9 @@ object UsageLog {
         category: UsageCategory,
         messageId: String?,
         record: TurnUsageRecord,
-        nowMs: Long = System.currentTimeMillis()
-    ) = UsageLogEntry(UUID.randomUUID().toString(), category, messageId, nowMs, record)
+        nowMs: Long = System.currentTimeMillis(),
+        function: UsageFunction? = null
+    ) = UsageLogEntry(UUID.randomUUID().toString(), category, messageId, nowMs, record, function)
 
     /** Each field is written explicitly so a minified build cannot erase the
      * element types Gson would otherwise rely on. */
@@ -108,6 +160,7 @@ object UsageLog {
                 addProperty("id", entry.id)
                 addProperty("category", entry.category.key)
                 entry.messageId?.let { addProperty("messageId", it) }
+                entry.function?.let { addProperty("function", it.key) }
                 addProperty("recordedAtMs", entry.recordedAtMs)
                 add("record", gson.toJsonTree(entry.record))
             })
@@ -117,6 +170,43 @@ object UsageLog {
             addProperty("seeded", state.seeded)
             add("entries", entries)
         }.toString()
+    }
+
+    /** The sections handed to the Usage & Cost screen. Written field by
+     * field for the same reason as [encode]. */
+    fun encodeSections(sections: List<UsageSection>): String {
+        val array = JsonArray()
+        sections.forEach { section ->
+            array.add(JsonObject().apply {
+                addProperty("category", section.category.key)
+                add("summary", JsonParser.parseString(TokenUsageAccounting.encodeSummary(section.summary)))
+                add("functions", JsonObject().apply {
+                    section.functionsByModel.forEach { (model, functions) ->
+                        add(model, JsonArray().apply { functions.forEach { add(it.key) } })
+                    }
+                })
+            })
+        }
+        return array.toString()
+    }
+
+    fun decodeSections(value: String?): List<UsageSection> {
+        if (value.isNullOrBlank()) return emptyList()
+        return try {
+            JsonParser.parseString(value).asJsonArray.mapNotNull { element ->
+                val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+                val functions = o.getAsJsonObject("functions")?.entrySet()?.associate { (model, list) ->
+                    model to list.asJsonArray.mapNotNull { UsageFunction.fromKey(it.asString) }
+                }.orEmpty()
+                UsageSection(
+                    category = UsageCategory.fromKey(o.get("category")?.asString),
+                    summary = TokenUsageAccounting.decodeSummary(o.get("summary")?.toString()),
+                    functionsByModel = functions
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     /** Null when [value] is not a readable log; blank means none yet. */
@@ -134,7 +224,8 @@ object UsageLog {
                     category = UsageCategory.fromKey(o.get("category")?.asString),
                     messageId = o.get("messageId")?.takeUnless { it.isJsonNull }?.asString,
                     recordedAtMs = o.get("recordedAtMs")?.asLong ?: 0L,
-                    record = record
+                    record = record,
+                    function = UsageFunction.fromKey(o.get("function")?.takeUnless { it.isJsonNull }?.asString)
                 )
             }.orEmpty()
             UsageLogState(seeded = root.get("seeded")?.asBoolean == true, entries = entries)

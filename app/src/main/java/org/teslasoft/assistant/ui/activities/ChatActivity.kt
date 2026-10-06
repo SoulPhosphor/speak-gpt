@@ -280,6 +280,8 @@ import org.teslasoft.assistant.usage.TokenPricingSnapshot
 import org.teslasoft.assistant.usage.TokenUsageAccounting
 import org.teslasoft.assistant.usage.TurnUsageRecord
 import org.teslasoft.assistant.usage.UsageCategory
+import org.teslasoft.assistant.usage.UsageFunction
+import org.teslasoft.assistant.usage.UsageSection
 import org.teslasoft.assistant.usage.UsageLog
 import org.teslasoft.assistant.usage.UsageLogStore
 import org.teslasoft.assistant.ui.chat.ChatComposerLayout
@@ -674,6 +676,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var usageIn: Int = 0
     private var usageOut: Int = 0
     private var conversationUsageSummary = ConversationUsageSummary(emptyList())
+    private var conversationUsageSections: List<UsageSection> = emptyList()
     private var bulkSelectionMode: Boolean = false
 
     // init AI
@@ -1198,10 +1201,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 val log = preferences?.let { UsageLogStore.read(it) }
                 if (log != null && log.seeded) {
-                    log.summarize(snapshot, estimate)
+                    Pair(log.summarize(snapshot, estimate), log.sections(snapshot, estimate))
                 } else {
-                    TokenUsageAccounting.summarizeMessages(snapshot, estimate)
+                    // No readable log: only the records inside messages, all chat replies.
+                    val fromMessages = TokenUsageAccounting.summarizeMessages(snapshot, estimate)
+                    Pair(
+                        fromMessages,
+                        listOfNotNull(
+                            fromMessages.takeIf { it.groups.isNotEmpty() }
+                                ?.let { UsageSection(UsageCategory.CHAT, it) }
+                        )
+                    )
                 }
+        }.let { (total, sections) ->
+            conversationUsageSections = sections
+            total
         }
         conversationUsageSummary = summary
         usageIn = summary.totalInputTokens
@@ -4383,7 +4397,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         )
                     )
                 )
-                withAttachmentUsage(spec.model, include.id) { client.chatCompletion(request) }
+                withAttachmentUsage(spec.model, include.id, UsageFunction.REMOVAL) { client.chatCompletion(request) }
                     .choices.firstOrNull()?.message?.content
             }
             IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
@@ -4440,7 +4454,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         ChatMessage(role = ChatRole.User, content = parts)
                     )
                 )
-                val raw = withAttachmentUsage(lineModel, include.id) { client.chatCompletion(request) }
+                val raw = withAttachmentUsage(lineModel, include.id, UsageFunction.REMOVAL) { client.chatCompletion(request) }
                     .choices.firstOrNull()?.message?.content
                 IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
             }
@@ -4653,11 +4667,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             )
                         ))
                     )
-                    withAttachmentUsage(spec.model, include.id, listOf(nativePayload)) {
+                    withAttachmentUsage(spec.model, include.id, UsageFunction.CONDENSING, listOf(nativePayload)) {
                         client.chatCompletion(nativeRequest)
                     }.choices.firstOrNull()?.message?.content?.trim()
                 } else {
-                    withAttachmentUsage(spec.model, include.id) { client.chatCompletion(request) }
+                    withAttachmentUsage(spec.model, include.id, UsageFunction.CONDENSING) { client.chatCompletion(request) }
                         .choices.firstOrNull()?.message?.content?.trim()
                 }
             }
@@ -4816,7 +4830,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         ChatMessage(role = ChatRole.User, content = parts)
                     )
                 )
-                withAttachmentUsage(spec.model, include.id) { client.chatCompletion(request) }
+                withAttachmentUsage(spec.model, include.id, UsageFunction.REDUCING) { client.chatCompletion(request) }
                     .choices.firstOrNull()?.message?.content?.trim()
             }
             if (text.isNullOrBlank()) {
@@ -5113,6 +5127,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     .putExtra(
                         TokenPricingDetailsActivity.EXTRA_USAGE_SUMMARY,
                         TokenUsageAccounting.encodeSummary(summary)
+                    )
+                    .putExtra(
+                        TokenPricingDetailsActivity.EXTRA_USAGE_SECTIONS,
+                        UsageLog.encodeSections(conversationUsageSections)
                     )
             )
         }
@@ -10990,12 +11008,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /**
      * Runs one Condense, Reduce or removal-reminder request and logs what it
-     * cost under Attachments. Usage is read from the provider's own response;
-     * a request that fails is logged only when the provider reported usage.
+     * cost under Summarizing, as [function]. Usage is read from the provider's
+     * own response; a request that fails is logged only when the provider
+     * reported usage.
      */
     private suspend fun <T> withAttachmentUsage(
         requestModel: String,
         includeId: String,
+        function: UsageFunction,
         nativePdfs: List<NativePdfPayload> = emptyList(),
         block: suspend () -> T
     ): T {
@@ -11020,7 +11040,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             withContext(kotlinx.coroutines.NonCancellable) {
                 val record = auxiliaryUsageRecord(attempt, pricing, succeeded)
                 if (record != null) {
-                    appendUsageLog(UsageCategory.ATTACHMENTS, includeOwnerMessageId(includeId), listOf(record))
+                    appendUsageLog(UsageCategory.SUMMARIZING, includeOwnerMessageId(includeId), listOf(record), function)
                 }
             }
         }
@@ -11045,7 +11065,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private suspend fun appendUsageLog(
         category: UsageCategory,
         messageId: String?,
-        records: List<TurnUsageRecord>
+        records: List<TurnUsageRecord>,
+        function: UsageFunction? = null
     ) {
         val prefs = preferences ?: return
         if (records.isEmpty() || chatStorageUnavailable) return
@@ -11054,7 +11075,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             UsageLogStore.seed(prefs, snapshot)
             UsageLogStore.append(
                 prefs,
-                records.map { UsageLog.entry(category, messageId?.ifBlank { null }, it) }
+                records.map { UsageLog.entry(category, messageId?.ifBlank { null }, it, function = function) }
             )
         }
     }

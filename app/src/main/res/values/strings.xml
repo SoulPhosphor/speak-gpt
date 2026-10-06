@@ -1060,7 +1060,6 @@
     <string name="usage_conversation_meta">%1$d recorded requests · %2$d models · %3$d providers</string>
     <string name="usage_model_meta">%1$d recorded requests · %2$d providers</string>
     <string name="usage_provider_meta">%1$d recorded requests</string>
-    <string name="usage_model_total">Model Total</string>
     <string name="usage_provider_total">Provider Total</string>
     <string name="usage_column_usage">Usage</string>
     <string name="usage_column_tokens">Tokens</string>
@@ -1071,6 +1070,18 @@
     <string name="usage_cache_hit_rate">Cache Hit Rate</string>
     <string name="usage_price_per_million">Price per 1M Tokens</string>
     <string name="usage_variable_price">Variable</string>
+    <!-- Usage & Cost section headings and Summarizing functions (owner ruling, Oct 6 2026). -->
+    <string name="usage_section_chat">Chat</string>
+    <string name="usage_section_image_generations">Image Generations</string>
+    <string name="usage_section_summarizing">Summarizing</string>
+    <string name="usage_section_stt">STT</string>
+    <string name="usage_section_tts">TTS</string>
+    <string name="usage_function_summarizing">Summarizing</string>
+    <string name="usage_function_compacting">Compacting</string>
+    <string name="usage_function_condensing">Condensing</string>
+    <string name="usage_function_reducing">Reducing</string>
+    <string name="usage_function_image_description">Image Description</string>
+    <string name="usage_function_removal">Removal</string>
     <string name="token_pricing_group_title" translatable="false">%1$s · %2$s</string>
     <string name="prompt_no_model_provided" translatable="false">No model has been provided.</string>
 

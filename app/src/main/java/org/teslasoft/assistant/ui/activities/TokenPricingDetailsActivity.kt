@@ -19,13 +19,18 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.usage.ConversationUsageSummary
 import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.UsageCategory
+import org.teslasoft.assistant.usage.UsageFunction
 import org.teslasoft.assistant.usage.UsageGroup
+import org.teslasoft.assistant.usage.UsageLog
+import org.teslasoft.assistant.usage.UsageSection
 import org.teslasoft.assistant.usage.UsageValueFormatter
 import java.util.Locale
 
 class TokenPricingDetailsActivity : FragmentActivity() {
     companion object {
         const val EXTRA_USAGE_SUMMARY = "usageSummary"
+        const val EXTRA_USAGE_SECTIONS = "usageSections"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,41 +43,66 @@ class TokenPricingDetailsActivity : FragmentActivity() {
             intent.getStringExtra(EXTRA_USAGE_SUMMARY)
         )
         renderConversationSummary(summary)
-        val container = findViewById<LinearLayout>(R.id.pricing_sections)
-        modelSections(summary).forEach { model ->
-            val section = LayoutInflater.from(this)
-                .inflate(R.layout.view_usage_model_section, container, false)
-            bindModelSummary(section, model)
-            val providers = section.findViewById<LinearLayout>(R.id.provider_cards)
-            model.providers.forEach { group ->
-                val card = LayoutInflater.from(this)
-                    .inflate(R.layout.view_usage_provider_card, providers, false)
-                bindProviderCard(card, group)
-                providers.addView(card)
+        val sections = UsageLog.decodeSections(intent.getStringExtra(EXTRA_USAGE_SECTIONS))
+            .ifEmpty {
+                listOfNotNull(
+                    summary.takeIf { it.groups.isNotEmpty() }
+                        ?.let { UsageSection(UsageCategory.CHAT, it) }
+                )
             }
-            container.addView(section)
+        val container = findViewById<LinearLayout>(R.id.pricing_sections)
+        val inflater = LayoutInflater.from(this)
+        // Sections arrive in screen order and only when they have requests.
+        sections.forEach { usageSection ->
+            val pill = inflater.inflate(R.layout.view_usage_section_pill, container, false) as TextView
+            pill.setText(sectionTitle(usageSection.category))
+            container.addView(pill)
+            modelSections(usageSection.summary).forEach { model ->
+                val card = inflater.inflate(R.layout.view_usage_model_section, container, false)
+                bindModelSummary(card, model, usageSection.functionsByModel[model.key].orEmpty())
+                val providers = card.findViewById<LinearLayout>(R.id.provider_cards)
+                model.providers.forEachIndexed { index, group ->
+                    val block = inflater.inflate(R.layout.view_usage_provider_block, providers, false)
+                    bindProviderCard(block, group)
+                    block.findViewById<View>(R.id.provider_gap).visibility =
+                        if (index == 0) View.GONE else View.VISIBLE
+                    // Only the last provider meets the card's rounded bottom.
+                    block.findViewById<View>(R.id.pricing_footer).setBackgroundResource(
+                        if (index == model.providers.lastIndex) R.drawable.bg_usage_pricing_footer
+                        else R.drawable.bg_usage_pricing_footer_inner
+                    )
+                    providers.addView(block)
+                }
+                container.addView(card)
+            }
         }
+    }
+
+    private fun sectionTitle(category: UsageCategory): Int = when (category) {
+        UsageCategory.CHAT -> R.string.usage_section_chat
+        UsageCategory.IMAGE_GENERATION -> R.string.usage_section_image_generations
+        UsageCategory.SUMMARIZING -> R.string.usage_section_summarizing
+        UsageCategory.STT -> R.string.usage_section_stt
+        UsageCategory.TTS -> R.string.usage_section_tts
+    }
+
+    private fun functionName(function: UsageFunction): Int = when (function) {
+        UsageFunction.SUMMARIZING -> R.string.usage_function_summarizing
+        UsageFunction.COMPACTING -> R.string.usage_function_compacting
+        UsageFunction.CONDENSING -> R.string.usage_function_condensing
+        UsageFunction.REDUCING -> R.string.usage_function_reducing
+        UsageFunction.IMAGE_DESCRIPTION -> R.string.usage_function_image_description
+        UsageFunction.REMOVAL -> R.string.usage_function_removal
     }
 
     private data class ModelSection(
         val model: String,
         val providers: List<UsageGroup>
     ) {
+        val key: String get() = model.trim().lowercase(Locale.ROOT)
         val recordCount: Int get() = providers.sumOf { it.recordCount }
         val totalCost: Double get() = providers.sumOf { it.totalCost }
         val hasUnknownCost: Boolean get() = providers.any { it.hasUnknownCost }
-        val uncachedInputTokens: Int get() = providers.sumOf { it.uncachedInputTokens }
-        val cachedInputTokens: Int get() = providers.sumOf { it.cachedInputTokens }
-        val outputTokens: Int get() = providers.sumOf { it.outputTokens }
-        val uncachedInputCost: Double get() = providers.sumOf { it.uncachedInputCost }
-        val cachedInputCost: Double get() = providers.sumOf { it.cachedInputCost }
-        val outputCost: Double get() = providers.sumOf { it.outputCost }
-        val unknownUncachedTokens: Boolean get() = providers.any { it.hasUnknownUncachedInputTokens }
-        val unknownCachedTokens: Boolean get() = providers.any { it.hasUnknownCachedInputTokens }
-        val unknownOutputTokens: Boolean get() = providers.any { it.hasUnknownOutputTokens }
-        val unknownUncachedCost: Boolean get() = providers.any { it.hasUnknownUncachedInputCost }
-        val unknownCachedCost: Boolean get() = providers.any { it.hasUnknownCachedInputCost }
-        val unknownOutputCost: Boolean get() = providers.any { it.hasUnknownOutputCost }
     }
 
     private fun modelSections(summary: ConversationUsageSummary): List<ModelSection> =
@@ -97,41 +127,20 @@ class TokenPricingDetailsActivity : FragmentActivity() {
             getString(R.string.usage_conversation_meta, requests, models, providers)
     }
 
-    private fun bindModelSummary(view: View, model: ModelSection) {
+    private fun bindModelSummary(view: View, model: ModelSection, functions: List<UsageFunction>) {
         view.findViewById<TextView>(R.id.model_name).text = model.model
         view.findViewById<TextView>(R.id.model_meta).text = getString(
             R.string.usage_model_meta, model.recordCount, model.providers.size
         )
         view.findViewById<TextView>(R.id.model_total_cost).text =
             UsageValueFormatter.cost(model.totalCost, model.hasUnknownCost)
-        bindFact(
-            view, R.id.model_input, R.string.usage_input,
-            UsageValueFormatter.tokens(model.uncachedInputTokens, model.unknownUncachedTokens),
-            UsageValueFormatter.cost(model.uncachedInputCost, model.unknownUncachedCost)
-        )
-        bindFact(
-            view, R.id.model_output, R.string.usage_output,
-            UsageValueFormatter.tokens(model.outputTokens, model.unknownOutputTokens),
-            UsageValueFormatter.cost(model.outputCost, model.unknownOutputCost)
-        )
-        bindFact(
-            view, R.id.model_cached, R.string.usage_cached,
-            UsageValueFormatter.tokens(model.cachedInputTokens, model.unknownCachedTokens),
-            UsageValueFormatter.cost(model.cachedInputCost, model.unknownCachedCost)
-        )
-    }
-
-    private fun bindFact(
-        root: View,
-        factId: Int,
-        labelId: Int,
-        tokens: String,
-        cost: String
-    ) {
-        val fact = root.findViewById<View>(factId)
-        fact.findViewById<TextView>(R.id.fact_label).setText(labelId)
-        fact.findViewById<TextView>(R.id.fact_tokens).text = tokens
-        fact.findViewById<TextView>(R.id.fact_cost).text = cost
+        val functionLine = view.findViewById<TextView>(R.id.model_functions)
+        if (functions.isEmpty()) {
+            functionLine.visibility = View.GONE
+        } else {
+            functionLine.text = functions.joinToString(", ") { getString(functionName(it)) }
+            functionLine.visibility = View.VISIBLE
+        }
     }
 
     private fun bindProviderCard(view: View, group: UsageGroup) {

@@ -7,22 +7,45 @@ import org.junit.Test
 
 class UsageCostStructureTest {
     @Test
-    fun usageScreenKeepsModelSummarySeparateFromProviderCards() {
+    fun eachModelCardHoldsItsProvidersBelowASectionPill() {
         val section = resource("layout/view_usage_model_section.xml")
-        val provider = resource("layout/view_usage_provider_card.xml")
+        val provider = resource("layout/view_usage_provider_block.xml")
+        val header = resource("layout/view_usage_model_summary.xml")
 
+        // Owner ruling, October 6 2026: the model header and its providers
+        // are one card, and only the provider blocks sit inside it.
+        assertTrue(section.contains("MaterialCardView"))
         assertTrue(section.contains("view_usage_model_summary"))
         assertTrue(section.contains("@+id/provider_cards"))
+        assertFalse(provider.contains("MaterialCardView"))
+        assertTrue(provider.contains("@+id/provider_gap"))
         assertTrue(provider.contains("@+id/usage_input_row"))
         assertTrue(provider.contains("@+id/usage_output_row"))
         assertTrue(provider.contains("@+id/usage_cached_row"))
         assertTrue(provider.contains("@+id/cache_hit_rate"))
         assertFalse(provider.contains("Breakdown"))
+        assertTrue(header.contains("@+id/model_functions"))
+        assertTrue(resource("layout/view_usage_section_pill.xml").contains("Widget.App.Usage.SectionPill"))
+    }
+
+    @Test
+    fun usageColorsComeFromThemeRoles() {
+        for (drawable in listOf(
+            "drawable/bg_usage_section_pill.xml",
+            "drawable/bg_usage_model_header.xml",
+            "drawable/bg_usage_provider_header.xml",
+            "drawable/bg_usage_pricing_footer.xml",
+            "drawable/bg_usage_pricing_footer_inner.xml"
+        )) {
+            val xml = resource(drawable)
+            assertFalse(drawable, Regex("android:(start|end|)[cC]olor=\"#").containsMatchIn(xml))
+            assertFalse(drawable, xml.contains("@color/"))
+        }
     }
 
     @Test
     fun priceCaptionIsCenteredBelowInputOutputAndCachedPrices() {
-        val provider = resource("layout/view_usage_provider_card.xml")
+        val provider = resource("layout/view_usage_provider_block.xml")
         val input = provider.indexOf("@+id/price_input")
         val output = provider.indexOf("@+id/price_output")
         val cached = provider.indexOf("@+id/price_cached")
@@ -45,6 +68,7 @@ class UsageCostStructureTest {
         assertTrue(chat.contains("R.string.usage_cost_title"))
         assertTrue(chat.contains("openUsageAndCost()"))
         assertTrue(chat.contains("TokenPricingDetailsActivity.EXTRA_USAGE_SUMMARY"))
+        assertTrue(chat.contains("TokenPricingDetailsActivity.EXTRA_USAGE_SECTIONS"))
         assertTrue(chat.contains("completeTerminalUsageRecord"))
         assertTrue(chat.contains("!snapshot.counts.hasAnyValue() && !snapshot.providerCost.hasAnyValue()"))
         val activity = source(

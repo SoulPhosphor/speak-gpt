@@ -272,10 +272,20 @@ A service's own `/models` list is used only when it has OpenRouter's
 The screen opens from the chat menu (**Usage & Cost**). It is built from the
 chat's usage log (section 5) at the moment it opens.
 
-- **Grouping:** records are grouped by model, then by provider. Upper and
-  lower case are ignored.
-- **Conversation Total:** the sum of every request's Total.
-- **Model Total / Provider Total:** the sum for that model or provider.
+- **Sections (owner ruling, October 6 2026):** requests are split into
+  sections, top to bottom: **Chat, Image Generations, Summarizing, STT, TTS**.
+  Each section's title sits in a centered pill above its cards. A section
+  with no requests in this chat is not shown.
+- **Grouping:** inside a section, records are grouped by model, then by
+  provider. Upper and lower case are ignored. Each model is one card: the
+  model's name, total, and request count on top, then one block per provider.
+- **What a Summarizing model did:** in the Summarizing section only, a line
+  under the model's request count lists what that model was used for, in this
+  order and separated by commas: Summarizing, Compacting, Condensing,
+  Reducing, Image Description, Removal. Only the ones used appear.
+- **Conversation Total:** the sum of every request's Total, in every section.
+- **Model Total / Provider Total:** the sum for that model or provider within
+  its section.
 - **Rows:**
   - **Input:** input minus cached. This includes cache writes.
   - **Cached:** cached input.
@@ -305,31 +315,34 @@ partial sum is never shown as if it were complete.
 - **Regenerated replies:** every version's requests are counted, not just the
   version on screen, including versions from a different model and versions
   that were never used.
-- **Attachment requests:** Condense, Reduce, and the short reminder written
-  when an attachment is removed are each a paid request and are counted.
-- **Summarizer and Compact requests:** every summary section, image
-  description, and Compact fold-in request is counted.
+- **Summarizing section:** every Summarizer section (Summarizing), Compact
+  fold-in (Compacting), Condense (Condensing), Reduce (Reducing), Summarizer
+  image description (Image Description), and the short reminder written when
+  an attachment is removed (Removal) is a paid request and is counted.
 - **Recorded the same way as chat replies:** counts and charges come only from
   the service's report, and prices are frozen when the request finishes. A
   finished request with no usage report is still counted, with its values
   "Not Reported"; a failed one only when the service reported usage.
-- **Not counted yet:** text-to-speech (TTS) read-aloud requests, and Whisper
-  cloud voice input (audio sent to OpenAI's `whisper-1` transcription
-  service). TTS services do not report usage, so a TTS record would be "Not
-  Reported" and, under the "Not Reported" rule, so would the chat's total.
+- **Not counted yet:** image generation requests (Image Generations),
+  Whisper cloud voice input (audio sent to OpenAI's `whisper-1`
+  transcription service; STT), and text-to-speech read-aloud requests (TTS).
+  Their sections exist and appear once they are recorded. The STT section is
+  meant for any speech-to-text service, not only Whisper. TTS services do not
+  report usage, so a TTS record would be "Not Reported" and, under the "Not
+  Reported" rule, so would the chat's total.
 
 ### The usage log (owner ruling, October 6 2026)
 
 Each chat keeps its own usage log in its per-chat settings file
-(`usage_log`). Entries are only ever added: deleting a message, regenerating,
-regenerating an earlier reply (which removes everything after it), making
+(`usage_log`). Entries are only ever added: deleting a message,
+regenerating (including an earlier reply, which removes everything after it), making
 another version current, or compacting never removes usage already spent.
 
 - **First open:** the records already stored in the chat's messages are copied
   into the log once. Requests recorded before that (for example by the
   Summarizer) are kept and merged.
 - **Each entry** keeps the request's frozen record, what it was for (chat,
-  attachments, summarization, or TTS), and the permanent id of the message
+  its section and, for Summarizing, its function), and the permanent id of the message
   it served, when there is one. Neither depends on a message's position.
 - **Old replies** saved before usage records existed are not in the log;
   they are still estimated from the messages present (section 1).

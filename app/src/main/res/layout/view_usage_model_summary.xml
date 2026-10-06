@@ -1,80 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/model_summary"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@drawable/bg_usage_model_summary"
-    android:orientation="vertical">
+    style="@style/Widget.App.Usage.ModelHeader">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="14dp"
-        android:paddingTop="14dp"
-        android:paddingEnd="14dp"
-        android:paddingBottom="11dp">
+        android:orientation="horizontal">
 
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+        <TextView
+            android:id="@+id/model_name"
+            style="@style/Widget.App.Usage.ModelName" />
 
-            <TextView
-                android:id="@+id/model_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="?attr/colorOnSecondaryContainer"
-                android:textSize="20sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/model_meta"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:textColor="?attr/colorOnSecondaryContainer"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="end"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/model_total_cost"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="?attr/colorOnSecondaryContainer"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="@string/usage_model_total"
-                android:textColor="?attr/colorOnSecondaryContainer"
-                android:textSize="11sp" />
-        </LinearLayout>
+        <TextView
+            android:id="@+id/model_total_cost"
+            style="@style/Widget.App.Usage.ModelTotal" />
     </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_usage_model_facts"
-        android:orientation="horizontal"
-        android:paddingStart="14dp"
-        android:paddingTop="11dp"
-        android:paddingEnd="14dp"
-        android:paddingBottom="13dp">
+    <TextView
+        android:id="@+id/model_meta"
+        style="@style/Widget.App.Usage.ModelMeta" />
 
-        <include android:id="@+id/model_input" layout="@layout/view_usage_fact" />
-        <include android:id="@+id/model_output" layout="@layout/view_usage_fact" />
-        <include android:id="@+id/model_cached" layout="@layout/view_usage_fact" />
-    </LinearLayout>
+    <TextView
+        android:id="@+id/model_functions"
+        style="@style/Widget.App.Usage.ModelFunctions" />
 </LinearLayout>

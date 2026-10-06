@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Usage & Cost section heading pill. Theme roles only, so a palette can recolor it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners android:radius="999dp" />
+    <gradient
+        android:angle="0"
+        android:endColor="?attr/colorSurfaceContainerHighest"
+        android:startColor="?attr/colorPrimaryContainer" />
+</shape>

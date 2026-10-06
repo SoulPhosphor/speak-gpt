@@ -56,6 +56,7 @@ import org.teslasoft.assistant.usage.ProviderUsageAttempt
 import org.teslasoft.assistant.usage.TokenPricingCatalogClient
 import org.teslasoft.assistant.usage.TokenUsageAccounting
 import org.teslasoft.assistant.usage.UsageCategory
+import org.teslasoft.assistant.usage.UsageFunction
 import org.teslasoft.assistant.usage.UsageLog
 import org.teslasoft.assistant.usage.UsageLogStore
 import io.ktor.client.plugins.api.Send
@@ -463,7 +464,8 @@ class SummarizerController(
                 )
                 withSummarizerUsage(
                     Preferences.getPreferences(appContext, chatIdProvider()),
-                    endpoint, model, requestFavorite?.selectedProvider.orEmpty()
+                    endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
+                    UsageFunction.IMAGE_DESCRIPTION
                 ) { attempt ->
                     buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
                         .chatCompletion(request)
@@ -762,7 +764,8 @@ class SummarizerController(
         val choice = try {
             withContext(Dispatchers.IO) {
                 withSummarizerUsage(
-                    runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider
+                    runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider,
+                    UsageFunction.SUMMARIZING
                 ) { attempt ->
                     val client = buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)
                     evidence.dispatched = true
@@ -932,7 +935,8 @@ class SummarizerController(
                         messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
                     withSummarizerUsage(
-                        runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider
+                        runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider,
+                        UsageFunction.COMPACTING
                     ) { attempt ->
                         val client = buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)
                         evidence.dispatched = true
@@ -1197,6 +1201,7 @@ class SummarizerController(
         endpoint: ApiEndpointObject,
         model: String,
         requestedProvider: String,
+        function: UsageFunction,
         block: suspend (ProviderUsageAttempt) -> T
     ): T = coroutineScope {
         val attempt = ProviderUsageAttempt(
@@ -1223,7 +1228,7 @@ class SummarizerController(
                     withContext(Dispatchers.IO) {
                         UsageLogStore.append(
                             prefs,
-                            listOf(UsageLog.entry(UsageCategory.SUMMARIZATION, null, record))
+                            listOf(UsageLog.entry(UsageCategory.SUMMARIZING, null, record, function = function))
                         )
                     }
                 }

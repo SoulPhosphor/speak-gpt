@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Top of a Usage & Cost model card. Theme roles only, so a palette can recolor it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:topLeftRadius="@dimen/usage_card_corner_radius"
+        android:topRightRadius="@dimen/usage_card_corner_radius" />
+    <gradient
+        android:angle="270"
+        android:endColor="?attr/colorSurfaceContainerHigh"
+        android:startColor="?attr/colorSecondaryContainer" />
+</shape>

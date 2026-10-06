@@ -49,13 +49,13 @@ class UsageLogTest {
     }
 
     @Test fun `entries appended before seeding are kept when the history is merged in`() {
-        val summary = UsageLog.entry(UsageCategory.SUMMARIZATION, null, record("s", 100, 10, 0.5), 3L)
+        val summary = UsageLog.entry(UsageCategory.SUMMARIZING, null, record("s", 100, 10, 0.5), 3L)
         val early = UsageLog.EMPTY.append(listOf(summary))
         assertFalse(early.seeded)
 
         val seeded = early.seed(listOf(reply("m1", record("a", 10, 5, 1.0))), nowMs = 4L)
 
-        assertEquals(listOf(UsageCategory.CHAT, UsageCategory.SUMMARIZATION), seeded.entries.map { it.category })
+        assertEquals(listOf(UsageCategory.CHAT, UsageCategory.SUMMARIZING), seeded.entries.map { it.category })
         assertEquals(1.5, seeded.summarize(emptyList(), noEstimate).totalCost, 1e-9)
     }
 
@@ -92,18 +92,18 @@ class UsageLogTest {
         val log = UsageLog.EMPTY.seed(emptyList(), 1L).append(
             listOf(
                 UsageLog.entry(UsageCategory.CHAT, "m1", record("a", 10, 5, 1.0)),
-                UsageLog.entry(UsageCategory.ATTACHMENTS, "m1", record("a", 50, 20, 4.0)),
-                UsageLog.entry(UsageCategory.SUMMARIZATION, null, record("s", 30, 10, 0.25))
+                UsageLog.entry(UsageCategory.IMAGE_GENERATION, "m1", record("a", 50, 20, 4.0)),
+                UsageLog.entry(UsageCategory.SUMMARIZING, null, record("s", 30, 10, 0.25))
             )
         )
 
-        assertEquals(4.0, log.summarize(emptyList(), noEstimate, setOf(UsageCategory.ATTACHMENTS)).totalCost, 1e-9)
+        assertEquals(4.0, log.summarize(emptyList(), noEstimate, setOf(UsageCategory.IMAGE_GENERATION)).totalCost, 1e-9)
         assertEquals(5.25, log.summarize(emptyList(), noEstimate).totalCost, 1e-9)
     }
 
     @Test fun `log survives a save and reload unchanged`() {
         val log = UsageLog.EMPTY.seed(listOf(reply("m1", record("a", 10, 5, 1.0))), 2L).append(
-            listOf(UsageLog.entry(UsageCategory.ATTACHMENTS, null, record("b", 1, 2, 0.1), 5L))
+            listOf(UsageLog.entry(UsageCategory.SUMMARIZING, null, record("b", 1, 2, 0.1), 5L, UsageFunction.CONDENSING))
         )
 
         val reloaded = UsageLog.decode(UsageLog.encode(log))
@@ -111,5 +111,44 @@ class UsageLogTest {
         assertEquals(log, reloaded)
         assertEquals(UsageLog.EMPTY, UsageLog.decode(""))
         assertNull(UsageLog.decode("{not json"))
+    }
+
+    @Test fun `sections come in screen order and leave out unused ones`() {
+        val log = UsageLog.EMPTY.seed(listOf(reply("m1", record("chat-model", 10, 5, 1.0))), 1L).append(
+            listOf(
+                UsageLog.entry(UsageCategory.SUMMARIZING, null, record("Mini", 30, 10, 0.2), 2L, UsageFunction.COMPACTING),
+                UsageLog.entry(UsageCategory.SUMMARIZING, null, record("mini", 30, 10, 0.2), 3L, UsageFunction.SUMMARIZING),
+                UsageLog.entry(UsageCategory.SUMMARIZING, "m1", record("mini", 5, 5, 0.1), 4L, UsageFunction.CONDENSING),
+                UsageLog.entry(UsageCategory.SUMMARIZING, null, record("mini", 5, 5, 0.1), 5L, UsageFunction.SUMMARIZING)
+            )
+        )
+
+        val sections = log.sections(emptyList(), noEstimate)
+
+        assertEquals(listOf(UsageCategory.CHAT, UsageCategory.SUMMARIZING), sections.map { it.category })
+        assertEquals(
+            listOf(UsageFunction.SUMMARIZING, UsageFunction.COMPACTING, UsageFunction.CONDENSING),
+            sections[1].functionsByModel["mini"]
+        )
+        assertTrue(sections[0].functionsByModel.isEmpty())
+    }
+
+    @Test fun `sections survive the hand-off to the usage screen`() {
+        val log = UsageLog.EMPTY.seed(emptyList(), 1L).append(
+            listOf(UsageLog.entry(UsageCategory.SUMMARIZING, null, record("mini", 30, 10, 0.2), 2L, UsageFunction.REMOVAL))
+        )
+        val sections = log.sections(emptyList(), noEstimate)
+
+        val decoded = UsageLog.decodeSections(UsageLog.encodeSections(sections))
+
+        assertEquals(sections.map { it.category }, decoded.map { it.category })
+        assertEquals(listOf(UsageFunction.REMOVAL), decoded[0].functionsByModel["mini"])
+        assertEquals(0.2, decoded[0].summary.totalCost, 1e-9)
+    }
+
+    @Test fun `keys written before the sections were named read as Summarizing`() {
+        assertEquals(UsageCategory.SUMMARIZING, UsageCategory.fromKey("summarization"))
+        assertEquals(UsageCategory.SUMMARIZING, UsageCategory.fromKey("attachments"))
+        assertEquals(UsageCategory.TTS, UsageCategory.fromKey("tts"))
     }
 }

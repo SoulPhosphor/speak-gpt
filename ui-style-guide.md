@@ -975,6 +975,35 @@ Shared layouts:
 
 Do not assign an id to an XML `<include>` tag that includes these layouts. Android replaces the included root id with the `<include>` id, which breaks code expecting the root's original id.
 
+## Usage & Cost cards
+
+`Widget.App.Usage.SectionPill`, `Widget.App.Usage.ModelCard`,
+`Widget.App.Usage.ModelHeader`, `Widget.App.Usage.ModelName`,
+`Widget.App.Usage.ModelTotal`, `Widget.App.Usage.ModelMeta`,
+`Widget.App.Usage.ModelFunctions`, `Widget.App.Usage.ProviderGap`
+
+Use only on the Usage & Cost screen (owner ruling, October 6 2026).
+
+Composition, top to bottom, per section:
+
+1. one centered `SectionPill` (`view_usage_section_pill.xml`) holding only the
+   section title;
+2. one `ModelCard` per model (`view_usage_model_section.xml`): the model header
+   (`view_usage_model_summary.xml`, gradient top) with name and total on one
+   line, the request count below, and, in Summarizing only, the
+   `ModelFunctions` line;
+3. inside that card, one provider block per provider
+   (`view_usage_provider_block.xml`), separated by a `ProviderGap` that is hidden
+   above the first. Only the last provider's pricing footer uses the rounded
+   `bg_usage_pricing_footer`; the others use `bg_usage_pricing_footer_inner`.
+
+Theme readiness: every color in these styles and in `bg_usage_section_pill`,
+`bg_usage_model_header`, `bg_usage_provider_header`, and the two pricing
+footers is a theme role (`colorPrimaryContainer`, `colorSecondaryContainer`,
+`colorSurfaceContainerHigh`, and so on). The corner radius is one dimen,
+`usage_card_corner_radius`. Recoloring the screen is a change to these
+styles and drawables only; nothing is colored in code.
+
 ## Maintaining this guide
 
 ## Conversation mode segmented selector

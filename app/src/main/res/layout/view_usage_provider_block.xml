@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<!-- One provider inside its model's card (Usage & Cost). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
-    app:cardBackgroundColor="?attr/colorSurface"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="0dp"
-    app:strokeColor="?attr/colorOutlineVariant"
-    app:strokeWidth="1dp">
+    android:orientation="vertical">
+
+    <!-- Separates this provider from the one above; hidden on the first. -->
+    <View
+        android:id="@+id/provider_gap"
+        style="@style/Widget.App.Usage.ProviderGap" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -126,6 +126,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:id="@+id/pricing_footer"
             android:background="@drawable/bg_usage_pricing_footer"
             android:orientation="vertical"
             android:paddingStart="14dp"
@@ -153,4 +154,4 @@
                 android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
-</com.google.android.material.card.MaterialCardView>
+</LinearLayout>
