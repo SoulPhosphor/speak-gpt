@@ -17,7 +17,7 @@ enum class UsageCategory(val key: String) {
     CHAT("chat"),
     ATTACHMENTS("attachments"),
     SUMMARIZATION("summarization"),
-    VOICE("voice");
+    TTS("tts");
 
     companion object {
         fun fromKey(key: String?): UsageCategory =
