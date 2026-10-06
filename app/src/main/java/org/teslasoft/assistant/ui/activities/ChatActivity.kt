@@ -1201,11 +1201,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 val log = preferences?.let { UsageLogStore.read(it) }
                 if (log != null && log.seeded) {
-                    Pair(log.summarize(snapshot, estimate), log.sections(snapshot, estimate))
+                    kotlin.Pair(log.summarize(snapshot, estimate), log.sections(snapshot, estimate))
                 } else {
                     // No readable log: only the records inside messages, all chat replies.
                     val fromMessages = TokenUsageAccounting.summarizeMessages(snapshot, estimate)
-                    Pair(
+                    kotlin.Pair(
                         fromMessages,
                         listOfNotNull(
                             fromMessages.takeIf { it.groups.isNotEmpty() }
