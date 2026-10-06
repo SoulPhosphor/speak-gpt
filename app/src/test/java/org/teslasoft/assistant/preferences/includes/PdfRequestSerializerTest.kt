@@ -52,8 +52,9 @@ class PdfRequestSerializerTest {
         assertEquals("document", PdfRequestSerializer.anthropicDocumentBlock(payload).getString("type"))
         assertEquals("base64", PdfRequestSerializer.anthropicDocumentBlock(payload)
             .getJSONObject("source").getString("type"))
-        assertEquals("document", PdfRequestSerializer.geminiDocumentPart(payload).getString("type"))
-        assertEquals("application/pdf", PdfRequestSerializer.geminiDocumentPart(payload).getString("mime_type"))
+        val gemini = PdfRequestSerializer.geminiDocumentPart(payload).getJSONObject("inline_data")
+        assertEquals("application/pdf", gemini.getString("mime_type"))
+        assertEquals("QUJD", gemini.getString("data"))
         assertEquals("input_file", PdfRequestSerializer.xAiInputFile("file-1").getString("type"))
     }
 }

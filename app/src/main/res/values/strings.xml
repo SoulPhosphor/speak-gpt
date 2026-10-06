@@ -3419,6 +3419,7 @@
     <string name="include_error_duplicate">Document already attached.</string>
     <string name="include_error_duplicate_image">Image already attached.</string>
     <string name="document_attach_failed_title">Document could not be attached</string>
+    <string name="pdf_attach_too_large_body">This PDF is larger than the 256 MB attachment limit. No part of the PDF was attached. Try attaching a smaller copy.</string>
     <string name="document_attach_memory_body">This app could not process the complete document within this device’s safe memory limit. No part of the document was attached. Try attaching a smaller copy.</string>
     <string name="document_attach_expansion_body">This document expands into more data than this app can safely process. No part of the document was attached. Try saving a smaller copy and attaching that instead.</string>
     <string name="document_storage_failed_title">Not enough storage</string>

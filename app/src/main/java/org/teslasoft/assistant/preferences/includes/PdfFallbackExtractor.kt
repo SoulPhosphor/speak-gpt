@@ -7,6 +7,7 @@ package org.teslasoft.assistant.preferences.includes
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -74,6 +75,11 @@ object PdfFallbackExtractor {
                                         Bitmap.Config.ARGB_8888
                                     )
                                     try {
+                                        // PdfRenderer draws only the page content onto
+                                        // the bitmap; an unfilled bitmap is transparent,
+                                        // which the recognizer reads as black, hiding
+                                        // dark text. Give the page a white background.
+                                        bitmap.eraseColor(Color.WHITE)
                                         page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                                         recognizer.process(InputImage.fromBitmap(bitmap, 0)).await().text.trim()
                                     } finally {

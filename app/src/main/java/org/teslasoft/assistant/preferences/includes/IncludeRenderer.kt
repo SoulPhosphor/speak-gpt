@@ -102,7 +102,7 @@ object IncludeRenderer {
         val name = include.fileName
         return when {
             include.form == IncludeForm.ARTIFACT ->
-                "Short reminder of removed uploaded $type ($name):"
+                "Reminder of removed $type ($name):"
             include.form == IncludeForm.CONDENSED && include.kind.isImage() ->
                 "Description of original uploaded image ($name):"
             include.form == IncludeForm.CONDENSED ->

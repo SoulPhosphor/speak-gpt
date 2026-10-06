@@ -221,6 +221,7 @@ import org.teslasoft.assistant.preferences.includes.PdfIncludeLifecycle
 import org.teslasoft.assistant.preferences.includes.NativePdfPayload
 import org.teslasoft.assistant.preferences.includes.PdfCapability
 import org.teslasoft.assistant.preferences.includes.PdfCapabilityProvider
+import org.teslasoft.assistant.preferences.includes.PdfDeliveryPolicy
 import org.teslasoft.assistant.preferences.includes.PdfCapabilityMetadataClient
 import org.teslasoft.assistant.preferences.includes.PdfCapabilityResolver
 import org.teslasoft.assistant.preferences.includes.PdfCapabilityStore
@@ -3924,9 +3925,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     is PdfImporter.Result.NotPdf ->
                         showIncludeProblem(R.string.include_error_content_mismatch, pdfResult.fileName)
                     is PdfImporter.Result.TooLarge ->
-                        showIncludeCapacityProblem(R.string.document_attach_failed_title, R.string.document_attach_memory_body)
+                        showIncludeCapacityProblem(R.string.document_attach_failed_title, R.string.pdf_attach_too_large_body)
                     is PdfImporter.Result.Unavailable ->
                         showIncludeProblem(R.string.include_error_source_unavailable, pdfResult.fileName)
+                    is PdfImporter.Result.PermissionDenied ->
+                        showIncludeProblem(R.string.include_error_permission_denied, pdfResult.fileName)
+                    is PdfImporter.Result.FileGone ->
+                        showIncludeProblem(R.string.include_error_file_gone, pdfResult.fileName)
+                    is PdfImporter.Result.InterruptedRead ->
+                        showIncludeCapacityProblem(
+                            R.string.document_attach_failed_title,
+                            R.string.document_attach_interrupted_body
+                        )
+                    is PdfImporter.Result.StorageLimit ->
+                        showIncludeCapacityProblem(
+                            R.string.document_storage_failed_title,
+                            R.string.document_attach_storage_body
+                        )
                     is PdfImporter.Result.Unreadable ->
                         showIncludeProblem(R.string.include_error_unknown, pdfResult.fileName)
                 }
@@ -4568,12 +4583,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     PdfAttachmentStore.pdfFile(this@ChatActivity, chatId, include)
                         ?.takeIf { it.isFile } ?: error("PDF is unavailable")
                 } else null
-                val nativePdf = resolvedPdf?.capability == PdfCapability.SUPPORTED &&
-                    resolvedPdf.routing.provider in setOf(
-                        PdfCapabilityProvider.OPENAI, PdfCapabilityProvider.OPENROUTER
-                    ) && pdfFile != null && PdfRequestSerializer.canInline(
-                        pdfFile.length(), MAX_INLINE_NATIVE_PDF_BYTES
-                    )
+                val nativePdf = resolvedPdf != null && pdfFile != null && PdfDeliveryPolicy.useNative(
+                    resolvedPdf.routing.provider,
+                    resolvedPdf.capability,
+                    pdfFile.length(),
+                    MAX_INLINE_NATIVE_PDF_BYTES
+                )
                 val sourceInclude = if (include.kind == IncludeKind.PDF && !nativePdf) {
                     val fallback = PdfFallbackExtractor.extract(this@ChatActivity, chatId, include)
                     include.copy(fullText =
@@ -7451,7 +7466,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val payloads = generationRequestContext.get()?.nativePdfs.orEmpty()
         if (payloads.isEmpty()) return
         val provider = apiEndpointObject?.let { PdfCapabilityProvider.forEndpoint(it) } ?: return
-        if (provider != PdfCapabilityProvider.OPENAI && provider != PdfCapabilityProvider.OPENROUTER) return
+        if (!PdfDeliveryPolicy.hasNativeTransport(provider)) return
         val content = request.body as? TextContent ?: return
         if (content.contentType?.match(ContentType.Application.Json) != true) return
         val augmented = PdfRequestSerializer.augmentOpenAiChatBody(
@@ -11124,16 +11139,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 is RenderedSegment.Pdf -> {
                     val include = segment.include
                     try {
-                        val capability = resolvedPdf?.capability ?: PdfCapability.UNKNOWN
-                        val nativeTransportAvailable =
-                            resolvedPdf?.routing?.provider == PdfCapabilityProvider.OPENAI ||
-                                resolvedPdf?.routing?.provider == PdfCapabilityProvider.OPENROUTER
                         val file = PdfAttachmentStore.pdfFile(this@ChatActivity, cid, include)
                             ?.takeIf { it.isFile } ?: error("PDF ${include.fileName} is unavailable")
-                        val useNative = capability == PdfCapability.SUPPORTED &&
-                            nativeTransportAvailable && PdfRequestSerializer.canInline(
-                                file.length(), MAX_INLINE_NATIVE_PDF_BYTES
-                            )
+                        val useNative = PdfDeliveryPolicy.useNative(
+                            resolvedPdf?.routing?.provider,
+                            resolvedPdf?.capability ?: PdfCapability.UNKNOWN,
+                            file.length(),
+                            MAX_INLINE_NATIVE_PDF_BYTES
+                        )
                         if (useNative) {
                             nativePdfs += NativePdfPayload(
                                 include.id,

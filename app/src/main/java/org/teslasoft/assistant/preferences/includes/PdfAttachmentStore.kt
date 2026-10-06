@@ -50,8 +50,47 @@ object PdfAttachmentStore {
     }
 
     fun reconcileChatPdfs(context: Context, chatId: String, referencedHashes: Set<String>) {
-        chatPdfsDir(context, chatId).listFiles()?.forEach { file ->
+        val dir = chatPdfsDir(context, chatId)
+        dir.listFiles()?.forEach { file ->
             if (file.extension == "pdf" && file.nameWithoutExtension !in referencedHashes) file.delete()
+        }
+        deleteAbandonedImportTemps(dir)
+    }
+
+    private const val IMPORT_TEMP_PREFIX = "pdf-import-"
+    private const val IMPORT_TEMP_SUFFIX = ".tmp"
+
+    /** Working copies of imports running in this process; guarded by itself. */
+    private val activeImportTemps = HashSet<String>()
+
+    /**
+     * Creates an import's working copy and registers it as active in the same
+     * step, so cleanup can never see an untracked live import.
+     */
+    internal fun createImportTemp(dir: File): File = synchronized(activeImportTemps) {
+        File.createTempFile(IMPORT_TEMP_PREFIX, IMPORT_TEMP_SUFFIX, dir).also {
+            activeImportTemps += it.absolutePath
+        }
+    }
+
+    internal fun releaseImportTemp(file: File) {
+        synchronized(activeImportTemps) { activeImportTemps -= file.absolutePath }
+    }
+
+    /**
+     * Deletes import working copies that no running import owns, such as
+     * those left behind when the process died mid-import.
+     */
+    internal fun deleteAbandonedImportTemps(dir: File) {
+        synchronized(activeImportTemps) {
+            dir.listFiles()?.forEach { file ->
+                val name = file.name
+                if (file.isFile && name.startsWith(IMPORT_TEMP_PREFIX) &&
+                    name.endsWith(IMPORT_TEMP_SUFFIX) && file.absolutePath !in activeImportTemps
+                ) {
+                    file.delete()
+                }
+            }
         }
     }
 

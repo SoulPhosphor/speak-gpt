@@ -171,6 +171,8 @@ jobs:
             org.teslasoft.assistant.preferences.memory.MemorySharedRestoreInstrumentedTest
             org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporterImageValidationInstrumentedTest
             org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecoveryInstrumentedTest
+            org.teslasoft.assistant.preferences.includes.PdfAttachmentStoreInstrumentedTest
+            org.teslasoft.assistant.preferences.includes.PdfFallbackExtractorInstrumentedTest
           )
           failed=0
           for class_name in "${classes[@]}"; do

@@ -69,10 +69,11 @@ object PdfRequestSerializer {
             .put("media_type", "application/pdf")
             .put("data", pdf.base64Data))
 
+    /** Gemini's native generateContent part (not its OpenAI-compatible endpoint). */
     fun geminiDocumentPart(pdf: NativePdfPayload): JSONObject = JSONObject()
-        .put("type", "document")
-        .put("data", pdf.base64Data)
-        .put("mime_type", "application/pdf")
+        .put("inline_data", JSONObject()
+            .put("mime_type", "application/pdf")
+            .put("data", pdf.base64Data))
 
     fun xAiInputFile(fileId: String): JSONObject = JSONObject()
         .put("type", "input_file")

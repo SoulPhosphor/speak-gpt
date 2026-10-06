@@ -155,7 +155,7 @@ class IncludeRendererTest {
             )
         )
         assertEquals(
-            "Short reminder of removed uploaded Word document (resume.docx):",
+            "Reminder of removed Word document (resume.docx):",
             IncludeRenderer.label(
                 doc(name = "resume.docx", form = IncludeForm.ARTIFACT, artifact = "R")
                     .copy(kind = IncludeKind.DOCX)
@@ -167,7 +167,7 @@ class IncludeRendererTest {
             IncludeRenderer.label(image(form = IncludeForm.CONDENSED, condensed = "D"))
         )
         assertEquals(
-            "Short reminder of removed uploaded image (photo.jpg):",
+            "Reminder of removed image (photo.jpg):",
             IncludeRenderer.label(image(form = IncludeForm.ARTIFACT, artifact = "R"))
         )
         val types = mapOf(
