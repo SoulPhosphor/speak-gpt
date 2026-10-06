@@ -3268,20 +3268,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     /** Internal retry cleanup; user deletion goes through the host confirmation. */
     fun removeMessageForRetry(position: Int) {
         if (position < 0 || position >= dataArray.size) return
-        // §12 cleanup: note the generated-image file this message references
-        // BEFORE removing it; once the deletion is persisted, the file goes
-        // too unless another stored message still uses it.
-        val deletedImageHash =
-            org.teslasoft.assistant.imagegen.GeneratedImageMetadata
-                .referencedFileHash(dataArray[position])
         deleteMessage(position)
 
         // The host saves the replacement turn. This temporary removal must
         // not delete its ownership or shrink saved summary/Compact boundaries.
-        if (deletedImageHash != null) {
-            org.teslasoft.assistant.imagegen.GeneratedImageFiles
-                .deleteIfUnreferenced(context, listOf(deletedImageHash))
-        }
+        // A generated image it showed is kept: the reply comes back if the
+        // regeneration produces nothing, and otherwise stays as an earlier
+        // version of the turn, so its file is still needed either way.
 
         listener?.onMessageDeleted()
     }

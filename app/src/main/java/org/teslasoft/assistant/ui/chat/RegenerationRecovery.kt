@@ -22,10 +22,15 @@ import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
  * exact state a regeneration leaves behind.
  */
 object RegenerationRecovery {
-    /** The reply being regenerated and the message it answers. */
+    /**
+     * The reply being regenerated and the message it answers.
+     * [replyKeepsId] is false for a generated-image reply, whose
+     * regeneration arrives as a new message with its own permanent id.
+     */
     data class Pending(
         val original: HashMap<String, Any>,
-        val precedingMessageId: String
+        val precedingMessageId: String,
+        val replyKeepsId: Boolean = true
     )
 
     sealed class Outcome {
@@ -40,18 +45,23 @@ object RegenerationRecovery {
     private val gson = Gson()
     private const val KEY_ORIGINAL = "original"
     private const val KEY_PRECEDING = "precedingMessageId"
+    private const val KEY_REPLY_KEEPS_ID = "replyKeepsId"
 
-    fun pendingFor(messages: List<Map<String, Any>>): Pending? {
+    fun pendingFor(messages: List<Map<String, Any>>, replyKeepsId: Boolean = true): Pending? {
         if (messages.size < 2) return null
         val last = messages.last()
         if (last["isBot"] != true) return null
         val precedingId = MessageIdentity.idOf(messages[messages.size - 2])
         if (precedingId.isBlank() || MessageIdentity.idOf(last).isBlank()) return null
-        return Pending(HashMap(last), precedingId)
+        return Pending(HashMap(last), precedingId, replyKeepsId)
     }
 
     fun encode(pending: Pending): String = gson.toJson(
-        mapOf(KEY_ORIGINAL to pending.original, KEY_PRECEDING to pending.precedingMessageId)
+        mapOf(
+            KEY_ORIGINAL to pending.original,
+            KEY_PRECEDING to pending.precedingMessageId,
+            KEY_REPLY_KEEPS_ID to pending.replyKeepsId
+        )
     )
 
     /** Null for blank or unreadable text. */
@@ -64,7 +74,7 @@ object RegenerationRecovery {
             val original = (root[KEY_ORIGINAL] as? Map<String, Any>)?.let { HashMap(it) } ?: return null
             val preceding = root[KEY_PRECEDING]?.toString()?.ifBlank { null } ?: return null
             if (MessageIdentity.idOf(original).isBlank()) return null
-            Pending(original, preceding)
+            Pending(original, preceding, root[KEY_REPLY_KEEPS_ID] as? Boolean ?: true)
         } catch (_: Exception) {
             null
         }
@@ -88,8 +98,9 @@ object RegenerationRecovery {
     /**
      * What a saved [pending] regeneration means for [messages] as stored.
      * Restore only when the history still ends at the message the reply
-     * answered; fold only an unversioned reply that took the original's
-     * permanent id, which only the regeneration itself produces.
+     * answered; fold only an unversioned reply right after that message —
+     * one that took the original's permanent id, or, for a generated-image
+     * reply, any reply other than the original itself.
      */
     fun resolve(messages: List<HashMap<String, Any>>, pending: Pending): Outcome {
         val last = messages.lastOrNull() ?: return Outcome.Unchanged
@@ -107,9 +118,12 @@ object RegenerationRecovery {
             pending.original[ChatAdapter.KEY_MESSAGE_TIME]?.toString() &&
             last["message"]?.toString() == pending.original["message"]?.toString()
         val unversioned = last[ChatAdapter.KEY_VARIANTS]?.toString().isNullOrBlank()
-        return if (answersSameMessage && !isOriginal && unversioned &&
+        val isRegeneratedReply = if (pending.replyKeepsId) {
             MessageIdentity.idOf(last) == originalId
-        ) {
+        } else {
+            MessageIdentity.idOf(last) != originalId
+        }
+        return if (answersSameMessage && !isOriginal && unversioned && isRegeneratedReply) {
             Outcome.Fold(last)
         } else {
             Outcome.Unchanged

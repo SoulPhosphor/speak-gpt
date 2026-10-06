@@ -710,6 +710,14 @@ old adapter code still requires it during migration.
 Deleting a generated-image message should delete its private image file when
 no other app record references it.
 
+Regenerating a generated-image reply never deletes its image file (owner
+ruling, October 6 2026). If the regeneration fails before producing a reply,
+is cancelled before it starts, produces nothing, or the app closes mid-way,
+the old reply is put back with its image intact. A regeneration that does
+produce a reply — a new image, a failure notice, or a cancellation notice —
+keeps the old reply as an earlier version of the turn, so its image is still
+needed and is kept.
+
 ## 13. Error Behavior
 
 Errors must identify which side failed:

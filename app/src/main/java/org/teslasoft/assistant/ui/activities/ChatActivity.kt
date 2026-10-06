@@ -8556,6 +8556,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (endpointId.isBlank() || generatorModelId.isBlank()) {
             saveSettings()
             restoreUIState()
+            settlePendingRegeneration()
             MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                 .setTitle(R.string.title_image_generation)
                 .setMessage(R.string.image_gen_configure_message)
@@ -8602,7 +8603,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 .setPositiveButton(R.string.image_gen_action_continue) { _, _ ->
                     sendCoordinatorImageRequest(request)
                 }
-                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                .setNegativeButton(R.string.btn_cancel) { _, _ -> settlePendingRegeneration() }
+                .setOnCancelListener { settlePendingRegeneration() }
                 .show()
             return
         }
@@ -8680,6 +8682,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (fromImagine) restoreUIState()
             }
         }
+        // `/imagine` owns its whole turn, so a regeneration of it ends here.
+        // A tool image is mid-turn; the surrounding reply settles it.
+        if (fromImagine || pendingRegenerationAwaitsImageJob) settlePendingRegeneration()
     }
 
     /** §12: stamp the just-added terminal message with its structured
@@ -8728,6 +8733,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatId == "") return
         ImageGenerationJobRegistry.attach(chatId, this)
         val activeJob = ImageGenerationJobRegistry.activeJob(chatId) ?: return
+        if (pendingRetryVariants == null) {
+            org.teslasoft.assistant.ui.chat.RegenerationRecovery
+                .decode(preferences?.getPendingRegeneration())
+                ?.takeIf { pending ->
+                    messages.lastOrNull()?.let {
+                        org.teslasoft.assistant.preferences.MessageIdentity.idOf(it)
+                    } == pending.precedingMessageId
+                }
+                ?.let { pending ->
+                    pendingRetryOriginal = pending
+                    pendingRetryVariants =
+                        org.teslasoft.assistant.ui.chat.RegenerationRecovery.historyOf(pending.original)
+                    pendingRegenerationAwaitsImageJob = true
+                }
+        }
         showImageProgressCard()
         if (activeJob.origin == ImageGenerationJobRegistry.Origin.IMAGINE) {
             disableTurnControlsUnlessTheyAreStops()
@@ -10782,9 +10802,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var pendingRetryVariants: MutableList<HashMap<String, String>>? = null
 
     /** The reply a Retry removed, kept (and saved) until the regeneration
-     *  settles so it can be put back when no new reply is produced. Null for
-     *  a generated-image reply, whose file is deleted with it. */
+     *  settles so it can be put back when no new reply is produced. */
     private var pendingRetryOriginal: org.teslasoft.assistant.ui.chat.RegenerationRecovery.Pending? = null
+
+    /** A regeneration whose image is still being created after this screen
+     *  was recreated; it settles when that image job finishes. */
+    private var pendingRegenerationAwaitsImageJob = false
 
     /**
      * Fold the just-finished regenerated reply into its turn's version list as
@@ -10840,6 +10863,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         chatId: String,
         history: ArrayList<HashMap<String, Any>>
     ) {
+        // An image still being created settles when it finishes (the screen
+        // picks it up in restoreImageGenerationJobState).
+        if (ImageGenerationJobRegistry.activeJob(chatId) != null) return
         val pending = org.teslasoft.assistant.ui.chat.RegenerationRecovery
             .decode(prefs.getPendingRegeneration())
         if (pending == null) {
@@ -10885,6 +10911,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun finishPendingRegeneration() {
         pendingRetryMessageId = null
         pendingRetryOriginal = null
+        pendingRegenerationAwaitsImageJob = false
         val recompactBoundary = pendingRecompactBoundary
         pendingRecompactBoundary = null
         lifecycleScope.launch {
@@ -13886,11 +13913,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             null
         }
         // Saved before the reply is removed, so a regeneration that never
-        // produces a reply (or an app closed mid-way) can put it back.
-        pendingRetryOriginal = if (pendingRetryMessageId != null &&
-            org.teslasoft.assistant.imagegen.GeneratedImageMetadata.referencedFileHash(last!!) == null
-        ) {
-            org.teslasoft.assistant.ui.chat.RegenerationRecovery.pendingFor(messages)
+        // produces a reply (or an app closed mid-way) can put it back. A
+        // generated-image reply's file is kept for the same reason.
+        pendingRetryOriginal = if (pendingRetryVariants != null) {
+            org.teslasoft.assistant.ui.chat.RegenerationRecovery.pendingFor(
+                messages,
+                replyKeepsId = pendingRetryMessageId != null
+            )
         } else {
             null
         }

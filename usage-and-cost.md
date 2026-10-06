@@ -270,7 +270,7 @@ A service's own `/models` list is used only when it has OpenRouter's
 ## 4. What the screen adds up
 
 The screen opens from the chat menu (**Usage & Cost**). It is built from the
-saved request records at the moment it opens.
+chat's usage log (section 5) at the moment it opens.
 
 - **Grouping:** records are grouped by model, then by provider. Upper and
   lower case are ignored.
@@ -303,16 +303,46 @@ partial sum is never shown as if it were complete.
   empty reply, its frozen records are first moved to the initiating user
   message, without recalculating any count, price, or cost.
 - **Regenerated replies:** every version's requests are counted, not just the
-  version on screen.
+  version on screen, including versions from a different model and versions
+  that were never used.
+- **Attachment requests:** Condense, Reduce, and the short reminder written
+  when an attachment is removed are each a paid request and are counted.
+- **Summarizer and Compact requests:** every summary section, image
+  description, and Compact fold-in request is counted.
+- **Recorded the same way as chat replies:** counts and charges come only from
+  the service's report, and prices are frozen when the request finishes. A
+  finished request with no usage report is still counted, with its values
+  "Not Reported"; a failed one only when the service reported usage.
+- **Not counted yet:** text-to-speech (TTS) read-aloud requests, and Whisper
+  cloud voice input (audio sent to OpenAI's `whisper-1` transcription
+  service). TTS services do not report usage, so a TTS record would be "Not
+  Reported" and, under the "Not Reported" rule, so would the chat's total.
 
-Usage records are saved inside the chat's messages, in the
-`tokenUsageRecords` field of each message and of each reply version.
+### The usage log (owner ruling, October 6 2026)
+
+Each chat keeps its own usage log in its per-chat settings file
+(`usage_log`). Entries are only ever added: deleting a message, regenerating,
+regenerating an earlier reply (which removes everything after it), making
+another version current, or compacting never removes usage already spent.
+
+- **First open:** the records already stored in the chat's messages are copied
+  into the log once. Requests recorded before that (for example by the
+  Summarizer) are kept and merged.
+- **Each entry** keeps the request's frozen record, what it was for (chat,
+  attachments, summarization, or TTS), and the permanent id of the message
+  it served, when there is one. Neither depends on a message's position.
+- **Old replies** saved before usage records existed are not in the log;
+  they are still estimated from the messages present (section 1).
+
+Chat replies also keep their records inside the message, in the
+`tokenUsageRecords` field of each message and of each reply version, so a
+reply's details still show its own usage.
 
 ### Backup and restore
 
-Chat backups copy each chat's stored messages unchanged, so usage records
-(and their copies inside reply versions) are exported and restored with
-them. A backup made before usage records existed restores normally; its
+Chat backups copy each chat's stored messages and its per-chat settings file
+unchanged, so usage records (and their copies inside reply versions) and the
+usage log are exported and restored with them. A backup made before usage records existed restores normally; its
 replies fall back to the old-reply estimate described in section 1.
 
 ## 6. Settled behavior and open items (October 2026)
@@ -408,6 +438,8 @@ plans, absence of admin calls, reasoning, and frozen-record serialization.
 | Per-request capture, reasoning as output | `app/src/main/java/org/teslasoft/assistant/usage/ProviderUsageAttempt.kt` (`outputIncludingReasoning`) |
 | Price fetching and matching | `app/src/main/java/org/teslasoft/assistant/usage/TokenPricingCatalog.kt` (`TokenPricingCatalogClient`, `PricingSource`, `FirstPartyPricing`, `NanoGptPricing`, `VenicePricing`, `GenericPricing`) |
 | Cost math, long-context tier, grouping, "Not Reported" formatting | `app/src/main/java/org/teslasoft/assistant/usage/TokenUsageAccounting.kt` |
-| When records are created and attached | `app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt` (`completePendingUsageRecord`, `completeTerminalUsageRecord`, `attachUsageRecords`, `openUsageAndCost`) |
+| When records are created and attached | `app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt` (`completePendingUsageRecord`, `completeTerminalUsageRecord`, `attachUsageRecords`, `appendUsageLog`, `withAttachmentUsage`, `openUsageAndCost`) |
+| The usage log | `app/src/main/java/org/teslasoft/assistant/usage/UsageLog.kt` (`UsageLogState`, `UsageLogStore`) |
+| Attachment and Summarizer request records | `app/src/main/java/org/teslasoft/assistant/usage/AuxiliaryUsage.kt`; `app/src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt` (`withSummarizerUsage`) |
 | The screen | `app/src/main/java/org/teslasoft/assistant/ui/activities/TokenPricingDetailsActivity.kt` |
 | Tests | `app/src/test/java/org/teslasoft/assistant/usage/`, `app/src/test/java/org/teslasoft/assistant/providers/ReportedProviderParserTest.kt`, `app/src/test/java/org/teslasoft/assistant/preferences/backup/portable/PortableChatRestorePlanTest.kt` |

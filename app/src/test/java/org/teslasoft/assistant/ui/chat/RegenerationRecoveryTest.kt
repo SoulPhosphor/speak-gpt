@@ -76,6 +76,30 @@ class RegenerationRecoveryTest {
         assertTrue(RegenerationRecovery.resolve(listOf(user("u1"), user("u2"), reply("r2", "x", "300")), pending) is Outcome.Unchanged)
     }
 
+    @Test fun `an image regeneration that produced nothing puts the image reply back`() {
+        val original = reply("r1", "~file:abc123", "100")
+        val pending = RegenerationRecovery.pendingFor(listOf(user("u1"), original), replyKeepsId = false)!!
+
+        val outcome = RegenerationRecovery.resolve(listOf(user("u1")), pending) as Outcome.Restore
+
+        assertEquals("~file:abc123", outcome.original["message"])
+    }
+
+    @Test fun `a new image reply is folded in under its own id`() {
+        val original = reply("r1", "~file:abc123", "100")
+        val pending = RegenerationRecovery.pendingFor(listOf(user("u1"), original), replyKeepsId = false)!!
+        val newImage = reply("r2", "~file:def456", "200")
+
+        val outcome = RegenerationRecovery.resolve(listOf(user("u1"), newImage), pending) as Outcome.Fold
+        RegenerationRecovery.foldInto(outcome.reply, RegenerationRecovery.historyOf(pending.original), null)
+
+        val versions = ChatAdapter.parseVariants(newImage[ChatAdapter.KEY_VARIANTS]?.toString())
+        assertEquals(listOf("~file:abc123", "~file:def456"), versions.map { it["message"] })
+        assertEquals("r2", MessageIdentity.idOf(newImage))
+        // The original itself, still present, is left alone.
+        assertTrue(RegenerationRecovery.resolve(listOf(user("u1"), reply("r1", "~file:abc123", "100")), pending) is Outcome.Unchanged)
+    }
+
     @Test fun `a saved regeneration survives encoding`() {
         val pending = pendingOver(user("u1"), reply("r1", "first answer", "100"))
 
@@ -84,6 +108,9 @@ class RegenerationRecoveryTest {
         assertEquals("u1", decoded.precedingMessageId)
         assertEquals("first answer", decoded.original["message"])
         assertEquals(true, decoded.original["isBot"])
+        val image = RegenerationRecovery.pendingFor(listOf(user("u1"), reply("r1", "~file:a", "1")), replyKeepsId = false)!!
+        assertEquals(false, RegenerationRecovery.decode(RegenerationRecovery.encode(image))!!.replyKeepsId)
+        assertEquals(true, decoded.replyKeepsId)
         assertNull(RegenerationRecovery.decode(""))
         assertNull(RegenerationRecovery.decode("{broken"))
     }
