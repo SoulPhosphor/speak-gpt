@@ -461,7 +461,27 @@ Current priorities belong in the active conversation, issue, work order, or bran
 - Do not claim a reported runtime bug is fixed until the owner confirms the symptom is resolved on the test device.
 - When the owner says "put it on Main," merge the approved green branch to `main` with a normal merge or other explicitly approved method.
 
-### Never hard-code prices (owner ruling, October 7 2026)
+### Never hard-code what a service can change (owner ruling, October 7 2026)
+
+If it cannot be learned from outside the app while the app runs, it does not
+belong in the app. Services change their models, prices and features often,
+and a list written into the code goes stale.
+
+Never write any of these into the app's code or configuration, even when
+copied from a service's documentation:
+
+- prices, rates, or price tables;
+- lists of model names or IDs;
+- lists of which models can do what (speech, streaming, images, tools, and
+  so on);
+- voice lists or other catalogs a service publishes.
+
+The app must read these from the service, or from OpenRouter, while it runs.
+When the information cannot be read, the app says it is unknown ("Not
+Reported" for costs) instead of guessing. If a feature seems impossible
+without a hard-coded list, stop and ask the owner before writing one.
+
+#### Prices
 
 Never write a price, rate, or price table into the app's code or configuration,
 for any service, model, or feature. This includes prices copied from a
