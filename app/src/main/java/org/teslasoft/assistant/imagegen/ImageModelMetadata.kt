@@ -62,7 +62,8 @@ data class ImageModelMetadata(
     val knownImageOutput: Boolean = true,
     val tariffsComplete: Boolean = true,
     val resolvedIds: Set<String> = setOf(id),
-    val outputModalities: Set<String> = emptySet()
+    val outputModalities: Set<String> = emptySet(),
+    val nativeSizes: List<String> = emptyList()
 )
 
 data class ImageServingMetadata(
@@ -143,7 +144,11 @@ object ImageMetadataParser {
             val id = model.imageText("id") ?: return@mapNotNull null
             val modalities = model.get("architecture").imageObject()?.imageStrings("output_modalities")
             if (modalities != null && modalities.isNotEmpty() && "image" !in modalities) return@mapNotNull null
-            ImageModelMetadata(id, parameters(model.get("supported_parameters").imageObject()), sourceUrl = sourceUrl)
+            if (model.get("capabilities").imageObject()?.get("image_generation")
+                    ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean == false) return@mapNotNull null
+            ImageModelMetadata(id, parameters(model.get("supported_parameters").imageObject()),
+                tariffs = tariffs(model.get("pricing")), sourceUrl = sourceUrl,
+                tariffsComplete = tariffsComplete(model.get("pricing")))
         }
     }
 
@@ -172,7 +177,8 @@ object ImageMetadataParser {
             parameter.copy(values = values, minimum = minimum, maximum = maximum,
                 defaultValue = parameter.defaultValue?.takeIf { value -> present.all { it.defaultValue == value } })
         }
-        return model.copy(parameters = if (endpoints.isEmpty()) model.parameters else common, endpointRecords = endpoints)
+        return model.copy(parameters = common, tariffs = emptyList(),
+            tariffsComplete = endpoints.isNotEmpty(), endpointRecords = endpoints)
     }
 }
 

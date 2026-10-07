@@ -41,9 +41,7 @@ object OpenAiImageAdapter : ImageProviderAdapter {
 
     /** The generations path under the endpoint's base URL. */
     fun imagesUrl(endpoint: ApiEndpointObject): String {
-        var base = endpoint.host.trim()
-        if (!base.endsWith("/")) base += "/"
-        return base + "images/generations"
+        return ImageApiRoutes.base(endpoint) + "images/generations"
     }
 
     /** Request body as JSON, visible for unit tests. Exactly one image. */

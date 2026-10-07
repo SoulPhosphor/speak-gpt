@@ -181,7 +181,9 @@ data class ImageUsageAttempt(
             ImageProviderKind.GEMINI -> listOf(UsageMeterComponent.IMAGE_INPUT, UsageMeterComponent.CACHED_IMAGE_INPUT)
             else -> emptyList()
         }
-        exactZeros.forEach { component ->
+        val inputIsZero = meters.firstOrNull { it.component == UsageMeterComponent.TEXT_INPUT }?.quantity == 0.0
+        val zeros = exactZeros + if (inputIsZero) listOf(UsageMeterComponent.CACHED_TEXT_INPUT) else emptyList()
+        zeros.forEach { component ->
             val index = meters.indexOfFirst { it.component == component }
             if (index < 0) meters += UsageMeter(component, UsageMeterUnit.TOKEN, 0.0, UsageQuantitySource.LOCAL_EXACT)
             else if (meters[index].quantity == null) meters[index] = meters[index].copy(quantity = 0.0, quantitySource = UsageQuantitySource.LOCAL_EXACT)
@@ -249,7 +251,7 @@ data class ImageUsageAttempt(
             requestId = receipt.requestId ?: receipt.generationId,
             requestedModel = model, requestStartedAtMs = startedAtMs, httpStatus = httpStatus,
             requestParameters = Gson().toJson(effectiveParameters), pricingSource = metadata?.sourceUrl,
-            pricingEvidence = Gson().toJson(metadata?.tariffs.orEmpty() + metadata?.endpointRecords.orEmpty().flatMap { it.tariffs }),
+            pricingEvidence = metadata?.let { Gson().toJson(it) },
             reportedChargeAmount = originalCharge.amount, reportedChargeCurrency = originalCharge.currency,
             reportedChargeDecimal = originalCharge.amountDecimal
         )

@@ -67,7 +67,15 @@ object GeminiImagePricingParser {
             }
         }
         if (tariffs.none { it.billable == "text_input" } || tariffs.none { it.billable == "image_output" }) complete = false
-        return model.copy(tariffs = tariffs, tariffsComplete = complete, sourceUrl = model.sourceUrl + " | " + URL)
+        val outputDescription = rows.firstOrNull { it.firstOrNull() == "Output price" }?.getOrNull(paid).orEmpty()
+        val sizes = model.nativeSizes.filter { size ->
+            Regex("(?<![\\w.])" + Regex.escape(size) + "(?![\\w.])").containsMatchIn(outputDescription)
+        }
+        // Exact-model pricing also names supported output resolution tiers. This
+        // resolves a missing guide table without assigning capabilities from a name.
+        val parameters = if (model.parameters.none { it.key == "resolution" } && sizes.size > 1)
+            listOf(ImageParameter("resolution", ImageParameterType.ENUM, sizes)) + model.parameters else model.parameters
+        return model.copy(parameters = parameters, tariffs = tariffs, tariffsComplete = complete, sourceUrl = model.sourceUrl + " | " + URL)
     }
 }
 

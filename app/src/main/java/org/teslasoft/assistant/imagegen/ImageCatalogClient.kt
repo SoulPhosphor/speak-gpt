@@ -14,6 +14,12 @@ object ImageApiRoutes {
         val url = endpoint.host.trim().toHttpUrl()
         return when (ImageProviderKind.forEndpoint(endpoint)) {
             ImageProviderKind.GEMINI -> url.newBuilder().encodedPath("/v1beta/").query(null).build().toString()
+            ImageProviderKind.OPENAI -> if (url.encodedPath == "/")
+                url.newBuilder().encodedPath("/v1/").query(null).build().toString()
+                else endpoint.host.trim().trimEnd('/') + "/"
+            ImageProviderKind.OPENROUTER -> if (url.encodedPath == "/")
+                url.newBuilder().encodedPath("/api/v1/").query(null).build().toString()
+                else endpoint.host.trim().trimEnd('/') + "/"
             ImageProviderKind.NANOGPT -> url.newBuilder().encodedPath("/api/v1/").query(null).build().toString()
             else -> endpoint.host.trim().trimEnd('/') + "/"
         }
@@ -215,7 +221,7 @@ object GeminiImageMetadataParser {
             ids.map { id -> ImageModelMetadata(id, buildList {
                 if (sizes.isNotEmpty()) add(ImageParameter("resolution", ImageParameterType.ENUM, sizes))
                 if (ratios.isNotEmpty()) add(ImageParameter("aspect_ratio", ImageParameterType.ENUM, ratios))
-            }, sourceUrl = GUIDE_URL) }
+            }, sourceUrl = GUIDE_URL + " | " + SCHEMA_URL, nativeSizes = schemaValues("imageSize")) }
         }.distinctBy { it.id }
     }
 }

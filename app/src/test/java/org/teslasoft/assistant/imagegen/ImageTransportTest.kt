@@ -10,6 +10,12 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 class ImageTransportTest {
     private fun request() = ImageGenerationRequest("draw a tree", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future/image")
 
+    @Test fun knownRootHostsResolveTheirImageBaseWithoutChangingCustomBases() {
+        assertEquals("https://api.openai.com/v1/images/generations", OpenAiImageAdapter.imagesUrl(ApiEndpointObject("O", "https://api.openai.com", "k")))
+        assertEquals("https://openrouter.ai/api/v1/", ImageApiRoutes.base(ApiEndpointObject("R", "https://openrouter.ai", "k")))
+        assertEquals("https://proxy.example/custom/", ImageApiRoutes.base(ApiEndpointObject("C", "https://proxy.example/custom", "k")))
+    }
+
     @Test fun catalogAdapterSendsPublishedTypesAndExactlyOneImage() {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("""{"data":[{"b64_json":"AQID"}],"usage":{"cost":0.001}}"""))

@@ -26,6 +26,13 @@ class ImageMetadataTest {
         assertFalse(mismatch.tariffsComplete)
     }
 
+    @Test fun compatibleCatalogKeepsExplicitTariffsAndExcludesDeclaredEditOnlyModels() {
+        val catalog = ImageMetadataParser.catalog("""{"data":[{"id":"new-generator","pricing":[{"billable":"output_image","unit":"image","cost_usd":0.07}]},{"id":"edit-only","capabilities":{"image_generation":false}}]}""", "fetched-source")
+        assertEquals(1, catalog.size)
+        assertTrue(catalog.single().tariffsComplete)
+        assertEquals(0.07, catalog.single().tariffs.single().amount, 0.0)
+    }
+
     @Test fun malformedPriceLineOrQuantityDoesNotBecomeCompletePricing() {
         val pricing = imageJson("""{"pricing":[{"billable":"output_image","unit":"image","cost_usd":0.2},{"billable":"input_image","unit":"image","cost_usd":0.1,"quantity":0}]}""")!!.get("pricing")
         assertEquals(1, ImageMetadataParser.tariffs(pricing).size)
@@ -57,6 +64,9 @@ class ImageMetadataTest {
         assertTrue(priced.tariffsComplete)
         assertEquals(71.0, priced.tariffs.single { it.billable == "image_output" }.amount, 0.0)
         assertEquals(2_000_000.0, priced.tariffs.first().quantity, 0.0)
+        val withTiers = GeminiImagePricingParser.enrich(model.copy(parameters = emptyList(), nativeSizes = listOf("8K", "9K", "1K")),
+            pricing.replace("per image", "per 8K/9K image"))
+        assertEquals(listOf("8K", "9K"), withTiers.parameters.single { it.key == "resolution" }.values)
         assertFalse(GeminiImagePricingParser.enrich(model, pricing.replace("Not available", "Free of charge")).tariffsComplete)
         assertFalse(GeminiImagePricingParser.enrich(model.copy(id = "other", resolvedIds = setOf("other")), pricing).tariffsComplete)
     }

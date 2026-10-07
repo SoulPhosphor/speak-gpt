@@ -56,12 +56,24 @@ class ImageUsageAccountingTest {
         assertEquals(3.98, record.totalCost!!, 1e-12) // later metadata changes cannot reprice this record
     }
 
+    @Test fun zeroTextInputHasAnExactZeroCachedSubset() {
+        val prices = listOf(ImageTariff("text_input", "token", 9.0, 1000.0, "USD"),
+            ImageTariff("text_cached_input", "token", 1.0, 1000.0, "USD"),
+            ImageTariff("image_output", "token", 17.0, 1000.0, "USD"))
+        val model = ImageModelMetadata("new-model", tariffs = prices, outputModalities = setOf("image"))
+        val body = """{"usage":{"input_tokens_details":{"text_tokens":0,"image_tokens":0},"output_tokens":200},"data":[{}]}"""
+        assertEquals(3.4, attempt(ImageProviderKind.OPENAI, body, model).record().totalCost!!, 1e-12)
+    }
+
     @Test fun servingProviderAndModelMustMatchFrozenMetadata() {
         val a = ImageServingMetadata("A", "a", emptyList(), listOf(ImageTariff("output_image", "image", 0.1, 1.0, "USD")))
         val b = a.copy(providerName = "B", providerSlug = "b", tariffs = listOf(ImageTariff("output_image", "image", 0.3, 1.0, "USD")))
         val request = attempt(body = """{"data":[{}]}""", metadata = ImageModelMetadata("new-model", endpointRecords = listOf(a,b)))
         assertNull(request.record().totalCost)
-        assertEquals(0.3, request.record(ImageUsageReceipt(provider = "B")).totalCost!!, 0.0)
+        val matched = request.record(ImageUsageReceipt(provider = "B"))
+        assertEquals(0.3, matched.totalCost!!, 0.0)
+        val frozen = imageJson(matched.pricingEvidence!!)!!.imageArray("endpointRecords")!!
+        assertEquals(listOf("A", "B"), frozen.map { it.imageObject()!!.imageText("providerName") })
         assertNull(request.record(ImageUsageReceipt(model = "unrelated", provider = "B")).totalCost)
     }
 
