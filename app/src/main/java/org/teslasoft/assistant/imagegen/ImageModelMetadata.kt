@@ -371,6 +371,16 @@ object ImageRequestOptions {
             throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION,
                 "choose an output format this app can display before generating")
         }
+        val routes = listOf(metadata?.parameters.orEmpty()) + metadata?.endpointRecords.orEmpty().map { it.parameters }
+        if (routes.any { parameters ->
+                val background = options["background"] ?: parameters.firstOrNull { it.key == "background" }?.defaultValue
+                val output = options["output_format"] ?: parameters.firstOrNull { it.key == "output_format" }?.defaultValue
+                background.equals("transparent", ignoreCase = true) &&
+                    output?.let { ImageFormat.fromOutputName(it)?.supportsTransparency } == false
+            }) {
+            throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION,
+                "choose an output format that supports transparency or change the background")
+        }
         return options
     }
 }

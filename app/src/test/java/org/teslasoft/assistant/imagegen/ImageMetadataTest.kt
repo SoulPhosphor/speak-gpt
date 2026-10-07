@@ -4,6 +4,43 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageMetadataTest {
+    @Test fun transparentBackgroundRejectsOpaqueFormatsInEitherSettingOrderAndWithPublishedDefaults() {
+        val model = ImageModelMetadata("future", parameters = listOf(
+            ImageParameter("background", ImageParameterType.ENUM, listOf("transparent", "opaque", "auto")),
+            ImageParameter("output_format", ImageParameterType.ENUM, listOf("jpeg", "jpg", "image/jpeg", "png", "webp"))))
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future")
+        for (opaque in listOf("jpeg", "jpg", "image/jpeg")) {
+            val options = listOf("background" to "transparent", "output_format" to opaque)
+            for (ordered in listOf(options, options.reversed())) {
+                try { ImageRequestOptions.resolve(request.copy(parameters = ordered.toMap()), model); fail("JPEG cannot retain transparency") }
+                catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+            }
+        }
+        val jpegDefault = model.copy(parameters = model.parameters.map {
+            if (it.key == "output_format") it.copy(defaultValue = "jpeg") else it
+        })
+        try { ImageRequestOptions.resolve(request.copy(parameters = mapOf("background" to "transparent")), jpegDefault); fail("published opaque default cannot retain transparency") }
+        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        val transparentDefault = model.copy(parameters = model.parameters.map {
+            if (it.key == "background") it.copy(defaultValue = "transparent") else it
+        })
+        try { ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_format" to "jpeg")), transparentDefault); fail("background default must be considered") }
+        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        for (alpha in listOf("png", "webp")) {
+            val options = mapOf("background" to "transparent", "output_format" to alpha)
+            assertEquals(options, ImageRequestOptions.resolve(request.copy(parameters = options), model))
+        }
+        for (background in listOf("opaque", "auto")) {
+            val options = mapOf("background" to background, "output_format" to "jpeg")
+            assertEquals(options, ImageRequestOptions.resolve(request.copy(parameters = options), model))
+        }
+        val routed = ImageMetadataParser.endpoints("""{"id":"future","endpoints":[{"supported_parameters":{"background":{"type":"enum","values":["transparent","opaque"],"default":"transparent"},"output_format":{"type":"enum","values":["png","jpeg"],"default":"png"}}},{"supported_parameters":{"background":{"type":"enum","values":["transparent","opaque"],"default":"opaque"},"output_format":{"type":"enum","values":["png","jpeg"],"default":"png"}}}]}""", model)
+        try { ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_format" to "jpeg")), routed); fail("an unsafe route default cannot be hidden by the intersection") }
+        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        assertEquals(mapOf("background" to "opaque", "output_format" to "jpeg"), ImageRequestOptions.resolve(
+            request.copy(parameters = mapOf("background" to "opaque", "output_format" to "jpeg")), routed))
+    }
+
     @Test fun oneMalformedEndpointInvalidatesTheEntireEnrichment() {
         val model = ImageModelMetadata("future", parameters = listOf(
             ImageParameter("output_format", ImageParameterType.ENUM, listOf("svg"))),
