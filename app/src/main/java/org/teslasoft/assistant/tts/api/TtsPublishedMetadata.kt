@@ -206,7 +206,7 @@ internal class TtsPublishedMetadataClient(private val http: TtsHttpExecutor) {
                 val catalog = TtsDiscoveryClient(http).providers(source, token)
                 val published = openRouterPrices(source, token, op)
                 val providers = catalog.copy(providers = catalog.providers.map { provider ->
-                    provider.copy(price = published[provider.id] ?: provider.price)
+                    provider.copy(price = OpenRouterPublishedPrices.forEndpoint(provider.price, published[provider.id]))
                 })
                 TtsSynthesisMetadata(wire, providers = providers)
             }
@@ -249,6 +249,29 @@ internal class TtsPublishedMetadataClient(private val http: TtsHttpExecutor) {
 }
 
 internal object OpenRouterPublishedPrices {
+    fun forEndpoint(account: TtsPrice, published: TtsPrice?): TtsPrice {
+        // Endpoint rates take priority. Public SKUs supply the flat API's missing units.
+        val declared = account.complete && account.charges.isNotEmpty() && account.charges.all {
+            it.amount != null && !it.unit.isNullOrBlank() && (it.quantity?.signum() ?: 0) > 0
+        }
+        if (declared || published == null) return account
+        if (account.charges.isEmpty()) return published
+        if (!account.complete || !published.complete || account.charges.any { it.amount == null }) return account
+        val used = mutableSetOf<TtsCharge>()
+        val charges = published.charges.map { charge ->
+            val components = when (charge.component) {
+                "characters", "bytes" -> setOf(charge.component, "input")
+                else -> setOf(charge.component)
+            }
+            val rate = account.charges.singleOrNull { it.component in components } ?: return account
+            if (!used.add(rate)) return account
+            charge.copy(amount = rate.amount, currency = rate.currency ?: charge.currency, quantity = rate.quantity)
+        }
+        // Every paid account component must be accounted for; never discard an unfamiliar fee.
+        if (account.charges.any { it !in used && it.amount?.signum() != 0 }) return account
+        return TtsPrice(charges, true)
+    }
+
     fun parse(body: String, modelId: String): Map<String, TtsPrice> = PublishedPageJson.objects(body)
         .filter { it.text("model_variant_slug") == modelId && it.text("provider_slug") != null }
         .mapNotNull { endpoint ->

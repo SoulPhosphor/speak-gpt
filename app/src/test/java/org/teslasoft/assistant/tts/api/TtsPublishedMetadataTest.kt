@@ -119,6 +119,20 @@ class TtsPublishedMetadataTest {
         assertNull(ElevenLabsPublishedPrices.parse(published("0.024"), model, "negotiated-plan"))
     }
 
+    @Test fun anExplicitEndpointRateTakesPriorityOverPublicPricing() {
+        val public = TtsPrice(listOf(TtsCharge("characters", BigDecimal("0.003"), "USD", "character")), true)
+        val account = TtsPrice(listOf(TtsCharge("characters", BigDecimal("0.002"), "USD", "character")), true)
+        assertEquals(account, OpenRouterPublishedPrices.forEndpoint(account, public))
+        val unitless = account.copy(charges = account.charges.map { it.copy(unit = null) })
+        assertEquals(account, OpenRouterPublishedPrices.forEndpoint(unitless, public))
+        assertEquals(unitless, OpenRouterPublishedPrices.forEndpoint(unitless, null))
+        val flat = TtsPrice(listOf(TtsCharge("input", BigDecimal("0.002"), null, null),
+            TtsCharge("output", BigDecimal.ZERO, null, null)), true)
+        assertEquals(account, OpenRouterPublishedPrices.forEndpoint(flat, public))
+        val withFee = flat.copy(charges = flat.charges + TtsCharge("unknown_fee", BigDecimal.ONE, null, null))
+        assertEquals(withFee, OpenRouterPublishedPrices.forEndpoint(withFee, public))
+    }
+
     @Test fun elevenLabsFetchesAccountPlanAndVoiceBeforeApplyingThePublishedRate() {
         val published = page("""{"models":[{"id":"speech-future","name":"Future","category":"Text to Speech"}],
             "tiers":[{"id":"plan-new","title":"New plan"}],"sections":[{"id":"text_to_speech",
