@@ -31,8 +31,9 @@ a detail; the file list at the end shows where each part lives.
 ## Owner rules (October 2026)
 
 1. Always use the most accurate source available: the service's reported
-   charge, then the service's own documented price list, then OpenRouter's
-   price for that service's model, then nothing ("Not Reported").
+   charge, then the service's own price list (downloaded by the app while it
+   runs), then OpenRouter's price for that service's model, then nothing
+   ("Not Reported").
 2. Services with their own documented formats (NanoGPT, Venice, xAI) are
    handled by their documentation, not by generic guessing.
 3. A model's price is used only for that exact model ID, or for an alias or
@@ -54,6 +55,11 @@ a detail; the file list at the end shows where each part lives.
 9. Wording on the screen (labels for calculated costs, estimates, or the
    OpenRouter price source) is on hold until the owner reviews the finished
    screen.
+10. **Never hard-code prices (owner ruling, October 7 2026).** No price,
+    rate, or price table is ever written into the app, including prices
+    copied from a service's documentation. Prices come only from a charge the
+    service reports or a price list the app downloads at the time of the
+    request. Otherwise the cost is "Not Reported".
 
 ## 1. Token counts
 

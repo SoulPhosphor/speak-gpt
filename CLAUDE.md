@@ -442,6 +442,20 @@ Current priorities belong in the active conversation, issue, work order, or bran
 - Do not claim a reported runtime bug is fixed until the owner confirms the symptom is resolved on the test device.
 - When the owner says "put it on Main," merge the approved green branch to `main` with a normal merge or other explicitly approved method.
 
+### Never hard-code prices (owner ruling, October 7 2026)
+
+Never write a price, rate, or price table into the app's code or configuration,
+for any service, model, or feature. This includes prices copied from a
+service's documentation or pricing page.
+
+The app may use only prices it gets while running: a charge the service
+reports for the request, or a price list the app downloads from the service
+(or OpenRouter) at the time of the request. When no such source exists, the
+cost is "Not Reported".
+
+Tests may use made-up prices only to check the arithmetic. Those values must
+never become data the app uses.
+
 ### Usage control
 
 Subagents are a normal, permitted tool. Choosing a high-end model (e.g. Fable) for a subagent is likewise permitted — it is not restricted.
