@@ -330,6 +330,14 @@ Reuse the app's established shared components and styles for:
 
 Do not create near-duplicate styles, hardcode visual properties in Kotlin, or copy repeated XML attributes because they are faster.
 
+### Never hard-code appearance (owner ruling, October 7 2026)
+
+Never write colors, sizes, spacing, text sizes, fonts, corner shapes, or other
+visual properties directly into Kotlin code or directly onto views in layout
+files. Appearance comes only from the app's shared styles and theme. If no
+shared style fits, stop and ask the owner before adding anything; do not copy
+values from another layout as a shortcut.
+
 New UI must remain compatible with app-wide themes and palette changes.
 
 A shared-style change that alters existing screens requires owner approval before implementation.
