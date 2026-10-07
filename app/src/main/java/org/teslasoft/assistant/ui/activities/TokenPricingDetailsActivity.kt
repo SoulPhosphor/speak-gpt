@@ -211,63 +211,30 @@ class TokenPricingDetailsActivity : FragmentActivity() {
         val inflater = LayoutInflater.from(this)
         val table = view.findViewById<LinearLayout>(R.id.usage_table)
         table.removeAllViews()
-        meters.forEachIndexed { index, meter ->
-            if (index > 0) table.addView(inflater.inflate(R.layout.view_usage_table_divider, table, false))
-            val row = inflater.inflate(R.layout.view_usage_table_row, table, false)
-            table.addView(row)
-            row.findViewById<TextView>(R.id.usage_label).setText(meterLabel(meter.component))
-            row.findViewById<TextView>(R.id.usage_tokens).text = when {
-                meter.hasUnknownQuantity -> UsageValueFormatter.NOT_REPORTED
-                meter.unit == UsageMeterUnit.SECOND -> getString(
-                    R.string.usage_duration_seconds, UsageValueFormatter.seconds(meter.quantity)
-                )
-                else -> UsageValueFormatter.count(meter.quantity, false)
+        MeteredUsagePresentation.rows(meters) { getString(R.string.usage_duration_seconds, it) }
+            .forEachIndexed { index, line ->
+                if (index > 0) table.addView(inflater.inflate(R.layout.view_usage_table_divider, table, false))
+                val row = inflater.inflate(R.layout.view_usage_table_row, table, false)
+                table.addView(row)
+                row.findViewById<TextView>(R.id.usage_label).setText(line.label)
+                row.findViewById<TextView>(R.id.usage_tokens).text = line.quantity
+                row.findViewById<TextView>(R.id.usage_cost).text = line.cost
             }
-            row.findViewById<TextView>(R.id.usage_cost).text =
-                UsageValueFormatter.cost(meter.cost, meter.hasUnknownCost)
-        }
         table.visibility = if (meters.isEmpty()) View.GONE else View.VISIBLE
         view.findViewById<View>(R.id.cache_hit_rate_box).visibility = View.GONE
 
         val facts = view.findViewById<LinearLayout>(R.id.price_facts)
         facts.removeAllViews()
-        meters.forEach { meter ->
+        MeteredUsagePresentation.prices(meters, getString(R.string.usage_variable_price)).forEach { price ->
             val fact = inflater.inflate(R.layout.view_usage_price_fact, facts, false)
             facts.addView(fact)
-            fact.findViewById<TextView>(R.id.price_label).setText(meterLabel(meter.component))
-            fact.findViewById<TextView>(R.id.price_value).text = when {
-                meter.hasVariablePrice -> getString(R.string.usage_variable_price)
-                meter.currency?.equals("USD", ignoreCase = true) != true -> UsageValueFormatter.NOT_REPORTED
-                else -> UsageValueFormatter.price(displayedRate(meter))
-            }
+            fact.findViewById<TextView>(R.id.price_label).setText(price.label)
+            fact.findViewById<TextView>(R.id.price_value).text = price.value
         }
-        view.findViewById<TextView>(R.id.price_caption).text = meters.map { it.unit }.distinct()
-            .joinToString(" · ") { getString(priceBasis(it)) }
+        view.findViewById<TextView>(R.id.price_caption).text =
+            MeteredUsagePresentation.captions(meters).joinToString(" · ") { getString(it) }
         view.findViewById<View>(R.id.pricing_footer).visibility =
             if (meters.isEmpty()) View.GONE else View.VISIBLE
-    }
-
-    /** The frozen rate restated per 1M units, or per minute of audio. */
-    private fun displayedRate(meter: UsageMeterTotal): Double? {
-        val amount = meter.priceAmount ?: return null
-        val basis = meter.priceQuantity?.takeIf { it > 0.0 } ?: return null
-        val per = if (meter.unit == UsageMeterUnit.SECOND) 60.0 else 1_000_000.0
-        return java.math.BigDecimal.valueOf(amount).multiply(java.math.BigDecimal.valueOf(per))
-            .divide(java.math.BigDecimal.valueOf(basis), java.math.MathContext.DECIMAL128).toDouble()
-    }
-
-    private fun meterLabel(component: UsageMeterComponent): Int = when (component) {
-        UsageMeterComponent.CHARACTERS -> R.string.usage_meter_characters
-        UsageMeterComponent.UTF8_BYTES -> R.string.usage_meter_utf8_bytes
-        UsageMeterComponent.TEXT_INPUT -> R.string.usage_meter_text_input
-        UsageMeterComponent.AUDIO_OUTPUT -> R.string.usage_meter_audio_output
-    }
-
-    private fun priceBasis(unit: UsageMeterUnit): Int = when (unit) {
-        UsageMeterUnit.CHARACTER -> R.string.usage_price_per_million_characters
-        UsageMeterUnit.BYTE -> R.string.usage_price_per_million_utf8_bytes
-        UsageMeterUnit.TOKEN -> R.string.usage_price_per_million
-        UsageMeterUnit.SECOND -> R.string.usage_price_per_minute_audio
     }
 
     private fun bindUsageRow(
@@ -316,5 +283,54 @@ class TokenPricingDetailsActivity : FragmentActivity() {
                 window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom
             )
         } catch (_: Exception) { }
+    }
+}
+
+/** What the Usage & Cost screen shows for metered (TTS) usage: label resources and text. */
+internal object MeteredUsagePresentation {
+    data class Row(val label: Int, val quantity: String, val cost: String)
+    data class Price(val label: Int, val value: String)
+
+    /** [seconds] adds the unit to a duration, for example "12.4 sec". */
+    fun rows(meters: List<UsageMeterTotal>, seconds: (String) -> String): List<Row> = meters.map { meter ->
+        Row(label(meter.component), when {
+            meter.hasUnknownQuantity -> UsageValueFormatter.NOT_REPORTED
+            meter.unit == UsageMeterUnit.SECOND -> seconds(UsageValueFormatter.seconds(meter.quantity))
+            else -> UsageValueFormatter.count(meter.quantity, false)
+        }, UsageValueFormatter.cost(meter.cost, meter.hasUnknownCost))
+    }
+
+    fun prices(meters: List<UsageMeterTotal>, variable: String): List<Price> = meters.map { meter ->
+        Price(label(meter.component), when {
+            meter.hasVariablePrice -> variable
+            meter.currency?.equals("USD", ignoreCase = true) != true -> UsageValueFormatter.NOT_REPORTED
+            else -> UsageValueFormatter.price(displayedRate(meter))
+        })
+    }
+
+    /** One caption per distinct unit, naming the basis the prices are shown in. */
+    fun captions(meters: List<UsageMeterTotal>): List<Int> = meters.map { it.unit }.distinct().map {
+        when (it) {
+            UsageMeterUnit.CHARACTER -> R.string.usage_price_per_million_characters
+            UsageMeterUnit.BYTE -> R.string.usage_price_per_million_utf8_bytes
+            UsageMeterUnit.TOKEN -> R.string.usage_price_per_million
+            UsageMeterUnit.SECOND -> R.string.usage_price_per_minute_audio
+        }
+    }
+
+    fun label(component: UsageMeterComponent): Int = when (component) {
+        UsageMeterComponent.CHARACTERS -> R.string.usage_meter_characters
+        UsageMeterComponent.UTF8_BYTES -> R.string.usage_meter_utf8_bytes
+        UsageMeterComponent.TEXT_INPUT -> R.string.usage_meter_text_input
+        UsageMeterComponent.AUDIO_OUTPUT -> R.string.usage_meter_audio_output
+    }
+
+    /** The frozen rate restated per 1M units, or per minute of audio. */
+    private fun displayedRate(meter: UsageMeterTotal): Double? {
+        val amount = meter.priceAmount ?: return null
+        val basis = meter.priceQuantity?.takeIf { it > 0.0 } ?: return null
+        val per = if (meter.unit == UsageMeterUnit.SECOND) 60.0 else 1_000_000.0
+        return java.math.BigDecimal.valueOf(amount).multiply(java.math.BigDecimal.valueOf(per))
+            .divide(java.math.BigDecimal.valueOf(basis), java.math.MathContext.DECIMAL128).toDouble()
     }
 }
