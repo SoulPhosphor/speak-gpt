@@ -61,7 +61,7 @@ class TtsWireFormatTest {
             assertFalse(body(request).has("stream_format"))
             assertEquals("https://api.openai.com/v1/audio/speech", request.url.toString())
         }
-        val sse = TtsSpeechTransport().request(openAi("gpt-4o-mini-tts"), "Hi")
+        val sse = TtsSpeechTransport().request(openAi("gpt-4o-mini-tts"), "Hi", wire = TtsWireFormat.OPENAI_SSE)
         assertEquals("sse", body(sse)["stream_format"].asString)
         assertEquals("text/event-stream", sse.header("Accept"))
         // A compatible service, or an unknown OpenAI model, is never switched to SSE.
@@ -80,20 +80,20 @@ class TtsWireFormatTest {
             "data: {\"type\":\"speech.audio.delta\",\"audio\":\"${b64(second)}\"}\r\n\r\n" +
             "data: {\"type\":\"speech.audio.done\",\"usage\":{\"input_tokens\":48,\"output_tokens\":914,\"total_tokens\":962}}\n\n"
         val http = FakeHttp { TtsHttpResponse(200, stream.toByteArray(), "text/event-stream") }
-        val audio = TtsSpeechTransport(http).synthesize(openAi("gpt-4o-mini-tts"), "Hi", TtsRequestGate().begin())
+        val audio = TtsSpeechTransport(http, wireFor = { _, _ -> TtsWireFormat.OPENAI_SSE }).synthesize(openAi("gpt-4o-mini-tts"), "Hi", TtsRequestGate().begin())
         assertArrayEquals(mp3, audio.bytes)
         assertEquals(TtsReportedTokens(48, 914, 962), audio.metering.tokens)
     }
 
     @Test fun openAiSseWithoutDoneEventKeepsUsageUnknownAndErrorEventsFail() {
         val delta = "data: {\"type\":\"speech.audio.delta\",\"audio\":\"${Base64.getEncoder().encodeToString(mp3)}\"}\n\n"
-        val audio = TtsSpeechTransport(FakeHttp { TtsHttpResponse(200, delta.toByteArray(), "text/event-stream") })
+        val audio = TtsSpeechTransport(FakeHttp { TtsHttpResponse(200, delta.toByteArray(), "text/event-stream") }, wireFor = { _, _ -> TtsWireFormat.OPENAI_SSE })
             .synthesize(openAi("gpt-4o-mini-tts"), "Hi", TtsRequestGate().begin())
         assertNull(audio.metering.tokens)
         val error = "data: {\"type\":\"error\",\"error\":{\"message\":\"bad voice\"}}\n\n"
         var billed = 0
         assertThrows(TtsException::class.java) {
-            TtsSpeechTransport(FakeHttp { TtsHttpResponse(200, error.toByteArray(), "text/event-stream") })
+            TtsSpeechTransport(FakeHttp { TtsHttpResponse(200, error.toByteArray(), "text/event-stream") }, wireFor = { _, _ -> TtsWireFormat.OPENAI_SSE })
                 .synthesize(openAi("gpt-4o-mini-tts"), "Hi", TtsRequestGate().begin(), onBilled = { billed++ })
         }
         assertEquals(0, billed)

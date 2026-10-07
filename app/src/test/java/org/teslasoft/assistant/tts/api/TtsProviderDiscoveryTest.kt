@@ -52,7 +52,19 @@ class TtsProviderDiscoveryTest {
     @Test fun officialOpenAiSpeechModelsAreRecognizedByExactDocumentedId() {
         val body = """{"data":[{"id":"tts-1"},{"id":"gpt-4o-mini-tts"},{"id":"gpt-4o"},{"id":"tts-1-hd"},
             {"id":"my-tts-1-finetune"}]}"""
-        val official = TtsDiscoveryClient(FakeHttp { response(body) })
+        val official = TtsDiscoveryClient(FakeHttp { request ->
+            when (request.url.toString()) {
+                TtsPublishedMetadataClient.OPENAI_REFERENCE -> response("""- `model: string or SpeechModel`
+                  |  - `SpeechModel = "tts-1" or "gpt-4o-mini-tts" or "tts-1-hd"`
+                  |- `voice: string`
+                  |    - `"river"`
+                  |- `stream_format: optional "sse" or "audio"`
+                  |  `sse` is not supported for `tts-1` or `tts-1-hd`.
+                  """.trimMargin())
+                TtsPublishedMetadataClient.OPENAI_GUIDE -> response("### Voice options\n- `river`")
+                else -> response(body)
+            }
+        })
             .models(resolved("https://api.openai.com/v1"), TtsRequestGate().begin())
         assertEquals(listOf("tts-1", "gpt-4o-mini-tts", "tts-1-hd"), official.models.map { it.id })
         // Another service listing the same IDs still needs real synthesis evidence.

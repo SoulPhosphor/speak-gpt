@@ -206,7 +206,8 @@ internal fun String.replaceSecret(secret: String): String =
 
 /** A validated MP3 result, not a player. Phase 5 uses token.deliver around playback start. */
 class TtsAudio(val bytes: ByteArray, val target: TtsTarget, val generationId: String?,
-    val metering: TtsMetering = TtsMetering(generationId = generationId)) {
+    val metering: TtsMetering = TtsMetering(generationId = generationId),
+    val price: TtsPrice? = null, val providerPrices: TtsProviderCatalog? = null) {
     val mimeType = "audio/mpeg"
     val extension = ".mp3"
 }
@@ -217,7 +218,8 @@ class TtsSpeechTransport(
     private val wireFor: (TtsEndpoint, String) -> TtsWireFormat = TtsServices::wireFormat
 ) {
     fun request(source: ResolvedTtsSource, input: String, operation: TtsOperation = TtsOperation.SPEECH,
-        options: JsonObject = JsonObject()): Request {
+        options: JsonObject = JsonObject(),
+        wire: TtsWireFormat = wireFor(source.endpoint, source.target.modelId)): Request {
         require(operation == TtsOperation.SPEECH || operation == TtsOperation.PREVIEW)
         val t = source.target
         if (t.endpointId.isBlank()) fail(source, operation, TtsFailureKind.ENDPOINT_REQUIRED)
@@ -229,7 +231,7 @@ class TtsSpeechTransport(
         if (t.routing.mode == TtsRoutingMode.PREFERRED && !t.routing.allowFallbacks &&
             t.routing.providerOrder.isEmpty() && t.routing.selectedProvider.isBlank())
             fail(source, operation, TtsFailureKind.PROVIDER_REQUIRED)
-        if (wireFor(source.endpoint, t.modelId) == TtsWireFormat.ELEVENLABS) {
+        if (wire == TtsWireFormat.ELEVENLABS) {
             // ElevenLabs' native contract: the voice is in the path and there is no routing.
             val url = source.endpoint.baseUrl.trim().toHttpUrlOrNull()?.newBuilder()
                 ?.addPathSegment("text-to-speech")?.addPathSegment(t.voiceId!!)
@@ -240,7 +242,7 @@ class TtsSpeechTransport(
                 .header("Accept", "audio/mpeg")
                 .post(body.toString().toRequestBody("application/json".toMediaType())).build()
         }
-        val sse = wireFor(source.endpoint, t.modelId) == TtsWireFormat.OPENAI_SSE
+        val sse = wire == TtsWireFormat.OPENAI_SSE
         val body = JsonObject().apply {
             addProperty("model", t.modelId); addProperty("voice", t.voiceId)
             addProperty("input", input); addProperty("response_format", "mp3")
@@ -261,8 +263,14 @@ class TtsSpeechTransport(
         operation: TtsOperation = TtsOperation.SPEECH, options: JsonObject = JsonObject(),
         onBilled: (TtsAudio) -> Unit = {}): TtsAudio {
         token.check()
-        val wire = wireFor(source.endpoint, source.target.modelId)
-        val request = request(source, input, operation, options)
+        val fallbackWire = wireFor(source.endpoint, source.target.modelId)
+        // Validate the saved target before any discovery or billable network operation.
+        request(source, input, operation, options, fallbackWire)
+        // Freeze fetched prices before the billable request. Discovery failure cannot stop speech.
+        val metadata = runCatching { TtsPublishedMetadataClient(http).synthesis(source, token, operation) }
+            .getOrElse { token.check(); TtsSynthesisMetadata(fallbackWire) }
+        val wire = if (fallbackWire == TtsWireFormat.OPENAI_SSE) fallbackWire else metadata.wire
+        val request = request(source, input, operation, options, wire)
         val response = http.execute(source.endpoint, source.target, operation, request, token)
         val audio = try {
             when (wire) {
@@ -298,9 +306,11 @@ class TtsSpeechTransport(
             token.check()
             throw failure
         }
-        onBilled(audio)
+        val pricedAudio = TtsAudio(audio.bytes, audio.target, audio.generationId, audio.metering,
+            metadata.price, metadata.providers)
+        onBilled(pricedAudio)
         token.check()
-        return audio
+        return pricedAudio
     }
 
     private fun outboundFields(source: ResolvedTtsSource, options: JsonObject) =

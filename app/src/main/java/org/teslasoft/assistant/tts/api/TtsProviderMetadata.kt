@@ -80,7 +80,8 @@ object TtsProviderParser {
             return TtsPrice(charges, charges.size == components.size() && charges.isNotEmpty() &&
                 charges.all { it.component != "?" } && obj.bool("complete") != false)
         }
-        val metadata = setOf("currency", "unit", "quantity", "complete", "component")
+        val metadata = setOf("currency", "unit", "quantity", "complete", "component", "discount",
+            "display_pricing", "overrides")
         // Retain unfamiliar charge components too: dropping one could label a paid source free.
         val names = obj.keySet().filter { it !in metadata && !it.endsWith("_unit") &&
             !it.endsWith("_currency") && !it.endsWith("_quantity") }
@@ -97,7 +98,11 @@ object TtsProviderParser {
         // Flat OpenRouter prompt/completion are both applicable. One missing component is unknown.
         val pairComplete = if (obj.has("prompt") || obj.has("completion")) obj.has("prompt") && obj.has("completion")
             else if (obj.has("input") || obj.has("output")) obj.has("input") && obj.has("output") else charges.isNotEmpty()
-        return TtsPrice(charges, obj.bool("complete") ?: pairComplete)
+        val overrides = obj.get("overrides")
+        val unhandledOverrides = overrides != null && !overrides.isJsonNull &&
+            !(overrides.isJsonArray && overrides.asJsonArray.isEmpty) &&
+            !(overrides.isJsonObject && overrides.asJsonObject.size() == 0)
+        return TtsPrice(charges, !unhandledOverrides && (obj.bool("complete") ?: pairComplete))
     }
 
     private fun decimal(obj: JsonObject, key: String): BigDecimal? = obj.get(key)

@@ -26,22 +26,6 @@ object TtsServices {
     val ELEVENLABS_HOSTS = setOf("api.elevenlabs.io", "api.us.elevenlabs.io",
         "api.eu.residency.elevenlabs.io", "api.in.residency.elevenlabs.io")
 
-    /**
-     * Official OpenAI speech models for `/audio/speech`. OpenAI's model list does not mark
-     * speech output, so on the official host an exact ID from this list is the synthesis
-     * evidence. https://developers.openai.com/api/docs/models (verified October 2026).
-     */
-    val OPENAI_SPEECH_MODELS = setOf("tts-1", "tts-1-1106", "tts-1-hd", "tts-1-hd-1106",
-        "gpt-4o-mini-tts", "gpt-4o-mini-tts-2025-03-20", "gpt-4o-mini-tts-2025-12-15")
-
-    /**
-     * Models for which OpenAI documents `stream_format: "sse"`, whose final
-     * `speech.audio.done` event reports token usage. OpenAI documents that SSE is not
-     * supported for tts-1 or tts-1-hd. Exact IDs only.
-     */
-    val OPENAI_SSE_MODELS = setOf("gpt-4o-mini-tts", "gpt-4o-mini-tts-2025-03-20",
-        "gpt-4o-mini-tts-2025-12-15")
-
     /** ElevenLabs' documented default output format: MP3, 44.1 kHz, 128 kbps. */
     const val ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128"
 
@@ -59,8 +43,6 @@ object TtsServices {
 
     fun wireFormat(endpoint: TtsEndpoint, modelId: String): TtsWireFormat = when (endpoint.kind) {
         TtsEndpointKind.ELEVENLABS -> TtsWireFormat.ELEVENLABS
-        TtsEndpointKind.OPENAI -> if (modelId in OPENAI_SSE_MODELS) TtsWireFormat.OPENAI_SSE
-            else TtsWireFormat.OPENAI_COMPATIBLE
         else -> TtsWireFormat.OPENAI_COMPATIBLE
     }
 }

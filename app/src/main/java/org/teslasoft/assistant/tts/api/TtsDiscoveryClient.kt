@@ -24,7 +24,13 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
         return parse(source, op, response) {
             when (source.endpoint.kind) {
                 TtsEndpointKind.ELEVENLABS -> TtsCatalogParser.elevenLabsModels(response.text())
-                TtsEndpointKind.OPENAI -> TtsCatalogParser.models(response.text(), TtsServices.OPENAI_SPEECH_MODELS)
+                TtsEndpointKind.OPENAI -> {
+                    val published = TtsPublishedMetadataClient(http).openAi(source, token, op)
+                    val catalog = TtsCatalogParser.models(response.text(), published.modelIds)
+                    catalog.copy(models = catalog.models.map { model ->
+                        model.copy(voices = TtsVoiceCatalog.Known(published.voicesFor(model.id)))
+                    })
+                }
                 else -> TtsCatalogParser.models(response.text())
             }
         } to response
@@ -122,7 +128,7 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
             token.check(); return TtsVoiceDiscovery(it, evidence)
         }
         // OpenRouter's model metadata is its supported discovery source. No invented OpenAI fallback.
-        if (source.endpoint.openRouter) {
+        if (source.endpoint.openRouter || source.endpoint.kind == TtsEndpointKind.OPENAI) {
             token.check()
             if (model == null && failure != null) throw failure
             providerFailure?.let { throw it }
@@ -196,6 +202,8 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
     private inline fun <T> parse(source: ResolvedTtsSource, op: TtsOperation, response: TtsHttpResponse,
         block: () -> T): T =
         try { block() } catch (e: Exception) {
+            if (e is java.util.concurrent.CancellationException) throw e
+            if (e is TtsException) throw e
             throw TtsException(TtsFailure(op, source.target, source.endpoint.label,
                 (e as? TtsCatalogDataException)?.kind ?: TtsFailureKind.MALFORMED, responseReceived = true,
                 voiceEvidence = voiceEvidence(source, response).copy(parsingError = e.message ?: e.javaClass.simpleName)))

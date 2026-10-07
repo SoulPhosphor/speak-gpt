@@ -45,22 +45,15 @@ object TtsTextMeasure {
     fun utf8Bytes(text: String): Long = text.toByteArray(Charsets.UTF_8).size.toLong()
 }
 
-/**
- * What official OpenAI speech requests billed, as quantities only. No price is ever written
- * into the app: OpenAI reports no charge for speech and publishes no price list the app can
- * download, so these requests show their quantities and a "Not Reported" cost.
- */
+/** Billing units and prices come from the fetched document; model names never decide accounting. */
 object OpenAiSpeechMetering {
-    private val characterBilled = setOf("tts-1", "tts-1-1106", "tts-1-hd", "tts-1-hd-1106")
-
-    fun meters(modelId: String, input: String, tokens: TtsReportedTokens?): List<UsageMeter> {
-        if (modelId in characterBilled) return listOf(UsageMeter(UsageMeterComponent.CHARACTERS,
-            UsageMeterUnit.CHARACTER, TtsTextMeasure.characters(input).toDouble(), UsageQuantitySource.LOCAL_EXACT))
-        if (modelId in TtsServices.OPENAI_SSE_MODELS) return listOf(
-            UsageMeter(UsageMeterComponent.TEXT_INPUT, UsageMeterUnit.TOKEN, tokens?.inputTokens?.toDouble(),
-                tokens?.inputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED }),
-            UsageMeter(UsageMeterComponent.AUDIO_OUTPUT, UsageMeterUnit.TOKEN, tokens?.outputTokens?.toDouble(),
-                tokens?.outputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED }))
+    fun meters(input: String, tokens: TtsReportedTokens?, price: TtsPrice?, audio: ByteArray): List<UsageMeter> {
+        price?.let { TtsUsageAccounting.openRouterMeters(it, input, audio, tokens) }?.let { return it }
+        if (tokens != null) return listOf(
+            UsageMeter(UsageMeterComponent.TEXT_INPUT, UsageMeterUnit.TOKEN, tokens.inputTokens?.toDouble(),
+                tokens.inputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED }),
+            UsageMeter(UsageMeterComponent.AUDIO_OUTPUT, UsageMeterUnit.TOKEN, tokens.outputTokens?.toDouble(),
+                tokens.outputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED }))
         return emptyList()
     }
 }
@@ -139,13 +132,12 @@ object TtsUsageAccounting {
                 reportedTotal = generation?.totalCost
                 meters = openRouterPrice?.let { openRouterMeters(it, billed.input, billed.audio.bytes) }.orEmpty()
             }
-            TtsEndpointKind.OPENAI -> meters = OpenAiSpeechMetering.meters(modelId, billed.input,
-                billed.audio.metering.tokens)
-            // ElevenLabs bills characters; its character-cost header is the reported count.
-            // No ElevenLabs US-dollar rate is applied, so the cost is not reported.
-            TtsEndpointKind.ELEVENLABS -> meters = listOf(UsageMeter(UsageMeterComponent.CHARACTERS,
-                UsageMeterUnit.CHARACTER, billed.audio.metering.characterCost?.toDouble(),
-                billed.audio.metering.characterCost?.let { UsageQuantitySource.PROVIDER_REPORTED }))
+            TtsEndpointKind.OPENAI -> meters = OpenAiSpeechMetering.meters(billed.input,
+                billed.audio.metering.tokens, billed.audio.price, billed.audio.bytes)
+            TtsEndpointKind.ELEVENLABS -> meters = billed.audio.price?.let {
+                openRouterMeters(it, billed.input, billed.audio.bytes)
+            } ?: listOf(UsageMeter(UsageMeterComponent.CHARACTERS, UsageMeterUnit.CHARACTER,
+                TtsTextMeasure.characters(billed.input).toDouble(), UsageQuantitySource.LOCAL_EXACT))
             TtsEndpointKind.GENERIC -> meters = emptyList()
         }
         return MeteredUsageAccounting.record(model, provider, endpoint.baseUrl, meters, reportedTotal)
@@ -158,7 +150,8 @@ object TtsUsageAccounting {
      * unknown. Prices are US dollars by OpenRouter's documented convention. Null when the
      * price cannot be applied without guessing.
      */
-    fun openRouterMeters(price: TtsPrice, input: String, audio: ByteArray): List<UsageMeter>? {
+    fun openRouterMeters(price: TtsPrice, input: String, audio: ByteArray,
+        tokens: TtsReportedTokens? = null): List<UsageMeter>? {
         if (!price.complete || price.charges.isEmpty()) return null
         val meters = mutableListOf<UsageMeter>()
         for (charge in price.charges) {
@@ -179,16 +172,16 @@ object TtsUsageAccounting {
                         seconds?.let { UsageQuantitySource.LOCAL_EXACT })
                 }
                 "token", "tokens" -> when (component) {
-                    "input", "prompt" -> UsageMeter(UsageMeterComponent.TEXT_INPUT, UsageMeterUnit.TOKEN, null, null)
-                    "output", "completion" -> UsageMeter(UsageMeterComponent.AUDIO_OUTPUT, UsageMeterUnit.TOKEN, null, null)
+                    "input", "prompt" -> UsageMeter(UsageMeterComponent.TEXT_INPUT, UsageMeterUnit.TOKEN,
+                        tokens?.inputTokens?.toDouble(), tokens?.inputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED })
+                    "output", "completion" -> UsageMeter(UsageMeterComponent.AUDIO_OUTPUT, UsageMeterUnit.TOKEN,
+                        tokens?.outputTokens?.toDouble(), tokens?.outputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED })
                     else -> return null
                 }
                 else -> return null
             }
             val perMinute = unit.endsWith("minute") || unit.endsWith("minutes")
             val priceQuantity = basis.multiply(if (perMinute) BigDecimal(60) else BigDecimal.ONE).toDouble()
-            // A zero-priced component with no measurable quantity costs nothing and shows nothing.
-            if (amount.signum() == 0 && meter.quantity == null) continue
             if (meters.any { it.component == meter.component && it.unit == meter.unit }) return null
             meters += meter.copy(priceAmount = amount.toDouble(), priceQuantity = priceQuantity, currency = currency)
         }
@@ -201,10 +194,12 @@ object TtsUsageAccounting {
      * convenient provider's price is never presented as the one charged.
      */
     fun servingPrice(catalog: TtsProviderCatalog, servingProvider: String?): TtsPrice? {
-        if (servingProvider != null) return catalog.providers.firstOrNull {
+        val prices = if (servingProvider != null) catalog.providers.filter {
             it.name.equals(servingProvider, ignoreCase = true) || it.id.equals(servingProvider, ignoreCase = true)
-        }?.price
-        val prices = catalog.providers.map { it.price }
+        }.map { it.price } else {
+            if (!catalog.complete) return null
+            catalog.providers.map { it.price }
+        }
         val first = prices.firstOrNull() ?: return null
         return first.takeIf { prices.all { samePrice(it, first) } }
     }
@@ -223,8 +218,8 @@ object TtsUsageAccounting {
     fun resolve(billed: TtsBilledSynthesis,
         generationLookup: (ResolvedTtsSource, String) -> OpenRouterGeneration? = { source, id ->
             OpenRouterGenerationClient().lookup(source, id, billed.operation) },
-        catalogLookup: (ResolvedTtsSource) -> TtsProviderCatalog? = { source ->
-            TtsDiscoveryClient().providers(source, TtsRequestGate().begin()) }
+        catalogLookup: (ResolvedTtsSource) -> TtsProviderCatalog? = { _ ->
+            billed.audio.providerPrices }
     ): TurnUsageRecord {
         if (billed.source.endpoint.kind != TtsEndpointKind.OPENROUTER) return record(billed)
         val generation = billed.audio.metering.generationId?.let { id ->

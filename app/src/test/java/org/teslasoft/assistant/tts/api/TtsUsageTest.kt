@@ -19,8 +19,8 @@ class TtsUsageTest {
             identity = if (openRouter) ApiEndpointObject.IDENTITY_OPENROUTER else ApiEndpointObject.IDENTITY_GENERIC)))
 
     private fun billed(source: ResolvedTtsSource, input: String, metering: TtsMetering = TtsMetering(),
-        audio: ByteArray = mp3) = TtsBilledSynthesis(source, input, TtsOperation.SPEECH,
-        TtsAudio(audio, source.target, metering.generationId, metering))
+        audio: ByteArray = mp3, fetchedPrice: TtsPrice? = null) = TtsBilledSynthesis(source, input, TtsOperation.SPEECH,
+        TtsAudio(audio, source.target, metering.generationId, metering, fetchedPrice))
 
     private val openRouter = resolved("https://openrouter.ai/api/v1", "openai/gpt-4o-mini-tts", openRouter = true)
 
@@ -45,19 +45,18 @@ class TtsUsageTest {
         assertEquals(0L, TtsTextMeasure.characters(""))
     }
 
-    @Test fun openAiTts1AndTts1HdCountExactCharactersWithoutAnyPriceInTheApp() {
+    @Test fun openAiCharacterBillingUsesOnlyTheFetchedRateForAnyModelId() {
         val text = "a".repeat(2_000) + "👋"
-        for (model in listOf("tts-1", "tts-1-hd")) {
-            val record = TtsUsageAccounting.record(billed(resolved("https://api.openai.com/v1", model), text))
+        for (model in listOf("new-character-speech", "future-character-speech-snapshot")) {
+            val record = TtsUsageAccounting.record(billed(resolved("https://api.openai.com/v1", model), text,
+                fetchedPrice = price("characters", "character", "0.025", "1000")))
             val meter = record.meters!!.single()
             assertEquals(UsageMeterComponent.CHARACTERS, meter.component)
             assertEquals(2_001.0, meter.quantity!!, 0.0)
             assertEquals(UsageQuantitySource.LOCAL_EXACT, meter.quantitySource)
-            // Never hard-code prices (owner ruling, October 7 2026): no price, so no cost.
-            assertNull(meter.priceAmount)
-            assertNull(meter.cost)
-            assertNull(record.totalCost)
-            assertEquals(CostSource.UNKNOWN.storedValue, record.costSource)
+            assertEquals(0.025, meter.priceAmount!!, 0.0)
+            assertEquals(0.050025, record.totalCost!!, 1e-12)
+            assertEquals(CostSource.FROZEN_PRICING.storedValue, record.costSource)
             assertEquals("My Speech", record.provider)
             assertNull(record.inputTokens)
         }
@@ -76,20 +75,36 @@ class TtsUsageTest {
         assertTrue(record.meters!!.all { it.priceAmount == null && it.cost == null })
         assertNull(record.totalCost)
         // Without the reported usage, no audio tokens are invented.
-        val unreported = TtsUsageAccounting.record(billed(resolved("https://api.openai.com/v1", "gpt-4o-mini-tts"), "Hi"))
+        val unreported = TtsUsageAccounting.record(billed(resolved("https://api.openai.com/v1", "gpt-4o-mini-tts"), "Hi",
+            fetchedPrice = TtsPrice(listOf(TtsCharge("input", BigDecimal("0.002"), "USD", "token"),
+                TtsCharge("output", BigDecimal("0.006"), "USD", "token")), true)))
         assertTrue(unreported.meters!!.all { it.quantity == null && it.cost == null })
         assertNull(unreported.totalCost)
     }
 
-    @Test fun elevenLabsKeepsReportedCharactersAndLeavesUnverifiedCostUnknown() {
+    @Test fun elevenLabsCreditsAreNeverMislabelledAsInputCharacters() {
         val record = TtsUsageAccounting.record(billed(resolved("https://api.elevenlabs.io/v1", "eleven_flash_v2_5"),
             "Hello", TtsMetering(characterCost = 2_847)))
         val meter = record.meters!!.single()
-        assertEquals(2_847.0, meter.quantity!!, 0.0)
-        assertEquals(UsageQuantitySource.PROVIDER_REPORTED, meter.quantitySource)
+        assertEquals(5.0, meter.quantity!!, 0.0)
+        assertEquals(UsageQuantitySource.LOCAL_EXACT, meter.quantitySource)
         assertNull(meter.cost)
         assertNull(record.totalCost)
         assertEquals(CostSource.UNKNOWN.storedValue, record.costSource)
+    }
+
+    @Test fun incompletePricingStillKeepsProviderReportedTokenUsage() {
+        val record = TtsUsageAccounting.record(billed(resolved("https://api.openai.com/v1", "future-speech"), "Hi",
+            TtsMetering(tokens = TtsReportedTokens(10, 20, 30)), fetchedPrice = TtsPrice(emptyList(), false)))
+        assertEquals(listOf(10.0, 20.0), record.meters!!.map { it.quantity })
+        assertNull(record.totalCost)
+    }
+
+    @Test fun aFetchedZeroTokenRateCanEstablishZeroCostWithoutInventingTokens() {
+        val record = TtsUsageAccounting.record(billed(resolved("https://api.openai.com/v1", "free-speech"), "Hi",
+            fetchedPrice = TtsPrice(price("input", "token", "0").charges + price("output", "token", "0").charges, true)))
+        assertTrue(record.meters!!.all { it.quantity == null })
+        assertEquals(0.0, record.totalCost!!, 0.0)
     }
 
     @Test fun genericEndpointRecordsTheRequestWithoutGuessingAUnit() {

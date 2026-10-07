@@ -27,11 +27,6 @@ import java.io.File
 import java.io.FileOutputStream
 import kotlin.time.Duration.Companion.seconds
 
-/** The only fallback catalog. No other code may assume a compatible server supports these voices. */
-internal val OPENAI_COMPATIBLE_FALLBACK_VOICE_NAMES = listOf(
-    "alloy", "echo", "fable", "nova", "onyx", "shimmer"
-)
-
 class OpenAiVoiceProvider(
     context: Context,
     private val preferences: Preferences
@@ -59,13 +54,10 @@ class OpenAiVoiceProvider(
             val result = runCatching {
                 val endpointId = preferences.getApiEndpointId()
                 val endpoint = endpointPreferences.getApiEndpoint(appContext, endpointId)
-                val catalog = ApiSpeechCatalogClient.discover(endpoint).getOrThrow()
-                val modelId = preferences.getOpenAITtsModel().takeIf(catalog.modelIds::contains)
-                    ?: catalog.modelIds.first()
+                val catalog = ApiSpeechCatalogClient.discover(endpoint, preferences.getOpenAITtsModel()).getOrThrow()
+                val modelId = catalog.modelIds.single()
                 val rejected = endpointPreferences.getRejectedTtsVoices(endpointId)
-                val catalogVoices = catalog.voices ?: OPENAI_COMPATIBLE_FALLBACK_VOICE_NAMES.map {
-                    ApiCatalogVoice(it, it.replaceFirstChar(Char::uppercase))
-                }
+                val catalogVoices = catalog.voices.orEmpty()
                 val available = catalogVoices.filterNot { it.id in rejected }
                 if (available.isEmpty()) throw IllegalStateException("The endpoint did not return any usable voices.")
                 loadedEndpointId = endpointId
