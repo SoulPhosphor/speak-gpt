@@ -195,6 +195,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
     private fun openEndpointPicker() = endpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
 
     private fun openModelChooser() {
+        currentFocus?.clearFocus()
         val endpointId = preferences.getImageGeneratorEndpointId()
         if (endpointId.isBlank()) { openEndpointPicker(); return }
         val dialog = AdvancedModelSelectorDialogFragment.newInstance(preferences.getImageGeneratorModel(), "", endpointId, imageModels = true)
