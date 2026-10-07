@@ -3,11 +3,7 @@
     android:id="@+id/model_summary"
     style="@style/Widget.App.Usage.ModelHeader">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+    <LinearLayout style="@style/Widget.App.Usage.ModelHeaderRow">
 
         <TextView
             android:id="@+id/model_name"

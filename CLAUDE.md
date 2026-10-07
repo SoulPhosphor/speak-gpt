@@ -330,13 +330,24 @@ Reuse the app's established shared components and styles for:
 
 Do not create near-duplicate styles, hardcode visual properties in Kotlin, or copy repeated XML attributes because they are faster.
 
-### Never hard-code appearance (owner ruling, October 7 2026)
+### Everything uses styles; never hard-code appearance (owner ruling, October 7 2026)
 
-Never write colors, sizes, spacing, text sizes, fonts, corner shapes, or other
-visual properties directly into Kotlin code or directly onto views in layout
-files. Appearance comes only from the app's shared styles and theme. If no
-shared style fits, stop and ask the owner before adding anything; do not copy
-values from another layout as a shortcut.
+Every visual element gets its appearance from a style, so the whole app can be
+themed and fixed from one place (like CSS classes, not inline `style=""`).
+
+- Layout files hold structure only: which element contains which, element
+  IDs, text and content references, and how an element is positioned
+  relative to another element.
+- Every visual value comes from a style in the styles/theme files: colors,
+  backgrounds, fixed sizes and column widths, margins, padding, text size,
+  weight, and color, alignment, minimum heights, and corner shapes. Repeated
+  measurements live in `dimens.xml`, colors in theme attributes.
+- Never write a visual value directly onto a view in a layout file, into a
+  drawable when a dimension resource should hold it, or into Kotlin code.
+- Boxes that show the same kind of thing use the same styles, so they always
+  match.
+- If no shared style fits, stop and ask the owner before adding anything; do
+  not copy values from another layout as a shortcut.
 
 New UI must remain compatible with app-wide themes and palette changes.
 

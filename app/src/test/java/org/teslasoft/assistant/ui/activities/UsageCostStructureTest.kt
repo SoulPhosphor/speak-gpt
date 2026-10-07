@@ -50,12 +50,36 @@ class UsageCostStructureTest {
         val output = provider.indexOf("@+id/price_output")
         val cached = provider.indexOf("@+id/price_cached")
         val caption = provider.indexOf("@string/usage_price_per_million")
-        val centered = provider.lastIndexOf("android:gravity=\"center\"", caption)
+        val captionStyle = provider.lastIndexOf("@style/Widget.App.Usage.PriceCaption", caption)
+        val themes = resource("values/themes.xml")
+        val captionDefinition = themes.substringAfter("<style name=\"Widget.App.Usage.PriceCaption\"")
+            .substringBefore("</style>")
 
         assertTrue(input in 0 until output)
         assertTrue(output < cached)
         assertTrue(cached < caption)
-        assertTrue(centered in (cached + 1) until caption)
+        assertTrue(captionStyle in (cached + 1) until caption)
+        assertTrue(captionDefinition.contains("<item name=\"android:gravity\">center</item>"))
+    }
+
+    @Test
+    fun usageLayoutsTakeEveryVisualValueFromStyles() {
+        // Owner ruling, October 7 2026: layouts hold structure only, so the
+        // screen is themed and fixed from the styles alone.
+        val visual = Regex("""android:(textSize|textColor|textStyle|background|gravity|minHeight|""" +
+            """padding\w*|layout_margin\w*|layout_weight|clipToPadding)=|""" +
+            """android:layout_(width|height)="(?!match_parent|wrap_content)""")
+        for (layout in listOf("activity_token_pricing_details", "view_usage_model_section",
+            "view_usage_model_summary", "view_usage_provider_block", "view_usage_section_pill",
+            "view_usage_table_header", "view_usage_table_row", "view_usage_price_fact",
+            "view_usage_table_divider")) {
+            val xml = resource("layout/$layout.xml")
+            assertFalse("$layout: ${visual.find(xml)?.value}", visual.containsMatchIn(xml))
+        }
+        for (drawable in listOf("bg_usage_cache_rate", "bg_usage_section_pill", "bg_usage_model_header",
+            "bg_usage_pricing_footer")) {
+            assertFalse(drawable, Regex("""[Rr]adius="\d""").containsMatchIn(resource("drawable/$drawable.xml")))
+        }
     }
 
     @Test

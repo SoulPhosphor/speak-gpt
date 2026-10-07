@@ -1,29 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Column headings of a token usage chart. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:paddingBottom="5dp">
+    style="@style/Widget.App.Usage.TableHeader">
 
     <TextView
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:text="@string/usage_column_usage"
-        android:textColor="?attr/appSubtleTextColor"
-        android:textSize="11sp" />
+        style="@style/Widget.App.Usage.TableHeaderLabel"
+        android:text="@string/usage_column_usage" />
     <TextView
-        android:layout_width="88dp"
-        android:layout_height="wrap_content"
-        android:gravity="end"
-        android:text="@string/usage_column_tokens"
-        android:textColor="?attr/appSubtleTextColor"
-        android:textSize="11sp" />
+        style="@style/Widget.App.Usage.TableHeaderQuantity"
+        android:text="@string/usage_column_tokens" />
     <TextView
-        android:layout_width="82dp"
-        android:layout_height="wrap_content"
-        android:gravity="end"
-        android:text="@string/usage_column_cost"
-        android:textColor="?attr/appSubtleTextColor"
-        android:textSize="11sp" />
+        style="@style/Widget.App.Usage.TableHeaderCost"
+        android:text="@string/usage_column_cost" />
 </LinearLayout>

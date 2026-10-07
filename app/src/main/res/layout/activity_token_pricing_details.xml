@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Usage & Cost. Structure only; every visual value is in the
+     Widget.App.Usage.* styles. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -7,21 +9,11 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/usage_header"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorPrimary"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        style="@style/Widget.App.Usage.Header">
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/action_bar"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:background="@color/transparent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
+            style="@style/Widget.App.Usage.HeaderBar">
 
             <ImageButton
                 android:id="@+id/btn_back"
@@ -29,66 +21,34 @@
 
             <TextView
                 android:id="@+id/activity_title"
-                style="@style/Widget.App.ActionBar.Title"
-                android:text="@string/usage_cost_title"
-                android:textColor="?attr/colorOnPrimary" />
+                style="@style/Widget.App.Usage.HeaderTitle"
+                android:text="@string/usage_cost_title" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <TextView
             android:id="@+id/conversation_total_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            style="@style/Widget.App.Usage.TotalLabel"
             android:text="@string/usage_conversation_total"
-            android:textColor="?attr/colorOnPrimary"
-            android:textSize="12sp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/action_bar" />
 
         <TextView
             android:id="@+id/conversation_total_cost"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="?attr/colorOnPrimary"
-            android:textSize="31sp"
-            android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
+            style="@style/Widget.App.Usage.TotalCost"
             app:layout_constraintTop_toBottomOf="@id/conversation_total_label" />
 
         <TextView
             android:id="@+id/conversation_usage_meta"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="22dp"
-            android:textColor="?attr/colorOnPrimary"
-            android:textSize="12sp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
+            style="@style/Widget.App.Usage.TotalMeta"
             app:layout_constraintTop_toBottomOf="@id/conversation_total_cost" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <ScrollView
         android:id="@+id/scroll"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:clipToPadding="false"
-        android:paddingBottom="24dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
+        style="@style/Widget.App.Usage.Scroll"
         app:layout_constraintTop_toBottomOf="@id/usage_header">
 
         <LinearLayout
             android:id="@+id/pricing_sections"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="16dp" />
+            style="@style/Widget.App.Usage.Sections" />
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

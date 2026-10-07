@@ -978,11 +978,32 @@ Do not assign an id to an XML `<include>` tag that includes these layouts. Andro
 ## Usage & Cost cards
 
 `Widget.App.Usage.SectionPill`, `Widget.App.Usage.ModelCard`,
-`Widget.App.Usage.ModelHeader`, `Widget.App.Usage.ModelName`,
-`Widget.App.Usage.ModelTotal`, `Widget.App.Usage.ModelMeta`,
-`Widget.App.Usage.ModelFunctions`, `Widget.App.Usage.ProviderGap`
+`Widget.App.Usage.ModelHeader`, `Widget.App.Usage.ModelHeaderRow`,
+`Widget.App.Usage.ModelName`, `Widget.App.Usage.ModelTotal`,
+`Widget.App.Usage.ModelMeta`, `Widget.App.Usage.ModelFunctions`,
+`Widget.App.Usage.ProviderGap`, `Widget.App.Usage.Stack`
+
+Screen frame: `Widget.App.Usage.Header`, `HeaderBar`, `HeaderTitle`,
+`TotalLabel`, `TotalCost`, `TotalMeta`, `Scroll`, `Sections`.
+
+Provider block: `Widget.App.Usage.ProviderHeader`, `ProviderNameColumn`,
+`ProviderName`, `ProviderMeta`, `ProviderTotalColumn`, `ProviderTotal`,
+`ProviderTotalLabel`; chart `Table`, `TableHeader`, `TableHeaderLabel`,
+`TableHeaderQuantity`, `TableHeaderCost`, `TableRow`, `TableLabel`,
+`TableQuantity`, `TableCost`, `TableDivider`; `CacheRate`, `CacheRateLabel`,
+`CacheRateValue`; pricing footer `PricingFooter`, `PriceFacts`, `PriceFact`,
+`PriceFactLabel`, `PriceFactValue`, `PriceCaption`.
 
 Use only on the Usage & Cost screen (owner ruling, October 6 2026).
+
+Every layout on this screen holds structure only (owner ruling, October 7
+2026): no size, spacing, text size, color, alignment, or background is written
+on a view. Every provider block in every section (Chat, Summarizing, TTS, and
+the rest) is built from the same styles, so they always match. Shared
+measurements are dimens: `usage_card_corner_radius`, `usage_pill_corner_radius`,
+`usage_cache_rate_corner_radius`, `usage_card_padding`,
+`usage_quantity_column_width`, `usage_cost_column_width`,
+`usage_table_divider_height`.
 
 Composition, top to bottom, per section:
 
@@ -1000,9 +1021,9 @@ Composition, top to bottom, per section:
 Theme readiness: every color in these styles and in `bg_usage_section_pill`,
 `bg_usage_model_header`, `bg_usage_provider_header`, and the two pricing
 footers is a theme role (`colorPrimaryContainer`, `colorSecondaryContainer`,
-`colorSurfaceContainerHigh`, and so on). The corner radius is one dimen,
-`usage_card_corner_radius`. Recoloring the screen is a change to these
-styles and drawables only; nothing is colored in code.
+`colorSurfaceContainerHigh`, and so on). Corner radii are dimens. Recoloring
+or resizing the screen is a change to these styles, dimens and drawables
+only; nothing is colored or sized in code.
 
 ## Maintaining this guide
 
