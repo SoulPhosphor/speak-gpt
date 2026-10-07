@@ -612,7 +612,7 @@ this accounting evidence.
 | Request protocol | Usage and authoritative cost evidence |
 | --- | --- |
 | Direct OpenAI `/images/generations` | Images API usage details; exact model documents supply frozen token rates and explicit aliases. Without output details, only an explicitly published image-only output modality can resolve output tokens to image tokens. A missing cache split with distinct cached rates leaves the total Not Reported. Approximate per-image pricing examples are never used as actual token-billed charges. |
-| Direct Gemini native `generateContent` | `usageMetadata` modality counts and additional thinking counts; exact model sections on Google's pricing page, standard synchronous USD token rates, only when the same section confirms no free tier. Missing modality counts, ambiguous tiers, aliases, or unparsed prices remain Not Reported. |
+| Direct Gemini native `interactions` or verified legacy `generateContent` | Interactions `usage` modality/cache counts and additional thought tokens, or legacy `usageMetadata` modality counts and additional thinking counts; exact model sections on Google's pricing page, standard synchronous USD token rates, only when the same section confirms no free tier. Missing modality counts, ambiguous tiers, aliases, or unparsed prices remain Not Reported. |
 | OpenRouter dedicated `/images` | Response `usage.cost` is documented USD. An exact generation ID can retrieve the generation receipt. Frozen per-endpoint tariffs are applied only for the identified route, or when all possible routes publish identical tariffs. |
 | NanoGPT dedicated `/images` | Model and endpoint descriptors supply settings and public tariffs. `X-Request-ID` retrieves the exact primary-charge receipt using the original key; explicit USD charges are used. XNO and unlabeled amounts retain their native evidence with USD cost Not Reported. The receipt excludes refunds and separately billed extras. |
 | Other OpenAI-compatible `/images/generations` | Preserve real image/request/usage information and explicit provider-reported currency/cost or credits. Unsupported or unavailable metadata never triggers a guessed model price or capability. |
@@ -639,11 +639,19 @@ actual image codecs; format-only models without a decodable output are omitted f
 the picker, and unusable explicit or default formats are rejected before billing.
 When a model mixes decodable and unsupported formats without a published default,
 an explicit decodable output format is required. Gemini discovery reads authoritative
-model-document links as well as inline model IDs, then matches the native API catalog.
+model-document links as well as inline model IDs, then matches native IDs where
+available. The published image guide supplies each model's API transport;
+Interactions models are not gated by the older generateContent method list.
+Interactions controls use the fetched OpenAPI response schema, and final images come
+only from model-output steps. Missing token modality, cache, or thinking evidence
+keeps cost Not Reported. Failed endpoint enrichment retains known output restrictions
+and discards billing rates. The latest saved dimension selection clears conflicting
+peers, and conflicting historical maps are rejected before dispatch.
 
 Authoritative references: [OpenAI Images](https://developers.openai.com/api/reference/resources/images/methods/generate/),
 [OpenAI model documents](https://developers.openai.com/api/docs/models),
-[Gemini image generation](https://ai.google.dev/gemini-api/docs/generate-content/image-generation),
+[Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation),
+[Gemini Interactions schema](https://ai.google.dev/static/api/interactions.openapi.json),
 [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing),
 [OpenRouter Image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation),
 [NanoGPT Image API](https://docs.nano-gpt.com/api-reference/image-generation),

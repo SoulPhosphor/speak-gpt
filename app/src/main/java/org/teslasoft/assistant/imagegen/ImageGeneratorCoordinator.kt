@@ -128,11 +128,13 @@ object ImageGeneratorCoordinator {
             billingEndpoint = ApiEndpointObject(endpoint.label, endpoint.host, endpoint.apiKey,
                 authType = endpoint.authType, provider = endpoint.provider, id = endpoint.id,
                 identity = endpoint.identity)
-            val metadata = runCatching { ImageCatalogClient.model(endpoint, request.modelId, fresh = true) }.getOrNull()
+            val metadata = runCatching { ImageCatalogClient.model(endpoint, request.modelId, fresh = true) }
+                .getOrElse { ImageCatalogClient.cachedModel(endpoint, request.modelId)?.withoutEndpointEvidence() }
             currentCoroutineContext().ensureActive()
             val options = ImageRequestOptions.resolve(request, metadata)
             val resolvedRequest = request.copy(parameters = options,
-                parameterTypes = metadata?.parameters.orEmpty().associate { it.key to it.type })
+                parameterTypes = metadata?.parameters.orEmpty().associate { it.key to it.type },
+                geminiTransport = metadata?.geminiTransport)
             val httpRequest = adapter.buildHttpRequest(resolvedRequest, endpoint)
             val kind = ImageProviderKind.forEndpoint(endpoint)
             usageAttempt = ImageUsageAttempt(kind, request.modelId,

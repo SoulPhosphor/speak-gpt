@@ -23,6 +23,9 @@ enum class ImageProviderKind {
 
 enum class ImageParameterType { ENUM, INTEGER, NUMBER, STRING, BOOLEAN }
 
+/** API protocols; the published guide supplies which one a model uses. */
+enum class GeminiImageTransport { GENERATE_CONTENT, INTERACTIONS }
+
 /** Every value and bound comes from the selected model's fetched metadata. */
 data class ImageParameter(
     val key: String,
@@ -66,12 +69,19 @@ data class ImageModelMetadata(
     val tariffsComplete: Boolean = true,
     val resolvedIds: Set<String> = setOf(id),
     val outputModalities: Set<String> = emptySet(),
-    val nativeSizes: List<String> = emptyList()
+    val nativeSizes: List<String> = emptyList(),
+    val geminiTransport: GeminiImageTransport? = null,
+    val requiresExplicitOutputFormat: Boolean = false
 ) {
     /** An explicitly published format-only model must have an app-decodable output. */
     fun hasDisplayableOutput(): Boolean = parameters.firstOrNull {
         it.key == "output_format" && it.type == ImageParameterType.ENUM
-    }?.selectableValues()?.isNotEmpty() ?: true
+    }?.selectableValues()?.isNotEmpty() ?: !requiresExplicitOutputFormat
+
+    /** Keep known output restrictions when endpoint details fail; never reuse old rates. */
+    fun withoutEndpointEvidence(): ImageModelMetadata = copy(
+        parameters = parameters.filter { it.key == "output_format" },
+        tariffs = emptyList(), endpointRecords = emptyList(), tariffsComplete = false)
 }
 
 data class ImageServingMetadata(
@@ -161,10 +171,10 @@ object ImageMetadataParser {
     }
 
     fun endpoints(body: String, model: ImageModelMetadata): ImageModelMetadata {
-        val parsed = imageJson(body) ?: return model.copy(parameters = emptyList(), tariffsComplete = false)
+        val parsed = imageJson(body) ?: return model.withoutEndpointEvidence()
         val root = parsed.get("data").imageObject() ?: parsed
-        if (root.imageText("id") != model.id) return model.copy(parameters = emptyList(), tariffsComplete = false)
-        val data = root.imageArray("endpoints") ?: return model.copy(parameters = emptyList(), tariffsComplete = false)
+        if (root.imageText("id") != model.id) return model.withoutEndpointEvidence()
+        val data = root.imageArray("endpoints") ?: return model.withoutEndpointEvidence()
         val endpoints = data.mapNotNull { element ->
             val endpoint = element.imageObject() ?: return@mapNotNull null
             ImageServingMetadata(endpoint.imageText("provider_name"), endpoint.imageText("provider_slug"),
@@ -185,8 +195,17 @@ object ImageMetadataParser {
             parameter.copy(values = values, minimum = minimum, maximum = maximum,
                 defaultValue = parameter.defaultValue?.takeIf { value -> present.all { it.defaultValue == value } })
         }
+        if (endpoints.isEmpty()) return model.withoutEndpointEvidence()
+        val catalogFormat = model.parameters.firstOrNull { it.key == "output_format" }
+        val explicitFormatRequired = endpoints.any { endpoint ->
+            val format = endpoint.parameters.firstOrNull { it.key == "output_format" } ?: catalogFormat
+            format?.let { field ->
+                field.defaultValue?.let { !ImageFormat.supportsOutputName(it) }
+                    ?: field.values.any { !ImageFormat.supportsOutputName(it) }
+            } == true
+        }
         return model.copy(parameters = common, tariffs = emptyList(),
-            tariffsComplete = endpoints.isNotEmpty(), endpointRecords = endpoints)
+            tariffsComplete = true, endpointRecords = endpoints, requiresExplicitOutputFormat = explicitFormatRequired)
     }
 }
 
@@ -250,6 +269,41 @@ object OpenAiImageMetadataParser {
     }
 }
 
+/** The latest dimension control wins, without changing unrelated saved options. */
+object ImageDimensionSettings {
+    private val pixelPattern = Regex("([0-9]+)[xX*]([0-9]+)")
+
+    fun change(saved: Map<String, String>, key: String, value: String?, metadata: ImageModelMetadata?): Map<String, String> {
+        val result = saved.toMutableMap()
+        if (value == null) { result.remove(key); return result }
+        val tiers = metadata?.parameters?.firstOrNull { it.key == "resolution" }?.values.orEmpty()
+        when (key) {
+            "size" -> {
+                result.remove("resolution")
+                if (value !in tiers) result.remove("aspect_ratio")
+            }
+            "resolution", "aspect_ratio" -> {
+                val size = result.remove("size")
+                if (key == "aspect_ratio" && result["resolution"] == null && size != null && size in tiers)
+                    result["resolution"] = size
+            }
+        }
+        result[key] = value
+        return result
+    }
+
+    fun hasConflict(options: Map<String, String>): Boolean {
+        val pixels = pixelPattern.matchEntire(options["size"].orEmpty()) ?: return false
+        if (options["resolution"] != null) return true
+        val ratio = options["aspect_ratio"]?.split(':') ?: return false
+        val width = pixels.groupValues[1].toDouble()
+        val height = pixels.groupValues[2].toDouble()
+        val x = ratio.getOrNull(0)?.toDoubleOrNull() ?: return true
+        val y = ratio.getOrNull(1)?.toDoubleOrNull() ?: return true
+        return width * y != height * x
+    }
+}
+
 /** Maps app-owned /imagine shape shorthand to an actual value the model publishes. */
 object ImageRequestOptions {
     private val dimensions = listOf("aspect_ratio", "size", "resolution")
@@ -303,10 +357,13 @@ object ImageRequestOptions {
             if (field == null || !field.accepts(value)) throw ImageGenerationException(
                 ImageErrorCause.UNSUPPORTED_OPTION, "the selected model does not accept the saved $key setting")
         }
+        if (ImageDimensionSettings.hasConflict(options)) throw ImageGenerationException(
+            ImageErrorCause.UNSUPPORTED_OPTION, "choose a pixel size or resolution and aspect ratio, then try again")
         val format = metadata?.parameters?.firstOrNull { it.key == "output_format" }
         val chosenFormat = options["output_format"] ?: format?.defaultValue
-        val unknownDefaultMayBeUnusable = chosenFormat == null && format?.type == ImageParameterType.ENUM &&
-            format.values.any { !ImageFormat.supportsOutputName(it) }
+        val unknownDefaultMayBeUnusable = options["output_format"] == null &&
+            (metadata?.requiresExplicitOutputFormat == true || (chosenFormat == null && format?.type == ImageParameterType.ENUM &&
+                format.values.any { !ImageFormat.supportsOutputName(it) }))
         if (metadata?.hasDisplayableOutput() == false ||
             chosenFormat?.let { !ImageFormat.supportsOutputName(it) } == true || unknownDefaultMayBeUnusable) {
             throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION,

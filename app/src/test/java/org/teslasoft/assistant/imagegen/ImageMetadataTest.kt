@@ -4,6 +4,82 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageMetadataTest {
+    @Test fun endpointEnrichmentFailuresPreserveKnownOutputRestrictionsWithoutRatesOrExtraSettings() {
+        val model = ImageModelMetadata("future", parameters = listOf(
+            ImageParameter("output_format", ImageParameterType.ENUM, listOf("svg")),
+            ImageParameter("seed", ImageParameterType.INTEGER)),
+            tariffs = listOf(ImageTariff("output_image", "image", 1.0, 1.0, "USD")))
+        for (body in listOf("not json", "{}", """{"id":"other","endpoints":[]}""", """{"id":"future","endpoints":[]}""")) {
+            val fallback = ImageMetadataParser.endpoints(body, model)
+            assertFalse(fallback.tariffsComplete)
+            assertTrue(fallback.tariffs.isEmpty())
+            assertEquals(listOf("output_format"), fallback.parameters.map { it.key })
+            assertFalse(fallback.hasDisplayableOutput())
+            val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future")
+            try { ImageRequestOptions.resolve(request, fallback); fail("known SVG-only output must not be forgotten") }
+            catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        }
+    }
+
+    @Test fun changingDimensionControlsClearsPeersInBothOrdersAndKeepsUnrelatedSettings() {
+        val metadata = ImageModelMetadata("future", parameters = listOf(ImageParameter("resolution", ImageParameterType.ENUM, listOf("9K"))))
+        val original = mapOf("size" to "900x900", "seed" to "42")
+        val ratio = ImageDimensionSettings.change(original, "aspect_ratio", "7:4", metadata)
+        assertEquals(mapOf("aspect_ratio" to "7:4", "seed" to "42"), ratio)
+        val tier = ImageDimensionSettings.change(ratio, "resolution", "9K", metadata)
+        val pixel = ImageDimensionSettings.change(tier, "size", "900x900", metadata)
+        assertEquals(original, pixel)
+        assertEquals(mapOf("seed" to "42", "resolution" to "9K"),
+            ImageDimensionSettings.change(pixel, "resolution", "9K", metadata))
+        val shorthand = ImageDimensionSettings.change(ratio, "size", "9K", metadata)
+        assertEquals(mapOf("aspect_ratio" to "7:4", "seed" to "42", "size" to "9K"), shorthand)
+        assertEquals(mapOf("aspect_ratio" to "7:4", "seed" to "42", "resolution" to "9K"),
+            ImageDimensionSettings.change(shorthand, "aspect_ratio", "7:4", metadata))
+    }
+
+    @Test fun historicalConflictingDimensionsAreRejectedWithoutAShapeOverride() {
+        val model = ImageModelMetadata("future", parameters = listOf(
+            ImageParameter("aspect_ratio", ImageParameterType.ENUM, listOf("7:4")),
+            ImageParameter("size", ImageParameterType.ENUM, listOf("900x900"))))
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future",
+            parameters = mapOf("aspect_ratio" to "7:4", "size" to "900x900"))
+        try { ImageRequestOptions.resolve(request, model); fail("contradictory settings must not be billed") }
+        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+    }
+
+    @Test fun googleTransportAndResponseChoicesComeFromPublishedExamplesAndSchema() {
+        val guide = """<h2>Model selection</h2><ul><li><a href="/gemini-api/docs/models/future-native">Future Image</a></li></ul><h2>Examples</h2><pre>curl https://generativelanguage.googleapis.com/v1beta/interactions -d '{"model":"future-native"}'</pre><h3>Future Image</h3><table><tr><th>Aspect ratio</th><th>9K resolution</th></tr><tr><td>7:4</td><td>7x4</td></tr></table>"""
+        val schema = """{"components":{"schemas":{"ImageResponseFormat":{"properties":{"aspect_ratio":{"enum":["7:4"]},"image_size":{"enum":["9K"]},"mime_type":{"enum":["image/jpeg"]}}}}}}"""
+        val model = GeminiImageMetadataParser.models(guide, null, schema).single()
+        assertEquals(GeminiImageTransport.INTERACTIONS, model.geminiTransport)
+        assertEquals(listOf("9K"), model.parameters.single { it.key == "resolution" }.values)
+        assertEquals(listOf("image/jpeg"), model.parameters.single { it.key == "output_format" }.values)
+        val mixed = guide.replace("</ul>", "<li><a href=\"/gemini-api/docs/models/legacy-native\">Legacy Image</a></li></ul>") +
+            "<pre>curl https://generativelanguage.googleapis.com/v1beta/models/legacy-native:generateContent</pre>"
+        val models = GeminiImageMetadataParser.models(mixed, null, schema).associateBy { it.id }
+        assertEquals(GeminiImageTransport.INTERACTIONS, models["future-native"]!!.geminiTransport)
+        assertEquals(GeminiImageTransport.GENERATE_CONTENT, models["legacy-native"]!!.geminiTransport)
+    }
+
+    @Test fun interactionsDiscoveryDoesNotRequireAnOlderGenerateContentMethodOrCatalogEntry() {
+        val published = ImageModelMetadata("future-native", geminiTransport = GeminiImageTransport.INTERACTIONS)
+        val native = imageJson("""{"name":"models/future-native","supportedGenerationMethods":[]}""")!!
+        assertEquals(listOf("future-native"), GeminiImageMetadataParser.withNativeIds(published, listOf(native)).map { it.id })
+        assertEquals(listOf(published), GeminiImageMetadataParser.withNativeIds(published, emptyList()))
+        assertTrue(GeminiImageMetadataParser.withNativeIds(published.copy(geminiTransport = GeminiImageTransport.GENERATE_CONTENT), listOf(native)).isEmpty())
+    }
+
+    @Test fun differingEndpointDefaultsCannotHideAnUnsafeOutputBehindAPngIntersection() {
+        val model = ImageModelMetadata("future")
+        val body = """{"id":"future","endpoints":[{"supported_parameters":{"output_format":{"type":"enum","values":["png","svg"],"default":"svg"}}},{"supported_parameters":{"output_format":{"type":"enum","values":["png"],"default":"png"}}}]}"""
+        val metadata = ImageMetadataParser.endpoints(body, model)
+        assertTrue(metadata.hasDisplayableOutput())
+        assertTrue(metadata.requiresExplicitOutputFormat)
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future")
+        try { ImageRequestOptions.resolve(request, metadata); fail("automatic cannot pick a possibly unsafe route default") }
+        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        assertEquals(mapOf("output_format" to "png"), ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_format" to "png")), metadata))
+    }
     @Test fun receiptRetryDelaysRespectSecondsAndDatesWithoutCapping() {
         assertEquals(240_000L, ImageBillingRetry.delayMs("240"))
         assertEquals(30_000L, ImageBillingRetry.delayMs("Wed, 21 Oct 2015 07:28:00 GMT", 1445412450000L))

@@ -108,13 +108,11 @@ object ImageCatalogClient {
                 val guide = http.get(GeminiImageMetadataParser.GUIDE_URL)
                     ?: throw IllegalStateException("The published Gemini image model catalog could not be read")
                 val schema = http.get(GeminiImageMetadataParser.SCHEMA_URL)
-                val available = nativeGeminiModels(endpoint)
-                GeminiImageMetadataParser.models(guide, schema).flatMap { published ->
-                    available.filter { native -> native.imageText("baseModelId") == published.id ||
-                        native.imageText("name")?.removePrefix("models/") == published.id }.map { native ->
-                        val id = native.imageText("name")!!.removePrefix("models/")
-                        published.copy(id = id, resolvedIds = setOf(id, published.id))
-                    }
+                val interactionsSchema = http.get(GeminiImageMetadataParser.INTERACTIONS_SCHEMA_URL)
+                // Interactions models need not appear in the generateContent model list.
+                val available = runCatching { nativeGeminiModels(endpoint) }.getOrDefault(emptyList())
+                GeminiImageMetadataParser.models(guide, schema, interactionsSchema).flatMap { published ->
+                    GeminiImageMetadataParser.withNativeIds(published, available)
                 }
             }
             ImageProviderKind.COMPATIBLE -> {
@@ -146,7 +144,7 @@ object ImageCatalogClient {
         if (kind == ImageProviderKind.OPENROUTER || kind == ImageProviderKind.NANOGPT) {
             val url = ImageApiRoutes.modelEndpoints(endpoint, id)
             return http.get(url, endpoint)?.let { ImageMetadataParser.endpoints(it, model).copy(sourceUrl = url) }
-                ?: model.copy(parameters = emptyList(), tariffs = emptyList())
+                ?: model.withoutEndpointEvidence()
         }
         if (kind == ImageProviderKind.GEMINI) return http.get(GeminiImagePricingParser.URL)
             ?.let { GeminiImagePricingParser.enrich(model, it) } ?: model.copy(tariffsComplete = false)
@@ -166,7 +164,7 @@ object ImageCatalogClient {
             val root = http.get(url, endpoint)?.let(::imageJson)
                 ?: throw IllegalStateException("The native Gemini model list could not be read")
             models += root.imageArray("models")?.mapNotNull { it.imageObject() }
-                ?.filter { "generateContent" in it.imageStrings("supportedGenerationMethods") }.orEmpty()
+                .orEmpty()
             page = root.imageText("nextPageToken")
         } while (page != null)
         return models
@@ -180,23 +178,48 @@ object ImageCatalogClient {
 object GeminiImageMetadataParser {
     const val GUIDE_URL = "https://ai.google.dev/gemini-api/docs/image-generation"
     const val SCHEMA_URL = "https://generativelanguage.googleapis.com/\$discovery/rest?version=v1beta"
+    const val INTERACTIONS_SCHEMA_URL = "https://ai.google.dev/static/api/interactions.openapi.json"
     private fun text(html: String): String = html.replace(Regex("<[^>]+>"), " ")
         .replace("&nbsp;", " ").replace("&amp;", "&").replace("&quot;", "\"").trim().replace(Regex("\\s+"), " ")
 
-    fun models(guide: String, schema: String?): List<ImageModelMetadata> {
+    fun withNativeIds(published: ImageModelMetadata, available: List<com.google.gson.JsonObject>): List<ImageModelMetadata> {
+        if (published.geminiTransport == null) return emptyList()
+        val matching = available.filter { native ->
+            (native.imageText("baseModelId") == published.id || native.imageText("name")?.removePrefix("models/") == published.id) &&
+                (published.geminiTransport == GeminiImageTransport.INTERACTIONS || "generateContent" in native.imageStrings("supportedGenerationMethods"))
+        }.mapNotNull { native -> native.imageText("name")?.removePrefix("models/")?.let { id ->
+            published.copy(id = id, resolvedIds = setOf(id, published.id))
+        } }
+        // The image guide itself publishes Interactions support for these exact IDs.
+        return matching.ifEmpty { if (published.geminiTransport == GeminiImageTransport.INTERACTIONS) listOf(published) else emptyList() }
+    }
+
+    fun models(guide: String, schema: String?, interactionsSchema: String? = null): List<ImageModelMetadata> {
         val headings = Regex("<h[23][^>]*>(.*?)</h[23]>", RegexOption.DOT_MATCHES_ALL).findAll(guide).toList()
         val start = headings.firstOrNull { text(it.groupValues[1]).equals("Model selection", true) } ?: return emptyList()
         val end = headings.firstOrNull { it.range.first > start.range.last }?.range?.first ?: guide.length
         val selection = guide.substring(start.range.last + 1, end)
         val items = Regex("<li[^>]*>(.*?)</li>", RegexOption.DOT_MATCHES_ALL).findAll(selection).toList()
-        val schemaProperties = schema?.let(::imageJson)?.get("schemas").imageObject()
+        val legacyProperties = schema?.let(::imageJson)?.get("schemas").imageObject()
             ?.get("ImageConfig").imageObject()?.get("properties").imageObject()
-        fun schemaValues(key: String) = schemaProperties?.get(key).imageObject()?.let { field ->
+        val interactionProperties = interactionsSchema?.let(::imageJson)?.get("components").imageObject()
+            ?.get("schemas").imageObject()?.get("ImageResponseFormat").imageObject()?.get("properties").imageObject()
+        fun schemaValues(properties: com.google.gson.JsonObject?, key: String) = properties?.get(key).imageObject()?.let { field ->
             field.imageStrings("enum").ifEmpty { Regex("`([^`]+)`").findAll(field.imageText("description").orEmpty())
                 .map { it.groupValues[1] }.distinct().toList() }
         }.orEmpty()
         val tables = Regex("<table[^>]*>.*?</table>", RegexOption.DOT_MATCHES_ALL).findAll(guide).toList()
             .filter { text(it.value).contains("Aspect ratio") }
+        val examples = Regex("<pre[^>]*>(.*?)</pre>", RegexOption.DOT_MATCHES_ALL).findAll(guide).map { pre ->
+            pre.groupValues[1].replace(Regex("<[^>]+>"), "").replace("&quot;", "\"").replace("&#34;", "\"").replace("&amp;", "&")
+        }.toList()
+        fun transport(example: String): GeminiImageTransport? = when {
+            example.contains("https://generativelanguage.googleapis.com/v1beta/interactions") -> GeminiImageTransport.INTERACTIONS
+            example.contains("https://generativelanguage.googleapis.com/v1beta/models/") &&
+                example.contains(":generateContent") -> GeminiImageTransport.GENERATE_CONTENT
+            else -> null
+        }
+        val guideTransport = examples.mapNotNull(::transport).distinct().singleOrNull()
         val guideUrl = GUIDE_URL.toHttpUrl()
         return items.flatMap { item ->
             val links = Regex("<a[^>]*href=[\"']([^\"']+)[\"'][^>]*>").findAll(item.value).mapNotNull { anchor ->
@@ -220,15 +243,30 @@ object GeminiImageMetadataParser {
                         ?.groupValues?.get(1)?.let(::text)?.takeIf { it.matches(Regex("[0-9]+:[0-9]+")) }
                 }.toSet()
             }
-            val ratios = schemaValues("aspectRatio").filter { value -> ratioSets.isNotEmpty() && ratioSets.all { value in it } }
-            val sizes = selectedTable?.let { table ->
-                val headers = Regex("<th[^>]*>(.*?)</th>", RegexOption.DOT_MATCHES_ALL).findAll(table.value).map { text(it.groupValues[1]) }.toList()
-                schemaValues("imageSize").filter { size -> headers.any { it.startsWith("$size resolution") || it.startsWith("${size}px resolution") } }
-            }.orEmpty()
-            ids.map { id -> ImageModelMetadata(id, buildList {
-                if (sizes.isNotEmpty()) add(ImageParameter("resolution", ImageParameterType.ENUM, sizes))
-                if (ratios.isNotEmpty()) add(ImageParameter("aspect_ratio", ImageParameterType.ENUM, ratios))
-            }, sourceUrl = GUIDE_URL + " | " + SCHEMA_URL, nativeSizes = schemaValues("imageSize")) }
+            ids.map { id ->
+                val protocol = examples.filter { example ->
+                    Regex("[\"']model[\"']\\s*:\\s*[\"']" + Regex.escape(id) + "[\"']").containsMatchIn(example) ||
+                        example.contains("/models/$id:generateContent")
+                }.mapNotNull(::transport).distinct().singleOrNull() ?: guideTransport
+                val interactions = protocol == GeminiImageTransport.INTERACTIONS
+                val properties = if (interactions) interactionProperties else legacyProperties
+                val nativeSizes = schemaValues(properties, if (interactions) "image_size" else "imageSize")
+                val ratios = schemaValues(properties, if (interactions) "aspect_ratio" else "aspectRatio")
+                    .filter { value -> ratioSets.isNotEmpty() && ratioSets.all { value in it } }
+                val sizes = selectedTable?.let { table ->
+                    val headers = Regex("<th[^>]*>(.*?)</th>", RegexOption.DOT_MATCHES_ALL).findAll(table.value).map { text(it.groupValues[1]) }.toList()
+                    nativeSizes.filter { size -> headers.any { it.startsWith("$size resolution") || it.startsWith("${size}px resolution") } }
+                }.orEmpty()
+                ImageModelMetadata(id, buildList {
+                    if (sizes.isNotEmpty()) add(ImageParameter("resolution", ImageParameterType.ENUM, sizes))
+                    if (ratios.isNotEmpty()) add(ImageParameter("aspect_ratio", ImageParameterType.ENUM, ratios))
+                    if (interactions) {
+                        val formats = schemaValues(properties, "mime_type")
+                        if (formats.isNotEmpty()) add(ImageParameter("output_format", ImageParameterType.ENUM, formats))
+                    }
+                }, sourceUrl = GUIDE_URL + " | " + if (interactions) INTERACTIONS_SCHEMA_URL else SCHEMA_URL,
+                    nativeSizes = nativeSizes, geminiTransport = protocol)
+            }
         }.distinctBy { it.id }
     }
 }

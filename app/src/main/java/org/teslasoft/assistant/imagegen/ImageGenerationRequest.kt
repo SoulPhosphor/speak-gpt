@@ -43,5 +43,7 @@ data class ImageGenerationRequest(
     val parameterTypes: Map<String, ImageParameterType> = emptyMap(),
     /** Historical defaults are best-effort; explicit per-request overrides are strict. */
     val defaultShape: ImageShape = ImageShape.AUTOMATIC,
-    val defaultQuality: ImageQuality = ImageQuality.AUTOMATIC
+    val defaultQuality: ImageQuality = ImageQuality.AUTOMATIC,
+    /** Selected from authoritative model metadata before dispatch. */
+    val geminiTransport: GeminiImageTransport? = null
 )

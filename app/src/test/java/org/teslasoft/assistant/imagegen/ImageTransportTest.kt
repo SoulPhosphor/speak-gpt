@@ -38,7 +38,8 @@ class ImageTransportTest {
 
     @Test fun nativeGeminiUsesItsOwnRouteAuthAndConfigurationEvenForChatCompatibleProfiles() {
         val endpoint = ApiEndpointObject("Google", "https://generativelanguage.googleapis.com/v1beta/openai/", "secret")
-        val request = GeminiImageAdapter.buildHttpRequest(request().copy(parameters = mapOf("resolution" to "new-size", "aspect_ratio" to "7:4")), endpoint)
+        val request = GeminiImageAdapter.buildHttpRequest(request().copy(parameters = mapOf("resolution" to "new-size", "aspect_ratio" to "7:4"),
+            geminiTransport = GeminiImageTransport.GENERATE_CONTENT), endpoint)
         assertEquals("/v1beta/models/future%2Fimage:generateContent", request.url.encodedPath)
         assertEquals("secret", request.header("x-goog-api-key"))
         assertNull(request.header("Authorization"))
@@ -46,6 +47,42 @@ class ImageTransportTest {
         val config = JSONObject(buffer.readUtf8()).getJSONObject("generationConfig")
         assertEquals("new-size", config.getJSONObject("imageConfig").getString("imageSize"))
         assertEquals("7:4", config.getJSONObject("imageConfig").getString("aspectRatio"))
+    }
+
+    @Test fun interactionsUsesPublishedNativeRouteAndImageResponseFormat() {
+        val endpoint = ApiEndpointObject("Google", "https://generativelanguage.googleapis.com/v1beta/openai/", "secret")
+        val http = GeminiImageAdapter.buildHttpRequest(request().copy(geminiTransport = GeminiImageTransport.INTERACTIONS,
+            parameters = mapOf("resolution" to "17K", "aspect_ratio" to "7:4", "output_format" to "image/jpeg")), endpoint)
+        assertEquals("/v1beta/interactions", http.url.encodedPath)
+        assertEquals("secret", http.header("x-goog-api-key"))
+        assertNull(http.header("Authorization"))
+        val buffer = okio.Buffer(); http.body!!.writeTo(buffer)
+        val body = JSONObject(buffer.readUtf8())
+        assertEquals("future/image", body.getString("model"))
+        assertEquals("draw a tree", body.getString("input"))
+        assertFalse(body.has("generationConfig"))
+        assertFalse(body.getBoolean("store"))
+        assertFalse(body.getBoolean("stream"))
+        assertFalse(body.getBoolean("background"))
+        val format = body.getJSONObject("response_format")
+        assertEquals("image", format.getString("type"))
+        assertEquals("17K", format.getString("image_size"))
+        assertEquals("7:4", format.getString("aspect_ratio"))
+        assertEquals("image/jpeg", format.getString("mime_type"))
+    }
+
+    @Test fun unknownGeminiTransportCannotDispatchAnAssumedLegacyRequest() {
+        try { GeminiImageAdapter.buildHttpRequest(request(), ApiEndpointObject("Google", "https://generativelanguage.googleapis.com", "k")); fail("route must be verified") }
+        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.GENERATOR_MODEL_REJECTED, failure.errorCause) }
+    }
+
+    @Test fun interactionsReadsOnlyFinalModelImageAndSupportsUriDelivery() {
+        val prefix = """{"status":"completed","steps":[{"type":"user_input","content":[{"type":"image","mime_type":"image/png","data":"AQ=="}]},{"type":"thought","content":[{"type":"image","mime_type":"image/png","data":"AQ=="}]},{"type":"model_output","content":["""
+        val inline = prefix + """{"type":"image","mime_type":"image/png","data":"Ag=="}]}]}"""
+        assertArrayEquals(byteArrayOf(2), (GeminiImageAdapter.parseResponse(inline).payload as ImagePayload.Bytes).bytes)
+        assertEquals(1.0, ImageUsageParser.response(ImageProviderKind.GEMINI, inline, null).images!!, 0.0)
+        val uri = prefix + """{"type":"image","mime_type":"image/png","uri":"https://media.example/result"}]}]}"""
+        assertEquals("https://media.example/result", (GeminiImageAdapter.parseResponse(uri).payload as ImagePayload.RemoteUrl).url)
     }
 
     @Test fun geminiReadsFinalImageAndSkipsUnbilledThinkingImage() {

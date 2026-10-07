@@ -5,6 +5,25 @@ import org.junit.Test
 import org.teslasoft.assistant.usage.*
 
 class ImageUsageAccountingTest {
+    @Test fun interactionsUsageRecordsModalitiesThoughtsCacheAndFinalImageWithFrozenPrices() {
+        val body = """{"model":"new-model","id":"interaction-1","status":"completed","usage":{"input_tokens_by_modality":[{"modality":"text","tokens":10}],"output_tokens_by_modality":[{"modality":"image","tokens":50},{"modality":"text","tokens":4}],"total_input_tokens":10,"total_output_tokens":54,"total_thought_tokens":2,"total_cached_tokens":0},"steps":[{"type":"model_output","content":[{"type":"image","mime_type":"image/png","data":"Ag=="}]}]}"""
+        val prices = listOf(ImageTariff("text_input", "token", 1.0, 1000.0, "USD"), ImageTariff("text_output", "token", 2.0, 1000.0, "USD"), ImageTariff("image_output", "token", 3.0, 1000.0, "USD"))
+        val metadata = ImageModelMetadata("new-model", tariffs = prices, geminiTransport = GeminiImageTransport.INTERACTIONS)
+        val record = attempt(ImageProviderKind.GEMINI, body, metadata).record()
+        assertEquals(0.172, record.totalCost!!, 1e-12)
+        assertEquals(1.0, record.meters!!.single { it.component == UsageMeterComponent.IMAGES }.quantity!!, 0.0)
+        assertEquals(6.0, record.meters!!.single { it.component == UsageMeterComponent.TEXT_OUTPUT }.quantity!!, 0.0)
+        val missingThoughts = body.replace(",\"total_thought_tokens\":2", "")
+        assertNull(attempt(ImageProviderKind.GEMINI, missingThoughts, metadata).record().totalCost)
+        val missingCache = body.replace(",\"total_cached_tokens\":0", "")
+        assertNull(attempt(ImageProviderKind.GEMINI, missingCache, metadata).record().totalCost)
+        val missingModalities = body.replace("\"output_tokens_by_modality\":[{\"modality\":\"image\",\"tokens\":50},{\"modality\":\"text\",\"tokens\":4}],", "")
+        val incomplete = attempt(ImageProviderKind.GEMINI, missingModalities, metadata).record()
+        assertNull(incomplete.totalCost)
+        assertEquals(54.0, incomplete.meters!!.single { it.component == UsageMeterComponent.OUTPUT }.quantity!!, 0.0)
+        assertEquals(1.0, incomplete.meters!!.single { it.component == UsageMeterComponent.IMAGES }.quantity!!, 0.0)
+        assertNull(attempt(ImageProviderKind.GEMINI, body.replace("\"total_output_tokens\":54", "\"total_output_tokens\":99"), metadata).record().totalCost)
+    }
     private fun attempt(kind: ImageProviderKind = ImageProviderKind.OPENROUTER, body: String = "{}",
                         metadata: ImageModelMetadata? = null, parameters: Map<String, String> = emptyMap()) =
         ImageUsageAttempt(kind, "new-model", "provider", "https://service.example/v1", 1234, parameters,

@@ -47,6 +47,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
     private lateinit var preferences: Preferences
     private lateinit var endpoints: ApiEndpointPreferences
     private var metadataJob: Job? = null
+    private var currentMetadata: ImageModelMetadata? = null
     private val endpointLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) result.data?.getStringExtra("apiEndpointId")?.let {
             preferences.selectImageGeneratorEndpoint(it)
@@ -91,6 +92,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
 
     private fun refresh() {
         metadataJob?.cancel()
+        currentMetadata = null
         val endpointId = preferences.getImageGeneratorEndpointId()
         val modelId = preferences.getImageGeneratorModel()
         val endpoint = endpoints.getApiEndpoint(this, endpointId)
@@ -115,6 +117,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
                 status.setText(R.string.image_gen_settings_unavailable)
                 retry.visibility = View.VISIBLE
             } else {
+                currentMetadata = metadata
                 status.setText(R.string.image_gen_settings_automatic)
                 val legacy = ImageGenerationRequest("", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC,
                     endpointId, modelId, parameters = preferences.getImageGeneratorParameters(),
@@ -145,19 +148,29 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
     }
 
     private fun save(parameter: ImageParameter, value: String?) {
-        val selected = preferences.getImageGeneratorParameters().toMutableMap()
-        if (value == null) selected.remove(parameter.key) else selected[parameter.key] = value
+        val selected = ImageDimensionSettings.change(preferences.getImageGeneratorParameters(), parameter.key, value, currentMetadata)
         preferences.setImageGeneratorParameters(selected)
         // These controls replace the former global shape/quality defaults. Explicit /imagine
         // and tool overrides remain independent and are validated for the selected model.
         if (parameter.key in listOf("size", "resolution", "aspect_ratio")) preferences.setImageGeneratorShape(ImageShape.AUTOMATIC)
         if (parameter.key == "quality") preferences.setImageGeneratorQuality(ImageQuality.AUTOMATIC)
+        val options = findViewById<LinearLayout>(R.id.image_model_options)
+        for (index in 0 until options.childCount) {
+            val row = options.getChildAt(index)
+            val key = row.tag as? String ?: continue
+            if (key != parameter.key && key in listOf("size", "resolution", "aspect_ratio")) {
+                row.findViewById<TextView>(R.id.image_setting_value)?.text = selected[key]
+                    ?: getString(R.string.image_gen_option_automatic)
+                row.findViewById<EditText>(R.id.image_setting_input)?.setText(selected[key].orEmpty())
+            }
+        }
     }
 
     private fun addSetting(parent: LinearLayout, parameter: ImageParameter) {
         val selected = preferences.getImageGeneratorParameters()[parameter.key]
         if (parameter.type == ImageParameterType.ENUM || parameter.type == ImageParameterType.BOOLEAN) {
             val row = layoutInflater.inflate(R.layout.view_image_setting_dropdown, parent, false)
+            row.tag = parameter.key
             row.findViewById<TextView>(R.id.image_setting_label).text = label(parameter.key)
             val value = row.findViewById<TextView>(R.id.image_setting_value)
             val choices = if (parameter.type == ImageParameterType.BOOLEAN) listOf("true", "false")
@@ -177,6 +190,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
         } else {
             val row = layoutInflater.inflate(if (parameter.type == ImageParameterType.STRING)
                 R.layout.view_image_setting_text else R.layout.view_image_setting_number, parent, false)
+            row.tag = parameter.key
             row.findViewById<TextView>(R.id.image_setting_label).text = label(parameter.key)
             val input = row.findViewById<EditText>(R.id.image_setting_input)
             input.hint = getString(R.string.image_gen_option_automatic)

@@ -29,7 +29,47 @@ object ImageUsageParser {
         val root = imageJson(body) ?: return ImageUsageReceipt(requestId = requestId, generationId = generationId)
         val usage = (root.get("usage") ?: root.get("usageMetadata")).imageObject()
         val meters = mutableListOf<UsageMeter>()
-        if (kind == ImageProviderKind.GEMINI) {
+        if (kind == ImageProviderKind.GEMINI && (root.has("steps") || usage?.has("total_input_tokens") == true)) {
+            fun modality(key: String, name: String, total: String): Double? {
+                val details = usage?.imageArray(key) ?: return null
+                val matching = details.mapNotNull { it.imageObject() }.filter { it.imageText("modality").equals(name, true) }
+                if (matching.isNotEmpty()) return matching.map { count(it, "tokens") }
+                    .takeIf { it.all { value -> value != null } }?.sumOf { it!! }
+                // An absent modality is zero only when the full reported split reconciles.
+                val values = details.map { count(it.imageObject(), "tokens") }
+                return 0.0.takeIf { values.all { value -> value != null } && values.sumOf { it!! } == count(usage, total) }
+            }
+            fun unresolvedSplit(key: String, total: String, component: UsageMeterComponent) {
+                val details = usage?.imageArray(key) ?: return
+                val objects = details.map { it.imageObject() }
+                val quantities = objects.map { count(it, "tokens") }
+                val known = objects.all { it?.imageText("modality")?.lowercase() in setOf("text", "image") } &&
+                    quantities.all { it != null }
+                val reported = count(usage, total)
+                if (!known || (reported != null && quantities.sumOf { it!! } != reported))
+                    meters += meter(component, reported)
+            }
+            unresolvedSplit("input_tokens_by_modality", "total_input_tokens", UsageMeterComponent.INPUT)
+            unresolvedSplit("output_tokens_by_modality", "total_output_tokens", UsageMeterComponent.OUTPUT)
+            val input = modality("input_tokens_by_modality", "text", "total_input_tokens")
+                ?: count(usage, "total_input_tokens").takeIf { usage?.imageArray("input_tokens_by_modality") == null }
+            meters += meter(UsageMeterComponent.TEXT_INPUT, input)
+            meters += meter(UsageMeterComponent.IMAGE_INPUT, modality("input_tokens_by_modality", "image", "total_input_tokens"))
+            val imageOutput = modality("output_tokens_by_modality", "image", "total_output_tokens")
+            val textOutput = modality("output_tokens_by_modality", "text", "total_output_tokens")
+            val thoughts = count(usage, "total_thought_tokens")
+            meters += meter(UsageMeterComponent.IMAGE_OUTPUT, imageOutput)
+            meters += meter(UsageMeterComponent.TEXT_OUTPUT, textOutput?.let { text -> thoughts?.let { text + it } })
+            if (usage?.imageArray("output_tokens_by_modality") == null)
+                meters += meter(UsageMeterComponent.OUTPUT, count(usage, "total_output_tokens"))
+            meters += meter(UsageMeterComponent.CACHED_TEXT_INPUT,
+                modality("cached_tokens_by_modality", "text", "total_cached_tokens")
+                    ?: 0.0.takeIf { count(usage, "total_cached_tokens") == 0.0 })
+            meters += meter(UsageMeterComponent.CACHED_IMAGE_INPUT,
+                modality("cached_tokens_by_modality", "image", "total_cached_tokens")
+                    ?: 0.0.takeIf { count(usage, "total_cached_tokens") == 0.0 })
+            count(usage, "total_tool_use_tokens")?.takeIf { it > 0 }?.let { meters += meter(UsageMeterComponent.INPUT, it) }
+        } else if (kind == ImageProviderKind.GEMINI) {
             fun modalities(key: String, input: Boolean): Boolean {
                 val details = usage?.imageArray(key) ?: return false
                 details.forEach { detail ->
@@ -89,6 +129,7 @@ object ImageUsageParser {
                 ?.let { (it.imageText("mimeType") ?: it.imageText("mime_type"))?.startsWith("image/") == true } == true
         }
         val images = when {
+            kind == ImageProviderKind.GEMINI && root.has("steps") -> GeminiImageAdapter.interactionImages(root).size.toDouble()
             data != null -> data.size().toDouble()
             chatImages != null -> chatImages.size().toDouble()
             nativeImages != null -> nativeImages.toDouble()
