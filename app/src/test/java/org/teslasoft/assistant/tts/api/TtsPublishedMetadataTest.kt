@@ -54,6 +54,28 @@ class TtsPublishedMetadataTest {
         assertEquals(BigDecimal("1000000"), parsed.priceFor("speech-future")!!.charges.first().quantity)
     }
 
+    @Test fun abbreviatedEnumHeadingsDoNotOmitTheFullPublishedModelList() {
+        val abbreviated = reference.replace("or \"speech-classic\"", "or 3 more\n    - `\"speech-classic\"`\n    - `\"speech-next\"`")
+        assertEquals(setOf("speech-future", "speech-classic", "speech-next"), OpenAiPublishedParser.modelIds(abbreviated))
+    }
+
+    @Test fun unreadableBillingScalesAreNotSilentlyTreatedAsOneToken() {
+        assertNull(PublishedPriceUnits.parse("1 billion tokens"))
+        assertNull(PublishedPriceUnits.parse("unknown tokens"))
+        assertEquals(BigDecimal("1000000") to "token", PublishedPriceUnits.parse("1M tokens"))
+    }
+
+    @Test fun modelSpecificApiVoicesTakePriorityOverTheGeneralPublishedList() {
+        val http = FakeHttp { request -> when (request.url.toString()) {
+            "https://api.openai.com/v1/models" -> response("""{"data":[{"id":"speech-future","supported_voices":["account-specific"]}]}""")
+            TtsPublishedMetadataClient.OPENAI_REFERENCE -> response(reference)
+            TtsPublishedMetadataClient.OPENAI_GUIDE -> response(guide)
+            else -> response(modelDoc(request.url.encodedPath.substringAfterLast('/').removeSuffix(".md")))
+        } }
+        val catalog = TtsDiscoveryClient(http).voices(source(), TtsRequestGate().begin()) as TtsVoiceCatalog.Known
+        assertEquals(listOf("account-specific"), catalog.voices.map { it.id })
+    }
+
     @Test fun officialOpenAiPickerActuallyFetchesThePublishedVoiceCatalogWithoutSendingTheKey() {
         val http = FakeHttp { request -> when (request.url.toString()) {
             "https://api.openai.com/v1/models" -> response("""{"data":[{"id":"speech-future"},{"id":"speech-future-snapshot-a"},{"id":"chat-only"}]}""")

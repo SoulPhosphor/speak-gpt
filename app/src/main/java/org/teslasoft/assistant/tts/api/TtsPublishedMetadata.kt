@@ -86,10 +86,12 @@ internal object OpenAiPublishedParser {
         .substringBefore("\n## ")
 
     fun modelIds(reference: String): Set<String> {
-        val declaration = parameter(reference, "model").lineSequence()
+        val modelSection = parameter(reference, "model")
+        val declaration = modelSection.lineSequence()
             .firstOrNull { it.contains("SpeechModel =") }
             ?: throw IllegalArgumentException("Published speech model enum is missing")
-        return quoted(declaration).also { require(it.isNotEmpty()) { "Published speech model enum is empty" } }
+        val entries = Regex("(?m)^    - `\"([^\"]+)\"`").findAll(modelSection).map { it.groupValues[1] }.toSet()
+        return (quoted(declaration) + entries).also { require(it.isNotEmpty()) { "Published speech model enum is empty" } }
     }
 
     fun catalog(reference: String, guide: String, modelDocs: Map<String, String>): OpenAiPublishedSpeech {
@@ -155,8 +157,9 @@ internal object OpenAiPublishedParser {
 internal object PublishedPriceUnits {
     /** Parses a published basis (1K characters, 1M tokens, /minute); numerical scales are unit conversions. */
     fun parse(text: String): Pair<BigDecimal, String>? {
+        val basis = text.trim().removePrefix("Price per ").removePrefix("/").trim()
         val match = Regex("(?i)(?:(\\d+(?:\\.\\d+)?)\\s*([km])?\\s*)?(characters?|tokens?|seconds?|minutes?|bytes?)")
-            .find(text) ?: return null
+            .matchEntire(basis) ?: return null
         val number = match.groupValues[1].takeIf(String::isNotEmpty)?.toBigDecimal() ?: BigDecimal.ONE
         val scale = when (match.groupValues[2].lowercase(Locale.ROOT)) {
             "k" -> BigDecimal("1000"); "m" -> BigDecimal("1000000"); else -> BigDecimal.ONE

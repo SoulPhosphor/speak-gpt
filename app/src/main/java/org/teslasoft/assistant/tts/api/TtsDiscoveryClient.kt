@@ -28,7 +28,8 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
                     val published = TtsPublishedMetadataClient(http).openAi(source, token, op)
                     val catalog = TtsCatalogParser.models(response.text(), published.modelIds)
                     catalog.copy(models = catalog.models.map { model ->
-                        model.copy(voices = TtsVoiceCatalog.Known(published.voicesFor(model.id)))
+                        model.copy(voices = model.voices.takeUnless { it == TtsVoiceCatalog.Unavailable }
+                            ?: TtsVoiceCatalog.Known(published.voicesFor(model.id)))
                     })
                 }
                 else -> TtsCatalogParser.models(response.text())
