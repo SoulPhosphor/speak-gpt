@@ -159,7 +159,18 @@ data class TurnUsageRecord(
     /** Billed components of a request not billed in text tokens (TTS). Null
      * for text-token requests. Transient: Gson cannot rebuild this list in a
      * minified build, so the usage log writes it with [UsageMeterCodec]. */
-    @Transient val meters: List<UsageMeter>? = null
+    @Transient val meters: List<UsageMeter>? = null,
+    /** Request evidence for image billing. No prompt, credentials, image bytes or download URLs. */
+    val requestId: String? = null,
+    val requestedModel: String? = null,
+    val requestStartedAtMs: Long? = null,
+    val httpStatus: Int? = null,
+    val requestParameters: String? = null,
+    val pricingSource: String? = null,
+    val pricingEvidence: String? = null,
+    val reportedChargeAmount: Double? = null,
+    val reportedChargeCurrency: String? = null,
+    val reportedChargeDecimal: String? = null
 ) {
     val countSource: TokenCountSource get() = TokenCountSource.fromStored(source)
     val storedCostSource: CostSource get() = when {

@@ -286,7 +286,7 @@ class TokenPricingDetailsActivity : FragmentActivity() {
     }
 }
 
-/** What the Usage & Cost screen shows for metered (TTS) usage: label resources and text. */
+/** What the Usage & Cost screen shows for metered usage: label resources and text. */
 internal object MeteredUsagePresentation {
     data class Row(val label: Int, val quantity: String, val cost: String)
     data class Price(val label: Int, val value: String)
@@ -296,6 +296,8 @@ internal object MeteredUsagePresentation {
         Row(label(meter.component), when {
             meter.hasUnknownQuantity -> UsageValueFormatter.NOT_REPORTED
             meter.unit == UsageMeterUnit.SECOND -> seconds(UsageValueFormatter.seconds(meter.quantity))
+            meter.unit == UsageMeterUnit.CREDIT || meter.unit == UsageMeterUnit.MEGAPIXEL ->
+                java.math.BigDecimal.valueOf(meter.quantity).stripTrailingZeros().toPlainString()
             else -> UsageValueFormatter.count(meter.quantity, false)
         }, UsageValueFormatter.cost(meter.cost, meter.hasUnknownCost))
     }
@@ -315,6 +317,9 @@ internal object MeteredUsagePresentation {
             UsageMeterUnit.BYTE -> R.string.usage_price_per_million_utf8_bytes
             UsageMeterUnit.TOKEN -> R.string.usage_price_per_million
             UsageMeterUnit.SECOND -> R.string.usage_price_per_minute_audio
+            UsageMeterUnit.IMAGE -> R.string.usage_price_per_image
+            UsageMeterUnit.MEGAPIXEL -> R.string.usage_price_per_megapixel
+            UsageMeterUnit.CREDIT -> R.string.usage_price_per_credit
         }
     }
 
@@ -323,13 +328,26 @@ internal object MeteredUsagePresentation {
         UsageMeterComponent.UTF8_BYTES -> R.string.usage_meter_utf8_bytes
         UsageMeterComponent.TEXT_INPUT -> R.string.usage_meter_text_input
         UsageMeterComponent.AUDIO_OUTPUT -> R.string.usage_meter_audio_output
+        UsageMeterComponent.IMAGE_INPUT -> R.string.usage_meter_image_input
+        UsageMeterComponent.IMAGE_OUTPUT -> R.string.usage_meter_image_output
+        UsageMeterComponent.TEXT_OUTPUT -> R.string.usage_meter_text_output
+        UsageMeterComponent.CACHED_TEXT_INPUT -> R.string.usage_meter_cached_text_input
+        UsageMeterComponent.CACHED_IMAGE_INPUT -> R.string.usage_meter_cached_image_input
+        UsageMeterComponent.INPUT -> R.string.usage_input
+        UsageMeterComponent.OUTPUT -> R.string.usage_output
+        UsageMeterComponent.IMAGES -> R.string.usage_meter_images
+        UsageMeterComponent.CREDITS -> R.string.usage_meter_credits
     }
 
     /** The frozen rate restated per 1M units, or per minute of audio. */
     private fun displayedRate(meter: UsageMeterTotal): Double? {
         val amount = meter.priceAmount ?: return null
         val basis = meter.priceQuantity?.takeIf { it > 0.0 } ?: return null
-        val per = if (meter.unit == UsageMeterUnit.SECOND) 60.0 else 1_000_000.0
+        val per = when (meter.unit) {
+            UsageMeterUnit.SECOND -> 60.0
+            UsageMeterUnit.IMAGE, UsageMeterUnit.MEGAPIXEL, UsageMeterUnit.CREDIT -> 1.0
+            else -> 1_000_000.0
+        }
         return java.math.BigDecimal.valueOf(amount).multiply(java.math.BigDecimal.valueOf(per))
             .divide(java.math.BigDecimal.valueOf(basis), java.math.MathContext.DECIMAL128).toDouble()
     }

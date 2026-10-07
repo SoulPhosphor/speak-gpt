@@ -90,6 +90,15 @@ data class UsageLogState(
     fun append(newEntries: List<UsageLogEntry>): UsageLogState =
         copy(entries = entries + newEntries)
 
+    /** An attempt and its final receipt share one identity; enrichment cannot duplicate charges. */
+    fun putRequest(entry: UsageLogEntry, existingOnly: Boolean = false): UsageLogState {
+        val index = entries.indexOfFirst { it.id == entry.id }
+        if (existingOnly && index < 0) return this
+        val updated = entries.toMutableList()
+        if (index < 0) updated.add(entry) else updated[index] = entry
+        return copy(entries = updated)
+    }
+
     /** Copies the durable records already stored in [messages] once. */
     fun seed(messages: List<Map<String, Any>>, nowMs: Long): UsageLogState {
         if (seeded) return this
@@ -272,5 +281,13 @@ object UsageLogStore {
         return synchronized(lock) {
             prefs.commitUsageLog(UsageLog.encode(read(prefs).append(entries)))
         }
+    }
+
+    /** Enriches the same image request with its delayed billing receipt, never adds a second charge. */
+    fun putRequest(prefs: org.teslasoft.assistant.preferences.Preferences, entry: UsageLogEntry, existingOnly: Boolean = false): Boolean = synchronized(lock) {
+        val state = read(prefs)
+        val updated = state.putRequest(entry, existingOnly)
+        if (updated === state) return@synchronized false
+        prefs.commitUsageLog(UsageLog.encode(updated))
     }
 }

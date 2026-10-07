@@ -62,22 +62,11 @@ class OpenAiImageAdapterTest {
     }
 
     @Test
-    fun explicitShapeAndQualityAreSent() {
-        val body = JSONObject(
-            OpenAiImageAdapter.buildRequestBodyJson(
-                request(shape = ImageShape.LANDSCAPE, quality = ImageQuality.HIGH)
-            )
-        )
-        assertEquals("1536x1024", body.getString("size"))
-        assertEquals("high", body.getString("quality"))
-    }
-
-    @Test
-    fun everyNonAutomaticShapeMapsToASize() {
-        assertEquals("1024x1024", OpenAiImageAdapter.sizeFor(ImageShape.SQUARE))
-        assertEquals("1536x1024", OpenAiImageAdapter.sizeFor(ImageShape.LANDSCAPE))
-        assertEquals("1024x1536", OpenAiImageAdapter.sizeFor(ImageShape.PORTRAIT))
-        assertNull(OpenAiImageAdapter.sizeFor(ImageShape.AUTOMATIC))
+    fun resolvedProviderValuesAreSentWithoutFixedSizeOrQualityLists() {
+        val body = JSONObject(OpenAiImageAdapter.buildRequestBodyJson(request().copy(
+            parameters = mapOf("size" to "2112x1408", "quality" to "future-quality"))))
+        assertEquals("2112x1408", body.getString("size"))
+        assertEquals("future-quality", body.getString("quality"))
     }
 
     @Test
@@ -175,9 +164,4 @@ class OpenAiImageAdapterTest {
         )
     }
 
-    @Test
-    fun adapterDeclaresShapeAndQualitySupport() {
-        assertTrue(OpenAiImageAdapter.capabilities.supportsShape)
-        assertTrue(OpenAiImageAdapter.capabilities.supportsQuality)
-    }
 }

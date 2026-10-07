@@ -331,8 +331,12 @@ partial sum is never shown as if it were complete.
   "Not Reported"; a failed one only when the service reported usage.
 - **TTS section:** every API voice request that returned audio is counted.
   Section 7 explains how.
-- **Not counted yet:** image generation requests (Image Generations) and
-  Whisper cloud voice input (audio sent to OpenAI's `whisper-1`
+- **Image Generations:** `/imagine` and AI `create_image` jobs record each
+  dispatched HTTP attempt through the shared registry/coordinator. A stable
+  request entry is committed before dispatch, enriched with the full allowlisted
+  usage before payload parsing/download, and finalized even on cancellation or
+  failure. Unconfirmed billing stays Not Reported; an attempt is never called free.
+- **Not counted yet:** Whisper cloud voice input (audio sent to OpenAI's `whisper-1`
   transcription service; STT). Their sections exist and appear once they are
   recorded. The STT section is meant for any speech-to-text service, not only
   Whisper.
@@ -592,3 +596,47 @@ plans, absence of admin calls, reasoning, and frozen-record serialization.
 | TTS request formats, OpenAI SSE, MP3 duration | `app/src/main/java/org/teslasoft/assistant/tts/api/TtsServices.kt`, `TtsTransport.kt` |
 | TTS usage records, prices, OpenRouter lookup, recording | `app/src/main/java/org/teslasoft/assistant/tts/api/TtsUsage.kt` (`TtsUsageAccounting`, `OpenAiSpeechPricing`, `OpenRouterGenerationClient`, `TtsUsageRecorder`) |
 | Tests | `app/src/test/java/org/teslasoft/assistant/usage/`, `app/src/test/java/org/teslasoft/assistant/providers/ReportedProviderParserTest.kt`, `app/src/test/java/org/teslasoft/assistant/preferences/backup/portable/PortableChatRestorePlanTest.kt`, `app/src/test/java/org/teslasoft/assistant/tts/api/` (`TtsUsageTest`, `TtsWireFormatTest`, `TtsProviderDiscoveryTest`, `TtsPlaybackUsageTest`), `app/src/test/java/org/teslasoft/assistant/ui/activities/UsageCostTtsRenderingTest.kt` |
+
+
+## 8. Image generation evidence and settings
+
+Image generation reuses generic meters, not chat text-token fields. Image count,
+actual output megapixels, modality token counts, cached modality token counts, and
+provider-reported credits retain their own units. Fractional credits are preserved;
+there is no invented credit-to-dollar exchange rate. Only USD enters dollar totals.
+Request IDs, selected and reported model IDs, endpoint, start time, HTTP status,
+effective settings, pricing source, and resolved tariff evidence are retained.
+Prompts, API keys, temporary image URLs, and raw response bodies are not copied into
+this accounting evidence.
+
+| Request protocol | Usage and authoritative cost evidence |
+| --- | --- |
+| Direct OpenAI `/images/generations` | Images API usage details; exact model documents supply frozen token rates and explicit aliases. Without output details, only an explicitly published image-only output modality can resolve output tokens to image tokens. A missing cache split with distinct cached rates leaves the total Not Reported. Approximate per-image pricing examples are never used as actual token-billed charges. |
+| Direct Gemini native `generateContent` | `usageMetadata` modality counts and additional thinking counts; exact model sections on Google's pricing page, standard synchronous USD token rates, only when the same section confirms no free tier. Missing modality counts, ambiguous tiers, aliases, or unparsed prices remain Not Reported. |
+| OpenRouter dedicated `/images` | Response `usage.cost` is documented USD. An exact generation ID can retrieve the generation receipt. Frozen per-endpoint tariffs are applied only for the identified route, or when all possible routes publish identical tariffs. |
+| NanoGPT dedicated `/images` | Model and endpoint descriptors supply settings and public tariffs. `X-Request-ID` retrieves the exact primary-charge receipt using the original key; explicit USD charges are used. XNO and unlabeled amounts retain their native evidence with USD cost Not Reported. The receipt excludes refunds and separately billed extras. |
+| Other OpenAI-compatible `/images/generations` | Preserve real image/request/usage information and explicit provider-reported currency/cost or credits. Unsupported or unavailable metadata never triggers a guessed model price or capability. |
+
+A receipt lookup retries only GET requests, never paid generation. Each enrichment
+updates the same image-request entry, so it cannot count a second charge. Deleting
+an image/message cannot remove its log entry; a receipt cannot resurrect an entry
+removed with the chat. Pending receipts unavailable within the bounded lookup window
+remain Not Reported. Pricing is resolved before dispatch and stored with the request;
+opening Usage & Cost never fetches newer rates to reprice history.
+
+The image menu orders the app toggles above Image Generation Options, Model Provider,
+Model, and published model settings. Labels use toggle-row typography. Enum choices
+and numeric bounds are fetched, never assigned by model name. Settings are scoped to
+the endpoint and exact model; historical shorthand defaults are translated against
+published choices, and unsupported historical defaults defer to the provider.
+Explicit request overrides and saved model-specific settings are strictly validated
+before dispatch. Unavailable metadata leaves provider defaults available and cost
+unknown; it does not fabricate extra controls.
+
+Authoritative references: [OpenAI Images](https://developers.openai.com/api/reference/resources/images/methods/generate/),
+[OpenAI model documents](https://developers.openai.com/api/docs/models),
+[Gemini image generation](https://ai.google.dev/gemini-api/docs/generate-content/image-generation),
+[Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing),
+[OpenRouter Image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation),
+[NanoGPT Image API](https://docs.nano-gpt.com/api-reference/image-generation),
+[NanoGPT request billing](https://docs.nano-gpt.com/api-reference/endpoint/request-billing).

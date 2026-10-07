@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/Widget.App.ImageGeneration.SettingRow">
+    <TextView android:id="@+id/image_setting_label" style="@style/Widget.App.ImageGeneration.Label" />
+    <EditText android:id="@+id/image_setting_input" style="@style/Widget.App.ImageGeneration.NumberInput" />
+</LinearLayout>

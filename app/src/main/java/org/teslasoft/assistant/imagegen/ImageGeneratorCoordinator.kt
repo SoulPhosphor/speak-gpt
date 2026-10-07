@@ -19,6 +19,8 @@ package org.teslasoft.assistant.imagegen
 import android.content.Context
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.Call
@@ -74,12 +76,14 @@ object ImageGeneratorCoordinator {
         ) : Outcome()
     }
 
-    suspend fun generate(context: Context, request: ImageGenerationRequest): Outcome =
-        withContext(Dispatchers.IO) { generateInternal(context, request) }
+    suspend fun generate(context: Context, request: ImageGenerationRequest,
+        onUsage: (ApiEndpointObject, ImageUsageAttempt) -> Unit = { _, _ -> }): Outcome =
+        withContext(Dispatchers.IO) { generateInternal(context, request, onUsage) }
 
     private suspend fun generateInternal(
         context: Context,
-        request: ImageGenerationRequest
+        request: ImageGenerationRequest,
+        onUsage: (ApiEndpointObject, ImageUsageAttempt) -> Unit
     ): Outcome {
         val startedAt = System.currentTimeMillis()
         var provider = "Image generator"
@@ -90,6 +94,8 @@ object ImageGeneratorCoordinator {
         var generationMs: Long? = null
         var downloadMs: Long? = null
         var apiKeyForSanitizing: String? = null
+        var billingEndpoint: ApiEndpointObject? = null
+        var usageAttempt: ImageUsageAttempt? = null
 
         fun diagnostics() = ImageRequestDiagnostics(
             provider = provider,
@@ -118,20 +124,52 @@ object ImageGeneratorCoordinator {
             provider = endpoint.provider.ifBlank { adapter.providerName }
             endpointLabel = endpoint.label
             val client = buildClient(endpoint)
+            // Copy the connection before dispatch; a settings edit cannot redirect a receipt lookup.
+            billingEndpoint = ApiEndpointObject(endpoint.label, endpoint.host, endpoint.apiKey,
+                authType = endpoint.authType, provider = endpoint.provider, id = endpoint.id,
+                identity = endpoint.identity)
+            val metadata = runCatching { ImageCatalogClient.model(endpoint, request.modelId, fresh = true) }.getOrNull()
+            currentCoroutineContext().ensureActive()
+            val options = ImageRequestOptions.resolve(request, metadata)
+            val resolvedRequest = request.copy(parameters = options,
+                parameterTypes = metadata?.parameters.orEmpty().associate { it.key to it.type })
+            val httpRequest = adapter.buildHttpRequest(resolvedRequest, endpoint)
+            val kind = ImageProviderKind.forEndpoint(endpoint)
+            usageAttempt = ImageUsageAttempt(kind, request.modelId,
+                if (kind == ImageProviderKind.OPENROUTER) org.teslasoft.assistant.usage.TokenUsageAccounting.PROVIDER_NOT_REPORTED
+                else endpoint.provider.ifBlank { when (kind) {
+                    ImageProviderKind.OPENAI -> "OpenAI"
+                    ImageProviderKind.GEMINI -> "Google"
+                    ImageProviderKind.NANOGPT -> "NanoGPT"
+                    else -> adapter.providerName
+                } }, endpoint.host, startedAt, options, metadata)
 
+            // Persist the dispatched attempt before waiting for the paid response. Later
+            // evidence replaces this same entry; process death cannot erase the attempt.
+            runCatching { onUsage(billingEndpoint!!, usageAttempt!!) }
             val generationStart = System.currentTimeMillis()
             val parsed: AdapterImageResponse =
-                executeCall(client, adapter.buildHttpRequest(request, endpoint)).use { response ->
+                executeCall(client, httpRequest).use { response ->
                     httpStatus = response.code
                     providerRequestId = ImageRequestDiagnostics.sanitizeRequestId(
                         response.header("x-request-id")
                     )
+                    val actualRequestId = imageIdentifier(response.header("x-request-id"))
+                    val generationId = imageIdentifier(response.header("x-generation-id"))
+                    usageAttempt = usageAttempt?.copy(httpStatus = response.code,
+                        receipt = ImageUsageReceipt(requestId = actualRequestId, generationId = generationId))
+                    runCatching { onUsage(billingEndpoint!!, usageAttempt!!) }
                     val bodyBytes = readBounded(response.body?.byteStream(), MAX_RESPONSE_BYTES)
                         ?: throw ImageGenerationException(
                             ImageErrorCause.DOWNLOAD_INVALID,
                             "the provider response exceeded the size limit"
                         )
                     val bodyText = String(bodyBytes)
+                    usageAttempt = usageAttempt?.copy(receipt = runCatching {
+                        ImageUsageParser.response(kind, bodyText, actualRequestId, generationId)
+                    }.getOrDefault(usageAttempt!!.receipt))
+                    // Preserve the receipt before parsing or downloading its payload.
+                    runCatching { onUsage(billingEndpoint!!, usageAttempt!!) }
                     if (!response.isSuccessful) {
                         val providerError = ProviderErrorInfo.parse(bodyText)
                         reportedProvider = providerError.providerName
@@ -166,6 +204,15 @@ object ImageGeneratorCoordinator {
                     "the received bytes are not a supported image format"
                 )
 
+            // Actual decoded output area, only when exactly one output was returned.
+            // Model size labels and requested dimensions never stand in for the image.
+            if (usageAttempt?.receipt?.images == 1.0 && usageAttempt?.receipt?.megapixels == null) {
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, bounds)
+                if (bounds.outWidth > 0 && bounds.outHeight > 0) usageAttempt = usageAttempt?.let { attempt ->
+                    attempt.copy(receipt = attempt.receipt.copy(megapixels = bounds.outWidth.toDouble() * bounds.outHeight / 1_000_000.0))
+                }
+            }
             return Outcome.Success(
                 GeneratedImageResult(
                     bytes = imageBytes,
@@ -196,6 +243,12 @@ object ImageGeneratorCoordinator {
                 reportedProvider,
                 diagnostics()
             )
+        } finally {
+            // A disconnected/cancelled request can still have been billed. Keep the real attempt
+            // and its header ID; any obtainable receipt enriches that same durable record.
+            usageAttempt?.let { attempt -> billingEndpoint?.let { endpoint ->
+                runCatching { onUsage(endpoint, attempt.copy(finalized = true)) }
+            } }
         }
     }
 

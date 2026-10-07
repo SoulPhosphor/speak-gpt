@@ -318,6 +318,8 @@ import org.teslasoft.assistant.imagegen.ImageFailureAction
 import org.teslasoft.assistant.imagegen.GeneratedImageFiles
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
+import org.teslasoft.assistant.imagegen.ImageShape
+import org.teslasoft.assistant.imagegen.ImageQuality
 import org.teslasoft.assistant.imagegen.ImageGenerationRequest
 import org.teslasoft.assistant.imagegen.imageFailureMessageRes
 import org.teslasoft.assistant.imagegen.imageFailureProviderDetailBlock
@@ -8586,46 +8588,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
 
-        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
-        val capabilities = ImageProviderAdapters.forEndpoint(endpoint).capabilities
-        val resolved = ImagineCommand.resolveOptions(
-            parsed.shapeOverride,
-            parsed.qualityOverride,
-            globalPreferences.getImageGeneratorShape(),
-            globalPreferences.getImageGeneratorQuality(),
-            capabilities
-        )
         val request = ImageGenerationRequest(
             prompt = parsed.prompt,
-            shape = resolved.shape,
-            quality = resolved.quality,
+            shape = parsed.shapeOverride ?: ImageShape.AUTOMATIC,
+            quality = parsed.qualityOverride ?: ImageQuality.AUTOMATIC,
             endpointId = endpointId,
-            modelId = generatorModelId
+            modelId = generatorModelId,
+            parameters = globalPreferences.getImageGeneratorParameters().toMap(),
+            defaultShape = globalPreferences.getImageGeneratorShape(),
+            defaultQuality = globalPreferences.getImageGeneratorQuality()
         )
-
-        if (resolved.unsupportedExplicit.isNotEmpty()) {
-            // §11: an explicitly requested option the selected generator
-            // cannot support is never silently ignored.
-            val optionLabels = resolved.unsupportedExplicit.joinToString(", ") { option ->
-                if (option == ImagineCommand.OPTION_SHAPE) {
-                    getString(R.string.image_gen_row_shape)
-                } else {
-                    getString(R.string.image_gen_row_quality)
-                }
-            }
-            saveSettings()
-            restoreUIState()
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.title_image_generation)
-                .setMessage(getString(R.string.image_gen_unsupported_option_notice, optionLabels))
-                .setPositiveButton(R.string.image_gen_action_continue) { _, _ ->
-                    sendCoordinatorImageRequest(request)
-                }
-                .setNegativeButton(R.string.btn_cancel) { _, _ -> settlePendingRegeneration() }
-                .setOnCancelListener { settlePendingRegeneration() }
-                .show()
-            return
-        }
 
         sendCoordinatorImageRequest(request)
     }
@@ -9148,32 +9120,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return CreateImageTool.errorResult("no image generator is configured")
         }
 
-        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
-        val adapter = ImageProviderAdapters.forEndpoint(endpoint)
-        val resolved = ImagineCommand.resolveOptions(
-            valid.shapeOverride,
-            null,
-            globalPreferences.getImageGeneratorShape(),
-            globalPreferences.getImageGeneratorQuality(),
-            adapter.capabilities
-        )
-        if (resolved.unsupportedExplicit.isNotEmpty() || resolved.silentFallbacks.isNotEmpty()) {
-            // §13: a model-initiated option that fell back to the provider
-            // default — the case the user cannot otherwise see.
-            ImageGenerationEventLog.recordSilentFallback(
-                this,
-                (resolved.unsupportedExplicit + resolved.silentFallbacks).joinToString(", "),
-                endpoint.provider.ifBlank { adapter.providerName },
-                generatorModelId
-            )
-        }
         val request = ImageGenerationRequest(
             prompt = valid.prompt,
-            shape = resolved.shape,
-            quality = resolved.quality,
+            shape = valid.shapeOverride ?: ImageShape.AUTOMATIC,
+            quality = ImageQuality.AUTOMATIC,
             endpointId = endpointId,
             modelId = generatorModelId,
-            description = valid.description
+            description = valid.description,
+            parameters = globalPreferences.getImageGeneratorParameters().toMap(),
+            defaultShape = globalPreferences.getImageGeneratorShape(),
+            defaultQuality = globalPreferences.getImageGeneratorQuality()
         )
 
         if (!requestImageConfirmation(valid.prompt, globalPreferences, shouldPronounce)) {

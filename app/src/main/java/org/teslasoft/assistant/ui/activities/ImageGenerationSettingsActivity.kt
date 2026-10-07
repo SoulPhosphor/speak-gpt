@@ -17,292 +17,198 @@
 package org.teslasoft.assistant.ui.activities
 
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
-import android.widget.ArrayAdapter
-import android.widget.ImageButton
-import android.widget.LinearLayout
+import android.widget.EditText
 import android.widget.ScrollView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.ListPopupWindow
-import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
-import com.google.android.material.elevation.SurfaceColors
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.materialswitch.MaterialSwitch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.imagegen.ImageGenerationMigration
-import org.teslasoft.assistant.imagegen.ImageQuality
-import org.teslasoft.assistant.imagegen.ImageShape
+import org.teslasoft.assistant.imagegen.*
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.util.ScreenChrome
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 
-/**
- * Image Generation settings (image-generation-rebuild-plan.md §5): the
- * app-wide configuration behind the Images row. Every row saves as it is
- * changed, following the Summarizer Settings interaction pattern: the
- * Image Service row opens the existing endpoint list picker, the Image
- * Model row opens the shared searchable model picker fed by the chosen
- * endpoint (in image mode, without the chat picker's name exclusions), and
- * the Ask Before Creating row is visible only while Let the AI Create
- * Images is enabled.
- */
+/** Settings are scoped to the endpoint and exact model. Choices come from fetched metadata. */
 class ImageGenerationSettingsActivity : FragmentActivity() {
-
-    private var preferences: Preferences? = null
-    private var apiEndpointPreferences: ApiEndpointPreferences? = null
-
-    private var actionBar: ConstraintLayout? = null
-    private var btnBack: ImageButton? = null
-    private var switchAiCreateImages: MaterialSwitch? = null
-    private var rowAskBeforeCreating: LinearLayout? = null
-    private var switchAskBeforeCreating: MaterialSwitch? = null
-    private var rowImageService: LinearLayout? = null
-    private var textImageServiceValue: TextView? = null
-    private var rowImageModel: LinearLayout? = null
-    private var textImageModelValue: TextView? = null
-    private var rowDefaultShape: LinearLayout? = null
-    private var rowDefaultQuality: LinearLayout? = null
-    private var textDefaultShape: TextView? = null
-    private var textDefaultQuality: TextView? = null
-    private var switchImagineCommand: MaterialSwitch? = null
-    private var switchDeleteImagesWithChat: MaterialSwitch? = null
-
-    private val endpointLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val id = result.data?.getStringExtra("apiEndpointId")
-            if (id != null) preferences?.setImageGeneratorEndpointId(id)
+    private lateinit var preferences: Preferences
+    private lateinit var endpoints: ApiEndpointPreferences
+    private var metadataJob: Job? = null
+    private val endpointLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) result.data?.getStringExtra("apiEndpointId")?.let {
+            preferences.selectImageGeneratorEndpoint(it)
         }
-        refreshServiceAndModelRows()
-        refreshShapeAndQuality()
+        refresh()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_image_generation_settings)
-
-        // Defensive: idempotent, normally already done at app start (§14).
         ImageGenerationMigration.runIfNeeded(this)
-
         preferences = Preferences.getPreferences(this, "")
-        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
-
-        bindViews()
-        applyTheme()
-        initLogic()
-    }
-
-    private fun bindViews() {
-        actionBar = findViewById(R.id.action_bar)
-        btnBack = findViewById(R.id.btn_back)
-        switchAiCreateImages = findViewById(R.id.switch_ai_create_images)
-        rowAskBeforeCreating = findViewById(R.id.row_ask_before_creating)
-        switchAskBeforeCreating = findViewById(R.id.switch_ask_before_creating)
-        rowImageService = findViewById(R.id.row_image_service)
-        textImageServiceValue = findViewById(R.id.text_image_service_value)
-        rowImageModel = findViewById(R.id.row_image_model)
-        textImageModelValue = findViewById(R.id.text_image_model_value)
-        rowDefaultShape = findViewById(R.id.row_default_shape)
-        rowDefaultQuality = findViewById(R.id.row_default_quality)
-        textDefaultShape = findViewById(R.id.text_default_shape)
-        textDefaultQuality = findViewById(R.id.text_default_quality)
-        switchImagineCommand = findViewById(R.id.switch_imagine_command)
-        switchDeleteImagesWithChat = findViewById(R.id.switch_delete_images_with_chat)
-    }
-
-    private fun applyTheme() {
-        window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
-        if (Build.VERSION.SDK_INT <= 34) {
-            @Suppress("DEPRECATION")
-            window.navigationBarColor = SurfaceColors.SURFACE_0.getColor(this)
-            @Suppress("DEPRECATION")
-            window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
-        }
-        actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-        btnBack?.backgroundTintList =
-            ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
-    }
-
-    private fun initLogic() {
-        btnBack?.setOnClickListener { finish() }
-
-        switchAiCreateImages?.isChecked = preferences?.getAiCreateImagesEnabled() ?: false
-        refreshAskBeforeVisibility()
-        switchAiCreateImages?.setOnCheckedChangeListener { _, checked ->
-            preferences?.setAiCreateImagesEnabled(checked)
+        endpoints = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        ScreenChrome.apply(this, findViewById(R.id.action_bar), findViewById(R.id.btn_back))
+        findViewById<View>(R.id.btn_back).setOnClickListener { finish() }
+        bindToggle(R.id.switch_imagine_command, preferences.getImagineCommandGlobal()) { preferences.setImagineCommandGlobal(it) }
+        bindToggle(R.id.switch_ai_create_images, preferences.getAiCreateImagesEnabled()) {
+            preferences.setAiCreateImagesEnabled(it)
             refreshAskBeforeVisibility()
         }
+        bindToggle(R.id.switch_ask_before_creating, preferences.getAskBeforeAiImages()) { preferences.setAskBeforeAiImages(it) }
+        bindToggle(R.id.switch_delete_images_with_chat, preferences.getDeleteImagesWithChat()) { preferences.setDeleteImagesWithChat(it) }
+        refreshAskBeforeVisibility()
+        findViewById<View>(R.id.row_image_service).setOnClickListener { openEndpointPicker() }
+        findViewById<View>(R.id.row_image_model).setOnClickListener { openModelChooser() }
+        findViewById<View>(R.id.image_settings_retry).setOnClickListener { refresh() }
+        refresh()
+    }
 
-        switchAskBeforeCreating?.isChecked = preferences?.getAskBeforeAiImages() ?: true
-        switchAskBeforeCreating?.setOnCheckedChangeListener { _, checked ->
-            preferences?.setAskBeforeAiImages(checked)
-        }
-
-        refreshServiceAndModelRows()
-        rowImageService?.setOnClickListener { openEndpointPicker() }
-        rowImageModel?.setOnClickListener { openModelChooser() }
-
-        refreshShapeAndQuality()
-        // The Dropdown.Value style makes the value clickable, so it consumes
-        // taps instead of passing them to the row — it needs its own listener.
-        textDefaultShape?.setOnClickListener { showShapeDropdown(it) }
-        textDefaultQuality?.setOnClickListener { showQualityDropdown(it) }
-
-        switchImagineCommand?.isChecked = preferences?.getImagineCommandGlobal() ?: true
-        switchImagineCommand?.setOnCheckedChangeListener { _, checked ->
-            preferences?.setImagineCommandGlobal(checked)
-        }
-
-        switchDeleteImagesWithChat?.isChecked =
-            preferences?.getDeleteImagesWithChat() ?: false
-        switchDeleteImagesWithChat?.setOnCheckedChangeListener { _, checked ->
-            preferences?.setDeleteImagesWithChat(checked)
+    private fun bindToggle(id: Int, checked: Boolean, save: (Boolean) -> Unit) {
+        findViewById<MaterialSwitch>(id).apply {
+            isChecked = checked
+            setOnCheckedChangeListener { _, value -> save(value) }
         }
     }
 
     private fun refreshAskBeforeVisibility() {
-        rowAskBeforeCreating?.visibility =
-            if (switchAiCreateImages?.isChecked == true) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.row_ask_before_creating).visibility =
+            if (preferences.getAiCreateImagesEnabled()) View.VISIBLE else View.GONE
     }
 
-    private fun refreshServiceAndModelRows() {
-        val endpointId = preferences?.getImageGeneratorEndpointId().orEmpty()
-        textImageServiceValue?.text = if (endpointId.isEmpty()) {
-            getString(R.string.label_endpoint_none)
+    private fun refresh() {
+        metadataJob?.cancel()
+        val endpointId = preferences.getImageGeneratorEndpointId()
+        val modelId = preferences.getImageGeneratorModel()
+        val endpoint = endpoints.getApiEndpoint(this, endpointId)
+        findViewById<TextView>(R.id.text_image_service_value).text =
+            endpoints.getApiEndpointsList(this).firstOrNull { it.id == endpointId }?.label
+                ?: getString(R.string.label_endpoint_none)
+        findViewById<TextView>(R.id.text_image_model_value).text = modelId.ifBlank { getString(R.string.label_endpoint_none) }
+        val options = findViewById<LinearLayout>(R.id.image_model_options)
+        val status = findViewById<TextView>(R.id.image_settings_status)
+        val retry = findViewById<View>(R.id.image_settings_retry)
+        options.removeAllViews()
+        retry.visibility = View.GONE
+        status.visibility = View.GONE
+        if (endpointId.isBlank() || modelId.isBlank()) return
+        status.visibility = View.VISIBLE
+        status.setText(R.string.image_gen_settings_loading)
+        metadataJob = lifecycleScope.launch {
+            val metadata = withContext(Dispatchers.IO) {
+                runCatching { ImageCatalogClient.model(endpoint, modelId, fresh = true) }.getOrNull()
+            }
+            if (metadata == null) {
+                status.setText(R.string.image_gen_settings_unavailable)
+                retry.visibility = View.VISIBLE
+            } else {
+                status.setText(R.string.image_gen_settings_automatic)
+                val legacy = ImageGenerationRequest("", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC,
+                    endpointId, modelId, parameters = preferences.getImageGeneratorParameters(),
+                    defaultShape = preferences.getImageGeneratorShape(), defaultQuality = preferences.getImageGeneratorQuality())
+                runCatching { ImageRequestOptions.resolve(legacy, metadata) }.getOrNull()?.let { resolved ->
+                    preferences.setImageGeneratorParameters(resolved)
+                    preferences.setImageGeneratorShape(ImageShape.AUTOMATIC)
+                    preferences.setImageGeneratorQuality(ImageQuality.AUTOMATIC)
+                }
+                metadata.parameters.forEach { addSetting(options, it) }
+            }
+        }
+    }
+
+    private fun label(key: String): String = getString(when (key) {
+        "size" -> R.string.image_gen_setting_size
+        "resolution" -> R.string.image_gen_setting_resolution
+        "aspect_ratio" -> R.string.image_gen_setting_aspect_ratio
+        "quality" -> R.string.image_gen_setting_quality
+        "background" -> R.string.image_gen_setting_background
+        "output_format" -> R.string.image_gen_setting_output_format
+        "output_compression" -> R.string.image_gen_setting_compression
+        "seed" -> R.string.image_gen_setting_seed
+        else -> return key.replace('_', ' ')
+    })
+
+    private fun save(parameter: ImageParameter, value: String?) {
+        val selected = preferences.getImageGeneratorParameters().toMutableMap()
+        if (value == null) selected.remove(parameter.key) else selected[parameter.key] = value
+        preferences.setImageGeneratorParameters(selected)
+        // These controls replace the former global shape/quality defaults. Explicit /imagine
+        // and tool overrides remain independent and are validated for the selected model.
+        if (parameter.key in listOf("size", "resolution", "aspect_ratio")) preferences.setImageGeneratorShape(ImageShape.AUTOMATIC)
+        if (parameter.key == "quality") preferences.setImageGeneratorQuality(ImageQuality.AUTOMATIC)
+    }
+
+    private fun addSetting(parent: LinearLayout, parameter: ImageParameter) {
+        val selected = preferences.getImageGeneratorParameters()[parameter.key]
+        if (parameter.type == ImageParameterType.ENUM || parameter.type == ImageParameterType.BOOLEAN) {
+            val row = layoutInflater.inflate(R.layout.view_image_setting_dropdown, parent, false)
+            row.findViewById<TextView>(R.id.image_setting_label).text = label(parameter.key)
+            val value = row.findViewById<TextView>(R.id.image_setting_value)
+            val choices = parameter.values.ifEmpty { listOf("true", "false") }
+            val labels = listOf(getString(R.string.image_gen_option_automatic)) + choices
+            value.text = selected ?: labels.first()
+            value.setOnClickListener {
+                AppDropdown.show(value, labels, if (preferences.getImageGeneratorParameters()[parameter.key] == null) 0 else
+                    choices.indexOf(value.text.toString()).let { if (it < 0) -1 else it + 1 }) { index ->
+                    val picked = choices.getOrNull(index - 1)
+                    save(parameter, picked)
+                    value.text = picked ?: labels.first()
+                }
+            }
+            parent.addView(row)
         } else {
-            val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
-            val label = endpoints.firstOrNull { it.id == endpointId }?.label
-            if (!label.isNullOrEmpty()) label else getString(R.string.label_endpoint_none)
+            val row = layoutInflater.inflate(if (parameter.type == ImageParameterType.STRING)
+                R.layout.view_image_setting_text else R.layout.view_image_setting_number, parent, false)
+            row.findViewById<TextView>(R.id.image_setting_label).text = label(parameter.key)
+            val input = row.findViewById<EditText>(R.id.image_setting_input)
+            input.hint = getString(R.string.image_gen_option_automatic)
+            input.setText(selected.orEmpty())
+            input.setOnFocusChangeListener { _, focused ->
+                if (!focused) {
+                    val entered = input.text.toString().trim()
+                    if (entered.isBlank() || parameter.accepts(entered)) {
+                        input.error = null
+                        save(parameter, entered.takeIf { it.isNotBlank() })
+                    } else input.error = getString(R.string.image_gen_setting_invalid)
+                }
+            }
+            parent.addView(row)
         }
-
-        val model = preferences?.getImageGeneratorModel().orEmpty()
-        textImageModelValue?.text = model.ifEmpty { getString(R.string.label_endpoint_none) }
     }
 
-    private fun openEndpointPicker() {
-        endpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
-    }
+    private fun openEndpointPicker() = endpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
 
-    /** The shared searchable model picker in image mode: the provider's
-     *  list is fetched from the generator endpoint, image-output capability
-     *  information narrows it when the catalog carries any, and the chat
-     *  picker's name exclusions do not apply (§5 row 4 / §10). */
     private fun openModelChooser() {
-        val endpointId = preferences?.getImageGeneratorEndpointId().orEmpty()
-        if (endpointId.isEmpty()) {
-            openEndpointPicker()
-            return
-        }
-
-        val current = preferences?.getImageGeneratorModel().orEmpty()
-        val dialog = AdvancedModelSelectorDialogFragment.newInstance(
-            current, "", endpointId, imageModels = true
-        )
-        dialog.setModelSelectedListener { model ->
-            preferences?.setImageGeneratorModel(model)
-            refreshServiceAndModelRows()
-        }
+        val endpointId = preferences.getImageGeneratorEndpointId()
+        if (endpointId.isBlank()) { openEndpointPicker(); return }
+        val dialog = AdvancedModelSelectorDialogFragment.newInstance(preferences.getImageGeneratorModel(), "", endpointId, imageModels = true)
+        dialog.setModelSelectedListener { model -> preferences.setImageGeneratorModel(model); refresh() }
         dialog.show(supportFragmentManager, "ImageGeneratorModelSelector")
     }
 
-    /* ------------------------------ Shape and quality ------------------------------ */
-
-    private fun shapeLabel(shape: ImageShape): String = when (shape) {
-        ImageShape.AUTOMATIC -> getString(R.string.image_gen_option_automatic)
-        ImageShape.SQUARE -> getString(R.string.image_gen_shape_square)
-        ImageShape.PORTRAIT -> getString(R.string.image_gen_shape_portrait)
-        ImageShape.LANDSCAPE -> getString(R.string.image_gen_shape_landscape)
-    }
-
-    private fun qualityLabel(quality: ImageQuality): String = when (quality) {
-        ImageQuality.AUTOMATIC -> getString(R.string.image_gen_option_automatic)
-        ImageQuality.LOW -> getString(R.string.image_gen_quality_low)
-        ImageQuality.MEDIUM -> getString(R.string.image_gen_quality_medium)
-        ImageQuality.HIGH -> getString(R.string.image_gen_quality_high)
-    }
-
-    private fun refreshShapeAndQuality() {
-        textDefaultShape?.text =
-            shapeLabel(preferences?.getImageGeneratorShape() ?: ImageShape.AUTOMATIC)
-        textDefaultQuality?.text =
-            qualityLabel(preferences?.getImageGeneratorQuality() ?: ImageQuality.AUTOMATIC)
-
-        // §5: never expose choices the selected service's API cannot carry
-        // at all. With no endpoint chosen the rows stay visible showing the
-        // saved defaults.
-        val endpointId = preferences?.getImageGeneratorEndpointId().orEmpty()
-        val capabilities = if (endpointId.isEmpty()) null else {
-            org.teslasoft.assistant.imagegen.ImageProviderAdapters.forEndpoint(
-                apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
-            ).capabilities
-        }
-        rowDefaultShape?.visibility =
-            if (capabilities?.supportsShape == false) View.GONE else View.VISIBLE
-        rowDefaultQuality?.visibility =
-            if (capabilities?.supportsQuality == false) View.GONE else View.VISIBLE
-    }
-
-    private fun showShapeDropdown(anchor: View) {
-        val options = ImageShape.entries
-        showDropdown(anchor, options.map { shapeLabel(it) }) { position ->
-            preferences?.setImageGeneratorShape(options[position])
-            refreshShapeAndQuality()
-        }
-    }
-
-    private fun showQualityDropdown(anchor: View) {
-        val options = ImageQuality.entries
-        showDropdown(anchor, options.map { qualityLabel(it) }) { position ->
-            preferences?.setImageGeneratorQuality(options[position])
-            refreshShapeAndQuality()
-        }
-    }
-
-    private fun showDropdown(anchor: View, labels: List<String>, onPicked: (Int) -> Unit) {
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = anchor.width
-        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
-            onPicked(position)
-        }
-        popup.show()
-    }
+    override fun onPause() { currentFocus?.clearFocus(); super.onPause() }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        adjustPaddings()
-    }
-
-    private fun adjustPaddings() {
         if (Build.VERSION.SDK_INT < 35) return
-        try {
-            actionBar?.setPadding(
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
-                0,
-                0
-            )
-            val scroll = findViewById<ScrollView>(R.id.scroll)
-            val density = resources.displayMetrics.density
-            scroll?.setPadding(
-                0,
-                0,
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom +
-                    (24 * density).toInt()
-            )
-        } catch (_: Exception) { /* unused */ }
+        val insets = window.decorView.rootWindowInsets ?: return
+        val header = findViewById<View>(R.id.action_bar)
+        header.setPadding(header.paddingLeft, insets.getInsets(WindowInsets.Type.statusBars()).top, header.paddingRight, header.paddingBottom)
+        val scroll = findViewById<ScrollView>(R.id.scroll)
+        scroll.setPadding(scroll.paddingLeft, scroll.paddingTop, scroll.paddingRight,
+            insets.getInsets(WindowInsets.Type.navigationBars()).bottom + resources.getDimensionPixelSize(R.dimen.image_settings_bottom_padding))
     }
 }

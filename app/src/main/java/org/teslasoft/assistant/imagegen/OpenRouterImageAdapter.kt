@@ -41,9 +41,6 @@ object OpenRouterImageAdapter : ImageProviderAdapter {
 
     override val providerName: String = "OpenRouter"
 
-    override val capabilities: ImageAdapterCapabilities =
-        ImageAdapterCapabilities(supportsShape = false, supportsQuality = false)
-
     /** The endpoint's own chat path under its base URL — the same
      *  composition rule the chat funnel uses. */
     fun chatUrl(endpoint: ApiEndpointObject): String {

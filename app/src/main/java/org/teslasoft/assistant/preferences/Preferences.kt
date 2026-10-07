@@ -2557,8 +2557,63 @@ class Preferences internal constructor(
         getGlobalString("image_gen_model", "")
 
     fun setImageGeneratorModel(model: String) {
+        val changed = getImageGeneratorModel() != model
+        if (changed) rememberImageLegacyDefaults()
         putGlobalString("image_gen_model", model)
+        val models = runCatching { org.json.JSONObject(getGlobalString("image_gen_models_by_endpoint", "{}")) }
+            .getOrDefault(org.json.JSONObject())
+        models.put(getImageGeneratorEndpointId(), model)
+        putGlobalString("image_gen_models_by_endpoint", models.toString())
+        if (changed) restoreImageLegacyDefaults()
     }
+
+    /** Switches the image connection and restores only that connection's saved model. */
+    fun selectImageGeneratorEndpoint(id: String) {
+        val oldId = getImageGeneratorEndpointId()
+        if (oldId == id) return
+        setImageGeneratorModel(getImageGeneratorModel())
+        val models = runCatching { org.json.JSONObject(getGlobalString("image_gen_models_by_endpoint", "{}")) }
+            .getOrDefault(org.json.JSONObject())
+        rememberImageLegacyDefaults()
+        setImageGeneratorEndpointId(id)
+        putGlobalString("image_gen_model", models.optString(id, ""))
+        restoreImageLegacyDefaults()
+    }
+
+    private fun rememberImageLegacyDefaults() {
+        val root = runCatching { org.json.JSONObject(getGlobalString("image_gen_legacy_defaults", "{}")) }.getOrDefault(org.json.JSONObject())
+        val endpoint = root.optJSONObject(getImageGeneratorEndpointId()) ?: org.json.JSONObject()
+        endpoint.put(getImageGeneratorModel(), org.json.JSONObject().put("shape", getImageGeneratorShape().storedValue)
+            .put("quality", getImageGeneratorQuality().storedValue))
+        root.put(getImageGeneratorEndpointId(), endpoint)
+        putGlobalString("image_gen_legacy_defaults", root.toString())
+    }
+
+    private fun restoreImageLegacyDefaults() {
+        val saved = runCatching { org.json.JSONObject(getGlobalString("image_gen_legacy_defaults", "{}")) }.getOrNull()
+            ?.optJSONObject(getImageGeneratorEndpointId())?.optJSONObject(getImageGeneratorModel())
+        setImageGeneratorShape(org.teslasoft.assistant.imagegen.ImageShape.fromStored(saved?.optString("shape")))
+        setImageGeneratorQuality(org.teslasoft.assistant.imagegen.ImageQuality.fromStored(saved?.optString("quality")))
+    }
+
+    /** Explicit provider settings are scoped to the endpoint and exact model ID. */
+    fun getImageGeneratorParameters(): Map<String, String> {
+        val root = runCatching { org.json.JSONObject(getGlobalString("image_gen_parameters", "{}")) }.getOrNull()
+            ?: return emptyMap()
+        val values = root.optJSONObject(getImageGeneratorEndpointId())?.optJSONObject(getImageGeneratorModel())
+            ?: return emptyMap()
+        return values.keys().asSequence().associateWith { values.optString(it) }
+    }
+
+    fun setImageGeneratorParameters(values: Map<String, String>) {
+        val root = runCatching { org.json.JSONObject(getGlobalString("image_gen_parameters", "{}")) }
+            .getOrDefault(org.json.JSONObject())
+        val endpoint = root.optJSONObject(getImageGeneratorEndpointId()) ?: org.json.JSONObject()
+        endpoint.put(getImageGeneratorModel(), org.json.JSONObject(values))
+        root.put(getImageGeneratorEndpointId(), endpoint)
+        putGlobalString("image_gen_parameters", root.toString())
+    }
+
 
     /** Default Shape (§5/§11). Unknown stored values read as AUTOMATIC. */
     fun getImageGeneratorShape(): org.teslasoft.assistant.imagegen.ImageShape =

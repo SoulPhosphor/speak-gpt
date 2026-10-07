@@ -22,7 +22,16 @@ enum class UsageMeterComponent(val key: String) {
     CHARACTERS("characters"),
     UTF8_BYTES("utf8_bytes"),
     TEXT_INPUT("text_input"),
-    AUDIO_OUTPUT("audio_output");
+    AUDIO_OUTPUT("audio_output"),
+    IMAGE_INPUT("image_input"),
+    IMAGE_OUTPUT("image_output"),
+    TEXT_OUTPUT("text_output"),
+    CACHED_TEXT_INPUT("cached_text_input"),
+    CACHED_IMAGE_INPUT("cached_image_input"),
+    INPUT("input"),
+    OUTPUT("output"),
+    IMAGES("images"),
+    CREDITS("credits");
 
     companion object {
         fun fromKey(key: String?): UsageMeterComponent? = entries.firstOrNull { it.key == key }
@@ -34,7 +43,10 @@ enum class UsageMeterUnit(val key: String) {
     CHARACTER("character"),
     BYTE("byte"),
     TOKEN("token"),
-    SECOND("second");
+    SECOND("second"),
+    IMAGE("image"),
+    MEGAPIXEL("megapixel"),
+    CREDIT("credit");
 
     companion object {
         fun fromKey(key: String?): UsageMeterUnit? = entries.firstOrNull { it.key == key }

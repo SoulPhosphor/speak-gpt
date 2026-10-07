@@ -120,4 +120,7 @@
     <dimen name="usage_cost_column_width">82dp</dimen>
     <dimen name="usage_card_padding">14dp</dimen>
     <dimen name="usage_table_divider_height">1dp</dimen>
+    <dimen name="image_settings_content_padding">20dp</dimen>
+    <dimen name="image_settings_bottom_padding">24dp</dimen>
+    <dimen name="image_settings_field_gap">12dp</dimen>
 </resources>

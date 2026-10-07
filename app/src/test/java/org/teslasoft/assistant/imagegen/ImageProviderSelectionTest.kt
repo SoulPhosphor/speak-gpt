@@ -39,13 +39,19 @@ class ImageProviderSelectionTest {
     @Test
     fun openRouterHostsGetTheOpenRouterAdapter() {
         assertSame(
-            OpenRouterImageAdapter,
+            CatalogImageAdapter,
             ImageProviderAdapters.forEndpoint(endpoint("https://openrouter.ai/api/v1/"))
         )
         assertSame(
-            OpenRouterImageAdapter,
+            CatalogImageAdapter,
             ImageProviderAdapters.forEndpoint(endpoint("https://OPENROUTER.AI/api/v1"))
         )
+    }
+
+    @Test
+    fun nativeGoogleAndNanoEndpointsUseTheirImageProtocols() {
+        assertSame(GeminiImageAdapter, ImageProviderAdapters.forEndpoint(endpoint("https://generativelanguage.googleapis.com/v1beta/openai/")))
+        assertSame(CatalogImageAdapter, ImageProviderAdapters.forEndpoint(endpoint("https://nano-gpt.com/api/v1/")))
     }
 
     @Test

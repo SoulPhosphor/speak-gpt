@@ -21,15 +21,18 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 /**
  * Adapter selection (image-generation-rebuild-plan.md §9): the adapter is
  * chosen from SAVED ENDPOINT CONFIGURATION — the endpoint's host — and
- * never from the image model's name. An OpenRouter endpoint speaks the
- * chat-with-image-output mechanism; everything else speaks the
- * OpenAI-compatible generations path.
+ * never from the image model's name. Dedicated Images APIs, native Gemini,
+ * and the OpenAI-compatible generations protocol each have their own adapter.
  */
 object ImageProviderAdapters {
 
     fun isOpenRouter(endpoint: ApiEndpointObject): Boolean =
-        endpoint.host.contains("openrouter.ai", ignoreCase = true)
+        ImageProviderKind.forEndpoint(endpoint) == ImageProviderKind.OPENROUTER
 
     fun forEndpoint(endpoint: ApiEndpointObject): ImageProviderAdapter =
-        if (isOpenRouter(endpoint)) OpenRouterImageAdapter else OpenAiImageAdapter
+        when (ImageProviderKind.forEndpoint(endpoint)) {
+            ImageProviderKind.OPENROUTER, ImageProviderKind.NANOGPT -> CatalogImageAdapter
+            ImageProviderKind.GEMINI -> GeminiImageAdapter
+            else -> OpenAiImageAdapter
+        }
 }

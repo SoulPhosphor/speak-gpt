@@ -2274,4 +2274,51 @@
         <item name="appDropdownDisabledTextColor">@color/text_subtitle</item>
         <item name="appDropdownDisabledBorderColor">@color/dropdown_disabled_border</item>
     </style>
+
+    <!-- Image settings composition. Labels inherit exactly the toggle typography. -->
+    <style name="Widget.App.ImageGeneration.Root" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Scroll" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:clipToPadding">false</item>
+        <item name="android:paddingBottom">@dimen/image_settings_bottom_padding</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingHorizontal">@dimen/image_settings_content_padding</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Options" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.SettingRow" parent="Widget.App.Row">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:clickable">false</item>
+        <item name="android:focusable">false</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Label" parent="Widget.App.Row.Title">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_marginEnd">@dimen/image_settings_field_gap</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Value" parent="Widget.App.Dropdown.CanonicalValue">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Input" parent="Widget.App.Field.Box">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:minLines">1</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:inputType">text</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.NumberInput" parent="Widget.App.ImageGeneration.Input">
+        <item name="android:inputType">numberDecimal|numberSigned</item>
+    </style>
+
 </resources>
