@@ -7838,7 +7838,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val extraHeaders: Map<String, String> = when (apiEndpointObject?.authType) {
                 ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to key!!)
                 ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to key!!)
-                ApiEndpointObject.AUTH_XI_API_KEY -> mapOf("xi-api-key" to key!!)
                 else -> emptyMap()
             }
 

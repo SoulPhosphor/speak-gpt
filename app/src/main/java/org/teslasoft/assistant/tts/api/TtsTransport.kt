@@ -175,11 +175,12 @@ internal fun requestBuilder(endpoint: TtsEndpoint, target: TtsTarget, operation:
     if (key == null && endpoint.openRouter && operation in setOf(TtsOperation.SPEECH, TtsOperation.PREVIEW)) {
         throw TtsException(TtsFailure(operation, target, endpoint.label, TtsFailureKind.KEY_MISSING))
     }
-    if (key != null) when(endpoint.authType) {
+    // Official ElevenLabs accepts its key only in xi-api-key, so its address decides the header.
+    if (key != null && endpoint.kind == TtsEndpointKind.ELEVENLABS) builder.header("xi-api-key", key)
+    else if (key != null) when(endpoint.authType) {
         ApiEndpointObject.AUTH_BEARER -> builder.header("Authorization", "Bearer $key")
         ApiEndpointObject.AUTH_X_API_KEY -> builder.header("x-api-key", key)
         ApiEndpointObject.AUTH_API_KEY -> builder.header("api-key", key)
-        ApiEndpointObject.AUTH_XI_API_KEY -> builder.header("xi-api-key", key)
         // An explicit no-auth/unknown mode must not leak a saved key as Bearer.
     }
     return builder

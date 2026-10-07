@@ -76,7 +76,6 @@ object PdfCapabilityMetadataClient {
             when (endpoint.authType) {
                 ApiEndpointObject.AUTH_X_API_KEY -> header("x-api-key", endpoint.apiKey)
                 ApiEndpointObject.AUTH_API_KEY -> header("api-key", endpoint.apiKey)
-                ApiEndpointObject.AUTH_XI_API_KEY -> header("xi-api-key", endpoint.apiKey)
                 else -> header("Authorization", "Bearer ${endpoint.apiKey}")
             }
         }.get().build()

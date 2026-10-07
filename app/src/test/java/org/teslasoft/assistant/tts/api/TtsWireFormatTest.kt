@@ -26,7 +26,7 @@ class TtsWireFormatTest {
             identity = if (openRouter) ApiEndpointObject.IDENTITY_OPENROUTER else ApiEndpointObject.IDENTITY_GENERIC)))
 
     private fun openAi(model: String) = resolved("https://api.openai.com/v1", model)
-    private fun elevenLabs(voice: String = "21m00Tcm4TlvDq8ikWAM", auth: String = ApiEndpointObject.AUTH_XI_API_KEY) =
+    private fun elevenLabs(voice: String = "21m00Tcm4TlvDq8ikWAM", auth: String = ApiEndpointObject.AUTH_BEARER) =
         resolved("https://api.elevenlabs.io/v1", "eleven_multilingual_v2", auth, voice)
 
     @Test fun openRouterAndGenericSpeechRequestsKeepTheOpenAiCompatibleShape() {
@@ -136,12 +136,12 @@ class TtsWireFormatTest {
     }
 
     @Test fun genericOrOpenRouterEndpointsNeverReceiveElevenLabsWireFormat() {
-        // xi-api-key on another host only changes the header, not the request contract.
-        val generic = TtsSpeechTransport().request(resolved("https://speech.example/v1", "eleven_turbo_v2",
-            ApiEndpointObject.AUTH_XI_API_KEY), "Hi")
+        // Only the official ElevenLabs address gets ElevenLabs' request and key header.
+        val generic = TtsSpeechTransport().request(resolved("https://speech.example/v1", "eleven_turbo_v2"), "Hi")
         assertEquals(setOf("model", "voice", "input", "response_format"), body(generic).keySet())
         assertEquals("/v1/audio/speech", generic.url.encodedPath)
-        assertEquals("secret-key", generic.header("xi-api-key"))
+        assertNull(generic.header("xi-api-key"))
+        assertEquals("Bearer secret-key", generic.header("Authorization"))
         val routed = TtsSpeechTransport().request(resolved("https://elevenlabs-proxy.example/v1",
             "elevenlabs/eleven-turbo-v2", openRouter = true), "Hi")
         assertEquals("/v1/audio/speech", routed.url.encodedPath)
@@ -176,8 +176,11 @@ class TtsWireFormatTest {
         assertEquals(0, billed)
     }
 
-    @Test fun xiApiKeyModeSendsOnlyItsOwnHeader() {
-        val request = TtsSpeechTransport().request(elevenLabs(), "Hello")
-        assertEquals(1, listOf("Authorization", "api-key", "x-api-key", "xi-api-key").count { request.header(it) != null })
+    @Test fun elevenLabsAddressSendsTheKeyOnlyAsXiApiKeyWhateverTheAuthMode() {
+        for (mode in listOf(ApiEndpointObject.AUTH_BEARER, ApiEndpointObject.AUTH_X_API_KEY, ApiEndpointObject.AUTH_API_KEY)) {
+            val request = TtsSpeechTransport().request(elevenLabs(auth = mode), "Hello")
+            assertEquals("secret-key", request.header("xi-api-key"))
+            assertEquals(1, listOf("Authorization", "api-key", "x-api-key", "xi-api-key").count { request.header(it) != null })
+        }
     }
 }

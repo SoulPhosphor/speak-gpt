@@ -497,8 +497,9 @@ documented speech model IDs are recognized exactly: `tts-1`, `tts-1-1106`,
 Official ElevenLabs hosts are recognized exactly: `api.elevenlabs.io`,
 `api.us.elevenlabs.io`, `api.eu.residency.elevenlabs.io`,
 `api.in.residency.elevenlabs.io`. The connection's address must include
-`/v1` (for example `https://api.elevenlabs.io/v1`) and its auth mode must be
-**API key header (xi-api-key)**.
+`/v1` (for example `https://api.elevenlabs.io/v1`). There is no ElevenLabs
+setting to choose: on these addresses the key is always sent in ElevenLabs'
+`xi-api-key` header, whatever the connection's Auth mode says.
 
 - **Speech:** `POST {address}/text-to-speech/{voice_id}?output_format=mp3_44100_128`
   with `text` and `model_id`. The connection's Text to Speech Endpoint

@@ -20,11 +20,11 @@ class TtsProviderDiscoveryTest {
         assertEquals("Eleven Flash v2.5", catalog.models.last().name)
         assertTrue(catalog.complete)
         val http = FakeHttp { response(elevenLabsModels) }
-        val models = TtsDiscoveryClient(http).models(resolved("https://api.elevenlabs.io/v1",
-            auth = ApiEndpointObject.AUTH_XI_API_KEY), TtsRequestGate().begin())
+        val models = TtsDiscoveryClient(http).models(resolved("https://api.elevenlabs.io/v1"), TtsRequestGate().begin())
         assertEquals(2, models.models.size)
         assertEquals("https://api.elevenlabs.io/v1/models", http.requests.single().url.toString())
         assertEquals("secret-key", http.requests.single().header("xi-api-key"))
+        assertNull(http.requests.single().header("Authorization"))
     }
 
     @Test fun elevenLabsVoicesComeFromTheAccountVoiceListIntoTheSameCatalog() {
@@ -37,7 +37,7 @@ class TtsProviderDiscoveryTest {
             }
         }
         val discovery = TtsDiscoveryClient(http).voiceDiscovery(resolved("https://api.elevenlabs.io/v1",
-            "eleven_multilingual_v2", ApiEndpointObject.AUTH_XI_API_KEY), TtsRequestGate().begin())
+            "eleven_multilingual_v2"), TtsRequestGate().begin())
         val voices = (discovery.catalog as TtsVoiceCatalog.Known).voices
         assertEquals(listOf("21m00Tcm4TlvDq8ikWAM", "pNInz6obpgDQGcFmaJgB"), voices.map { it.id })
         assertEquals("Rachel", voices.first().displayName)

@@ -78,7 +78,6 @@ object ImageEndpointAuth {
     fun headers(endpoint: ApiEndpointObject): Map<String, String> = when (endpoint.authType) {
         ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to endpoint.apiKey)
         ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to endpoint.apiKey)
-        ApiEndpointObject.AUTH_XI_API_KEY -> mapOf("xi-api-key" to endpoint.apiKey)
         else -> mapOf("Authorization" to "Bearer ${endpoint.apiKey}")
     }
 }

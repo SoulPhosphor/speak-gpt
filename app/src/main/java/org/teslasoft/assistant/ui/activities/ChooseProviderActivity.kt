@@ -656,7 +656,6 @@ class ChooseProviderActivity : FragmentActivity() {
         when (authType) {
             ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
             ApiEndpointObject.AUTH_API_KEY -> authHeaders["api-key"] = apiKey
-            ApiEndpointObject.AUTH_XI_API_KEY -> authHeaders["xi-api-key"] = apiKey
             else -> authHeaders["Authorization"] = "Bearer $apiKey"
         }
         return authHeaders
