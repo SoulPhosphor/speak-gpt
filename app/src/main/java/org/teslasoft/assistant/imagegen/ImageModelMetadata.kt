@@ -14,7 +14,8 @@ enum class ImageProviderKind {
         fun forEndpoint(endpoint: ApiEndpointObject): ImageProviderKind = when (endpoint.host.toHttpUrlOrNull()?.host) {
             "api.openai.com" -> OPENAI
             "openrouter.ai" -> OPENROUTER
-            "nano-gpt.com", "api.nano-gpt.com" -> NANOGPT
+            // NanoGPT's documented API and partner origins use the same image protocol.
+            "nano-gpt.com", "api.nano-gpt.com", "cake.nano-gpt.com", "ai.bitcoin.com", "bcashgpt.com" -> NANOGPT
             "generativelanguage.googleapis.com" -> GEMINI
             // Chat routing identity survives profile URL edits; image protocol does not.
             else -> COMPATIBLE

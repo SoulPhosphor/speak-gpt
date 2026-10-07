@@ -10,6 +10,27 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 class ImageTransportTest {
     private fun request() = ImageGenerationRequest("draw a tree", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future/image")
 
+    @Test fun nanoGptPartnerOriginsKeepTheirImageApiAndHost() {
+        for (host in listOf("nano-gpt.com", "api.nano-gpt.com", "cake.nano-gpt.com", "ai.bitcoin.com", "bcashgpt.com")) {
+            for (path in listOf("", "/api/v1/")) {
+                val endpoint = ApiEndpointObject("Nano", "https://${host.uppercase()}$path", "secret")
+                assertEquals(ImageProviderKind.NANOGPT, ImageProviderKind.forEndpoint(endpoint))
+                assertSame(CatalogImageAdapter, ImageProviderAdapters.forEndpoint(endpoint))
+                assertEquals("https://$host/api/v1/", ImageApiRoutes.base(endpoint))
+                assertEquals("https://$host/api/v1/images/models/future/image/endpoints", ImageApiRoutes.modelEndpoints(endpoint, "future/image"))
+                val http = ImageProviderAdapters.forEndpoint(endpoint).buildHttpRequest(request(), endpoint)
+                assertEquals(host, http.url.host)
+                assertEquals("/api/v1/images", http.url.encodedPath)
+                assertEquals("Bearer secret", http.header("Authorization"))
+            }
+        }
+        for (host in listOf("cake.nano-gpt.com.example", "not-bcashgpt.com", "bitcoin.com")) {
+            val endpoint = ApiEndpointObject("custom", "https://$host", "k")
+            assertEquals(ImageProviderKind.COMPATIBLE, ImageProviderKind.forEndpoint(endpoint))
+            assertSame(OpenAiImageAdapter, ImageProviderAdapters.forEndpoint(endpoint))
+        }
+    }
+
     @Test fun editedOpenRouterProfilesUseTheCurrentHostForImageDiscoveryAndGeneration() {
         MockWebServer().use { server ->
             val endpoint = ApiEndpointObject("edited", "https://openrouter.ai/api/v1/", "secret",
