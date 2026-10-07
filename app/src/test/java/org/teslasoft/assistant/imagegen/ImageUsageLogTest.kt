@@ -3,8 +3,48 @@ package org.teslasoft.assistant.imagegen
 import org.junit.Assert.*
 import org.junit.Test
 import org.teslasoft.assistant.usage.*
+import kotlinx.coroutines.runBlocking
 
 class ImageUsageLogTest {
+    @Test fun fetchedChargeIsRetriedUntilCommitSucceedsWithoutDuplicatingIt() = runBlocking {
+        val received = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
+        var state = UsageLog.EMPTY.putRequest(entry())
+        var writes = 0
+        val pauses = mutableListOf<Long>()
+        assertTrue(ImageUsagePersistence.commit(save = {
+            writes++
+            if (writes < 3) ImageUsageSaveResult.RETRY else {
+                state = state.putRequest(received, existingOnly = true)
+                ImageUsageSaveResult.SAVED
+            }
+        }, pause = { pauses += it }))
+        assertEquals(listOf(1_000L, 2_000L), pauses)
+        val restored = UsageLog.decode(UsageLog.encode(state))!!
+        assertEquals(1, restored.entries.size)
+        assertEquals(0.12, restored.entries.single().record.totalCost!!, 0.0)
+        assertEquals("real-id", restored.entries.single().record.requestId)
+    }
+
+    @Test fun deletedDestinationStopsPersistenceRetry() = runBlocking {
+        var writes = 0
+        assertFalse(ImageUsagePersistence.commit(save = {
+            writes++
+            if (writes == 1) ImageUsageSaveResult.RETRY else ImageUsageSaveResult.REMOVED
+        }, pause = {}))
+        assertEquals(2, writes)
+    }
+
+    @Test fun longStorageOutageRetainsEvidenceAndCapsOnlyThePause() = runBlocking {
+        var writes = 0
+        val pauses = mutableListOf<Long>()
+        assertTrue(ImageUsagePersistence.commit(save = {
+            if (++writes < 9) ImageUsageSaveResult.RETRY else ImageUsageSaveResult.SAVED
+        }, pause = { pauses += it }))
+        assertEquals(9, writes)
+        assertEquals(30_000L, pauses.last())
+        assertTrue(pauses.all { it <= 30_000L })
+    }
+
     private fun entry(receipt: ImageUsageReceipt = ImageUsageReceipt()): UsageLogEntry {
         val attempt = ImageUsageAttempt(ImageProviderKind.COMPATIBLE, "future-model", "Provider", "https://example/v1", 123,
             mapOf("resolution" to "large"), null, httpStatus = 200, receipt = receipt)

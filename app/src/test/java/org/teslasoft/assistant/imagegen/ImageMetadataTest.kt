@@ -4,6 +4,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageMetadataTest {
+    @Test fun oneMalformedEndpointInvalidatesTheEntireEnrichment() {
+        val model = ImageModelMetadata("future", parameters = listOf(
+            ImageParameter("output_format", ImageParameterType.ENUM, listOf("svg"))),
+            tariffs = listOf(ImageTariff("output_image", "image", 1.0, 1.0, "USD")))
+        val valid = """{"supported_parameters":{"output_format":{"type":"enum","values":["png"],"default":"png"},"seed":{"type":"range","min":1,"max":9}},"pricing":[{"billable":"output_image","unit":"image","cost_usd":0.2}]}"""
+        for (invalid in listOf("null", "42", "\"broken\"", "[]")) {
+            for (routes in listOf("$valid,$invalid", "$invalid,$valid")) {
+                val metadata = ImageMetadataParser.endpoints("""{"id":"future","endpoints":[$routes]}""", model)
+                assertFalse(metadata.tariffsComplete)
+                assertTrue(metadata.endpointRecords.isEmpty())
+                assertTrue(metadata.tariffs.isEmpty())
+                assertEquals(model.parameters, metadata.parameters)
+                assertFalse(metadata.hasDisplayableOutput())
+            }
+        }
+    }
+
     @Test fun endpointEnrichmentFailuresPreserveKnownOutputRestrictionsWithoutRatesOrExtraSettings() {
         val model = ImageModelMetadata("future", parameters = listOf(
             ImageParameter("output_format", ImageParameterType.ENUM, listOf("svg")),

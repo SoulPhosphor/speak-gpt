@@ -175,8 +175,10 @@ object ImageMetadataParser {
         val root = parsed.get("data").imageObject() ?: parsed
         if (root.imageText("id") != model.id) return model.withoutEndpointEvidence()
         val data = root.imageArray("endpoints") ?: return model.withoutEndpointEvidence()
-        val endpoints = data.mapNotNull { element ->
-            val endpoint = element.imageObject() ?: return@mapNotNull null
+        val endpoints = data.map { element ->
+            // A partial route list cannot prove that every possible serving route
+            // accepts these options or charges these rates.
+            val endpoint = element.imageObject() ?: return model.withoutEndpointEvidence()
             ImageServingMetadata(endpoint.imageText("provider_name"), endpoint.imageText("provider_slug"),
                 parameters(endpoint.get("supported_parameters").imageObject()), tariffs(endpoint.get("pricing")),
                 tariffsComplete(endpoint.get("pricing")))
