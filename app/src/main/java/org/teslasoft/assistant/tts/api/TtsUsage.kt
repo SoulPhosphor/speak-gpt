@@ -46,38 +46,21 @@ object TtsTextMeasure {
 }
 
 /**
- * OpenAI's documented US-dollar speech prices, for exact model IDs on the official host.
- * Sources (verified October 2026): https://developers.openai.com/api/docs/pricing,
- * https://developers.openai.com/api/docs/models/tts-1,
- * https://developers.openai.com/api/docs/models/tts-1-hd,
- * https://developers.openai.com/api/docs/models/gpt-4o-mini-tts.
- * A model without a documented price here keeps its quantities and has no cost.
+ * What official OpenAI speech requests billed, as quantities only. No price is ever written
+ * into the app: OpenAI reports no charge for speech and publishes no price list the app can
+ * download, so these requests show their quantities and a "Not Reported" cost.
  */
-object OpenAiSpeechPricing {
-    private const val PER_MILLION = 1_000_000.0
-    private val perCharacter = mapOf("tts-1" to 15.0, "tts-1-hd" to 30.0)
+object OpenAiSpeechMetering {
     private val characterBilled = setOf("tts-1", "tts-1-1106", "tts-1-hd", "tts-1-hd-1106")
-    /** Text-input and audio-output token prices per million. */
-    private val perToken = mapOf("gpt-4o-mini-tts" to (0.60 to 12.0))
 
     fun meters(modelId: String, input: String, tokens: TtsReportedTokens?): List<UsageMeter> {
-        if (modelId in characterBilled) {
-            val price = perCharacter[modelId]
-            return listOf(UsageMeter(UsageMeterComponent.CHARACTERS, UsageMeterUnit.CHARACTER,
-                TtsTextMeasure.characters(input).toDouble(), UsageQuantitySource.LOCAL_EXACT,
-                price, price?.let { PER_MILLION }, price?.let { "USD" }))
-        }
-        if (modelId in TtsServices.OPENAI_SSE_MODELS) {
-            val prices = perToken[modelId]
-            fun reported(value: Long?) = value?.toDouble()
-            return listOf(
-                UsageMeter(UsageMeterComponent.TEXT_INPUT, UsageMeterUnit.TOKEN, reported(tokens?.inputTokens),
-                    tokens?.inputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED },
-                    prices?.first, prices?.let { PER_MILLION }, prices?.let { "USD" }),
-                UsageMeter(UsageMeterComponent.AUDIO_OUTPUT, UsageMeterUnit.TOKEN, reported(tokens?.outputTokens),
-                    tokens?.outputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED },
-                    prices?.second, prices?.let { PER_MILLION }, prices?.let { "USD" }))
-        }
+        if (modelId in characterBilled) return listOf(UsageMeter(UsageMeterComponent.CHARACTERS,
+            UsageMeterUnit.CHARACTER, TtsTextMeasure.characters(input).toDouble(), UsageQuantitySource.LOCAL_EXACT))
+        if (modelId in TtsServices.OPENAI_SSE_MODELS) return listOf(
+            UsageMeter(UsageMeterComponent.TEXT_INPUT, UsageMeterUnit.TOKEN, tokens?.inputTokens?.toDouble(),
+                tokens?.inputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED }),
+            UsageMeter(UsageMeterComponent.AUDIO_OUTPUT, UsageMeterUnit.TOKEN, tokens?.outputTokens?.toDouble(),
+                tokens?.outputTokens?.let { UsageQuantitySource.PROVIDER_REPORTED }))
         return emptyList()
     }
 }
@@ -136,8 +119,9 @@ class OpenRouterGenerationClient(
 object TtsUsageAccounting {
     /**
      * The usage record for one paid synthesis, from the most authoritative source available:
-     * the service's reported charge, then reported quantities × frozen prices, then exact
-     * local quantities × frozen documented prices. Anything else stays unknown.
+     * the service's reported charge, then reported quantities × prices fetched at request
+     * time, then exact local quantities × prices fetched at request time. No price is ever
+     * written into the app; anything else stays unknown.
      */
     fun record(billed: TtsBilledSynthesis, generation: OpenRouterGeneration? = null,
         openRouterPrice: TtsPrice? = null): TurnUsageRecord {
@@ -155,7 +139,7 @@ object TtsUsageAccounting {
                 reportedTotal = generation?.totalCost
                 meters = openRouterPrice?.let { openRouterMeters(it, billed.input, billed.audio.bytes) }.orEmpty()
             }
-            TtsEndpointKind.OPENAI -> meters = OpenAiSpeechPricing.meters(modelId, billed.input,
+            TtsEndpointKind.OPENAI -> meters = OpenAiSpeechMetering.meters(modelId, billed.input,
                 billed.audio.metering.tokens)
             // ElevenLabs bills characters; its character-cost header is the reported count.
             // No ElevenLabs US-dollar rate is applied, so the cost is not reported.

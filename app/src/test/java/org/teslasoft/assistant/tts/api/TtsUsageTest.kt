@@ -45,34 +45,37 @@ class TtsUsageTest {
         assertEquals(0L, TtsTextMeasure.characters(""))
     }
 
-    @Test fun openAiTts1AndTts1HdArePricedPerCharacterOfTheExactInput() {
+    @Test fun openAiTts1AndTts1HdCountExactCharactersWithoutAnyPriceInTheApp() {
         val text = "a".repeat(2_000) + "👋"
-        for ((model, rate) in listOf("tts-1" to 15.0, "tts-1-hd" to 30.0)) {
+        for (model in listOf("tts-1", "tts-1-hd")) {
             val record = TtsUsageAccounting.record(billed(resolved("https://api.openai.com/v1", model), text))
             val meter = record.meters!!.single()
             assertEquals(UsageMeterComponent.CHARACTERS, meter.component)
             assertEquals(2_001.0, meter.quantity!!, 0.0)
             assertEquals(UsageQuantitySource.LOCAL_EXACT, meter.quantitySource)
-            assertEquals(2_001 * rate / 1_000_000, record.totalCost!!, 1e-12)
-            assertEquals(CostSource.FROZEN_PRICING.storedValue, record.costSource)
+            // Never hard-code prices (owner ruling, October 7 2026): no price, so no cost.
+            assertNull(meter.priceAmount)
+            assertNull(meter.cost)
+            assertNull(record.totalCost)
+            assertEquals(CostSource.UNKNOWN.storedValue, record.costSource)
             assertEquals("My Speech", record.provider)
             assertNull(record.inputTokens)
         }
     }
 
-    @Test fun openAiTokenPricedSpeechCostsTextInputAndAudioOutputSeparately() {
+    @Test fun openAiTokenSpeechKeepsReportedTextInputAndAudioOutputWithoutAnyPriceInTheApp() {
         val record = TtsUsageAccounting.record(billed(resolved("https://api.openai.com/v1", "gpt-4o-mini-tts"), "Hi",
             TtsMetering(tokens = TtsReportedTokens(48, 914, 962))))
         val (input, output) = record.meters!!
         assertEquals(UsageMeterComponent.TEXT_INPUT, input.component)
         assertEquals(UsageMeterUnit.TOKEN, input.unit)
         assertEquals(48.0, input.quantity!!, 0.0)
-        assertEquals(48 * 0.60 / 1_000_000, input.cost!!, 1e-15)
         assertEquals(UsageMeterComponent.AUDIO_OUTPUT, output.component)
-        assertEquals(914 * 12.0 / 1_000_000, output.cost!!, 1e-15)
+        assertEquals(914.0, output.quantity!!, 0.0)
         assertEquals(UsageQuantitySource.PROVIDER_REPORTED, output.quantitySource)
-        assertEquals(input.cost!! + output.cost!!, record.totalCost!!, 1e-15)
-        // Without the reported usage, no audio tokens are invented and the total is unknown.
+        assertTrue(record.meters!!.all { it.priceAmount == null && it.cost == null })
+        assertNull(record.totalCost)
+        // Without the reported usage, no audio tokens are invented.
         val unreported = TtsUsageAccounting.record(billed(resolved("https://api.openai.com/v1", "gpt-4o-mini-tts"), "Hi"))
         assertTrue(unreported.meters!!.all { it.quantity == null && it.cost == null })
         assertNull(unreported.totalCost)

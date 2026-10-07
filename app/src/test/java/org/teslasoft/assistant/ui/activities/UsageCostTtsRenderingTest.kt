@@ -33,7 +33,7 @@ class UsageCostTtsRenderingTest {
         costSource = CostSource.FROZEN_PRICING.storedValue)
 
     private val tts = listOf(
-        MeteredUsageAccounting.record("tts-1", "Characters Co", null, listOf(meter(UsageMeterComponent.CHARACTERS,
+        MeteredUsageAccounting.record("speech-model", "Characters Co", null, listOf(meter(UsageMeterComponent.CHARACTERS,
             UsageMeterUnit.CHARACTER, 2_847.0, 15.0, 1_000_000.0)), null),
         MeteredUsageAccounting.record("mini-tts", "Tokens Co", null, listOf(
             meter(UsageMeterComponent.TEXT_INPUT, UsageMeterUnit.TOKEN, 48.0, 0.6, 1_000_000.0),
@@ -88,7 +88,7 @@ class UsageCostTtsRenderingTest {
         assertEquals(listOf(MeteredUsagePresentation.Row(R.string.usage_meter_characters, "Not Reported", "Not Reported")),
             MeteredUsagePresentation.rows(totals) { it })
         assertEquals("Not Reported", MeteredUsagePresentation.prices(totals, "Variable").single().value)
-        val variable = MeteredUsageAccounting.aggregate(listOf(tts[0], MeteredUsageAccounting.record("tts-1", "P", null,
+        val variable = MeteredUsageAccounting.aggregate(listOf(tts[0], MeteredUsageAccounting.record("speech-model", "P", null,
             listOf(meter(UsageMeterComponent.CHARACTERS, UsageMeterUnit.CHARACTER, 1.0, 30.0, 1_000_000.0)), null)))!!
         assertEquals("Variable", MeteredUsagePresentation.prices(variable, "Variable").single().value)
     }

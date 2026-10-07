@@ -14,8 +14,8 @@ class MeteredUsageTest {
         count?.let { UsageQuantitySource.LOCAL_EXACT }, perMillion, perMillion?.let { 1_000_000.0 },
         perMillion?.let { "USD" })
 
-    private fun tts(vararg meters: UsageMeter, reported: Double? = null, provider: String = "OpenAI") =
-        MeteredUsageAccounting.record("tts-1", provider, "https://api.openai.com/v1", meters.toList(), reported)
+    private fun tts(vararg meters: UsageMeter, reported: Double? = null, provider: String = "Provider") =
+        MeteredUsageAccounting.record("speech-model", provider, "https://speech.example/v1", meters.toList(), reported)
 
     private fun chat(cost: Double) = TurnUsageRecord(model = "gpt", provider = "P", inputTokens = 10,
         outputTokens = 5, totalTokens = 15, cachedInputTokens = 0, source = TokenCountSource.PROVIDER_REPORTED.storedValue,

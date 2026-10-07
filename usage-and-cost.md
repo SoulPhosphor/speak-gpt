@@ -476,30 +476,21 @@ documented speech model IDs are recognized exactly: `tts-1`, `tts-1-1106`,
 `tts-1-hd`, `tts-1-hd-1106`, `gpt-4o-mini-tts`,
 `gpt-4o-mini-tts-2025-03-20`, `gpt-4o-mini-tts-2025-12-15`.
 
-- **`tts-1` and `tts-1-hd`:** billed per character of the exact text sent.
-  OpenAI's documented prices: $15.00 and $30.00 per 1M characters.
+- **Cost: "Not Reported".** OpenAI reports no charge for speech and
+  publishes no price list the app can download, and prices are never written
+  into the app (owner rule 10). The quantities below are still shown.
+- **`tts-1` and `tts-1-hd` (and their dated versions):** billed per character;
+  the Characters row counts the exact text sent.
 - **`gpt-4o-mini-tts` and its dated versions:** requested with
   `stream_format: "sse"`. The audio arrives in `speech.audio.delta` events,
   which are decoded and joined in order; the final `speech.audio.done` event
-  reports `input_tokens` and `output_tokens`. These are billed as Text Input
-  ($0.60 per 1M) and Audio Output ($12.00 per 1M). If OpenAI sends no usage,
-  the token counts and the cost are "Not Reported".
-- **Prices without a documented match:** the dated versions
-  (`tts-1-1106`, `tts-1-hd-1106`, `gpt-4o-mini-tts-2025-…`) keep their
-  quantities but show "Not Reported" costs. OpenAI's pricing page lists only
-  the undated IDs.
+  reports `input_tokens` and `output_tokens`, shown as Text Input and Audio
+  Output. If OpenAI sends no usage, the token counts are "Not Reported".
 - SSE is used only on the official host and only for the models above. Every
   other OpenAI-compatible service keeps the ordinary audio request.
 - A third-party price listing reports that `tts-1` is scheduled for
   deprecation on December 15, 2026. This was not confirmed on OpenAI's own
   page. Speech keeps using `/audio/speech`; nothing was moved to Realtime.
-
-OpenAI prices verified October 2026 (search results quoting OpenAI's
-official pages; the pages themselves could not be opened from the
-development environment):
-- https://developers.openai.com/api/docs/models/tts-1
-- https://developers.openai.com/api/docs/models/tts-1-hd
-- https://developers.openai.com/api/docs/models/gpt-4o-mini-tts
 
 ### ElevenLabs direct
 
@@ -517,10 +508,9 @@ Official ElevenLabs hosts are recognized exactly: `api.elevenlabs.io`,
   same Voice Browser.
 - **Usage:** the `character-cost` response header is the reported character
   count. If it is missing, the count is "Not Reported".
-- **Cost: "Not Reported".** ElevenLabs' published API rates could not be
-  confirmed from an authoritative source (the sources found disagree and
-  include plan-specific and promotional rates), so no ElevenLabs dollar rate
-  is applied.
+- **Cost: "Not Reported".** ElevenLabs reports no dollar charge and
+  publishes no price list the app can download, and prices are never written
+  into the app (owner rule 10).
 
 ## 8. Featherless
 
