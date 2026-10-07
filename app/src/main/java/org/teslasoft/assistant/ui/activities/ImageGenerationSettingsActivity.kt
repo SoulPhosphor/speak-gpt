@@ -129,17 +129,20 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
         }
     }
 
-    private fun label(key: String): String = getString(when (key) {
-        "size" -> R.string.image_gen_setting_size
-        "resolution" -> R.string.image_gen_setting_resolution
-        "aspect_ratio" -> R.string.image_gen_setting_aspect_ratio
-        "quality" -> R.string.image_gen_setting_quality
-        "background" -> R.string.image_gen_setting_background
-        "output_format" -> R.string.image_gen_setting_output_format
-        "output_compression" -> R.string.image_gen_setting_compression
-        "seed" -> R.string.image_gen_setting_seed
+    private fun label(key: String): String {
+        val resource = when (key) {
+        "size" -> R.string.image_gen_size
+        "resolution" -> R.string.image_gen_resolution
+        "aspect_ratio" -> R.string.image_gen_aspect_ratio
+        "quality" -> R.string.image_gen_quality
+        "background" -> R.string.image_gen_background
+        "output_format" -> R.string.image_gen_output_format
+        "output_compression" -> R.string.image_gen_compression
+        "seed" -> R.string.image_gen_seed
         else -> return key.replace('_', ' ')
-    })
+        }
+        return getString(resource)
+    }
 
     private fun save(parameter: ImageParameter, value: String?) {
         val selected = preferences.getImageGeneratorParameters().toMutableMap()

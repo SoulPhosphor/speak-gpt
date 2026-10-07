@@ -9152,18 +9152,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         return when (val terminal = job.await()) {
             is ImageGenerationJobRegistry.Terminal.Complete -> {
-                // §11: a model-initiated unsupported option applies the
-                // fallback and reports it in the tool result instead of
-                // interrupting the user.
-                val fallbackNote = if (resolved.unsupportedExplicit.isNotEmpty() ||
-                    resolved.silentFallbacks.isNotEmpty()
-                ) {
-                    "the requested shape is not supported by the image service; " +
-                        "the provider default was used"
-                } else {
-                    null
-                }
-                CreateImageTool.successResult(terminal.marker, valid.description, fallbackNote)
+                CreateImageTool.successResult(terminal.marker, valid.description)
             }
             is ImageGenerationJobRegistry.Terminal.Failed ->
                 CreateImageTool.errorResult(
