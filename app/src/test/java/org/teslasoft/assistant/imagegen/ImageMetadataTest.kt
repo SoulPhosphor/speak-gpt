@@ -4,6 +4,74 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageMetadataTest {
+    @Test fun savedSnapshotReloadsItsCanonicalDocumentWithoutAProcessCache() {
+        val alias = "future-snapshot-v7"
+        val canonical = "future-base"
+        val document = """# Future Image
+Model ID: `future-base`
+- Output modalities: image
+| Endpoint | Support |
+| `v1/images/generations` | Supported |
+## Pricing
+### Image generation
+| Quality | precise | Price |
+| 1888x944 | precise | illustrative |
+### Text tokens
+| Input | ${'$'}3 | 1000 tokens |
+## Snapshots
+- `future-snapshot-v7`
+"""
+        val index = "- [Future Image](/api/docs/models/future-base.md): image generation"
+        val reads = mutableListOf<String>()
+        val resolved = OpenAiImageMetadataParser.resolve(alias, read = { url ->
+            reads += url
+            when (url) {
+                OpenAiImageMetadataParser.INDEX_URL -> index
+                OpenAiImageMetadataParser.modelUrl(canonical) -> document
+                else -> null
+            }
+        })!!
+        assertEquals(OpenAiImageMetadataParser.modelUrl(alias), reads.first())
+        assertTrue(reads.contains(OpenAiImageMetadataParser.INDEX_URL))
+        assertEquals(OpenAiImageMetadataParser.modelUrl(canonical), resolved.sourceUrl)
+        assertEquals(alias, resolved.id)
+        assertEquals(setOf(alias, canonical), resolved.resolvedIds)
+        assertEquals("Future Image", resolved.publishedName)
+        assertEquals(3.0, resolved.tariffs.single().amount, 0.0)
+        val options = mapOf("size" to "1888x944", "quality" to "precise")
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", alias, parameters = options)
+        assertEquals(options, ImageRequestOptions.resolve(request, resolved))
+        assertNull(OpenAiImageMetadataParser.resolve("unpublished-alias", read = { url ->
+            when (url) { OpenAiImageMetadataParser.INDEX_URL -> index
+                OpenAiImageMetadataParser.modelUrl(canonical) -> document
+                else -> null }
+        }))
+    }
+
+    @Test fun booleanCompressionCapabilityUsesFetchedBoundsAndRejectsUnboundedValues() {
+        val descriptor = imageJson("""{"output_compression":{"type":"boolean"}}""")!!
+        assertTrue(ImageMetadataParser.parameters(descriptor).isEmpty())
+        val rule = OpenRouterImageConfigurationParser.compression("* `output_compression` — 0-100 for webp/jpeg.")!!
+        val model = ImageModelMetadata("future", parameters = ImageMetadataParser.parameters(descriptor, rule))
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future")
+        for (valid in listOf("0", "63", "100")) assertEquals(mapOf("output_compression" to valid),
+            ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_compression" to valid)), model))
+        for (invalid in listOf("-1", "101", "0.5")) {
+            try { ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_compression" to invalid)), model); fail("compression must respect the published bounds") }
+            catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        }
+        val changed = OpenRouterImageConfigurationParser.compression("* `output_compression` — 15-87 for webp/jpeg.")!!
+        val next = ImageMetadataParser.parameters(descriptor, changed).single()
+        assertTrue(next.accepts("15")); assertTrue(next.accepts("87"))
+        assertFalse(next.accepts("0")); assertFalse(next.accepts("100"))
+        val narrower = imageJson("""{"output_compression":{"type":"range","min":20,"max":75}}""")!!
+        assertFalse(ImageMetadataParser.parameters(narrower, changed).single().accepts("15"))
+        assertNull(OpenRouterImageConfigurationParser.compression("missing limits"))
+        val body = """{"id":"future","endpoints":[{"supported_parameters":{"output_compression":{"type":"boolean"}}}]}"""
+        assertEquals(model.parameters, ImageMetadataParser.endpoints(body, ImageModelMetadata("future"), rule).parameters)
+        assertTrue(ImageMetadataParser.endpoints(body, ImageModelMetadata("future")).parameters.isEmpty())
+    }
+
     @Test fun transparentBackgroundRejectsOpaqueFormatsInEitherSettingOrderAndWithPublishedDefaults() {
         val model = ImageModelMetadata("future", parameters = listOf(
             ImageParameter("background", ImageParameterType.ENUM, listOf("transparent", "opaque", "auto")),

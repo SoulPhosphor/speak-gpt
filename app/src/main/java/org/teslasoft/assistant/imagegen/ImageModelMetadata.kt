@@ -72,7 +72,8 @@ data class ImageModelMetadata(
     val nativeSizes: List<String> = emptyList(),
     val geminiTransport: GeminiImageTransport? = null,
     val requiresExplicitOutputFormat: Boolean = false,
-    val directCachedInputExcluded: Boolean = false
+    val directCachedInputExcluded: Boolean = false,
+    val publishedName: String? = null
 ) {
     /** An explicitly published format-only model must have an app-decodable output. */
     fun hasDisplayableOutput(): Boolean = parameters.firstOrNull {
@@ -119,7 +120,7 @@ object ImageMetadataParser {
     private val settingsOrder = listOf("size", "resolution", "aspect_ratio", "quality", "background",
         "output_format", "output_compression", "seed")
 
-    fun parameters(root: JsonObject?): List<ImageParameter> = root?.entrySet()?.mapNotNull { (key, value) ->
+    fun parameters(root: JsonObject?, compression: ImageParameter? = null): List<ImageParameter> = root?.entrySet()?.mapNotNull { (key, value) ->
         if (key in reserved) return@mapNotNull null
         val descriptor = value.imageObject() ?: return@mapNotNull null
         val values = descriptor.imageStrings("values").ifEmpty { descriptor.imageStrings("enum") }
@@ -136,8 +137,14 @@ object ImageMetadataParser {
             else -> return@mapNotNull null
         }
         if (type == ImageParameterType.ENUM && values.isEmpty()) return@mapNotNull null
-        ImageParameter(key, type, values, descriptor.imageBound("min") ?: descriptor.imageBound("minimum"),
-            descriptor.imageBound("max") ?: descriptor.imageBound("maximum"), descriptor.imageText("default"))
+        var minimum = descriptor.imageBound("min") ?: descriptor.imageBound("minimum")
+        var maximum = descriptor.imageBound("max") ?: descriptor.imageBound("maximum")
+        if (key == "output_compression" && type in setOf(ImageParameterType.INTEGER, ImageParameterType.NUMBER)) {
+            minimum = listOfNotNull(minimum, compression?.minimum).maxOrNull()
+            maximum = listOfNotNull(maximum, compression?.maximum).minOrNull()
+            if (minimum == null || maximum == null || minimum > maximum) return@mapNotNull null
+        }
+        ImageParameter(key, type, values, minimum, maximum, descriptor.imageText("default"))
     }.orEmpty().sortedWith(compareBy({ settingsOrder.indexOf(it.key).takeIf { n -> n >= 0 } ?: Int.MAX_VALUE }, { it.key }))
 
     fun tariffs(value: JsonElement?): List<ImageTariff> = value?.takeIf { it.isJsonArray }?.asJsonArray
@@ -155,7 +162,7 @@ object ImageMetadataParser {
     fun tariffsComplete(value: JsonElement?): Boolean = value?.takeIf { it.isJsonArray }?.asJsonArray
         ?.let { it.size() > 0 && tariffs(value).size == it.size() } == true
 
-    fun catalog(body: String, sourceUrl: String): List<ImageModelMetadata> {
+    fun catalog(body: String, sourceUrl: String, compression: ImageParameter? = null): List<ImageModelMetadata> {
         val root = imageJson(body) ?: throw IllegalArgumentException("The provider's model list is not valid JSON")
         val data = root.imageArray("data") ?: throw IllegalArgumentException("The provider returned no model list")
         return data.mapNotNull { element ->
@@ -165,13 +172,13 @@ object ImageMetadataParser {
             if (modalities != null && modalities.isNotEmpty() && "image" !in modalities) return@mapNotNull null
             if (model.get("capabilities").imageObject()?.get("image_generation")
                     ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean == false) return@mapNotNull null
-            ImageModelMetadata(id, parameters(model.get("supported_parameters").imageObject()),
+            ImageModelMetadata(id, parameters(model.get("supported_parameters").imageObject(), compression),
                 tariffs = tariffs(model.get("pricing")), sourceUrl = sourceUrl,
                 tariffsComplete = tariffsComplete(model.get("pricing")))
         }
     }
 
-    fun endpoints(body: String, model: ImageModelMetadata): ImageModelMetadata {
+    fun endpoints(body: String, model: ImageModelMetadata, compression: ImageParameter? = null): ImageModelMetadata {
         val parsed = imageJson(body) ?: return model.withoutEndpointEvidence()
         val root = parsed.get("data").imageObject() ?: parsed
         if (root.imageText("id") != model.id) return model.withoutEndpointEvidence()
@@ -181,7 +188,7 @@ object ImageMetadataParser {
             // accepts these options or charges these rates.
             val endpoint = element.imageObject() ?: return model.withoutEndpointEvidence()
             ImageServingMetadata(endpoint.imageText("provider_name"), endpoint.imageText("provider_slug"),
-                parameters(endpoint.get("supported_parameters").imageObject()), tariffs(endpoint.get("pricing")),
+                parameters(endpoint.get("supported_parameters").imageObject(), compression), tariffs(endpoint.get("pricing")),
                 tariffsComplete(endpoint.get("pricing")))
         }
         // Without pinning a serving provider, expose only parameters all routes support.
@@ -214,6 +221,26 @@ object ImageMetadataParser {
 
 /** Published OpenAI model documents identify exact IDs, image support and metering independently. */
 object OpenAiImageMetadataParser {
+    const val INDEX_URL = "https://developers.openai.com/api/docs/models.md"
+
+    fun modelUrl(id: String) = "https://developers.openai.com/api/docs/models/" +
+        java.net.URLEncoder.encode(id, "UTF-8").replace("+", "%20") + ".md"
+
+    /** A persisted alias is resolved from fresh documents even after the process cache is gone. */
+    fun resolve(requestedId: String, read: (String) -> String?, canonicalHint: String? = null): ImageModelMetadata? {
+        val direct = modelUrl(requestedId)
+        for (url in listOfNotNull(direct, canonicalHint).distinct()) {
+            read(url)?.let { document -> model(document, requestedId, url) }?.let { return it }
+        }
+        val index = read(INDEX_URL) ?: return null
+        for (id in candidates(index)) {
+            val url = modelUrl(id)
+            if (url == direct || url == canonicalHint) continue
+            read(url)?.let { document -> model(document, requestedId, url) }?.let { return it }
+        }
+        return null
+    }
+
     fun candidates(index: String): List<String> = index.lineSequence().filter {
         it.substringAfter("):", "").contains("image", ignoreCase = true)
     }.mapNotNull { Regex("\\(/api/docs/models/([^/)]+)\\.md\\)").find(it)?.groupValues?.get(1) }.distinct().toList()
@@ -268,7 +295,8 @@ object OpenAiImageMetadataParser {
         }
         return ImageModelMetadata(requestedId, parameters, tariffs, sourceUrl, resolvedIds = ids,
             outputModalities = document.lineSequence().firstOrNull { it.startsWith("- Output modalities:") }
-                ?.substringAfter(":")?.split(',')?.map { it.trim() }?.toSet().orEmpty())
+                ?.substringAfter(":")?.split(',')?.map { it.trim() }?.toSet().orEmpty(),
+            publishedName = document.lineSequence().firstOrNull { it.startsWith("# ") }?.removePrefix("# ")?.trim())
     }
 }
 

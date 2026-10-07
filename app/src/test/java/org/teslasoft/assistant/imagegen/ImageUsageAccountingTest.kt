@@ -5,6 +5,24 @@ import org.junit.Test
 import org.teslasoft.assistant.usage.*
 
 class ImageUsageAccountingTest {
+    @Test fun cachePolicyMapsPublishedFamilyNamesToDocumentedVariantIdsWithoutIdPrefixes() {
+        val guide = """### Cached input pricing
+For Future Image 8 and Future Image 8.5, cached input pricing applies only to the image generation tool in the Responses API. It doesn't apply to direct Images API requests.
+
+### Available models
+Use `published-bloom-id` or `published-ember-id` directly.
+"""
+        for ((id, name) in listOf("published-bloom-id" to "Future-Image-8.5 Bloom", "published-ember-id" to "Future Image 8.5 Ember")) {
+            val model = ImageModelMetadata(id, publishedName = name)
+            assertTrue(OpenAiImageCachePolicyParser.enrich(model, guide).directCachedInputExcluded)
+            assertFalse(OpenAiImageCachePolicyParser.enrich(model, guide.replace("`$id`", "`other-id`")).directCachedInputExcluded)
+        }
+        val unmentionedFamily = ImageModelMetadata("published-bloom-id", publishedName = "Future Image 8.7 Bloom")
+        assertFalse(OpenAiImageCachePolicyParser.enrich(unmentionedFamily, guide).directCachedInputExcluded)
+        val prefixOnly = ImageModelMetadata("future-image-8.5-unsupported")
+        assertFalse(OpenAiImageCachePolicyParser.enrich(prefixOnly, guide).directCachedInputExcluded)
+    }
+
     @Test fun interactionsUsageRecordsModalitiesThoughtsCacheAndFinalImageWithFrozenPrices() {
         val body = """{"model":"new-model","id":"interaction-1","status":"completed","usage":{"input_tokens_by_modality":[{"modality":"text","tokens":10}],"output_tokens_by_modality":[{"modality":"image","tokens":50},{"modality":"text","tokens":4}],"total_input_tokens":10,"total_output_tokens":54,"total_thought_tokens":2,"total_cached_tokens":0},"steps":[{"type":"model_output","content":[{"type":"image","mime_type":"image/png","data":"Ag=="}]}]}"""
         val prices = listOf(ImageTariff("text_input", "token", 1.0, 1000.0, "USD"), ImageTariff("text_output", "token", 2.0, 1000.0, "USD"), ImageTariff("image_output", "token", 3.0, 1000.0, "USD"))

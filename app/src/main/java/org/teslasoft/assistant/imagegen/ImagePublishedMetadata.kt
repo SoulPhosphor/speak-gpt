@@ -36,9 +36,33 @@ object OpenAiImageCachePolicyParser {
         val names = Regex("For (.*?), cached input pricing applies only to .*?Responses API\\.\\s*It (?:doesn't|does not|doesn’t) apply to direct Images API requests", RegexOption.DOT_MATCHES_ALL)
             .find(section)?.groupValues?.get(1)?.split(Regex(",\\s*|\\s+and\\s+")) ?: return current
         fun normalized(value: String) = value.lowercase().replace(Regex("[^a-z0-9]"), "")
-        if (model.resolvedIds.none { id -> names.any { normalized(it) == normalized(id) } }) return current
+        val exact = model.resolvedIds.any { id -> names.any { normalized(it) == normalized(id) } }
+        // The canonical document publishes the family/variant name and its exact
+        // IDs. Require an ID in the guide too; an ID prefix alone is not evidence.
+        fun label(value: String) = value.lowercase().replace('-', ' ').replace(Regex("\\s+"), " ").trim()
+        val published = model.publishedName?.let(::label)
+        val guideIds = Regex("`([^`]+)`").findAll(guide).map { it.groupValues[1] }.toSet()
+        val family = published != null && model.resolvedIds.any { it in guideIds } && names.any { name ->
+            val familyName = label(name)
+            published == familyName || published.startsWith("$familyName ")
+        }
+        if (!exact && !family) return current
         return current.copy(directCachedInputExcluded = true,
             sourceUrl = listOfNotNull(model.sourceUrl, URL).joinToString(" | "))
+    }
+}
+
+object OpenRouterImageConfigurationParser {
+    const val URL = "https://openrouter.ai/docs/guides/overview/multimodal/image-generation.md"
+
+    fun compression(guide: String): ImageParameter? {
+        val text = imageHtmlText(guide).replace("`", "")
+        val range = Regex("\\boutput_compression\\s*[—–-]\\s*([0-9]+(?:\\.[0-9]+)?)\\s*[-–]\\s*([0-9]+(?:\\.[0-9]+)?)")
+            .find(text) ?: return null
+        val minimum = range.groupValues[1].toDoubleOrNull() ?: return null
+        val maximum = range.groupValues[2].toDoubleOrNull() ?: return null
+        if (!minimum.isFinite() || !maximum.isFinite() || minimum > maximum) return null
+        return ImageParameter("output_compression", ImageParameterType.INTEGER, minimum = minimum, maximum = maximum)
     }
 }
 

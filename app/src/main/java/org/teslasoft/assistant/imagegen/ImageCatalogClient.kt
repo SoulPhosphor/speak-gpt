@@ -84,19 +84,20 @@ object ImageCatalogClient {
         val cached = cache[key(endpoint)]
         if (!fresh && cached != null && System.currentTimeMillis() - cached.time < 10 * 60 * 1000) return cached.models
         val base = ImageApiRoutes.base(endpoint)
-        val models = when (ImageProviderKind.forEndpoint(endpoint)) {
+        val kind = ImageProviderKind.forEndpoint(endpoint)
+        val models = when (kind) {
             ImageProviderKind.OPENROUTER, ImageProviderKind.NANOGPT -> {
                 val url = base + "images/models"
                 val body = http.get(url, endpoint) ?: throw IllegalStateException("The provider's image model list could not be read")
-                ImageMetadataParser.catalog(body, url)
+                ImageMetadataParser.catalog(body, url, compressionRule(kind))
             }
             ImageProviderKind.OPENAI -> {
-                val indexUrl = "https://developers.openai.com/api/docs/models.md"
+                val indexUrl = OpenAiImageMetadataParser.INDEX_URL
                 val index = http.get(indexUrl) ?: throw IllegalStateException("The published image model catalog could not be read")
                 val advertised = http.get(base + "models", endpoint)?.let { imageJson(it)?.imageArray("data") }
                     ?.mapNotNull { it.imageObject()?.imageText("id") }?.toSet()
                 OpenAiImageMetadataParser.candidates(index).mapNotNull { id ->
-                    val url = openAiModelUrl(id)
+                    val url = OpenAiImageMetadataParser.modelUrl(id)
                     val document = http.get(url) ?: return@mapNotNull null
                     OpenAiImageMetadataParser.model(document, id, url)
                 }.flatMap { published ->
@@ -129,13 +130,8 @@ object ImageCatalogClient {
     fun model(endpoint: ApiEndpointObject, id: String, fresh: Boolean = false): ImageModelMetadata? {
         val kind = ImageProviderKind.forEndpoint(endpoint)
         if (kind == ImageProviderKind.OPENAI && fresh) {
-            val url = openAiModelUrl(id)
-            var source = url
-            val document = http.get(url) ?: cachedModel(endpoint, id)?.sourceUrl?.substringBefore(" | ")?.let { fallback ->
-                source = fallback
-                http.get(fallback)
-            }
-            val metadata = document?.let { OpenAiImageMetadataParser.model(it, id, source) } ?: return null
+            val metadata = OpenAiImageMetadataParser.resolve(id, read = { http.get(it) },
+                canonicalHint = cachedModel(endpoint, id)?.sourceUrl?.substringBefore(" | ")) ?: return null
             return openAiDetails(metadata)
         }
         val model = if (fresh) models(endpoint, fresh = true).firstOrNull { it.id == id }
@@ -143,7 +139,9 @@ object ImageCatalogClient {
         if (model == null) return null
         if (kind == ImageProviderKind.OPENROUTER || kind == ImageProviderKind.NANOGPT) {
             val url = ImageApiRoutes.modelEndpoints(endpoint, id)
-            return http.get(url, endpoint)?.let { ImageMetadataParser.endpoints(it, model).copy(sourceUrl = url) }
+            val compression = compressionRule(kind)
+            return http.get(url, endpoint)?.let { ImageMetadataParser.endpoints(it, model, compression).copy(
+                sourceUrl = url + if (compression != null) " | " + OpenRouterImageConfigurationParser.URL else "") }
                 ?: model.withoutEndpointEvidence()
         }
         if (kind == ImageProviderKind.GEMINI) return http.get(GeminiImagePricingParser.URL)
@@ -156,6 +154,9 @@ object ImageCatalogClient {
         val settings = http.get(OpenAiImageReferenceParser.URL)?.let { OpenAiImageReferenceParser.enrich(model, it) } ?: model
         return http.get(OpenAiImageCachePolicyParser.URL)?.let { OpenAiImageCachePolicyParser.enrich(settings, it) } ?: settings
     }
+
+    private fun compressionRule(kind: ImageProviderKind): ImageParameter? = if (kind == ImageProviderKind.OPENROUTER)
+        http.get(OpenRouterImageConfigurationParser.URL)?.let(OpenRouterImageConfigurationParser::compression) else null
 
     private fun nativeGeminiModels(endpoint: ApiEndpointObject): List<com.google.gson.JsonObject> {
         val models = mutableListOf<com.google.gson.JsonObject>()
@@ -174,8 +175,6 @@ object ImageCatalogClient {
         return models
     }
 
-    private fun openAiModelUrl(id: String) = "https://developers.openai.com/api/docs/models/" +
-        java.net.URLEncoder.encode(id, "UTF-8").replace("+", "%20") + ".md"
 }
 
 /** Extracts Google's own model-selection list and per-model size tables, never model-name heuristics. */
