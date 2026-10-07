@@ -240,23 +240,25 @@ object UsageLog {
         if (value.isNullOrBlank()) return EMPTY
         return try {
             val root = JsonParser.parseString(value).asJsonObject
-            val entries = root.getAsJsonArray("entries")?.mapNotNull { element ->
-                val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-                val recordJson = o.get("record")?.takeIf { it.isJsonObject }?.asJsonObject
-                    ?: return@mapNotNull null
+            val array = root.get("entries")?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
+            val entries = array.map { element ->
+                val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+                val id = o.get("id")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                    ?.asString?.takeIf { it.isNotBlank() } ?: return null
+                val recordJson = o.get("record")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
                 // Entries written before metered usage have no meters and decode as before.
                 val record = gson.fromJson(recordJson, TurnUsageRecord::class.java)
-                    ?.copy(meters = UsageMeterCodec.decode(recordJson.get("meters")))
-                    ?: return@mapNotNull null
+                    ?.copy(meters = UsageMeterCodec.decode(recordJson.get("meters"))) ?: return null
                 UsageLogEntry(
-                    id = o.get("id")?.asString?.ifBlank { null } ?: return@mapNotNull null,
+                    id = id,
                     category = UsageCategory.fromKey(o.get("category")?.asString),
                     messageId = o.get("messageId")?.takeUnless { it.isJsonNull }?.asString,
                     recordedAtMs = o.get("recordedAtMs")?.asLong ?: 0L,
                     record = record,
                     function = UsageFunction.fromKey(o.get("function")?.takeUnless { it.isJsonNull }?.asString)
                 )
-            }.orEmpty()
+            }
+            if (entries.map { it.id }.toSet().size != entries.size) return null
             UsageLogState(seeded = root.get("seeded")?.asBoolean == true, entries = entries,
                 quarantinedLog = root.get("quarantinedLog")?.takeUnless { it.isJsonNull }?.asString)
         } catch (_: Exception) {

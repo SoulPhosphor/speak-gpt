@@ -6,6 +6,33 @@ import org.teslasoft.assistant.usage.*
 import kotlinx.coroutines.runBlocking
 
 class ImageUsageLogTest {
+    @Test fun malformedEntriesQuarantineTheWholeLogInsteadOfSilentlyDiscardingEvidence() {
+        val valid = UsageLog.encode(UsageLog.EMPTY.putRequest(entry()))
+        val receipt = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
+        val originals = mutableListOf("{}", """{"entries":{}}""")
+        for (bad in listOf("null", "7", """{}""", """{"id":"image-1:image-generation","record":"wrong"}""",
+                """{"id":"","record":{}}""", """{"id":7,"record":{}}""")) {
+            val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
+            root.getAsJsonArray("entries").add(com.google.gson.JsonParser.parseString(bad))
+            originals += root.toString()
+        }
+        val duplicated = com.google.gson.JsonParser.parseString(valid).asJsonObject
+        duplicated.getAsJsonArray("entries").add(duplicated.getAsJsonArray("entries").first().deepCopy())
+        originals += duplicated.toString()
+        for (original in originals) {
+            assertNull(UsageLog.decode(original))
+            assertEquals(original, UsageLog.recover(original).quarantinedLog)
+            val received = UsageLog.requestUpdate(original, receipt, existingOnly = true)!!
+            val restored = UsageLog.decode(UsageLog.encode(received))!!
+            assertEquals(original, restored.quarantinedLog)
+            assertEquals(1, restored.entries.size)
+            assertEquals("real-id", restored.entries.single().record.requestId)
+            assertEquals(0.12, restored.entries.single().record.totalCost!!, 0.0)
+        }
+        assertNotNull(UsageLog.decode(valid))
+        assertNotNull(UsageLog.decode(UsageLog.encode(UsageLog.EMPTY)))
+    }
+
     @Test fun malformedLogsArePreservedThroughNewEntriesReceiptsAndSeeding() {
         for (original in listOf("{broken", UsageLog.encode(UsageLog.EMPTY).dropLast(1))) {
             val initial = UsageLog.requestUpdate(original, entry())!!
