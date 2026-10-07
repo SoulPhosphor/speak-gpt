@@ -31,6 +31,12 @@ enum class ImageFormat(val mimeType: String, val fileExtension: String) {
     GIF("image/gif", "gif");
 
     companion object {
+        /** The app's codecs, not a provider/model capability list. */
+        fun supportsOutputName(value: String): Boolean = entries.any {
+            value.equals(it.fileExtension, true) || value.equals(it.mimeType, true) ||
+                value.equals(it.mimeType.substringAfter('/'), true)
+        }
+
         fun detect(bytes: ByteArray): ImageFormat? {
             if (bytes.size < 12) return null
             // PNG: 89 50 4E 47 0D 0A 1A 0A

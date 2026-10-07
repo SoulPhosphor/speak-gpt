@@ -160,7 +160,9 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
             val row = layoutInflater.inflate(R.layout.view_image_setting_dropdown, parent, false)
             row.findViewById<TextView>(R.id.image_setting_label).text = label(parameter.key)
             val value = row.findViewById<TextView>(R.id.image_setting_value)
-            val choices = parameter.values.ifEmpty { listOf("true", "false") }
+            val choices = if (parameter.type == ImageParameterType.BOOLEAN) listOf("true", "false")
+                else parameter.selectableValues()
+            if (choices.isEmpty()) return
             val labels = listOf(getString(R.string.image_gen_option_automatic)) + choices
             value.text = selected ?: labels.first()
             value.setOnClickListener {

@@ -17,7 +17,9 @@
 package org.teslasoft.assistant.imagegen
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -26,6 +28,11 @@ import org.junit.Test
  * bytes are "no usable image", not a guessed format.
  */
 class ImageFormatTest {
+
+    @Test fun outputNamesUseTheSameCodecsAsGeneratedFileDetection() {
+        for (name in listOf("PNG", "image/png", "jpg", "jpeg", "webp", "gif")) assertTrue(ImageFormat.supportsOutputName(name))
+        for (name in listOf("svg", "image/svg+xml", "unknown-format")) assertFalse(ImageFormat.supportsOutputName(name))
+    }
 
     private fun withHeader(vararg header: Int): ByteArray {
         val bytes = ByteArray(32)

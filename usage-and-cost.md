@@ -633,6 +633,14 @@ Explicit request overrides and saved model-specific settings are strictly valida
 before dispatch. Unavailable metadata leaves provider defaults available and cost
 unknown; it does not fabricate extra controls.
 
+Shape overrides discard conflicting pixel-size controls while preserving a compatible
+resolution tier with an aspect ratio. Published output choices are limited by the app's
+actual image codecs; format-only models without a decodable output are omitted from
+the picker, and unusable explicit or default formats are rejected before billing.
+When a model mixes decodable and unsupported formats without a published default,
+an explicit decodable output format is required. Gemini discovery reads authoritative
+model-document links as well as inline model IDs, then matches the native API catalog.
+
 Authoritative references: [OpenAI Images](https://developers.openai.com/api/reference/resources/images/methods/generate/),
 [OpenAI model documents](https://developers.openai.com/api/docs/models),
 [Gemini image generation](https://ai.google.dev/gemini-api/docs/generate-content/image-generation),

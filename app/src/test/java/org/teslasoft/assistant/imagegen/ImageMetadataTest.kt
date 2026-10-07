@@ -52,6 +52,83 @@ class ImageMetadataTest {
         } catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
     }
 
+    @Test fun shapeOverrideRemovesPixelSizeAndPreservesCompatibleResolutionTier() {
+        val model = ImageModelMetadata("future", parameters = listOf(
+            ImageParameter("aspect_ratio", ImageParameterType.ENUM, listOf("1:1", "7:4")),
+            ImageParameter("size", ImageParameterType.ENUM, listOf("900x900")),
+            ImageParameter("resolution", ImageParameterType.ENUM, listOf("9K"))))
+        val saved = mapOf("size" to "900x900", "aspect_ratio" to "1:1", "resolution" to "9K")
+        val request = ImageGenerationRequest("p", ImageShape.LANDSCAPE, ImageQuality.AUTOMATIC, "e", "future", parameters = saved)
+        assertEquals(mapOf("aspect_ratio" to "7:4", "resolution" to "9K"), ImageRequestOptions.resolve(request, model))
+        assertEquals("900x900", saved["size"])
+    }
+
+    @Test fun pixelShapeOverrideClearsOtherDimensionControlsWhenRatioHasNoPublishedMatch() {
+        val model = ImageModelMetadata("future", parameters = listOf(
+            ImageParameter("aspect_ratio", ImageParameterType.ENUM, listOf("auto")),
+            ImageParameter("size", ImageParameterType.ENUM, listOf("900x900", "1200x900")),
+            ImageParameter("resolution", ImageParameterType.ENUM, listOf("9K")),
+            ImageParameter("seed", ImageParameterType.INTEGER)))
+        val request = ImageGenerationRequest("p", ImageShape.LANDSCAPE, ImageQuality.AUTOMATIC, "e", "future",
+            parameters = mapOf("aspect_ratio" to "auto", "resolution" to "9K", "seed" to "42"))
+        assertEquals(mapOf("size" to "1200x900", "seed" to "42"), ImageRequestOptions.resolve(request, model))
+    }
+
+    @Test fun aspectOverridePreservesSizeShorthandWhichIsAlsoAPublishedResolutionTier() {
+        val model = ImageModelMetadata("future", parameters = listOf(
+            ImageParameter("aspect_ratio", ImageParameterType.ENUM, listOf("7:4")),
+            ImageParameter("size", ImageParameterType.ENUM, listOf("9K", "900x900")),
+            ImageParameter("resolution", ImageParameterType.ENUM, listOf("9K"))))
+        val request = ImageGenerationRequest("p", ImageShape.LANDSCAPE, ImageQuality.AUTOMATIC, "e", "future",
+            parameters = mapOf("size" to "9K"))
+        assertEquals(mapOf("resolution" to "9K", "aspect_ratio" to "7:4"), ImageRequestOptions.resolve(request, model))
+    }
+
+    @Test fun explicitSavedDimensionsTakePrecedenceOverHistoricalShapeDefaults() {
+        val model = ImageModelMetadata("future", parameters = listOf(
+            ImageParameter("aspect_ratio", ImageParameterType.ENUM, listOf("1:1")),
+            ImageParameter("size", ImageParameterType.ENUM, listOf("1200x900"))))
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future",
+            parameters = mapOf("size" to "1200x900"), defaultShape = ImageShape.SQUARE)
+        assertEquals(mapOf("size" to "1200x900"), ImageRequestOptions.resolve(request, model))
+    }
+
+    @Test fun svgOnlyOutputsAreNotSelectableAndAreRejectedBeforeDispatch() {
+        val format = ImageParameter("output_format", ImageParameterType.ENUM, listOf("svg"))
+        val model = ImageModelMetadata("future", parameters = listOf(format))
+        assertTrue(format.selectableValues().isEmpty())
+        assertFalse(model.hasDisplayableOutput())
+        for (settings in listOf(emptyMap(), mapOf("output_format" to "svg"))) {
+            val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future", parameters = settings)
+            try { ImageRequestOptions.resolve(request, model); fail("unusable output must not be dispatched") }
+            catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        }
+    }
+
+    @Test fun mixedOutputsUseOnlyDecodableChoicesAndRequireASafeKnownDefaultOrExplicitFormat() {
+        val format = ImageParameter("output_format", ImageParameterType.ENUM, listOf("svg", "png"))
+        val model = ImageModelMetadata("future", parameters = listOf(format))
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future")
+        assertEquals(listOf("png"), format.selectableValues())
+        assertTrue(model.hasDisplayableOutput())
+        assertEquals(mapOf("output_format" to "png"), ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_format" to "png")), model))
+        assertTrue(ImageRequestOptions.resolve(request, model.copy(parameters = listOf(format.copy(defaultValue = "png")))).isEmpty())
+        for (metadata in listOf(model, model.copy(parameters = listOf(format.copy(defaultValue = "svg"))))) {
+            try { ImageRequestOptions.resolve(request, metadata); fail("an unsafe or unknown default must not be dispatched") }
+            catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        }
+        try { ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_format" to "svg")), model); fail("SVG is not an app-decodable format") }
+        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+    }
+
+    @Test fun googleModelLinksResolveIdsWithoutCodeTagsAndRejectOtherOrigins() {
+        val guide = """<h2>Model selection</h2><ul><li><a href="/gemini-api/docs/models/future-native">Gemini Future Image</a></li><li><a href="https://ai.google.dev/gemini-api/docs/models/future-alias">Alias</a></li><li><a href="https://elsewhere.example/gemini-api/docs/models/not-authoritative">Other</a></li></ul><h2>Options</h2><h3>Future Image</h3><table><tr><th>Aspect ratio</th><th>9K resolution</th></tr><tr><td>7:4</td><td>7x4</td></tr></table>"""
+        val schema = """{"schemas":{"ImageConfig":{"properties":{"aspectRatio":{"enum":["7:4"]},"imageSize":{"enum":["9K"]}}}}}"""
+        val models = GeminiImageMetadataParser.models(guide, schema)
+        assertEquals(listOf("future-native", "future-alias"), models.map { it.id })
+        assertEquals(listOf("9K"), models.first().parameters.single { it.key == "resolution" }.values)
+    }
+
     @Test fun googleTablesAndSchemaSupplyValuesForNewIdsAndPricesUseOnlyStandardPaidTokens() {
         val guide = """<h2>Model selection</h2><ul><li><a>Gemini Future Image</a> (<code>future-id</code>)</li></ul><h2>Options</h2><h3>Future Image</h3><table><tr><th>Aspect ratio</th><th>9K resolution</th></tr><tr><td>7:4</td><td>7x4</td></tr></table>"""
         val schema = """{"schemas":{"ImageConfig":{"properties":{"aspectRatio":{"enum":["7:4","1:1"]},"imageSize":{"enum":["9K","1K"]}}}}}"""

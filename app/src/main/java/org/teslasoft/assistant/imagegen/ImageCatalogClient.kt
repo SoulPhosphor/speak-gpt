@@ -197,8 +197,15 @@ object GeminiImageMetadataParser {
         }.orEmpty()
         val tables = Regex("<table[^>]*>.*?</table>", RegexOption.DOT_MATCHES_ALL).findAll(guide).toList()
             .filter { text(it.value).contains("Aspect ratio") }
+        val guideUrl = GUIDE_URL.toHttpUrl()
         return items.flatMap { item ->
-            val ids = Regex("<code[^>]*>([^<]+)</code>").findAll(item.value).map { text(it.groupValues[1]) }.toList()
+            val links = Regex("<a[^>]*href=[\"']([^\"']+)[\"'][^>]*>").findAll(item.value).mapNotNull { anchor ->
+                val url = guideUrl.resolve(anchor.groupValues[1].replace("&amp;", "&")) ?: return@mapNotNull null
+                url.pathSegments.takeIf { url.host == guideUrl.host && url.scheme == guideUrl.scheme && url.port == guideUrl.port &&
+                    it.size == 4 && it.take(3) == listOf("gemini-api", "docs", "models") }?.last()
+            }.toList()
+            val ids = (links + Regex("<code[^>]*>([^<]+)</code>").findAll(item.value)
+                .map { text(it.groupValues[1]) }.toList()).distinct()
             val labels = Regex("<a[^>]*>(.*?)</a>", RegexOption.DOT_MATCHES_ALL).findAll(item.value)
                 .map { text(it.groupValues[1]).removePrefix("Gemini ") }.toList() + text(item.value).substringBefore('(').trim()
             val selectedTable = tables.firstOrNull { table ->

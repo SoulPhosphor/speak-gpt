@@ -777,7 +777,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                     }
                     if (!isAdded) return@launch
                     availableModels.clear()
-                    availableModels.addAll(models.map { it.id })
+                    availableModels.addAll(models.filter { it.hasDisplayableOutput() }.map { it.id })
                     catalogLoaded = true
                     render()
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {

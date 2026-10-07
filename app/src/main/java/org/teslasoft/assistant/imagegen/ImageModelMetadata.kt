@@ -32,6 +32,9 @@ data class ImageParameter(
     val maximum: Double? = null,
     val defaultValue: String? = null
 ) {
+    fun selectableValues(): List<String> = if (key == "output_format")
+        values.filter(ImageFormat::supportsOutputName) else values
+
     fun accepts(value: String): Boolean = when (type) {
         ImageParameterType.ENUM -> value in values
         ImageParameterType.STRING -> value.isNotBlank()
@@ -64,7 +67,12 @@ data class ImageModelMetadata(
     val resolvedIds: Set<String> = setOf(id),
     val outputModalities: Set<String> = emptySet(),
     val nativeSizes: List<String> = emptyList()
-)
+) {
+    /** An explicitly published format-only model must have an app-decodable output. */
+    fun hasDisplayableOutput(): Boolean = parameters.firstOrNull {
+        it.key == "output_format" && it.type == ImageParameterType.ENUM
+    }?.selectableValues()?.isNotEmpty() ?: true
+}
 
 data class ImageServingMetadata(
     val providerName: String?,
@@ -244,8 +252,11 @@ object OpenAiImageMetadataParser {
 
 /** Maps app-owned /imagine shape shorthand to an actual value the model publishes. */
 object ImageRequestOptions {
+    private val dimensions = listOf("aspect_ratio", "size", "resolution")
+
     fun resolve(request: ImageGenerationRequest, metadata: ImageModelMetadata?): Map<String, String> {
-        val legacyShape = if (request.shape == ImageShape.AUTOMATIC && request.defaultShape != ImageShape.AUTOMATIC)
+        val legacyShape = if (request.shape == ImageShape.AUTOMATIC && request.defaultShape != ImageShape.AUTOMATIC &&
+            request.parameters.keys.none { it in dimensions })
             runCatching { resolve(request.copy(shape = request.defaultShape, quality = ImageQuality.AUTOMATIC,
                 parameters = emptyMap(), defaultShape = ImageShape.AUTOMATIC, defaultQuality = ImageQuality.AUTOMATIC), metadata) }.getOrDefault(emptyMap()) else emptyMap()
         val legacyQuality = if (request.quality == ImageQuality.AUTOMATIC && request.defaultQuality != ImageQuality.AUTOMATIC)
@@ -253,21 +264,33 @@ object ImageRequestOptions {
                 parameters = emptyMap(), defaultShape = ImageShape.AUTOMATIC, defaultQuality = ImageQuality.AUTOMATIC), metadata) }.getOrDefault(emptyMap()) else emptyMap()
         val options = (legacyShape + legacyQuality + request.parameters).toMutableMap()
         if (request.shape != ImageShape.AUTOMATIC) {
-            val field = metadata?.parameters?.firstOrNull { it.key == "aspect_ratio" }
-                ?: metadata?.parameters?.firstOrNull { it.key == "size" }
-                ?: metadata?.parameters?.firstOrNull { it.key == "resolution" }
-            val selected = field?.values?.firstOrNull { value ->
-                val dimensions = value.split(Regex("[x:*]"))
-                val width = dimensions.getOrNull(0)?.toDoubleOrNull()
-                val height = dimensions.getOrNull(1)?.toDoubleOrNull()
-                width != null && height != null && when (request.shape) {
-                    ImageShape.SQUARE -> width == height
-                    ImageShape.LANDSCAPE -> width > height
-                    ImageShape.PORTRAIT -> width < height
-                    ImageShape.AUTOMATIC -> false
-                }
-            } ?: throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION, "the selected model does not publish a supported value for this shape")
-            options[field.key] = selected
+            val selected = dimensions.mapNotNull { key -> metadata?.parameters?.firstOrNull { it.key == key } }
+                .firstNotNullOfOrNull { field ->
+                    field.values.firstOrNull { value ->
+                        val parts = value.split(Regex("[x:*]"))
+                        val width = parts.getOrNull(0)?.toDoubleOrNull()
+                        val height = parts.getOrNull(1)?.toDoubleOrNull()
+                        width != null && height != null && when (request.shape) {
+                            ImageShape.SQUARE -> width == height
+                            ImageShape.LANDSCAPE -> width > height
+                            ImageShape.PORTRAIT -> width < height
+                            ImageShape.AUTOMATIC -> false
+                        }
+                    }?.let { field to it }
+                } ?: throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION,
+                    "the selected model does not publish a supported value for this shape")
+            val (field, value) = selected
+            // An explicit pixel size takes precedence over both other controls.
+            // Aspect ratio combines with a resolution tier, but not a saved pixel size.
+            if (field.key == "aspect_ratio") {
+                val size = options.remove("size")
+                val resolution = metadata?.parameters?.firstOrNull { it.key == "resolution" }
+                // Preserve a size shorthand only when the provider also publishes it
+                // as a resolution tier; opaque size labels never imply a tier.
+                if (options["resolution"] == null && size != null && size in resolution?.values.orEmpty())
+                    options["resolution"] = size
+            } else dimensions.forEach(options::remove)
+            options[field.key] = value
         }
         if (request.quality != ImageQuality.AUTOMATIC) {
             val field = metadata?.parameters?.firstOrNull { it.key == "quality" }
@@ -279,6 +302,15 @@ object ImageRequestOptions {
             val field = metadata?.parameters?.firstOrNull { it.key == key }
             if (field == null || !field.accepts(value)) throw ImageGenerationException(
                 ImageErrorCause.UNSUPPORTED_OPTION, "the selected model does not accept the saved $key setting")
+        }
+        val format = metadata?.parameters?.firstOrNull { it.key == "output_format" }
+        val chosenFormat = options["output_format"] ?: format?.defaultValue
+        val unknownDefaultMayBeUnusable = chosenFormat == null && format?.type == ImageParameterType.ENUM &&
+            format.values.any { !ImageFormat.supportsOutputName(it) }
+        if (metadata?.hasDisplayableOutput() == false ||
+            chosenFormat?.let { !ImageFormat.supportsOutputName(it) } == true || unknownDefaultMayBeUnusable) {
+            throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION,
+                "choose an output format this app can display before generating")
         }
         return options
     }
