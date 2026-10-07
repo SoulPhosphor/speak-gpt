@@ -94,7 +94,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         private val authTypes = arrayOf(
             ApiEndpointObject.AUTH_BEARER,
             ApiEndpointObject.AUTH_X_API_KEY,
-            ApiEndpointObject.AUTH_API_KEY
+            ApiEndpointObject.AUTH_API_KEY,
+            ApiEndpointObject.AUTH_XI_API_KEY
         )
     }
 
@@ -535,6 +536,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         return when (authType) {
             ApiEndpointObject.AUTH_X_API_KEY -> getString(R.string.auth_mode_x_api_key)
             ApiEndpointObject.AUTH_API_KEY -> getString(R.string.auth_mode_api_key)
+            ApiEndpointObject.AUTH_XI_API_KEY -> getString(R.string.auth_mode_xi_api_key)
             else -> getString(R.string.auth_mode_bearer)
         }
     }

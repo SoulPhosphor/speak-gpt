@@ -24,20 +24,39 @@ internal class TtsCatalogDataException(val kind: TtsFailureKind, message: String
 object TtsCatalogParser {
     private val tasks = setOf("tts", "text-to-speech", "text_to_speech", "speech-synthesis", "speech_synthesis")
 
-    fun models(body: String): TtsModelCatalog {
+    /** [openAiSpeechIds]: on official OpenAI, whose list carries no modality data, an exact
+     * documented speech-model ID is the synthesis evidence. Empty for every other service. */
+    fun models(body: String, openAiSpeechIds: Set<String> = emptySet()): TtsModelCatalog {
         val root = objectBody(body)
         val data = root.getAsJsonArrayOrNull("data") ?: throw IllegalArgumentException("Missing data array")
         var readable = true
         val models = data.mapNotNull { element ->
             val obj = element.objectOrNull() ?: run { readable = false; return@mapNotNull null }
             val id = obj.text("id") ?: run { readable = false; return@mapNotNull null }
-            val evidence = evidence(obj)
+            val evidence = evidence(obj) + if (id in openAiSpeechIds) setOf("openai-documented-speech-model") else emptySet()
             if (evidence.isEmpty()) return@mapNotNull null
             model(obj, id, evidence)
         }.distinctBy { it.id }
         if (!readable && models.isEmpty()) throw TtsCatalogDataException(TtsFailureKind.IDENTIFIERS_MISSING,
             "Model entries are missing an id.")
         return TtsModelCatalog(models, readable && complete(root) && models.isNotEmpty())
+    }
+
+    /** ElevenLabs' `GET /v1/models`: a JSON array whose entries name `model_id` and state
+     * `can_do_text_to_speech`. Only an explicit true is synthesis evidence. */
+    fun elevenLabsModels(body: String): TtsModelCatalog {
+        val root = JsonParser.parseString(body)
+        if (!root.isJsonArray) throw IllegalArgumentException("Expected a JSON array of models")
+        var readable = true
+        val models = root.asJsonArray.mapNotNull { element ->
+            val obj = element.objectOrNull() ?: run { readable = false; return@mapNotNull null }
+            val id = obj.text("model_id") ?: run { readable = false; return@mapNotNull null }
+            if (obj.bool("can_do_text_to_speech") != true) return@mapNotNull null
+            TtsModel(id, obj.text("name") ?: id, setOf("can_do_text_to_speech"), TtsVoiceCatalog.Unavailable, null)
+        }.distinctBy { it.id }
+        if (!readable && models.isEmpty()) throw TtsCatalogDataException(TtsFailureKind.IDENTIFIERS_MISSING,
+            "Model entries are missing a model_id.")
+        return TtsModelCatalog(models, readable && models.isNotEmpty())
     }
 
     /** An exact lookup still needs synthesis evidence; aliases retain the caller's requested ID. */
@@ -100,7 +119,9 @@ object TtsCatalogParser {
                 val id = voice.text("id") ?: voice.text("voice_id") ?: voice.text("voice")
                     ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.IDENTIFIERS_MISSING,
                         "Voice entry has no id, voice_id, or voice field. Entry: $voice")
-                fun facet(key: String) = voice.text(key)?.let { VoiceFacetValue(it.lowercase(Locale.ROOT), it) }
+                // ElevenLabs keeps descriptive facets in a nested `labels` object.
+                fun facet(key: String) = (voice.text(key) ?: voice.get("labels").objectOrNull()?.text(key))
+                    ?.let { VoiceFacetValue(it.lowercase(Locale.ROOT), it) }
                 result += ApiCatalogVoice(id, voice.text("display_name") ?: voice.text("name") ?: id,
                     facet("language"), facet("region"), facet("gender"), facet("accent"), facet("style"))
             }

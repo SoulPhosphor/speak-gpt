@@ -155,7 +155,11 @@ data class TurnUsageRecord(
     val uncachedInputCost: Double? = null,
     val cachedInputCost: Double? = null,
     val totalCost: Double? = null,
-    val costSource: String? = null
+    val costSource: String? = null,
+    /** Billed components of a request not billed in text tokens (TTS). Null
+     * for text-token requests. Transient: Gson cannot rebuild this list in a
+     * minified build, so the usage log writes it with [UsageMeterCodec]. */
+    @Transient val meters: List<UsageMeter>? = null
 ) {
     val countSource: TokenCountSource get() = TokenCountSource.fromStored(source)
     val storedCostSource: CostSource get() = when {
@@ -201,7 +205,10 @@ data class UsageGroup(
     val hasVariableCachedInputPricing: Boolean,
     val hasVariablePricing: Boolean,
     val containsEstimatedTokens: Boolean,
-    val recordCount: Int
+    val recordCount: Int,
+    /** Metered totals for non-token requests (TTS); null for text tokens.
+     * Transient for the same reason as [TurnUsageRecord.meters]. */
+    @Transient val meters: List<UsageMeterTotal>? = null
 )
 
 data class ConversationUsageSummary(
@@ -320,7 +327,16 @@ object TokenUsageAccounting {
         }
     }
 
-    fun encodeSummary(summary: ConversationUsageSummary): String = gson.toJson(summary)
+    /** Metered totals are written by hand; see [UsageGroup.meters]. */
+    fun encodeSummary(summary: ConversationUsageSummary): String {
+        val root = gson.toJsonTree(summary).asJsonObject
+        val groups = root.getAsJsonArray("groups")
+        summary.groups.forEachIndexed { index, group ->
+            val meters = group.meters ?: return@forEachIndexed
+            groups[index].asJsonObject.add("meters", UsageMeterCodec.encodeTotals(meters))
+        }
+        return root.toString()
+    }
 
     /**
      * Decode the transport copy handed to the Usage & Cost screen.
@@ -341,7 +357,10 @@ object TokenUsageAccounting {
                 ConversationUsageSummary(emptyList())
             } else {
                 val groups = groupsElement.asJsonArray.mapNotNull { element ->
-                    gson.fromJson<UsageGroup>(element, UsageGroup::class.java)
+                    gson.fromJson<UsageGroup>(element, UsageGroup::class.java)?.let { group ->
+                        val meters = element.takeIf { it.isJsonObject }?.asJsonObject?.get("meters")
+                        group.copy(meters = UsageMeterCodec.decodeTotals(meters))
+                    }
                 }
                 ConversationUsageSummary(groups)
             }
@@ -535,7 +554,8 @@ object TokenUsageAccounting {
                 hasVariablePricing = inputPrices.size > 1 || outputPrices.size > 1 ||
                     cachedInputPrices.size > 1 || hasCacheWritePricing,
                 containsEstimatedTokens = rows.any { it.countSource == TokenCountSource.ESTIMATED_CL100K },
-                recordCount = rows.size
+                recordCount = rows.size,
+                meters = MeteredUsageAccounting.aggregate(rows)
             )
         })
     }
@@ -618,6 +638,20 @@ object UsageValueFormatter {
 
     fun pricePerMillion(pricePerToken: Double?): String = pricePerToken?.let {
         "\$" + String.format(Locale.US, "%.2f", it * 1_000_000)
+    } ?: NOT_REPORTED
+
+    /** A whole-number quantity (characters, bytes, tokens). */
+    fun count(knownSum: Double, hasUnknownPart: Boolean): String =
+        if (hasUnknownPart) NOT_REPORTED else String.format(Locale.US, "%,d", Math.round(knownSum))
+
+    /** Seconds to one decimal place, without the unit. */
+    fun seconds(knownSum: Double): String = String.format(Locale.US, "%.1f", knownSum)
+
+    /** A rate in dollars, never rounded to a misleading zero: at least two decimals and
+     * six significant digits. */
+    fun price(amount: Double?): String = amount?.let {
+        val rounded = java.math.BigDecimal.valueOf(it).round(java.math.MathContext(6)).stripTrailingZeros()
+        "\$" + rounded.setScale(maxOf(2, rounded.scale())).toPlainString()
     } ?: NOT_REPORTED
 
     fun percentage(numerator: Int, denominator: Int, hasUnknownPart: Boolean): String =

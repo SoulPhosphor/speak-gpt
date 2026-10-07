@@ -19,6 +19,9 @@ class TtsEndpoint private constructor(
     val authType: String, val speechPath: String, val discoveryPath: String,
     val connectSeconds: Int, val responseSeconds: Int, val openRouter: Boolean
 ) {
+    /** Derived from the address alone, so [sameConfiguration] already covers it. */
+    val kind: TtsEndpointKind get() = TtsServices.kind(baseUrl, openRouter)
+
     internal fun sameConfiguration(other: TtsEndpoint): Boolean = id == other.id &&
         baseUrl == other.baseUrl && apiKey == other.apiKey && authType == other.authType &&
         speechPath == other.speechPath && discoveryPath == other.discoveryPath &&

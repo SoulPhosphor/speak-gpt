@@ -23,6 +23,9 @@ import org.teslasoft.assistant.usage.UsageCategory
 import org.teslasoft.assistant.usage.UsageFunction
 import org.teslasoft.assistant.usage.UsageGroup
 import org.teslasoft.assistant.usage.UsageLog
+import org.teslasoft.assistant.usage.UsageMeterComponent
+import org.teslasoft.assistant.usage.UsageMeterTotal
+import org.teslasoft.assistant.usage.UsageMeterUnit
 import org.teslasoft.assistant.usage.UsageSection
 import org.teslasoft.assistant.usage.UsageValueFormatter
 import java.util.Locale
@@ -149,6 +152,10 @@ class TokenPricingDetailsActivity : FragmentActivity() {
             getString(R.string.usage_provider_meta, group.recordCount)
         view.findViewById<TextView>(R.id.provider_total_cost).text =
             UsageValueFormatter.cost(group.totalCost, group.hasUnknownCost)
+        group.meters?.let { meters ->
+            bindMeteredRows(view, meters)
+            return
+        }
 
         bindUsageRow(
             view, R.id.usage_input_row, R.string.usage_input,
@@ -193,6 +200,74 @@ class TokenPricingDetailsActivity : FragmentActivity() {
             view, R.id.price_cached, R.string.usage_cached,
             group.cachedInputPricePerToken, group.hasVariableCachedInputPricing
         )
+    }
+
+    /**
+     * A request billed in units other than text tokens (TTS) shows only what was billed,
+     * in its own unit: no token header, Cached row or Cache Hit Rate, and the price
+     * caption names the actual basis.
+     */
+    private fun bindMeteredRows(view: View, meters: List<UsageMeterTotal>) {
+        val inflater = LayoutInflater.from(this)
+        val table = view.findViewById<LinearLayout>(R.id.usage_table)
+        table.removeAllViews()
+        meters.forEachIndexed { index, meter ->
+            if (index > 0) table.addView(inflater.inflate(R.layout.view_usage_table_divider, table, false))
+            val row = inflater.inflate(R.layout.view_usage_table_row, table, false)
+            table.addView(row)
+            row.findViewById<TextView>(R.id.usage_label).setText(meterLabel(meter.component))
+            row.findViewById<TextView>(R.id.usage_tokens).text = when {
+                meter.hasUnknownQuantity -> UsageValueFormatter.NOT_REPORTED
+                meter.unit == UsageMeterUnit.SECOND -> getString(
+                    R.string.usage_duration_seconds, UsageValueFormatter.seconds(meter.quantity)
+                )
+                else -> UsageValueFormatter.count(meter.quantity, false)
+            }
+            row.findViewById<TextView>(R.id.usage_cost).text =
+                UsageValueFormatter.cost(meter.cost, meter.hasUnknownCost)
+        }
+        table.visibility = if (meters.isEmpty()) View.GONE else View.VISIBLE
+        view.findViewById<View>(R.id.cache_hit_rate_box).visibility = View.GONE
+
+        val facts = view.findViewById<LinearLayout>(R.id.price_facts)
+        facts.removeAllViews()
+        meters.forEach { meter ->
+            val fact = inflater.inflate(R.layout.view_usage_price_fact, facts, false)
+            facts.addView(fact)
+            fact.findViewById<TextView>(R.id.price_label).setText(meterLabel(meter.component))
+            fact.findViewById<TextView>(R.id.price_value).text = when {
+                meter.hasVariablePrice -> getString(R.string.usage_variable_price)
+                meter.currency?.equals("USD", ignoreCase = true) != true -> UsageValueFormatter.NOT_REPORTED
+                else -> UsageValueFormatter.price(displayedRate(meter))
+            }
+        }
+        view.findViewById<TextView>(R.id.price_caption).text = meters.map { it.unit }.distinct()
+            .joinToString(" · ") { getString(priceBasis(it)) }
+        view.findViewById<View>(R.id.pricing_footer).visibility =
+            if (meters.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** The frozen rate restated per 1M units, or per minute of audio. */
+    private fun displayedRate(meter: UsageMeterTotal): Double? {
+        val amount = meter.priceAmount ?: return null
+        val basis = meter.priceQuantity?.takeIf { it > 0.0 } ?: return null
+        val per = if (meter.unit == UsageMeterUnit.SECOND) 60.0 else 1_000_000.0
+        return java.math.BigDecimal.valueOf(amount).multiply(java.math.BigDecimal.valueOf(per))
+            .divide(java.math.BigDecimal.valueOf(basis), java.math.MathContext.DECIMAL128).toDouble()
+    }
+
+    private fun meterLabel(component: UsageMeterComponent): Int = when (component) {
+        UsageMeterComponent.CHARACTERS -> R.string.usage_meter_characters
+        UsageMeterComponent.UTF8_BYTES -> R.string.usage_meter_utf8_bytes
+        UsageMeterComponent.TEXT_INPUT -> R.string.usage_meter_text_input
+        UsageMeterComponent.AUDIO_OUTPUT -> R.string.usage_meter_audio_output
+    }
+
+    private fun priceBasis(unit: UsageMeterUnit): Int = when (unit) {
+        UsageMeterUnit.CHARACTER -> R.string.usage_price_per_million_characters
+        UsageMeterUnit.BYTE -> R.string.usage_price_per_million_utf8_bytes
+        UsageMeterUnit.TOKEN -> R.string.usage_price_per_million
+        UsageMeterUnit.SECOND -> R.string.usage_price_per_minute_audio
     }
 
     private fun bindUsageRow(

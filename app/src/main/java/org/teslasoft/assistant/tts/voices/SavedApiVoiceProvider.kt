@@ -13,6 +13,8 @@ class SavedApiVoiceProvider(
     val source: SavedTtsSource,
     endpointName: String,
     private val preferences: Preferences,
+    /** The chat whose Usage & Cost receives paid previews; blank when none owns them. */
+    private val usageChatId: String = "",
     private val onFailure: (TtsFailure, () -> Unit) -> Unit
 ) : VoiceBrowserProvider {
     override val id = source.sourceId
@@ -95,7 +97,9 @@ class SavedApiVoiceProvider(
             onDone = { onPlaybackChanged(null) },
             onFailure = { failure -> this.onFailure(failure) {
                 preview(voice, sampleText, onFailure, onCatalogChanged, onPlaybackChanged)
-            } })
+            } },
+            // A preview is real paid synthesis. It is recorded only for a chat that exists.
+            onSynthesized = { billed -> TtsUsageRecorder.recordForChat(app, usageChatId, billed) })
     }
 
     override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit

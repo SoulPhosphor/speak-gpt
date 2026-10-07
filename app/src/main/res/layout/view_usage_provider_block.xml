@@ -72,6 +72,7 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/usage_table"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -95,6 +96,7 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/cache_hit_rate_box"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="14dp"
@@ -135,6 +137,7 @@
             android:paddingBottom="13dp">
 
             <LinearLayout
+                android:id="@+id/price_facts"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
@@ -145,6 +148,7 @@
             </LinearLayout>
 
             <TextView
+                android:id="@+id/price_caption"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"

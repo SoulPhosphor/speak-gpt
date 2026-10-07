@@ -417,6 +417,7 @@
     <string name="auth_mode_bearer">Bearer token (Authorization)</string>
     <string name="auth_mode_x_api_key">API key header (x-api-key)</string>
     <string name="auth_mode_api_key">API key header (api-key)</string>
+    <string name="auth_mode_xi_api_key">API key header (xi-api-key)</string>
     <string name="api_endpoint_model">Model</string>
     <string name="api_endpoint_model_help">Tap to choose from models available on this endpoint.</string>
     <string name="endpoint_choose_provider_title">Choose Provider</string>
@@ -1070,6 +1071,14 @@
     <string name="usage_cache_hit_rate">Cache Hit Rate</string>
     <string name="usage_price_per_million">Price per 1M Tokens</string>
     <string name="usage_variable_price">Variable</string>
+    <string name="usage_meter_characters">Characters</string>
+    <string name="usage_meter_utf8_bytes">UTF-8 Bytes</string>
+    <string name="usage_meter_text_input">Text Input</string>
+    <string name="usage_meter_audio_output">Audio Output</string>
+    <string name="usage_duration_seconds">%1$s sec</string>
+    <string name="usage_price_per_million_characters">Price per 1M Characters</string>
+    <string name="usage_price_per_million_utf8_bytes">Price per 1M UTF-8 Bytes</string>
+    <string name="usage_price_per_minute_audio">Price per Minute of Audio</string>
     <!-- Usage & Cost section headings and Summarizing functions (owner ruling, Oct 6 2026). -->
     <string name="usage_section_chat">Chat</string>
     <string name="usage_section_image_generations">Image Generations</string>

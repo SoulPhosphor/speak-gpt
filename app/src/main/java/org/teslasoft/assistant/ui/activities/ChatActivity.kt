@@ -7838,6 +7838,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val extraHeaders: Map<String, String> = when (apiEndpointObject?.authType) {
                 ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to key!!)
                 ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to key!!)
+                ApiEndpointObject.AUTH_XI_API_KEY -> mapOf("xi-api-key" to key!!)
                 else -> emptyMap()
             }
 
@@ -13728,7 +13729,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } else {
             val playback = apiReadback ?: TtsPlayback(this).also { apiReadback = it }
+            val usagePreferences = preferences
             playback.play(selected.sourceId, selected.voiceId, message, TtsOperation.SPEECH,
+                // Read-aloud and hands-free readback belong to this chat. The charge is recorded
+                // when the audio arrives, whatever playback does afterwards.
+                onSynthesized = { billed ->
+                    if (usagePreferences != null && !chatStorageUnavailable) {
+                        TtsUsageRecorder.record(usagePreferences, billed)
+                    }
+                },
                 stillCurrent = { session == readbackSession && !isDestroyed && preferences?.getSelectedTtsVoice() == selected },
                 onPlayer = { next ->
                     if (mediaPlayer !== next) runCatching { mediaPlayer?.release() }

@@ -241,7 +241,7 @@ class VoiceBrowserActivity : FragmentActivity() {
                     val google = controller.availableProviders.first { it.id == "google" }
                     val apis = rows.map { row -> SavedApiVoiceProvider(this@VoiceBrowserActivity, row,
                         endpoints.firstOrNull { it.id == row.endpointId }?.label ?: row.endpointId,
-                        preferences) { failure, retry ->
+                        preferences, usageChatId = intent.getStringExtra(EXTRA_CHAT_ID).orEmpty()) { failure, retry ->
                             if (controller.browsedProviderId == row.sourceId) showTtsFailure(failure, retry)
                         } }
                     shownLoadFailure = null

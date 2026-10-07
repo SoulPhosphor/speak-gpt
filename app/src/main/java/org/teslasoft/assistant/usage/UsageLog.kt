@@ -162,7 +162,9 @@ object UsageLog {
                 entry.messageId?.let { addProperty("messageId", it) }
                 entry.function?.let { addProperty("function", it.key) }
                 addProperty("recordedAtMs", entry.recordedAtMs)
-                add("record", gson.toJsonTree(entry.record))
+                add("record", gson.toJsonTree(entry.record).asJsonObject.apply {
+                    entry.record.meters?.let { add("meters", UsageMeterCodec.encode(it)) }
+                })
             })
         }
         return JsonObject().apply {
@@ -216,8 +218,11 @@ object UsageLog {
             val root = JsonParser.parseString(value).asJsonObject
             val entries = root.getAsJsonArray("entries")?.mapNotNull { element ->
                 val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-                val record = o.get("record")?.takeIf { it.isJsonObject }
-                    ?.let { gson.fromJson(it, TurnUsageRecord::class.java) }
+                val recordJson = o.get("record")?.takeIf { it.isJsonObject }?.asJsonObject
+                    ?: return@mapNotNull null
+                // Entries written before metered usage have no meters and decode as before.
+                val record = gson.fromJson(recordJson, TurnUsageRecord::class.java)
+                    ?.copy(meters = UsageMeterCodec.decode(recordJson.get("meters")))
                     ?: return@mapNotNull null
                 UsageLogEntry(
                     id = o.get("id")?.asString?.ifBlank { null } ?: return@mapNotNull null,

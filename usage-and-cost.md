@@ -323,13 +323,13 @@ partial sum is never shown as if it were complete.
   the service's report, and prices are frozen when the request finishes. A
   finished request with no usage report is still counted, with its values
   "Not Reported"; a failed one only when the service reported usage.
-- **Not counted yet:** image generation requests (Image Generations),
+- **TTS section:** every API voice request that returned audio is counted.
+  Section 7 explains how.
+- **Not counted yet:** image generation requests (Image Generations) and
   Whisper cloud voice input (audio sent to OpenAI's `whisper-1`
-  transcription service; STT), and text-to-speech read-aloud requests (TTS).
-  Their sections exist and appear once they are recorded. The STT section is
-  meant for any speech-to-text service, not only Whisper. TTS services do not
-  report usage, so a TTS record would be "Not Reported" and, under the "Not
-  Reported" rule, so would the chat's total.
+  transcription service; STT). Their sections exist and appear once they are
+  recorded. The STT section is meant for any speech-to-text service, not only
+  Whisper.
 
 ### The usage log (owner ruling, October 6 2026)
 
@@ -355,7 +355,7 @@ reply's details still show its own usage.
 
 Chat backups copy each chat's stored messages and its per-chat settings file
 unchanged, so usage records (and their copies inside reply versions) and the
-usage log are exported and restored with them. A backup made before usage records existed restores normally; its
+usage log, including TTS entries, are exported and restored with them. A backup made before usage records existed restores normally; its
 replies fall back to the old-reply estimate described in section 1.
 
 ## 6. Settled behavior and open items (October 2026)
@@ -380,7 +380,143 @@ On hold until the owner reviews the finished screen:
 3. Display of old and estimated records.
 4. Subscription services in general (such as OpenCode Go).
 
-## 7. Featherless
+## 7. TTS (text to speech)
+
+Device (Google) voices are free and not recorded. API voices are recorded
+in the unit each service actually bills, never converted to text tokens.
+
+### When a request is counted
+
+- **Counted when the audio arrives.** The service charges for synthesis, not
+  playback. A request is recorded once the service has returned valid audio,
+  before playback starts. A playback error, Stop, or leaving the screen
+  afterwards does not remove it.
+- **Each synthesis is its own request.** A Retry that synthesizes again is
+  counted again.
+- **Not counted:** a request stopped before the service answered, and a
+  request that failed without returning audio. No charge is invented for
+  them.
+- **Which chat:** read-aloud and hands-free readback in a chat are recorded
+  in that chat. A Voice Browser preview is real paid synthesis. It is
+  recorded in a chat only when the Voice Browser was opened from that chat's
+  settings and the chat exists. A preview from the Voice Browser opened from
+  the main settings (no chat) is **not recorded anywhere**. There is no
+  app-wide usage log yet.
+- **Recorded in the background.** Cost details are completed after playback
+  has started, so they never delay speech. The usage entry is written by the
+  app's process, so closing the chat straight away does not lose it. If the
+  app process itself ends before it is written (for OpenRouter, up to about
+  15 seconds while the charge is looked up), that entry is lost.
+
+### Billing units
+
+| Row | Unit | How the quantity is known |
+| --- | --- | --- |
+| Characters | characters | The service's report (ElevenLabs), or counted from the exact text sent. Characters are Unicode code points: an emoji counts once, not as two. |
+| UTF-8 Bytes | bytes | Counted from the UTF-8 encoding of the exact text sent. |
+| Text Input | tokens | Only from the service's report (OpenAI). Never estimated. |
+| Audio Output | tokens | Only from the service's report (OpenAI). Never estimated. |
+| Audio Output | seconds | Measured from the MP3 audio returned (its frame headers). Never estimated from text length. |
+
+The TTS card shows only these rows. There is no Cached row and no Cache Hit
+Rate, because no supported speech service reports a cache. The price line
+under the rows names the actual basis: per 1M characters, per 1M tokens,
+per 1M UTF-8 bytes, or per minute of audio. "Variable" means requests in the
+group used different prices.
+
+### Cost source order
+
+1. The service's reported US-dollar charge for this request.
+2. The service's reported quantity × its price frozen with the request.
+3. An exact locally known quantity × the price frozen with the request.
+4. Otherwise "Not Reported".
+
+The total is the reported charge when there is one, even when no detail row
+can be shown. Otherwise it is the sum of the rows, and only when every
+billed row has a cost; a partial sum is never shown as the total. A request
+whose billing unit is unknown is still counted, with "Not Reported" costs.
+
+### OpenRouter (including ElevenLabs and other models routed through it)
+
+Speech uses OpenRouter's own `/audio/speech` request and key. A model such
+as `elevenlabs/eleven-turbo-v2` chosen on an OpenRouter connection is an
+OpenRouter request, and is shown as one.
+
+- **Reported charge:** after the audio arrives, the app asks OpenRouter's
+  generation record (`/generation?id=…`) for the `X-Generation-Id` the speech
+  response returned. `total_cost` becomes the Total; `provider_name` becomes
+  the provider shown; `model` the model shown. OpenRouter documents the
+  generation ID on speech but does not promise speech appears in that
+  record, so this is best effort: it is asked again after about 1.5, 3 and 6
+  seconds, and a failure never affects speech or shows an error.
+- **Serving provider:** only what OpenRouter reports. Routing can fall back,
+  so the requested provider is never assumed. Without a report the provider
+  shows "Not Reported".
+- **Price fallback and detail rows:** the price list OpenRouter publishes for
+  the model's providers (the same list the provider picker reads), for the
+  provider that served the request. When the serving provider is unknown, a
+  price is used only if every listed provider charges the same. A price is
+  applied only when each paid part states a unit this app can measure
+  exactly (characters, bytes, seconds/minutes, tokens). OpenRouter's flat
+  `prompt`/`completion` fields without a stated unit are not applied, so
+  such requests show "Not Reported" unless OpenRouter reported the charge.
+  OpenRouter does not report tokens for speech, so token-priced speech
+  models (such as Gemini TTS) have unknown token counts.
+
+### OpenAI direct (`api.openai.com`)
+
+OpenAI's model list does not mark speech models, so on the official host the
+documented speech model IDs are recognized exactly: `tts-1`, `tts-1-1106`,
+`tts-1-hd`, `tts-1-hd-1106`, `gpt-4o-mini-tts`,
+`gpt-4o-mini-tts-2025-03-20`, `gpt-4o-mini-tts-2025-12-15`.
+
+- **`tts-1` and `tts-1-hd`:** billed per character of the exact text sent.
+  OpenAI's documented prices: $15.00 and $30.00 per 1M characters.
+- **`gpt-4o-mini-tts` and its dated versions:** requested with
+  `stream_format: "sse"`. The audio arrives in `speech.audio.delta` events,
+  which are decoded and joined in order; the final `speech.audio.done` event
+  reports `input_tokens` and `output_tokens`. These are billed as Text Input
+  ($0.60 per 1M) and Audio Output ($12.00 per 1M). If OpenAI sends no usage,
+  the token counts and the cost are "Not Reported".
+- **Prices without a documented match:** the dated versions
+  (`tts-1-1106`, `tts-1-hd-1106`, `gpt-4o-mini-tts-2025-…`) keep their
+  quantities but show "Not Reported" costs. OpenAI's pricing page lists only
+  the undated IDs.
+- SSE is used only on the official host and only for the models above. Every
+  other OpenAI-compatible service keeps the ordinary audio request.
+- A third-party price listing reports that `tts-1` is scheduled for
+  deprecation on December 15, 2026. This was not confirmed on OpenAI's own
+  page. Speech keeps using `/audio/speech`; nothing was moved to Realtime.
+
+OpenAI prices verified October 2026 (search results quoting OpenAI's
+official pages; the pages themselves could not be opened from the
+development environment):
+- https://developers.openai.com/api/docs/models/tts-1
+- https://developers.openai.com/api/docs/models/tts-1-hd
+- https://developers.openai.com/api/docs/models/gpt-4o-mini-tts
+
+### ElevenLabs direct
+
+Official ElevenLabs hosts are recognized exactly: `api.elevenlabs.io`,
+`api.us.elevenlabs.io`, `api.eu.residency.elevenlabs.io`,
+`api.in.residency.elevenlabs.io`. The connection's address must include
+`/v1` (for example `https://api.elevenlabs.io/v1`) and its auth mode must be
+**API key header (xi-api-key)**.
+
+- **Speech:** `POST {address}/text-to-speech/{voice_id}?output_format=mp3_44100_128`
+  with `text` and `model_id`. The connection's Text to Speech Endpoint
+  setting is not used for ElevenLabs.
+- **Models and voices:** `GET {address}/models` (models whose
+  `can_do_text_to_speech` is true) and `GET {address}/voices`, shown in the
+  same Voice Browser.
+- **Usage:** the `character-cost` response header is the reported character
+  count. If it is missing, the count is "Not Reported".
+- **Cost: "Not Reported".** ElevenLabs' published API rates could not be
+  confirmed from an authoritative source (the sources found disagree and
+  include plan-specific and promotional rates), so no ElevenLabs dollar rate
+  is applied.
+
+## 8. Featherless
 
 Implemented using official documentation verified October 3, 2026:
 
@@ -455,4 +591,7 @@ plans, absence of admin calls, reasoning, and frozen-record serialization.
 | The usage log | `app/src/main/java/org/teslasoft/assistant/usage/UsageLog.kt` (`UsageLogState`, `UsageLogStore`) |
 | Attachment and Summarizer request records | `app/src/main/java/org/teslasoft/assistant/usage/AuxiliaryUsage.kt`; `app/src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt` (`withSummarizerUsage`) |
 | The screen | `app/src/main/java/org/teslasoft/assistant/ui/activities/TokenPricingDetailsActivity.kt` |
-| Tests | `app/src/test/java/org/teslasoft/assistant/usage/`, `app/src/test/java/org/teslasoft/assistant/providers/ReportedProviderParserTest.kt`, `app/src/test/java/org/teslasoft/assistant/preferences/backup/portable/PortableChatRestorePlanTest.kt` |
+| Non-token (metered) usage, its grouping and storage | `app/src/main/java/org/teslasoft/assistant/usage/MeteredUsage.kt` (`UsageMeter`, `MeteredUsageAccounting`, `UsageMeterCodec`) |
+| TTS request formats, OpenAI SSE, MP3 duration | `app/src/main/java/org/teslasoft/assistant/tts/api/TtsServices.kt`, `TtsTransport.kt` |
+| TTS usage records, prices, OpenRouter lookup, recording | `app/src/main/java/org/teslasoft/assistant/tts/api/TtsUsage.kt` (`TtsUsageAccounting`, `OpenAiSpeechPricing`, `OpenRouterGenerationClient`, `TtsUsageRecorder`) |
+| Tests | `app/src/test/java/org/teslasoft/assistant/usage/`, `app/src/test/java/org/teslasoft/assistant/providers/ReportedProviderParserTest.kt`, `app/src/test/java/org/teslasoft/assistant/preferences/backup/portable/PortableChatRestorePlanTest.kt`, `app/src/test/java/org/teslasoft/assistant/tts/api/` (`TtsUsageTest`, `TtsWireFormatTest`, `TtsProviderDiscoveryTest`, `TtsPlaybackUsageTest`), `app/src/test/java/org/teslasoft/assistant/ui/activities/UsageCostTtsRenderingTest.kt` |

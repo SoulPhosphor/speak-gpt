@@ -21,7 +21,13 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
             .addQueryParameter("output_modalities", "speech").build().toString()
         val response = get(source, op, url, token)
         response.requireSuccess(source, op)
-        return parse(source, op, response) { TtsCatalogParser.models(response.text()) } to response
+        return parse(source, op, response) {
+            when (source.endpoint.kind) {
+                TtsEndpointKind.ELEVENLABS -> TtsCatalogParser.elevenLabsModels(response.text())
+                TtsEndpointKind.OPENAI -> TtsCatalogParser.models(response.text(), TtsServices.OPENAI_SPEECH_MODELS)
+                else -> TtsCatalogParser.models(response.text())
+            }
+        } to response
     }
 
     fun providers(source: ResolvedTtsSource, token: TtsRequestToken): TtsProviderCatalog {
@@ -122,9 +128,12 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
             providerFailure?.let { throw it }
             return TtsVoiceDiscovery(TtsVoiceCatalog.Unavailable, evidence)
         }
-        for (probe in listOf("audio/voices", "voices")) {
+        // ElevenLabs documents one account-wide voice list, `GET /v1/voices`, with no model filter.
+        val elevenLabs = source.endpoint.kind == TtsEndpointKind.ELEVENLABS
+        for (probe in if (elevenLabs) listOf("voices") else listOf("audio/voices", "voices")) {
             try {
-                val url = checkedUrl(source, op, path(source, probe)).newBuilder()
+                val url = if (elevenLabs) checkedUrl(source, op, path(source, probe)).toString()
+                else checkedUrl(source, op, path(source, probe)).newBuilder()
                     .addQueryParameter("model", source.target.modelId).apply {
                         val routing = TtsRouting.compose(JsonObject(), source.target.routing, JsonObject()).get("provider")
                         if (routing != null) addQueryParameter("provider", routing.toString())

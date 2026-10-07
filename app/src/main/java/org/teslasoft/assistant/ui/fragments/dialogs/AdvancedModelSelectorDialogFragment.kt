@@ -780,6 +780,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         val extraHeaders: Map<String, String> = when (endpoint.authType) {
             ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to endpoint.apiKey)
             ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to endpoint.apiKey)
+            ApiEndpointObject.AUTH_XI_API_KEY -> mapOf("xi-api-key" to endpoint.apiKey)
             else -> emptyMap()
         }
 
@@ -823,6 +824,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         when (apiEndpointObject?.authType) {
             ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
             ApiEndpointObject.AUTH_API_KEY -> authHeaders["api-key"] = apiKey
+            ApiEndpointObject.AUTH_XI_API_KEY -> authHeaders["xi-api-key"] = apiKey
             else -> authHeaders["Authorization"] = "Bearer $apiKey"
         }
         requestNetwork?.setHeaders(authHeaders)

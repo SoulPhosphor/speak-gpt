@@ -184,6 +184,8 @@ class ApiEndpointObject(
         const val AUTH_BEARER = "bearer"
         const val AUTH_X_API_KEY = "x-api-key"
         const val AUTH_API_KEY = "api-key"
+        /** ElevenLabs' native API-key header. */
+        const val AUTH_XI_API_KEY = "xi-api-key"
         const val DEFAULT_MODEL = "gpt-4o"
         const val DEFAULT_TEMPERATURE = 0.7f
         const val DEFAULT_TOP_P = 1.0f
