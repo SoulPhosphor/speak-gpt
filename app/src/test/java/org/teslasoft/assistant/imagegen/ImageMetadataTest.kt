@@ -4,6 +4,43 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageMetadataTest {
+    @Test fun metadataOutagesUseDefaultsForUnverifiableSavedFieldsButKeepKnownRestrictionsAndOverrides() {
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future",
+            parameters = mapOf("size" to "1888x944", "quality" to "precise", "output_format" to "png"))
+        val unknown = ImageRequestOptions.forMetadataFallback(request, null)
+        assertTrue(unknown.parameters.isEmpty())
+        assertTrue(ImageRequestOptions.resolve(unknown, null).isEmpty())
+        val known = ImageModelMetadata("future", parameters = listOf(ImageParameter("output_format", ImageParameterType.ENUM, listOf("png"))))
+        val fallback = known.withoutEndpointEvidence()
+        val safe = ImageRequestOptions.forMetadataFallback(request, fallback)
+        assertEquals(mapOf("output_format" to "png"), ImageRequestOptions.resolve(safe, fallback))
+        assertEquals(request.parameters, ImageRequestOptions.forMetadataFallback(request, known).parameters)
+        for (override in listOf(request.copy(shape = ImageShape.LANDSCAPE), request.copy(quality = ImageQuality.HIGH))) {
+            try { ImageRequestOptions.resolve(ImageRequestOptions.forMetadataFallback(override, fallback), fallback); fail("explicit override must remain strict") }
+            catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        }
+        val svg = known.copy(parameters = listOf(ImageParameter("output_format", ImageParameterType.ENUM, listOf("svg")))).withoutEndpointEvidence()
+        try { ImageRequestOptions.resolve(ImageRequestOptions.forMetadataFallback(request, svg), svg); fail("known unusable output must remain blocked") }
+        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        assertEquals(mapOf("size" to "1888x944", "quality" to "precise", "output_format" to "png"), request.parameters)
+    }
+
+    @Test fun incompleteOrInvalidRangesAreNotInterpretedAsUnboundedEndpoints() {
+        val model = ImageModelMetadata("future", parameters = listOf(ImageParameter("output_format", ImageParameterType.ENUM, listOf("svg"))))
+        for (limits in listOf("\"min\":1", "\"max\":9", "\"min\":1,\"max\":\"bad\"", "\"min\":9,\"max\":1")) {
+            val fields = """{"seed":{"type":"range",$limits}}"""
+            assertTrue(ImageMetadataParser.parameters(imageJson(fields)).isEmpty())
+            val fallback = ImageMetadataParser.endpoints("""{"id":"future","endpoints":[{"supported_parameters":$fields,"pricing":[{"billable":"output_image","unit":"image","cost_usd":0.1}]}]}""", model)
+            assertFalse(fallback.settingsVerified)
+            assertFalse(fallback.tariffsComplete)
+            assertTrue(fallback.endpointRecords.isEmpty())
+            assertEquals(model.parameters, fallback.parameters)
+            assertFalse(fallback.hasDisplayableOutput())
+        }
+        val valid = ImageMetadataParser.parameters(imageJson("""{"seed":{"type":"range","min":1,"max":9}}""")).single()
+        assertTrue(valid.accepts("9")); assertFalse(valid.accepts("10"))
+    }
+
     @Test fun savedSnapshotReloadsItsCanonicalDocumentWithoutAProcessCache() {
         val alias = "future-snapshot-v7"
         val canonical = "future-base"

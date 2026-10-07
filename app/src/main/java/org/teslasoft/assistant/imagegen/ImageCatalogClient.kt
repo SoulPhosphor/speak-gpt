@@ -151,7 +151,8 @@ object ImageCatalogClient {
     }
 
     private fun openAiDetails(model: ImageModelMetadata): ImageModelMetadata {
-        val settings = http.get(OpenAiImageReferenceParser.URL)?.let { OpenAiImageReferenceParser.enrich(model, it) } ?: model
+        val settings = http.get(OpenAiImageReferenceParser.URL)?.let { OpenAiImageReferenceParser.enrich(model, it) }
+            ?: model.copy(settingsVerified = false)
         return http.get(OpenAiImageCachePolicyParser.URL)?.let { OpenAiImageCachePolicyParser.enrich(settings, it) } ?: settings
     }
 
@@ -268,7 +269,7 @@ object GeminiImageMetadataParser {
                         if (formats.isNotEmpty()) add(ImageParameter("output_format", ImageParameterType.ENUM, formats))
                     }
                 }, sourceUrl = GUIDE_URL + " | " + if (interactions) INTERACTIONS_SCHEMA_URL else SCHEMA_URL,
-                    nativeSizes = nativeSizes, geminiTransport = protocol)
+                    nativeSizes = nativeSizes, geminiTransport = protocol, settingsVerified = properties != null)
             }
         }.distinctBy { it.id }
     }

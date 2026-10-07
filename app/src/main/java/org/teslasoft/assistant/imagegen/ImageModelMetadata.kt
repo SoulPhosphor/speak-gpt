@@ -73,7 +73,8 @@ data class ImageModelMetadata(
     val geminiTransport: GeminiImageTransport? = null,
     val requiresExplicitOutputFormat: Boolean = false,
     val directCachedInputExcluded: Boolean = false,
-    val publishedName: String? = null
+    val publishedName: String? = null,
+    val settingsVerified: Boolean = true
 ) {
     /** An explicitly published format-only model must have an app-decodable output. */
     fun hasDisplayableOutput(): Boolean = parameters.firstOrNull {
@@ -83,7 +84,7 @@ data class ImageModelMetadata(
     /** Keep known output restrictions when endpoint details fail; never reuse old rates. */
     fun withoutEndpointEvidence(): ImageModelMetadata = copy(
         parameters = parameters.filter { it.key == "output_format" },
-        tariffs = emptyList(), endpointRecords = emptyList(), tariffsComplete = false)
+        tariffs = emptyList(), endpointRecords = emptyList(), tariffsComplete = false, settingsVerified = false)
 }
 
 data class ImageServingMetadata(
@@ -120,9 +121,16 @@ object ImageMetadataParser {
     private val settingsOrder = listOf("size", "resolution", "aspect_ratio", "quality", "background",
         "output_format", "output_compression", "seed")
 
+    private fun completeRange(descriptor: JsonObject): Boolean {
+        val minimum = descriptor.imageBound("min") ?: descriptor.imageBound("minimum")
+        val maximum = descriptor.imageBound("max") ?: descriptor.imageBound("maximum")
+        return minimum != null && maximum != null && minimum <= maximum
+    }
+
     fun parameters(root: JsonObject?, compression: ImageParameter? = null): List<ImageParameter> = root?.entrySet()?.mapNotNull { (key, value) ->
         if (key in reserved) return@mapNotNull null
         val descriptor = value.imageObject() ?: return@mapNotNull null
+        if (descriptor.imageText("type") == "range" && !completeRange(descriptor)) return@mapNotNull null
         val values = descriptor.imageStrings("values").ifEmpty { descriptor.imageStrings("enum") }
         val type = when (descriptor.imageText("type")) {
             "enum" -> ImageParameterType.ENUM
@@ -187,8 +195,12 @@ object ImageMetadataParser {
             // A partial route list cannot prove that every possible serving route
             // accepts these options or charges these rates.
             val endpoint = element.imageObject() ?: return model.withoutEndpointEvidence()
+            val fields = endpoint.get("supported_parameters").imageObject()
+            if (fields?.entrySet()?.any { (_, value) -> value.imageObject()?.let { descriptor ->
+                    descriptor.imageText("type") == "range" && !completeRange(descriptor)
+                } == true } == true) return model.withoutEndpointEvidence()
             ImageServingMetadata(endpoint.imageText("provider_name"), endpoint.imageText("provider_slug"),
-                parameters(endpoint.get("supported_parameters").imageObject(), compression), tariffs(endpoint.get("pricing")),
+                parameters(fields, compression), tariffs(endpoint.get("pricing")),
                 tariffsComplete(endpoint.get("pricing")))
         }
         // Without pinning a serving provider, expose only parameters all routes support.
@@ -338,6 +350,14 @@ object ImageDimensionSettings {
 /** Maps app-owned /imagine shape shorthand to an actual value the model publishes. */
 object ImageRequestOptions {
     private val dimensions = listOf("aspect_ratio", "size", "resolution")
+
+    /** Outages use provider defaults only for saved fields we cannot verify.
+     * Explicit shape/quality overrides and known format restrictions stay enforced. */
+    fun forMetadataFallback(request: ImageGenerationRequest, metadata: ImageModelMetadata?): ImageGenerationRequest {
+        if (metadata?.settingsVerified == true) return request
+        val known = metadata?.parameters.orEmpty().map { it.key }.toSet()
+        return request.copy(parameters = request.parameters.filterKeys { it in known })
+    }
 
     fun resolve(request: ImageGenerationRequest, metadata: ImageModelMetadata?): Map<String, String> {
         val legacyShape = if (request.shape == ImageShape.AUTOMATIC && request.defaultShape != ImageShape.AUTOMATIC &&
