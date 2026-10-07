@@ -26,6 +26,22 @@ object OpenAiImageReferenceParser {
     }
 }
 
+/** Cache exclusions are model-specific published billing policy, not a fixed provider capability. */
+object OpenAiImageCachePolicyParser {
+    const val URL = "https://developers.openai.com/api/docs/guides/image-generation.md"
+
+    fun enrich(model: ImageModelMetadata, guide: String): ImageModelMetadata {
+        val current = model.copy(directCachedInputExcluded = false)
+        val section = guide.substringAfter("### Cached input pricing", "").substringBefore("\n### ")
+        val names = Regex("For (.*?), cached input pricing applies only to .*?Responses API\\.\\s*It (?:doesn't|does not|doesn’t) apply to direct Images API requests", RegexOption.DOT_MATCHES_ALL)
+            .find(section)?.groupValues?.get(1)?.split(Regex(",\\s*|\\s+and\\s+")) ?: return current
+        fun normalized(value: String) = value.lowercase().replace(Regex("[^a-z0-9]"), "")
+        if (model.resolvedIds.none { id -> names.any { normalized(it) == normalized(id) } }) return current
+        return current.copy(directCachedInputExcluded = true,
+            sourceUrl = listOfNotNull(model.sourceUrl, URL).joinToString(" | "))
+    }
+}
+
 object GeminiImagePricingParser {
     const val URL = "https://ai.google.dev/gemini-api/docs/pricing"
 

@@ -136,7 +136,7 @@ object ImageCatalogClient {
                 http.get(fallback)
             }
             val metadata = document?.let { OpenAiImageMetadataParser.model(it, id, source) } ?: return null
-            return http.get(OpenAiImageReferenceParser.URL)?.let { OpenAiImageReferenceParser.enrich(metadata, it) } ?: metadata
+            return openAiDetails(metadata)
         }
         val model = if (fresh) models(endpoint, fresh = true).firstOrNull { it.id == id }
             else cachedModel(endpoint, id) ?: models(endpoint).firstOrNull { it.id == id }
@@ -148,9 +148,13 @@ object ImageCatalogClient {
         }
         if (kind == ImageProviderKind.GEMINI) return http.get(GeminiImagePricingParser.URL)
             ?.let { GeminiImagePricingParser.enrich(model, it) } ?: model.copy(tariffsComplete = false)
-        if (kind == ImageProviderKind.OPENAI) return http.get(OpenAiImageReferenceParser.URL)
-            ?.let { OpenAiImageReferenceParser.enrich(model, it) } ?: model
+        if (kind == ImageProviderKind.OPENAI) return openAiDetails(model)
         return model
+    }
+
+    private fun openAiDetails(model: ImageModelMetadata): ImageModelMetadata {
+        val settings = http.get(OpenAiImageReferenceParser.URL)?.let { OpenAiImageReferenceParser.enrich(model, it) } ?: model
+        return http.get(OpenAiImageCachePolicyParser.URL)?.let { OpenAiImageCachePolicyParser.enrich(settings, it) } ?: settings
     }
 
     private fun nativeGeminiModels(endpoint: ApiEndpointObject): List<com.google.gson.JsonObject> {

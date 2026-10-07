@@ -71,7 +71,8 @@ data class ImageModelMetadata(
     val outputModalities: Set<String> = emptySet(),
     val nativeSizes: List<String> = emptyList(),
     val geminiTransport: GeminiImageTransport? = null,
-    val requiresExplicitOutputFormat: Boolean = false
+    val requiresExplicitOutputFormat: Boolean = false,
+    val directCachedInputExcluded: Boolean = false
 ) {
     /** An explicitly published format-only model must have an app-decodable output. */
     fun hasDisplayableOutput(): Boolean = parameters.firstOrNull {

@@ -59,7 +59,11 @@ object ImageUsageParser {
             val textOutput = modality("output_tokens_by_modality", "text", "total_output_tokens")
             val thoughts = count(usage, "total_thought_tokens")
             meters += meter(UsageMeterComponent.IMAGE_OUTPUT, imageOutput)
-            meters += meter(UsageMeterComponent.TEXT_OUTPUT, textOutput?.let { text -> thoughts?.let { text + it } })
+            meters += meter(UsageMeterComponent.TEXT_OUTPUT, textOutput?.let { text -> thoughts?.let { text + it } ?: text })
+            // An omitted optional thought counter does not erase the reported text
+            // split. An explicitly malformed counter still prevents a complete bill.
+            if (usage?.has("total_thought_tokens") == true && thoughts == null)
+                meters += meter(UsageMeterComponent.OUTPUT, null)
             if (usage?.imageArray("output_tokens_by_modality") == null)
                 meters += meter(UsageMeterComponent.OUTPUT, count(usage, "total_output_tokens"))
             meters += meter(UsageMeterComponent.CACHED_TEXT_INPUT,
@@ -223,7 +227,10 @@ data class ImageUsageAttempt(
             else -> emptyList()
         }
         val inputIsZero = meters.firstOrNull { it.component == UsageMeterComponent.TEXT_INPUT }?.quantity == 0.0
-        val zeros = exactZeros + if (inputIsZero) listOf(UsageMeterComponent.CACHED_TEXT_INPUT) else emptyList()
+        val documentedUncached = kind == ImageProviderKind.OPENAI && sameModel && metadata?.directCachedInputExcluded == true
+        if (documentedUncached && meters.any { it.component == UsageMeterComponent.CACHED_TEXT_INPUT && (it.quantity ?: 0.0) > 0.0 })
+            completePricing = false
+        val zeros = exactZeros + if (inputIsZero || documentedUncached) listOf(UsageMeterComponent.CACHED_TEXT_INPUT) else emptyList()
         zeros.forEach { component ->
             val index = meters.indexOfFirst { it.component == component }
             if (index < 0) meters += UsageMeter(component, UsageMeterUnit.TOKEN, 0.0, UsageQuantitySource.LOCAL_EXACT)

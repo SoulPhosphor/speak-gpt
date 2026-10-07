@@ -14,7 +14,10 @@ class ImageUsageAccountingTest {
         assertEquals(1.0, record.meters!!.single { it.component == UsageMeterComponent.IMAGES }.quantity!!, 0.0)
         assertEquals(6.0, record.meters!!.single { it.component == UsageMeterComponent.TEXT_OUTPUT }.quantity!!, 0.0)
         val missingThoughts = body.replace(",\"total_thought_tokens\":2", "")
-        assertNull(attempt(ImageProviderKind.GEMINI, missingThoughts, metadata).record().totalCost)
+        val withoutThoughts = attempt(ImageProviderKind.GEMINI, missingThoughts, metadata).record()
+        assertEquals(4.0, withoutThoughts.meters!!.single { it.component == UsageMeterComponent.TEXT_OUTPUT }.quantity!!, 0.0)
+        assertEquals(0.168, withoutThoughts.totalCost!!, 1e-12)
+        assertNull(attempt(ImageProviderKind.GEMINI, body.replace("\"total_thought_tokens\":2", "\"total_thought_tokens\":-1"), metadata).record().totalCost)
         val missingCache = body.replace(",\"total_cached_tokens\":0", "")
         assertNull(attempt(ImageProviderKind.GEMINI, missingCache, metadata).record().totalCost)
         val missingModalities = body.replace("\"output_tokens_by_modality\":[{\"modality\":\"image\",\"tokens\":50},{\"modality\":\"text\",\"tokens\":4}],", "")
@@ -82,6 +85,34 @@ class ImageUsageAccountingTest {
         val model = ImageModelMetadata("new-model", tariffs = prices, outputModalities = setOf("image"))
         val body = """{"usage":{"input_tokens_details":{"text_tokens":0,"image_tokens":0},"output_tokens":200},"data":[{}]}"""
         assertEquals(3.4, attempt(ImageProviderKind.OPENAI, body, model).record().totalCost!!, 1e-12)
+    }
+
+    @Test fun publishedDirectCacheExclusionAllowsNonzeroUncachedTextWithoutGuessingOtherModels() {
+        val prices = listOf(ImageTariff("text_input", "token", 9.0, 1000.0, "USD"),
+            ImageTariff("text_cached_input", "token", 1.0, 1000.0, "USD"),
+            ImageTariff("image_output", "token", 17.0, 1000.0, "USD"))
+        val guide = """### Cached input pricing
+
+For Future Image 8 and Future Image 8.5, cached input pricing applies only to the image generation tool in the Responses API. It doesn't apply to direct Images API requests.
+"""
+        val base = ImageModelMetadata("future-image-8", tariffs = prices, outputModalities = setOf("image"))
+        val documented = OpenAiImageCachePolicyParser.enrich(base, guide)
+        assertTrue(documented.directCachedInputExcluded)
+        val body = """{"usage":{"input_tokens_details":{"text_tokens":100,"image_tokens":0},"output_tokens":200},"data":[{}]}"""
+        val direct = attempt(ImageProviderKind.OPENAI, body, documented).copy(model = base.id)
+        val record = direct.record()
+        assertEquals(4.3, record.totalCost!!, 1e-12)
+        val cache = record.meters!!.single { it.component == UsageMeterComponent.CACHED_TEXT_INPUT }
+        assertEquals(0.0, cache.quantity!!, 0.0)
+        assertEquals(UsageQuantitySource.LOCAL_EXACT, cache.quantitySource)
+        assertTrue(record.pricingEvidence!!.contains(OpenAiImageCachePolicyParser.URL))
+        assertFalse(OpenAiImageCachePolicyParser.enrich(base.copy(id = "future-image-80", resolvedIds = setOf("future-image-80")), guide).directCachedInputExcluded)
+        assertFalse(OpenAiImageCachePolicyParser.enrich(documented, guide.replace("doesn't apply", "applies")).directCachedInputExcluded)
+        val contradictoryCache = body.replace("\"image_tokens\":0", "\"image_tokens\":0,\"cached_tokens_details\":{\"text_tokens\":40}")
+        assertNull(attempt(ImageProviderKind.OPENAI, contradictoryCache, documented).copy(model = base.id).record().totalCost)
+        assertNull(direct.copy(metadata = base).record().totalCost)
+        assertNull(direct.copy(kind = ImageProviderKind.COMPATIBLE, receipt = ImageUsageReceipt()).record().totalCost)
+        assertNull(direct.copy(receipt = ImageUsageReceipt(model = "different")).record().totalCost)
     }
 
     @Test fun servingProviderAndModelMustMatchFrozenMetadata() {
