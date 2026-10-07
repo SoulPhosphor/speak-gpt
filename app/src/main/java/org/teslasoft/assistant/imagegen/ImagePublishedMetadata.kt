@@ -11,18 +11,23 @@ object OpenAiImageReferenceParser {
     fun enrich(model: ImageModelMetadata, reference: String): ImageModelMetadata {
         val supported = reference.substringAfter("Supported models include ", "").substringBefore("\n\n")
         val ids = Regex("`([^`]+)`").findAll(supported).map { it.groupValues[1] }.toSet()
-        if (model.resolvedIds.none { it in ids }) return model
+        if (model.resolvedIds.none { it in ids }) return model.copy(settingsVerified = false)
         fun section(key: String): String = reference.substringAfter("- `$key:", "").substringBefore("\n- `")
         fun choices(key: String) = Regex("(?m)^  - `\"([^\"]+)\"`").findAll(section(key)).map { it.groupValues[1] }.toList()
         val parameters = model.parameters.toMutableList()
+        var verified = true
         listOf("background", "output_format").forEach { key ->
             val values = choices(key)
             if (values.isNotEmpty()) parameters += ImageParameter(key, ImageParameterType.ENUM, values)
+            else verified = false
         }
         val compression = Regex("\\(([0-9]+)-([0-9]+)%\\)").find(section("output_compression"))
-        if (compression != null) parameters += ImageParameter("output_compression", ImageParameterType.INTEGER,
-            minimum = compression.groupValues[1].toDouble(), maximum = compression.groupValues[2].toDouble())
-        return model.copy(parameters = parameters, sourceUrl = model.sourceUrl + " | " + URL)
+        val minimum = compression?.groupValues?.get(1)?.toDoubleOrNull()
+        val maximum = compression?.groupValues?.get(2)?.toDoubleOrNull()
+        if (minimum != null && maximum != null && minimum.isFinite() && maximum.isFinite() && minimum <= maximum)
+            parameters += ImageParameter("output_compression", ImageParameterType.INTEGER, minimum = minimum, maximum = maximum)
+        else verified = false
+        return model.copy(parameters = parameters, sourceUrl = model.sourceUrl + " | " + URL, settingsVerified = verified)
     }
 }
 

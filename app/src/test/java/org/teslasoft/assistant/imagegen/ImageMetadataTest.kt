@@ -4,6 +4,36 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageMetadataTest {
+    @Test fun unparseableOrPartialSuccessfulReferencesUseUnverifiedSettingsFallback() {
+        val model = ImageModelMetadata("future", parameters = listOf(ImageParameter("quality", ImageParameterType.ENUM, listOf("precise"))))
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future",
+            parameters = mapOf("quality" to "precise", "output_format" to "png", "output_compression" to "63"))
+        for (body in listOf("layout changed", "Supported models include `future`.\n\n", "Supported models include `future`.\n\n- `output_format: string`\n")) {
+            val unverified = OpenAiImageReferenceParser.enrich(model, body)
+            assertFalse(unverified.settingsVerified)
+            assertEquals(mapOf("quality" to "precise"), ImageRequestOptions.resolve(
+                ImageRequestOptions.forMetadataFallback(request, unverified), unverified))
+        }
+        val complete = """Supported models include `future`.
+
+- `background: string`
+  - `"transparent"`
+  - `"opaque"`
+- `output_format: string`
+  - `"png"`
+  - `"jpeg"`
+- `output_compression: integer`
+  Compression (15-87%)
+"""
+        val verified = OpenAiImageReferenceParser.enrich(model, complete)
+        assertTrue(verified.settingsVerified)
+        assertEquals(request.parameters, ImageRequestOptions.resolve(request, verified))
+        val partial = OpenAiImageReferenceParser.enrich(model, complete.substringBefore("- `output_compression"))
+        assertFalse(partial.settingsVerified)
+        assertEquals(mapOf("quality" to "precise", "output_format" to "png"), ImageRequestOptions.resolve(
+            ImageRequestOptions.forMetadataFallback(request, partial), partial))
+    }
+
     @Test fun metadataOutagesUseDefaultsForUnverifiableSavedFieldsButKeepKnownRestrictionsAndOverrides() {
         val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future",
             parameters = mapOf("size" to "1888x944", "quality" to "precise", "output_format" to "png"))
