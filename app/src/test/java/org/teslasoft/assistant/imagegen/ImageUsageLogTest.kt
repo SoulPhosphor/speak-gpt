@@ -6,6 +6,48 @@ import org.teslasoft.assistant.usage.*
 import kotlinx.coroutines.runBlocking
 
 class ImageUsageLogTest {
+    @Test fun malformedLogsArePreservedThroughNewEntriesReceiptsAndSeeding() {
+        for (original in listOf("{broken", UsageLog.encode(UsageLog.EMPTY).dropLast(1))) {
+            val initial = UsageLog.requestUpdate(original, entry())!!
+            assertEquals(original, initial.quarantinedLog)
+            val seeded = UsageLog.decode(UsageLog.encode(initial))!!.seed(emptyList(), 456)
+            val appended = seeded.append(listOf(entry().copy(id = "image-2:image-generation")))
+            val received = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
+            val updated = UsageLog.requestUpdate(UsageLog.encode(appended), received, existingOnly = true)!!
+            val restored = UsageLog.decode(UsageLog.encode(updated))!!
+            assertEquals(original, restored.quarantinedLog)
+            assertTrue(restored.seeded)
+            assertEquals(2, restored.entries.size)
+            assertEquals(0.12, restored.entries.single { it.id == received.id }.record.totalCost!!, 0.0)
+            assertEquals("real-id", restored.entries.single { it.id == received.id }.record.requestId)
+        }
+    }
+
+    @Test fun corruptReceiptLogsRecoverAfterFailedCommitsButValidDeletionsStayDeleted() = runBlocking {
+        val original = "{unreadable old usage"
+        var stored = original
+        var writes = 0
+        val pauses = mutableListOf<Long>()
+        val received = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
+        assertTrue(ImageUsagePersistence.commit(save = {
+            val updated = UsageLog.requestUpdate(stored, received, existingOnly = true)!!
+            if (++writes < 3) {
+                assertEquals(original, stored)
+                ImageUsageSaveResult.RETRY
+            } else {
+                stored = UsageLog.encode(updated)
+                ImageUsageSaveResult.SAVED
+            }
+        }, pause = { pauses += it }))
+        assertEquals(listOf(1_000L, 2_000L), pauses)
+        val restored = UsageLog.decode(stored)!!
+        assertEquals(original, restored.quarantinedLog)
+        assertEquals(1, restored.entries.size)
+        assertEquals(0.12, restored.entries.single().record.totalCost!!, 0.0)
+        assertNull(UsageLog.requestUpdate(UsageLog.encode(restored.copy(entries = emptyList())), received, existingOnly = true))
+        assertNull(UsageLog.requestUpdate(UsageLog.encode(UsageLog.EMPTY), received, existingOnly = true))
+    }
+
     @Test fun fetchedChargeIsRetriedUntilCommitSucceedsWithoutDuplicatingIt() = runBlocking {
         val received = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
         var state = UsageLog.EMPTY.putRequest(entry())

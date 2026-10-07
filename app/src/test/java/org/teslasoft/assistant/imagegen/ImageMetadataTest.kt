@@ -4,6 +4,34 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageMetadataTest {
+    @Test fun unavailableCompressionBoundsUseDefaultsAndKeepVerifiedSettings() {
+        val fields = """{"output_compression":{"type":"boolean"},"output_format":{"type":"enum","values":["png"]}}"""
+        val catalogBody = """{"data":[{"id":"future","supported_parameters":$fields}]}"""
+        val endpointBody = """{"id":"future","endpoints":[{"supported_parameters":$fields}]}"""
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future",
+            parameters = mapOf("output_compression" to "63", "output_format" to "png"))
+        val base = ImageModelMetadata("future")
+        for (rule in listOf(null, OpenRouterImageConfigurationParser.compression("changed layout without limits"))) {
+            val catalog = ImageMetadataParser.catalog(catalogBody, "fixture", rule).single()
+            val endpoint = ImageMetadataParser.endpoints(endpointBody, base, rule)
+            for (model in listOf(catalog, endpoint, ImageMetadataParser.endpoints(endpointBody, catalog, rule))) {
+                assertFalse(model.settingsVerified)
+                assertEquals(mapOf("output_format" to "png"), ImageRequestOptions.resolve(
+                    ImageRequestOptions.forMetadataFallback(request, model), model))
+            }
+        }
+        val rule = OpenRouterImageConfigurationParser.compression("* `output_compression` — 15-87 for webp/jpeg.")!!
+        val catalog = ImageMetadataParser.catalog(catalogBody, "fixture", rule).single()
+        val endpoint = ImageMetadataParser.endpoints(endpointBody, catalog, rule)
+        assertTrue(catalog.settingsVerified); assertTrue(endpoint.settingsVerified)
+        assertEquals(request.parameters, ImageRequestOptions.resolve(request, endpoint))
+        val bounded = fields.replace("""{"type":"boolean"}""", """{"type":"integer","minimum":15,"maximum":87}""")
+        assertTrue(ImageMetadataParser.catalog(catalogBody.replace(fields, bounded), "fixture").single().settingsVerified)
+        assertTrue(ImageMetadataParser.endpoints(endpointBody.replace(fields, bounded), base).settingsVerified)
+        try { ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_compression" to "99")), endpoint); fail("known bounds remain strict") }
+        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+    }
+
     @Test fun unparseableOrPartialSuccessfulReferencesUseUnverifiedSettingsFallback() {
         val model = ImageModelMetadata("future", parameters = listOf(ImageParameter("quality", ImageParameterType.ENUM, listOf("precise"))))
         val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future",

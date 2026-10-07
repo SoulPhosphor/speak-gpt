@@ -39,8 +39,9 @@ object ImageUsageRecorder {
             if (chats.chats.none { ChatPreferences.storedChatId(it) == chatId }) return@synchronized ImageUsageSaveResult.REMOVED
             val prefs = Preferences.getPreferences(context, chatId)
             if (SecurePrefs.isLockedName("settings.$chatId")) return@synchronized ImageUsageSaveResult.RETRY
-            val stored = UsageLog.decode(prefs.getUsageLog()) ?: return@synchronized ImageUsageSaveResult.RETRY
-            if (existingOnly && stored.entries.none { it.id == entry.id }) return@synchronized ImageUsageSaveResult.REMOVED
+            val stored = UsageLog.decode(prefs.getUsageLog())
+            if (existingOnly && stored != null && stored.entries.none { it.id == entry.id })
+                return@synchronized ImageUsageSaveResult.REMOVED
             if (UsageLogStore.putRequest(prefs, entry, existingOnly)) ImageUsageSaveResult.SAVED
             else ImageUsageSaveResult.RETRY
         }

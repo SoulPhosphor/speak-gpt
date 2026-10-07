@@ -157,6 +157,10 @@ object ImageMetadataParser {
         ImageParameter(key, type, values, minimum, maximum, descriptor.imageText("default"))
     }.orEmpty().sortedWith(compareBy({ settingsOrder.indexOf(it.key).takeIf { n -> n >= 0 } ?: Int.MAX_VALUE }, { it.key }))
 
+    /** A published compression field without usable bounds depends on unavailable settings evidence. */
+    private fun settingsVerified(fields: JsonObject?, parsed: List<ImageParameter>): Boolean =
+        fields?.has("output_compression") != true || parsed.any { it.key == "output_compression" }
+
     fun tariffs(value: JsonElement?): List<ImageTariff> = value?.takeIf { it.isJsonArray }?.asJsonArray
         ?.mapNotNull { element ->
             val line = element.imageObject() ?: return@mapNotNull null
@@ -182,9 +186,12 @@ object ImageMetadataParser {
             if (modalities != null && modalities.isNotEmpty() && "image" !in modalities) return@mapNotNull null
             if (model.get("capabilities").imageObject()?.get("image_generation")
                     ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean == false) return@mapNotNull null
-            ImageModelMetadata(id, parameters(model.get("supported_parameters").imageObject(), compression),
+            val fields = model.get("supported_parameters").imageObject()
+            val parsedParameters = parameters(fields, compression)
+            ImageModelMetadata(id, parsedParameters,
                 tariffs = tariffs(model.get("pricing")), sourceUrl = sourceUrl,
-                tariffsComplete = tariffsComplete(model.get("pricing")))
+                tariffsComplete = tariffsComplete(model.get("pricing")),
+                settingsVerified = settingsVerified(fields, parsedParameters))
         }
     }
 
@@ -193,6 +200,7 @@ object ImageMetadataParser {
         val root = parsed.get("data").imageObject() ?: parsed
         if (root.imageText("id") != model.id) return model.withoutEndpointEvidence()
         val data = root.imageArray("endpoints") ?: return model.withoutEndpointEvidence()
+        var verified = model.settingsVerified
         val endpoints = data.map { element ->
             // A partial route list cannot prove that every possible serving route
             // accepts these options or charges these rates.
@@ -201,8 +209,10 @@ object ImageMetadataParser {
             if (fields?.entrySet()?.any { (_, value) -> value.imageObject()?.let { descriptor ->
                     descriptor.imageText("type") == "range" && !completeRange(descriptor)
                 } == true } == true) return model.withoutEndpointEvidence()
+            val parsedParameters = parameters(fields, compression)
+            verified = verified && settingsVerified(fields, parsedParameters)
             ImageServingMetadata(endpoint.imageText("provider_name"), endpoint.imageText("provider_slug"),
-                parameters(fields, compression), tariffs(endpoint.get("pricing")),
+                parsedParameters, tariffs(endpoint.get("pricing")),
                 tariffsComplete(endpoint.get("pricing")))
         }
         // Without pinning a serving provider, expose only parameters all routes support.
@@ -229,7 +239,8 @@ object ImageMetadataParser {
             } == true
         }
         return model.copy(parameters = common, tariffs = emptyList(),
-            tariffsComplete = true, endpointRecords = endpoints, requiresExplicitOutputFormat = explicitFormatRequired)
+            tariffsComplete = true, endpointRecords = endpoints, requiresExplicitOutputFormat = explicitFormatRequired,
+            settingsVerified = verified)
     }
 }
 

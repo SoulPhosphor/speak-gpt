@@ -85,7 +85,9 @@ data class UsageSection(
  */
 data class UsageLogState(
     val seeded: Boolean,
-    val entries: List<UsageLogEntry>
+    val entries: List<UsageLogEntry>,
+    /** Exact unreadable log retained in the same durable commit as recovered entries. */
+    val quarantinedLog: String? = null
 ) {
     fun append(newEntries: List<UsageLogEntry>): UsageLogState =
         copy(entries = entries + newEntries)
@@ -108,7 +110,7 @@ data class UsageLogState(
                 UsageLog.entry(UsageCategory.CHAT, messageId, record, nowMs)
             }
         }
-        return UsageLogState(seeded = true, entries = fromMessages + entries)
+        return copy(seeded = true, entries = fromMessages + entries)
     }
 
     /**
@@ -152,6 +154,18 @@ object UsageLog {
 
     val EMPTY = UsageLogState(seeded = false, entries = emptyList())
 
+    /** Recovery preserves the exact original value; callers commit it together with new evidence. */
+    fun recover(value: String?): UsageLogState =
+        decode(value) ?: EMPTY.copy(quarantinedLog = value)
+
+    /** Corruption cannot prove that a receipt's existing entry was deliberately removed. */
+    fun requestUpdate(value: String?, entry: UsageLogEntry, existingOnly: Boolean = false): UsageLogState? {
+        val decoded = decode(value)
+        val state = decoded ?: recover(value)
+        val updated = state.putRequest(entry, existingOnly && decoded != null)
+        return updated.takeUnless { it === state }
+    }
+
     fun entry(
         category: UsageCategory,
         messageId: String?,
@@ -180,6 +194,7 @@ object UsageLog {
             addProperty("version", VERSION)
             addProperty("seeded", state.seeded)
             add("entries", entries)
+            state.quarantinedLog?.let { addProperty("quarantinedLog", it) }
         }.toString()
     }
 
@@ -242,7 +257,8 @@ object UsageLog {
                     function = UsageFunction.fromKey(o.get("function")?.takeUnless { it.isJsonNull }?.asString)
                 )
             }.orEmpty()
-            UsageLogState(seeded = root.get("seeded")?.asBoolean == true, entries = entries)
+            UsageLogState(seeded = root.get("seeded")?.asBoolean == true, entries = entries,
+                quarantinedLog = root.get("quarantinedLog")?.takeUnless { it.isJsonNull }?.asString)
         } catch (_: Exception) {
             null
         }
@@ -252,13 +268,14 @@ object UsageLog {
 /**
  * Reads and writes a chat's log in its settings file. The chat screen and the
  * summarizer can append concurrently, so every read-modify-write holds one
- * lock. An unreadable stored log is replaced rather than blocking new usage.
+ * lock. An unreadable stored log is quarantined within the replacement, preserving
+ * its exact text in the same durable write as new usage.
  */
 object UsageLogStore {
     private val lock = Any()
 
     fun read(prefs: org.teslasoft.assistant.preferences.Preferences): UsageLogState =
-        UsageLog.decode(prefs.getUsageLog()) ?: UsageLog.EMPTY
+        UsageLog.recover(prefs.getUsageLog())
 
     /** Copies the chat's message records in once, before anything can delete them. */
     fun seed(
@@ -285,9 +302,8 @@ object UsageLogStore {
 
     /** Enriches the same image request with its delayed billing receipt, never adds a second charge. */
     fun putRequest(prefs: org.teslasoft.assistant.preferences.Preferences, entry: UsageLogEntry, existingOnly: Boolean = false): Boolean = synchronized(lock) {
-        val state = read(prefs)
-        val updated = state.putRequest(entry, existingOnly)
-        if (updated === state) return@synchronized false
+        val updated = UsageLog.requestUpdate(prefs.getUsageLog(), entry, existingOnly)
+            ?: return@synchronized false
         prefs.commitUsageLog(UsageLog.encode(updated))
     }
 }
