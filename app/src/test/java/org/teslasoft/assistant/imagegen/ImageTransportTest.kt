@@ -10,6 +10,25 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 class ImageTransportTest {
     private fun request() = ImageGenerationRequest("draw a tree", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future/image")
 
+    @Test fun editedOpenRouterProfilesUseTheCurrentHostForImageDiscoveryAndGeneration() {
+        MockWebServer().use { server ->
+            val endpoint = ApiEndpointObject("edited", "https://openrouter.ai/api/v1/", "secret",
+                identity = ApiEndpointObject.IDENTITY_OPENROUTER)
+            assertEquals(ImageProviderKind.OPENROUTER, ImageProviderKind.forEndpoint(endpoint))
+            endpoint.host = server.url("/custom/v1/").toString()
+            assertTrue(endpoint.isOpenRouterRouting())
+            assertEquals(ImageProviderKind.COMPATIBLE, ImageProviderKind.forEndpoint(endpoint))
+            server.enqueue(MockResponse().setBody("""{"data":[{"id":"future/image"}]}"""))
+            assertEquals("future/image", ImageCatalogClient.models(endpoint, fresh = true).single().id)
+            assertEquals("/custom/v1/models", server.takeRequest().path)
+            assertEquals("/custom/v1/images/generations", OpenAiImageAdapter.buildHttpRequest(request(), endpoint).url.encodedPath)
+            endpoint.host = "https://api.openai.com/v1/"
+            assertEquals(ImageProviderKind.OPENAI, ImageProviderKind.forEndpoint(endpoint))
+            endpoint.host = "https://generativelanguage.googleapis.com/v1beta/"
+            assertEquals(ImageProviderKind.GEMINI, ImageProviderKind.forEndpoint(endpoint))
+        }
+    }
+
     @Test fun knownRootHostsResolveTheirImageBaseWithoutChangingCustomBases() {
         assertEquals("https://api.openai.com/v1/images/generations", OpenAiImageAdapter.imagesUrl(ApiEndpointObject("O", "https://api.openai.com", "k")))
         assertEquals("https://openrouter.ai/api/v1/", ImageApiRoutes.base(ApiEndpointObject("R", "https://openrouter.ai", "k")))

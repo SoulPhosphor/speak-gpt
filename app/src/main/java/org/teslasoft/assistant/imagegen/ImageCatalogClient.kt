@@ -241,12 +241,14 @@ object GeminiImageMetadataParser {
                     .findAll(preceding).lastOrNull()?.groupValues?.get(1)?.let(::text)?.removePrefix("Gemini ")
                 lastHeading != null && lastHeading in labels
             }
-            val ratioSets = (selectedTable?.let { listOf(it) } ?: tables).map { table ->
+            val tableRatios = selectedTable?.let { table ->
                 Regex("<tr[^>]*>(.*?)</tr>", RegexOption.DOT_MATCHES_ALL).findAll(table.value).mapNotNull { row ->
                     Regex("<td[^>]*>(.*?)</td>", RegexOption.DOT_MATCHES_ALL).find(row.groupValues[1])
                         ?.groupValues?.get(1)?.let(::text)?.takeIf { it.matches(Regex("[0-9]+:[0-9]+")) }
                 }.toSet()
-            }
+            }.orEmpty()
+            val headers = selectedTable?.let { table -> Regex("<th[^>]*>(.*?)</th>", RegexOption.DOT_MATCHES_ALL)
+                .findAll(table.value).map { text(it.groupValues[1]) }.toList() }.orEmpty()
             ids.map { id ->
                 val protocol = examples.filter { example ->
                     Regex("[\"']model[\"']\\s*:\\s*[\"']" + Regex.escape(id) + "[\"']").containsMatchIn(example) ||
@@ -256,11 +258,12 @@ object GeminiImageMetadataParser {
                 val properties = if (interactions) interactionProperties else legacyProperties
                 val nativeSizes = schemaValues(properties, if (interactions) "image_size" else "imageSize")
                 val ratios = schemaValues(properties, if (interactions) "aspect_ratio" else "aspectRatio")
-                    .filter { value -> ratioSets.isNotEmpty() && ratioSets.all { value in it } }
-                val sizes = selectedTable?.let { table ->
-                    val headers = Regex("<th[^>]*>(.*?)</th>", RegexOption.DOT_MATCHES_ALL).findAll(table.value).map { text(it.groupValues[1]) }.toList()
-                    nativeSizes.filter { size -> headers.any { it.startsWith("$size resolution") || it.startsWith("${size}px resolution") } }
-                }.orEmpty()
+                    .filter { value -> value in tableRatios }
+                fun matchesSize(header: String, size: String) = header.startsWith("$size resolution") || header.startsWith("${size}px resolution")
+                val sizes = nativeSizes.filter { size -> headers.any { matchesSize(it, size) } }
+                val resolutionHeaders = headers.filter { it.contains("resolution", true) }
+                val tableVerified = selectedTable != null && ratios.isNotEmpty() && resolutionHeaders.isNotEmpty() &&
+                    resolutionHeaders.all { header -> header.equals("Resolution", true) || nativeSizes.any { matchesSize(header, it) } }
                 ImageModelMetadata(id, buildList {
                     if (sizes.isNotEmpty()) add(ImageParameter("resolution", ImageParameterType.ENUM, sizes))
                     if (ratios.isNotEmpty()) add(ImageParameter("aspect_ratio", ImageParameterType.ENUM, ratios))
@@ -269,7 +272,7 @@ object GeminiImageMetadataParser {
                         if (formats.isNotEmpty()) add(ImageParameter("output_format", ImageParameterType.ENUM, formats))
                     }
                 }, sourceUrl = GUIDE_URL + " | " + if (interactions) INTERACTIONS_SCHEMA_URL else SCHEMA_URL,
-                    nativeSizes = nativeSizes, geminiTransport = protocol, settingsVerified = properties != null)
+                    nativeSizes = nativeSizes, geminiTransport = protocol, settingsVerified = properties != null && tableVerified)
             }
         }.distinctBy { it.id }
     }

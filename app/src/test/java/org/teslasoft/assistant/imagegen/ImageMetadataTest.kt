@@ -240,6 +240,7 @@ Model ID: `future-base`
         val guide = """<h2>Model selection</h2><ul><li><a href="/gemini-api/docs/models/future-native">Future Image</a></li></ul><h2>Examples</h2><pre>curl https://generativelanguage.googleapis.com/v1beta/interactions -d '{"model":"future-native"}'</pre><h3>Future Image</h3><table><tr><th>Aspect ratio</th><th>9K resolution</th></tr><tr><td>7:4</td><td>7x4</td></tr></table>"""
         val schema = """{"components":{"schemas":{"ImageResponseFormat":{"properties":{"aspect_ratio":{"enum":["7:4"]},"image_size":{"enum":["9K"]},"mime_type":{"enum":["image/jpeg"]}}}}}}"""
         val model = GeminiImageMetadataParser.models(guide, null, schema).single()
+        assertTrue(model.settingsVerified)
         assertEquals(GeminiImageTransport.INTERACTIONS, model.geminiTransport)
         assertEquals(listOf("9K"), model.parameters.single { it.key == "resolution" }.values)
         assertEquals(listOf("image/jpeg"), model.parameters.single { it.key == "output_format" }.values)
@@ -248,6 +249,31 @@ Model ID: `future-base`
         val models = GeminiImageMetadataParser.models(mixed, null, schema).associateBy { it.id }
         assertEquals(GeminiImageTransport.INTERACTIONS, models["future-native"]!!.geminiTransport)
         assertEquals(GeminiImageTransport.GENERATE_CONTENT, models["legacy-native"]!!.geminiTransport)
+    }
+
+    @Test fun incompleteGeminiModelTablesUseDefaultsWhileRetainingVerifiedSchemaFields() {
+        val selection = """<h2>Model selection</h2><ul><li><a href="/gemini-api/docs/models/future-native">Future Image</a></li></ul><h2>Examples</h2><pre>curl https://generativelanguage.googleapis.com/v1beta/interactions -d '{"model":"future-native"}'</pre>"""
+        val table = """<h3>Future Image</h3><table><tr><th>Aspect ratio</th><th>9K resolution</th></tr><tr><td>7:4</td><td>7x4</td></tr></table>"""
+        val schema = """{"components":{"schemas":{"ImageResponseFormat":{"properties":{"aspect_ratio":{"enum":["7:4"]},"image_size":{"enum":["9K"]},"mime_type":{"enum":["image/jpeg"]}}}}}}"""
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future-native",
+            parameters = mapOf("resolution" to "9K", "aspect_ratio" to "7:4", "output_format" to "image/jpeg"))
+        val complete = GeminiImageMetadataParser.models(selection + table, null, schema).single()
+        assertTrue(complete.settingsVerified)
+        assertEquals(request.parameters, ImageRequestOptions.resolve(request, complete))
+        for (broken in listOf("", table.replace("Future Image", "Changed heading"), table.substringBefore("<tr><td>"),
+                table.replace("<tr><td>7:4</td><td>7x4</td></tr>", ""), table.replace("9K resolution", "Changed column"))) {
+            val fallback = GeminiImageMetadataParser.models(selection + broken, null, schema).single()
+            assertFalse(fallback.settingsVerified)
+            assertEquals(GeminiImageTransport.INTERACTIONS, fallback.geminiTransport)
+            val retained = ImageRequestOptions.forMetadataFallback(request, fallback)
+            assertEquals(retained.parameters, ImageRequestOptions.resolve(retained, fallback))
+            assertEquals("image/jpeg", retained.parameters["output_format"])
+            if (broken.isEmpty() || broken.contains("Changed heading") || !broken.contains("</table>")) {
+                assertFalse(retained.parameters.containsKey("resolution"))
+                assertFalse(retained.parameters.containsKey("aspect_ratio"))
+            }
+        }
+        assertFalse(GeminiImageMetadataParser.models(selection + table, null, schema.replace("\"9K\"", "\"other\"")).single().settingsVerified)
     }
 
     @Test fun interactionsDiscoveryDoesNotRequireAnOlderGenerateContentMethodOrCatalogEntry() {

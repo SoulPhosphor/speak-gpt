@@ -16,7 +16,8 @@ enum class ImageProviderKind {
             "openrouter.ai" -> OPENROUTER
             "nano-gpt.com", "api.nano-gpt.com" -> NANOGPT
             "generativelanguage.googleapis.com" -> GEMINI
-            else -> if (endpoint.isOpenRouterRouting()) OPENROUTER else COMPATIBLE
+            // Chat routing identity survives profile URL edits; image protocol does not.
+            else -> COMPATIBLE
         }
     }
 }
