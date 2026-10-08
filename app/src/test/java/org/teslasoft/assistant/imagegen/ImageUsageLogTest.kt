@@ -6,6 +6,110 @@ import org.teslasoft.assistant.usage.*
 import kotlinx.coroutines.runBlocking
 
 class ImageUsageLogTest {
+    @Test fun malformedScalarFieldsAreQuarantinedInsteadOfBeingCoerced() {
+        val valid = UsageLog.encode(UsageLog.EMPTY.putRequest(entry()))
+        val originals = mutableListOf<String>()
+        for ((key, bad) in listOf("seeded" to "\"true\"", "seeded" to "null", "quarantinedLog" to "7")) {
+            val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
+            root.add(key, com.google.gson.JsonParser.parseString(bad))
+            originals += root.toString()
+        }
+        for ((key, bad) in listOf("category" to "\"future\"", "category" to "7", "function" to "\"future\"",
+                "function" to "7", "messageId" to "7", "recordedAtMs" to "1.5", "recordedAtMs" to "\"4\"",
+                "recordedAtMs" to "9223372036854775808")) {
+            val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
+            root.getAsJsonArray("entries").first().asJsonObject.add(key, com.google.gson.JsonParser.parseString(bad))
+            originals += root.toString()
+        }
+        for ((key, bad) in listOf("inputTokens" to "1.5", "inputTokens" to "2147483648", "inputTokens" to "\"3\"",
+                "requestStartedAtMs" to "1.5", "requestStartedAtMs" to "9223372036854775808", "totalCost" to "1e999",
+                "totalCost" to "true", "totalCost" to "\"3\"", "requestId" to "7")) {
+            val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
+            root.getAsJsonArray("entries").first().asJsonObject.getAsJsonObject("record").add(key, com.google.gson.JsonParser.parseString(bad))
+            originals += root.toString()
+        }
+        for (original in originals) {
+            assertNull(UsageLog.decode(original))
+            val recovered = UsageLog.decode(UsageLog.encode(UsageLog.requestUpdate(original, entry())!!))!!
+            assertEquals(original, recovered.quarantinedLog)
+        }
+        val legacy = com.google.gson.JsonParser.parseString(valid).asJsonObject
+        val logged = legacy.getAsJsonArray("entries").first().asJsonObject
+        logged.remove("recordedAtMs")
+        logged.addProperty("category", "attachments")
+        assertEquals(UsageCategory.SUMMARIZING, UsageLog.decode(legacy.toString())!!.entries.single().category)
+        assertEquals(0L, UsageLog.decode(legacy.toString())!!.entries.single().recordedAtMs)
+    }
+
+    @Test fun unreadableNestedMetersQuarantineTheWholeLogBeforeReceiptRecovery() {
+        val valid = UsageLog.encode(UsageLog.EMPTY.putRequest(entry()))
+        val validMeters = UsageMeterCodec.encode(listOf(UsageMeter(UsageMeterComponent.IMAGES, UsageMeterUnit.IMAGE,
+            1.0, UsageQuantitySource.PROVIDER_REPORTED)))
+        val malformed = mutableListOf<com.google.gson.JsonElement>(com.google.gson.JsonNull.INSTANCE,
+            com.google.gson.JsonObject(), com.google.gson.JsonPrimitive("not an array"), com.google.gson.JsonPrimitive(7))
+        for (bad in listOf("null", "7", "[]", "{}", """{"component":"future","unit":"image"}""",
+                """{"component":"images","unit":"future"}""")) {
+            val meters = validMeters.deepCopy()
+            meters.add(com.google.gson.JsonParser.parseString(bad))
+            malformed.add(meters)
+        }
+        for (key in listOf("quantity", "priceAmount", "priceQuantity", "cost", "currency", "quantitySource")) {
+            for (bad in listOf("true", "{}", "[]", "1e999")) {
+                val meters = validMeters.deepCopy()
+                meters.first().asJsonObject.add(key, com.google.gson.JsonParser.parseString(bad))
+                malformed.add(meters)
+            }
+        }
+        for (key in listOf("quantity", "priceAmount", "priceQuantity", "cost", "quantitySource")) {
+            val meters = validMeters.deepCopy()
+            meters.first().asJsonObject.addProperty(key, "unreadable")
+            malformed.add(meters)
+        }
+        val receipt = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
+        for (meters in malformed) {
+            assertNull(UsageMeterCodec.decode(meters))
+            val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
+            root.getAsJsonArray("entries").first().asJsonObject.getAsJsonObject("record").add("meters", meters)
+            val original = root.toString()
+            assertNull(UsageLog.decode(original))
+            val restored = UsageLog.decode(UsageLog.encode(UsageLog.requestUpdate(original, receipt, existingOnly = true)!!))!!
+            assertEquals(original, restored.quarantinedLog)
+            assertEquals("real-id", restored.entries.single().record.requestId)
+            assertEquals(0.12, restored.entries.single().record.totalCost!!, 0.0)
+        }
+        val legacy = com.google.gson.JsonParser.parseString(valid).asJsonObject
+        legacy.getAsJsonArray("entries").first().asJsonObject.getAsJsonObject("record").remove("meters")
+        assertNull(UsageLog.decode(legacy.toString())!!.entries.single().record.meters)
+        val meterRoot = com.google.gson.JsonParser.parseString(valid).asJsonObject
+        meterRoot.getAsJsonArray("entries").first().asJsonObject.getAsJsonObject("record").add("meters", validMeters)
+        assertEquals(1, UsageLog.decode(meterRoot.toString())!!.entries.single().record.meters!!.size)
+    }
+
+    @Test fun unsupportedUsageLogVersionsPreserveAllOriginalFields() {
+        val valid = UsageLog.encode(UsageLog.EMPTY.putRequest(entry()))
+        val originals = mutableListOf<String>()
+        for (version in listOf("2", "0", "-1", "1.5", "1e30", "null", "\"1\"", "true", "{}", "[]")) {
+            val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
+            root.add("version", com.google.gson.JsonParser.parseString(version))
+            root.addProperty("futureEvidence", "keep this unchanged")
+            originals += root.toString()
+        }
+        val missing = com.google.gson.JsonParser.parseString(valid).asJsonObject
+        missing.remove("version")
+        originals += missing.toString()
+        for (original in originals) {
+            assertNull(UsageLog.decode(original))
+            val restored = UsageLog.decode(UsageLog.encode(UsageLog.requestUpdate(original, entry())!!))!!
+            assertEquals(original, restored.quarantinedLog)
+            assertEquals(1, restored.entries.size)
+        }
+        for (version in listOf("1", "1.0", "1e0")) {
+            val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
+            root.add("version", com.google.gson.JsonParser.parseString(version))
+            assertNotNull(UsageLog.decode(root.toString()))
+        }
+    }
+
     @Test fun requiredUsageRecordStringsAreValidatedBeforeRecovery() {
         val valid = UsageLog.encode(UsageLog.EMPTY.putRequest(entry()))
         val originals = mutableListOf<String>()

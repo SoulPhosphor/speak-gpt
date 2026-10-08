@@ -209,19 +209,24 @@ object UsageMeterCodec {
         }
     }
 
-    /** Null when [value] is absent. A meter this version cannot read is left
-     * out; the request's stored total is not affected by it. */
+    /** Null when absent or unreadable. Callers must distinguish presence before replacing stored evidence. */
     fun decode(value: JsonElement?): List<UsageMeter>? {
         if (value == null || value.isJsonNull || !value.isJsonArray) return null
-        return value.asJsonArray.mapNotNull { element ->
-            val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-            val component = UsageMeterComponent.fromKey(o.string("component")) ?: return@mapNotNull null
-            val unit = UsageMeterUnit.fromKey(o.string("unit")) ?: return@mapNotNull null
+        return value.asJsonArray.map { element ->
+            val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+            val component = UsageMeterComponent.fromKey(o.string("component")) ?: return null
+            val unit = UsageMeterUnit.fromKey(o.string("unit")) ?: return null
+            if (listOf("quantity", "priceAmount", "priceQuantity", "cost").any { key ->
+                    o.has(key) && !o.get(key).isJsonNull && o.number(key) == null }) return null
+            if (listOf("quantitySource", "currency").any { key ->
+                    o.has(key) && !o.get(key).isJsonNull && o.string(key) == null }) return null
+            val quantitySource = UsageQuantitySource.fromKey(o.string("quantitySource"))
+            if (o.has("quantitySource") && !o.get("quantitySource").isJsonNull && quantitySource == null) return null
             UsageMeter(
                 component = component,
                 unit = unit,
                 quantity = o.number("quantity"),
-                quantitySource = UsageQuantitySource.fromKey(o.string("quantitySource")),
+                quantitySource = quantitySource,
                 priceAmount = o.number("priceAmount"),
                 priceQuantity = o.number("priceQuantity"),
                 currency = o.string("currency"),
