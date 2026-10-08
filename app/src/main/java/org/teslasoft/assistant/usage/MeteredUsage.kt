@@ -279,8 +279,11 @@ object UsageMeterCodec {
 
     private fun JsonObject.string(key: String): String? = get(key)
         ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
-    private fun JsonObject.number(key: String): Double? = get(key)
-        ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asDouble?.takeIf { it.isFinite() }
+    private fun JsonObject.number(key: String): Double? {
+        val field = get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber } ?: return null
+        val number = field.asDouble.takeIf { it.isFinite() } ?: return null
+        return number.takeUnless { it == 0.0 && runCatching { field.asBigDecimal.signum() != 0 }.getOrDefault(true) }
+    }
     private fun JsonObject.bool(key: String): Boolean? = get(key)
         ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean
 }

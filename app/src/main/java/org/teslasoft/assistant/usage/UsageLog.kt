@@ -281,7 +281,8 @@ object UsageLog {
                 if (listOf("inputPricePerToken", "outputPricePerToken", "cachedInputPricePerToken", "cacheWriteInputPricePerToken",
                         "inputCost", "outputCost", "uncachedInputCost", "cachedInputCost", "totalCost", "reportedChargeAmount")
                         .any { !validOptional(it) { field -> field.isNumber && field.asDouble.isFinite() &&
-                            runCatching { field.asBigDecimal.signum() >= 0 }.getOrDefault(false) } }) return null
+                            runCatching { val sign = field.asBigDecimal.signum()
+                                sign >= 0 && (field.asDouble != 0.0 || sign == 0) }.getOrDefault(false) } }) return null
                 if (listOf("apiEndpoint", "costSource", "requestId", "requestedModel", "requestParameters", "pricingSource",
                         "pricingEvidence", "reportedChargeCurrency", "reportedChargeDecimal")
                         .any { !validOptional(it) { field -> field.isString } }) return null

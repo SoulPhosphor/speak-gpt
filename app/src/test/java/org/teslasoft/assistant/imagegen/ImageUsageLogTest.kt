@@ -6,14 +6,15 @@ import org.teslasoft.assistant.usage.*
 import kotlinx.coroutines.runBlocking
 
 class ImageUsageLogTest {
-    @Test fun negativeMeterValuesAndNonpositivePriceBasesPreserveTheOriginalLog() {
+    @Test fun invalidMeterValuesAndNonpositivePriceBasesPreserveTheOriginalLog() {
         val valid = UsageLog.encode(UsageLog.EMPTY.putRequest(entry()))
         val validMeters = UsageMeterCodec.encode(listOf(UsageMeter(UsageMeterComponent.IMAGES, UsageMeterUnit.IMAGE,
             1.0, UsageQuantitySource.PROVIDER_REPORTED, priceAmount = 0.1, priceQuantity = 1.0, currency = "USD", cost = 0.1)))
         val receipt = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
         val invalid = listOf("quantity" to "-1", "priceAmount" to "-0.1", "cost" to "-5",
             "priceQuantity" to "-1", "priceQuantity" to "0", "priceQuantity" to "1e-999",
-            "quantity" to "-1e-999", "priceAmount" to "-1e-999", "cost" to "-1e-999")
+            "quantity" to "-1e-999", "priceAmount" to "-1e-999", "cost" to "-1e-999",
+            "quantity" to "1e-999", "priceAmount" to "1e-999", "cost" to "1e-999")
         for ((key, value) in invalid) {
             val meters = validMeters.deepCopy()
             meters.first().asJsonObject.add(key, com.google.gson.JsonParser.parseString(value))
@@ -38,14 +39,16 @@ class ImageUsageLogTest {
         assertNull(restored.quarantinedLog)
         assertEquals(meters, restored.entries.single().record.meters)
         assertEquals(0.0, MeteredUsageAccounting.aggregate(restored.entries.map { it.record })!!.single().cost, 0.0)
+        val smallest = meters.single().copy(quantity = Double.MIN_VALUE, priceAmount = Double.MIN_VALUE, cost = Double.MIN_VALUE)
+        assertEquals(listOf(smallest), UsageMeterCodec.decode(UsageMeterCodec.encode(listOf(smallest))))
     }
 
-    @Test fun negativeRecordCountsPricesAndChargesAreQuarantinedToo() {
+    @Test fun invalidRecordCountsPricesAndChargesAreQuarantinedToo() {
         val valid = UsageLog.encode(UsageLog.EMPTY.putRequest(entry()))
         val counts = listOf("inputTokens", "outputTokens", "totalTokens", "cachedInputTokens", "cacheWriteInputTokens")
         val charges = listOf("inputPricePerToken", "outputPricePerToken", "cachedInputPricePerToken", "cacheWriteInputPricePerToken",
             "inputCost", "outputCost", "uncachedInputCost", "cachedInputCost", "totalCost", "reportedChargeAmount")
-        val invalid = counts.map { it to "-1" } + charges.flatMap { listOf(it to "-1", it to "-1e-999") } +
+        val invalid = counts.map { it to "-1" } + charges.flatMap { listOf(it to "-1", it to "-1e-999", it to "1e-999") } +
             listOf("reportedChargeDecimal" to "\"-0.12\"", "reportedChargeDecimal" to "\"unreadable\"")
         for ((key, value) in invalid) {
             val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
@@ -60,6 +63,8 @@ class ImageUsageLogTest {
         val record = zero.getAsJsonArray("entries").first().asJsonObject.getAsJsonObject("record")
         (counts + charges).forEach { record.addProperty(it, 0) }
         record.addProperty("reportedChargeDecimal", "0.000")
+        assertNotNull(UsageLog.decode(zero.toString()))
+        charges.forEach { record.addProperty(it, Double.MIN_VALUE) }
         assertNotNull(UsageLog.decode(zero.toString()))
     }
 
