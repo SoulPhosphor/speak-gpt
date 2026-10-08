@@ -62,6 +62,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_image_generation_settings)
         ImageGenerationMigration.runIfNeeded(this)
+        ImageCatalogClient.initializeEvidence(this)
         preferences = Preferences.getPreferences(this, "")
         endpoints = ApiEndpointPreferences.getApiEndpointPreferences(this)
         ScreenChrome.apply(this, findViewById(R.id.action_bar), findViewById(R.id.btn_back))

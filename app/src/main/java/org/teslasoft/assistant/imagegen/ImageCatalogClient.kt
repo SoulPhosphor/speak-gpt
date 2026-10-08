@@ -1,10 +1,15 @@
 package org.teslasoft.assistant.imagegen
 
+import android.content.Context
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.GlobalPreferences
+import org.teslasoft.assistant.preferences.Logger
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -75,41 +80,33 @@ object ImageCatalogClient {
     private val http = ImageMetadataHttp()
     private data class Cached(val time: Long, val models: List<ImageModelMetadata>)
     private val cache = ConcurrentHashMap<String, Cached>()
-    // Extend the existing process-local cache; preferences remain independent.
-    private data class PublishedSettings(val parameters: Set<ImageParameter>,
-        val routes: Set<Set<ImageParameter>>, val explicitFormat: Boolean)
-    private data class CachedRejection(val rejection: ImageOptionRejection, val settings: PublishedSettings?)
-    private val incompatibilities = ConcurrentHashMap<Pair<String, String>, List<CachedRejection>>()
+    private var incompatibilities = ImageCompatibilityEvidence()
+    private var evidenceInitialized = false
     private fun key(endpoint: ApiEndpointObject) = endpoint.host + "|" + endpoint.id + "|" + endpoint.authType + "|" + ImageProviderKind.forEndpoint(endpoint) + "|" + java.security.MessageDigest.getInstance("SHA-256").digest(endpoint.apiKey.toByteArray()).joinToString("") { "%02x".format(it) }
 
-    fun confirmedIncompatibilities(endpoint: ApiEndpointObject, model: String): List<ImageOptionRejection> =
-        incompatibilities[key(endpoint) to model].orEmpty().map { it.rejection }
-
-    private fun publishedSettings(metadata: ImageModelMetadata?): PublishedSettings? {
-        if (metadata?.settingsVerified != true) return null
-        fun normalized(parameters: List<ImageParameter>) = parameters.map { parameter ->
-            parameter.copy(values = parameter.values.map(parameter::canonicalValue).sorted(),
-                defaultValue = parameter.defaultValue?.let(parameter::canonicalValue), requiresValues = parameter.requiresValues.mapValues { it.value.sorted() })
-        }.toSet()
-        return PublishedSettings(normalized(metadata.parameters), metadata.endpointRecords.map { normalized(it.parameters) }.toSet(),
-            metadata.requiresExplicitOutputFormat)
+    /** Both the request and settings paths bind before reading evidence; no asynchronous startup race. */
+    @Synchronized
+    fun initializeEvidence(context: Context) {
+        if (evidenceInitialized) return
+        val preferences = GlobalPreferences.getPreferences(context.applicationContext)
+        incompatibilities = ImageCompatibilityEvidence(preferences::getImageCompatibilityEvidence) { scope, json ->
+            preferences.commitImageCompatibilityEvidence(scope, json).also { saved ->
+                if (!saved) Logger.log(context.applicationContext, "image_generation", "ImageCompatibility", "error",
+                    "Confirmed image compatibility evidence could not be saved; restart recovery may be incomplete.")
+            }
+        }
+        evidenceInitialized = true
     }
+
+    fun confirmedIncompatibilities(endpoint: ApiEndpointObject, model: String): List<ImageOptionRejection> =
+        incompatibilities.confirmed(endpoint, model)
 
     fun rememberIncompatibility(endpoint: ApiEndpointObject, model: String, rejection: ImageOptionRejection,
-        metadata: ImageModelMetadata? = null) {
-        val contextual = rejection.selection?.let {
-            rejection.copy(selection = ImageRequestOptions.effectiveParameters(it, metadata))
-        } ?: rejection
-        val entry = CachedRejection(contextual, publishedSettings(metadata))
-        incompatibilities.compute(key(endpoint) to model) { _, previous -> (previous.orEmpty() + entry).distinct() }
-    }
+        metadata: ImageModelMetadata? = null): Boolean = incompatibilities.remember(endpoint, model, rejection, metadata)
 
     /** Failed/incomplete refreshes and unchanged documents retain evidence. Updated authoritative settings supersede it. */
     internal fun refreshedSettings(endpoint: ApiEndpointObject, metadata: ImageModelMetadata) {
-        val settings = publishedSettings(metadata) ?: return
-        incompatibilities.computeIfPresent(key(endpoint) to metadata.id) { _, previous ->
-            previous.filter { it.settings == settings }.takeIf { it.isNotEmpty() }
-        }
+        incompatibilities.refreshed(endpoint, metadata)
     }
 
     fun cachedModel(endpoint: ApiEndpointObject, model: String): ImageModelMetadata? =
@@ -212,6 +209,112 @@ object ImageCatalogClient {
         return models
     }
 
+}
+
+/** Durable extension of the metadata cache, using the existing global preferences store.
+ * Only structured rejections enter here. Prompts, raw errors and credentials never enter the codec.
+ * Synchronous read/modify/write prevents concurrent requests from losing each other's evidence. */
+internal class ImageCompatibilityEvidence(
+    private val read: (String) -> String? = { null },
+    private val write: (String, String) -> Boolean = { _, _ -> true }
+) {
+    private data class Entry(val rejection: ImageOptionRejection, val settings: String?)
+    private val cache = mutableMapOf<String, List<Entry>>()
+
+    private fun digest(value: String): String = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
+    private fun scope(endpoint: ApiEndpointObject, model: String): String = digest(JsonArray().apply {
+        // JSON fields avoid delimiter collisions; the persisted key is only the final digest.
+        add(endpoint.host); add(endpoint.id); add(endpoint.authType)
+        add(ImageProviderKind.forEndpoint(endpoint).name); add(digest(endpoint.apiKey)); add(model)
+    }.toString())
+
+    private fun settings(metadata: ImageModelMetadata?): String? {
+        if (metadata?.settingsVerified != true) return null
+        fun normalized(parameters: List<ImageParameter>): String = com.google.gson.Gson().toJson(parameters.map { parameter ->
+            parameter.copy(values = parameter.values.map(parameter::canonicalValue).distinct().sorted(),
+                defaultValue = parameter.defaultValue?.let(parameter::canonicalValue),
+                requiresValues = parameter.requiresValues.toSortedMap().mapValues { it.value.distinct().sorted() })
+        }.distinct().sortedBy { it.key })
+        return digest(JsonArray().apply {
+            add(normalized(metadata.parameters))
+            add(JsonArray().apply { metadata.endpointRecords.map { normalized(it.parameters) }.distinct().sorted().forEach { add(it) } })
+            add(metadata.requiresExplicitOutputFormat); add(metadata.geminiTransport?.name)
+        }.toString())
+    }
+
+    private fun entries(scope: String): List<Entry> = cache.getOrPut(scope) {
+        runCatching { read(scope)?.let(::decode).orEmpty() }.getOrDefault(emptyList())
+    }
+
+    @Synchronized
+    fun confirmed(endpoint: ApiEndpointObject, model: String): List<ImageOptionRejection> =
+        entries(scope(endpoint, model)).map { it.rejection }
+
+    @Synchronized
+    fun remember(endpoint: ApiEndpointObject, model: String, rejection: ImageOptionRejection,
+        metadata: ImageModelMetadata? = null): Boolean {
+        require(rejection.parameter.isNotBlank())
+        require(rejection.selection == null || rejection.parameter in rejection.selection)
+        val contextual = rejection.selection?.let {
+            rejection.copy(selection = ImageRequestOptions.effectiveParameters(it, metadata))
+        } ?: rejection
+        val scope = scope(endpoint, model)
+        val next = (entries(scope) + Entry(contextual, settings(metadata))).distinct()
+        cache[scope] = next // Retain confirmed evidence in this process even if storage fails.
+        return runCatching { write(scope, encode(next)) }.getOrDefault(false)
+    }
+
+    @Synchronized
+    fun refreshed(endpoint: ApiEndpointObject, metadata: ImageModelMetadata): Boolean {
+        val settings = settings(metadata) ?: return true
+        val scope = scope(endpoint, metadata.id)
+        val previous = entries(scope)
+        val next = previous.filter { it.settings == settings }
+        cache[scope] = next
+        // Write even an empty result: superseded evidence must not return after a restart.
+        // Also retry an earlier failed save/clear when the same metadata is read again.
+        return if (previous.isNotEmpty() || runCatching { read(scope) }.getOrNull() != null)
+            runCatching { write(scope, encode(next)) }.getOrDefault(false) else true
+    }
+
+    private fun encode(entries: List<Entry>): String = JsonObject().apply {
+        addProperty("version", 1)
+        add("rejections", JsonArray().apply { entries.forEach { entry -> add(JsonObject().apply {
+            addProperty("parameter", entry.rejection.parameter)
+            entry.rejection.selection?.let { selection -> add("selection", JsonObject().apply {
+                selection.toSortedMap().forEach { (key, value) -> addProperty(key, value) }
+            }) }
+            entry.settings?.let { addProperty("settings", it) }
+        }) } })
+    }.toString()
+
+    /** Malformed/unknown versions are not evidence and must never disable a setting. */
+    private fun decode(json: String): List<Entry> {
+        val root = imageJson(json) ?: error("Invalid compatibility evidence")
+        val version = root.get("version")?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive
+        require(version?.isNumber == true && version.asString == "1")
+        val array = root.imageArray("rejections") ?: error("Missing compatibility evidence")
+        fun string(value: com.google.gson.JsonElement?): String {
+            require(value?.isJsonPrimitive == true && value.asJsonPrimitive.isString)
+            return value.asString
+        }
+        return array.map { raw ->
+            val entry = raw.imageObject() ?: error("Invalid compatibility entry")
+            val parameter = string(entry.get("parameter")).also { require(it.isNotBlank()) }
+            val selection = if (entry.has("selection")) {
+                val values = entry.get("selection").imageObject() ?: error("Invalid selection")
+                values.entrySet().associate { (key, value) ->
+                    require(key.isNotBlank()); key to string(value)
+                }.also { require(parameter in it) }
+            } else null
+            val settings = if (entry.has("settings")) string(entry.get("settings")).also {
+                require(it.matches(Regex("[0-9a-f]{64}")))
+            } else null
+            Entry(ImageOptionRejection(parameter, selection), settings)
+        }.distinct()
+    }
 }
 
 /** Extracts Google's own model-selection list and per-model size tables, never model-name heuristics. */

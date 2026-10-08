@@ -110,6 +110,7 @@ object ImageGeneratorCoordinator {
         )
 
         try {
+            ImageCatalogClient.initializeEvidence(context)
             if (request.endpointId.isBlank() || request.modelId.isBlank()) {
                 throw ImageGenerationException(ImageErrorCause.NO_GENERATOR_CONFIGURED)
             }
