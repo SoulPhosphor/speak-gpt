@@ -12,15 +12,14 @@ import java.math.BigDecimal
 import java.math.MathContext
 import java.util.Locale
 
-/** Null means the sum cannot be represented by the existing summary field. */
+/** Monetary estimates and measured quantities allow normal rounding; invalid or overflowing sums stay unknown. */
 internal fun checkedUsageSum(values: Iterable<Double>): Double? {
     var sum = BigDecimal.ZERO
     for (value in values) {
         if (!value.isFinite() || value < 0.0) return null
         sum = sum.add(BigDecimal.valueOf(value))
     }
-    val result = sum.toDouble().takeIf { it.isFinite() } ?: return null
-    return result.takeIf { BigDecimal.valueOf(it).compareTo(sum) == 0 }
+    return sum.toDouble().takeIf { it.isFinite() }
 }
 
 internal fun checkedTokenSum(values: Iterable<Int>): Int? {
@@ -236,13 +235,13 @@ object UsageMeterCodec {
         }
     }
 
-    /** Null when absent or unreadable. Callers must distinguish presence before replacing stored evidence. */
+    /** Skip individually unreadable meters while retaining valid historical components. */
     fun decode(value: JsonElement?): List<UsageMeter>? {
         if (value == null || value.isJsonNull || !value.isJsonArray) return null
-        return value.asJsonArray.map { element ->
-            val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return null
-            val component = UsageMeterComponent.fromKey(o.string("component")) ?: return null
-            val unit = UsageMeterUnit.fromKey(o.string("unit")) ?: return null
+        return value.asJsonArray.mapNotNull { element ->
+            val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+            val component = UsageMeterComponent.fromKey(o.string("component")) ?: return@mapNotNull null
+            val unit = UsageMeterUnit.fromKey(o.string("unit")) ?: return@mapNotNull null
             if (listOf("quantity", "priceAmount", "priceQuantity", "cost").any { key ->
                     val field = o.get(key)
                     if (field == null || field.isJsonNull) false else {
@@ -250,11 +249,11 @@ object UsageMeterCodec {
                         number == null || runCatching { field.asBigDecimal.signum() < 0 }.getOrDefault(true) ||
                             (key == "priceQuantity" && number <= 0.0)
                     }
-                }) return null
+                }) return@mapNotNull null
             if (listOf("quantitySource", "currency").any { key ->
-                    o.has(key) && !o.get(key).isJsonNull && o.string(key) == null }) return null
+                    o.has(key) && !o.get(key).isJsonNull && o.string(key) == null }) return@mapNotNull null
             val quantitySource = UsageQuantitySource.fromKey(o.string("quantitySource"))
-            if (o.has("quantitySource") && !o.get("quantitySource").isJsonNull && quantitySource == null) return null
+            if (o.has("quantitySource") && !o.get("quantitySource").isJsonNull && quantitySource == null) return@mapNotNull null
             UsageMeter(
                 component = component,
                 unit = unit,

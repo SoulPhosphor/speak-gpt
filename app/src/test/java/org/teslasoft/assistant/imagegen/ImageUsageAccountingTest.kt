@@ -5,19 +5,24 @@ import org.junit.Test
 import org.teslasoft.assistant.usage.*
 
 class ImageUsageAccountingTest {
-    @Test fun frozenRequestTotalsRejectFinitePrecisionLoss() {
+    @Test fun frozenRequestEstimatesAllowNormalRounding() {
         val body = """{"usage":{"input_tokens_details":{"text_tokens":1,"image_tokens":0},"output_tokens_details":{"text_tokens":1,"image_tokens":0}},"data":[{}]}"""
         val metadata = ImageModelMetadata("new-model", tariffs = listOf(
             ImageTariff("text_input", "token", 0.1, 1.0, "USD"),
             ImageTariff("text_output", "token", 1e-18, 1.0, "USD")))
         val record = attempt(ImageProviderKind.OPENAI, body, metadata).record()
-        assertNull(record.totalCost)
-        assertEquals(CostSource.UNKNOWN.storedValue, record.costSource)
+        assertEquals(0.1, record.totalCost!!, 0.0)
+        assertEquals(CostSource.FROZEN_PRICING.storedValue, record.costSource)
         assertEquals(listOf(0.1, 1e-18), record.meters!!.filter { it.cost != null }.map { it.cost })
         val representable = metadata.copy(tariffs = listOf(
             ImageTariff("text_input", "token", 0.1, 1.0, "USD"),
             ImageTariff("text_output", "token", 0.2, 1.0, "USD")))
         assertEquals(0.3, attempt(ImageProviderKind.OPENAI, body, representable).record().totalCost!!, 0.0)
+        val fractionalRate = metadata.copy(tariffs = listOf(
+            ImageTariff("text_input", "token", 0.1, 1.0, "USD"),
+            ImageTariff("text_output", "token", 1.0, 3.0, "USD")))
+        assertEquals(0.1 + 1.0 / 3.0,
+            attempt(ImageProviderKind.OPENAI, body, fractionalRate).record().totalCost!!, 1e-12)
     }
 
     @Test fun unresolvedOutputIncludesThoughtsWithoutInventingAModalitySplit() {
@@ -40,13 +45,13 @@ class ImageUsageAccountingTest {
                     .single { it.component == UsageMeterComponent.OUTPUT }.quantity!!, 0.0)
                 usage.addProperty(totalKey, 9007199254740992L)
                 usage.addProperty(thoughtsKey, 1)
-                assertNull(attempt(ImageProviderKind.GEMINI, root.toString()).record().meters!!
-                    .single { it.component == UsageMeterComponent.OUTPUT }.quantity)
+                assertEquals(9007199254740992.0, attempt(ImageProviderKind.GEMINI, root.toString()).record().meters!!
+                    .single { it.component == UsageMeterComponent.OUTPUT }.quantity!!, 0.0)
             }
         }
     }
 
-    @Test fun reconciledSplitsRejectInexactModalitySubtotals() {
+    @Test fun reconciledSplitsAllowRoundedModalitySubtotals() {
         for ((rootKey, totalKey, splitKey, countKey) in listOf(
             listOf("usageMetadata", "candidatesTokenCount", "candidatesTokensDetails", "tokenCount"),
             listOf("usage", "total_output_tokens", "output_tokens_by_modality", "tokens"))) {
@@ -59,28 +64,30 @@ class ImageUsageAccountingTest {
             root.add(rootKey, usage)
             val receipt = ImageUsageParser.response(ImageProviderKind.GEMINI, root.toString(), "request")
             assertFalse(receipt.usageVerified)
-            assertEquals(9007199254740994.0, receipt.meters.single { it.component == UsageMeterComponent.OUTPUT }.quantity!!, 0.0)
-            assertFalse(receipt.meters.any { it.component == UsageMeterComponent.TEXT_OUTPUT && it.quantity != null })
+            assertEquals(9007199254740992.0, receipt.meters.single { it.component == UsageMeterComponent.TEXT_OUTPUT }.quantity!!, 0.0)
+            assertEquals(1.0, receipt.meters.single { it.component == UsageMeterComponent.IMAGE_OUTPUT }.quantity!!, 0.0)
         }
     }
 
-    @Test fun finiteInexactMeterAndConversationSumsStayUnknown() {
-        assertNull(checkedUsageSum(listOf(9007199254740992.0, 1.0)))
+    @Test fun roundedMeterAndConversationEstimatesRemainVisible() {
+        assertEquals(9007199254740992.0, checkedUsageSum(listOf(9007199254740992.0, 1.0))!!, 0.0)
         assertEquals(0.3, checkedUsageSum(listOf(0.1, 0.2))!!, 0.0)
-        val rows = listOf(9007199254740992.0, 1.0).map { value ->
+        val rows = listOf(0.1, 1e-18).map { value ->
             TurnUsageRecord("model", "provider", source = TokenCountSource.PROVIDER_REPORTED.storedValue,
-                totalCost = value, meters = listOf(UsageMeter(UsageMeterComponent.IMAGES,
-                    UsageMeterUnit.IMAGE, value, UsageQuantitySource.PROVIDER_REPORTED, cost = value)))
+                totalCost = value, meters = listOf(UsageMeter(UsageMeterComponent.AUDIO_OUTPUT,
+                    UsageMeterUnit.SECOND, value, UsageQuantitySource.PROVIDER_REPORTED, cost = value)))
         }
         val meters = MeteredUsageAccounting.aggregate(rows)!!.single()
-        assertTrue(meters.hasUnknownQuantity)
-        assertTrue(meters.hasUnknownCost)
+        assertFalse(meters.hasUnknownQuantity)
+        assertFalse(meters.hasUnknownCost)
+        assertEquals(0.1, meters.quantity, 0.0)
+        assertEquals(0.1, meters.cost, 0.0)
         for (records in listOf(rows, listOf(rows[0], rows[1].copy(model = "other")))) {
             val summary = TokenUsageAccounting.aggregate(records)
-            assertTrue(summary.hasUnknownCost)
-            assertTrue(summary.totalCost.isFinite())
-            assertEquals(9007199254740992.0, summary.totalCost, 0.0)
-            assertTrue(TokenUsageAccounting.decodeSummary(TokenUsageAccounting.encodeSummary(summary)).hasUnknownCost)
+            assertFalse(summary.hasUnknownCost)
+            assertEquals(0.1, summary.totalCost, 0.0)
+            assertEquals("$0.10000", UsageValueFormatter.cost(summary.totalCost, summary.hasUnknownCost))
+            assertFalse(TokenUsageAccounting.decodeSummary(TokenUsageAccounting.encodeSummary(summary)).hasUnknownCost)
         }
     }
 
@@ -105,7 +112,7 @@ class ImageUsageAccountingTest {
         }
     }
 
-    @Test fun thoughtTokenAdditionRequiresAnExactlyRepresentableCombinedCount() {
+    @Test fun thoughtTokenAdditionAllowsNormalRounding() {
         val native = """{"usageMetadata":{"promptTokenCount":10,"promptTokensDetails":[{"modality":"TEXT","tokenCount":10}],"candidatesTokenCount":9007199254740992,"candidatesTokensDetails":[{"modality":"TEXT","tokenCount":9007199254740992},{"modality":"IMAGE","tokenCount":0}],"thoughtsTokenCount":1},"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"AQ=="}}]}}]}"""
         val interactions = """{"usage":{"total_input_tokens":10,"input_tokens_by_modality":[{"modality":"text","tokens":10}],"total_output_tokens":9007199254740992,"output_tokens_by_modality":[{"modality":"text","tokens":9007199254740992},{"modality":"image","tokens":0}],"total_thought_tokens":1,"total_cached_tokens":0},"steps":[{"type":"model_output","content":[{"type":"image","mime_type":"image/png","data":"Ag=="}]}]}"""
         val metadata = ImageModelMetadata("new-model", tariffs = listOf(
@@ -114,9 +121,10 @@ class ImageUsageAccountingTest {
             ImageTariff("image_output", "token", 3.0, 1000.0, "USD")))
         for (body in listOf(native, interactions)) {
             val request = attempt(ImageProviderKind.GEMINI, body, metadata)
-            assertFalse(request.receipt.usageVerified)
-            assertNull(request.record().totalCost)
-            assertNull(request.record().meters!!.single { it.component == UsageMeterComponent.TEXT_OUTPUT }.quantity)
+            assertTrue(request.receipt.usageVerified)
+            assertNotNull(request.record().totalCost)
+            assertEquals(9007199254740992.0, request.record().meters!!
+                .single { it.component == UsageMeterComponent.TEXT_OUTPUT }.quantity!!, 0.0)
             val representable = body.replace("\"thoughtsTokenCount\":1", "\"thoughtsTokenCount\":2")
                 .replace("\"total_thought_tokens\":1", "\"total_thought_tokens\":2")
             val valid = attempt(ImageProviderKind.GEMINI, representable, metadata)

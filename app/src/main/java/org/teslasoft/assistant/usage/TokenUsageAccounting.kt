@@ -114,16 +114,6 @@ data class ExtendedPricingTier(
         else inputTokens > inputTokenThreshold
 }
 
-/** Compatibility subtotal only; an inexact value must retain its unknown flag. */
-private fun approximateCostSubtotal(values: Iterable<Double>): Double {
-    var sum = java.math.BigDecimal.ZERO
-    for (value in values) {
-        if (!value.isFinite() || value < 0.0) return 0.0
-        sum = sum.add(java.math.BigDecimal.valueOf(value))
-    }
-    return sum.toDouble().takeIf { it.isFinite() } ?: 0.0
-}
-
 /** Exact monetary values returned by the serving API. A reported total does
  * not imply that the provider supplied an input/output split. */
 data class ProviderReportedCost(
@@ -239,7 +229,7 @@ data class ConversationUsageSummary(
     val totalOutputTokens: Int get() = checkedTokenSum(groups.map { it.outputTokens }) ?: 0
     val totalUncachedInputTokens: Int get() = checkedTokenSum(groups.map { it.uncachedInputTokens }) ?: 0
     val totalCachedInputTokens: Int get() = checkedTokenSum(groups.map { it.cachedInputTokens }) ?: 0
-    val totalCost: Double get() = checkedUsageSum(groups.map { it.totalCost }) ?: approximateCostSubtotal(groups.map { it.totalCost })
+    val totalCost: Double get() = checkedUsageSum(groups.map { it.totalCost }) ?: 0.0
     val isMultiPricing: Boolean get() = groups.size > 1
     val hasUnknownInputTokens: Boolean get() = groups.any { it.hasUnknownInputTokens } || checkedTokenSum(groups.map { it.inputTokens }) == null
     val hasUnknownOutputTokens: Boolean get() = groups.any { it.hasUnknownOutputTokens } || checkedTokenSum(groups.map { it.outputTokens }) == null
@@ -555,11 +545,11 @@ object TokenUsageAccounting {
                 outputTokens = outputTokens ?: 0,
                 uncachedInputTokens = uncachedInputTokens ?: 0,
                 cachedInputTokens = cachedInputTokens ?: 0,
-                inputCost = inputCost ?: approximateCostSubtotal(rows.mapNotNull { it.inputCost }),
-                outputCost = outputCost ?: approximateCostSubtotal(rows.mapNotNull { it.outputCost }),
-                uncachedInputCost = uncachedInputCost ?: approximateCostSubtotal(rows.mapNotNull { it.uncachedInputCost }),
-                cachedInputCost = cachedInputCost ?: approximateCostSubtotal(rows.mapNotNull { it.cachedInputCost }),
-                totalCost = totalCost ?: approximateCostSubtotal(rows.mapNotNull { it.totalCost }),
+                inputCost = inputCost ?: 0.0,
+                outputCost = outputCost ?: 0.0,
+                uncachedInputCost = uncachedInputCost ?: 0.0,
+                cachedInputCost = cachedInputCost ?: 0.0,
+                totalCost = totalCost ?: 0.0,
                 inputPricePerToken = inputPrices.singleOrNull()
                     ?.takeIf { rows.all { it.inputPricePerToken != null } },
                 outputPricePerToken = outputPrices.singleOrNull()

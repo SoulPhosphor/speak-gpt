@@ -250,68 +250,74 @@ object UsageLog {
                 it.asString
             }
             val array = root.get("entries")?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
-            val entries = array.map { element ->
-                val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return null
-                val id = o.get("id")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
-                    ?.asString?.takeIf { it.isNotBlank() } ?: return null
-                val categoryKey = o.get("category")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
-                    ?.asString ?: return null
-                if (UsageCategory.entries.none { it.key == categoryKey } && categoryKey !in listOf("summarization", "attachments")) return null
-                val function = o.get("function")?.takeUnless { it.isJsonNull }?.let {
-                    if (!it.isJsonPrimitive || !it.asJsonPrimitive.isString) return null
-                    UsageFunction.fromKey(it.asString) ?: return null
-                }
-                val messageId = o.get("messageId")?.takeUnless { it.isJsonNull }?.let {
-                    if (!it.isJsonPrimitive || !it.asJsonPrimitive.isString) return null
-                    it.asString
-                }
-                val recordedAtMs = o.get("recordedAtMs")?.let {
-                    if (!it.isJsonPrimitive || !it.asJsonPrimitive.isNumber) return null
-                    it.asBigDecimal.longValueExact()
-                } ?: 0L
-                val recordJson = o.get("record")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
-                fun validOptional(key: String, valid: (com.google.gson.JsonPrimitive) -> Boolean): Boolean {
-                    val field = recordJson.get(key) ?: return true
-                    return field.isJsonNull || (field.isJsonPrimitive && valid(field.asJsonPrimitive))
-                }
-                if (listOf("inputTokens", "outputTokens", "totalTokens", "cachedInputTokens", "cacheWriteInputTokens")
-                        .any { !validOptional(it) { field -> field.isNumber && runCatching { field.asBigDecimal.intValueExact() >= 0 }.getOrDefault(false) } }) return null
-                if (!validOptional("httpStatus") { it.isNumber && runCatching { it.asBigDecimal.intValueExact() }.isSuccess }) return null
-                if (!validOptional("requestStartedAtMs") { it.isNumber && runCatching { it.asBigDecimal.longValueExact() }.isSuccess }) return null
-                if (listOf("inputPricePerToken", "outputPricePerToken", "cachedInputPricePerToken", "cacheWriteInputPricePerToken",
-                        "inputCost", "outputCost", "uncachedInputCost", "cachedInputCost", "totalCost", "reportedChargeAmount")
-                        .any { !validOptional(it) { field -> field.isNumber && field.asDouble.isFinite() &&
-                            runCatching { val sign = field.asBigDecimal.signum()
-                                sign >= 0 && (field.asDouble != 0.0 || sign == 0) }.getOrDefault(false) } }) return null
-                if (listOf("apiEndpoint", "costSource", "requestId", "requestedModel", "requestParameters", "pricingSource",
-                        "pricingEvidence", "reportedChargeCurrency", "reportedChargeDecimal")
-                        .any { !validOptional(it) { field -> field.isString } }) return null
-                if (!validOptional("reportedChargeDecimal") { it.isString &&
-                        it.asString.toBigDecimalOrNull()?.signum()?.let { sign -> sign >= 0 } == true }) return null
-                fun recordText(key: String): String? = recordJson.get(key)
-                    ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
-                // Gson bypasses Kotlin constructors, so required strings need explicit validation.
-                val model = recordText("model") ?: return null
-                val provider = recordText("provider") ?: return null
-                val source = if (recordJson.has("source")) recordText("source") ?: return null
-                    else TokenCountSource.ESTIMATED_CL100K.storedValue
-                // Entries written before metered usage have no meters and decode as before.
-                val meters = UsageMeterCodec.decode(recordJson.get("meters"))
-                if (recordJson.has("meters") && meters == null) return null
-                val record = gson.fromJson(recordJson, TurnUsageRecord::class.java)
-                    ?.copy(model = model, provider = provider, source = source,
-                        meters = meters) ?: return null
-                UsageLogEntry(
-                    id = id,
-                    category = UsageCategory.fromKey(categoryKey),
-                    messageId = messageId,
-                    recordedAtMs = recordedAtMs,
-                    record = record,
-                    function = function
-                )
+            val seenIds = mutableSetOf<String>()
+            val entries = array.mapNotNull { element ->
+                runCatching {
+                    val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+                    val id = o.get("id")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                        ?.asString?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    val categoryKey = o.get("category")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                        ?.asString ?: return@mapNotNull null
+                    if (UsageCategory.entries.none { it.key == categoryKey } && categoryKey !in listOf("summarization", "attachments")) return@mapNotNull null
+                    val function = o.get("function")?.takeUnless { it.isJsonNull }?.let {
+                        if (!it.isJsonPrimitive || !it.asJsonPrimitive.isString) return@mapNotNull null
+                        UsageFunction.fromKey(it.asString) ?: return@mapNotNull null
+                    }
+                    val messageId = o.get("messageId")?.takeUnless { it.isJsonNull }?.let {
+                        if (!it.isJsonPrimitive || !it.asJsonPrimitive.isString) return@mapNotNull null
+                        it.asString
+                    }
+                    val recordedAtMs = o.get("recordedAtMs")?.let {
+                        if (!it.isJsonPrimitive || !it.asJsonPrimitive.isNumber) return@mapNotNull null
+                        it.asBigDecimal.longValueExact()
+                    } ?: 0L
+                    val recordJson = o.get("record")?.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+                    fun validOptional(key: String, valid: (com.google.gson.JsonPrimitive) -> Boolean): Boolean {
+                        val field = recordJson.get(key) ?: return true
+                        return field.isJsonNull || (field.isJsonPrimitive && valid(field.asJsonPrimitive))
+                    }
+                    if (listOf("inputTokens", "outputTokens", "totalTokens", "cachedInputTokens", "cacheWriteInputTokens")
+                            .any { !validOptional(it) { field -> field.isNumber && runCatching { field.asBigDecimal.intValueExact() >= 0 }.getOrDefault(false) } }) return@mapNotNull null
+                    if (!validOptional("httpStatus") { it.isNumber && runCatching { it.asBigDecimal.intValueExact() }.isSuccess }) return@mapNotNull null
+                    if (!validOptional("requestStartedAtMs") { it.isNumber && runCatching { it.asBigDecimal.longValueExact() }.isSuccess }) return@mapNotNull null
+                    if (listOf("inputPricePerToken", "outputPricePerToken", "cachedInputPricePerToken", "cacheWriteInputPricePerToken",
+                            "inputCost", "outputCost", "uncachedInputCost", "cachedInputCost", "totalCost", "reportedChargeAmount")
+                            .any { !validOptional(it) { field -> field.isNumber && field.asDouble.isFinite() &&
+                                runCatching { val sign = field.asBigDecimal.signum()
+                                    sign >= 0 && (field.asDouble != 0.0 || sign == 0) }.getOrDefault(false) } }) return@mapNotNull null
+                    if (listOf("apiEndpoint", "costSource", "requestId", "requestedModel", "requestParameters", "pricingSource",
+                            "pricingEvidence", "reportedChargeCurrency", "reportedChargeDecimal")
+                            .any { !validOptional(it) { field -> field.isString } }) return@mapNotNull null
+                    if (!validOptional("reportedChargeDecimal") { it.isString &&
+                            it.asString.toBigDecimalOrNull()?.signum()?.let { sign -> sign >= 0 } == true }) return@mapNotNull null
+                    fun recordText(key: String): String? = recordJson.get(key)
+                        ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+                    // Gson bypasses Kotlin constructors, so required strings need explicit validation.
+                    val model = recordText("model") ?: return@mapNotNull null
+                    val provider = recordText("provider") ?: return@mapNotNull null
+                    val source = if (recordJson.has("source")) recordText("source") ?: return@mapNotNull null
+                        else TokenCountSource.ESTIMATED_CL100K.storedValue
+                    // Entries written before metered usage have no meters and decode as before.
+                    val meters = UsageMeterCodec.decode(recordJson.get("meters"))
+                    val record = gson.fromJson(recordJson.deepCopy().apply { remove("meters") }, TurnUsageRecord::class.java)
+                        ?.copy(model = model, provider = provider, source = source,
+                            meters = meters) ?: return@mapNotNull null
+                    if (!seenIds.add(id)) return@mapNotNull null
+                    UsageLogEntry(
+                        id = id,
+                        category = UsageCategory.fromKey(categoryKey),
+                        messageId = messageId,
+                        recordedAtMs = recordedAtMs,
+                        record = record,
+                        function = function
+                    )
+                }.getOrNull()
             }
-            if (entries.map { it.id }.toSet().size != entries.size) return null
-            UsageLogState(seeded = seeded, entries = entries, quarantinedLog = quarantined)
+            // Recover readable history preserved by the former all-or-nothing parser.
+            // Current entries win so a delayed receipt cannot revert to its older charge.
+            val preservedEntries = quarantined?.let { decode(it)?.entries }.orEmpty()
+            UsageLogState(seeded = seeded, entries = (entries + preservedEntries).distinctBy { it.id },
+                quarantinedLog = quarantined)
         } catch (_: Exception) {
             null
         }

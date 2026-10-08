@@ -33,9 +33,7 @@ object ImageUsageParser {
     }
 
     private fun addCounts(first: Double, second: Double): Double? {
-        val exact = java.math.BigDecimal.valueOf(first).add(java.math.BigDecimal.valueOf(second))
-        val result = exact.toDouble().takeIf { it.isFinite() } ?: return null
-        return result.takeIf { java.math.BigDecimal.valueOf(it).compareTo(exact) == 0 }
+        return checkedUsageSum(listOf(first, second))
     }
 
     private fun split(o: JsonObject?, key: String, totalKey: String, countKey: String): Map<String, Double>? {
@@ -53,7 +51,6 @@ object ImageUsageParser {
         val result = linkedMapOf<String, Double>()
         for ((modality, exact) in counts) {
             val value = exact.toDouble().takeIf { it.isFinite() } ?: return null
-            if (java.math.BigDecimal.valueOf(value).compareTo(exact) != 0) return null
             result[modality] = value
         }
         return result
