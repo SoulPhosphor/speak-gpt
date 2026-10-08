@@ -131,10 +131,9 @@ object ImageGeneratorCoordinator {
             val metadata = runCatching { ImageCatalogClient.model(endpoint, request.modelId, fresh = true) }
                 .getOrNull() ?: ImageCatalogClient.cachedModel(endpoint, request.modelId)?.withoutEndpointEvidence()
             currentCoroutineContext().ensureActive()
-            val options = ImageRequestOptions.resolve(ImageRequestOptions.forMetadataFallback(request, metadata), metadata)
-            val resolvedRequest = request.copy(parameters = options,
-                parameterTypes = metadata?.parameters.orEmpty().associate { it.key to it.type },
-                geminiTransport = metadata?.geminiTransport)
+            val resolvedRequest = ImageRequestOptions.prepare(request, metadata,
+                ImageCatalogClient.confirmedIncompatibilities(endpoint, request.modelId))
+            val options = resolvedRequest.parameters
             val httpRequest = adapter.buildHttpRequest(resolvedRequest, endpoint)
             val kind = ImageProviderKind.forEndpoint(endpoint)
             usageAttempt = ImageUsageAttempt(kind, request.modelId,
@@ -176,8 +175,10 @@ object ImageGeneratorCoordinator {
                         val providerError = ProviderErrorInfo.parse(bodyText)
                         reportedProvider = providerError.providerName
                         val providerMessage = providerError.message ?: bodyText
+                        val incompatibility = adapter.confirmedIncompatibility(response.code, bodyText, resolvedRequest)
+                        incompatibility?.let { ImageCatalogClient.rememberIncompatibility(endpoint, request.modelId, it, metadata) }
                         throw ImageGenerationException(
-                            adapter.classifyHttpError(response.code, bodyText),
+                            if (incompatibility != null) ImageErrorCause.UNSUPPORTED_OPTION else adapter.classifyHttpError(response.code, bodyText),
                             ImageErrorSanitizer.sanitize(providerMessage, endpoint.apiKey)
                         )
                     }
@@ -258,12 +259,14 @@ object ImageGeneratorCoordinator {
      *  values the chat funnel honors. Image generation can take far longer
      *  than chat, which is exactly why the configured response timeout is
      *  preserved rather than replaced with a shorter constant (§11). */
-    private fun buildClient(endpoint: ApiEndpointObject): OkHttpClient {
+    internal fun buildClient(endpoint: ApiEndpointObject): OkHttpClient {
         val connectSeconds = ApiEndpointObject
             .coerceConnectTimeoutSeconds(endpoint.connectTimeoutSeconds).toLong()
         val responseSeconds = ApiEndpointObject
             .coerceResponseTimeoutSeconds(endpoint.responseTimeoutSeconds).toLong()
         return OkHttpClient.Builder()
+            // A paid image request must never be retried implicitly after a connection failure.
+            .retryOnConnectionFailure(false)
             .connectTimeout(connectSeconds, TimeUnit.SECONDS)
             .readTimeout(responseSeconds, TimeUnit.SECONDS)
             .writeTimeout(responseSeconds, TimeUnit.SECONDS)

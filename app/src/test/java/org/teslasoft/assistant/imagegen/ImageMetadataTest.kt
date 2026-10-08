@@ -43,9 +43,8 @@ Model ID: `future`
                 assertFalse(model.settingsVerified)
                 assertEquals(mapOf("output_format" to "png"), ImageRequestOptions.resolve(
                     ImageRequestOptions.forMetadataFallback(request, model), model))
-                try { ImageRequestOptions.resolve(ImageRequestOptions.forMetadataFallback(
-                    request.copy(parameters = mapOf("output_format" to "jpeg")), model), model); fail("known format remains strict") }
-                catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+                assertTrue(ImageRequestOptions.resolve(ImageRequestOptions.forMetadataFallback(
+                    request.copy(parameters = mapOf("output_format" to "jpeg")), model), model).isEmpty())
             }
         }
         for (bad in listOf("[]", "null", "7")) {
@@ -102,8 +101,7 @@ Model ID: `future`
         val bounded = fields.replace("""{"type":"boolean"}""", """{"type":"integer","minimum":15,"maximum":87}""")
         assertTrue(ImageMetadataParser.catalog(catalogBody.replace(fields, bounded), "fixture").single().settingsVerified)
         assertTrue(ImageMetadataParser.endpoints(endpointBody.replace(fields, bounded), base).settingsVerified)
-        try { ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_compression" to "99")), endpoint); fail("known bounds remain strict") }
-        catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        assertTrue(ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_compression" to "99")), endpoint).isEmpty())
     }
 
     @Test fun unparseableOrPartialSuccessfulReferencesUseUnverifiedSettingsFallback() {
@@ -226,8 +224,7 @@ Model ID: `future-base`
         for (valid in listOf("0", "63", "100")) assertEquals(mapOf("output_compression" to valid),
             ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_compression" to valid)), model))
         for (invalid in listOf("-1", "101", "0.5")) {
-            try { ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_compression" to invalid)), model); fail("compression must respect the published bounds") }
-            catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+            assertTrue(ImageRequestOptions.resolve(request.copy(parameters = mapOf("output_compression" to invalid)), model).isEmpty())
         }
         val changed = OpenRouterImageConfigurationParser.compression("* `output_compression` — 15-87 for webp/jpeg.")!!
         val next = ImageMetadataParser.parameters(descriptor, changed).single()
@@ -439,10 +436,8 @@ Model ID: `future-base`
             ImageParameter("quality", ImageParameterType.ENUM, listOf("medium", "precise"))))
         val request = ImageGenerationRequest("p", ImageShape.LANDSCAPE, ImageQuality.MEDIUM, "endpoint", "unknown")
         assertEquals(mapOf("size" to "1888x944", "quality" to "medium"), ImageRequestOptions.resolve(request, model))
-        try {
-            ImageRequestOptions.resolve(request.copy(parameters = mapOf("seed" to "10")), model)
-            fail("unsupported saved setting must not be sent or silently discarded")
-        } catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+        assertEquals(mapOf("size" to "1888x944", "quality" to "medium"),
+            ImageRequestOptions.resolve(request.copy(parameters = mapOf("seed" to "10")), model))
     }
 
     @Test fun shapeOverrideRemovesPixelSizeAndPreservesCompatibleResolutionTier() {

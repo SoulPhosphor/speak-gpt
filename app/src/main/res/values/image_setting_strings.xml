@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="image_gen_setting_boolean_required">Tap to choose On or Off.</string>
+    <string name="image_gen_setting_required">Choose a value</string>
+    <string name="image_gen_setting_shape">Image Shape</string>
+    <string name="image_gen_setting_not_supported">Not Supported</string>
+    <string name="image_gen_setting_unverified">Unverified</string>
+    <string name="image_gen_setting_previous">Previously selected: %1$s</string>
+    <string name="image_gen_setting_unsupported_parameter">Not supported by this model. Optional settings use the provider\'s defaults.</string>
+    <string name="image_gen_setting_unsupported_value">This selection is not supported. Choose a supported value.</string>
+    <string name="image_gen_setting_unverified_detail">Support could not be verified. Your selection is saved.</string>
+    <string name="image_gen_setting_boolean_automatic">Automatic uses the provider\'s default. Tap to choose On or Off.</string>
+    <string name="image_gen_setting_boolean_explicit">Tap to choose On, Off or Automatic.</string>
+    <string name="image_gen_setting_range">Allowed range: %1$s to %2$s</string>
+    <string name="image_gen_setting_minimum">Minimum: %1$s</string>
+    <string name="image_gen_setting_maximum">Maximum: %1$s</string>
+</resources>

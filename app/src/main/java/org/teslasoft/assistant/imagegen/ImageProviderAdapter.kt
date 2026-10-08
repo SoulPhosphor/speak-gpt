@@ -68,14 +68,17 @@ interface ImageProviderAdapter {
 
     /** Classify a non-2xx provider response into a §13 cause. */
     fun classifyHttpError(status: Int, body: String): ImageErrorCause
+
+    /** Null when an error cannot identify an unsupported setting reliably. */
+    fun confirmedIncompatibility(status: Int, body: String, request: ImageGenerationRequest): ImageOptionRejection? = null
 }
 
 /** Writes values with the types the provider published. */
 internal fun putImageParameters(body: org.json.JSONObject, request: ImageGenerationRequest) {
     request.parameters.forEach { (key, value) ->
         val typed: Any = when (request.parameterTypes[key]) {
-            ImageParameterType.INTEGER -> value.toLong()
-            ImageParameterType.NUMBER -> value.toDouble()
+            ImageParameterType.INTEGER -> imageInteger(value) ?: throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION, "choose a valid integer for $key")
+            ImageParameterType.NUMBER -> value.toBigDecimal()
             ImageParameterType.BOOLEAN -> value.toBooleanStrict()
             else -> value
         }

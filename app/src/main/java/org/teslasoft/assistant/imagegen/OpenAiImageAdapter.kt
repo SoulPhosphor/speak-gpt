@@ -105,6 +105,9 @@ object OpenAiImageAdapter : ImageProviderAdapter {
         return AdapterImageResponse(payload, usage)
     }
 
+    override fun confirmedIncompatibility(status: Int, body: String, request: ImageGenerationRequest): ImageOptionRejection? =
+        ImageOptionRejection.fromError(status, body, request)
+
     override fun classifyHttpError(status: Int, body: String): ImageErrorCause {
         val lower = body.lowercase()
         val errorCode = try {

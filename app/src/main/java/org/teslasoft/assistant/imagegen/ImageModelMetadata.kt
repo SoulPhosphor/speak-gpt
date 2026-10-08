@@ -35,17 +35,27 @@ data class ImageParameter(
     val values: List<String> = emptyList(),
     val minimum: Double? = null,
     val maximum: Double? = null,
-    val defaultValue: String? = null
+    val defaultValue: String? = null,
+    val required: Boolean = false,
+    /** Published dependencies; an absent dependent setting is checked against its published default. */
+    val requiresValues: Map<String, List<String>> = emptyMap()
 ) {
     fun selectableValues(): List<String> = if (key == "output_format")
         values.filter(ImageFormat::supportsOutputName) else values
 
-    fun accepts(value: String): Boolean = when (type) {
+    fun accepts(value: String): Boolean = acceptsType(value) && (values.isEmpty() || when (type) {
+        ImageParameterType.INTEGER, ImageParameterType.NUMBER -> values.any {
+            it.toBigDecimalOrNull()?.compareTo(value.toBigDecimalOrNull() ?: return false) == 0
+        }
+        else -> value in values
+    })
+
+    private fun acceptsType(value: String): Boolean = when (type) {
         ImageParameterType.ENUM -> value in values
         ImageParameterType.STRING -> value.isNotBlank()
         ImageParameterType.BOOLEAN -> value == "true" || value == "false"
         ImageParameterType.INTEGER, ImageParameterType.NUMBER -> imageDecimal(value)?.let {
-            (type != ImageParameterType.INTEGER || value.toLongOrNull() != null) &&
+            (type != ImageParameterType.INTEGER || imageInteger(value) != null) &&
                 (minimum == null || it >= minimum) && (maximum == null || it <= maximum)
         } == true
     }
@@ -106,6 +116,7 @@ internal fun imageDecimal(value: String?): Double? {
     val number = decimal.toDouble().takeIf { it.isFinite() } ?: return null
     return number.takeUnless { it == 0.0 && decimal.signum() != 0 }
 }
+internal fun imageInteger(value: String): Long? = runCatching { value.toBigDecimal().longValueExact() }.getOrNull()
 internal fun imagePricingBasis(value: String, multiplier: Double): Double? = value.toBigDecimalOrNull()
     ?.multiply(java.math.BigDecimal.valueOf(multiplier))?.toDouble()?.takeIf { it.isFinite() && it > 0.0 }
 internal fun JsonObject.imageNumber(key: String): Double? = get(key)
@@ -136,28 +147,46 @@ object ImageMetadataParser {
         return minimum != null && maximum != null && minimum <= maximum
     }
 
-    fun parameters(root: JsonObject?, compression: ImageParameter? = null): List<ImageParameter> = root?.entrySet()?.mapNotNull { (key, value) ->
+    fun parameters(root: JsonObject?, compression: ImageParameter? = null,
+        booleanCapabilities: Boolean = true): List<ImageParameter> = root?.entrySet()?.mapNotNull { (key, value) ->
         if (key in reserved) return@mapNotNull null
         val descriptor = value.imageObject() ?: return@mapNotNull null
-        if (listOf("values", "enum").any { field -> descriptor.has(field) &&
-                descriptor.imageArray(field)?.all { it.isJsonPrimitive && it.asJsonPrimitive.isString && it.asString.isNotBlank() } != true }) return@mapNotNull null
+        val lists = listOf("values", "enum").filter(descriptor::has).map { field ->
+            descriptor.imageArray(field)?.takeIf { entries -> entries.size() > 0 && entries.all {
+                it.isJsonPrimitive && !it.asString.isBlank() &&
+                    (it.asJsonPrimitive.isString || it.asJsonPrimitive.isBoolean || imageDecimal(it.asString) != null)
+            } } ?: return@mapNotNull null
+        }
+        // Mixed JSON types are not a usable typed allowlist.
+        val entries = lists.firstOrNull()?.toList().orEmpty()
+        if (entries.map { when { it.asJsonPrimitive.isString -> "string"; it.asJsonPrimitive.isBoolean -> "boolean"; else -> "number" } }
+                .distinct().size > 1) return@mapNotNull null
+        val values = entries.map { it.asString }
         if (listOf("min", "minimum", "max", "maximum").any { descriptor.has(it) && descriptor.imageBound(it) == null }) return@mapNotNull null
-        if (descriptor.has("default") && descriptor.get("default")?.isJsonPrimitive != true) return@mapNotNull null
+        if (descriptor.has("default") && descriptor.get("default")?.let { it.isJsonPrimitive || it.isJsonNull } != true) return@mapNotNull null
+        if (descriptor.has("required") && descriptor.get("required")?.let { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean } != true) return@mapNotNull null
         if (descriptor.imageText("type") == "range" && !completeRange(descriptor)) return@mapNotNull null
-        val values = descriptor.imageStrings("values").ifEmpty { descriptor.imageStrings("enum") }
         val type = when (descriptor.imageText("type")) {
-            "enum" -> ImageParameterType.ENUM
+            "enum" -> when {
+                entries.isEmpty() -> return@mapNotNull null
+                entries.first().asJsonPrimitive.isBoolean -> ImageParameterType.BOOLEAN
+                entries.first().asJsonPrimitive.isNumber -> if (values.all { imageInteger(it) != null })
+                    ImageParameterType.INTEGER else ImageParameterType.NUMBER
+                else -> ImageParameterType.ENUM
+            }
             "range", "integer" -> ImageParameterType.INTEGER
             "number" -> ImageParameterType.NUMBER
             "string" -> if (values.isNotEmpty()) ImageParameterType.ENUM else ImageParameterType.STRING
-            // The Images API's boolean descriptor means 'supported', not a boolean request value.
-            "boolean" -> when (key) {
-                "seed", "output_compression" -> ImageParameterType.INTEGER
-                else -> return@mapNotNull null
-            }
+            // In the dedicated Images API, a boolean descriptor is a support flag,
+            // not the request's value type. Generic typed schemas use real booleans.
+            "boolean" -> if (!booleanCapabilities || entries.firstOrNull()?.asJsonPrimitive?.isBoolean == true)
+                ImageParameterType.BOOLEAN else when (key) {
+                    "seed", "output_compression" -> ImageParameterType.INTEGER
+                    else -> return@mapNotNull null
+                }
             else -> return@mapNotNull null
         }
-        if (type == ImageParameterType.ENUM && values.isEmpty()) return@mapNotNull null
+        if (type == ImageParameterType.ENUM && (values.isEmpty() || entries.any { !it.asJsonPrimitive.isString })) return@mapNotNull null
         var minimum = descriptor.imageBound("min") ?: descriptor.imageBound("minimum")
         var maximum = descriptor.imageBound("max") ?: descriptor.imageBound("maximum")
         if (minimum != null && maximum != null && minimum > maximum) return@mapNotNull null
@@ -166,8 +195,10 @@ object ImageMetadataParser {
             maximum = listOfNotNull(maximum, compression?.maximum).minOrNull()
             if (minimum == null || maximum == null || minimum > maximum) return@mapNotNull null
         }
-        ImageParameter(key, type, values, minimum, maximum, descriptor.imageText("default"))
-            .takeIf { it.defaultValue == null || it.accepts(it.defaultValue) }
+        val parameter = ImageParameter(key, type, values, minimum, maximum, descriptor.imageText("default"),
+            required = descriptor.get("required")?.asBoolean == true)
+        // Validate the allowlist itself as well as the default, without ignoring a bad item.
+        parameter.takeIf { (it.defaultValue == null || it.accepts(it.defaultValue)) && values.all(it::accepts) }
     }.orEmpty().sortedWith(compareBy({ settingsOrder.indexOf(it.key).takeIf { n -> n >= 0 } ?: Int.MAX_VALUE }, { it.key }))
 
     /** Every advertised model setting must have a readable descriptor. */
@@ -192,7 +223,7 @@ object ImageMetadataParser {
     fun tariffsComplete(value: JsonElement?): Boolean = value?.takeIf { it.isJsonArray }?.asJsonArray
         ?.let { it.size() > 0 && tariffs(value).size == it.size() } == true
 
-    fun catalog(body: String, sourceUrl: String, compression: ImageParameter? = null): List<ImageModelMetadata> {
+    fun catalog(body: String, sourceUrl: String, compression: ImageParameter? = null, booleanCapabilities: Boolean = true): List<ImageModelMetadata> {
         val root = imageJson(body) ?: throw IllegalArgumentException("The provider's model list is not valid JSON")
         val data = root.imageArray("data") ?: throw IllegalArgumentException("The provider returned no model list")
         return data.mapNotNull { element ->
@@ -203,7 +234,7 @@ object ImageMetadataParser {
             if (model.get("capabilities").imageObject()?.get("image_generation")
                     ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean == false) return@mapNotNull null
             val fields = model.get("supported_parameters").imageObject()
-            val parsedParameters = parameters(fields, compression)
+            val parsedParameters = parameters(fields, compression, booleanCapabilities)
             ImageModelMetadata(id, parsedParameters,
                 tariffs = tariffs(model.get("pricing")), sourceUrl = sourceUrl,
                 tariffsComplete = tariffsComplete(model.get("pricing")),
@@ -237,13 +268,15 @@ object ImageMetadataParser {
             if (matching.isEmpty() || matching.any { it == null }) return@mapNotNull null
             val present = matching.filterNotNull()
             if (present.any { it.type != parameter.type }) return@mapNotNull null
-            val values = parameter.values.filter { value -> present.all { value in it.values } }
-            if (parameter.type == ImageParameterType.ENUM && values.isEmpty()) return@mapNotNull null
+            val hasAllowlist = present.any { it.values.isNotEmpty() }
+            val values = present.flatMap { it.values }.distinct().filter { value -> present.all { it.accepts(value) } }
+            if (hasAllowlist && values.isEmpty()) return@mapNotNull null
             val minimum = present.mapNotNull { it.minimum }.maxOrNull()
             val maximum = present.mapNotNull { it.maximum }.minOrNull()
             if (minimum != null && maximum != null && minimum > maximum) return@mapNotNull null
             parameter.copy(values = values, minimum = minimum, maximum = maximum,
-                defaultValue = parameter.defaultValue?.takeIf { value -> present.all { it.defaultValue == value } })
+                defaultValue = parameter.defaultValue?.takeIf { value -> present.all { it.defaultValue == value } },
+                required = present.any { it.required })
         }
         if (endpoints.isEmpty()) return model.withoutEndpointEvidence()
         val catalogFormat = model.parameters.firstOrNull { it.key == "output_format" }
@@ -388,7 +421,26 @@ object ImageRequestOptions {
         return request.copy(parameters = request.parameters.filterKeys { it in known })
     }
 
-    fun resolve(request: ImageGenerationRequest, metadata: ImageModelMetadata?): Map<String, String> {
+    fun prepare(request: ImageGenerationRequest, metadata: ImageModelMetadata?,
+        rejections: List<ImageOptionRejection> = emptyList()): ImageGenerationRequest = request.copy(
+        parameters = resolve(forMetadataFallback(request, metadata), metadata, rejections),
+        parameterTypes = metadata?.parameters.orEmpty().associate { it.key to it.type },
+        geminiTransport = metadata?.geminiTransport)
+
+    /** Read-only legacy presentation. A failed migration must never erase a saved preference. */
+    fun savedSelections(request: ImageGenerationRequest, metadata: ImageModelMetadata?): Map<String, String> {
+        val legacyShape = if (request.defaultShape != ImageShape.AUTOMATIC && request.parameters.keys.none { it in dimensions })
+            runCatching { resolve(request.copy(shape = request.defaultShape, quality = ImageQuality.AUTOMATIC,
+                parameters = emptyMap(), defaultShape = ImageShape.AUTOMATIC, defaultQuality = ImageQuality.AUTOMATIC), metadata) }
+                .getOrElse { mapOf("shape" to request.defaultShape.storedValue) } else emptyMap()
+        val quality = if (request.defaultQuality != ImageQuality.AUTOMATIC && "quality" !in request.parameters)
+            mapOf("quality" to (metadata?.parameters?.firstOrNull { it.key == "quality" }?.values
+                ?.firstOrNull { it.equals(request.defaultQuality.storedValue, true) } ?: request.defaultQuality.storedValue)) else emptyMap()
+        return legacyShape + quality + request.parameters
+    }
+
+    fun resolve(request: ImageGenerationRequest, metadata: ImageModelMetadata?,
+        rejections: List<ImageOptionRejection> = emptyList()): Map<String, String> {
         val legacyShape = if (request.shape == ImageShape.AUTOMATIC && request.defaultShape != ImageShape.AUTOMATIC &&
             request.parameters.keys.none { it in dimensions })
             runCatching { resolve(request.copy(shape = request.defaultShape, quality = ImageQuality.AUTOMATIC,
@@ -397,6 +449,7 @@ object ImageRequestOptions {
             runCatching { resolve(request.copy(shape = ImageShape.AUTOMATIC, quality = request.defaultQuality,
                 parameters = emptyMap(), defaultShape = ImageShape.AUTOMATIC, defaultQuality = ImageQuality.AUTOMATIC), metadata) }.getOrDefault(emptyMap()) else emptyMap()
         val options = (legacyShape + legacyQuality + request.parameters).toMutableMap()
+        val explicitKeys = mutableSetOf<String>()
         if (request.shape != ImageShape.AUTOMATIC) {
             val selected = dimensions.mapNotNull { key -> metadata?.parameters?.firstOrNull { it.key == key } }
                 .firstNotNullOfOrNull { field ->
@@ -425,17 +478,36 @@ object ImageRequestOptions {
                     options["resolution"] = size
             } else dimensions.forEach(options::remove)
             options[field.key] = value
+            explicitKeys += field.key
         }
         if (request.quality != ImageQuality.AUTOMATIC) {
             val field = metadata?.parameters?.firstOrNull { it.key == "quality" }
             val value = field?.values?.firstOrNull { it.equals(request.quality.storedValue, true) }
                 ?: throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION, "the selected model does not publish this quality")
             options[field.key] = value
+            explicitKeys += field.key
         }
-        options.forEach { (key, value) ->
+        for ((key, value) in options.toMap()) {
             val field = metadata?.parameters?.firstOrNull { it.key == key }
-            if (field == null || !field.accepts(value)) throw ImageGenerationException(
-                ImageErrorCause.UNSUPPORTED_OPTION, "the selected model does not accept the saved $key setting")
+            val rejectedParameter = rejections.any { it.parameter == key && it.selection == null }
+            if (field == null || !field.accepts(value) || rejectedParameter) {
+                if (key in explicitKeys || field?.required == true) throw ImageGenerationException(
+                    ImageErrorCause.UNSUPPORTED_OPTION, "the selected model does not accept the selected $key setting; change it or select another model before generating")
+                // Optional saved settings defer to the provider's defaults, without rewriting preferences.
+                options.remove(key)
+            }
+        }
+        if (rejections.any { it.selection != null && it.matches(options) }) throw ImageGenerationException(
+            ImageErrorCause.UNSUPPORTED_OPTION, "the provider rejected this combination of image settings; change the selected settings before generating")
+        metadata?.parameters.orEmpty().forEach { field ->
+            if (field.required && options[field.key] == null && field.defaultValue == null) throw ImageGenerationException(
+                ImageErrorCause.UNSUPPORTED_OPTION, "choose a supported ${field.key} before generating")
+            val conflict = if (options[field.key] != null) field.requiresValues.entries.firstOrNull { (dependency, values) ->
+                val effective = options[dependency] ?: metadata?.parameters?.firstOrNull { it.key == dependency }?.defaultValue
+                effective == null || effective !in values
+            } else null
+            if (conflict != null) throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION,
+                "${field.key} requires ${conflict.key}: ${conflict.value.joinToString(", ")}; change image settings before generating")
         }
         if (ImageDimensionSettings.hasConflict(options)) throw ImageGenerationException(
             ImageErrorCause.UNSUPPORTED_OPTION, "choose a pixel size or resolution and aspect ratio, then try again")

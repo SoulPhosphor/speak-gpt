@@ -24,8 +24,12 @@ object OpenAiImageReferenceParser {
         val compression = Regex("\\(([0-9]+)-([0-9]+)%\\)").find(section("output_compression"))
         val minimum = compression?.groupValues?.get(1)?.toDoubleOrNull()
         val maximum = compression?.groupValues?.get(2)?.toDoubleOrNull()
-        if (minimum != null && maximum != null && minimum.isFinite() && maximum.isFinite() && minimum <= maximum)
-            parameters += ImageParameter("output_compression", ImageParameterType.INTEGER, minimum = minimum, maximum = maximum)
+        val formatsClause = Regex("with the (.*?) output formats").find(section("output_compression"))?.groupValues?.get(1)
+        val compressionFormats = formatsClause?.let { Regex("`([^`]+)`").findAll(it).map { match -> match.groupValues[1] }.toList() }
+        if (minimum != null && maximum != null && minimum.isFinite() && maximum.isFinite() && minimum <= maximum &&
+            (formatsClause == null || !compressionFormats.isNullOrEmpty()))
+            parameters += ImageParameter("output_compression", ImageParameterType.INTEGER, minimum = minimum, maximum = maximum,
+                requiresValues = compressionFormats?.let { mapOf("output_format" to it) }.orEmpty())
         else verified = false
         return model.copy(parameters = parameters, sourceUrl = model.sourceUrl + " | " + URL, settingsVerified = verified)
     }

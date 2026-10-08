@@ -24,6 +24,9 @@ object CatalogImageAdapter : ImageProviderAdapter {
 
     override fun parseResponse(body: String) = OpenAiImageAdapter.parseResponse(body)
 
+    override fun confirmedIncompatibility(status: Int, body: String, request: ImageGenerationRequest): ImageOptionRejection? =
+        ImageOptionRejection.fromError(status, body, request)
+
     override fun classifyHttpError(status: Int, body: String): ImageErrorCause {
         val root = imageJson(body)
         val error = root?.get("error").imageObject()

@@ -75,7 +75,38 @@ object ImageCatalogClient {
     private val http = ImageMetadataHttp()
     private data class Cached(val time: Long, val models: List<ImageModelMetadata>)
     private val cache = ConcurrentHashMap<String, Cached>()
+    // Extend the existing process-local cache; preferences remain independent.
+    private data class PublishedSettings(val parameters: Set<ImageParameter>,
+        val routes: Set<Set<ImageParameter>>, val explicitFormat: Boolean)
+    private data class CachedRejection(val rejection: ImageOptionRejection, val settings: PublishedSettings?)
+    private val incompatibilities = ConcurrentHashMap<Pair<String, String>, List<CachedRejection>>()
     private fun key(endpoint: ApiEndpointObject) = endpoint.host + "|" + endpoint.id + "|" + endpoint.authType + "|" + ImageProviderKind.forEndpoint(endpoint) + "|" + java.security.MessageDigest.getInstance("SHA-256").digest(endpoint.apiKey.toByteArray()).joinToString("") { "%02x".format(it) }
+
+    fun confirmedIncompatibilities(endpoint: ApiEndpointObject, model: String): List<ImageOptionRejection> =
+        incompatibilities[key(endpoint) to model].orEmpty().map { it.rejection }
+
+    private fun publishedSettings(metadata: ImageModelMetadata?): PublishedSettings? {
+        if (metadata?.settingsVerified != true) return null
+        fun normalized(parameters: List<ImageParameter>) = parameters.map { parameter ->
+            parameter.copy(values = parameter.values.sorted(), requiresValues = parameter.requiresValues.mapValues { it.value.sorted() })
+        }.toSet()
+        return PublishedSettings(normalized(metadata.parameters), metadata.endpointRecords.map { normalized(it.parameters) }.toSet(),
+            metadata.requiresExplicitOutputFormat)
+    }
+
+    fun rememberIncompatibility(endpoint: ApiEndpointObject, model: String, rejection: ImageOptionRejection,
+        metadata: ImageModelMetadata? = null) {
+        val entry = CachedRejection(rejection, publishedSettings(metadata))
+        incompatibilities.compute(key(endpoint) to model) { _, previous -> (previous.orEmpty() + entry).distinct() }
+    }
+
+    /** Failed/incomplete refreshes and unchanged documents retain evidence. Updated authoritative settings supersede it. */
+    internal fun refreshedSettings(endpoint: ApiEndpointObject, metadata: ImageModelMetadata) {
+        val settings = publishedSettings(metadata) ?: return
+        incompatibilities.computeIfPresent(key(endpoint) to metadata.id) { _, previous ->
+            previous.filter { it.settings == settings }.takeIf { it.isNotEmpty() }
+        }
+    }
 
     fun cachedModel(endpoint: ApiEndpointObject, model: String): ImageModelMetadata? =
         cache[key(endpoint)]?.models?.firstOrNull { it.id == model }
@@ -119,7 +150,7 @@ object ImageCatalogClient {
             ImageProviderKind.COMPATIBLE -> {
                 val url = base + "models"
                 val body = http.get(url, endpoint) ?: throw IllegalStateException("The provider's model list could not be read")
-                ImageMetadataParser.catalog(body, url).map { it.copy(knownImageOutput = false) }
+                ImageMetadataParser.catalog(body, url, booleanCapabilities = false).map { it.copy(knownImageOutput = false) }
             }
         }
         if (models.isEmpty()) throw IllegalStateException("The provider published no available image models")
@@ -132,22 +163,23 @@ object ImageCatalogClient {
         if (kind == ImageProviderKind.OPENAI && fresh) {
             val metadata = OpenAiImageMetadataParser.resolve(id, read = { http.get(it) },
                 canonicalHint = cachedModel(endpoint, id)?.sourceUrl?.substringBefore(" | ")) ?: return null
-            return openAiDetails(metadata)
+            return openAiDetails(metadata).also { refreshedSettings(endpoint, it) }
         }
         val model = if (fresh) models(endpoint, fresh = true).firstOrNull { it.id == id }
             else cachedModel(endpoint, id) ?: models(endpoint).firstOrNull { it.id == id }
         if (model == null) return null
-        if (kind == ImageProviderKind.OPENROUTER || kind == ImageProviderKind.NANOGPT) {
+        val detailed = if (kind == ImageProviderKind.OPENROUTER || kind == ImageProviderKind.NANOGPT) {
             val url = ImageApiRoutes.modelEndpoints(endpoint, id)
             val compression = compressionRule(kind)
-            return http.get(url, endpoint)?.let { ImageMetadataParser.endpoints(it, model, compression).copy(
+            http.get(url, endpoint)?.let { ImageMetadataParser.endpoints(it, model, compression).copy(
                 sourceUrl = url + if (compression != null) " | " + OpenRouterImageConfigurationParser.URL else "") }
                 ?: model.withoutEndpointEvidence()
-        }
-        if (kind == ImageProviderKind.GEMINI) return http.get(GeminiImagePricingParser.URL)
+        } else if (kind == ImageProviderKind.GEMINI) http.get(GeminiImagePricingParser.URL)
             ?.let { GeminiImagePricingParser.enrich(model, it) } ?: model.copy(tariffsComplete = false)
-        if (kind == ImageProviderKind.OPENAI) return openAiDetails(model)
-        return model
+        else if (kind == ImageProviderKind.OPENAI) openAiDetails(model)
+        else model
+        if (fresh) refreshedSettings(endpoint, detailed)
+        return detailed
     }
 
     private fun openAiDetails(model: ImageModelMetadata): ImageModelMetadata {
