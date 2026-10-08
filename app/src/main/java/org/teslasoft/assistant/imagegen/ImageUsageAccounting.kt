@@ -367,9 +367,7 @@ data class ImageUsageAttempt(
         val originalCharge = billing?.takeIf { it.amount != null || it.amountDecimal != null } ?: receipt
         if (originalCharge.amountDecimal != null && originalCharge.amount == null) completePricing = false
         if ((originalCharge.amount != null || originalCharge.amountDecimal != null) && !originalCharge.currency.equals("USD", true)) completePricing = false
-        val total = if (completePricing) billed.fold(java.math.BigDecimal.ZERO) { sum, meter ->
-            sum.add(java.math.BigDecimal.valueOf(meter.cost!!))
-        }.toDouble().takeIf { it.isFinite() } else null
+        val total = if (completePricing) checkedUsageSum(billed.map { it.cost!! }) else null
         val reported = originalCharge.usd
         return MeteredUsageAccounting.record(selectedModel, selectedProvider, endpoint, meters, reported).copy(
             totalCost = reported ?: total,

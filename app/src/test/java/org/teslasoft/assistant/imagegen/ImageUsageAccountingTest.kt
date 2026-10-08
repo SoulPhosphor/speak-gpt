@@ -5,6 +5,21 @@ import org.junit.Test
 import org.teslasoft.assistant.usage.*
 
 class ImageUsageAccountingTest {
+    @Test fun frozenRequestTotalsRejectFinitePrecisionLoss() {
+        val body = """{"usage":{"input_tokens_details":{"text_tokens":1,"image_tokens":0},"output_tokens_details":{"text_tokens":1,"image_tokens":0}},"data":[{}]}"""
+        val metadata = ImageModelMetadata("new-model", tariffs = listOf(
+            ImageTariff("text_input", "token", 0.1, 1.0, "USD"),
+            ImageTariff("text_output", "token", 1e-18, 1.0, "USD")))
+        val record = attempt(ImageProviderKind.OPENAI, body, metadata).record()
+        assertNull(record.totalCost)
+        assertEquals(CostSource.UNKNOWN.storedValue, record.costSource)
+        assertEquals(listOf(0.1, 1e-18), record.meters!!.filter { it.cost != null }.map { it.cost })
+        val representable = metadata.copy(tariffs = listOf(
+            ImageTariff("text_input", "token", 0.1, 1.0, "USD"),
+            ImageTariff("text_output", "token", 0.2, 1.0, "USD")))
+        assertEquals(0.3, attempt(ImageProviderKind.OPENAI, body, representable).record().totalCost!!, 0.0)
+    }
+
     @Test fun unresolvedOutputIncludesThoughtsWithoutInventingAModalitySplit() {
         for ((rootKey, totalKey, splitKey, thoughtsKey, countKey) in listOf(
             listOf("usageMetadata", "candidatesTokenCount", "candidatesTokensDetails", "thoughtsTokenCount", "tokenCount"),

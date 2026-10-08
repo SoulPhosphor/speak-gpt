@@ -17,6 +17,7 @@ import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.usage.checkedUsageSum
 import org.teslasoft.assistant.usage.ConversationUsageSummary
 import org.teslasoft.assistant.usage.TokenUsageAccounting
 import org.teslasoft.assistant.usage.UsageCategory
@@ -104,8 +105,9 @@ class TokenPricingDetailsActivity : FragmentActivity() {
     ) {
         val key: String get() = model.trim().lowercase(Locale.ROOT)
         val recordCount: Int get() = providers.sumOf { it.recordCount }
-        val totalCost: Double get() = providers.sumOf { it.totalCost }
-        val hasUnknownCost: Boolean get() = providers.any { it.hasUnknownCost }
+        val totalCost: Double get() = checkedUsageSum(providers.map { it.totalCost }) ?: 0.0
+        val hasUnknownCost: Boolean get() = providers.any { it.hasUnknownCost } ||
+            checkedUsageSum(providers.map { it.totalCost }) == null
     }
 
     private fun modelSections(summary: ConversationUsageSummary): List<ModelSection> =
