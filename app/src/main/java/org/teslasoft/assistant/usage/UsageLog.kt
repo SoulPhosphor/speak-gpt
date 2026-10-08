@@ -274,15 +274,19 @@ object UsageLog {
                     val field = recordJson.get(key) ?: return true
                     return field.isJsonNull || (field.isJsonPrimitive && valid(field.asJsonPrimitive))
                 }
-                if (listOf("inputTokens", "outputTokens", "totalTokens", "cachedInputTokens", "cacheWriteInputTokens", "httpStatus")
-                        .any { !validOptional(it) { field -> field.isNumber && runCatching { field.asBigDecimal.intValueExact() }.isSuccess } }) return null
+                if (listOf("inputTokens", "outputTokens", "totalTokens", "cachedInputTokens", "cacheWriteInputTokens")
+                        .any { !validOptional(it) { field -> field.isNumber && runCatching { field.asBigDecimal.intValueExact() >= 0 }.getOrDefault(false) } }) return null
+                if (!validOptional("httpStatus") { it.isNumber && runCatching { it.asBigDecimal.intValueExact() }.isSuccess }) return null
                 if (!validOptional("requestStartedAtMs") { it.isNumber && runCatching { it.asBigDecimal.longValueExact() }.isSuccess }) return null
                 if (listOf("inputPricePerToken", "outputPricePerToken", "cachedInputPricePerToken", "cacheWriteInputPricePerToken",
                         "inputCost", "outputCost", "uncachedInputCost", "cachedInputCost", "totalCost", "reportedChargeAmount")
-                        .any { !validOptional(it) { field -> field.isNumber && field.asDouble.isFinite() } }) return null
+                        .any { !validOptional(it) { field -> field.isNumber && field.asDouble.isFinite() &&
+                            runCatching { field.asBigDecimal.signum() >= 0 }.getOrDefault(false) } }) return null
                 if (listOf("apiEndpoint", "costSource", "requestId", "requestedModel", "requestParameters", "pricingSource",
                         "pricingEvidence", "reportedChargeCurrency", "reportedChargeDecimal")
                         .any { !validOptional(it) { field -> field.isString } }) return null
+                if (!validOptional("reportedChargeDecimal") { it.isString &&
+                        it.asString.toBigDecimalOrNull()?.signum()?.let { sign -> sign >= 0 } == true }) return null
                 fun recordText(key: String): String? = recordJson.get(key)
                     ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
                 // Gson bypasses Kotlin constructors, so required strings need explicit validation.

@@ -217,7 +217,13 @@ object UsageMeterCodec {
             val component = UsageMeterComponent.fromKey(o.string("component")) ?: return null
             val unit = UsageMeterUnit.fromKey(o.string("unit")) ?: return null
             if (listOf("quantity", "priceAmount", "priceQuantity", "cost").any { key ->
-                    o.has(key) && !o.get(key).isJsonNull && o.number(key) == null }) return null
+                    val field = o.get(key)
+                    if (field == null || field.isJsonNull) false else {
+                        val number = o.number(key)
+                        number == null || runCatching { field.asBigDecimal.signum() < 0 }.getOrDefault(true) ||
+                            (key == "priceQuantity" && number <= 0.0)
+                    }
+                }) return null
             if (listOf("quantitySource", "currency").any { key ->
                     o.has(key) && !o.get(key).isJsonNull && o.string(key) == null }) return null
             val quantitySource = UsageQuantitySource.fromKey(o.string("quantitySource"))
