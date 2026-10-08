@@ -82,7 +82,8 @@ data class UsageMeter(
 ) {
     /** Price per single unit, or null when the price or its basis is unknown. */
     val unitPrice: Double?
-        get() = if (priceAmount != null && priceQuantity != null && priceQuantity > 0.0)
+        get() = if (priceAmount != null && priceAmount.isFinite() && priceAmount >= 0.0 &&
+            priceQuantity != null && priceQuantity.isFinite() && priceQuantity > 0.0)
             BigDecimal.valueOf(priceAmount)
                 .divide(BigDecimal.valueOf(priceQuantity), MathContext.DECIMAL128).toDouble()
                 .takeIf { it.isFinite() && (it != 0.0 || priceAmount == 0.0) }
@@ -91,10 +92,11 @@ data class UsageMeter(
     /** Costs are calculated only from a known quantity and a frozen US-dollar
      * price; a zero price costs nothing whatever the quantity. */
     fun withCalculatedCost(): UsageMeter {
-        if (cost != null) return this
-        val amount = priceAmount ?: return this
-        val basis = priceQuantity?.takeIf { it > 0.0 } ?: return this
+        if (cost != null) return if (cost.isFinite() && cost >= 0.0) this else copy(cost = null)
+        val amount = priceAmount?.takeIf { it.isFinite() && it >= 0.0 } ?: return this
+        val basis = priceQuantity?.takeIf { it.isFinite() && it > 0.0 } ?: return this
         if (!currency.equals("USD", ignoreCase = true)) return this
+        if (quantity != null && (!quantity.isFinite() || quantity < 0.0)) return this
         if (amount == 0.0) return copy(cost = 0.0)
         val count = quantity ?: return this
         val calculated = BigDecimal.valueOf(count).multiply(BigDecimal.valueOf(amount))

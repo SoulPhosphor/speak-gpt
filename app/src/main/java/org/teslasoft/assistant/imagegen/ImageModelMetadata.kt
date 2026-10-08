@@ -106,6 +106,8 @@ internal fun imageDecimal(value: String?): Double? {
     val number = decimal.toDouble().takeIf { it.isFinite() } ?: return null
     return number.takeUnless { it == 0.0 && decimal.signum() != 0 }
 }
+internal fun imagePricingBasis(value: String, multiplier: Double): Double? = value.toBigDecimalOrNull()
+    ?.multiply(java.math.BigDecimal.valueOf(multiplier))?.toDouble()?.takeIf { it.isFinite() && it > 0.0 }
 internal fun JsonObject.imageNumber(key: String): Double? = get(key)
     ?.takeIf { it.isJsonPrimitive && !it.asJsonPrimitive.isBoolean }?.asString
     ?.let(::imageDecimal)?.takeIf { it >= 0.0 }
@@ -170,7 +172,7 @@ object ImageMetadataParser {
 
     /** Every advertised model setting must have a readable descriptor. */
     private fun settingsVerified(value: JsonElement?, parsed: List<ImageParameter>): Boolean {
-        if (value == null) return true
+        if (value == null) return false
         val fields = value.imageObject() ?: return false
         return fields.keySet().filterNot { it in reserved }.all { key -> parsed.any { it.key == key } }
     }
@@ -312,9 +314,9 @@ object OpenAiImageMetadataParser {
             val amount = imageDecimal(cells[1].removePrefix("$"))?.takeIf { cells[1].startsWith('$') && it >= 0 }
                 ?: return@forEach
             val basis = Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*([km])?\\s*(tokens?|images?)").matchEntire(cells[2]) ?: return@forEach
-            val quantity = basis.groupValues[1].toDouble() * when (basis.groupValues[2].lowercase()) {
+            val quantity = imagePricingBasis(basis.groupValues[1], when (basis.groupValues[2].lowercase()) {
                 "k" -> 1e3; "m" -> 1e6; else -> 1.0
-            }
+            }) ?: return@forEach
             val component = when (modality) {
                 "text tokens" -> "text"
                 "image tokens" -> "image"

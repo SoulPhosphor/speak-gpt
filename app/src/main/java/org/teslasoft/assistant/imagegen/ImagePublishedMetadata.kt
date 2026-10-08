@@ -93,9 +93,10 @@ object GeminiImagePricingParser {
         val basis = header.getOrNull(paid)?.let {
             Regex("per ([0-9]+(?:\\.[0-9]+)?)([MK]?) tokens in USD").find(it)
         } ?: return model.copy(tariffsComplete = false)
-        val quantity = basis.groupValues[1].toDouble() * when (basis.groupValues[2]) { "M" -> 1e6; "K" -> 1e3; else -> 1.0 }
+        val quantity = imagePricingBasis(basis.groupValues[1], when (basis.groupValues[2]) { "M" -> 1e6; "K" -> 1e3; else -> 1.0 })
+            ?: return model.copy(tariffs = emptyList(), tariffsComplete = false)
         val tariffs = mutableListOf<ImageTariff>()
-        var complete = quantity.isFinite() && quantity > 0
+        var complete = true
         listOf("Input price" to "input", "Output price" to "output").forEach { (label, suffix) ->
             val row = rows.singleOrNull { it.firstOrNull() == label }
             // Do not choose a paid price for a model which might have been served free.

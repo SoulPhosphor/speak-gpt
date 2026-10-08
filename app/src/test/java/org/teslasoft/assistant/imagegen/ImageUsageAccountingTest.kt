@@ -5,6 +5,19 @@ import org.junit.Test
 import org.teslasoft.assistant.usage.*
 
 class ImageUsageAccountingTest {
+    @Test fun preferredUsageChargeCannotBorrowADifferentRootAmount() {
+        for (value in listOf("1e-999", "\"1e-999\"", "null", "\"unreadable\"")) {
+            val request = attempt(body = """{"usage":{"cost":$value},"cost":0.25,"data":[{}]}""")
+            assertNull(request.receipt.amount)
+            assertNull(request.record().totalCost)
+            if (value.contains("1e-999")) assertEquals("1e-999", request.record().reportedChargeDecimal)
+        }
+        val zero = attempt(body = """{"usage":{"cost":0},"cost":0.25}""").record()
+        assertEquals(0.0, zero.totalCost!!, 0.0)
+        assertEquals("0", zero.reportedChargeDecimal)
+        assertEquals(0.25, attempt(body = """{"usage":{},"cost":0.25}""").record().totalCost!!, 0.0)
+    }
+
     @Test fun unrepresentableProviderChargesStayUnknownAndRetainTheirDecimalEvidence() {
         for (value in listOf("1e-999", "\"1e-999\"")) {
             val initial = attempt(ImageProviderKind.NANOGPT, """{"cost":$value,"currency":"USD","data":[{}]}""")
@@ -40,6 +53,14 @@ class ImageUsageAccountingTest {
         assertNull(MeteredUsageAccounting.record("model", "provider", null,
             listOf(meter.copy(cost = Double.MAX_VALUE), meter.copy(cost = Double.MAX_VALUE)), null).totalCost)
         assertEquals(0.0, meter.copy(priceAmount = 0.0).withCalculatedCost().cost!!, 0.0)
+        for (invalid in listOf(Double.NaN, Double.POSITIVE_INFINITY, -1.0)) {
+            assertNull(meter.copy(priceAmount = invalid).unitPrice)
+            assertNull(meter.copy(priceAmount = invalid).withCalculatedCost().cost)
+            assertNull(meter.copy(priceQuantity = invalid).unitPrice)
+            assertNull(meter.copy(priceQuantity = invalid).withCalculatedCost().cost)
+            assertNull(meter.copy(quantity = invalid).withCalculatedCost().cost)
+            assertNull(meter.copy(cost = invalid).withCalculatedCost().cost)
+        }
     }
 
     @Test fun cachePolicyMapsPublishedFamilyNamesToDocumentedVariantIdsWithoutIdPrefixes() {

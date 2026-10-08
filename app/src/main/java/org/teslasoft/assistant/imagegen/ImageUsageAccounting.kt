@@ -150,11 +150,14 @@ object ImageUsageParser {
             ?.sumOf { it!! }
         val reportedCurrency = usage?.imageText("currency") ?: root.imageText("currency")
         val currency = reportedCurrency ?: if (kind == ImageProviderKind.OPENROUTER) "USD" else null
-        val amount = usage?.imageNumber("cost") ?: root.imageNumber("cost")
+        // Select the preferred evidence before parsing, so an unreadable usage charge
+        // cannot borrow a different numeric charge from the response root.
+        val charge = usage?.takeIf { it.has("cost") } ?: root
+        val amount = charge.imageNumber("cost")
         return ImageUsageReceipt(root.imageText("model") ?: root.imageText("modelVersion"),
             root.imageText("provider") ?: root.imageText("provider_name"), imageIdentifier(requestId),
             imageIdentifier(generationId) ?: imageIdentifier(root.imageText("id")), images, megapixels, meters, amount, currency,
-            chargeDecimal(usage, "cost") ?: chargeDecimal(root, "cost"))
+            chargeDecimal(charge, "cost"))
     }
 
     /** Only a receipt with the exact provider-issued identity can enrich a request. */

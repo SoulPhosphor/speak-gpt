@@ -4,6 +4,30 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageMetadataTest {
+    @Test fun invalidPublishedTariffBasesNeverEnterAccounting() {
+        val huge = "1" + "0".repeat(400)
+        val scaledOverflow = "1" + "0".repeat(308)
+        val underflow = "0." + "0".repeat(400) + "1"
+        for (basis in listOf(huge, scaledOverflow + "M", "0", underflow)) {
+            val pricing = """<h2 id="future">Future</h2><h3>Standard</h3><table><tr><th></th><th>Free Tier</th><th>Paid Tier, per $basis tokens in USD</th></tr><tr><td>Input price</td><td>Not available</td><td>${'$'}1 (text/image)</td></tr><tr><td>Output price</td><td>Not available</td><td>${'$'}2 (images)</td></tr></table>"""
+            val gemini = GeminiImagePricingParser.enrich(ImageModelMetadata("future"), pricing)
+            assertFalse(gemini.tariffsComplete)
+            assertTrue(gemini.tariffs.isEmpty())
+            val document = """# Future
+Model ID: `future`
+- Output modalities: image
+| Endpoint | Support |
+| `v1/images/generations` | Supported |
+## Pricing
+### Text tokens
+| Input | ${'$'}1 | $basis tokens |
+"""
+            assertTrue(OpenAiImageMetadataParser.model(document, "future", "fixture")!!.tariffs.isEmpty())
+        }
+        assertEquals(2_000_000.0, imagePricingBasis("2", 1e6)!!, 0.0)
+        assertEquals(0.5, imagePricingBasis("0.5", 1.0)!!, 0.0)
+    }
+
     @Test fun unreadableAdvertisedDescriptorsUseDefaultsInsteadOfBlockingSavedSettings() {
         val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future",
             parameters = mapOf("quality" to "precise", "output_format" to "png"))
@@ -32,6 +56,9 @@ class ImageMetadataTest {
         }
         val valid = """{"quality":{"type":"enum","values":["precise"]},$format,"prompt":[]}"""
         assertTrue(ImageMetadataParser.catalog("""{"data":[{"id":"future","supported_parameters":$valid}]}""", "fixture").single().settingsVerified)
+        val missing = ImageMetadataParser.catalog("""{"data":[{"id":"future"}]}""", "fixture").single()
+        assertFalse(missing.settingsVerified)
+        assertTrue(ImageRequestOptions.resolve(ImageRequestOptions.forMetadataFallback(request, missing), missing).isEmpty())
         assertEquals(mapOf("quality" to "precise", "output_format" to "png"), request.parameters)
     }
 
