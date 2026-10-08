@@ -52,6 +52,11 @@ object SummarizerControllerRegistry {
     @Synchronized
     fun removeAppListener(listener: AppListener) { appListeners.remove(listener) }
 
+    /** The chat's current operation, without creating a controller. */
+    @Synchronized
+    fun operationState(chatId: String): SummarizerController.OperationState =
+        records[chatId]?.controller?.currentOperationState() ?: SummarizerController.OperationState.Idle
+
     @Synchronized
     fun cancel(chatId: String) {
         records[chatId]?.controller?.cancel()

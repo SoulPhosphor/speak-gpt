@@ -27,4 +27,23 @@ object SummarizerOperationMessages {
             else -> if (compacting) R.string.compaction_status_failed else R.string.summarizer_status_failed
         }
     }
+
+    /* Read-only lock for the summary / compacted text while an operation runs
+     * (owner ruling, Oct 3 2026): the text can't be edited until the run has
+     * saved its result, and then the newest version is shown for editing. */
+
+    fun isLocked(state: SummarizerController.OperationState): Boolean =
+        state is SummarizerController.OperationState.Running
+
+    fun inProgressRes(kind: SummarizerController.OperationKind): Int =
+        if (kind == SummarizerController.OperationKind.COMPACTING) R.string.compaction_summary_in_progress
+        else R.string.compaction_summary_summarizing
+
+    fun readOnlyRes(kind: SummarizerController.OperationKind): Int =
+        if (kind == SummarizerController.OperationKind.COMPACTING) R.string.compaction_summary_read_only
+        else R.string.compaction_summary_read_only_summarizing
+
+    fun successRes(kind: SummarizerController.OperationKind): Int =
+        if (kind == SummarizerController.OperationKind.COMPACTING) R.string.compaction_summary_success
+        else R.string.compaction_summary_summarized
 }

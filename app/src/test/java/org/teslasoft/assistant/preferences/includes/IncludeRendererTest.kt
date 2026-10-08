@@ -130,7 +130,7 @@ class IncludeRendererTest {
 
     @Test fun anEmptyTypedMessageStillCarriesItsDocument() {
         val out = IncludeRenderer.renderUserMessage("", listOf(doc()))
-        assertTrue(out.startsWith("<document name=\"report.txt\">"))
+        assertTrue(out.startsWith("Uploaded text file (report.txt):\n<document name=\"report.txt\">"))
         assertTrue(out.contains("THE BODY"))
     }
 
@@ -139,7 +139,88 @@ class IncludeRendererTest {
             "",
             listOf(doc(name = "A&B \"draft\".txt"))
         )
-        assertTrue(out.startsWith("<document name=\"A&amp;B &quot;draft&quot;.txt\">"))
+        assertTrue(out.contains("\n<document name=\"A&amp;B &quot;draft&quot;.txt\">"))
+    }
+
+    @Test fun everyFormIsIntroducedByItsApprovedLabel() {
+        assertEquals(
+            "Uploaded Word document (resume.docx):",
+            IncludeRenderer.label(doc(name = "resume.docx").copy(kind = IncludeKind.DOCX))
+        )
+        assertEquals(
+            "Summary of original uploaded Word document (resume.docx):",
+            IncludeRenderer.label(
+                doc(name = "resume.docx", form = IncludeForm.CONDENSED, condensed = "S")
+                    .copy(kind = IncludeKind.DOCX)
+            )
+        )
+        assertEquals(
+            "Reminder of removed Word document (resume.docx):",
+            IncludeRenderer.label(
+                doc(name = "resume.docx", form = IncludeForm.ARTIFACT, artifact = "R")
+                    .copy(kind = IncludeKind.DOCX)
+            )
+        )
+        assertEquals("Uploaded image (photo.jpg):", IncludeRenderer.label(image()))
+        assertEquals(
+            "Description of original uploaded image (photo.jpg):",
+            IncludeRenderer.label(image(form = IncludeForm.CONDENSED, condensed = "D"))
+        )
+        assertEquals(
+            "Reminder of removed image (photo.jpg):",
+            IncludeRenderer.label(image(form = IncludeForm.ARTIFACT, artifact = "R"))
+        )
+        val types = mapOf(
+            IncludeKind.TXT to "text file", IncludeKind.MARKDOWN to "Markdown file",
+            IncludeKind.JSON to "JSON file", IncludeKind.CSV to "CSV file",
+            IncludeKind.XLSX to "Excel spreadsheet", IncludeKind.PDF to "PDF"
+        )
+        types.forEach { (kind, type) ->
+            assertEquals("Uploaded $type (f):", IncludeRenderer.label(doc(name = "f").copy(kind = kind)))
+        }
+    }
+
+    @Test fun segmentsKeepWordsThenEachLabelFollowedByItsContentInPlace() {
+        val segments = IncludeRenderer.segmentsFor(
+            "look at these",
+            listOf(
+                doc(id = "a", name = "notes.txt", text = "NOTES"),
+                image(id = "i", name = "chart.png", kind = IncludeKind.PNG, mime = "image/png"),
+                doc(id = "c", name = "old.txt", form = IncludeForm.CONDENSED, condensed = "SHORT")
+            )
+        )
+
+        assertEquals(5, segments.size)
+        assertEquals(RenderedSegment.Text("look at these"), segments[0])
+        val notes = (segments[1] as RenderedSegment.Text).text
+        assertTrue(notes.startsWith("Uploaded text file (notes.txt):\n<document"))
+        assertTrue(notes.contains("NOTES"))
+        assertEquals(RenderedSegment.Text("Uploaded image (chart.png):"), segments[2])
+        assertEquals("i", (segments[3] as RenderedSegment.Image).part.includeId)
+        val condensed = (segments[4] as RenderedSegment.Text).text
+        assertTrue(condensed.startsWith("Summary of original uploaded text file (old.txt):\n"))
+        assertTrue(condensed.contains("SHORT"))
+    }
+
+    @Test fun aFullPdfIsALabelFollowedByItsDeliverySlot() {
+        val pdf = ChatInclude(
+            id = "p", fileName = "paper.pdf", kind = IncludeKind.PDF,
+            form = IncludeForm.FULL, fullText = "", pdfFileHash = "hash",
+            pdfMimeType = "application/pdf"
+        )
+        val segments = IncludeRenderer.segmentsFor("read", listOf(pdf))
+        assertEquals(
+            listOf(
+                RenderedSegment.Text("read"),
+                RenderedSegment.Text("Uploaded PDF (paper.pdf):"),
+                RenderedSegment.Pdf(pdf)
+            ),
+            segments
+        )
+        val local = IncludeRenderer.renderLocalPdf(pdf, "--- Page 1 ---\nHello")
+        assertTrue(local.startsWith("<document name=\"paper.pdf\">\nThis is locally extracted PDF text."))
+        assertTrue(local.contains("--- Page 1 ---\nHello"))
+        assertTrue(local.endsWith("</document>"))
     }
 
     // ---- Images (Phase 3) --------------------------------------------------

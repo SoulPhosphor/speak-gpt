@@ -316,12 +316,16 @@
     <string name="prompt_menu_duplicate">Duplicate</string>
     <string name="prompt_menu_copy">Copy</string>
     <string name="prompt_menu_clear">Clear</string>
+    <string name="prompt_menu_revert">Revert</string>
+    <string name="prompt_menu_original">Original Prompt</string>
     <string name="prompt_menu_delete">Delete</string>
     <string name="prompt_delete_title">Delete Prompt?</string>
     <string name="prompt_delete_btn_ok">Okay</string>
     <string name="prompt_last_prompt_title">Companion must have at least one prompt</string>
     <string name="prompt_clear_title">Remove all prompt text?</string>
     <string name="prompt_clear_btn_ok">Okay</string>
+    <string name="prompt_revert_title">Return this prompt to its last saved text?</string>
+    <string name="prompt_original_title">Return this prompt to its original text?</string>
     <string name="prompt_copy_replace_title">Copying this prompt will replace all existing text.</string>
     <string name="prompt_copy_replace_btn_ok">Okay</string>
     <string name="prompt_copy_from_header">Copy text from:</string>
@@ -1056,7 +1060,6 @@
     <string name="usage_conversation_meta">%1$d recorded requests · %2$d models · %3$d providers</string>
     <string name="usage_model_meta">%1$d recorded requests · %2$d providers</string>
     <string name="usage_provider_meta">%1$d recorded requests</string>
-    <string name="usage_model_total">Model Total</string>
     <string name="usage_provider_total">Provider Total</string>
     <string name="usage_column_usage">Usage</string>
     <string name="usage_column_tokens">Tokens</string>
@@ -1067,6 +1070,26 @@
     <string name="usage_cache_hit_rate">Cache Hit Rate</string>
     <string name="usage_price_per_million">Price per 1M Tokens</string>
     <string name="usage_variable_price">Variable</string>
+    <string name="usage_meter_characters">Characters</string>
+    <string name="usage_meter_utf8_bytes">UTF-8 Bytes</string>
+    <string name="usage_meter_text_input">Text Input</string>
+    <string name="usage_meter_audio_output">Audio Output</string>
+    <string name="usage_duration_seconds">%1$s sec</string>
+    <string name="usage_price_per_million_characters">Price per 1M Characters</string>
+    <string name="usage_price_per_million_utf8_bytes">Price per 1M UTF-8 Bytes</string>
+    <string name="usage_price_per_minute_audio">Price per Minute of Audio</string>
+    <!-- Usage & Cost section headings and Summarizing functions (owner ruling, Oct 6 2026). -->
+    <string name="usage_section_chat">Chat</string>
+    <string name="usage_section_image_generations">Image Generations</string>
+    <string name="usage_section_summarizing">Summarizing</string>
+    <string name="usage_section_stt">STT</string>
+    <string name="usage_section_tts">TTS</string>
+    <string name="usage_function_summarizing">Summarizing</string>
+    <string name="usage_function_compacting">Compacting</string>
+    <string name="usage_function_condensing">Condensing</string>
+    <string name="usage_function_reducing">Reducing</string>
+    <string name="usage_function_image_description">Image Description</string>
+    <string name="usage_function_removal">Removal</string>
     <string name="token_pricing_group_title" translatable="false">%1$s · %2$s</string>
     <string name="prompt_no_model_provided" translatable="false">No model has been provided.</string>
 
@@ -3415,6 +3438,7 @@
     <string name="include_error_duplicate">Document already attached.</string>
     <string name="include_error_duplicate_image">Image already attached.</string>
     <string name="document_attach_failed_title">Document could not be attached</string>
+    <string name="pdf_attach_too_large_body">This PDF is larger than the 256 MB attachment limit. No part of the PDF was attached. Try attaching a smaller copy.</string>
     <string name="document_attach_memory_body">This app could not process the complete document within this device’s safe memory limit. No part of the document was attached. Try attaching a smaller copy.</string>
     <string name="document_attach_expansion_body">This document expands into more data than this app can safely process. No part of the document was attached. Try saving a smaller copy and attaching that instead.</string>
     <string name="document_storage_failed_title">Not enough storage</string>
@@ -3424,6 +3448,8 @@
     <string name="document_export_incomplete_body">The source app did not finish exporting the complete document. No part of the document was attached. Check that you are online and signed in to the source app, then try again.</string>
     <string name="request_prepare_failed_title">Request could not be prepared</string>
     <string name="request_prepare_failed_body">The complete request is too large for this device to assemble safely with the current conversation and attachments. Nothing was sent or shortened. Remove some content or attachments, or start a new chat.</string>
+    <string name="pdf_request_failed_title">PDF could not be prepared</string>
+    <string name="pdf_request_failed_body">%1$s could not be prepared for the selected model. Nothing was sent, and the original PDF remains attached. %2$s</string>
     <string name="response_limit_too_high_title">Response limit is too high</string>
     <string name="response_limit_too_high_body">This chat is configured to request up to %1$s response tokens, but the selected model supports a maximum of %2$s. Nothing was sent. Lower the response-token setting or choose another model.</string>
     <string name="request_context_exceeded_title">Request exceeds this model’s context limit</string>
@@ -3516,42 +3542,120 @@
 
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
-    <string name="compacting_cancel_behavior_title">Compacting Cancel Behavior</string>
-    <string name="compacting_cancel_discard">Don’t Save Already Summarized Messages</string>
-    <string name="compacting_cancel_save">Save Already Summarized Messages</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
     <string name="summarizer_length">Summary Length</string>
     <string name="summarizer_length_hint">Maximum amount of words the summary can become.</string>
 
-    <string name="summarizer_section_prompt">Summary Prompt</string>
-    <string name="summarizer_section_prompt_hint">This prompt gives instructions to the Summarizer Model so it properly helps your AI what\'s important in your conversation.\n\nOnly one prompt can be active at a time. The first two prompts are suggested styles.\n\nPresets one and two can always be reverted back to the original preset. Presets 3 through 5 will revert to the last saved prompt text.</string>
-    <string name="summarizer_prompt_dropdown">Prompt</string>
-    <string name="summarizer_slot_default_name">Preset %1$d</string>
-    <string name="summarizer_rename_slot">Rename</string>
-    <string name="summarizer_rename_slot_title">Rename Preset</string>
-    <string name="discard_summarizer_prompt_changes_q">Discard Summarizer Prompt Changes?</string>
-    <string name="summarizer_revert_prompt">Revert</string>
-    <string name="summarizer_revert_prompt_confirm">Revert to the shipped prompt?</string>
-    <string name="summarizer_empty_prompt_guard">Model summary prompts can\'t be empty. Last good prompt has been selected.</string>
-    <string name="summarizer_section_image_prompt">Image Summary Prompt</string>
-    <string name="summarizer_section_image_prompt_hint">This single prompt tells the Summarizer Model how to shorten an image prompt. The short version is what the AI receives each turn as a reminder of the image, instead of the full prompt.</string>
+    <!-- Summarizer Prompts screen (owner ruling, Oct 3 2026). -->
+    <string name="summarizer_prompts_row_title">Customize Prompt Summaries</string>
+    <string name="summarizer_prompts_row_subtitle">Edit prompt summaries used for the model that summarizes text and images.</string>
+    <string name="title_summarizer_prompts">Summarizer Prompts</string>
+    <string name="summarizer_prompts_edit_label">Edit Prompt:</string>
+    <string name="summarizer_prompts_go">Go</string>
+    <string name="summarizer_prompt_kind_summary">Summarizer Prompt</string>
+    <string name="summarizer_prompt_kind_compaction">Compaction Prompt</string>
+    <string name="summarizer_prompt_kind_image">Image Prompt</string>
+    <string name="summarizer_prompts_summary_intro">This prompt gives instructions to the Summarizer Model so it properly helps your AI what\'s important in your conversation.</string>
+    <string name="summarizer_prompts_compaction_intro">This prompt gives instructions to the Summarizer Model when you compact a conversation. Compacting condenses everything up to that point into one summary, which your AI then receives instead of those earlier messages.</string>
+    <string name="summarizer_prompts_image_intro">This single prompt tells the Summarizer Model how to shorten an image prompt. The short version is what the AI receives each turn as a reminder of the image, instead of the full prompt.</string>
+    <string name="summarizer_prompts_how_it_works">Only one prompt can be active at a time. The first two prompts are suggested styles.\n\nPresets one and two can always be reverted back to the original preset. Presets 3 through 5 will revert to the last saved prompt text.</string>
+    <string name="summarizer_prompts_field_hint">Write your prompt here…</string>
+    <string name="summarizer_prompts_edit_desc">Edit Summarizer Prompts</string>
+
+    <!-- Summary review screen: the Compaction Summary screen in summarizer
+         wording (owner ruling, Oct 3 2026). -->
+    <string name="title_conversation_summary">Conversation Summary</string>
+    <string name="summary_review_intro">This is the summarized text from your conversation that is sent instead of the full messages to save on token use.</string>
+    <string name="summary_unsummarize_desc">Unsummarize Conversation</string>
+    <string name="summary_resummarize_desc">Resummarize Conversation</string>
+    <string name="summary_unsummarize_title">Unsummarize Conversation?</string>
+    <string name="summary_unsummarize_body">This will not delete the summary and you can return to the screen at any time to resummarize using the previous summary.</string>
+    <string name="summary_resummarize_title">Resummarize this Conversation?</string>
+    <string name="summary_resummarize_body">The AI will no longer receive the summarized messages in full and instead will receive the summary text below.</string>
+    <!-- Summary sections (owner-approved design, Oct 4 2026). -->
+    <string name="summary_section_current_bookmark_desc">Current summary bookmark</string>
+    <string name="summary_section_header_desc">%1$s. Opens conversation preview.</string>
+    <string name="summary_section_time_unknown">Date Not Recorded</string>
+    <string name="summary_section_open_desc">Open summary section</string>
+    <string name="summary_section_menu">Summary Section</string>
+    <string name="summary_section_stale_note">The messages in this part of the conversation changed after this summary was written.</string>
+    <string name="summary_section_rewrite">Rewrite Summary</string>
+    <string name="summary_section_resummarize_title">Resummarize Conversation Section?</string>
+    <string name="summary_section_resummarize_body">This will only change the messages from %1$s.</string>
+    <string name="summary_section_resummarize_remember">Remember my choice for future summarized messages in this chat.</string>
+    <string name="summarizer_always_resummarize_toggle">When editing or regenerating a message always resummarize that section.</string>
+    <string name="summarizer_always_resummarize_hint">When off you will be prompted if you would like to resummarize the changed text segment.</string>
+    <string name="compaction_dialog_complete">Compaction complete!</string>
+    <!-- Compact error box (owner-approved wording, Oct 4 2026). -->
+    <string name="compaction_err_model_missing_title">Summary Model Configuration Needed</string>
+    <string name="compaction_err_model_missing">Summary Model configuration is missing or incomplete. Check the model, endpoint, and routing in Summarizer Settings.</string>
+    <string name="compaction_err_unreachable_title">Can\'t Connect</string>
+    <string name="compaction_err_unreachable">Couldn\'t reach the AI service.</string>
+    <string name="compaction_err_connect_timeout_title">Connection Timed Out</string>
+    <string name="compaction_err_connect_timeout">Couldn\'t connect to the AI service in time.</string>
+    <string name="compaction_err_response_timeout_title">Response Timed Out</string>
+    <string name="compaction_err_response_timeout">The response did not complete before the response timeout expired.</string>
+    <string name="compaction_err_access_rejected_title">Access Rejected</string>
+    <string name="compaction_err_access_rejected">The AI service rejected access. Check the endpoint\'s authentication and model access.</string>
+    <string name="compaction_err_model_unavailable_title">Model Unavailable</string>
+    <string name="compaction_err_model_unavailable">The AI service can\'t use this model.</string>
+    <string name="compaction_err_rate_limit_title">Rate Limit Reached</string>
+    <string name="compaction_err_rate_limit">The AI service is limiting requests right now.</string>
+    <string name="compaction_err_quota_title">Quota or Spending Limit Reached</string>
+    <string name="compaction_err_quota">The AI account reached a quota, spending, or credit limit. Check the provider account\'s usage and billing.</string>
+    <string name="compaction_err_too_large_title">Request Too Large</string>
+    <string name="compaction_err_too_large">The compaction request exceeded a model or provider\'s input limit.</string>
+    <string name="compaction_err_rejected_title">Content Rejected</string>
+    <string name="compaction_err_rejected">The AI service refused the request because of its content rules.</string>
+    <string name="compaction_err_service_title">Provider Error</string>
+    <string name="compaction_err_service">The AI service returned an error.</string>
+    <string name="compaction_err_unreadable_title">Unusable Reply</string>
+    <string name="compaction_err_unreadable">The model\'s reply couldn\'t be used.</string>
+    <string name="compaction_err_save_title">Couldn\'t Save</string>
+    <string name="compaction_err_save">The app couldn\'t save the compacted state. Technical details were recorded in the Error Log.</string>
+    <string name="compaction_err_unexpected_title">Internal Compaction Error</string>
+    <string name="compaction_err_unexpected">An internal compaction error occurred. Technical details were recorded in the Error Log.</string>
+    <string name="compaction_err_unchanged">Your conversation was not changed.</string>
+    <string name="compaction_err_partial_saved">%1$d messages were compacted and saved before this error. Retry to compact the rest.</string>
+    <string name="compaction_err_provider">Provider error: %1$s</string>
+    <string name="compaction_recompact_after_delete_title">Recompact Conversation?</string>
+    <string name="compaction_edit_summary">Edit Summary</string>
+    <string name="summary_section_rewrite_title">Replace this summary with a new one written from the current messages?</string>
+    <string name="conversation_preview_title">Conversation Preview</string>
+    <string name="conversation_preview_start">Summary starts here</string>
+    <string name="conversation_preview_close_desc">Close conversation preview</string>
+    <string name="compact_unavailable_with_summarizer">Compact isn\'t available while the Summarizer is on for this chat.</string>
+
+    <!-- Compaction Summary screen (owner ruling, Oct 3 2026). -->
+    <string name="title_compaction_summary">Compaction Summary</string>
+    <string name="compaction_icon_desc">Compaction Summary</string>
+    <string name="compaction_summary_intro">This is the compacted text from your conversation that is sent instead of the full messages to save on token use.</string>
+    <string name="compaction_summary_in_progress">Compacting in Progress…</string>
+    <string name="compaction_summary_read_only">Compacted text is read only while the compactor is in progress. The text below will update when the process is finished.</string>
+    <string name="compaction_summary_success">Compaction Successful!</string>
+    <string name="compaction_summary_summarizing">Summarizing in Progress…</string>
+    <string name="compaction_summary_read_only_summarizing">Summary text is read only while the summarizer is in progress. The text below will update when the process is finished.</string>
+    <string name="compaction_summary_summarized">Summary Successful!</string>
+    <string name="compaction_uncompact_desc">Uncompact Conversation</string>
+    <string name="compaction_recompact_desc">Recompact Conversation</string>
+    <string name="compaction_uncompact_title">Uncompact Conversation?</string>
+    <string name="compaction_uncompact_body">This will not delete the compaction summary and you can return to the screen at any time to recompact using the previous summary.</string>
+    <string name="compaction_uncompact_hide">Hide this hint for the rest of the chat</string>
+    <string name="compaction_recompact_title">Recompact this Conversation?</string>
+    <string name="compaction_recompact_body">The AI will no longer receive the compacted messages in full and instead will receive the compacted text below.</string>
+    <string name="compaction_recompact_hide">Hide this message in this chat</string>
 
     <!-- Quick Settings (decision 3): toggle and number box, no hints. -->
     <string name="summarizer_use_toggle">Use Summarizer</string>
     <string name="quick_summarizer_hint">The Summarizer periodically condenses older completed messages into a shorter context summary. This helps a long chat retain important history without sending the entire transcript to the model on every turn. It does not delete messages from the visible conversation. Complete Messages controls how many finished messages are kept before another summary is created.\n\nGeneral Recommended Default: On, when a Summarizer model is configured.</string>
 
     <!-- Summary view (decision 11; wording owner-approved July 29 2026). -->
-    <string name="summarizer_summary_title">Summary</string>
-    <string name="summarizer_update_now">Update Now</string>
-    <string name="summarizer_send_entire_chat">Send Entire Chat</string>
-    <string name="summarizer_use_summary">Use Summary</string>
-    <string name="summarizer_use_compacted">Use Compacted Conversation</string>
     <string name="summarizer_status_running">Summarizing conversation…</string>
     <string name="compaction_status_running">Compacting messages…</string>
     <string name="summarizer_status_complete">Summary updated</string>
     <string name="compaction_status_complete">Compaction complete</string>
     <string name="summarizer_status_timeout">Summarization model took too long to respond</string>
-    <string name="compaction_status_timeout">Compaction model took too long to respond</string>
+    <string name="compaction_status_timeout">Compaction request timed out</string>
     <string name="summarizer_status_unreachable">Couldn’t reach the summarization model</string>
     <string name="compaction_status_unreachable">Couldn’t reach the compaction model</string>
     <string name="summarizer_status_too_large">Conversation was too large to summarize</string>
@@ -3565,9 +3669,6 @@
     <string name="compaction_notification_text">Compacting “%1$s”…</string>
     <string name="summarizer_app_status_running">Summarizing “%1$s”…</string>
     <string name="compaction_app_status_running">Compacting “%1$s”…</string>
-    <string name="summarizer_now_entire_chat">Now sending entire chat to the AI</string>
-    <string name="summarizer_now_compacted">Now sending the compacted chat version</string>
-    <string name="summarizer_now_summary">Now sending the summary. Summarizer will catch up to the current conversation.</string>
     <string name="large_summarization_title">Large Summarization</string>
     <string name="large_summarization_body">This operation is unusually large and is estimated to send about %1$s input tokens to the summarization model. It may require multiple requests and use significantly more API credits than usual.</string>
     <string name="summarize_anyway">Summarize Anyway</string>
@@ -3577,7 +3678,6 @@
     <string name="regenerate_unavailable_title">Regenerate Unavailable</string>
     <string name="regenerate_unavailable_summary">This message is already part of the summary.</string>
     <string name="regenerate_unavailable_compaction">This message is already part of the compacted conversation.</string>
-    <string name="summarizer_icon_summary_desc">Summary</string>
     <string name="summarizer_icon_errors_desc">Summarizer Errors</string>
 
     <!-- Summarizer Errors dialog (decision 16 + errors addendum §1). -->
@@ -3602,39 +3702,42 @@
     <string name="summarizer_unknown_model">(unknown)</string>
 
     <!-- Failure categories — exact normative wording (errors addendum §2). -->
-    <string name="summarizer_err_model_missing_title">Summary Model Missing</string>
-    <string name="summarizer_err_model_missing">The selected Summary Model is no longer available. Choose another model in Summarizer Settings.</string>
+    <string name="summarizer_err_model_missing_title">Summary Model Configuration Needed</string>
+    <string name="summarizer_err_model_missing">Summary Model configuration is missing or incomplete. Check the model, endpoint, and routing in Summarizer Settings.</string>
     <string name="summarizer_routing_not_configured_detail">Provider routing for this Summary Model is incomplete. Choose Automatic or finish Preferred or Only setup in Summarizer Settings.</string>
     <string name="summarizer_err_unreachable_title">AI Service Unreachable</string>
     <string name="summarizer_err_unreachable">The summarizer couldn\'t reach the selected AI service. Check your connection and the selected endpoint, then try again.</string>
     <string name="summarizer_err_connect_timeout_title">Connection Timed Out</string>
     <string name="summarizer_err_connect_timeout">The summarizer couldn\'t connect before the endpoint\'s Connection Timeout expired. The app will try again automatically. Check your connection or increase Connection Timeout for the selected endpoint.</string>
     <string name="summarizer_err_response_timeout_title">Response Timed Out</string>
-    <string name="summarizer_err_response_timeout">The summarizer connected, but the model didn\'t respond before the endpoint\'s Response Time expired. The app will try again automatically. You can also choose another Summary Model or increase Response Time for the selected endpoint.</string>
+    <string name="summarizer_err_response_timeout">The summary response did not complete before the endpoint\'s Response Time expired. The app will try again automatically. You can also choose another Summary Model or increase Response Time for the selected endpoint.</string>
     <string name="summarizer_err_access_rejected_title">Access Rejected</string>
     <string name="summarizer_err_access_rejected">The selected AI service rejected access. Check the endpoint\'s API key, authentication mode, and model access.</string>
     <string name="summarizer_err_model_unavailable_title">Model Unavailable</string>
     <string name="summarizer_err_model_unavailable">The selected AI service couldn\'t use the Summary Model. Check the model name and access, or choose another model in Summarizer Settings.</string>
     <string name="summarizer_err_rate_limit_title">Rate Limit Reached</string>
     <string name="summarizer_err_rate_limit">The selected AI service temporarily limited summary requests. The app will try again automatically. If it continues, wait or choose another Summary Model.</string>
-    <string name="summarizer_err_quota_title">Quota Reached</string>
+    <string name="summarizer_err_quota_title">Quota or Spending Limit Reached</string>
     <string name="summarizer_err_quota">The selected AI account reached its quota or spending limit. Check the provider account\'s usage and billing, or choose another Summary Model.</string>
     <string name="summarizer_err_too_large_title">Summary Request Too Large</string>
-    <string name="summarizer_err_too_large">The current summary or one or more messages are too large for the selected Summary Model to process. Shorten the summary, choose a model or endpoint with a larger input limit, or turn off the summarizer for this chat.</string>
+    <string name="summarizer_err_too_large">The source messages or context for this Summary Section exceed the selected model or provider\'s input limit. Choose a model or endpoint with a larger input limit, or turn off the summarizer for this chat.</string>
     <string name="summarizer_err_rejected_title">Summary Request Rejected</string>
     <string name="summarizer_err_rejected">The selected AI service rejected the summary request because of its content rules. Choose another Summary Model or turn off the summarizer for this chat.</string>
-    <string name="summarizer_err_service_title">AI Service Error</string>
-    <string name="summarizer_err_service">The selected AI service returned an error while updating the summary. The app will try again automatically. If it continues, check the endpoint or choose another Summary Model.</string>
+    <string name="summarizer_err_service_title">Provider Error</string>
+    <string name="summarizer_err_service">The AI service returned an error while generating a Summary Section. The app will try again automatically. If it continues, check the endpoint or choose another Summary Model.</string>
     <string name="summarizer_err_unreadable_title">Summary Response Unreadable</string>
-    <string name="summarizer_err_unreadable">The Summary Model returned a response the app couldn\'t use. The previous summary was kept unchanged. Try another model or check whether the endpoint supports chat completions.</string>
-    <string name="summarizer_err_save_title">Summary Couldn\'t Be Saved</string>
-    <string name="summarizer_err_save">The model returned an updated summary, but the app couldn\'t save it on this device. The previous summary and bookmark were kept. Check available storage and try again.</string>
-    <string name="summarizer_err_unexpected_title">Unexpected Summarizer Error</string>
-    <string name="summarizer_err_unexpected">The summary update failed for an unknown reason. The previous summary and bookmark were kept. Copy this error when reporting the problem.</string>
+    <string name="summarizer_err_unreadable">The AI service returned an unusable response for this Summary Section. Existing sections were not replaced by that response. Try another model or check whether the endpoint supports chat completions.</string>
+    <string name="summarizer_err_save_title">Couldn\'t Save Summary</string>
+    <string name="summarizer_err_save">The app couldn\'t save Summary Section state on this device. Technical details were recorded in the Error Log. Check available storage and try again.</string>
+    <string name="summarizer_err_unexpected_title">Internal Summarizer Error</string>
+    <string name="summarizer_err_unexpected">An internal Summary Section error occurred. Technical details were recorded in the Error Log.</string>
 
     <!-- Model-facing label for the injected summary (decision 14; approved
          July 29 2026). Sent as its own system message, never shown in chat. -->
     <string name="summarizer_injection_header">Summary of the earlier conversation so far:</string>
+    <!-- Model-facing direction ahead of the Summarizer's sections (owner-approved
+         design, Oct 4 2026). Never shown to the user; no dates or IDs follow. -->
+    <string name="summarizer_sections_injection_header">The following conversation summaries are ordered chronologically from oldest to newest. Later summaries describe later parts of the conversation and may update or supersede earlier information.</string>
 
     <!-- Chat redesign: Appearance destination and companion name-style override. -->
     <string name="appearance_title">Appearance</string>
@@ -3867,4 +3970,30 @@
     <string name="include_remove_image_body">The AI model will not be able to recall any of the information from the image you are removing.</string>
     <string name="include_remove_document_body">The AI model will not be able to recall any of the information from the document you are removing.</string>
     <string name="include_removed_name">%1$s (removed)</string>
+    <string name="image_gen_options_title">Image Generation Options</string>
+    <string name="image_gen_provider">Model Provider</string>
+    <string name="image_gen_model">Model</string>
+    <string name="image_gen_size">Size</string>
+    <string name="image_gen_resolution">Resolution</string>
+    <string name="image_gen_aspect_ratio">Aspect Ratio</string>
+    <string name="image_gen_quality">Quality</string>
+    <string name="image_gen_background">Background</string>
+    <string name="image_gen_output_format">Output Format</string>
+    <string name="image_gen_compression">Compression</string>
+    <string name="image_gen_seed">Seed</string>
+    <string name="image_gen_settings_loading">Loading model settings…</string>
+    <string name="image_gen_settings_automatic">Automatic uses the provider\'s defaults.</string>
+    <string name="image_gen_settings_unavailable">Model settings could not be read. Automatic uses the provider\'s defaults.</string>
+    <string name="image_gen_setting_invalid">This value is outside the model\'s published settings.</string>
+    <string name="usage_meter_image_input">Image Input</string>
+    <string name="usage_meter_image_output">Image Output</string>
+    <string name="usage_meter_text_output">Text Output</string>
+    <string name="usage_meter_cached_text_input">Cached Text Input</string>
+    <string name="usage_meter_cached_image_input">Cached Image Input</string>
+    <string name="usage_meter_cached_input">Cached Input</string>
+    <string name="usage_meter_images">Images</string>
+    <string name="usage_meter_credits">Credits</string>
+    <string name="usage_price_per_image">Price per Image</string>
+    <string name="usage_price_per_megapixel">Price per Megapixel</string>
+    <string name="usage_price_per_credit">Price per Credit</string>
 </resources>

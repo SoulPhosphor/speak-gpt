@@ -237,26 +237,6 @@ object SummarizerErrorClassifier {
 }
 
 /**
- * Word-count policy for saved summaries (owner ruling, July 29 2026): the
- * configured Summary Length is not a hard limit because models count words
- * unreliably. The app counts the returned words itself, tolerates up to 10%
- * over, and beyond that saves the text unchanged but flags it over-length so
- * the next regular fold-in compresses it back toward the limit. Never a
- * separate corrective call, never truncation, never a discard.
- */
-object SummarizerLengthPolicy {
-
-    fun wordCount(text: String): Int =
-        text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-
-    fun allowedWords(configuredLength: Int): Int =
-        configuredLength + configuredLength / 10
-
-    fun isOverLength(text: String, configuredLength: Int): Boolean =
-        wordCount(text) > allowedWords(configuredLength)
-}
-
-/**
  * Strips credential-shaped material from provider/technical detail before it
  * is stored in a Summarizer Errors entry or the app-wide Error Log (errors
  * doc §1: never display or copy an API key, authorization header, complete
@@ -272,11 +252,43 @@ object SummarizerDetailSanitizer {
         Regex("""sk-[A-Za-z0-9._\-]{8,}""")
     )
 
-    fun sanitize(raw: String?): String? {
+    /** Remove payload fields even inside client exception JSON dumps. */
+    private val privateFields = setOf("messages", "choices", "content", "text", "input", "output", "prompt",
+        "summary", "request", "request_body", "body", "headers", "authorization", "api_key", "api-key", "x-api-key", "token", "access_token", "password", "secret")
+
+    fun sanitize(raw: String?, secrets: List<String> = emptyList(), maxChars: Int = MAX_DETAIL_CHARS): String? {
         if (raw.isNullOrBlank()) return null
         var out: String = raw
+        // Decoder exceptions can append a full or truncated private body.
+        out = out.replace(Regex("""(?is)JSON input:.*"""), "JSON input: [payload removed]")
+        // Exact request-known secrets/private text are removed before truncation.
+        secrets.filter { it.isNotBlank() }.sortedByDescending { it.length }.forEach { out = out.replace(it, "[removed]") }
+        fun clean(value: com.google.gson.JsonElement) {
+            if (value.isJsonObject) {
+                value.asJsonObject.entrySet().toList().forEach { (key, child) ->
+                    if (key.lowercase() in privateFields) value.asJsonObject.addProperty(key, "[removed]") else clean(child)
+                }
+            } else if (value.isJsonArray) value.asJsonArray.forEach { clean(it) }
+        }
+        // Client exceptions can prefix/suffix an otherwise valid JSON envelope.
+        val start = out.indexOf('{')
+        val end = out.lastIndexOf('}')
+        if (start >= 0 && end > start) {
+            try {
+                val parsed = com.google.gson.JsonParser.parseString(out.substring(start, end + 1))
+                clean(parsed)
+                out = out.substring(0, start) + parsed.toString() + out.substring(end + 1)
+            } catch (_: Exception) {
+                // Broken JSON must not leak a partial request/completion dump.
+                if (Regex("\"(?i:messages|choices|content|prompt|summary|headers)\"\\s*:").containsMatchIn(out.substring(start)))
+                    out = out.substring(0, start) + "[payload removed]"
+            }
+        }
         for (p in patterns) out = out.replace(p, "[removed]")
-        if (out.length > MAX_DETAIL_CHARS) out = out.take(MAX_DETAIL_CHARS) + "…"
+        out = out.replace(Regex("""(?i)["']?(authorization|x-api-key|api-key|api_key)["']?\s*[:=]\s*["']?[^\s,"'}]+"""), "[removed]")
+        out = out.replace(Regex("""(?i)(https?://)[^/\s@]+@"""), "$1[removed]@")
+        out = out.replace(Regex("""(?i)([?&](?:key|api_key|token|access_token)=)[^&\s]+"""), "$1[removed]")
+        if (out.length > maxChars) out = out.take(maxChars) + "…"
         return out.trim().ifBlank { null }
     }
 }

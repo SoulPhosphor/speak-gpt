@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Summarizer Prompts (owner ruling, Oct 3 2026): an Edit Prompt dropdown
+     whose choice opens only through Go, the selected collection's title and
+     explanation, and the shared multiple-prompt editor. Changes persist only
+     through the header Save icon. Composed from shared style families only. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/title_summarizer_prompts"
+            app:layout_constraintEnd_toStartOf="@+id/btn_save" />
+
+        <ImageButton
+            android:id="@+id/btn_save"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save"
+            app:srcCompat="@drawable/ic_save" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="16dp">
+
+            <!-- Edit Prompt: label, dropdown, and Go on one line. Choosing in
+                 the dropdown changes nothing until Go is tapped. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/summarizer_prompts_edit_label" />
+
+                <TextView
+                    android:id="@+id/text_prompt_kind"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_go"
+                    style="@style/AppButton.Primary.Inline"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/summarizer_prompts_go" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/text_prompt_kind_title"
+                style="@style/Widget.App.Section.Title" />
+
+            <TextView
+                android:id="@+id/text_prompt_kind_hint"
+                style="@style/Widget.App.Section.Hint" />
+
+            <include
+                android:id="@+id/prompt_variant_editor"
+                layout="@layout/view_prompt_variant_editor"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp" />
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

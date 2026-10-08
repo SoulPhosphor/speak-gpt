@@ -22,7 +22,9 @@ import com.google.android.material.elevation.SurfaceColors
  */
 object ScreenChrome {
 
-    fun apply(activity: Activity, actionBar: View?, backButton: View?) {
+    /** [headerButtons] are trailing header icons (for example Save) that
+     *  share the back button's header-colored background. */
+    fun apply(activity: Activity, actionBar: View?, backButton: View?, vararg headerButtons: View?) {
         val windowColor = SurfaceColors.SURFACE_0.getColor(activity)
         val headerColor = SurfaceColors.SURFACE_4.getColor(activity)
         activity.window.setBackgroundDrawable(windowColor.toDrawable())
@@ -34,5 +36,6 @@ object ScreenChrome {
         }
         actionBar?.setBackgroundColor(headerColor)
         backButton?.backgroundTintList = ColorStateList.valueOf(headerColor)
+        headerButtons.forEach { it?.backgroundTintList = ColorStateList.valueOf(headerColor) }
     }
 }

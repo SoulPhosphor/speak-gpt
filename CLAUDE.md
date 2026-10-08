@@ -330,6 +330,25 @@ Reuse the app's established shared components and styles for:
 
 Do not create near-duplicate styles, hardcode visual properties in Kotlin, or copy repeated XML attributes because they are faster.
 
+### Everything uses styles; never hard-code appearance (owner ruling, October 7 2026)
+
+Every visual element gets its appearance from a style, so the whole app can be
+themed and fixed from one place (like CSS classes, not inline `style=""`).
+
+- Layout files hold structure only: which element contains which, element
+  IDs, text and content references, and how an element is positioned
+  relative to another element.
+- Every visual value comes from a style in the styles/theme files: colors,
+  backgrounds, fixed sizes and column widths, margins, padding, text size,
+  weight, and color, alignment, minimum heights, and corner shapes. Repeated
+  measurements live in `dimens.xml`, colors in theme attributes.
+- Never write a visual value directly onto a view in a layout file, into a
+  drawable when a dimension resource should hold it, or into Kotlin code.
+- Boxes that show the same kind of thing use the same styles, so they always
+  match.
+- If no shared style fits, stop and ask the owner before adding anything; do
+  not copy values from another layout as a shortcut.
+
 New UI must remain compatible with app-wide themes and palette changes.
 
 A shared-style change that alters existing screens requires owner approval before implementation.
@@ -441,6 +460,40 @@ Current priorities belong in the active conversation, issue, work order, or bran
 - Report what changed and the CI result separately from on-device behavior.
 - Do not claim a reported runtime bug is fixed until the owner confirms the symptom is resolved on the test device.
 - When the owner says "put it on Main," merge the approved green branch to `main` with a normal merge or other explicitly approved method.
+
+### Never hard-code what a service can change (owner ruling, October 7 2026)
+
+If it cannot be learned from outside the app while the app runs, it does not
+belong in the app. Services change their models, prices and features often,
+and a list written into the code goes stale.
+
+Never write any of these into the app's code or configuration, even when
+copied from a service's documentation:
+
+- prices, rates, or price tables;
+- lists of model names or IDs;
+- lists of which models can do what (speech, streaming, images, tools, and
+  so on);
+- voice lists or other catalogs a service publishes.
+
+The app must read these from the service, or from OpenRouter, while it runs.
+When the information cannot be read, the app says it is unknown ("Not
+Reported" for costs) instead of guessing. If a feature seems impossible
+without a hard-coded list, stop and ask the owner before writing one.
+
+#### Prices
+
+Never write a price, rate, or price table into the app's code or configuration,
+for any service, model, or feature. This includes prices copied from a
+service's documentation or pricing page.
+
+The app may use only prices it gets while running: a charge the service
+reports for the request, or a price list the app downloads from the service
+(or OpenRouter) at the time of the request. When no such source exists, the
+cost is "Not Reported".
+
+Tests may use made-up prices only to check the arithmetic. Those values must
+never become data the app uses.
 
 ### Usage control
 

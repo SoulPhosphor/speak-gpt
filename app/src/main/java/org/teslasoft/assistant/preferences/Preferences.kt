@@ -30,7 +30,8 @@ class Preferences internal constructor(
     private var gp: SharedPreferences,
     private var chatId: String,
     private var defaultPreferences: SharedPreferences? = preferences,
-    private val ttsVoicePreferences: AppTtsVoicePreferences = AppTtsVoicePreferences(gp)
+    private val ttsVoicePreferences: AppTtsVoicePreferences = AppTtsVoicePreferences(gp),
+    private val diagnosticContext: Context? = null
 ) {
     companion object {
         fun getPreferences(context: Context, xchatId: String) : Preferences {
@@ -50,7 +51,8 @@ class Preferences internal constructor(
                     // Keep it available until every such value has migrated.
                     SecurePrefs.get(context, "settings.")
                 },
-                AppTtsVoicePreferences.getPreferences(context)
+                AppTtsVoicePreferences.getPreferences(context),
+                context.applicationContext
             )
         }
 
@@ -75,6 +77,16 @@ class Preferences internal constructor(
         const val LOG_DEFAULT_MAX_DAYS = 7
         const val CONDENSED_KIND_SUMMARY = "summary"
         const val CONDENSED_KIND_COMPACTION = "compaction"
+        private val COMPACTION_STATE_KEYS = listOf(
+            "summarizer_summary",
+            "summarizer_folded",
+            "summarizer_over_length",
+            "summarizer_episode",
+            "manual_compaction_boundary",
+            "condensed_conversation_kind",
+            "compaction_regeneration_lock_boundary",
+            "compaction_stale"
+        )
 
         private const val LAST_SUCCESS_ENDPOINT_ID = "last_success_endpoint_id"
         private const val LAST_SUCCESS_MODEL = "last_success_model"
@@ -2408,14 +2420,36 @@ class Preferences internal constructor(
         return getString("pending_includes", "")
     }
 
-    fun setPendingIncludes(json: String, synchronous: Boolean = false) {
-        if (synchronous) {
-            preferences.edit(commit = true) {
+    fun setPendingIncludes(json: String, synchronous: Boolean = false): Boolean {
+        if (!synchronous) {
+            return runCatching {
                 putString("pending_includes", json)
-            }
-        } else {
-            putString("pending_includes", json)
+                true
+            }.getOrDefault(false)
         }
+
+        val key = "pending_includes"
+        val hadPrevious = runCatching { preferences.contains(key) }.getOrDefault(false)
+        val previous = runCatching { preferences.getString(key, null) }.getOrNull()
+
+        val committed = runCatching {
+            val editor = preferences.edit()
+            editor.putString(key, json)
+            editor.commit()
+        }.getOrDefault(false)
+        if (committed) return true
+
+        // SharedPreferences updates its process-local map before waiting for
+        // the disk write. A false commit result therefore still needs a
+        // compensating edit so this process cannot observe the rejected
+        // attachment transition. Even if that second disk write also fails,
+        // it restores the previous in-memory value before returning.
+        runCatching {
+            val rollback = preferences.edit()
+            if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
+            rollback.commit()
+        }
+        return false
     }
 
     /**
@@ -2523,8 +2557,63 @@ class Preferences internal constructor(
         getGlobalString("image_gen_model", "")
 
     fun setImageGeneratorModel(model: String) {
+        val changed = getImageGeneratorModel() != model
+        if (changed) rememberImageLegacyDefaults()
         putGlobalString("image_gen_model", model)
+        val models = runCatching { org.json.JSONObject(getGlobalString("image_gen_models_by_endpoint", "{}")) }
+            .getOrDefault(org.json.JSONObject())
+        models.put(getImageGeneratorEndpointId(), model)
+        putGlobalString("image_gen_models_by_endpoint", models.toString())
+        if (changed) restoreImageLegacyDefaults()
     }
+
+    /** Switches the image connection and restores only that connection's saved model. */
+    fun selectImageGeneratorEndpoint(id: String) {
+        val oldId = getImageGeneratorEndpointId()
+        if (oldId == id) return
+        setImageGeneratorModel(getImageGeneratorModel())
+        val models = runCatching { org.json.JSONObject(getGlobalString("image_gen_models_by_endpoint", "{}")) }
+            .getOrDefault(org.json.JSONObject())
+        rememberImageLegacyDefaults()
+        setImageGeneratorEndpointId(id)
+        putGlobalString("image_gen_model", models.optString(id, ""))
+        restoreImageLegacyDefaults()
+    }
+
+    private fun rememberImageLegacyDefaults() {
+        val root = runCatching { org.json.JSONObject(getGlobalString("image_gen_legacy_defaults", "{}")) }.getOrDefault(org.json.JSONObject())
+        val endpoint = root.optJSONObject(getImageGeneratorEndpointId()) ?: org.json.JSONObject()
+        endpoint.put(getImageGeneratorModel(), org.json.JSONObject().put("shape", getImageGeneratorShape().storedValue)
+            .put("quality", getImageGeneratorQuality().storedValue))
+        root.put(getImageGeneratorEndpointId(), endpoint)
+        putGlobalString("image_gen_legacy_defaults", root.toString())
+    }
+
+    private fun restoreImageLegacyDefaults() {
+        val saved = runCatching { org.json.JSONObject(getGlobalString("image_gen_legacy_defaults", "{}")) }.getOrNull()
+            ?.optJSONObject(getImageGeneratorEndpointId())?.optJSONObject(getImageGeneratorModel())
+        setImageGeneratorShape(org.teslasoft.assistant.imagegen.ImageShape.fromStored(saved?.optString("shape")))
+        setImageGeneratorQuality(org.teslasoft.assistant.imagegen.ImageQuality.fromStored(saved?.optString("quality")))
+    }
+
+    /** Explicit provider settings are scoped to the endpoint and exact model ID. */
+    fun getImageGeneratorParameters(): Map<String, String> {
+        val root = runCatching { org.json.JSONObject(getGlobalString("image_gen_parameters", "{}")) }.getOrNull()
+            ?: return emptyMap()
+        val values = root.optJSONObject(getImageGeneratorEndpointId())?.optJSONObject(getImageGeneratorModel())
+            ?: return emptyMap()
+        return values.keys().asSequence().associateWith { values.optString(it) }
+    }
+
+    fun setImageGeneratorParameters(values: Map<String, String>) {
+        val root = runCatching { org.json.JSONObject(getGlobalString("image_gen_parameters", "{}")) }
+            .getOrDefault(org.json.JSONObject())
+        val endpoint = root.optJSONObject(getImageGeneratorEndpointId()) ?: org.json.JSONObject()
+        endpoint.put(getImageGeneratorModel(), org.json.JSONObject(values))
+        root.put(getImageGeneratorEndpointId(), endpoint)
+        putGlobalString("image_gen_parameters", root.toString())
+    }
+
 
     /** Default Shape (§5/§11). Unknown stored values read as AUTOMATIC. */
     fun getImageGeneratorShape(): org.teslasoft.assistant.imagegen.ImageShape =
@@ -2697,6 +2786,23 @@ class Preferences internal constructor(
         putGlobalString("summarizer_on_new_chats", value.toString())
     }
 
+    /** Editing or regenerating a summarized message rewrites its summary
+     *  section without asking (owner ruling, Oct 4 2026). Default on. */
+    fun getSummarizerAlwaysResummarize(): Boolean =
+        getGlobalString("summarizer_always_resummarize", "true") == "true"
+
+    fun setSummarizerAlwaysResummarize(value: Boolean) {
+        putGlobalString("summarizer_always_resummarize", value.toString())
+    }
+
+    /** This chat's remembered answer to "Resummarize Conversation Section?":
+     *  "" = ask, "yes" = always rewrite, "no" = always keep. */
+    fun getSummaryResummarizeChoice(): String = getString("summary_resummarize_choice", "")
+
+    fun setSummaryResummarizeChoice(value: String) {
+        putString("summary_resummarize_choice", value)
+    }
+
     /** Selected prompt slot, 0–4 (decision 6). */
     fun getSummarizerSelectedSlot(): Int =
         getGlobalString("summarizer_selected_slot", "0").toIntOrNull()?.coerceIn(0, 4) ?: 0
@@ -2742,13 +2848,14 @@ class Preferences internal constructor(
         putGlobalString("image_summary_prompt", prompt)
     }
 
-    /** Manual compaction cancellation policy. False is the conservative,
-     * atomic default: cancelling discards every result from that operation. */
-    fun getSavePartialCompactionOnCancel(): Boolean =
-        getGlobalString("save_partial_compaction_on_cancel", "false") == "true"
+    /** One saved Summarizer Prompts collection (JSON prompt variants), keyed
+     *  by SummarizerPromptSets.Kind.storageKey. "" = never saved; the older
+     *  slot and image prompt settings are then carried over on read. */
+    fun getSummarizerPromptSet(kind: String): String =
+        getGlobalString("summarizer_prompt_set_$kind", "")
 
-    fun setSavePartialCompactionOnCancel(value: Boolean) {
-        putGlobalString("save_partial_compaction_on_cancel", value.toString())
+    fun setSummarizerPromptSet(kind: String, json: String) {
+        putGlobalString("summarizer_prompt_set_$kind", json)
     }
 
     /** Per-chat Use Summarizer state: "" = never stamped, else "true"/"false".
@@ -2775,6 +2882,134 @@ class Preferences internal constructor(
 
     fun setUseSummarizedConversationProjection(enabled: Boolean) {
         putString("use_summarized_conversation_projection", enabled.toString())
+    }
+
+    /** Summary / Compaction review hints (owner ruling, Oct 3 2026): once
+     *  hidden, that confirmation is skipped for the rest of this chat. */
+    fun getHideUncompactHint(): Boolean = getString("hide_uncompact_hint", "false") == "true"
+
+    fun setHideUncompactHint(hide: Boolean) {
+        putString("hide_uncompact_hint", hide.toString())
+    }
+
+    fun getHideRecompactHint(): Boolean = getString("hide_recompact_hint", "false") == "true"
+
+    fun setHideRecompactHint(hide: Boolean) {
+        putString("hide_recompact_hint", hide.toString())
+    }
+
+    fun getHideUnsummarizeHint(): Boolean = getString("hide_unsummarize_hint", "false") == "true"
+
+    fun setHideUnsummarizeHint(hide: Boolean) {
+        putString("hide_unsummarize_hint", hide.toString())
+    }
+
+    fun getHideResummarizeHint(): Boolean = getString("hide_resummarize_hint", "false") == "true"
+
+    fun setHideResummarizeHint(hide: Boolean) {
+        putString("hide_resummarize_hint", hide.toString())
+    }
+
+    /** Retained without changing the Boolean storage APIs used by existing callers. */
+    var summarizerStorageFailure: Throwable? = null
+        private set
+
+    fun reportSummarizerStorageFailure(operation: String, error: Throwable, privateValues: List<String> = emptyList()) {
+        summarizerStorageFailure = error
+        diagnosticContext?.let {
+            Logger.logAsync(it, "crash", "Summarizer storage", "error",
+                org.teslasoft.assistant.util.summarizer.SummarizerDiagnostics.localDetail(operation, error, privateValues))
+        }
+    }
+
+    private fun summarizerStorageCommit(operation: String, privateValues: List<String> = emptyList(), action: () -> Boolean): Boolean = try {
+        val saved = action()
+        if (!saved) reportSummarizerStorageFailure(operation,
+            java.io.IOException("SharedPreferences.commit() returned false"), privateValues)
+        saved
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        reportSummarizerStorageFailure(operation, e, privateValues)
+        false
+    }
+
+    /** This chat's usage log (UsageLog JSON). Entries are only ever added, so
+     *  usage already spent survives message deletes and regenerations. */
+    fun getUsageLog(): String = getString("usage_log", "")
+
+    /** The reply a regeneration removed (RegenerationRecovery JSON), kept
+     *  until the regeneration settles so it can be put back. */
+    fun getPendingRegeneration(): String = getString("pending_regeneration", "")
+
+    /** Committed synchronously, before the reply is removed from history. */
+    fun commitPendingRegeneration(json: String): Boolean = try {
+        preferences.edit().putString("pending_regeneration", json).commit()
+    } catch (_: Exception) {
+        false
+    }
+
+    fun clearPendingRegeneration() {
+        putString("pending_regeneration", "")
+    }
+
+    /** Committed synchronously: a recorded charge must survive a process kill.
+     *  A rejected write restores the previous value in the process map. */
+    fun commitUsageLog(json: String): Boolean {
+        val key = "usage_log"
+        val hadPrevious = runCatching { preferences.contains(key) }.getOrDefault(false)
+        val previous = runCatching { preferences.getString(key, null) }.getOrNull()
+        return try {
+            val committed = preferences.edit().putString(key, json).commit()
+            if (!committed) {
+                runCatching {
+                    val rollback = preferences.edit()
+                    if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
+                    rollback.commit()
+                }
+            }
+            committed
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** The automatic Summarizer's sections (SummarySections JSON). Separate
+     *  from the single summary that Compact keeps in summarizer_summary. */
+    fun getSummarySections(): String = getString("summary_sections", "")
+
+    /** Committed synchronously: a section is conversation state that must
+     *  survive a process kill once written. */
+    fun commitSummarySections(json: String): Boolean {
+        val key = "summary_sections"
+        val hadPrevious = runCatching { preferences.contains(key) }.getOrDefault(false)
+        val previous = runCatching { preferences.getString(key, null) }.getOrNull()
+        return summarizerStorageCommit(
+            "Summarizing: commitSummarySections",
+            org.teslasoft.assistant.util.summarizer.SummarizerDiagnostics.privateSectionValues(json)
+        ) {
+            try {
+                val committed = preferences.edit().putString(key, json).commit()
+                if (!committed) {
+                    // Android installs an edit in the process-local map before
+                    // it knows whether the disk write succeeded. Restore the
+                    // prior value so rejected sections cannot affect model
+                    // projection or be persisted by an unrelated later edit.
+                    runCatching {
+                        val rollback = preferences.edit()
+                        if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
+                        rollback.commit()
+                    }
+                }
+                committed
+            } catch (error: Exception) {
+                runCatching {
+                    val rollback = preferences.edit()
+                    if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
+                    rollback.commit()
+                }
+                throw error
+            }
+        }
     }
 
     fun getSummarizerCatchUpPending(): Boolean =
@@ -2830,14 +3065,12 @@ class Preferences internal constructor(
             getString("compaction_regeneration_lock_boundary", "0").toIntOrNull() ?: 0,
             getManualCompactionBoundary()
         )
-        return try {
+        return summarizerStorageCommit("Summarizing/Compacting: ensureCondensedRegenerationLockMigration") {
             preferences.edit()
                 .putString("summary_regeneration_lock_boundary", summaryBoundary.toString())
                 .putString("compaction_regeneration_lock_boundary", compactionBoundary.toString())
                 .putString("condensed_regeneration_lock_migrated", "true")
                 .commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
@@ -2870,22 +3103,24 @@ class Preferences internal constructor(
         val current = getString(key, "0").toIntOrNull()?.coerceAtLeast(0) ?: 0
         val next = maxOf(current, value.coerceAtLeast(0))
         if (next == current) return true
-        return try {
+        return summarizerStorageCommit("${if (key.startsWith("compaction")) "Compacting" else "Summarizing"}: advanceCondensedRegenerationLockBoundary") {
             preferences.edit().putString(key, next.toString()).commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
     /** Direct realignment after canonical messages inside a locked prefix are deleted. */
     fun setSummaryRegenerationLockBoundary(value: Int) {
         ensureCondensedRegenerationLockMigration()
-        putString("summary_regeneration_lock_boundary", value.coerceAtLeast(0).toString())
+        summarizerStorageCommit("Summarizing: setSummaryRegenerationLockBoundary") {
+            preferences.edit().putString("summary_regeneration_lock_boundary", value.coerceAtLeast(0).toString()).commit()
+        }
     }
 
     fun setCompactionRegenerationLockBoundary(value: Int) {
         ensureCondensedRegenerationLockMigration()
-        putString("compaction_regeneration_lock_boundary", value.coerceAtLeast(0).toString())
+        summarizerStorageCommit("Compacting: setCompactionRegenerationLockBoundary") {
+            preferences.edit().putString("compaction_regeneration_lock_boundary", value.coerceAtLeast(0).toString()).commit()
+        }
     }
 
     /**
@@ -2903,7 +3138,7 @@ class Preferences internal constructor(
         if (getSummarizerProjectionVersion() == SummarizerProjectionContract.VERSION) {
             return true
         }
-        return try {
+        return summarizerStorageCommit("Summarizing/Compacting: ensureSummarizerProjectionCompatibility") {
             preferences.edit()
                 .putString("summarizer_summary", "")
                 .putString("summarizer_folded", "0")
@@ -2915,8 +3150,6 @@ class Preferences internal constructor(
                     SummarizerProjectionContract.VERSION.toString()
                 )
                 .commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
@@ -2971,7 +3204,7 @@ class Preferences internal constructor(
      *         fold-in as unsaved and leave its in-memory state unchanged.
      */
     fun commitSummarizerFoldIn(summary: String, foldedCount: Int, overLength: Boolean): Boolean {
-        return try {
+        return summarizerStorageCommit("Summarizing: commitSummarizerFoldIn", listOf(summary)) {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
@@ -2983,8 +3216,6 @@ class Preferences internal constructor(
                     SummarizerProjectionContract.VERSION.toString()
                 )
                 .commit()
-        } catch (_: Exception) {
-            false
         }
     }
 
@@ -2995,7 +3226,7 @@ class Preferences internal constructor(
         overLength: Boolean,
         episode: String,
         condensedKind: String
-    ): Boolean = try {
+    ): Boolean = summarizerStorageCommit("Summarizing: restoreSummarizerState", listOf(summary)) {
         preferences.edit()
             .putString("summarizer_summary", summary)
             .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
@@ -3007,8 +3238,6 @@ class Preferences internal constructor(
                 SummarizerProjectionContract.VERSION.toString()
             )
             .commit()
-    } catch (_: Exception) {
-        false
     }
 
     /**
@@ -3022,7 +3251,7 @@ class Preferences internal constructor(
         overLength: Boolean,
         boundaryCount: Int
     ): Boolean {
-        return try {
+        return summarizerStorageCommit("Compacting: commitManualCompaction", listOf(summary)) {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
@@ -3030,14 +3259,40 @@ class Preferences internal constructor(
                 .putString("summarizer_episode", "")
                 .putString("manual_compaction_boundary", boundaryCount.coerceAtLeast(0).toString())
                 .putString("condensed_conversation_kind", CONDENSED_KIND_COMPACTION)
+                .putString("compaction_stale", "false")
                 .putString(
                     "summarizer_projection_version",
                     SummarizerProjectionContract.VERSION.toString()
                 )
                 .commit()
-        } catch (_: Exception) {
-            false
         }
+    }
+
+    /** Everything a compaction run writes, as stored (null = absent), so a
+     *  compaction the user cancels can be put back exactly (owner ruling,
+     *  Oct 4 2026: Cancel gets rid of the whole thing). */
+    fun compactionCheckpoint(): Map<String, String?> =
+        COMPACTION_STATE_KEYS.associateWith { key ->
+            if (preferences.contains(key)) preferences.getString(key, null) else null
+        }
+
+    fun restoreCompactionCheckpoint(state: Map<String, String?>): Boolean {
+        return summarizerStorageCommit("Compacting: restoreCompactionCheckpoint", listOfNotNull(state["summarizer_summary"])) {
+            val editor = preferences.edit()
+            state.forEach { (key, value) ->
+                if (value == null) editor.remove(key) else editor.putString(key, value)
+            }
+            editor.commit()
+        }
+    }
+
+    /** Compacted messages were deleted and the user kept the compacted
+     *  text; the Compaction Summary screen says the messages changed until
+     *  it is recompacted or saved (owner ruling, Oct 4 2026). */
+    fun getCompactionStale(): Boolean = getString("compaction_stale", "false") == "true"
+
+    fun setCompactionStale(value: Boolean) {
+        putString("compaction_stale", value.toString())
     }
 
     /** Number of oldest canonical messages through the latest manual marker. */
@@ -3061,7 +3316,7 @@ class Preferences internal constructor(
             ensureSummarizerProjectionCompatibility()
             return false
         }
-        return try {
+        return summarizerStorageCommit("Summarizing: commitSummarizerSummaryEdit", listOf(summary)) {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_over_length", "false")
@@ -3070,8 +3325,6 @@ class Preferences internal constructor(
                     SummarizerProjectionContract.VERSION.toString()
                 )
                 .commit()
-        } catch (_: Exception) {
-            false
         }
     }
 

@@ -34,6 +34,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -47,6 +50,15 @@ import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.util.GenerationErrorClassifier
+import org.teslasoft.assistant.providers.ReportedProviderParser
+import org.teslasoft.assistant.usage.AuxiliaryUsage
+import org.teslasoft.assistant.usage.ProviderUsageAttempt
+import org.teslasoft.assistant.usage.TokenPricingCatalogClient
+import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.UsageCategory
+import org.teslasoft.assistant.usage.UsageFunction
+import org.teslasoft.assistant.usage.UsageLog
+import org.teslasoft.assistant.usage.UsageLogStore
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.observer.ResponseObserver
@@ -93,7 +105,11 @@ class SummarizerController(
         data class Failed(
             val kind: OperationKind,
             val chatName: String,
-            val category: SummarizerErrorCategory
+            val category: SummarizerErrorCategory,
+            /** The AI service's own error text, when it sent one. */
+            val providerError: String? = null,
+            /** Messages a failed compaction still compacted and saved. */
+            val savedMessages: Int = 0
         ) : OperationState
         data class Cancelled(
             val kind: OperationKind,
@@ -119,24 +135,32 @@ class SummarizerController(
      * [text] is the model-facing content ("" for messages the projection
      * skips — they still advance the bookmark but are not sent).
      */
-    data class Entry(val isBot: Boolean, val text: String)
+    data class Entry(
+        val isBot: Boolean,
+        val text: String,
+        /** The stored message's permanent ID (MessageIdentity). */
+        val id: String = "",
+        val timeMillis: Long? = null
+    )
 
-    data class Snapshot(val entries: List<Entry>, val window: Int)
+    data class Snapshot(val entries: List<Entry>, val window: Int) {
+        fun sources(): List<SummarySections.SourceMessage> =
+            entries.map { SummarySections.SourceMessage(it.id, it.isBot, it.text, it.timeMillis) }
+    }
 
     private data class FoldRuntime(
         val prefs: Preferences,
         val endpoint: ApiEndpointObject,
         val model: String,
         val providerJson: com.google.gson.JsonObject?,
-        val prompt: String,
-        val lengthWords: Int
+        val requestedProvider: String,
+        val prompt: String
     )
 
     private sealed interface FoldBatchResult {
         data class Advanced(
             val summary: String,
-            val foldedCount: Int,
-            val overLength: Boolean
+            val foldedCount: Int
         ) : FoldBatchResult
 
         data object Failed : FoldBatchResult
@@ -149,16 +173,12 @@ class SummarizerController(
     private var manualCompactionRunning = false
     @Volatile private var operationState: OperationState = OperationState.Idle
     private var lastFailureCategory: SummarizerErrorCategory? = null
+    private var lastFailureProviderError: String? = null
     private var terminalClearJob: Job? = null
 
     companion object {
         /** Internal fold-in batch size (decision 15) — not a user setting. */
         const val BATCH_SIZE = 10
-
-        /** Response-token budget for a summary call: roomy enough that a
-         *  summary near the word limit is never cut off mid-sentence. */
-        fun responseTokenBudget(lengthWords: Int): Int =
-            (lengthWords * 3).coerceIn(300, 4096)
 
         /** True when a summarizer endpoint profile and model resolve — the
          *  gate for showing the Quick Settings toggle (decision 8). */
@@ -185,28 +205,6 @@ class SummarizerController(
         } catch (_: Exception) {
             false
         }
-
-        /**
-         * The prompt text actually used for fold-ins: the selected slot,
-         * falling back per decision 7 (most recently used slot with text,
-         * else slot one's shipped prompt) so a fold-in can never run on
-         * empty instructions even if the settings-screen guard was bypassed.
-         */
-        fun effectivePrompt(prefs: Preferences): String {
-            fun slotText(slot: Int): String =
-                prefs.getSummarizerSlotPrompt(slot).ifBlank { SummarizerPrompts.shippedPrompt(slot) }
-
-            val selected = slotText(prefs.getSummarizerSelectedSlot())
-            if (selected.isNotBlank()) return selected
-
-            val recency = prefs.getSummarizerSlotRecency()
-                .split(",").mapNotNull { it.trim().toIntOrNull() }
-            for (slot in recency) {
-                val text = slotText(slot)
-                if (text.isNotBlank()) return text
-            }
-            return SummarizerPrompts.STORYTELLER
-        }
     }
 
     fun isRunning(): Boolean = job?.isActive == true
@@ -223,6 +221,54 @@ class SummarizerController(
     fun cancel() {
         job?.cancel()
         job = null
+    }
+
+    /** The chat's state from before the last finished compaction, held
+     *  until the user answers Cancel or Okay in its dialog. */
+    private var finishedCompactionCheckpoint: Pair<Map<String, String?>, String>? = null
+
+    /** Cancel after "Compaction complete!": puts the chat back exactly as it
+     *  was before compacting (owner ruling, Oct 4 2026). */
+    fun discardFinishedCompaction(): Boolean {
+        val (checkpoint, chatId) = finishedCompactionCheckpoint ?: return false
+        finishedCompactionCheckpoint = null
+        if (chatId != chatIdProvider()) return false
+        val restored = Preferences.getPreferences(appContext, chatId).restoreCompactionCheckpoint(checkpoint)
+        if (restored) notifyStateChanged()
+        return restored
+    }
+
+    /** Okay after "Compaction complete!": the compaction stays. */
+    fun keepFinishedCompaction() {
+        finishedCompactionCheckpoint = null
+    }
+
+    /** The compaction regeneration lock when the current run started. */
+    private var runStartLock: Int? = null
+
+    /** Messages the current run compacted and saved before it failed. */
+    private var partialSavedMessages = 0
+
+    /** Puts back the regeneration lock a stopped run's finished batches
+     *  advanced. Never raises it, so a deletion's realignment stands. */
+    private fun restoreRunLock(prefs: Preferences, startLock: Int) {
+        val current = prefs.getCompactionRegenerationLockBoundary()
+        if (current > startLock) prefs.setCompactionRegenerationLockBoundary(startLock)
+    }
+
+    /**
+     * Stops an automatic summary update and waits until its cancellation
+     * cleanup has finished, so the caller can change the stored messages
+     * and bookmark afterwards (owner ruling, Oct 3 2026: deleting messages
+     * stops summarizing). The unfinished batch is discarded. A user-started
+     * compaction is left alone: it already discards its result if the
+     * messages it froze were changed.
+     */
+    suspend fun cancelSummarizingAndWait() {
+        if (manualCompactionRunning) return
+        val running = job ?: return
+        running.cancelAndJoin()
+        if (job === running) job = null
     }
 
     /**
@@ -242,38 +288,16 @@ class SummarizerController(
         if (manualCompactionRunning || isRunning()) return
         job = scope.launch {
             var advancedAny = false
-            val initialSnapshot = snapshotProvider()
-            val initialPrefs = chatIdProvider().takeIf { it.isNotBlank() }?.let {
-                Preferences.getPreferences(appContext, it)
-            }
-            val initialSummary = initialPrefs?.getSummarizerSummary().orEmpty()
-            val initialFolded = initialPrefs?.getSummarizerFoldedCount() ?: 0
-            val initialOverLength = initialPrefs?.getSummarizerOverLength() == true
-            val initialEpisode = initialPrefs?.getSummarizerEpisode().orEmpty()
-            val initialKind = initialPrefs?.getCondensedConversationKind().orEmpty()
             try {
                 while (true) {
-                    val advanced = foldOneBatch(force, chatName, snapshotProvider)
+                    val advanced = buildOneSection(force, chatName, snapshotProvider)
                     if (!advanced) break
                     advancedAny = true
                 }
             } catch (_: CancellationException) {
-                // Deliberate cancellation — not a Summarizer Error (§4).
-                val running = operationState as? OperationState.Running
-                if (running?.requestedMessages?.let { it >= 21 } == true &&
-                    initialPrefs?.getSavePartialCompactionOnCancel() != true
-                ) {
-                    withContext(NonCancellable) {
-                        initialPrefs?.restoreSummarizerState(
-                            initialSummary,
-                            initialFolded.coerceAtMost(initialSnapshot?.entries?.size ?: initialFolded),
-                            initialOverLength,
-                            initialEpisode,
-                            initialKind
-                        )
-                    }
-                    notifyStateChanged()
-                }
+                // Deliberate cancellation — not a Summarizer Error (§4). Each
+                // section is saved on its own, so finished sections stay and
+                // the unfinished one is simply discarded.
                 setOperationState(
                     OperationState.Cancelled(
                         OperationKind.SUMMARIZING,
@@ -281,6 +305,8 @@ class SummarizerController(
                         (operationState as? OperationState.Running)?.successfulMessages ?: 0
                     )
                 )
+            } catch (e: Exception) {
+                recordUnexpectedFailure(e, OperationKind.SUMMARIZING, chatName)
             } finally {
                 if (operationState is OperationState.Running) {
                     setOperationState(
@@ -314,12 +340,18 @@ class SummarizerController(
         chatName: String,
         savePartialOnCancel: Boolean,
         stillCurrent: () -> Boolean,
-        onFinished: (Boolean) -> Unit
+        onFinished: (Boolean) -> Unit,
+        /** Rewrite the compacted text from the first message instead of
+         *  adding to it (Recompact after compacted messages were deleted). */
+        fromScratch: Boolean = false
     ) {
         if (manualCompactionRunning) return
         cancel()
         manualCompactionRunning = true
         lastFailureCategory = null
+        lastFailureProviderError = null
+        runStartLock = null
+        partialSavedMessages = 0
         setOperationState(
             OperationState.Running(
                 OperationKind.COMPACTING,
@@ -335,13 +367,25 @@ class SummarizerController(
                     snapshot,
                     chatName,
                     savePartialOnCancel,
-                    stillCurrent
+                    stillCurrent,
+                    fromScratch
                 )
             } catch (_: CancellationException) {
                 // compactSnapshot owns the optional partial commit.
+            } catch (e: Exception) {
+                recordUnexpectedFailure(e, OperationKind.COMPACTING, chatName)
             } finally {
                 manualCompactionRunning = false
                 if (operationState is OperationState.Running) {
+                    // A failed run that saved nothing puts back the lock its
+                    // finished batches advanced.
+                    if (!committed && partialSavedMessages == 0) {
+                        val chatId = chatIdProvider()
+                        val startLock = runStartLock
+                        if (chatId.isNotBlank() && startLock != null) {
+                            restoreRunLock(Preferences.getPreferences(appContext, chatId), startLock)
+                        }
+                    }
                     setOperationState(
                         if (committed) {
                             OperationState.Succeeded(OperationKind.COMPACTING, chatName)
@@ -349,7 +393,9 @@ class SummarizerController(
                             OperationState.Failed(
                                 OperationKind.COMPACTING,
                                 chatName,
-                                lastFailureCategory ?: SummarizerErrorCategory.UNEXPECTED
+                                lastFailureCategory ?: SummarizerErrorCategory.UNEXPECTED,
+                                lastFailureProviderError,
+                                partialSavedMessages
                             )
                         }
                     )
@@ -403,18 +449,27 @@ class SummarizerController(
         )
         if (routingResolution.block != RoutingBlock.NONE) return null
 
-        val instruction = prefs.getImageSummaryPrompt().ifBlank { SummarizerPrompts.IMAGE_SUMMARY }
+        val instruction = SummarizerPromptSets.activeText(
+            prefs,
+            SummarizerPromptSets.Kind.IMAGE,
+            chatIdProvider()
+        )
         val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
         return try {
             withContext(Dispatchers.IO) {
-                val client = buildClient(endpoint, routingResolution.providerJson)
                 val request = ChatCompletionRequest(
                     model = ModelId(model),
                     maxTokens = 200,
                     messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                 )
-                client.chatCompletion(request)
-                    .choices.firstOrNull()?.message?.content?.toString().orEmpty()
+                withSummarizerUsage(
+                    Preferences.getPreferences(appContext, chatIdProvider()),
+                    endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
+                    UsageFunction.IMAGE_DESCRIPTION
+                ) { attempt ->
+                    buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
+                        .chatCompletion(request)
+                }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
             }.trim().ifBlank { null }
         } catch (e: CancellationException) {
             throw e
@@ -427,7 +482,8 @@ class SummarizerController(
         snapshot: Snapshot,
         chatName: String,
         savePartialOnCancel: Boolean,
-        stillCurrent: () -> Boolean
+        stillCurrent: () -> Boolean,
+        fromScratch: Boolean = false
     ): Boolean {
         val chatId = chatIdProvider()
         if (chatId.isBlank() || snapshot.entries.isEmpty()) return false
@@ -448,11 +504,15 @@ class SummarizerController(
         }
 
         val target = snapshot.entries.size
+        // Cancel, during the run or after it finishes, puts this back.
+        val checkpoint = prefs.compactionCheckpoint()
+        val startingLock = prefs.getCompactionRegenerationLockBoundary()
+        runStartLock = startingLock
+        finishedCompactionCheckpoint = null
         val startingSummary = prefs.getSummarizerSummary()
         val startingFolded = prefs.getSummarizerFoldedCount()
-        val startingOverLength = prefs.getSummarizerOverLength()
         val startingVersion = prefs.getSummarizerProjectionVersion()
-        val operationStartFolded = startingFolded.coerceAtMost(target)
+        val operationStartFolded = if (fromScratch) 0 else startingFolded.coerceAtMost(target)
 
         setOperationState(
             OperationState.Running(
@@ -463,26 +523,24 @@ class SummarizerController(
             )
         )
 
-        var summary = startingSummary
+        var summary = if (fromScratch) "" else startingSummary
         var folded = operationStartFolded
-        var overLength = startingOverLength
 
         try {
             if (folded < target) {
-                val runtime = resolveFoldRuntime(prefs) ?: return false
+                val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.COMPACTION)
+                    ?: return false
                 while (folded < target) {
                     when (val result = foldBatch(
                         runtime = runtime,
                         entries = snapshot.entries,
                         folded = folded,
                         pending = target - folded,
-                        summary = summary,
-                        priorOverLength = overLength
+                        summary = summary
                     )) {
                         is FoldBatchResult.Advanced -> {
                             summary = result.summary
                             folded = result.foldedCount
-                            overLength = result.overLength
                             if (!prefs.advanceCompactionRegenerationLockBoundary(folded)) {
                                 recordFailure(
                                     prefs,
@@ -504,7 +562,23 @@ class SummarizerController(
                                 )
                             )
                         }
-                        FoldBatchResult.Failed -> return false
+                        FoldBatchResult.Failed -> {
+                            // A failure keeps the batches that finished (owner
+                            // ruling, Oct 4 2026), when the messages and saved
+                            // state they came from are unchanged.
+                            if (folded > operationStartFolded &&
+                                chatIdProvider() == chatId &&
+                                stillCurrent() &&
+                                prefs.getSummarizerSummary() == startingSummary &&
+                                prefs.getSummarizerFoldedCount() == startingFolded &&
+                                prefs.getSummarizerProjectionVersion() == startingVersion &&
+                                prefs.commitManualCompaction(summary, folded, false, folded)
+                            ) {
+                                partialSavedMessages = folded - operationStartFolded
+                                notifyStateChanged()
+                            }
+                            return false
+                        }
                     }
                 }
             }
@@ -512,9 +586,14 @@ class SummarizerController(
             val completedThisRun = folded - startingFolded.coerceAtMost(target)
             val saved = if (savePartialOnCancel && completedThisRun > 0 && stillCurrent()) {
                 withContext(NonCancellable) {
-                    prefs.commitManualCompaction(summary, folded, overLength, folded)
+                    prefs.commitManualCompaction(summary, folded, false, folded)
                 }
-            } else false
+            } else {
+                // Nothing from the run is kept, including the regeneration
+                // lock its finished batches advanced.
+                withContext(NonCancellable) { restoreRunLock(prefs, startingLock) }
+                false
+            }
             setOperationState(
                 OperationState.Cancelled(
                     OperationKind.COMPACTING,
@@ -533,7 +612,6 @@ class SummarizerController(
             !stillCurrent() ||
             prefs.getSummarizerSummary() != startingSummary ||
             prefs.getSummarizerFoldedCount() != startingFolded ||
-            prefs.getSummarizerOverLength() != startingOverLength ||
             prefs.getSummarizerProjectionVersion() != startingVersion
         ) {
             val configuredModel = prefs.getSummarizerModel()
@@ -550,7 +628,7 @@ class SummarizerController(
             return false
         }
 
-        if (!prefs.commitManualCompaction(summary, target, overLength, target)) {
+        if (!prefs.commitManualCompaction(summary, target, false, target)) {
             val configuredModel = prefs.getSummarizerModel()
             recordFailure(
                 prefs,
@@ -564,12 +642,21 @@ class SummarizerController(
             )
             return false
         }
+        finishedCompactionCheckpoint = checkpoint to chatId
         notifyStateChanged()
         return true
     }
 
-    /** @return true when a batch was folded and committed (keep looping). */
-    private suspend fun foldOneBatch(
+    /**
+     * Writes one summary section: first any unedited section whose messages
+     * changed, otherwise the next new section past the Complete Messages
+     * window. [snapshotProvider] is read live, before the request and again
+     * when it returns; a result whose messages changed meanwhile is discarded.
+     * The source-change handler decides whether to start another cycle.
+     *
+     * @return true to keep looping.
+     */
+    private suspend fun buildOneSection(
         force: Boolean,
         chatName: String,
         snapshotProvider: () -> Snapshot?
@@ -579,85 +666,173 @@ class SummarizerController(
         if (chatId.isBlank()) return false
         val prefs = Preferences.getPreferences(appContext, chatId)
         if (!prefs.getChatUseSummarizer()) return false
-        // Phase 6.2: never fold onto or advance from a rolling summary that
-        // may already contain old inline Include payload material. A failed
-        // compatibility commit leaves canonical history intact and simply
-        // postpones this cycle.
-        if (!prefs.ensureSummarizerProjectionCompatibility()) return false
+        // Summary state saved before the Include payload migration may hold
+        // old inline payload material. A failed compatibility commit leaves
+        // canonical history intact and simply postpones this cycle.
+        if (!prefs.ensureSummarizerProjectionCompatibility()) {
+            recordStorageFailure(prefs, chatName, "Could not migrate Summary Section storage.")
+            return false
+        }
+        val current = snapshot.sources()
+        if (current.any { it.id.isBlank() }) return false
+        val sections = SummarySectionStore.load(prefs, current) ?: run {
+            recordStorageFailure(prefs, chatName, "Could not load Summary Sections.")
+            return false
+        }
 
-        val entries = snapshot.entries
-        val folded = prefs.getSummarizerFoldedCount().coerceAtMost(entries.size)
-        val windowEdge = (entries.size - snapshot.window.coerceAtLeast(1)).coerceAtLeast(0)
-        val pending = windowEdge - folded
-        if (pending <= 0) return false
-        if (!force && pending < BATCH_SIZE) return false
+        val replacing = sections.firstOrNull { it.awaitsRegeneration }
+        val owned: List<SummarySections.SourceMessage> = if (replacing != null) {
+            val byId = current.associateBy { it.id }
+            replacing.messageIds.mapNotNull { byId[it] }
+        } else {
+            val covered = SummarySections.coveredCount(sections, current)
+            val windowEdge = (current.size - snapshot.window.coerceAtLeast(1)).coerceAtLeast(0)
+            val range = SummarySections.nextRange(current, covered, windowEdge, BATCH_SIZE, force)
+                ?: return false
+            current.subList(range.first, range.last + 1).toList()
+        }
+        if (owned.isEmpty()) return false
+        val start = current.indexOfFirst { it.id == owned.first().id }
+        val context = SummarySections.contextBefore(current, start).toList()
 
         if (operationState !is OperationState.Running) {
             lastFailureCategory = null
             setOperationState(
-                OperationState.Running(OperationKind.SUMMARIZING, chatName, pending, 0)
+                OperationState.Running(OperationKind.SUMMARIZING, chatName, owned.size, 0)
             )
         }
 
-        val runtime = resolveFoldRuntime(prefs) ?: return false
-        val result = foldBatch(
-            runtime = runtime,
-            entries = entries,
-            folded = folded,
-            pending = pending,
-            summary = prefs.getSummarizerSummary(),
-            priorOverLength = prefs.getSummarizerOverLength()
-        )
-        if (result !is FoldBatchResult.Advanced) return false
-        // A usable batch permanently fixes the processed prefix even if the
-        // user later discards, pauses, or otherwise undoes its derived summary.
-        if (!prefs.advanceSummaryRegenerationLockBoundary(result.foldedCount)) {
+        val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.SUMMARY) ?: return false
+        val text = requestSection(runtime, owned, context) ?: return false
+
+        // Never save a summary written from messages that changed meanwhile.
+        val latest = snapshotProvider()?.sources() ?: return false
+        if (chatIdProvider() != chatId ||
+            !SummarySections.sourceStillCurrent(owned, context, latest)
+        ) return false
+        val fresh = SummarySectionStore.load(prefs, latest) ?: run {
+            recordStorageFailure(prefs, chatName, "Could not load Summary Sections before saving.")
+            return false
+        }
+        val updated = if (replacing != null) {
+            val target = fresh.firstOrNull { it.id == replacing.id }
+            if (!SummarySections.canCommitReplacement(replacing, target)) return false
+            fresh.map {
+                if (it.id == replacing.id) SummarySections.newSection(owned, context, text, it.id) else it
+            }
+        } else {
+            if (SummarySections.coveredCount(fresh, latest) != start) return true
+            fresh + SummarySections.newSection(owned, context, text)
+        }
+        if (!SummarySectionStore.save(prefs, updated)) {
             recordFailure(
-                prefs,
-                SummarizerErrorCategory.SAVE_FAILED,
-                runtime.endpoint.label,
-                runtime.model,
-                null,
-                "The summary batch was usable, but its permanent regeneration lock could not be saved."
+                prefs, SummarizerErrorCategory.SAVE_FAILED, runtime.endpoint.label, runtime.model,
+                httpStatus = null, detail = null
             )
             return false
         }
-        if (!prefs.commitSummarizerFoldIn(
-                result.summary,
-                result.foldedCount,
-                result.overLength
-            )
-        ) {
-            recordFailure(
-                prefs,
-                SummarizerErrorCategory.SAVE_FAILED,
-                runtime.endpoint.label,
-                runtime.model,
-                null,
-                null
-            )
+        if (!prefs.advanceSummaryRegenerationLockBoundary(SummarySections.coveredCount(updated, latest))) {
+            recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, runtime.endpoint.label,
+                runtime.model, null, "Could not save the Summary Section regeneration boundary. Technical details were recorded in the Error Log.")
             return false
         }
         notifyStateChanged()
         val running = operationState as? OperationState.Running
         if (running?.kind == OperationKind.SUMMARIZING) {
-            setOperationState(
-                running.copy(successfulMessages = running.successfulMessages +
-                    (result.foldedCount - folded))
-            )
+            setOperationState(running.copy(successfulMessages = running.successfulMessages + owned.size))
         }
         return true
     }
 
-    /** Resolve the configured Summary Model and routing once per cycle. */
-    private fun resolveFoldRuntime(prefs: Preferences): FoldRuntime? {
-        val lengthWords = prefs.getSummarizerLength()
+    /**
+     * One section summary call with no app-imposed response length ceiling.
+     * @return the summary text, or null after recording the failure.
+     */
+    private suspend fun requestSection(
+        runtime: FoldRuntime,
+        owned: List<SummarySections.SourceMessage>,
+        context: List<SummarySections.SourceMessage>
+    ): String? {
+        fun role(m: SummarySections.SourceMessage) = if (m.isBot) "Assistant" else "User"
+        val body = SummarizerPrompts.sectionRequestBody(
+            runtime.prompt,
+            context.filter { it.text.isNotBlank() }.map { role(it) to it.text },
+            owned.filter { it.text.isNotBlank() }.map { role(it) to it.text }
+        )
+        val evidence = SummarizerDiagnostics.RequestEvidence()
+        val privateValues = (owned + context).map { it.text } + listOf(body, runtime.endpoint.apiKey)
+        val choice = try {
+            withContext(Dispatchers.IO) {
+                withSummarizerUsage(
+                    runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider,
+                    UsageFunction.SUMMARIZING
+                ) { attempt ->
+                    val client = buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)
+                    evidence.dispatched = true
+                    client.chatCompletion(
+                        ChatCompletionRequest(
+                            model = ModelId(runtime.model),
+                            messages = listOf(ChatMessage(role = ChatRole.User, content = body))
+                        )
+                    )
+                }.choices.firstOrNull()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
+            if (classified.code == org.teslasoft.assistant.util.GenErrorCode.C1) throw CancellationException("Request cancelled", e)
+            val owner = SummarizerDiagnostics.owner(e, classified, evidence)
+            recordFailure(
+                runtime.prefs,
+                if (owner == SummarizerDiagnostics.Owner.LOCAL) SummarizerErrorCategory.UNEXPECTED else SummarizerErrorClassifier.categorize(classified),
+                runtime.endpoint.label,
+                runtime.model,
+                classified.httpStatus,
+                SummarizerErrorDetail.readable(e),
+                rawProviderError = e.message,
+                rawResponseBody = evidence.body,
+                failureOwner = owner,
+                exception = e,
+                providerEvidence = evidence.snapshot(),
+                requestEndpoint = runtime.endpoint,
+                requestedProvider = runtime.requestedProvider,
+                privateValues = privateValues + evidence.privateResponseValues()
+            )
+            return null
+        }
+        val text = choice?.message?.content?.toString().orEmpty().trim()
+        if (text.isBlank()) {
+            recordFailure(
+                runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
+                runtime.endpoint.label, runtime.model, null, null,
+                failureOwner = SummarizerDiagnostics.Owner.EXTERNAL,
+                providerEvidence = evidence.snapshot(),
+                requestEndpoint = runtime.endpoint,
+                requestedProvider = runtime.requestedProvider,
+                privateValues = privateValues + evidence.privateResponseValues(),
+                rawResponseBody = evidence.body
+            )
+            return null
+        }
+        return text
+    }
+
+    /** Resolve the configured Summary Model, routing, and the [promptKind]
+     *  prompt once per cycle. */
+    private fun resolveFoldRuntime(
+        prefs: Preferences,
+        promptKind: SummarizerPromptSets.Kind
+    ): FoldRuntime? {
         val endpointId = prefs.getSummarizerEndpointId()
         val endpoint = if (endpointId.isBlank()) null else try {
             ApiEndpointPreferences.getApiEndpointPreferences(appContext)
                 .getApiEndpoint(appContext, endpointId)
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            recordUnexpectedFailure(e, (operationState as? OperationState.Running)?.kind ?: OperationKind.SUMMARIZING,
+                (operationState as? OperationState.Running)?.chatName.orEmpty())
+            return null
         }
         // The Summary Model is an explicit selection. Endpoint changes clear
         // it to "Select"; never fall back to the profile's chat model behind
@@ -710,8 +885,14 @@ class SummarizerController(
             endpoint = endpoint,
             model = model,
             providerJson = routingResolution.providerJson,
-            prompt = SummarizerPrompts.render(effectivePrompt(prefs), lengthWords),
-            lengthWords = lengthWords
+            requestedProvider = when (routingMode) {
+                org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_ONLY -> savedFavorite?.selectedProvider.orEmpty().ifBlank { "Not Reported" }
+                org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_PREFERRED -> savedFavorite?.providerOrder?.joinToString(", ").orEmpty().ifBlank { "Automatic" }
+                else -> "Automatic"
+            },
+            prompt = SummarizerPrompts.render(
+                SummarizerPromptSets.activeText(prefs, promptKind, chatIdProvider())
+            )
         )
     }
 
@@ -721,8 +902,7 @@ class SummarizerController(
         entries: List<Entry>,
         folded: Int,
         pending: Int,
-        summary: String,
-        priorOverLength: Boolean
+        summary: String
     ): FoldBatchResult {
         var batch = pending.coerceAtMost(BATCH_SIZE)
 
@@ -736,8 +916,7 @@ class SummarizerController(
             if (departing.isEmpty()) {
                 return FoldBatchResult.Advanced(
                     summary,
-                    folded + batch,
-                    priorOverLength
+                    folded + batch
                 )
             }
 
@@ -746,24 +925,31 @@ class SummarizerController(
                 summary,
                 departing
             )
-            val rawResponse = java.util.concurrent.atomic.AtomicReference<String?>(null)
+            val evidence = SummarizerDiagnostics.RequestEvidence()
+            val privateValues = departing.map { it.second } + listOf(summary, body, runtime.endpoint.apiKey)
             val text: String
             try {
                 text = withContext(Dispatchers.IO) {
-                    val client = buildClient(runtime.endpoint, runtime.providerJson, rawResponse)
                     val request = ChatCompletionRequest(
                         model = ModelId(runtime.model),
-                        maxTokens = responseTokenBudget(runtime.lengthWords),
                         messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
-                    client.chatCompletion(request)
-                        .choices.firstOrNull()?.message?.content?.toString().orEmpty()
+                    withSummarizerUsage(
+                        runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider,
+                        UsageFunction.COMPACTING
+                    ) { attempt ->
+                        val client = buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)
+                        evidence.dispatched = true
+                        client.chatCompletion(request)
+                    }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
                 }.trim()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val classified = GenerationErrorClassifier.classify(e)
-                val category = SummarizerErrorClassifier.categorize(classified)
+                val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
+                if (classified.code == org.teslasoft.assistant.util.GenErrorCode.C1) throw CancellationException("Request cancelled", e)
+                val owner = SummarizerDiagnostics.owner(e, classified, evidence)
+                val category = if (owner == SummarizerDiagnostics.Owner.LOCAL) SummarizerErrorCategory.UNEXPECTED else SummarizerErrorClassifier.categorize(classified)
                 if (category == SummarizerErrorCategory.REQUEST_TOO_LARGE && batch > 1) {
                     batch = (batch / 2).coerceAtLeast(1)
                     continue
@@ -777,9 +963,15 @@ class SummarizerController(
                 val detail = SummarizerErrorDetail.readable(e)
                 recordFailure(
                     runtime.prefs, category, runtime.endpoint.label, runtime.model,
-                    classified.httpStatus, SummarizerDetailSanitizer.sanitize(detail),
+                    classified.httpStatus, detail,
                     rawProviderError = e.message,
-                    rawResponseBody = rawResponse.get()
+                    rawResponseBody = evidence.body,
+                    failureOwner = owner,
+                    exception = e,
+                    providerEvidence = evidence.snapshot(),
+                    requestEndpoint = runtime.endpoint,
+                    requestedProvider = runtime.requestedProvider,
+                    privateValues = privateValues + evidence.privateResponseValues()
                 )
                 return FoldBatchResult.Failed
             }
@@ -791,20 +983,18 @@ class SummarizerController(
                     runtime.endpoint.label,
                     runtime.model,
                     null,
-                    null
+                    null,
+                    failureOwner = SummarizerDiagnostics.Owner.EXTERNAL,
+                    providerEvidence = evidence.snapshot(),
+                    requestEndpoint = runtime.endpoint,
+                    requestedProvider = runtime.requestedProvider,
+                    privateValues = privateValues + evidence.privateResponseValues(),
+                    rawResponseBody = evidence.body
                 )
                 return FoldBatchResult.Failed
             }
 
-            // Owner ruling: count the words ourselves, allow 10% over, and
-            // beyond that save unchanged but flag for compression on the
-            // next regular fold-in. Never truncated, never discarded, never
-            // a separate corrective call.
-            val overLength = SummarizerLengthPolicy.isOverLength(
-                text,
-                runtime.lengthWords
-            )
-            return FoldBatchResult.Advanced(text, folded + batch, overLength)
+            return FoldBatchResult.Advanced(text, folded + batch)
         }
     }
 
@@ -816,128 +1006,155 @@ class SummarizerController(
         httpStatus: Int?,
         detail: String?,
         rawProviderError: String? = null,
-        rawResponseBody: String? = null
+        rawResponseBody: String? = null,
+        failureOwner: SummarizerDiagnostics.Owner = if (category == SummarizerErrorCategory.MODEL_MISSING)
+            SummarizerDiagnostics.Owner.CONFIGURATION else SummarizerDiagnostics.Owner.LOCAL,
+        exception: Throwable? = null,
+        providerEvidence: org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot? = null,
+        requestEndpoint: ApiEndpointObject? = null,
+        requestedProvider: String? = null,
+        privateValues: List<String> = emptyList(),
+        diagnosticRecorded: Boolean = false
     ) {
+        if (failureOwner == SummarizerDiagnostics.Owner.CANCELLED) return
         lastFailureCategory = category
+        lastFailureProviderError = if (failureOwner == SummarizerDiagnostics.Owner.EXTERNAL)
+            SummarizerDetailSanitizer.sanitize(providerEvidence?.errorMessages?.joinToString("\n")
+                ?.ifBlank { null } ?: rawProviderError, privateValues) else null
+        val safeDetail = SummarizerDetailSanitizer.sanitize(lastFailureProviderError ?: detail, privateValues)
         val decorated = if (httpStatus != null) {
-            "HTTP status: $httpStatus" + (detail?.let { "\n$it" } ?: "")
+            "HTTP status: $httpStatus" + (safeDetail?.let { "\n$it" } ?: "")
         } else {
-            detail
+            safeDetail
         }
-        val current = SummarizerErrorLog.fromJson(prefs.getSummarizerErrors())
-        val result = SummarizerErrorLog.record(
-            current, prefs.getSummarizerEpisode(), category,
-            System.currentTimeMillis(), profile, model, decorated
-        )
-        prefs.setSummarizerErrors(SummarizerErrorLog.toJson(result.entries))
-        prefs.setSummarizerEpisode(category.name)
-        // A fresh failure the user has not opened yet — the top-bar badge shows
-        // as an alert until they view the errors list (owner ruling, Aug 31 2026).
-        prefs.setSummarizerErrorsUnseen(true)
-
+        // Owner ruling (Oct 4 2026, replacing July 29): a failure the AI
+        // service caused goes to the Provider Failure Log with what was being
+        // done (Summarizing or Compacting); any other failure goes to the
+        // Error Log.
         val running = operationState as? OperationState.Running
-        if (running?.kind == OperationKind.COMPACTING) {
-            recordCompactionDiagnostics(
+        if (running != null && !diagnosticRecorded) {
+            recordAppLogEntry(
                 prefs = prefs,
                 state = running,
                 category = category,
                 model = model,
+                failureOwner = failureOwner,
+                exception = exception,
+                providerEvidence = providerEvidence?.let {
+                    it.copy(outerHttpStatus = it.outerHttpStatus ?: httpStatus)
+                },
+                requestEndpoint = requestEndpoint,
+                requestedProvider = requestedProvider,
+                privateValues = privateValues,
                 rawProviderError = rawProviderError,
                 technicalDetail = decorated,
                 rawResponseBody = rawResponseBody
             )
         }
 
-        // Owner ruling (July 29 2026): summarizer failures are recorded ONLY
-        // in the per-chat Summarizer Errors log. No app-wide Error Log entry
-        // is written for this feature.
+        var newEpisode = false
+        try {
+            val current = SummarizerErrorLog.fromJson(prefs.getSummarizerErrors())
+            val result = SummarizerErrorLog.record(
+                current, prefs.getSummarizerEpisode(), category,
+                System.currentTimeMillis(), profile, model, decorated
+            )
+            newEpisode = result.newEpisode
+            prefs.setSummarizerErrors(SummarizerErrorLog.toJson(result.entries))
+            prefs.setSummarizerEpisode(category.name)
+            prefs.setSummarizerErrorsUnseen(true)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            prefs.reportSummarizerStorageFailure("Summarizer/Compact: persist error status", e)
+        }
 
-        if (result.newEpisode) {
+        if (newEpisode) {
             listener?.onSummarizerErrorEpisode()
         }
         notifyStateChanged()
     }
 
-    private fun recordCompactionDiagnostics(
+    private fun recordAppLogEntry(
         prefs: Preferences,
         state: OperationState.Running,
         category: SummarizerErrorCategory,
         model: String,
+        failureOwner: SummarizerDiagnostics.Owner,
+        exception: Throwable?,
+        providerEvidence: org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot?,
+        requestEndpoint: ApiEndpointObject?,
+        requestedProvider: String?,
+        privateValues: List<String>,
         rawProviderError: String?,
         technicalDetail: String?,
         rawResponseBody: String? = null
     ) {
-        val endpointId = prefs.getSummarizerEndpointId()
-        val endpoint = try {
-            ApiEndpointPreferences.getApiEndpointPreferences(appContext)
-                .getApiEndpoint(appContext, endpointId)
-        } catch (_: Exception) { null }
-        val favorite = FavoriteModelsPreferences.getPreferences(appContext)
-            .getFavorite(model, endpointId)
-        val provider = when (prefs.getSummarizerRoutingType()) {
-            org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_ONLY ->
-                favorite?.selectedProvider.orEmpty().ifBlank { "Not Reported" }
-            org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_PREFERRED ->
-                favorite?.providerOrder?.joinToString(", ").orEmpty().ifBlank { "Automatic" }
-            else -> "Automatic"
-        }
-        val outcome = if (state.successfulMessages > 0) "Partially Failed" else "Failed Completely"
-        val explanation = when (category) {
-            SummarizerErrorCategory.RESPONSE_TIMEOUT,
-            SummarizerErrorCategory.CONNECT_TIMEOUT -> "The configured timeout expired before a usable compacted summary was saved."
-            SummarizerErrorCategory.SERVICE_UNREACHABLE -> "The app could not reach the configured compaction endpoint."
-            SummarizerErrorCategory.REQUEST_TOO_LARGE -> "The compaction request exceeded a provider or model input limit."
-            SummarizerErrorCategory.SAVE_FAILED -> "The model returned usable work, but the app could not save the compacted state."
-            else -> "The compaction operation stopped before the requested range could be committed."
-        }
-        val body = buildString {
-            append("Function: Compacting\n")
-            append("Conversation: ").append(state.chatName.ifBlank { "Untitled chat" }).append('\n')
-            append("Summarizer Model: ").append(model).append('\n')
-            append("Summarizer Endpoint: ")
-                .append(endpoint?.label.orEmpty().ifBlank { "Not Reported" })
-                .append(" (").append(endpoint?.host.orEmpty().ifBlank { "Not Reported" }).append(")\n")
-            append("Summarizer Provider: ").append(provider).append('\n')
-            append("Messages Requested: ").append(state.requestedMessages).append('\n')
-            append("Outcome: ").append(outcome).append('\n')
-            if (state.successfulMessages > 0) {
-                append("Messages Successfully Processed: ").append(state.successfulMessages).append('\n')
-            }
-            rawProviderError?.takeIf { it.isNotBlank() }?.let {
-                append("Provider Error: ").append(it).append('\n')
-            }
-            technicalDetail?.takeIf { it.isNotBlank() && it != rawProviderError }?.let {
-                append("Technical Detail: ").append(it).append('\n')
-            }
-            // Owner-approved diagnostic (Aug 31 2026): the exact raw response
-            // body the provider returned, so a one-shot summary/compaction call
-            // that failed to parse shows what the AI service actually sent —
-            // e.g. an error notice returned in place of a completion.
-            SummarizerDetailSanitizer.sanitize(rawResponseBody)?.takeIf { it.isNotBlank() }?.let {
-                append("Raw Response: ").append(it).append('\n')
-            }
-            append("Explanation: ").append(explanation)
-        }
-        org.teslasoft.assistant.preferences.Logger.logAsync(
-            appContext, "crash", "Compaction", "error", body
-        )
-        if ((rawProviderError != null || rawResponseBody != null) && prefs.getLogChatFailures()) {
-            val providerLogMessage = buildString {
-                append(rawProviderError.orEmpty().ifBlank { "Not Reported" })
-                SummarizerDetailSanitizer.sanitize(rawResponseBody)?.takeIf { it.isNotBlank() }?.let {
-                    append("\nRaw Response: ").append(it)
+        val function = if (state.kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
+        SummarizerDiagnostics.record(
+            failureOwner,
+            logProviders = failureOwner != SummarizerDiagnostics.Owner.EXTERNAL || prefs.getLogChatFailures(),
+            local = {
+                // Storage APIs record the original exception at the failure site,
+                // including when used outside this controller. Do not duplicate it.
+                if (category != SummarizerErrorCategory.SAVE_FAILED || prefs.summarizerStorageFailure == null) {
+                val error = exception ?: IllegalStateException(technicalDetail ?: "Local $function failure: $category")
+                org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
+                    SummarizerDiagnostics.localDetail(function, error, privateValues))
+                }
+            },
+            external = {
+                val endpoint = requestEndpoint
+                val requested = requestedProvider
+                val message = buildString {
+                    append(SummarizerDetailSanitizer.sanitize(providerEvidence?.errorMessages?.joinToString("\n")
+                        ?.ifBlank { null } ?: rawProviderError ?: technicalDetail, privateValues) ?: "Provider returned no usable completion")
+                    // Strip completion and request payload fields before keeping wire evidence.
+                    SummarizerDetailSanitizer.sanitize(rawResponseBody, privateValues)?.let { append("\nResponse evidence (").append(rawResponseBody?.length ?: 0).append(" characters): ").append(it) }
+                }
+                scope.launch(Dispatchers.IO) {
+                    org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                        appContext, SummarizerDetailSanitizer.sanitize(endpoint?.label, privateValues) ?: "Not Reported",
+                        SummarizerDetailSanitizer.sanitize(providerEvidence?.actualServingProvider, privateValues) ?: "Not Reported",
+                        SummarizerDetailSanitizer.sanitize(model, privateValues) ?: "Not Reported", function, message,
+                        requestedRoutedProvider = SummarizerDetailSanitizer.sanitize(requested, privateValues),
+                        outerHttpStatus = providerEvidence?.outerHttpStatus,
+                        embeddedProviderStatus = providerEvidence?.embeddedHttpStatus,
+                        providerCode = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerCode, privateValues),
+                        providerType = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerType, privateValues),
+                        providerErrorType = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerErrorType, privateValues),
+                        contentFilterSide = providerEvidence?.contentFilterSide?.wire,
+                        attemptId = providerEvidence?.attemptId
+                    )
                 }
             }
-            scope.launch(Dispatchers.IO) {
-                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
-                    appContext,
-                    endpoint?.label.orEmpty().ifBlank { "Not Reported" },
-                    provider,
-                    model,
-                    "Compacting",
-                    providerLogMessage
-                )
-            }
+        )
+    }
+
+    private fun recordStorageFailure(prefs: Preferences, chatName: String, detail: String) {
+        if (operationState !is OperationState.Running)
+            setOperationState(OperationState.Running(OperationKind.SUMMARIZING, chatName, 0, 0))
+        recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, "Not Reported",
+            prefs.getSummarizerModel(), null, "$detail Technical details were recorded in the Error Log.")
+    }
+
+    private fun recordUnexpectedFailure(error: Exception, kind: OperationKind, chatName: String) {
+        val function = if (kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
+        org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
+            SummarizerDiagnostics.localDetail(function, error))
+        lastFailureCategory = SummarizerErrorCategory.UNEXPECTED
+        if (operationState !is OperationState.Running)
+            setOperationState(OperationState.Running(kind, chatName, 0, 0))
+        try {
+            val prefs = Preferences.getPreferences(appContext, chatIdProvider())
+            recordFailure(prefs, SummarizerErrorCategory.UNEXPECTED, "Not Reported",
+                prefs.getSummarizerModel(), null, "Technical details were recorded in the Error Log.",
+                exception = error, diagnosticRecorded = true)
+        } catch (statusError: Exception) {
+            if (statusError is CancellationException) throw statusError
+            // A broken local store must not erase the original diagnostic or
+            // leave the operation falsely reported as successful.
+            org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
+                SummarizerDiagnostics.localDetail("$function: record failure status", statusError))
         }
     }
 
@@ -974,6 +1191,52 @@ class SummarizerController(
     }
 
     /**
+     * Runs one Summarizer or Compact request and logs what it cost to the
+     * chat's usage log under summarization. Counts and charges come only from
+     * the provider's response; a failed request is logged only when the
+     * provider reported usage.
+     */
+    private suspend fun <T> withSummarizerUsage(
+        prefs: Preferences,
+        endpoint: ApiEndpointObject,
+        model: String,
+        requestedProvider: String,
+        function: UsageFunction,
+        block: suspend (ProviderUsageAttempt) -> T
+    ): T = coroutineScope {
+        val attempt = ProviderUsageAttempt(
+            requestedModel = model,
+            fallbackProvider = requestedProvider.trim()
+                .ifBlank { TokenUsageAccounting.PROVIDER_NOT_REPORTED },
+            apiEndpoint = endpoint.host
+        )
+        // The response observer runs beside the client; wait for it before
+        // reading the attempt.
+        attempt.beginObservation()
+        val pricing = async(Dispatchers.IO) { TokenPricingCatalogClient.load(endpoint, model) }
+        var succeeded = false
+        try {
+            val result = block(attempt)
+            succeeded = true
+            result
+        } finally {
+            withContext(NonCancellable) {
+                val record = AuxiliaryUsage.record(attempt, pricing, succeeded) { reportedModel ->
+                    TokenPricingCatalogClient.load(endpoint, reportedModel)
+                }
+                if (record != null) {
+                    withContext(Dispatchers.IO) {
+                        UsageLogStore.append(
+                            prefs,
+                            listOf(UsageLog.entry(UsageCategory.SUMMARIZING, null, record, function = function))
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Same auth handling as the chat funnel and the Memory Assistant, but
      * with THIS endpoint's own Connection Timeout and Response Time — the
      * error wording tells the user to raise exactly those values (§2.3/2.4).
@@ -987,7 +1250,10 @@ class SummarizerController(
         // exact raw response body the provider returned for this call is stored
         // here, so a failure can log what the AI service actually sent back —
         // e.g. an error notice returned in place of a completion.
-        rawResponseSink: java.util.concurrent.atomic.AtomicReference<String?>? = null
+        rawResponseSink: SummarizerDiagnostics.RequestEvidence? = null,
+        // Usage capture: the provider's reported counts and charge for this
+        // call, read from the same response body.
+        usageAttempt: ProviderUsageAttempt? = null
     ): OpenAI {
         val isBearerAuth = endpoint.authType == ApiEndpointObject.AUTH_BEARER
         val extraHeaders: Map<String, String> = when (endpoint.authType) {
@@ -1013,16 +1279,24 @@ class SummarizerController(
                 proxy = null,
                 retry = RetryStrategy(maxRetries = 0),
                 httpClientConfig = {
-                    if (rawResponseSink != null) {
+                    if (rawResponseSink != null || usageAttempt != null) {
                         install(ResponseObserver) {
                             onResponse { response ->
-                                rawResponseSink.set(
-                                    try {
-                                        response.bodyAsText()
-                                    } catch (_: Exception) {
-                                        null
+                                try {
+                                    val body = response.bodyAsText()
+                                    rawResponseSink?.status = response.status.value
+                                    rawResponseSink?.body = body
+                                    if (usageAttempt != null) {
+                                        if (response.status.value in 200..299) {
+                                            ReportedProviderParser.observeCompletedBody(body)
+                                                ?.let(usageAttempt::noteRawObservation)
+                                        } else {
+                                            usageAttempt.noteHttpResponse(response.status.value, body)
+                                        }
                                     }
-                                )
+                                } finally {
+                                    usageAttempt?.finishObservation()
+                                }
                             }
                         }
                     }

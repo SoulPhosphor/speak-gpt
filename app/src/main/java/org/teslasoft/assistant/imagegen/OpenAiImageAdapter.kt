@@ -39,31 +39,9 @@ object OpenAiImageAdapter : ImageProviderAdapter {
 
     override val providerName: String = "OpenAI-compatible"
 
-    override val capabilities: ImageAdapterCapabilities =
-        ImageAdapterCapabilities(supportsShape = true, supportsQuality = true)
-
     /** The generations path under the endpoint's base URL. */
     fun imagesUrl(endpoint: ApiEndpointObject): String {
-        var base = endpoint.host.trim()
-        if (!base.endsWith("/")) base += "/"
-        return base + "images/generations"
-    }
-
-    /** Canonical size per shape (the current OpenAI image sizes); a
-     *  provider that cannot accept one answers with the §11
-     *  unsupported-option flow rather than being silently second-guessed. */
-    fun sizeFor(shape: ImageShape): String? = when (shape) {
-        ImageShape.AUTOMATIC -> null
-        ImageShape.SQUARE -> "1024x1024"
-        ImageShape.LANDSCAPE -> "1536x1024"
-        ImageShape.PORTRAIT -> "1024x1536"
-    }
-
-    fun qualityFor(quality: ImageQuality): String? = when (quality) {
-        ImageQuality.AUTOMATIC -> null
-        ImageQuality.LOW -> "low"
-        ImageQuality.MEDIUM -> "medium"
-        ImageQuality.HIGH -> "high"
+        return ImageApiRoutes.base(endpoint) + "images/generations"
     }
 
     /** Request body as JSON, visible for unit tests. Exactly one image. */
@@ -72,8 +50,7 @@ object OpenAiImageAdapter : ImageProviderAdapter {
         body.put("model", request.modelId)
         body.put("prompt", request.prompt)
         body.put("n", 1)
-        sizeFor(request.shape)?.let { body.put("size", it) }
-        qualityFor(request.quality)?.let { body.put("quality", it) }
+        putImageParameters(body, request)
         return body.toString()
     }
 
@@ -127,6 +104,9 @@ object OpenAiImageAdapter : ImageProviderAdapter {
         val usage = root.optJSONObject("usage")?.toString()?.take(200)
         return AdapterImageResponse(payload, usage)
     }
+
+    override fun confirmedIncompatibility(status: Int, body: String, request: ImageGenerationRequest): ImageOptionRejection? =
+        ImageOptionRejection.fromError(status, body, request)
 
     override fun classifyHttpError(status: Int, body: String): ImageErrorCause {
         val lower = body.lowercase()

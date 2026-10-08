@@ -183,9 +183,11 @@ class ChatPreferences private constructor() {
             val settingsCleared = settings.edit().clear().commit()
             val includesCleared = org.teslasoft.assistant.preferences.includes.ImageImporter
                 .deleteChatImagesForDeletion(context, chatId)
+            val pdfsCleared = org.teslasoft.assistant.preferences.includes.PdfAttachmentStore
+                .deleteChatPdfs(context, chatId)
             if (historyCleared) ChatStorageHealth.clearReadFailure(context, historyName)
             if (settingsCleared) ChatStorageHealth.clearReadFailure(context, settingsName)
-            historyCleared && settingsCleared && includesCleared
+            historyCleared && settingsCleared && includesCleared && pdfsCleared
         } catch (_: Exception) {
             false
         }
@@ -914,6 +916,8 @@ class ChatPreferences private constructor() {
         try {
             org.teslasoft.assistant.preferences.includes.ImageImporter
                 .moveChatImages(context, oldId, newId)
+            org.teslasoft.assistant.preferences.includes.PdfAttachmentStore
+                .moveChatPdfs(context, oldId, newId)
         } catch (e: Exception) {
             Logger.log(
                 context, "crash", "ChatPreferences", "warning",

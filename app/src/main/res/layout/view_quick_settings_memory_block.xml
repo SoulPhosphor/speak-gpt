@@ -3,67 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/card_summarizer"
-        style="@style/Widget.App.QuickSettings.Segment.Top"
-        android:visibility="gone">
-
-        <LinearLayout
-            android:id="@+id/row_use_summarizer"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
-
-            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_weight="1"
-                app:parameterInfo="@string/quick_summarizer_hint"
-                app:parameterTitle="@string/summarizer_use_toggle" />
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/switch_use_summarizer"
-                style="@style/Widget.App.QuickSettings.Switch" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/row_summarizer_window"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/row_use_summarizer">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/summarizer_complete_messages"
-                android:textColor="?attr/appTextColor"
-                android:textSize="15sp" />
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_summarizer_window"
-                style="@style/Widget.App.Field.NumberBlank"
-                android:layout_marginStart="12dp"
-                android:ems="4"
-                android:maxLength="4"
-                android:singleLine="true" />
-        </LinearLayout>
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/row_chat_memory"
-        style="@style/Widget.App.QuickSettings.Segment.Middle">
+        style="@style/Widget.App.QuickSettings.Segment.Top">
 
         <TextView
             style="@style/Widget.App.QuickTile.Label"

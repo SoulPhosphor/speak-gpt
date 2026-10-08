@@ -24,13 +24,21 @@ package org.teslasoft.assistant.imagegen
  * claimed. Null means the bytes are not one of the supported image
  * formats — the "response did not contain a usable image" case.
  */
-enum class ImageFormat(val mimeType: String, val fileExtension: String) {
-    PNG("image/png", "png"),
-    JPEG("image/jpeg", "jpg"),
-    WEBP("image/webp", "webp"),
-    GIF("image/gif", "gif");
+enum class ImageFormat(val mimeType: String, val fileExtension: String, val supportsTransparency: Boolean) {
+    PNG("image/png", "png", true),
+    JPEG("image/jpeg", "jpg", false),
+    WEBP("image/webp", "webp", true),
+    GIF("image/gif", "gif", true);
 
     companion object {
+        /** The app's codecs, not a provider/model capability list. */
+        fun fromOutputName(value: String): ImageFormat? = entries.firstOrNull {
+            value.equals(it.fileExtension, true) || value.equals(it.mimeType, true) ||
+                value.equals(it.mimeType.substringAfter('/'), true)
+        }
+
+        fun supportsOutputName(value: String): Boolean = fromOutputName(value) != null
+
         fun detect(bytes: ByteArray): ImageFormat? {
             if (bytes.size < 12) return null
             // PNG: 89 50 4E 47 0D 0A 1A 0A

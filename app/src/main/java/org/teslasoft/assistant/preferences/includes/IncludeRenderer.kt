@@ -30,12 +30,11 @@ package org.teslasoft.assistant.preferences.includes
  * every single turn. Never introduce timestamps, ordering by hash-map
  * iteration, or anything else that varies between calls.
  *
- * Images are handled in two halves. Their inline text (a `<image>` block once
- * reduced, or a `<bookmark>` once removed) rides in the text side alongside
- * documents. FULL images contribute no text-side content — their bytes are
- * emitted as separate image parts by [imagePartsFor] and are always the LAST
- * content in the message so that everything preceding them still fills a
- * prefix cache when a provider cannot cache image bytes.
+ * Every attachment is introduced by a [label] naming its type, file name and
+ * current form. A FULL image is delivered as its label followed by the image
+ * part itself ([segmentsFor]); a reduced or removed image is text like any
+ * document. Condense, Reduce, Edit and Remove replace an attachment's content
+ * in place, so only that message and the ones after it leave the cache once.
  */
 object IncludeRenderer {
 
@@ -56,9 +55,82 @@ object IncludeRenderer {
         for (include in includes) {
             val block = renderInline(include) ?: continue
             if (body.isNotEmpty()) body.append("\n\n")
-            body.append(block)
+            body.append(label(include)).append('\n').append(block)
         }
         return body.toString()
+    }
+
+    /**
+     * The complete ordered content of a user message as the model receives
+     * it: the user's own words first, then each attachment in attachment
+     * order, each introduced by its [label]. A FULL image is its label
+     * followed by the image itself; a FULL PDF is its label followed by a
+     * [RenderedSegment.Pdf] the request builder resolves to native bytes or
+     * locally extracted text. Every other form is one text block. Whatever
+     * form an attachment is in, it occupies this same position in its
+     * message.
+     */
+    fun segmentsFor(typedText: String, includes: List<ChatInclude>): List<RenderedSegment> {
+        val out = ArrayList<RenderedSegment>()
+        if (typedText.isNotEmpty()) out += RenderedSegment.Text(typedText)
+        for (include in includes) {
+            when {
+                include.hasLiveImageBytes() -> {
+                    val part = imagePartsFor(listOf(include)).singleOrNull() ?: continue
+                    out += RenderedSegment.Text(label(include))
+                    out += RenderedSegment.Image(part)
+                }
+                include.hasLivePdfBytes() -> {
+                    out += RenderedSegment.Text(label(include))
+                    out += RenderedSegment.Pdf(include)
+                }
+                else -> {
+                    val block = renderInline(include) ?: continue
+                    out += RenderedSegment.Text(label(include) + "\n" + block)
+                }
+            }
+        }
+        return out
+    }
+
+    /**
+     * Owner-approved line introducing an attachment, so the model knows
+     * what the text or image that follows is and which upload it stands for.
+     */
+    fun label(include: ChatInclude): String {
+        val type = typeName(include.kind)
+        val name = include.fileName
+        return when {
+            include.form == IncludeForm.ARTIFACT ->
+                "Reminder of removed $type ($name):"
+            include.form == IncludeForm.CONDENSED && include.kind.isImage() ->
+                "Description of original uploaded image ($name):"
+            include.form == IncludeForm.CONDENSED ->
+                "Summary of original uploaded $type ($name):"
+            else -> "Uploaded $type ($name):"
+        }
+    }
+
+    private fun typeName(kind: IncludeKind): String = when (kind) {
+        IncludeKind.TXT -> "text file"
+        IncludeKind.MARKDOWN -> "Markdown file"
+        IncludeKind.JSON -> "JSON file"
+        IncludeKind.CSV -> "CSV file"
+        IncludeKind.DOCX -> "Word document"
+        IncludeKind.XLSX -> "Excel spreadsheet"
+        IncludeKind.PDF -> "PDF"
+        IncludeKind.JPEG, IncludeKind.PNG -> "image"
+    }
+
+    /** Body of a FULL PDF sent as locally extracted text instead of the file. */
+    fun renderLocalPdf(include: ChatInclude, extractedText: String): String = buildString {
+        append("<document name=\"")
+            .append(escapeAttribute(include.fileName))
+            .append("\">\n")
+        append("This is locally extracted PDF text. Page layout, diagrams, charts, ")
+        append("and other visual details may not be preserved.\n\n")
+        append(extractedText)
+        append("\n</document>")
     }
 
     /**
@@ -85,11 +157,30 @@ object IncludeRenderer {
         return out
     }
 
+    /** FULL PDFs stay out of the text projection. Delivery is selected at the
+     * final provider boundary, using either these original bytes or a local
+     * extracted/OCR representation. */
+    fun pdfPartsFor(includes: List<ChatInclude>): List<RenderedPdfPart> {
+        if (includes.isEmpty()) return emptyList()
+        return includes.mapNotNull { include ->
+            if (!include.hasLivePdfBytes()) return@mapNotNull null
+            RenderedPdfPart(
+                includeId = include.id,
+                pdfFileHash = include.pdfFileHash ?: return@mapNotNull null,
+                fileName = include.fileName,
+                byteSize = include.pdfByteSize,
+                pageCount = include.pdfPageCount,
+                cachedFallbackText = include.pdfFallbackText,
+                fallbackProvenance = include.pdfFallbackProvenance
+            )
+        }
+    }
+
     /** Text-side rendering of one include, or null if this include has no
      *  text-side representation (a FULL image is delivered as bytes, not text). */
     private fun renderInline(include: ChatInclude): String? = when {
         include.form == IncludeForm.ARTIFACT -> renderBookmark(include)
-        include.form == IncludeForm.FULL && include.kind.isImage() -> null
+        include.form == IncludeForm.FULL && (include.kind.isImage() || include.kind == IncludeKind.PDF) -> null
         include.kind.isImage() -> renderImage(include)
         else -> renderDocument(include)
     }
@@ -168,6 +259,14 @@ object IncludeRenderer {
     }
 }
 
+/** One ordered piece of a user message's model-facing content. */
+sealed class RenderedSegment {
+    data class Text(val text: String) : RenderedSegment()
+    data class Image(val part: RenderedImagePart) : RenderedSegment()
+    /** A FULL PDF whose delivery (native file or local text) is chosen per request. */
+    data class Pdf(val include: ChatInclude) : RenderedSegment()
+}
+
 /**
  * A live image content part that must accompany a multi-part user message.
  * Callers assemble the outbound "data:image/…;base64,…" URL themselves from
@@ -185,4 +284,14 @@ data class RenderedImagePart(
     /** Display file name (not used to look up the file — the hash is — but
      *  useful for logging and for diagnostics if the file has gone missing). */
     val fileName: String
+)
+
+data class RenderedPdfPart(
+    val includeId: String,
+    val pdfFileHash: String,
+    val fileName: String,
+    val byteSize: Long,
+    val pageCount: Int,
+    val cachedFallbackText: String?,
+    val fallbackProvenance: PdfFallbackProvenance?
 )

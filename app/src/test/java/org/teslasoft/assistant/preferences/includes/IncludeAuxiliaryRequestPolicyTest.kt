@@ -67,6 +67,24 @@ class IncludeAuxiliaryRequestPolicyTest {
         assertFalse(request.prompt.contains("Cliff Notes or a structured outline of the document below"))
     }
 
+    @Test fun fullPdfArtifactReadsSuppliedExtractedText() {
+        val pdf = ChatInclude(
+            id = "pdf", fileName = "paper.pdf", kind = IncludeKind.PDF,
+            form = IncludeForm.FULL, fullText = "", pdfFileHash = "hash",
+            pdfMimeType = "application/pdf"
+        )
+        val request = IncludeAuxiliaryRequestPolicy.artifact(
+            include = pdf,
+            selectedModel = "custom-endpoint-model",
+            excerptCharacters = 10,
+            sourceText = "Extracted findings and more text"
+        )
+
+        assertTrue(request.prompt.contains("File name: paper.pdf"))
+        assertTrue(request.prompt.contains("Extracted"))
+        assertFalse(request.prompt.contains("more text"))
+    }
+
     private val image = ChatInclude(
         id = "img",
         fileName = "chart.png",

@@ -769,10 +769,29 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
      *  filtering, and image mode keeps the raw capability-aware path. */
     private fun startCatalogFetch() {
         val endpoint = apiEndpointObject ?: return
+        if (imageMode) {
+            lifecycleScope.launch {
+                try {
+                    val models = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        org.teslasoft.assistant.imagegen.ImageCatalogClient.models(endpoint)
+                    }
+                    if (!isAdded) return@launch
+                    availableModels.clear()
+                    availableModels.addAll(models.filter { it.hasDisplayableOutput() }.map { it.id })
+                    catalogLoaded = true
+                    render()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    if (isAdded) showProviderError(failure.message, failure)
+                }
+            }
+            return
+        }
         // OpenRouter's raw catalog contains both ids and authoritative
         // reasoning metadata. Use it as the one shared request instead of an
         // SDK id fetch plus a disposable second capability fetch.
-        if (endpoint.hasOpenRouterCatalogAuthority() || imageMode || startsWithAllModels || rawModelCatalog) {
+        if (endpoint.hasOpenRouterCatalogAuthority() || startsWithAllModels || rawModelCatalog) {
             startRawModelsRequest()
             return
         }

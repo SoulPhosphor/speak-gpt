@@ -1,33 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- One usage row: what was billed, how much, and its cost. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:gravity="center_vertical"
-    android:minHeight="39dp"
-    android:orientation="horizontal"
-    android:paddingVertical="9dp">
+    style="@style/Widget.App.Usage.TableRow">
 
     <TextView
         android:id="@+id/usage_label"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:textColor="?attr/appTextColor"
-        android:textSize="14sp" />
+        style="@style/Widget.App.Usage.TableLabel" />
     <TextView
         android:id="@+id/usage_tokens"
-        android:layout_width="88dp"
-        android:layout_height="wrap_content"
-        android:gravity="end"
-        android:textColor="?attr/appTextColor"
-        android:textSize="14sp"
-        android:textStyle="bold" />
+        style="@style/Widget.App.Usage.TableQuantity" />
     <TextView
         android:id="@+id/usage_cost"
-        android:layout_width="82dp"
-        android:layout_height="wrap_content"
-        android:gravity="end"
-        android:textColor="?attr/appTextColor"
-        android:textSize="14sp"
-        android:textStyle="bold" />
+        style="@style/Widget.App.Usage.TableCost" />
 </LinearLayout>

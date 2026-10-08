@@ -190,6 +190,7 @@ class TokenUsageAccountingTest {
         assertEquals(60, summary.totalInputTokens)
         assertEquals(9, summary.totalOutputTokens)
         assertEquals(0.000078, summary.totalCost, 0.000000001)
+        assertFalse(summary.hasUnknownCost)
     }
 
     @Test fun mixedKnownAndUnknownTokenCountsRemainUnknownAtTheUiBoundary() {
@@ -391,6 +392,7 @@ class TokenUsageAccountingTest {
         )
         val group = TokenUsageAccounting.aggregate(listOf(old, newer)).groups.single()
         assertEquals(0.00046, group.totalCost, 0.000000001)
+        assertFalse(group.hasUnknownCost)
         assertEquals(null, group.inputPricePerToken)
         assertEquals(null, group.outputPricePerToken)
         assertTrue(group.hasVariablePricing)

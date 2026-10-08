@@ -240,7 +240,9 @@ object UnifiedPortableRestore {
             val covered = LinkedHashMap<String, List<PortableRestoreCategory>>()
             var chatParticipant: ChatRestoreParticipant? = null
             planned.chat?.let {
-                chatParticipant = ChatRestoreParticipant(app, it.desired, it.current, File(stagingRoot, "chats"))
+                chatParticipant = ChatRestoreParticipant(
+                    app, it.desired, it.current, File(stagingRoot, "chats"), it.incomingPdfAssets
+                )
                 participants.add(chatParticipant!!)
             }
             planned.generated?.let {
@@ -281,6 +283,7 @@ object UnifiedPortableRestore {
 
     private data class ParsedBackup(
         val chats: PortableChatRestorePlan.Plan? = null,
+        val chatPdfAssets: Map<String, File> = emptyMap(),
         val generatedImages: GeneratedImagePortableRestoreManager.Prepared? = null,
         val identities: CompanionBackupManifest? = null,
         val identityArchive: File? = null,
@@ -310,7 +313,8 @@ object UnifiedPortableRestore {
 
     private data class PlannedChat(
         val current: PortableChatRestorePlan.Plan,
-        val desired: PortableChatRestoreCoordinator.Prepared
+        val desired: PortableChatRestoreCoordinator.Prepared,
+        val incomingPdfAssets: Map<String, File>
     )
 
     private data class PlannedGenerated(
@@ -401,6 +405,16 @@ object UnifiedPortableRestore {
                 }
             }
         } else null
+        val parsedPdfAssets = PdfAttachmentPortableBackup.prepareRestore(artifacts)
+        if (chats != null &&
+            (parsedPdfAssets == null || PdfAttachmentPortableBackup.requiredHashes(chats) != parsedPdfAssets.keys)
+        ) {
+            fail(
+                PortableRestoreCategory.CHATS,
+                CategoryFailureReason.INVALID_DATA,
+                detail = "PDF attachment assets do not match live chat references"
+            )
+        }
 
         // Restored chats need the generated images they show. When the
         // gallery data is unusable the chats are still restored and the images
@@ -619,17 +633,19 @@ object UnifiedPortableRestore {
             }
         }
 
+        val chatPdfAssets = if (chats != null) parsedPdfAssets.orEmpty() else emptyMap()
         return ParsedBackup(
-            chats.takeIf { PortableRestoreCategory.CHATS !in failures },
-            generated,
-            identities.takeIf { identitySelections.none(failures::containsKey) },
-            identityArtifact?.stagedFile,
-            profileImages.takeIf { PortableRestoreCategory.PROFILE_IMAGES !in failures },
-            memories.takeIf { PortableRestoreCategory.MEMORIES !in failures },
-            rules.takeIf { PortableRestoreCategory.MODEL_RULES !in failures },
-            lorebooks.takeIf { PortableRestoreCategory.LOREBOOKS !in failures },
-            endpoints.takeIf { PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS !in failures },
-            settings.takeIf { PortableRestoreCategory.SETTINGS !in failures }
+            chats = chats.takeIf { PortableRestoreCategory.CHATS !in failures },
+            chatPdfAssets = chatPdfAssets,
+            generatedImages = generated,
+            identities = identities.takeIf { identitySelections.none(failures::containsKey) },
+            identityArchive = identityArtifact?.stagedFile,
+            profileImages = profileImages.takeIf { PortableRestoreCategory.PROFILE_IMAGES !in failures },
+            memories = memories.takeIf { PortableRestoreCategory.MEMORIES !in failures },
+            modelRules = rules.takeIf { PortableRestoreCategory.MODEL_RULES !in failures },
+            lorebooks = lorebooks.takeIf { PortableRestoreCategory.LOREBOOKS !in failures },
+            modelEndpoints = endpoints.takeIf { PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS !in failures },
+            settings = settings.takeIf { PortableRestoreCategory.SETTINGS !in failures }
         )
     }
 
@@ -962,7 +978,7 @@ object UnifiedPortableRestore {
                     )
                 }
             }
-            plannedChat = PlannedChat(current, prepared)
+            plannedChat = PlannedChat(current, prepared, backup.chatPdfAssets)
             prepared.plan
         } else live.chats
 

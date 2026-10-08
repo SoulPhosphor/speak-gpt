@@ -36,5 +36,14 @@ data class ImageGenerationRequest(
     val modelId: String,
     /** The model-supplied accessible description (§6 tool contract),
      *  carried through to the §12 stored record; null on `/imagine`. */
-    val description: String? = null
+    val description: String? = null,
+    /** Explicit model-specific settings, frozen when the job is started. Empty means provider defaults. */
+    val parameters: Map<String, String> = emptyMap(),
+    /** Filled by the coordinator from fetched descriptors, not field-name guesses. */
+    val parameterTypes: Map<String, ImageParameterType> = emptyMap(),
+    /** Historical defaults are best-effort; explicit per-request overrides are strict. */
+    val defaultShape: ImageShape = ImageShape.AUTOMATIC,
+    val defaultQuality: ImageQuality = ImageQuality.AUTOMATIC,
+    /** Selected from authoritative model metadata before dispatch. */
+    val geminiTransport: GeminiImageTransport? = null
 )

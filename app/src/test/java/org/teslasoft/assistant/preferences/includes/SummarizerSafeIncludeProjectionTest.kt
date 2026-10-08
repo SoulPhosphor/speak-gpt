@@ -53,108 +53,100 @@ class SummarizerSafeIncludeProjectionTest {
         imageHeight = 32
     )
 
+    private fun ids(includes: List<ChatInclude>) = includes.map { it.id }
+
     @Test
-    fun activeSummarizerSeparatesPayloadFromStableConversationReference() {
-        val source = include("stable-1", full = "SECRET DOCUMENT BODY")
+    fun attachmentRidesWithTheMessageItWasSentWith() {
+        val source = include("stable-1", full = "DOCUMENT BODY")
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "Read this.", listOf(source))),
             foldedCount = 0
         )
 
-        assertEquals(listOf("stable-1"), projection.persistentIncludes.map { it.include.id })
-        assertEquals("SECRET DOCUMENT BODY", projection.persistentIncludes.single().include.modelText())
-        val conversation = projection.conversation.single().text
-        assertTrue(conversation.contains("Read this."))
-        assertTrue(conversation.contains("\"id\":\"stable-1\""))
-        assertFalse(conversation.contains("SECRET DOCUMENT BODY"))
-        assertTrue(projection.conversation.single().inlineIncludes.isEmpty())
+        assertTrue(projection.foldedIncludes.isEmpty())
+        val message = projection.conversation.single()
+        assertEquals("Read this.", message.text)
+        assertEquals(listOf("stable-1"), ids(message.inlineIncludes))
+        assertEquals("DOCUMENT BODY", message.inlineIncludes.single().modelText())
     }
 
     @Test
-    fun activeSummarizerSplitsImmediatelyBeforeAnyFoldOrSummaryExists() {
-        val source = include("first")
+    fun attachmentOnlyMessageIsKept() {
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
-            listOf(CanonicalConversationMessage(false, "", listOf(source))),
+            listOf(CanonicalConversationMessage(false, "", listOf(include("first")))),
             foldedCount = 0
         )
 
-        assertEquals(1, projection.persistentIncludes.size)
         assertEquals(1, projection.conversation.size)
-        assertTrue(projection.conversation.single().text.contains("first"))
-        assertFalse(projection.conversation.single().text.contains("PAYLOAD-first"))
+        assertEquals("", projection.conversation.single().text)
+        assertEquals(listOf("first"), ids(projection.conversation.single().inlineIncludes))
     }
 
     @Test
-    fun foldedConversationNeverDropsOrMovesPersistentIncludes() {
-        val first = include("first")
-        val second = include("second")
+    fun foldedMessagesHandTheirAttachmentsToTheFoldedBlock() {
         val canonical = listOf(
-            CanonicalConversationMessage(false, "one", listOf(first)),
+            CanonicalConversationMessage(false, "one", listOf(include("first"))),
             CanonicalConversationMessage(true, "reply"),
-            CanonicalConversationMessage(false, "two", listOf(second))
+            CanonicalConversationMessage(false, "two", listOf(include("second")))
         )
-        val projection = SummarizerSafeIncludeProjectionBuilder.build(
-            canonical,
-            foldedCount = 2
-        )
+        val projection = SummarizerSafeIncludeProjectionBuilder.build(canonical, foldedCount = 2)
 
-        assertEquals(listOf("first", "second"), projection.persistentIncludes.map { it.include.id })
-        assertTrue(projection.persistentIncludes.all { it.include.form == IncludeForm.FULL })
-        assertEquals(1, projection.conversation.size)
-        assertTrue(projection.conversation.single().text.contains("\"id\":\"second\""))
-        assertFalse(projection.conversation.single().text.contains("PAYLOAD-second"))
+        assertEquals(listOf("first"), projection.foldedIncludes.map { it.include.id })
+        val retained = projection.conversation.single()
+        assertEquals("two", retained.text)
+        assertEquals(listOf("second"), ids(retained.inlineIncludes))
     }
 
     @Test
-    fun fullImageSurvivesFoldAsOneLivePersistentImageUnit() {
-        val image = fullImage("photo")
+    fun fullImageSurvivesFoldWithItsLiveBytes() {
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(
-                CanonicalConversationMessage(false, "look", listOf(image)),
+                CanonicalConversationMessage(false, "look", listOf(fullImage("photo"))),
                 CanonicalConversationMessage(true, "seen"),
                 CanonicalConversationMessage(false, "continue")
             ),
             foldedCount = 2
         )
 
-        val unit = projection.persistentIncludes.single().include
+        val unit = projection.foldedIncludes.single().include
         assertEquals("photo", unit.id)
         assertTrue(unit.hasLiveImageBytes())
-        assertFalse(projection.conversation.single().text.contains("hash-photo"))
+        assertTrue(projection.conversation.single().inlineIncludes.isEmpty())
     }
 
     @Test
-    fun formChangeReplacesPayloadInExistingSlotWithoutChangingReference() {
+    fun formChangeReplacesContentInPlaceAndLeavesEarlierMessagesUntouched() {
+        val earlier = CanonicalConversationMessage(false, "earlier", listOf(include("e")))
+        val reply = CanonicalConversationMessage(true, "reply")
         val original = include("a")
         val neighbor = include("b")
         val before = SummarizerSafeIncludeProjectionBuilder.build(
-            listOf(CanonicalConversationMessage(false, "turn", listOf(original, neighbor))),
+            listOf(earlier, reply, CanonicalConversationMessage(false, "turn", listOf(original, neighbor))),
             0
         )
-        val changed = original.copy(
-            form = IncludeForm.CONDENSED,
-            condensedText = "SHORT-A"
-        )
+        val changed = original.copy(form = IncludeForm.CONDENSED, condensedText = "SHORT-A")
         val after = SummarizerSafeIncludeProjectionBuilder.build(
-            listOf(CanonicalConversationMessage(false, "turn", listOf(changed, neighbor))),
+            listOf(earlier, reply, CanonicalConversationMessage(false, "turn", listOf(changed, neighbor))),
             0
         )
 
-        assertEquals(listOf("a", "b"), before.persistentIncludes.map { it.include.id })
-        assertEquals(listOf("a", "b"), after.persistentIncludes.map { it.include.id })
-        assertEquals("SHORT-A", after.persistentIncludes.first().include.modelText())
-        assertEquals(before.conversation.single().text, after.conversation.single().text)
+        // Everything before the changed message is identical, so it stays cached.
+        assertEquals(before.conversation.take(2), after.conversation.take(2))
+        val turn = after.conversation.last()
+        assertEquals("turn", turn.text)
+        assertEquals(listOf("a", "b"), ids(turn.inlineIncludes))
+        assertEquals("SHORT-A", turn.inlineIncludes.first().modelText())
     }
 
     @Test
-    fun reduceArtifactAndEditEachReplaceTheSameLogicalSlot() {
+    fun reduceArtifactAndEditEachReplaceTheSameSlot() {
         val left = include("left")
         val image = fullImage("image")
         val right = include("right")
         fun project(changed: ChatInclude) = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "turn", listOf(left, changed, right))),
             0
-        )
+        ).conversation.single().inlineIncludes
 
         val reduced = image.copy(
             form = IncludeForm.CONDENSED,
@@ -162,65 +154,36 @@ class SummarizerSafeIncludeProjectionTest {
             imageFileHash = null,
             imageMimeType = null
         )
-        val artifact = reduced.copy(
-            form = IncludeForm.ARTIFACT,
-            artifactLine = "IMAGE BOOKMARK"
-        )
+        val artifact = reduced.copy(form = IncludeForm.ARTIFACT, artifactLine = "IMAGE BOOKMARK")
         val edited = artifact.copy(artifactLine = "EDITED BOOKMARK")
 
-        listOf(project(reduced), project(artifact), project(edited)).forEach { projection ->
-            assertEquals(
-                listOf("left", "image", "right"),
-                projection.persistentIncludes.map { it.include.id }
-            )
+        listOf(project(reduced), project(artifact), project(edited)).forEach {
+            assertEquals(listOf("left", "image", "right"), ids(it))
         }
-        assertEquals("REDUCED IMAGE", project(reduced).persistentIncludes[1].include.modelText())
-        assertEquals("IMAGE BOOKMARK", project(artifact).persistentIncludes[1].include.modelText())
-        assertEquals("EDITED BOOKMARK", project(edited).persistentIncludes[1].include.modelText())
+        assertEquals("REDUCED IMAGE", project(reduced)[1].modelText())
+        assertEquals("IMAGE BOOKMARK", project(artifact)[1].modelText())
+        assertEquals("EDITED BOOKMARK", project(edited)[1].modelText())
     }
 
     @Test
-    fun payloadNeverRidesInHistoryEvenWithNothingFolded() {
-        val source = include("inline", full = "INLINE BODY")
-        val projection = SummarizerSafeIncludeProjectionBuilder.build(
-            listOf(CanonicalConversationMessage(false, "Question", listOf(source))),
-            foldedCount = 0
-        )
-
-        assertEquals("INLINE BODY", projection.persistentIncludes.single().include.modelText())
-        assertEquals(1, projection.conversation.size)
-        assertFalse(projection.conversation.single().text.contains("INLINE BODY"))
-        assertTrue(projection.conversation.single().text.contains("\"id\":\"inline\""))
-        assertTrue(projection.conversation.single().inlineIncludes.isEmpty())
-    }
-
-    @Test
-    fun repeatedProjectionOfOneSnapshotIsByteIdentical() {
-        val source = include("toggle")
-        val canonical = listOf(CanonicalConversationMessage(false, "question", listOf(source)))
+    fun repeatedProjectionOfOneSnapshotIsIdentical() {
+        val canonical = listOf(CanonicalConversationMessage(false, "question", listOf(include("toggle"))))
         val first = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
         val second = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
 
-        assertFalse(first.conversation.single().text.contains("PAYLOAD-toggle"))
-        assertEquals("PAYLOAD-toggle", first.persistentIncludes.single().include.modelText())
         assertEquals(first, second)
+        assertEquals("PAYLOAD-toggle", first.conversation.single().inlineIncludes.single().modelText())
         assertEquals(listOf("toggle"), canonical.single().includes.map { it.id })
     }
 
     @Test
-    fun markerNamesWhetherTheAttachmentWasAnImageOrADocument() {
-        val projection = SummarizerSafeIncludeProjectionBuilder.build(
+    fun summarizerMarkerNamesWhetherTheAttachmentWasAnImageOrADocument() {
+        val text = SummarizerSafeIncludeProjectionBuilder.summarizerConversation(
             listOf(
-                CanonicalConversationMessage(
-                    false,
-                    "Look",
-                    listOf(include("doc-1"), fullImage("pic-1"))
-                )
-            ),
-            foldedCount = 0
-        )
+                CanonicalConversationMessage(false, "Look", listOf(include("doc-1"), fullImage("pic-1")))
+            )
+        ).single().text
 
-        val text = projection.conversation.single().text
         assertTrue(text.contains("\"id\":\"doc-1\",\"type\":\"document\""))
         assertTrue(text.contains("\"id\":\"pic-1\",\"type\":\"image\""))
     }
@@ -249,7 +212,7 @@ class SummarizerSafeIncludeProjectionTest {
     }
 
     @Test
-    fun changingCompleteMessagesWindowNeverRewritesPersistentPrefix() {
+    fun foldingMovesOnlyTheAttachmentsOfFoldedMessages() {
         val canonical = listOf(
             CanonicalConversationMessage(false, "one", listOf(include("a"), include("b"))),
             CanonicalConversationMessage(true, "reply"),
@@ -258,15 +221,10 @@ class SummarizerSafeIncludeProjectionTest {
         val wide = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
         val narrow = SummarizerSafeIncludeProjectionBuilder.build(canonical, 2)
 
-        assertEquals(wide.persistentIncludes, narrow.persistentIncludes)
-        assertEquals(
-            wide.persistentIncludes.map {
-                StableAttachmentReference.renderPersistentPayload(it.include)
-            },
-            narrow.persistentIncludes.map {
-                StableAttachmentReference.renderPersistentPayload(it.include)
-            }
-        )
+        assertTrue(wide.foldedIncludes.isEmpty())
+        assertEquals(listOf("a", "b"), ids(wide.conversation.first().inlineIncludes))
+        assertEquals(listOf("a", "b"), narrow.foldedIncludes.map { it.include.id })
+        assertEquals(listOf("c"), ids(narrow.conversation.single().inlineIncludes))
         assertNotEquals(wide.conversation, narrow.conversation)
     }
 
@@ -281,41 +239,38 @@ class SummarizerSafeIncludeProjectionTest {
             1
         )
 
-        assertEquals(
-            listOf("a", "b", "c", "d"),
-            projection.persistentIncludes.map { it.include.id }
-        )
+        assertEquals(listOf("a", "b"), projection.foldedIncludes.map { it.include.id })
+        assertEquals(listOf("c", "d"), ids(projection.conversation.last().inlineIncludes))
     }
 
     @Test
-    fun newAttachmentOnlyTurnAppendsExactlyOneUnitAndRetryIsIdempotent() {
-        val old = include("old")
-        val fresh = include("fresh")
-        val before = listOf(CanonicalConversationMessage(false, "old turn", listOf(old)))
-        val after = before + CanonicalConversationMessage(false, "", listOf(fresh))
+    fun newAttachmentTurnLeavesEveryEarlierMessageUnchanged() {
+        val before = listOf(CanonicalConversationMessage(false, "old turn", listOf(include("old"))))
+        val after = before + CanonicalConversationMessage(false, "", listOf(include("fresh")))
 
+        val previous = SummarizerSafeIncludeProjectionBuilder.build(before, 0)
         val firstBuild = SummarizerSafeIncludeProjectionBuilder.build(after, 0)
         val retryBuild = SummarizerSafeIncludeProjectionBuilder.build(after, 0)
 
-        assertEquals(listOf("old", "fresh"), firstBuild.persistentIncludes.map { it.include.id })
+        assertEquals(previous.conversation, firstBuild.conversation.dropLast(1))
         assertEquals(firstBuild, retryBuild)
-        val freshConversation = firstBuild.conversation.last().text
-        assertTrue(freshConversation.contains("\"id\":\"fresh\""))
-        assertFalse(freshConversation.contains("PAYLOAD-fresh"))
+        assertEquals(listOf("fresh"), ids(firstBuild.conversation.last().inlineIncludes))
     }
 
     @Test
-    fun newTextAndAttachmentTurnKeepsTextAndOnlyAReferenceInConversation() {
-        val fresh = include("fresh", full = "LARGE NEW BODY")
+    fun newTextAndAttachmentTurnKeepsTheWordsFirst() {
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
-            listOf(CanonicalConversationMessage(false, "Please compare it.", listOf(fresh))),
+            listOf(
+                CanonicalConversationMessage(
+                    false, "Please compare it.", listOf(include("fresh", full = "LARGE NEW BODY"))
+                )
+            ),
             0
         )
 
-        assertEquals(1, projection.persistentIncludes.size)
-        assertTrue(projection.conversation.single().text.startsWith("Please compare it."))
-        assertTrue(projection.conversation.single().text.contains("\"id\":\"fresh\""))
-        assertFalse(projection.conversation.single().text.contains("LARGE NEW BODY"))
+        val message = projection.conversation.single()
+        assertEquals("Please compare it.", message.text)
+        assertEquals("LARGE NEW BODY", message.inlineIncludes.single().modelText())
     }
 
     @Test
@@ -327,18 +282,7 @@ class SummarizerSafeIncludeProjectionTest {
             0
         )
 
-        assertEquals(listOf("id-1", "id-2"), projection.persistentIncludes.map { it.include.id })
-        val refs = projection.conversation.single().text
-        assertTrue(refs.contains("\"id\":\"id-1\""))
-        assertTrue(refs.contains("\"id\":\"id-2\""))
-        assertTrue(
-            StableAttachmentReference.renderPersistentPayload(first)
-                .contains("\"id\":\"id-1\"")
-        )
-        assertTrue(
-            StableAttachmentReference.renderPersistentPayload(second)
-                .contains("\"id\":\"id-2\"")
-        )
+        assertEquals(listOf("id-1", "id-2"), ids(projection.conversation.single().inlineIncludes))
     }
 
     @Test
@@ -380,9 +324,8 @@ class SummarizerSafeIncludeProjectionTest {
 
         val projection = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
 
-        assertEquals(1, projection.persistentIncludes.size)
-        assertEquals("FIRST OWNER", projection.persistentIncludes.single().include.modelText())
-        assertFalse(projection.conversation.last().text.contains("\"id\":\"same\""))
+        assertEquals("FIRST OWNER", projection.conversation.first().inlineIncludes.single().modelText())
+        assertTrue(projection.conversation.last().inlineIncludes.isEmpty())
     }
 
     @Test
@@ -392,31 +335,32 @@ class SummarizerSafeIncludeProjectionTest {
         val snapshot = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
 
         // A request projection is derived data. Discarding it leaves canonical
-        // ownership unchanged; a retry deterministically recreates one unit.
+        // ownership unchanged; a retry deterministically recreates it.
         assertEquals(listOf("owned"), canonical.single().includes.map { it.id })
         assertEquals(snapshot, SummarizerSafeIncludeProjectionBuilder.build(canonical, 0))
-        assertEquals(1, snapshot.persistentIncludes.size)
+        assertEquals(1, snapshot.conversation.single().inlineIncludes.size)
     }
 
     @Test
     fun frozenBuildDoesNotMixLaterCanonicalFormChanges() {
         val source = include("frozen", full = "OLD PAYLOAD")
-        val canonicalAtDispatch = listOf(
-            CanonicalConversationMessage(false, "turn", listOf(source))
+        val frozen = SummarizerSafeIncludeProjectionBuilder.build(
+            listOf(CanonicalConversationMessage(false, "turn", listOf(source))), 0
         )
-        val frozen = SummarizerSafeIncludeProjectionBuilder.build(canonicalAtDispatch, 0)
-        val nextCanonical = listOf(
-            CanonicalConversationMessage(
-                false,
-                "turn",
-                listOf(source.copy(form = IncludeForm.ARTIFACT, artifactLine = "NEW BOOKMARK"))
-            )
+        val next = SummarizerSafeIncludeProjectionBuilder.build(
+            listOf(
+                CanonicalConversationMessage(
+                    false,
+                    "turn",
+                    listOf(source.copy(form = IncludeForm.ARTIFACT, artifactLine = "NEW BOOKMARK"))
+                )
+            ),
+            0
         )
-        val next = SummarizerSafeIncludeProjectionBuilder.build(nextCanonical, 0)
 
-        assertEquals("OLD PAYLOAD", frozen.persistentIncludes.single().include.modelText())
-        assertEquals("NEW BOOKMARK", next.persistentIncludes.single().include.modelText())
-        assertNotEquals(frozen.persistentIncludes, next.persistentIncludes)
+        assertEquals("OLD PAYLOAD", frozen.conversation.single().inlineIncludes.single().modelText())
+        assertEquals("NEW BOOKMARK", next.conversation.single().inlineIncludes.single().modelText())
+        assertNotEquals(frozen, next)
     }
 
     @Test
@@ -438,5 +382,27 @@ class SummarizerSafeIncludeProjectionTest {
         assertFalse(entries[1].text.contains("NEVER SUMMARIZE THIS BODY"))
         assertEquals("", entries[2].text)
         assertEquals("reply", entries.last().text)
+    }
+
+    @Test
+    fun pdfSummarizerProjectionCarriesOnlyStableDocumentReference() {
+        val pdf = ChatInclude(
+            id = "pdf-1",
+            fileName = "evidence.pdf",
+            kind = IncludeKind.PDF,
+            form = IncludeForm.FULL,
+            fullText = "",
+            pdfFileHash = "hash",
+            pdfMimeType = "application/pdf",
+            pdfFallbackText = "LOCALLY EXTRACTED SECRET BODY",
+            pdfFallbackProvenance = PdfFallbackProvenance.MIXED
+        )
+        val entry = SummarizerSafeIncludeProjectionBuilder.summarizerConversation(
+            listOf(CanonicalConversationMessage(false, "Review it", listOf(pdf)))
+        ).single().text
+
+        assertTrue(entry.contains("\"type\":\"document\""))
+        assertTrue(entry.contains("\"kind\":\"pdf\""))
+        assertFalse(entry.contains("LOCALLY EXTRACTED SECRET BODY"))
     }
 }

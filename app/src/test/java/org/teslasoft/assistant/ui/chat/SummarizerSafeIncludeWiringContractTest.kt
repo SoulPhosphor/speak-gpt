@@ -37,7 +37,7 @@ class SummarizerSafeIncludeWiringContractTest {
     @Test
     fun typedAndLegacyPathsUseTheSameProjectionResolver() {
         assertTrue(activity.split("freezeConversationProjection(").size - 1 >= 3)
-        assertTrue(activity.contains("legacyConversationProjection?.persistentIncludes"))
+        assertTrue(activity.contains("legacyConversationProjection?.foldedIncludes"))
         assertTrue(activity.contains("legacyConversationProjection?.conversation.orEmpty()"))
         assertFalse(activity.contains("summarizerTrimmedHistory()"))
         assertFalse(activity.contains("summarizerInjectionText()"))
@@ -45,20 +45,24 @@ class SummarizerSafeIncludeWiringContractTest {
     }
 
     @Test
-    fun attachmentPayloadsFollowTheHistoryOnBothRequestPaths() {
+    fun attachmentsRideInTheirMessagesAndFoldedOnesFollowTheSummary() {
+        // Owner ruling, Oct 6 2026: no separate attachment block after the
+        // history. Only attachments of folded messages travel on their own,
+        // right after the summary and ahead of the retained history.
+        assertFalse(activity.contains("persistentIncludes"))
+
+        val frozenSummary = activity.indexOf("content = conversationProjection.summaryInjection")
+        val frozenFolded = activity.indexOf("msgs.addAll(conversationProjection.foldedIncludes)")
         val frozenHistory = activity.indexOf("msgs.addAll(resolvedHistory.dropLast(1))")
-        val frozenPayload = activity.indexOf("msgs.addAll(conversationProjection.persistentIncludes)")
-        assertTrue(frozenHistory > 0 && frozenPayload > frozenHistory)
+        assertTrue(frozenSummary > 0 && frozenFolded > frozenSummary && frozenHistory > frozenFolded)
 
+        val legacySummary = activity.indexOf("content = legacyConversationProjection.summaryInjection")
+        val legacyFolded = activity.indexOf("legacyConversationProjection?.foldedIncludes?.let(msgs::addAll)")
         val legacyHistory = activity.indexOf("msgs.addAll(legacyResolvedHistory.dropLast(1))")
-        val legacyPayload = activity.indexOf(
-            "legacyConversationProjection?.persistentIncludes?.let(msgs::addAll)"
-        )
-        assertTrue(legacyHistory > 0 && legacyPayload > legacyHistory)
+        assertTrue(legacySummary > 0 && legacyFolded > legacySummary && legacyHistory > legacyFolded)
 
-        // Memory and Lorebook are rebuilt every turn, so the payload block must
-        // land ahead of them and keep its own cacheable position.
-        assertTrue(activity.indexOf("assembly.prompt", frozenPayload) > frozenPayload)
+        // Memory recall keeps reading words and markers, not attachment bodies.
+        assertTrue(activity.contains("conversationProjection.memoryContext"))
     }
 
     @Test
@@ -88,8 +92,17 @@ class SummarizerSafeIncludeWiringContractTest {
         val controller = source(
             "src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt"
         )
-        assertTrue(controller.contains("if (!prefs.ensureSummarizerProjectionCompatibility()) return false"))
-        assertTrue(activity.contains("val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true"))
+        val sectionBuild = controller.substringAfter("private suspend fun buildOneSection(")
+        val incompatible = sectionBuild.substringAfter("if (!prefs.ensureSummarizerProjectionCompatibility()) {")
+            .substringBefore("val current = snapshot.sources()")
+        assertTrue(incompatible.contains("recordStorageFailure(prefs, chatName,"))
+        assertTrue(incompatible.contains("return false"))
+        assertFalse(incompatible.contains("requestSection("))
+        // The summary / compaction review screen loads only compatible text.
+        val review = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/ConversationSummaryActivity.kt"
+        )
+        assertTrue(review.contains("val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true"))
     }
 
     @Test

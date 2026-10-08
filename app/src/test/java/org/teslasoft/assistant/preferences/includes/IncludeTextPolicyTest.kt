@@ -100,13 +100,13 @@ class IncludeTextPolicyTest {
         assertEquals(IncludeKind.CSV, IncludeKind.fromFileName("data.csv"))
         assertEquals(IncludeKind.DOCX, IncludeKind.fromFileName("resume.docx"))
         assertEquals(IncludeKind.XLSX, IncludeKind.fromFileName("budget.xlsx"))
+        assertEquals(IncludeKind.PDF, IncludeKind.fromFileName("manual.PDF"))
         assertEquals(IncludeKind.JPEG, IncludeKind.fromFileName("Photo 07-27-26.jpg"))
         assertEquals(IncludeKind.JPEG, IncludeKind.fromFileName("Screenshot.JPEG"))
         assertEquals(IncludeKind.PNG, IncludeKind.fromFileName("chart.png"))
     }
 
-    @Test fun deferredAndUnsupportedTypesAreRejected() {
-        assertNull(IncludeKind.fromFileName("manual.pdf"))
+    @Test fun unsupportedTypesAreRejected() {
         assertNull(IncludeKind.fromFileName("old.doc"))
         assertNull(IncludeKind.fromFileName("noextension"))
         // HEIC is converted to JPEG at import time, so a raw .heic name is not
@@ -120,6 +120,7 @@ class IncludeTextPolicyTest {
         assertTrue(IncludeKind.PNG.isImage())
         assertFalse(IncludeKind.TXT.isImage())
         assertFalse(IncludeKind.DOCX.isImage())
+        assertFalse(IncludeKind.PDF.isImage())
     }
 
     @Test fun imageTokenEstimateHasAFloor() {

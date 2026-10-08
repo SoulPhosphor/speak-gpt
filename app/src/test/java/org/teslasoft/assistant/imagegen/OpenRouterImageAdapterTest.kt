@@ -66,12 +66,6 @@ class OpenRouterImageAdapterTest {
     }
 
     @Test
-    fun shapeAndQualityAreDeclaredUnsupported() {
-        assertFalse(OpenRouterImageAdapter.capabilities.supportsShape)
-        assertFalse(OpenRouterImageAdapter.capabilities.supportsQuality)
-    }
-
-    @Test
     fun dataUrlImageDecodesToBytes() {
         val bytes = byteArrayOf(9, 8, 7, 6)
         val dataUrl = "data:image/png;base64," + Base64.getEncoder().encodeToString(bytes)

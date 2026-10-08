@@ -56,7 +56,8 @@ object ModelEndpointPortableCodec {
         val reasoningRejectedLevelsByModel: String,
         val providerDiscoveryPath: String,
         val identity: String,
-        val rejectedTtsVoices: List<String>
+        val rejectedTtsVoices: List<String>,
+        val pdfCapabilityByModel: String = ""
     )
 
     data class Data(
@@ -101,6 +102,7 @@ object ModelEndpointPortableCodec {
                     .put("reasoning_rejected_levels_by_model", endpoint.reasoningRejectedLevelsByModel)
                     .put("provider_discovery_path", endpoint.providerDiscoveryPath)
                     .put("identity", endpoint.identity)
+                    .put("pdf_capability_by_model", endpoint.pdfCapabilityByModel)
                     .put("rejected_tts_voices", JSONArray(endpoint.rejectedTtsVoices))
             )
         }
@@ -132,7 +134,7 @@ object ModelEndpointPortableCodec {
             val endpoints = ArrayList<Endpoint>(endpointsJson.length())
             repeat(endpointsJson.length()) { index ->
                 val item = endpointsJson.getJSONObject(index)
-                if (!hasExactKeys(item, ENDPOINT_KEYS)) {
+                if (!hasExactKeys(item, ENDPOINT_KEYS) && !hasExactKeys(item, LEGACY_ENDPOINT_KEYS)) {
                     return Result.Rejected("endpoint $index has unknown or missing fields")
                 }
                 endpoints.add(
@@ -163,6 +165,7 @@ object ModelEndpointPortableCodec {
                         reasoningRejectedLevelsByModel = item.getString("reasoning_rejected_levels_by_model"),
                         providerDiscoveryPath = item.getString("provider_discovery_path"),
                         identity = item.getString("identity"),
+                        pdfCapabilityByModel = item.optString("pdf_capability_by_model"),
                         rejectedTtsVoices = strings(item.getJSONArray("rejected_tts_voices"))
                     )
                 )
@@ -211,6 +214,7 @@ object ModelEndpointPortableCodec {
             if (endpoint.identity !in setOf("generic", "openrouter")) return "invalid endpoint identity"
             for (capabilities in listOf(
                 endpoint.imageCapabilityByModel,
+                endpoint.pdfCapabilityByModel,
                 endpoint.toolCapabilityByModel,
                 endpoint.reasoningCapabilityByModel,
                 endpoint.reasoningRejectedLevelsByModel
@@ -273,8 +277,10 @@ object ModelEndpointPortableCodec {
         "response_timeout_seconds", "context_window_tokens", "context_window_model_id",
         "image_capability_by_model", "tool_capability_by_model",
         "reasoning_capability_by_model", "reasoning_rejected_levels_by_model",
-        "provider_discovery_path", "identity", "rejected_tts_voices"
+        "provider_discovery_path", "identity", "rejected_tts_voices",
+        "pdf_capability_by_model"
     )
+    private val LEGACY_ENDPOINT_KEYS = ENDPOINT_KEYS - "pdf_capability_by_model"
     private val FAVORITE_KEYS = setOf(
         "modelId", "endpointId", "routingType", "selectedProvider", "allowFallbacks",
         "providerOrder", "ignoredProviders", "reasoningEffort", "showReasoning", "streaming",

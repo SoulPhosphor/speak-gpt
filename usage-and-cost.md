@@ -31,8 +31,9 @@ a detail; the file list at the end shows where each part lives.
 ## Owner rules (October 2026)
 
 1. Always use the most accurate source available: the service's reported
-   charge, then the service's own documented price list, then OpenRouter's
-   price for that service's model, then nothing ("Not Reported").
+   charge, then the service's own price list (downloaded by the app while it
+   runs), then OpenRouter's price for that service's model, then nothing
+   ("Not Reported").
 2. Services with their own documented formats (NanoGPT, Venice, xAI) are
    handled by their documentation, not by generic guessing.
 3. A model's price is used only for that exact model ID, or for an alias or
@@ -54,6 +55,11 @@ a detail; the file list at the end shows where each part lives.
 9. Wording on the screen (labels for calculated costs, estimates, or the
    OpenRouter price source) is on hold until the owner reviews the finished
    screen.
+10. **Never hard-code prices (owner ruling, October 7 2026).** No price,
+    rate, or price table is ever written into the app, including prices
+    copied from a service's documentation. Prices come only from a charge the
+    service reports or a price list the app downloads at the time of the
+    request. Otherwise the cost is "Not Reported".
 
 ## 1. Token counts
 
@@ -270,12 +276,22 @@ A service's own `/models` list is used only when it has OpenRouter's
 ## 4. What the screen adds up
 
 The screen opens from the chat menu (**Usage & Cost**). It is built from the
-saved request records at the moment it opens.
+chat's usage log (section 5) at the moment it opens.
 
-- **Grouping:** records are grouped by model, then by provider. Upper and
-  lower case are ignored.
-- **Conversation Total:** the sum of every request's Total.
-- **Model Total / Provider Total:** the sum for that model or provider.
+- **Sections (owner ruling, October 6 2026):** requests are split into
+  sections, top to bottom: **Chat, Image Generations, Summarizing, STT, TTS**.
+  Each section's title sits in a centered pill above its cards. A section
+  with no requests in this chat is not shown.
+- **Grouping:** inside a section, records are grouped by model, then by
+  provider. Upper and lower case are ignored. Each model is one card: the
+  model's name, total, and request count on top, then one block per provider.
+- **What a Summarizing model did:** in the Summarizing section only, a line
+  under the model's request count lists what that model was used for, in this
+  order and separated by commas: Summarizing, Compacting, Condensing,
+  Reducing, Image Description, Removal. Only the ones used appear.
+- **Conversation Total:** the sum of every request's Total, in every section.
+- **Model Total / Provider Total:** the sum for that model or provider within
+  its section.
 - **Rows:**
   - **Input:** input minus cached. This includes cache writes.
   - **Cached:** cached input.
@@ -303,16 +319,53 @@ partial sum is never shown as if it were complete.
   empty reply, its frozen records are first moved to the initiating user
   message, without recalculating any count, price, or cost.
 - **Regenerated replies:** every version's requests are counted, not just the
-  version on screen.
+  version on screen, including versions from a different model and versions
+  that were never used.
+- **Summarizing section:** every Summarizer section (Summarizing), Compact
+  fold-in (Compacting), Condense (Condensing), Reduce (Reducing), Summarizer
+  image description (Image Description), and the short reminder written when
+  an attachment is removed (Removal) is a paid request and is counted.
+- **Recorded the same way as chat replies:** counts and charges come only from
+  the service's report, and prices are frozen when the request finishes. A
+  finished request with no usage report is still counted, with its values
+  "Not Reported"; a failed one only when the service reported usage.
+- **TTS section:** every API voice request that returned audio is counted.
+  Section 7 explains how.
+- **Image Generations:** `/imagine` and AI `create_image` jobs record each
+  dispatched HTTP attempt through the shared registry/coordinator. A stable
+  request entry is committed before dispatch, enriched with the full allowlisted
+  usage before payload parsing/download, and finalized even on cancellation or
+  failure. Unconfirmed billing stays Not Reported; an attempt is never called free.
+- **Not counted yet:** Whisper cloud voice input (audio sent to OpenAI's `whisper-1`
+  transcription service; STT). Their sections exist and appear once they are
+  recorded. The STT section is meant for any speech-to-text service, not only
+  Whisper.
 
-Usage records are saved inside the chat's messages, in the
-`tokenUsageRecords` field of each message and of each reply version.
+### The usage log (owner ruling, October 6 2026)
+
+Each chat keeps its own usage log in its per-chat settings file
+(`usage_log`). Entries are only ever added: deleting a message,
+regenerating (including an earlier reply, which removes everything after it), making
+another version current, or compacting never removes usage already spent.
+
+- **First open:** the records already stored in the chat's messages are copied
+  into the log once. Requests recorded before that (for example by the
+  Summarizer) are kept and merged.
+- **Each entry** keeps the request's frozen record, what it was for (chat,
+  its section and, for Summarizing, its function), and the permanent id of the message
+  it served, when there is one. Neither depends on a message's position.
+- **Old replies** saved before usage records existed are not in the log;
+  they are still estimated from the messages present (section 1).
+
+Chat replies also keep their records inside the message, in the
+`tokenUsageRecords` field of each message and of each reply version, so a
+reply's details still show its own usage.
 
 ### Backup and restore
 
-Chat backups copy each chat's stored messages unchanged, so usage records
-(and their copies inside reply versions) are exported and restored with
-them. A backup made before usage records existed restores normally; its
+Chat backups copy each chat's stored messages and its per-chat settings file
+unchanged, so usage records (and their copies inside reply versions) and the
+usage log, including TTS entries, are exported and restored with them. A backup made before usage records existed restores normally; its
 replies fall back to the old-reply estimate described in section 1.
 
 ## 6. Settled behavior and open items (October 2026)
@@ -337,7 +390,134 @@ On hold until the owner reviews the finished screen:
 3. Display of old and estimated records.
 4. Subscription services in general (such as OpenCode Go).
 
-## 7. Featherless
+## 7. TTS (text to speech)
+
+Device (Google) voices are free and not recorded. API voices are recorded
+in the unit each service actually bills, never converted to text tokens.
+
+### When a request is counted
+
+- **Counted when the audio arrives.** The service charges for synthesis, not
+  playback. A request is recorded once the service has returned valid audio,
+  before playback starts. A playback error, Stop, or leaving the screen
+  afterwards does not remove it.
+- **Each synthesis is its own request.** A Retry that synthesizes again is
+  counted again.
+- **Not counted:** a request stopped before the service answered, and a
+  request that failed without returning audio. No charge is invented for
+  them.
+- **Which chat:** read-aloud and hands-free readback in a chat are recorded
+  in that chat. A Voice Browser preview is real paid synthesis. It is
+  recorded in a chat only when the Voice Browser was opened from that chat's
+  settings and the chat exists. A preview from the Voice Browser opened from
+  the main settings (no chat) is **not recorded anywhere**. There is no
+  app-wide usage log yet.
+- **Recorded in the background.** Cost details are completed after playback
+  has started, so they never delay speech. The usage entry is written by the
+  app's process, so closing the chat straight away does not lose it. If the
+  app process itself ends before it is written (for OpenRouter, up to about
+  15 seconds while the charge is looked up), that entry is lost.
+
+### Billing units
+
+| Row | Unit | How the quantity is known |
+| --- | --- | --- |
+| Characters | characters | The service's report (ElevenLabs), or counted from the exact text sent. Characters are Unicode code points: an emoji counts once, not as two. |
+| UTF-8 Bytes | bytes | Counted from the UTF-8 encoding of the exact text sent. |
+| Text Input | tokens | Only from the service's report (OpenAI). Never estimated. |
+| Audio Output | tokens | Only from the service's report (OpenAI). Never estimated. |
+| Audio Output | seconds | Measured from the MP3 audio returned (its frame headers). Never estimated from text length. |
+
+The TTS card shows only these rows. There is no Cached row and no Cache Hit
+Rate, because no supported speech service reports a cache. The price line
+under the rows names the actual basis: per 1M characters, per 1M tokens,
+per 1M UTF-8 bytes, or per minute of audio. "Variable" means requests in the
+group used different prices.
+
+### Cost source order
+
+1. The service's reported US-dollar charge for this request.
+2. The service's reported quantity × its price frozen with the request.
+3. An exact locally known quantity × the price frozen with the request.
+4. Otherwise "Not Reported".
+
+The total is the reported charge when there is one, even when no detail row
+can be shown. Otherwise it is the sum of the rows, and only when every
+billed row has a cost; a partial sum is never shown as the total. A request
+whose billing unit is unknown is still counted, with "Not Reported" costs.
+
+### OpenRouter (including ElevenLabs and other models routed through it)
+
+Speech uses OpenRouter's own `/audio/speech` request and key. A model such
+as `elevenlabs/eleven-turbo-v2` chosen on an OpenRouter connection is an
+OpenRouter request, and is shown as one.
+
+- **Reported charge:** after the audio arrives, the app asks OpenRouter's
+  generation record (`/generation?id=…`) for the `X-Generation-Id` the speech
+  response returned. `total_cost` becomes the Total; `provider_name` becomes
+  the provider shown; `model` the model shown. OpenRouter documents the
+  generation ID on speech but does not promise speech appears in that
+  record, so this is best effort: it is asked again after about 1.5, 3 and 6
+  seconds, and a failure never affects speech or shows an error.
+- **Serving provider:** only what OpenRouter reports. Routing can fall back,
+  so the requested provider is never assumed. Without a report the provider
+  shows "Not Reported".
+- **Price fallback and detail rows:** the price list OpenRouter publishes for
+  the model's providers (the same list the provider picker reads), for the
+  provider that served the request. When the serving provider is unknown, a
+  price is used only if every listed provider charges the same. A price is
+  applied only when each paid part states a unit this app can measure
+  exactly (characters, bytes, seconds/minutes, tokens). OpenRouter's flat
+  `prompt`/`completion` fields without a stated unit are not applied, so
+  such requests show "Not Reported" unless OpenRouter reported the charge.
+  OpenRouter does not report tokens for speech, so token-priced speech
+  models (such as Gemini TTS) have unknown token counts.
+
+### OpenAI direct (`api.openai.com`)
+
+OpenAI's model list does not mark speech models, so on the official host the
+documented speech model IDs are recognized exactly: `tts-1`, `tts-1-1106`,
+`tts-1-hd`, `tts-1-hd-1106`, `gpt-4o-mini-tts`,
+`gpt-4o-mini-tts-2025-03-20`, `gpt-4o-mini-tts-2025-12-15`.
+
+- **Cost: "Not Reported".** OpenAI reports no charge for speech and
+  publishes no price list the app can download, and prices are never written
+  into the app (owner rule 10). The quantities below are still shown.
+- **`tts-1` and `tts-1-hd` (and their dated versions):** billed per character;
+  the Characters row counts the exact text sent.
+- **`gpt-4o-mini-tts` and its dated versions:** requested with
+  `stream_format: "sse"`. The audio arrives in `speech.audio.delta` events,
+  which are decoded and joined in order; the final `speech.audio.done` event
+  reports `input_tokens` and `output_tokens`, shown as Text Input and Audio
+  Output. If OpenAI sends no usage, the token counts are "Not Reported".
+- SSE is used only on the official host and only for the models above. Every
+  other OpenAI-compatible service keeps the ordinary audio request.
+- A third-party price listing reports that `tts-1` is scheduled for
+  deprecation on December 15, 2026. This was not confirmed on OpenAI's own
+  page. Speech keeps using `/audio/speech`; nothing was moved to Realtime.
+
+### ElevenLabs direct
+
+Official ElevenLabs hosts are recognized exactly: `api.elevenlabs.io`,
+`api.us.elevenlabs.io`, `api.eu.residency.elevenlabs.io`,
+`api.in.residency.elevenlabs.io`. The connection's address must include
+`/v1` (for example `https://api.elevenlabs.io/v1`). There is no ElevenLabs
+setting to choose: on these addresses the key is always sent in ElevenLabs'
+`xi-api-key` header, whatever the connection's Auth mode says.
+
+- **Speech:** `POST {address}/text-to-speech/{voice_id}?output_format=mp3_44100_128`
+  with `text` and `model_id`. The connection's Text to Speech Endpoint
+  setting is not used for ElevenLabs.
+- **Models and voices:** `GET {address}/models` (models whose
+  `can_do_text_to_speech` is true) and `GET {address}/voices`, shown in the
+  same Voice Browser.
+- **Usage:** the `character-cost` response header is the reported character
+  count. If it is missing, the count is "Not Reported".
+- **Cost: "Not Reported".** ElevenLabs reports no dollar charge and
+  publishes no price list the app can download, and prices are never written
+  into the app (owner rule 10).
+
+## 8. Featherless
 
 Implemented using official documentation verified October 3, 2026:
 
@@ -408,6 +588,71 @@ plans, absence of admin calls, reasoning, and frozen-record serialization.
 | Per-request capture, reasoning as output | `app/src/main/java/org/teslasoft/assistant/usage/ProviderUsageAttempt.kt` (`outputIncludingReasoning`) |
 | Price fetching and matching | `app/src/main/java/org/teslasoft/assistant/usage/TokenPricingCatalog.kt` (`TokenPricingCatalogClient`, `PricingSource`, `FirstPartyPricing`, `NanoGptPricing`, `VenicePricing`, `GenericPricing`) |
 | Cost math, long-context tier, grouping, "Not Reported" formatting | `app/src/main/java/org/teslasoft/assistant/usage/TokenUsageAccounting.kt` |
-| When records are created and attached | `app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt` (`completePendingUsageRecord`, `completeTerminalUsageRecord`, `attachUsageRecords`, `openUsageAndCost`) |
+| When records are created and attached | `app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt` (`completePendingUsageRecord`, `completeTerminalUsageRecord`, `attachUsageRecords`, `appendUsageLog`, `withAttachmentUsage`, `openUsageAndCost`) |
+| The usage log | `app/src/main/java/org/teslasoft/assistant/usage/UsageLog.kt` (`UsageLogState`, `UsageLogStore`) |
+| Attachment and Summarizer request records | `app/src/main/java/org/teslasoft/assistant/usage/AuxiliaryUsage.kt`; `app/src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt` (`withSummarizerUsage`) |
 | The screen | `app/src/main/java/org/teslasoft/assistant/ui/activities/TokenPricingDetailsActivity.kt` |
-| Tests | `app/src/test/java/org/teslasoft/assistant/usage/`, `app/src/test/java/org/teslasoft/assistant/providers/ReportedProviderParserTest.kt`, `app/src/test/java/org/teslasoft/assistant/preferences/backup/portable/PortableChatRestorePlanTest.kt` |
+| Non-token (metered) usage, its grouping and storage | `app/src/main/java/org/teslasoft/assistant/usage/MeteredUsage.kt` (`UsageMeter`, `MeteredUsageAccounting`, `UsageMeterCodec`) |
+| TTS request formats, OpenAI SSE, MP3 duration | `app/src/main/java/org/teslasoft/assistant/tts/api/TtsServices.kt`, `TtsTransport.kt` |
+| TTS usage records, prices, OpenRouter lookup, recording | `app/src/main/java/org/teslasoft/assistant/tts/api/TtsUsage.kt` (`TtsUsageAccounting`, `OpenAiSpeechPricing`, `OpenRouterGenerationClient`, `TtsUsageRecorder`) |
+| Tests | `app/src/test/java/org/teslasoft/assistant/usage/`, `app/src/test/java/org/teslasoft/assistant/providers/ReportedProviderParserTest.kt`, `app/src/test/java/org/teslasoft/assistant/preferences/backup/portable/PortableChatRestorePlanTest.kt`, `app/src/test/java/org/teslasoft/assistant/tts/api/` (`TtsUsageTest`, `TtsWireFormatTest`, `TtsProviderDiscoveryTest`, `TtsPlaybackUsageTest`), `app/src/test/java/org/teslasoft/assistant/ui/activities/UsageCostTtsRenderingTest.kt` |
+
+
+## 8. Image generation evidence and settings
+
+Image generation reuses generic meters, not chat text-token fields. Image count,
+actual output megapixels, modality token counts, cached modality token counts, and
+provider-reported credits retain their own units. Fractional credits are preserved;
+there is no invented credit-to-dollar exchange rate. Only USD enters dollar totals.
+Request IDs, selected and reported model IDs, endpoint, start time, HTTP status,
+effective settings, pricing source, and resolved tariff evidence are retained.
+Prompts, API keys, temporary image URLs, and raw response bodies are not copied into
+this accounting evidence.
+
+| Request protocol | Usage and authoritative cost evidence |
+| --- | --- |
+| Direct OpenAI `/images/generations` | Images API usage details; exact model documents supply frozen token rates and explicit aliases. Without output details, only an explicitly published image-only output modality can resolve output tokens to image tokens. A missing cache split with distinct cached rates leaves the total Not Reported. Approximate per-image pricing examples are never used as actual token-billed charges. |
+| Direct Gemini native `interactions` or verified legacy `generateContent` | Interactions `usage` modality/cache counts and additional thought tokens, or legacy `usageMetadata` modality counts and additional thinking counts; exact model sections on Google's pricing page, standard synchronous USD token rates, only when the same section confirms no free tier. Missing modality counts, ambiguous tiers, aliases, or unparsed prices remain Not Reported. |
+| OpenRouter dedicated `/images` | Response `usage.cost` is documented USD. An exact generation ID can retrieve the generation receipt. Frozen per-endpoint tariffs are applied only for the identified route, or when all possible routes publish identical tariffs. |
+| NanoGPT dedicated `/images` | Model and endpoint descriptors supply settings and public tariffs. `X-Request-ID` retrieves the exact primary-charge receipt using the original key; explicit USD charges are used. XNO and unlabeled amounts retain their native evidence with USD cost Not Reported. The receipt excludes refunds and separately billed extras. |
+| Other OpenAI-compatible `/images/generations` | Preserve real image/request/usage information and explicit provider-reported currency/cost or credits. Unsupported or unavailable metadata never triggers a guessed model price or capability. |
+
+A receipt lookup retries only GET requests, never paid generation. Each enrichment
+updates the same image-request entry, so it cannot count a second charge. Deleting
+an image/message cannot remove its log entry; a receipt cannot resurrect an entry
+removed with the chat. Pending receipts unavailable within the bounded lookup window
+remain Not Reported. Pricing is resolved before dispatch and stored with the request;
+opening Usage & Cost never fetches newer rates to reprice history.
+
+The image menu orders the app toggles above Image Generation Options, Model Provider,
+Model, and published model settings. Labels use toggle-row typography. Enum choices
+and numeric bounds are fetched, never assigned by model name. Settings are scoped to
+the endpoint and exact model; historical shorthand defaults are translated against
+published choices, and unsupported historical defaults defer to the provider.
+Explicit request overrides and saved model-specific settings are strictly validated
+before dispatch. Unavailable metadata leaves provider defaults available and cost
+unknown; it does not fabricate extra controls.
+
+Shape overrides discard conflicting pixel-size controls while preserving a compatible
+resolution tier with an aspect ratio. Published output choices are limited by the app's
+actual image codecs; format-only models without a decodable output are omitted from
+the picker, and unusable explicit or default formats are rejected before billing.
+When a model mixes decodable and unsupported formats without a published default,
+an explicit decodable output format is required. Gemini discovery reads authoritative
+model-document links as well as inline model IDs, then matches native IDs where
+available. The published image guide supplies each model's API transport;
+Interactions models are not gated by the older generateContent method list.
+Interactions controls use the fetched OpenAPI response schema, and final images come
+only from model-output steps. Missing token modality, cache, or thinking evidence
+keeps cost Not Reported. Failed endpoint enrichment retains known output restrictions
+and discards billing rates. The latest saved dimension selection clears conflicting
+peers, and conflicting historical maps are rejected before dispatch.
+
+Authoritative references: [OpenAI Images](https://developers.openai.com/api/reference/resources/images/methods/generate/),
+[OpenAI model documents](https://developers.openai.com/api/docs/models),
+[Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation),
+[Gemini Interactions schema](https://ai.google.dev/static/api/interactions.openapi.json),
+[Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing),
+[OpenRouter Image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation),
+[NanoGPT Image API](https://docs.nano-gpt.com/api-reference/image-generation),
+[NanoGPT request billing](https://docs.nano-gpt.com/api-reference/endpoint/request-billing).

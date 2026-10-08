@@ -281,6 +281,17 @@ reduction, more the longer the chat runs.
    the empty slots have no revert. Different styles are prompt text
    only — the wiring is identical for every slot.
 
+   **Superseded (owner ruling, Oct 3 2026):** prompts are now edited on a
+   separate Summarizer Prompts screen opened from Summarizer Settings. It
+   holds three collections — Summary Prompt, Compaction Prompt, and Image
+   Prompt — each edited with the same multiple-prompt editor as Edit
+   Companion (any number of named prompts, Make Default marks the one in
+   use, Revert returns the open prompt to its last save, built-in prompts
+   cannot be deleted). Compaction uses its own in-use prompt. Changes are
+   kept only through Save; leaving or switching collections with unsaved
+   changes asks first. A blank in-use prompt falls back to the collection's
+   first built-in prompt, replacing the decision 7 exit guard.
+
 7. **Empty-prompt guard on leaving the screen.** If the user leaves
    Summarizer Settings (header back control or system back gesture)
    while the selected slot's prompt is empty, a standard dialog blocks
@@ -332,6 +343,44 @@ reduction, more the longer the chat runs.
     view: the summary text (editable) and the manual update action.
     There is no pause switch here — turning off the Quick Settings
     "Use Summarizer" toggle is the pause (see decision 3).
+
+    **Read-only while running (owner ruling, Oct 3 2026):** while the
+    summarizer or compactor runs for a chat, its summary / compacted text is
+    read only in the summary view and on Compaction Summary, with a note
+    saying so. When the run ends the newest saved text is loaded and becomes
+    editable again, so an edit can never be overwritten by a run that started
+    from older text.
+
+    **Superseded (owner ruling, Oct 3 2026):** the summary view pop-up and
+    its "subject" icon are replaced by a full-screen Conversation Summary,
+    the same screen as Compaction Summary in summarizer wording, opened
+    from one top-bar icon (Topic while the condensed form is in use, Docs
+    Add On while the full conversation is sent) once a summary has been
+    saved. Unsummarize / Resummarize replace Send Entire Chat. A chat that
+    uses the summarizer is not compacted: Compact is hidden and /compact
+    explains why while Use Summarizer is on.
+
+    **Superseded (owner-approved design, Oct 4 2026): Summarizer Bookmarks
+    and sections.** The automatic Summarizer no longer rewrites one rolling
+    summary. It keeps chronological summary sections, each owning specific
+    messages by their permanent message ID and written only from those
+    messages plus the exchange just before them (context only). A section
+    forms at about ten messages on a turn boundary (a prompt is never split
+    from its reply), or earlier when the user returns on a later calendar
+    date. The chat AI receives a short chronological direction and every
+    section's text in order, exactly as the Conversation Summary screen
+    shows it; there is no hidden digest. Editing or deleting a message stops
+    a running update and affects only the section that owns it (and one
+    that used it as context): an unedited section is rewritten, a section
+    the user edited (or an older single summary carried over as a legacy
+    block) is kept and marked as needing an update. A summary is saved only
+    if its messages are unchanged when it returns, and a reply stopped at
+    the length limit is never saved. The screen shows each section with a
+    protected date/time header (tap: read-only conversation preview opened
+    at the section's start; tap a message to go to it in the chat). The
+    reply that opens a section shows the bookmark flag beside its info
+    button, and replies inside a section offer Summary Section in their
+    menu. Compact is unchanged and keeps its own single summary.
 
 12. **Scope (owner, July 29 2026).** Regular chat requests only. The
     Playground, image-generation commands, and the function-calling /
@@ -430,3 +479,15 @@ reduction, more the longer the chat runs.
 - Qvink MessageSummarize: https://github.com/qvink/SillyTavern-MessageSummarize
 - LangChain ConversationSummaryBufferMemory (progressive summary-buffer
   pattern); Claude Code auto-compaction (same pattern, coarser grain).
+
+
+## Cleanup completion — October 4, 2026
+
+These owner instructions supersede the older Summary Length rules above:
+
+- Summary Sections and Compact use content-driven length, preserving continuity while removing repetition. There is no configured word ceiling, output token cap, 10% over-length flag, or length-triggered shortening pass. The unused Summary Length control is removed; its legacy preference and backup keys remain compatible. The image-prompt summary keeps its separate 200-token cap. Untouched saved built-ins upgrade; saved `{length}` instructions no longer use the retired setting.
+- A Section request checks its owned message IDs, exact source content, order, roles, and preceding context before committing. A replacement also checks that its section and resummarization decision have not changed. Source changes discard the in-flight result and defer to the existing resummarization choice. Projection refreshes cannot consume the edit evidence before that choice is handled.
+- Make Current on summarized replies uses the same section-change decision as editing. Automatic or remembered Yes protects manual edits; an explicit Yes may replace them. No keeps the summary marked changed. Regenerate keeps the reply's permanent message ID across its temporary row replacement.
+- Branch regenerate realigns the existing saved boundaries. A replacement inside a manual Compact source range marks Compact stale and offers the existing Recompact handling when the replacement finishes. Changes outside the range leave Compact alone.
+
+Compact cancellation and partial-failure persistence are unchanged. Usage & Cost and error/log routing are separate work.

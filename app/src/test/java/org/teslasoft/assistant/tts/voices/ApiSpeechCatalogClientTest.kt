@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ApiSpeechCatalogClientTest {
-    @Test fun speechModelsComeFromReturnedCapabilitiesAndIds() {
+    @Test fun speechModelsRequireReturnedCapabilitiesRegardlessOfTheirIds() {
         val data = JsonParser.parseString(
             """[
               {"id":"custom-talker","capabilities":{"text_to_speech":true}},
@@ -17,7 +17,7 @@ class ApiSpeechCatalogClientTest {
             ]"""
         ).asJsonArray
         assertEquals(
-            listOf("custom-talker", "vendor/speech-v2"),
+            listOf("custom-talker"),
             ApiSpeechCatalogClient.speechModelIds(data)
         )
     }

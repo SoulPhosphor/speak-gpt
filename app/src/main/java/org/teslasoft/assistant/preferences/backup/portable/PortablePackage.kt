@@ -77,6 +77,7 @@ object PortablePackage {
     const val TYPE_GENERATED_IMAGES_CATALOG = "generated-images-catalog"
     const val TYPE_GENERATED_IMAGE_ASSET = "generated-image-asset"
     const val TYPE_PROFILE_IMAGE_ASSET = "profile-image-asset"
+    const val TYPE_CHAT_PDF_ASSET = "chat-pdf-asset"
 
     data class Artifact(
         val entryName: String,
@@ -697,7 +698,9 @@ object PortablePackage {
     ): Set<String> = artifacts.filterValues { item ->
         val name = item.optString("name", "")
         when (category) {
-            PortableRestoreCategory.CHATS -> item.optString("type") == TYPE_CHATS_JSON
+            PortableRestoreCategory.CHATS -> item.optString("type") in setOf(
+                TYPE_CHATS_JSON, TYPE_CHAT_PDF_ASSET
+            )
             PortableRestoreCategory.GENERATED_IMAGES -> item.optString("type") in setOf(
                 TYPE_GENERATED_IMAGES_CATALOG, TYPE_GENERATED_IMAGE_ASSET
             )
@@ -754,6 +757,9 @@ object PortablePackage {
             name.startsWith("profile_images/assets/") &&
                 Regex("^profile_[0-9a-f]{64}\\.jpg$").matches(fileName)
         }
+        TYPE_CHAT_PDF_ASSET -> Regex(
+            "^chat_pdfs/[A-Za-z0-9_-]+/[0-9a-f]{64}\\.pdf$"
+        ).matches(name)
         else -> false
     }
 }

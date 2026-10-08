@@ -343,6 +343,11 @@ object PortableRecoveryWriter {
                             databaseKeyHex = null, keySemantics = null, schemaVersion = 2
                         )
                     )
+                    when (val pdfs = PdfAttachmentPortableBackup.buildArtifacts(context, chats.json)) {
+                        is PdfAttachmentPortableBackup.Result.Ok -> artifacts.addAll(pdfs.artifacts)
+                        is PdfAttachmentPortableBackup.Result.Failed ->
+                            return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    }
                     includedTypes.add(BackupType.CHATS)
                     when (PortableBackupCaptureStability.decide(
                         beforeTokens,

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/Widget.App.ImageGeneration.SettingRow" android:orientation="vertical">
+    <LinearLayout style="@style/Widget.App.ImageGeneration.Options" android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:id="@+id/image_setting_label" style="@style/Widget.App.ImageGeneration.Label" />
+        <TextView android:id="@+id/image_setting_value" style="@style/Widget.App.ImageGeneration.Value" />
+    </LinearLayout>
+    <TextView android:id="@+id/image_setting_previous" style="@style/Widget.App.Row.Subtitle" android:visibility="gone" />
+    <TextView android:id="@+id/image_setting_subtitle" style="@style/Widget.App.Row.Subtitle" android:maxLines="3" android:visibility="gone" />
+</LinearLayout>

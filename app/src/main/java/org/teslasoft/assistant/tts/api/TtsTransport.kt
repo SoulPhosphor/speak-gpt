@@ -95,7 +95,14 @@ class TtsRequestToken internal constructor() {
 }
 
 data class TtsHttpResponse(val status: Int, val bytes: ByteArray, val contentType: String?,
-    val generationId: String? = null)
+    val generationId: String? = null,
+    /** Billing headers named in [METERING_HEADERS], keyed in lower case. */
+    val headers: Map<String, String> = emptyMap()) {
+    companion object {
+        /** ElevenLabs' documented usage and request-trace headers. */
+        val METERING_HEADERS = listOf("character-cost", "request-id")
+    }
+}
 
 /** Injectable boundary for tests; production always closes responses and disables automatic retries. */
 interface TtsHttpExecutor {
@@ -131,9 +138,13 @@ class OkHttpTtsExecutor(
             return call.execute().use { response ->
                 status = response.code
                 val bytes = response.body?.bytes() ?: byteArrayOf()
-                token.check()
+                // A complete response is returned even if Stop arrived meanwhile: a paid synthesis
+                // must reach its caller's accounting. Every caller checks the token next.
                 TtsHttpResponse(response.code, bytes, response.header("Content-Type"),
-                    response.header("X-Generation-Id"))
+                    response.header("X-Generation-Id"),
+                    TtsHttpResponse.METERING_HEADERS.mapNotNull { name ->
+                        response.header(name)?.let { name to it }
+                    }.toMap())
             }
         } catch (e: IOException) {
             token.check()
@@ -164,7 +175,9 @@ internal fun requestBuilder(endpoint: TtsEndpoint, target: TtsTarget, operation:
     if (key == null && endpoint.openRouter && operation in setOf(TtsOperation.SPEECH, TtsOperation.PREVIEW)) {
         throw TtsException(TtsFailure(operation, target, endpoint.label, TtsFailureKind.KEY_MISSING))
     }
-    if (key != null) when(endpoint.authType) {
+    // Official ElevenLabs accepts its key only in xi-api-key, so its address decides the header.
+    if (key != null && endpoint.kind == TtsEndpointKind.ELEVENLABS) builder.header("xi-api-key", key)
+    else if (key != null) when(endpoint.authType) {
         ApiEndpointObject.AUTH_BEARER -> builder.header("Authorization", "Bearer $key")
         ApiEndpointObject.AUTH_X_API_KEY -> builder.header("x-api-key", key)
         ApiEndpointObject.AUTH_API_KEY -> builder.header("api-key", key)
@@ -192,17 +205,21 @@ internal fun String.replaceSecret(secret: String): String =
     if (secret.isBlank() || secret == "null") this else replace(secret, "[redacted]")
 
 /** A validated MP3 result, not a player. Phase 5 uses token.deliver around playback start. */
-class TtsAudio(val bytes: ByteArray, val target: TtsTarget, val generationId: String?) {
+class TtsAudio(val bytes: ByteArray, val target: TtsTarget, val generationId: String?,
+    val metering: TtsMetering = TtsMetering(generationId = generationId),
+    val price: TtsPrice? = null, val providerPrices: TtsProviderCatalog? = null) {
     val mimeType = "audio/mpeg"
     val extension = ".mp3"
 }
 
 class TtsSpeechTransport(
     private val http: TtsHttpExecutor = OkHttpTtsExecutor(),
-    private val adapterFor: (TtsEndpoint) -> TtsRequestAdapter = { TtsRouting }
+    private val adapterFor: (TtsEndpoint) -> TtsRequestAdapter = { TtsRouting },
+    private val wireFor: (TtsEndpoint, String) -> TtsWireFormat = TtsServices::wireFormat
 ) {
     fun request(source: ResolvedTtsSource, input: String, operation: TtsOperation = TtsOperation.SPEECH,
-        options: JsonObject = JsonObject()): Request {
+        options: JsonObject = JsonObject(),
+        wire: TtsWireFormat = wireFor(source.endpoint, source.target.modelId)): Request {
         require(operation == TtsOperation.SPEECH || operation == TtsOperation.PREVIEW)
         val t = source.target
         if (t.endpointId.isBlank()) fail(source, operation, TtsFailureKind.ENDPOINT_REQUIRED)
@@ -214,25 +231,93 @@ class TtsSpeechTransport(
         if (t.routing.mode == TtsRoutingMode.PREFERRED && !t.routing.allowFallbacks &&
             t.routing.providerOrder.isEmpty() && t.routing.selectedProvider.isBlank())
             fail(source, operation, TtsFailureKind.PROVIDER_REQUIRED)
+        if (wire == TtsWireFormat.ELEVENLABS) {
+            // ElevenLabs' native contract: the voice is in the path and there is no routing.
+            val url = source.endpoint.baseUrl.trim().toHttpUrlOrNull()?.newBuilder()
+                ?.addPathSegment("text-to-speech")?.addPathSegment(t.voiceId!!)
+                ?.addQueryParameter("output_format", TtsServices.ELEVENLABS_OUTPUT_FORMAT)?.build()?.toString()
+                ?: fail(source, operation, TtsFailureKind.INVALID_ADDRESS)
+            val body = JsonObject().apply { addProperty("text", input); addProperty("model_id", t.modelId) }
+            return requestBuilder(source.endpoint, t, operation, url)
+                .header("Accept", "audio/mpeg")
+                .post(body.toString().toRequestBody("application/json".toMediaType())).build()
+        }
+        val sse = wire == TtsWireFormat.OPENAI_SSE
         val body = JsonObject().apply {
             addProperty("model", t.modelId); addProperty("voice", t.voiceId)
             addProperty("input", input); addProperty("response_format", "mp3")
+            if (sse) addProperty("stream_format", "sse")
         }
         val composed = adapterFor(source.endpoint).compose(body, t.routing, options)
         return requestBuilder(source.endpoint, t, operation,
             ApiEndpointObject.composeSpeechUrl(source.endpoint.baseUrl, source.endpoint.speechPath))
-            .header("Accept", "audio/mpeg")
+            .header("Accept", if (sse) "text/event-stream" else "audio/mpeg")
             .post(composed.toString().toRequestBody("application/json".toMediaType())).build()
     }
 
+    /**
+     * [onBilled] runs once, as soon as the service has returned valid audio and before a
+     * Stop is honored, so a paid synthesis is never lost to cancellation or to playback.
+     */
     fun synthesize(source: ResolvedTtsSource, input: String, token: TtsRequestToken,
-        operation: TtsOperation = TtsOperation.SPEECH, options: JsonObject = JsonObject()): TtsAudio {
+        operation: TtsOperation = TtsOperation.SPEECH, options: JsonObject = JsonObject(),
+        onBilled: (TtsAudio) -> Unit = {}): TtsAudio {
         token.check()
-        val request = request(source, input, operation, options)
+        val fallbackWire = wireFor(source.endpoint, source.target.modelId)
+        // Validate the saved target before any discovery or billable network operation.
+        request(source, input, operation, options, fallbackWire)
+        // Freeze fetched prices before the billable request. Discovery failure cannot stop speech.
+        val metadata = runCatching { TtsPublishedMetadataClient(http).synthesis(source, token, operation) }
+            .getOrElse { token.check(); TtsSynthesisMetadata(fallbackWire) }
+        val wire = if (fallbackWire == TtsWireFormat.OPENAI_SSE) fallbackWire else metadata.wire
+        val request = request(source, input, operation, options, wire)
         val response = http.execute(source.endpoint, source.target, operation, request, token)
+        val audio = try {
+            when (wire) {
+                TtsWireFormat.ELEVENLABS -> {
+                    response.requireSuccess(source, operation, listOf("text", "model_id"))
+                    TtsAudio(validatedMp3(source, operation, response), source.target, null,
+                        TtsMetering(characterCost = response.headers["character-cost"]?.trim()
+                            ?.toLongOrNull()?.takeIf { it >= 0 },
+                            requestId = response.headers["request-id"]?.trim()?.ifBlank { null }))
+                }
+                TtsWireFormat.OPENAI_SSE -> {
+                    response.requireSuccess(source, operation, outboundFields(source, options) + "stream_format")
+                    val decoded = try { TtsSpeechSse.decode(response.bytes.toString(Charsets.UTF_8)) }
+                        catch (_: IllegalArgumentException) {
+                            fail(source, operation, TtsFailureKind.AUDIO_FORMAT, responseReceived = true)
+                        }
+                    // A streamed error is classified exactly as the same error body would be.
+                    decoded.error?.let { error ->
+                        response.copy(bytes = error.toByteArray(), contentType = "application/json")
+                            .requireSuccess(source, operation, outboundFields(source, options) + "stream_format")
+                    }
+                    val bytes = validatedMp3(source, operation,
+                        TtsHttpResponse(response.status, decoded.audio, "audio/mpeg"))
+                    TtsAudio(bytes, source.target, null, TtsMetering(tokens = decoded.tokens))
+                }
+                TtsWireFormat.OPENAI_COMPATIBLE -> {
+                    response.requireSuccess(source, operation, outboundFields(source, options))
+                    TtsAudio(validatedMp3(source, operation, response), source.target, response.generationId)
+                }
+            }
+        } catch (failure: TtsException) {
+            // A Stop that arrived with a failed response is still a Stop, not an error.
+            token.check()
+            throw failure
+        }
+        val pricedAudio = TtsAudio(audio.bytes, audio.target, audio.generationId, audio.metering,
+            metadata.price, metadata.providers)
+        onBilled(pricedAudio)
         token.check()
-        response.requireSuccess(source, operation, listOf("model", "voice", "input", "response_format") +
-            if (source.target.routing.mode != TtsRoutingMode.AUTOMATIC || options.size() > 0) listOf("provider") else emptyList())
+        return pricedAudio
+    }
+
+    private fun outboundFields(source: ResolvedTtsSource, options: JsonObject) =
+        listOf("model", "voice", "input", "response_format") +
+            if (source.target.routing.mode != TtsRoutingMode.AUTOMATIC || options.size() > 0) listOf("provider") else emptyList()
+
+    private fun validatedMp3(source: ResolvedTtsSource, operation: TtsOperation, response: TtsHttpResponse): ByteArray {
         if (response.bytes.isEmpty()) fail(source, operation, TtsFailureKind.NO_AUDIO, responseReceived = true)
         val type = response.contentType?.substringBefore(';')?.lowercase()
         if (type == "application/json" || type?.endsWith("+json") == true)
@@ -242,8 +327,7 @@ class TtsSpeechTransport(
             (b.size >= 2 && b[0].toInt() and 255 == 255 && b[1].toInt() and 224 == 224)
         if (!mp3 || type !in setOf(null, "audio/mpeg", "audio/mp3", "application/octet-stream"))
             fail(source, operation, TtsFailureKind.AUDIO_FORMAT, responseReceived = true)
-        token.check()
-        return TtsAudio(b, source.target, response.generationId)
+        return b
     }
 
     private fun fail(source: ResolvedTtsSource, operation: TtsOperation, kind: TtsFailureKind,

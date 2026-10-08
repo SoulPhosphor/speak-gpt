@@ -51,6 +51,9 @@ class AppSettingsPromptPortabilityTest {
             listOf(
                 "summarizer_slot_recency",
                 "image_summary_prompt",
+                "summarizer_prompt_set_summary",
+                "summarizer_prompt_set_compaction",
+                "summarizer_prompt_set_image",
                 "archivist_custom_prompt",
                 "archivist_lorebook_prompt"
             )
@@ -87,6 +90,10 @@ class AppSettingsPromptPortabilityTest {
         "summarizer_slot_prompt_4" to LONG_PROMPT,
         "summarizer_slot_recency" to "3,0,4,1,2",
         "image_summary_prompt" to "Describe the image 🖼️ in two lines.\nSecond line.",
+        "summarizer_prompt_set_summary" to
+            "[{\"id\":\"builtin_storyteller\",\"name\":\"Récit ✦\",\"text\":\"Line one\\nLine two\",\"isDefault\":true}]",
+        "summarizer_prompt_set_compaction" to "[]",
+        "summarizer_prompt_set_image" to LONG_PROMPT,
         "archivist_custom_prompt" to "Associative analysis:\n\"quoted\" \\ backslash",
         // Intentionally empty: use the shipped Lorebook prompt.
         "archivist_lorebook_prompt" to ""

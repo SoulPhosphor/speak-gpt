@@ -176,4 +176,34 @@ class GlobalPreferences private constructor(private var gp: SharedPreferences) {
     fun setReadFormattingLanguage(read: Boolean) {
         gp.edit().putBoolean("read_formatting_language", read).apply()
     }
+
+    /** Runtime compatibility evidence is independent from the user's image selections. */
+    fun getImageCompatibilityEvidence(scope: String): String? =
+        gp.getString("image_compatibility_$scope", null)
+
+    /** Commit before returning from the provider error. Roll back Android's memory-first edit on failure. */
+    @Synchronized
+    fun commitImageCompatibilityEvidence(scope: String, json: String): Boolean {
+        val key = "image_compatibility_$scope"
+        val previous = gp.getString(key, null)
+        return try {
+            val editor = gp.edit()
+            editor.putString(key, json)
+            if (editor.commit()) true else {
+                restoreImageCompatibilityEvidence(key, previous)
+                false
+            }
+        } catch (_: Exception) {
+            restoreImageCompatibilityEvidence(key, previous)
+            false
+        }
+    }
+
+    private fun restoreImageCompatibilityEvidence(key: String, previous: String?) {
+        try {
+            val editor = gp.edit()
+            if (previous == null) editor.remove(key) else editor.putString(key, previous)
+            editor.commit()
+        } catch (_: Exception) { }
+    }
 }

@@ -211,8 +211,23 @@ import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
 import org.teslasoft.assistant.preferences.includes.IncludeRenderer
-import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
+import org.teslasoft.assistant.preferences.includes.RenderedImagePart
+import org.teslasoft.assistant.preferences.includes.RenderedSegment
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
+import org.teslasoft.assistant.preferences.includes.PdfAttachmentStore
+import org.teslasoft.assistant.preferences.includes.PdfFallbackExtractor
+import org.teslasoft.assistant.preferences.includes.PdfImporter
+import org.teslasoft.assistant.preferences.includes.PdfIncludeLifecycle
+import org.teslasoft.assistant.preferences.includes.NativePdfPayload
+import org.teslasoft.assistant.preferences.includes.PdfCapability
+import org.teslasoft.assistant.preferences.includes.PdfCapabilityProvider
+import org.teslasoft.assistant.preferences.includes.PdfDeliveryPolicy
+import org.teslasoft.assistant.preferences.includes.XaiPdfFiles
+import org.teslasoft.assistant.preferences.includes.PdfCapabilityMetadataClient
+import org.teslasoft.assistant.preferences.includes.PdfCapabilityResolver
+import org.teslasoft.assistant.preferences.includes.PdfCapabilityStore
+import org.teslasoft.assistant.preferences.includes.PdfRequestSerializer
+import org.teslasoft.assistant.preferences.includes.PdfRoutingConfig
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
 import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
 import org.teslasoft.assistant.preferences.includes.SummarizerSafeIncludeProjectionBuilder
@@ -264,6 +279,11 @@ import org.teslasoft.assistant.usage.TokenPricingCatalogClient
 import org.teslasoft.assistant.usage.TokenPricingSnapshot
 import org.teslasoft.assistant.usage.TokenUsageAccounting
 import org.teslasoft.assistant.usage.TurnUsageRecord
+import org.teslasoft.assistant.usage.UsageCategory
+import org.teslasoft.assistant.usage.UsageFunction
+import org.teslasoft.assistant.usage.UsageSection
+import org.teslasoft.assistant.usage.UsageLog
+import org.teslasoft.assistant.usage.UsageLogStore
 import org.teslasoft.assistant.ui.chat.ChatComposerLayout
 import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportFormatter
@@ -286,6 +306,7 @@ import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.FrozenChatPayload
+import org.teslasoft.assistant.util.FrozenNativeDocumentPayload
 import org.teslasoft.assistant.util.GenErrorCode
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.imagegen.CreateImageTool
@@ -297,6 +318,8 @@ import org.teslasoft.assistant.imagegen.ImageFailureAction
 import org.teslasoft.assistant.imagegen.GeneratedImageFiles
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
+import org.teslasoft.assistant.imagegen.ImageShape
+import org.teslasoft.assistant.imagegen.ImageQuality
 import org.teslasoft.assistant.imagegen.ImageGenerationRequest
 import org.teslasoft.assistant.imagegen.imageFailureMessageRes
 import org.teslasoft.assistant.imagegen.imageFailureProviderDetailBlock
@@ -320,6 +343,8 @@ import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
 import org.teslasoft.assistant.util.reachedServer
 import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
+import org.teslasoft.assistant.util.summarizer.CondensedBoundaryRealignment
+import org.teslasoft.assistant.util.summarizer.SummarizerPromptSession
 import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
@@ -405,6 +430,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         /** How much of a document the bookmark-writing request sees. Enough
          *  to say what the file IS, without paying to send it all again. */
         private const val ARTIFACT_EXCERPT_CHARS = 2000
+        /** Conservative inline/base64 preflight below documented provider request ceilings. */
 
         /** Pins a split raw response to the lifecycle recorder for that exact request. */
         private val responseLifecycleRecorderAttribute =
@@ -443,6 +469,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val showReasoning: Boolean
     )
 
+    private class PdfPreparationException(
+        val attachmentName: String,
+        cause: Throwable
+    ) : Exception(cause.message, cause)
+
     // Init UI
     private var messageInput: EditText? = null
     private var btnSend: ImageButton? = null
@@ -473,7 +504,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // then the subject summary icon. The controller runs the background
     // fold-ins; it is cancelled deliberately (never an error) when this
     // screen goes away.
-    private var btnSummary: ImageButton? = null
+    private var btnConversationSummary: ImageButton? = null
     private var btnSummarizerErrors: ImageButton? = null
     private var summarizerErrorBadge: TextView? = null
     private var summarizerController: org.teslasoft.assistant.util.summarizer.SummarizerController? = null
@@ -558,6 +589,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val imageImportScopes: MutableList<CoroutineScope> = mutableListOf()
     private var condenseJob: Job? = null
     private var condenseDialog: AlertDialog? = null
+    private var compactionDialog: AlertDialog? = null
+    /** The messages the last Compact froze, so Retry compacts them again. */
+    private var lastCompactionRequest: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null
+    private var lastCompactionFromScratch = false
     private var reduceJob: Job? = null
     private var reduceDialog: AlertDialog? = null
     private val artifactJobs: MutableMap<String, Job> = HashMap()
@@ -643,6 +678,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var usageIn: Int = 0
     private var usageOut: Int = 0
     private var conversationUsageSummary = ConversationUsageSummary(emptyList())
+    private var conversationUsageSections: List<UsageSection> = emptyList()
     private var bulkSelectionMode: Boolean = false
 
     // init AI
@@ -687,21 +723,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val request: ChatCompletionRequest,
         val payload: FrozenChatPayload,
         val activeMemoryReferences: List<ActiveMemoryReference>,
-        val contextDecision: ModelContextDecision
+        val contextDecision: ModelContextDecision,
+        val nativePdfs: List<NativePdfPayload>
     )
 
     private data class FrozenRegularRequest(
         val request: ChatCompletionRequest,
         val payload: FrozenChatPayload,
-        val activeMemoryReferences: List<ActiveMemoryReference>
+        val activeMemoryReferences: List<ActiveMemoryReference>,
+        val nativePdfs: List<NativePdfPayload>
     )
 
     /** One fully resolved conversation snapshot shared by measurement/send. */
     private data class FrozenConversationProjection(
-        val persistentIncludes: List<ChatMessage>,
+        /** Attachments whose owning message was folded into the summary. */
+        val foldedIncludes: List<ChatMessage>,
+        /** Retained history; each user message carries its own attachments. */
         val conversation: List<ChatMessage>,
+        /** [conversation] as words and attachment markers only, for memory recall. */
+        val memoryContext: List<ChatMessage>,
         val summaryInjection: String?,
-        val hasFullImages: Boolean
+        val hasFullImages: Boolean,
+        val nativePdfs: List<NativePdfPayload>
     )
 
     // Auto-naming attempts this screen instance. Used to be a one-shot
@@ -867,6 +910,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  only physical deletion is deferred for snapshot consistency. */
     private val protectedRequestImageHashes = HashSet<String>()
     private val deferredRequestImageDeletes = LinkedHashMap<String, ChatInclude>()
+    private val protectedRequestPdfHashes = HashSet<String>()
+    private val deferredRequestPdfDeletes = LinkedHashMap<String, ChatInclude>()
 
     private fun killAllProcesses() {
         onSpeechResultsScope?.coroutineContext?.cancel(CancellationException("Killed"))
@@ -1153,9 +1198,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         prefixTokens += count
                     }
                 }
-                TokenUsageAccounting.summarizeMessages(
-                    snapshot
-                ) { index -> legacyCounts[index] ?: TokenCounts(null, null, null) }
+                val estimate: (Int) -> TokenCounts = { index ->
+                    legacyCounts[index] ?: TokenCounts(null, null, null)
+                }
+                val log = preferences?.let { UsageLogStore.read(it) }
+                if (log != null && log.seeded) {
+                    kotlin.Pair(log.summarize(snapshot, estimate), log.sections(snapshot, estimate))
+                } else {
+                    // No readable log: only the records inside messages, all chat replies.
+                    val fromMessages = TokenUsageAccounting.summarizeMessages(snapshot, estimate)
+                    kotlin.Pair(
+                        fromMessages,
+                        listOfNotNull(
+                            fromMessages.takeIf { it.groups.isNotEmpty() }
+                                ?.let { UsageSection(UsageCategory.CHAT, it) }
+                        )
+                    )
+                }
+        }.let { (total, sections) ->
+            conversationUsageSections = sections
+            total
         }
         conversationUsageSummary = summary
         usageIn = summary.totalInputTokens
@@ -1494,6 +1556,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatStartupComplete && chatId != "") {
             refreshSummarizerIcons()
             refreshComposerTools()
+            // The summary / compaction review may have just closed: run any
+            // held update, or the catch-up owed after Resummarize.
+            releaseHeldSummarizerCycle()
+            if (!summarizerCycleHeld && preferences?.getSummarizerCatchUpPending() == true) {
+                summarizerCycle(force = true)
+            }
             // Appearance may have changed while Settings covered this screen.
             // Rebind existing rows so Staggered Responses takes effect at once.
             adapter?.notifyDataSetChanged()
@@ -2502,8 +2570,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 historyResult.messages
             ).succeeded
         }
+        // Every stored message gets its permanent ID once (MessageIdentity);
+        // older chats receive them here, the first time they are opened.
         if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
-            LegacyReasoningRepair.repairHistory(historyResult.messages)
+            (LegacyReasoningRepair.repairHistory(historyResult.messages) or
+                org.teslasoft.assistant.preferences.MessageIdentity.ensure(historyResult.messages))
         ) {
             // This method already runs on the startup storage worker. Update
             // the encrypted preference before binding, but let SharedPreferences
@@ -2515,6 +2586,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 historyResult.messages,
                 synchronous = false
             )
+        }
+        // A regeneration the app closed during: put the removed reply back,
+        // or fold the new reply into its versions, then forget it.
+        if (ChatStorageHealth.isAuthoritative(historyResult.state)) {
+            recoverPendingRegeneration(preparedPreferences, chatPreferences, preparedChatId, historyResult.messages)
+        }
+        // Copy the usage already stored in messages into the chat's usage log
+        // once, before any delete or regeneration in this session can drop it.
+        if (ChatStorageHealth.isAuthoritative(historyResult.state)) {
+            UsageLogStore.seed(preparedPreferences, historyResult.messages)
         }
 
         return ChatStartupResult(
@@ -2536,6 +2617,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Build the chat screen only after its encrypted startup data is ready. */
     private fun initializeChatUi(prepared: PreparedChatStartup, savedInstanceState: Bundle?) {
         chatId = prepared.chatId
+        // Opening a chat screen starts every Summarizer prompt from its
+        // collection's default. A Quick Settings rebuild of this same screen
+        // carries the choices over, and so does recreation.
+        if (savedInstanceState == null &&
+            !intent.getBooleanExtra(SummarizerPromptSession.EXTRA_KEEP_CHOICES, false)
+        ) {
+            SummarizerPromptSession.reset(chatId)
+        }
         chatName = prepared.chatName
         preferences = prepared.preferences
         apiEndpointPreferences = prepared.apiEndpointPreferences
@@ -2810,6 +2899,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ImageGenerationJobRegistry.detach(chatId, this)
         }
 
+        // Compacting continues without the screen; only its dialog closes.
+        compactionDialog?.dismiss()
+        compactionDialog = null
         killAllProcesses()
         stopHandsFreeService()
 
@@ -2943,6 +3035,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             loadPendingIncludes()
             reconcileChatImages()
+            reconcileChatPdfs()
 
             updateMessagesSelectionProjection()
 
@@ -2979,7 +3072,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnQuickSettings = findViewById(R.id.btn_quick_settings)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
-        btnSummary = findViewById(R.id.btn_summary)
+        btnConversationSummary = findViewById(R.id.btn_conversation_summary)
         btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
         summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
         summarizerOperationChip = findViewById(R.id.summarizer_operation_chip)
@@ -3663,11 +3756,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun includesOf(message: HashMap<String, Any>): List<ChatInclude> =
         ChatInclude.listFromJson(message[INCLUDES_KEY]?.toString())
 
-    private fun savePendingIncludes(synchronous: Boolean = false) {
-        preferences?.setPendingIncludes(
+    private fun savePendingIncludes(synchronous: Boolean = false): Boolean {
+        return preferences?.setPendingIncludes(
             if (pendingIncludes.isEmpty()) "" else ChatInclude.listToJson(pendingIncludes),
             synchronous = synchronous
-        )
+        ) ?: false
     }
 
     private fun loadPendingIncludes() {
@@ -3712,6 +3805,57 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         if (!changed) return
         saveSettings()
+        refreshAfterIncludeChange()
+    }
+
+    /**
+     * Applies a PDF transition only when its owning durable store accepts the
+     * synchronous write. The caller may release the original bytes only after
+     * this returns true. On failure the in-memory include is restored too, so
+     * a later unrelated save cannot accidentally persist a transition whose
+     * cleanup was never completed.
+     */
+    private fun commitPdfIncludeUpdate(updated: ChatInclude): Boolean {
+        val pendingIndex = pendingIncludes.indexOfFirst { it.id == updated.id }
+        if (pendingIndex >= 0) {
+            val previous = pendingIncludes[pendingIndex]
+            pendingIncludes[pendingIndex] = updated
+            if (!savePendingIncludes(synchronous = true)) {
+                pendingIncludes[pendingIndex] = previous
+                return false
+            }
+            refreshAfterIncludeChange()
+            return true
+        }
+
+        val previousJson = ArrayList<kotlin.Pair<HashMap<String, Any>, String>>()
+        for (message in messages) {
+            val existing = includesOf(message)
+            if (existing.none { it.id == updated.id }) continue
+            val original = message[INCLUDES_KEY]?.toString().orEmpty()
+            previousJson.add(message to original)
+            message[INCLUDES_KEY] = ChatInclude.listToJson(
+                existing.map { if (it.id == updated.id) updated else it }
+            )
+        }
+        if (previousJson.isEmpty()) return false
+
+        if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
+            previousJson.forEach { (message, original) ->
+                message[INCLUDES_KEY] = original
+            }
+            // Android may return commit=false after already updating the
+            // process-local SharedPreferences map. Re-save the restored
+            // history to roll that map back as well; even another false disk
+            // result installs the old value in memory before returning.
+            saveSettings(synchronous = true)
+            return false
+        }
+        refreshAfterIncludeChange()
+        return true
+    }
+
+    private fun refreshAfterIncludeChange() {
         rebuildModelProjection()
         refreshIncludeStrip()
         refreshPersistentIncludeControls()
@@ -3786,6 +3930,58 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun importDocument(uri: Uri, sourceFingerprint: String) {
         val scope = CoroutineScope(Dispatchers.Main)
         scope.launch {
+            if (PdfImporter.isPdfSelection(this@ChatActivity, uri)) {
+                val pdfResult = withContext(Dispatchers.IO) {
+                    PdfImporter.import(this@ChatActivity, uri, chatId)
+                }
+                pendingDocumentImports.remove(sourceFingerprint)
+                if (isFinishing || isDestroyed) {
+                    if (pdfResult is PdfImporter.Result.Success) {
+                        // The target is content-addressed and may already be
+                        // owned by another include or an in-flight request.
+                        // Use the normal reference/protection path instead of
+                        // treating every successful import as a new orphan.
+                        maybeDeletePdfBytes(pdfResult.include)
+                    }
+                    return@launch
+                }
+                when (pdfResult) {
+                    is PdfImporter.Result.Success -> {
+                        pendingIncludes.add(pdfResult.include)
+                        savePendingIncludes()
+                        refreshIncludeStrip()
+                    }
+                    is PdfImporter.Result.PasswordProtected ->
+                        showIncludeProblem(R.string.include_error_password_protected, pdfResult.fileName)
+                    is PdfImporter.Result.Corrupt ->
+                        showIncludeProblem(R.string.include_error_corrupted, pdfResult.fileName)
+                    is PdfImporter.Result.Empty ->
+                        showIncludeProblem(R.string.include_error_empty, pdfResult.fileName)
+                    is PdfImporter.Result.NotPdf ->
+                        showIncludeProblem(R.string.include_error_content_mismatch, pdfResult.fileName)
+                    is PdfImporter.Result.TooLarge ->
+                        showIncludeCapacityProblem(R.string.document_attach_failed_title, R.string.pdf_attach_too_large_body)
+                    is PdfImporter.Result.Unavailable ->
+                        showIncludeProblem(R.string.include_error_source_unavailable, pdfResult.fileName)
+                    is PdfImporter.Result.PermissionDenied ->
+                        showIncludeProblem(R.string.include_error_permission_denied, pdfResult.fileName)
+                    is PdfImporter.Result.FileGone ->
+                        showIncludeProblem(R.string.include_error_file_gone, pdfResult.fileName)
+                    is PdfImporter.Result.InterruptedRead ->
+                        showIncludeCapacityProblem(
+                            R.string.document_attach_failed_title,
+                            R.string.document_attach_interrupted_body
+                        )
+                    is PdfImporter.Result.StorageLimit ->
+                        showIncludeCapacityProblem(
+                            R.string.document_storage_failed_title,
+                            R.string.document_attach_storage_body
+                        )
+                    is PdfImporter.Result.Unreadable ->
+                        showIncludeProblem(R.string.include_error_unknown, pdfResult.fileName)
+                }
+                return@launch
+            }
             val result = withContext(Dispatchers.IO) {
                 try {
                     DocumentImporter.import(this@ChatActivity, uri)
@@ -3933,9 +4129,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val removed = pendingIncludes.removeAt(pendingIndex)
             // Persist the removal BEFORE touching bytes, so a crash mid-delete
             // never leaves a saved include pointing at bytes that are gone.
-            savePendingIncludes(synchronous = true)
+            if (!savePendingIncludes(synchronous = true)) {
+                pendingIncludes.add(pendingIndex, removed)
+                Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                return
+            }
             refreshIncludeStrip()
             if (removed.kind.isImage()) maybeDeleteImageBytes(removed)
+            if (removed.kind == IncludeKind.PDF) maybeDeletePdfBytes(removed)
             return
         }
 
@@ -3956,6 +4157,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 maybeDeleteImageBytes(imageInclude)
                 if (isFinishing || isDestroyed || written == null) return@launch
                 val latest = findIncludeById(imageInclude.id) ?: return@launch
+                if (latest.form == IncludeForm.ARTIFACT && latest.artifactLine == fallback) {
+                    updateInclude(latest.copy(artifactLine = written))
+                }
+            }
+            artifactJobs[include.id] = job
+            job.invokeOnCompletion {
+                if (artifactJobs[include.id] === job) artifactJobs.remove(include.id)
+            }
+            return
+        }
+
+        if (include.kind == IncludeKind.PDF) {
+            // Sent removal is local and immediate. A provider failure can never
+            // resurrect the original PDF or block the bookmark transition.
+            if (!commitPdfIncludeUpdate(PdfIncludeLifecycle.removePreviouslySent(include, fallback))) {
+                Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                return
+            }
+            // Like other documents, the model-written reminder replaces the
+            // fallback when/if it arrives. A FULL PDF has no stored text, so
+            // its bytes are released only after the reminder has read them.
+            artifactJobs.remove(include.id)?.cancel()
+            val pdfInclude = include
+            val job = CoroutineScope(Dispatchers.Main).launch {
+                val written = try {
+                    requestPdfArtifactLine(pdfInclude)
+                } finally {
+                    maybeDeletePdfBytes(pdfInclude)
+                }
+                if (isFinishing || isDestroyed || written == null) return@launch
+                val latest = findIncludeById(pdfInclude.id) ?: return@launch
                 if (latest.form == IncludeForm.ARTIFACT && latest.artifactLine == fallback) {
                     updateInclude(latest.copy(artifactLine = written))
                 }
@@ -4019,22 +4251,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun protectRequestImagePayloads(messages: List<CanonicalConversationMessage>) {
         protectedRequestImageHashes.clear()
+        protectedRequestPdfHashes.clear()
         for (message in messages) {
             for (include in message.includes) {
                 if (include.hasLiveImageBytes()) {
                     include.imageFileHash?.let(protectedRequestImageHashes::add)
                 }
+                if (include.hasLivePdfBytes()) {
+                    include.pdfFileHash?.let(protectedRequestPdfHashes::add)
+                }
             }
         }
     }
 
-    /** Release files only after the request owns encoded image payloads. */
+    /** Release files only after the request owns encoded image/PDF payloads. */
     private fun releaseRequestImagePayloads() {
         protectedRequestImageHashes.clear()
-        if (deferredRequestImageDeletes.isEmpty()) return
         val deferred = deferredRequestImageDeletes.values.toList()
         deferredRequestImageDeletes.clear()
         deferred.forEach(::maybeDeleteImageBytes)
+        protectedRequestPdfHashes.clear()
+        val deferredPdfs = deferredRequestPdfDeletes.values.toList()
+        deferredRequestPdfDeletes.clear()
+        deferredPdfs.forEach(::maybeDeletePdfBytes)
     }
 
     private fun imageBytesStillReferenced(hash: String, excludingId: String): Boolean {
@@ -4049,6 +4288,52 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ) return true
         }
         return false
+    }
+
+    private fun maybeDeletePdfBytes(include: ChatInclude) {
+        val hash = include.pdfFileHash?.takeIf { it.isNotBlank() } ?: return
+        if (hash in protectedRequestPdfHashes) {
+            deferredRequestPdfDeletes.putIfAbsent(hash, include)
+            return
+        }
+        val referenced = pdfBytesStillReferenced(hash, include.id)
+        val cid = chatId
+        val appContext = applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            PdfAttachmentStore.deletePdfIfUnreferenced(
+                appContext, cid, include,
+                stillReferenced = referenced,
+                fallbackStillReferenced = referenced
+            )
+            // The provider-side copy goes with the local bytes it was made from.
+            if (!referenced) {
+                XaiPdfFiles.deleteForHash(appContext, cid, hash) { id ->
+                    ApiEndpointPreferences.getApiEndpointPreferences(appContext)
+                        .getApiEndpoint(appContext, id)
+                }
+            }
+        }
+    }
+
+    private fun pdfBytesStillReferenced(hash: String, excludingId: String): Boolean {
+        if (pendingIncludes.any { it.id != excludingId && it.pdfFileHash == hash && it.hasLivePdfBytes() }) return true
+        return messages.any { message ->
+            includesOf(message).any {
+                it.id != excludingId && it.pdfFileHash == hash && it.hasLivePdfBytes()
+            }
+        }
+    }
+
+    private fun reconcileChatPdfs() {
+        val referenced = buildSet {
+            pendingIncludes.filter { it.hasLivePdfBytes() }.mapNotNullTo(this) { it.pdfFileHash }
+            messages.flatMap(::includesOf).filter { it.hasLivePdfBytes() }
+                .mapNotNullTo(this) { it.pdfFileHash }
+        }
+        val cid = chatId
+        CoroutineScope(Dispatchers.IO).launch {
+            PdfAttachmentStore.reconcileChatPdfs(this@ChatActivity, cid, referenced)
+        }
     }
 
     /**
@@ -4088,7 +4373,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * for a removed attachment. The caller has already applied a usable
      * filename fallback, so a failed request remains silent.
      */
-    private suspend fun requestArtifactLine(include: ChatInclude): String? {
+    private suspend fun requestArtifactLine(
+        include: ChatInclude,
+        sourceText: String = include.modelText()
+    ): String? {
         val client = ai ?: return null
         val lineModel = model.ifBlank { preferences?.getModel() ?: "" }
         if (lineModel.isBlank()) return null
@@ -4098,7 +4386,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val spec = IncludeAuxiliaryRequestPolicy.artifact(
                     include = include,
                     selectedModel = lineModel,
-                    excerptCharacters = ARTIFACT_EXCERPT_CHARS
+                    excerptCharacters = ARTIFACT_EXCERPT_CHARS,
+                    sourceText = sourceText
                 )
                 val request = ChatCompletionRequest(
                     model = ModelId(spec.model),
@@ -4110,12 +4399,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         )
                     )
                 )
-                client.chatCompletion(request).choices.firstOrNull()?.message?.content
+                withAttachmentUsage(spec.model, include.id, UsageFunction.REMOVAL) { client.chatCompletion(request) }
+                    .choices.firstOrNull()?.message?.content
             }
             IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * Reminder for a removed PDF. A CONDENSED PDF already carries its notes; a
+     * FULL PDF is read through the local extraction/OCR fallback while its
+     * bytes are still on disk. Extraction failure keeps the filename fallback.
+     */
+    private suspend fun requestPdfArtifactLine(include: ChatInclude): String? {
+        if (!include.hasLivePdfBytes()) return requestArtifactLine(include)
+        val text = include.pdfFallbackText?.takeIf { it.isNotBlank() } ?: try {
+            PdfFallbackExtractor.extract(this, chatId, include).text
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return null
+        }
+        return requestArtifactLine(include, text)
     }
 
     private suspend fun requestImageArtifactLine(include: ChatInclude): String? {
@@ -4149,7 +4456,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         ChatMessage(role = ChatRole.User, content = parts)
                     )
                 )
-                val raw = client.chatCompletion(request)
+                val raw = withAttachmentUsage(lineModel, include.id, UsageFunction.REMOVAL) { client.chatCompletion(request) }
                     .choices.firstOrNull()?.message?.content
                 IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
             }
@@ -4267,13 +4574,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                     getString(R.string.include_condense_failed)
                 }
-                condensed.isBlank() || condensedTokens >= sourceTokens ->
+                condensed.isBlank() || (include.kind != IncludeKind.PDF && condensedTokens >= sourceTokens) ->
                     getString(R.string.include_condense_not_shorter)
                 !stillCurrent ->
                     getString(R.string.include_condense_failed)
                 else -> {
-                    updateInclude(latest!!.withCondensedText(condensed))
-                    getString(R.string.include_condense_complete)
+                    if (include.kind == IncludeKind.PDF) {
+                        val committed = commitPdfIncludeUpdate(
+                            PdfIncludeLifecycle.afterCondenseAttempt(latest!!, condensed)
+                        )
+                        if (!committed) {
+                            getString(R.string.include_condense_failed)
+                        } else {
+                            maybeDeletePdfBytes(include)
+                            getString(R.string.include_condense_complete)
+                        }
+                    } else {
+                        updateInclude(latest!!.withCondensedText(condensed))
+                        getString(R.string.include_condense_complete)
+                    }
                 }
             }
 
@@ -4300,8 +4619,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         return try {
             val text = withContext(Dispatchers.IO) {
+                val endpoint = apiEndpointObject
+                val resolvedPdf = if (include.kind == IncludeKind.PDF && endpoint != null) {
+                    resolvePdfCapability(condenseModel)
+                } else null
+                val pdfFile = if (include.kind == IncludeKind.PDF) {
+                    PdfAttachmentStore.pdfFile(this@ChatActivity, chatId, include)
+                        ?.takeIf { it.isFile } ?: error("PDF is unavailable")
+                } else null
+                val nativePdf = resolvedPdf != null && pdfFile != null && PdfDeliveryPolicy.useNative(
+                    resolvedPdf.routing.provider,
+                    resolvedPdf.capability,
+                    pdfFile.length()
+                )
+                val sourceInclude = if (include.kind == IncludeKind.PDF && !nativePdf) {
+                    val fallback = PdfFallbackExtractor.extract(this@ChatActivity, chatId, include)
+                    include.copy(fullText =
+                        "This is locally extracted PDF text. Diagrams and page layout may not be preserved.\n\n" + fallback.text)
+                } else include
                 val spec = IncludeAuxiliaryRequestPolicy.condense(
-                    include = include,
+                    include = sourceInclude,
                     selectedModel = condenseModel,
                     configuredMaxTokens = outputLimit
                 )
@@ -4315,7 +4652,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         )
                     )
                 )
-                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+                if (nativePdf) {
+                    val nativePayload = nativePdfPayload(
+                        include, requireNotNull(pdfFile), resolvedPdf?.routing?.provider, chatId
+                    )
+                    val nativeRequest = ChatCompletionRequest(
+                        model = ModelId(spec.model),
+                        maxTokens = spec.maxTokens,
+                        // The marker part is the slot the provider boundary
+                        // replaces with the PDF file itself.
+                        messages = listOf(ChatMessage(
+                            role = ChatRole.User,
+                            content = listOf(
+                                TextPart(StableAttachmentReference.serialize(include)),
+                                TextPart(spec.prompt)
+                            )
+                        ))
+                    )
+                    withAttachmentUsage(spec.model, include.id, UsageFunction.CONDENSING, listOf(nativePayload)) {
+                        client.chatCompletion(nativeRequest)
+                    }.choices.firstOrNull()?.message?.content?.trim()
+                } else {
+                    withAttachmentUsage(spec.model, include.id, UsageFunction.CONDENSING) { client.chatCompletion(request) }
+                        .choices.firstOrNull()?.message?.content?.trim()
+                }
             }
             if (text.isNullOrBlank()) {
                 Result.failure(IllegalStateException("Condense returned no text"))
@@ -4472,7 +4832,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         ChatMessage(role = ChatRole.User, content = parts)
                     )
                 )
-                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+                withAttachmentUsage(spec.model, include.id, UsageFunction.REDUCING) { client.chatCompletion(request) }
+                    .choices.firstOrNull()?.message?.content?.trim()
             }
             if (text.isNullOrBlank()) {
                 Result.failure(IllegalStateException("Reduce returned no text"))
@@ -4769,6 +5130,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         TokenPricingDetailsActivity.EXTRA_USAGE_SUMMARY,
                         TokenUsageAccounting.encodeSummary(summary)
                     )
+                    .putExtra(
+                        TokenPricingDetailsActivity.EXTRA_USAGE_SECTIONS,
+                        UsageLog.encodeSections(conversationUsageSections)
+                    )
             )
         }
     }
@@ -4897,7 +5262,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         summarizerOperationCancel?.setOnClickListener {
             org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
         }
-        btnSummary?.setOnClickListener { showSummaryView() }
+        btnConversationSummary?.setOnClickListener { openConversationSummary() }
         btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
         refreshSummarizerIcons()
         // The next eligible cycle (errors doc §3): opening the chat retries
@@ -4908,6 +5273,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun renderSummarizerOperation(
         state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
     ) {
+        if (renderCompactionDialog(state)) return
         val preserveProjectionNotice = projectionStatusVisible &&
             (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Idle ||
                 state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled)
@@ -4954,6 +5320,165 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
+     * Compact shows its progress in a dialog (owner ruling, Oct 4 2026): a
+     * spinner, the status text and a single Cancel, which stops compacting
+     * and keeps nothing from the run. On success the spinner goes away, the
+     * text reads "Compaction complete!" and the buttons become Cancel and
+     * Okay: Cancel puts the chat back exactly as it was before compacting,
+     * Okay keeps the compaction. A failure closes the dialog; it is recorded
+     * in Summarizer Errors like every other summarizer failure. True when
+     * [state] belongs to Compact.
+     */
+    private fun renderCompactionDialog(
+        state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
+    ): Boolean {
+        val compacting = org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.COMPACTING
+        val kind = when (state) {
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running -> state.kind
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded -> state.kind
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed -> state.kind
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled -> state.kind
+            else -> null
+        }
+        if (kind != compacting) return false
+        if (!projectionStatusVisible) summarizerOperationChip?.visibility = View.GONE
+        if (isFinishing || isDestroyed) return true
+        when (state) {
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running -> {
+                if (compactionDialog?.isShowing == true) return true
+                val view = layoutInflater.inflate(R.layout.dialog_compaction_progress, null)
+                val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setView(view)
+                    .setCancelable(false)
+                    .create()
+                (view.findViewById<View>(R.id.btn_dialog_primary_action)?.parent as? View)
+                    ?.visibility = View.GONE
+                view.findViewById<MaterialButton>(R.id.btn_dialog_action)?.apply {
+                    setText(R.string.btn_cancel)
+                    setOnClickListener {
+                        dialog.dismiss()
+                        if (compactionDialog === dialog) compactionDialog = null
+                        org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
+                    }
+                }
+                compactionDialog = dialog
+                dialog.show()
+            }
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded -> {
+                val dialog = compactionDialog ?: return true
+                dialog.findViewById<View>(R.id.compaction_progress)?.visibility = View.GONE
+                dialog.findViewById<TextView>(R.id.compaction_status)
+                    ?.setText(R.string.compaction_dialog_complete)
+                (dialog.findViewById<View>(R.id.btn_dialog_action)?.parent as? View)
+                    ?.visibility = View.GONE
+                (dialog.findViewById<View>(R.id.btn_dialog_primary_action)?.parent as? View)
+                    ?.visibility = View.VISIBLE
+                fun close() {
+                    dialog.dismiss()
+                    if (compactionDialog === dialog) compactionDialog = null
+                }
+                dialog.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)?.apply {
+                    setText(R.string.btn_cancel)
+                    setOnClickListener {
+                        close()
+                        summarizerController?.discardFinishedCompaction()
+                        refreshManualCompactionMarker()
+                        refreshSummarizerIcons()
+                    }
+                }
+                dialog.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)?.apply {
+                    setText(R.string.okay)
+                    setOnClickListener {
+                        close()
+                        summarizerController?.keepFinishedCompaction()
+                    }
+                }
+            }
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed -> {
+                // The error box replaces the progress dialog the user is
+                // watching; reopening the chat later does not show it again.
+                val watching = compactionDialog?.isShowing == true
+                compactionDialog?.dismiss()
+                compactionDialog = null
+                if (watching) showCompactionFailure(state)
+            }
+            else -> {
+                compactionDialog?.dismiss()
+                compactionDialog = null
+            }
+        }
+        return true
+    }
+
+    /**
+     * Compact's error box: show the cause, whether any completed batches were
+     * saved, and the AI service's own error when it sent one. Retry continues
+     * from saved partial work; when nothing was saved, the conversation is
+     * explicitly reported as unchanged.
+     */
+    private fun showCompactionFailure(
+        state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed
+    ) {
+        val (title, reason) = when (state.category) {
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.MODEL_MISSING ->
+                R.string.compaction_err_model_missing_title to R.string.compaction_err_model_missing
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.SERVICE_UNREACHABLE ->
+                R.string.compaction_err_unreachable_title to R.string.compaction_err_unreachable
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.CONNECT_TIMEOUT ->
+                R.string.compaction_err_connect_timeout_title to R.string.compaction_err_connect_timeout
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.RESPONSE_TIMEOUT ->
+                R.string.compaction_err_response_timeout_title to R.string.compaction_err_response_timeout
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.ACCESS_REJECTED ->
+                R.string.compaction_err_access_rejected_title to R.string.compaction_err_access_rejected
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.MODEL_UNAVAILABLE ->
+                R.string.compaction_err_model_unavailable_title to R.string.compaction_err_model_unavailable
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.RATE_LIMIT ->
+                R.string.compaction_err_rate_limit_title to R.string.compaction_err_rate_limit
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.QUOTA ->
+                R.string.compaction_err_quota_title to R.string.compaction_err_quota
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.REQUEST_TOO_LARGE ->
+                R.string.compaction_err_too_large_title to R.string.compaction_err_too_large
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.CONTENT_REJECTED ->
+                R.string.compaction_err_rejected_title to R.string.compaction_err_rejected
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.SERVICE_ERROR ->
+                R.string.compaction_err_service_title to R.string.compaction_err_service
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.RESPONSE_UNREADABLE ->
+                R.string.compaction_err_unreadable_title to R.string.compaction_err_unreadable
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.SAVE_FAILED ->
+                R.string.compaction_err_save_title to R.string.compaction_err_save
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.UNEXPECTED ->
+                R.string.compaction_err_unexpected_title to R.string.compaction_err_unexpected
+        }
+        // Retry continues from what a partly finished run saved.
+        if (state.savedMessages > 0) lastCompactionFromScratch = false
+        val message = buildString {
+            append(getString(reason))
+            append("\n\n")
+            if (state.savedMessages > 0) {
+                append(getString(R.string.compaction_err_partial_saved, state.savedMessages))
+            } else {
+                append(getString(R.string.compaction_err_unchanged))
+            }
+            state.providerError?.let {
+                append("\n\n")
+                append(getString(R.string.compaction_err_provider, it))
+            }
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(title)
+            .setMessage(message)
+            .setCancelable(false)
+            .setNeutralButton(R.string.title_summarizer_settings) { _, _ ->
+                startActivity(Intent(this, SummarizerSettingsActivity::class.java))
+            }
+            .setNegativeButton(R.string.btn_msg_retry) { _, _ ->
+                lastCompactionRequest?.let { startManualCompactionConfirmed(it, lastCompactionFromScratch) }
+            }
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    /**
      * Stamps the per-chat Use Summarizer value once, so flipping the global
      * "Use Summarizer for New Chats" default later never silently changes
      * what an EXISTING chat sends (decision 2 + §4.6). A chat is "new" here
@@ -4972,12 +5497,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  subject while the summarizer is on for this chat (decisions 11/16). */
     private fun refreshSummarizerIcons() {
         refreshCondensedRegenerationLocks()
-        val summarizerOn = preferences?.getChatUseSummarizer() == true
-        val hasCondensedConversation =
-            (preferences?.getManualCompactionBoundary() ?: 0) > 0 ||
-                preferences?.getSummarizerSummary().orEmpty().isNotBlank()
-        btnSummary?.visibility =
-            if (summarizerOn || hasCondensedConversation) View.VISIBLE else View.GONE
+        // Summary / Compaction review: only once a summary or compaction has
+        // been saved. The icon shows whether that condensed form is in use.
+        val summaryMode = conversationSummaryMode()
+        btnConversationSummary?.visibility = if (summaryMode != null) View.VISIBLE else View.GONE
+        btnConversationSummary?.setImageResource(
+            if (preferences?.getUseSummarizedConversationProjection() != false) R.drawable.ic_topic
+            else R.drawable.ic_docs_add_on
+        )
+        if (summaryMode != null) {
+            val desc = getString(summaryMode.titleRes)
+            btnConversationSummary?.contentDescription = desc
+            btnConversationSummary?.tooltipText = desc
+        }
+        refreshSummarySectionAnchors(summaryMode)
 
         val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
             .fromJson(preferences?.getSummarizerErrors())
@@ -5008,12 +5541,119 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /**
+     * Summarizer Bookmarks in the chat: the reply that opens each summary
+     * section (the first reply after the section's first user prompt) shows
+     * the bookmark flag, and every reply inside a section offers Summary
+     * Section in its menu. Shown only while the Summary review applies.
+     */
+    private fun refreshSummarySectionAnchors(mode: ConversationSummaryActivity.Mode?) {
+        val prefs = preferences
+        if (prefs == null || mode != ConversationSummaryActivity.Mode.SUMMARY) {
+            adapter?.setSummarySections(emptyMap(), emptyMap())
+            return
+        }
+        val byId = messages.associateBy { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }
+        val starts = HashMap<String, String>()
+        val owners = HashMap<String, String>()
+        for (section in org.teslasoft.assistant.util.summarizer.SummarySections.fromJson(prefs.getSummarySections())) {
+            val owned = section.messageIds.mapNotNull { byId[it] }
+            val firstPrompt = owned.indexOfFirst { it["isBot"] != true }
+            val opening = (if (firstPrompt >= 0) owned.drop(firstPrompt + 1) else owned)
+                .firstOrNull { it["isBot"] == true }
+            opening?.let { starts[org.teslasoft.assistant.preferences.MessageIdentity.idOf(it)] = section.id }
+            owned.filter { it["isBot"] == true }
+                .forEach { owners[org.teslasoft.assistant.preferences.MessageIdentity.idOf(it)] = section.id }
+        }
+        adapter?.setSummarySections(starts, owners)
+    }
+
+    override fun onOpenSummarySection(sectionId: String) {
+        openConversationSummary(sectionId)
+    }
+
+    /** The preview's "go to this message" comes back here. */
+    private val conversationSummaryLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            val messageId = result.data?.getStringExtra(ConversationSummaryActivity.RESULT_MESSAGE_ID)
+            if (result.resultCode == RESULT_OK && !messageId.isNullOrBlank()) jumpToMessage(messageId)
+        }
+
+    /** Opens the Summary / Compaction review; [sectionId] (Summarizer only)
+     *  is scrolled to, flagged, and highlighted there. */
+    private fun openConversationSummary(sectionId: String? = null) {
+        val mode = conversationSummaryMode() ?: return
+        runSummaryDueBeforeReview()
+        org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.open(
+            chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.CONVERSATION_SUMMARY
+        )
+        conversationSummaryLauncher.launch(
+            ConversationSummaryActivity.createIntent(
+                this, chatId, mode,
+                sectionId.takeIf { mode == ConversationSummaryActivity.Mode.SUMMARY }
+            )
+        )
+    }
+
+    /** Scrolls the chat to that exact message and briefly emphasizes it. */
+    private fun jumpToMessage(messageId: String) {
+        val target = SearchTargetResolver.resolve(
+            messages = messages,
+            messageId = messageId,
+            legacyOrdinal = null,
+            legacyRole = null,
+            fingerprint = null
+        ) ?: return
+        (chat?.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
+            target,
+            (chat?.height ?: 0) / 4
+        ) ?: chat?.scrollToPosition(target)
+        adapter?.emphasizeSearchTarget(target)
+    }
+
+    /** Which review the top-bar icon opens: the summary while this chat uses
+     *  the summarizer (or kept a summary without a compaction), otherwise the
+     *  compaction once one has completed. Null before either exists. */
+    private fun conversationSummaryMode(): ConversationSummaryActivity.Mode? {
+        val prefs = preferences ?: return null
+        if (chatId.isBlank()) return null
+        // Sections are only loaded (and an older summary carried over) while
+        // the chat uses the summarizer; otherwise only saved sections count.
+        // Never reconcile against a chat that is not readable right now: an
+        // empty message list would look like every section's messages were
+        // deleted. Without a snapshot, only already-saved sections count.
+        val snapshot = if (prefs.getChatUseSummarizer()) summarizerSnapshot() else null
+        val hasSummaryText = if (snapshot != null) {
+            (org.teslasoft.assistant.util.summarizer.SummarySectionStore
+                .load(prefs, snapshot.sources()) ?: emptyList()).isNotEmpty()
+        } else {
+            org.teslasoft.assistant.util.summarizer.SummarySections
+                .fromJson(prefs.getSummarySections()).isNotEmpty()
+        }
+        return when {
+            prefs.getChatUseSummarizer() ->
+                if (hasSummaryText) ConversationSummaryActivity.Mode.SUMMARY else null
+            prefs.getManualCompactionBoundary() > 0 -> ConversationSummaryActivity.Mode.COMPACTION
+            hasSummaryText -> ConversationSummaryActivity.Mode.SUMMARY
+            else -> null
+        }
+    }
+
     private fun refreshCondensedRegenerationLocks() {
         adapter?.setCondensedRegenerationLockBoundaries(
             preferences?.getSummaryRegenerationLockBoundary() ?: 0,
-            preferences?.getCompactionRegenerationLockBoundary() ?: 0
+            preferences?.getCompactionRegenerationLockBoundary() ?: 0,
+            summaryRegenerateAllowed = preferences?.getChatUseSummarizer() == true
         )
     }
+
+    /** A summarized reply can be regenerated in a chat that uses the
+     *  Summarizer: its section is resummarized or kept (owner ruling, Oct 4
+     *  2026). Compacted replies stay locked. */
+    private fun regenerateLockKind(position: Int): CondensedRegenerationLock.Kind? =
+        condensedRegenerationLockKind(position)?.takeUnless {
+            it == CondensedRegenerationLock.Kind.SUMMARY && preferences?.getChatUseSummarizer() == true
+        }
 
     private fun condensedRegenerationLockKind(position: Int): CondensedRegenerationLock.Kind? =
         CondensedRegenerationLock.kindAt(
@@ -5039,9 +5679,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Show only configured composer tools; hide the gear when none are usable. */
     private fun refreshComposerTools() {
+        // A chat that uses the summarizer is not compacted (owner ruling,
+        // Oct 3 2026): Compact is offered only while Use Summarizer is off.
         val compactAvailable =
             org.teslasoft.assistant.util.summarizer.SummarizerController
-                .isConfigured(this)
+                .isConfigured(this) && preferences?.getChatUseSummarizer() != true
         val imageAvailable = imageGeneratorConfigured()
         btnToolCompact?.visibility = if (compactAvailable) View.VISIBLE else View.GONE
         btnToolCreateImage?.visibility = if (imageAvailable) View.VISIBLE else View.GONE
@@ -5082,7 +5724,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /** Freeze one reference-only conversation prefix and compact it atomically. */
-    private fun startManualCompaction(requestedSnapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null) {
+    private fun startManualCompaction(
+        requestedSnapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null,
+        /** Rewrite the compacted text from the first message (Recompact). */
+        fromScratch: Boolean = false
+    ) {
+        // A chat that uses the summarizer is not compacted; /compact says so.
+        if (preferences?.getChatUseSummarizer() == true) {
+            Toast.makeText(this, R.string.compact_unavailable_with_summarizer, Toast.LENGTH_LONG).show()
+            return
+        }
         if (!org.teslasoft.assistant.util.summarizer.SummarizerController
                 .isConfigured(this)
         ) {
@@ -5097,11 +5748,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // that text once, then only the raw messages that compaction will
         // actually send after its existing bookmark; otherwise a partially
         // condensed long chat can produce a wildly inflated cost warning.
-        val alreadyFolded = (preferences?.getSummarizerFoldedCount() ?: 0)
+        val alreadyFolded = if (fromScratch) 0 else (preferences?.getSummarizerFoldedCount() ?: 0)
             .coerceIn(0, snapshot.entries.size)
         val estimatedTokens = org.teslasoft.assistant.util.summarizer
             .LargeSummarizerOperationPolicy.estimateInputTokens(
-                preferences?.getSummarizerSummary().orEmpty(),
+                if (fromScratch) "" else preferences?.getSummarizerSummary().orEmpty(),
                 snapshot.entries.drop(alreadyFolded)
             )
         if (org.teslasoft.assistant.util.summarizer.LargeSummarizerOperationPolicy
@@ -5117,20 +5768,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
                 .setNegativeButton(R.string.btn_cancel, null)
                 .setPositiveButton(R.string.compact_anyway) { _, _ ->
-                    startManualCompactionConfirmed(snapshot)
+                    startManualCompactionConfirmed(snapshot, fromScratch)
                 }
                 .show()
             return
         }
-        startManualCompactionConfirmed(snapshot)
+        startManualCompactionConfirmed(snapshot, fromScratch)
     }
 
     private fun startManualCompactionConfirmed(
-        snapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot
+        snapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot,
+        fromScratch: Boolean = false
     ) {
         val controller = summarizerController ?: return
         val frozenEntries = snapshot.entries.toList()
         val frozen = snapshot.copy(entries = frozenEntries)
+        lastCompactionRequest = frozen
+        lastCompactionFromScratch = fromScratch
         val frozenChatId = chatId
         val frozenRows = org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard
             .rows(messages)
@@ -5139,7 +5793,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         controller.runManualCompaction(
             snapshot = frozen,
             chatName = chatName,
-            savePartialOnCancel = preferences?.getSavePartialCompactionOnCancel() == true,
+            // Cancel keeps nothing from the run (owner ruling, Oct 4 2026).
+            savePartialOnCancel = false,
             stillCurrent = {
                 val stored = org.teslasoft.assistant.preferences.ChatPreferences
                     .getChatPreferences().getChatById(app, frozenChatId)
@@ -5149,7 +5804,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard.rows(stored)
                     )
             },
-            onFinished = { /* registry listener refreshes any attached screen */ }
+            onFinished = { /* registry listener refreshes any attached screen */ },
+            fromScratch = fromScratch
         )
     }
 
@@ -5196,6 +5852,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (!prefs.ensureSummarizerProjectionCompatibility()) {
             return FrozenSummarizerState(true, 0, null)
         }
+        // The automatic Summarizer sends every summary section, in order,
+        // exactly as the Summary screen shows them, then the messages after
+        // the last section in full. Compact keeps its single summary below.
+        if (prefs.getChatUseSummarizer()) {
+            val sources = summarizerSnapshot()?.sources() ?: return FrozenSummarizerState(true, 0, null)
+            val sections = org.teslasoft.assistant.util.summarizer.SummarySectionStore.load(prefs, sources)
+                ?: return FrozenSummarizerState(true, 0, null)
+            return FrozenSummarizerState(
+                true,
+                org.teslasoft.assistant.util.summarizer.SummarySections.coveredCount(sections, sources),
+                org.teslasoft.assistant.util.summarizer.SummarySections.injection(
+                    getString(R.string.summarizer_sections_injection_header),
+                    sections
+                )
+            )
+        }
         val folded = prefs.getSummarizerFoldedCount()
         val summary = prefs.getSummarizerSummary()
         val injection = summary.takeIf { it.isNotBlank() }?.let {
@@ -5217,11 +5889,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the fold-in bookmark; blank entries advance it without being sent. */
     private fun summarizerSnapshot(): org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? {
         if (isFinishing || isDestroyed || chatStorageUnavailable || chatId.isEmpty()) return null
-        val storedCanonical = messages
+        // Retry briefly removes the old row before inserting its replacement.
+        // Do not reconcile ownership against that temporary absence.
+        if (pendingRetryMessageId?.let { id ->
+                messages.none { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == id }
+            } == true
+        ) return null
+        // A message that just received its permanent ID is saved at once, so
+        // a section (or a backup) never refers to an ID that was never stored.
+        if (org.teslasoft.assistant.preferences.MessageIdentity.ensure(messages)) saveSettings()
+        val storedMessages = messages
             .filterNot {
                 it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
                     it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
             }
+        val storedCanonical = storedMessages
             .map { message ->
                 CanonicalConversationMessage(
                     isBot = message["isBot"] == true,
@@ -5235,10 +5917,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         val entries = SummarizerSafeIncludeProjectionBuilder
             .summarizerConversation(storedCanonical)
-            .map {
+            .mapIndexed { index, it ->
+            val stored = storedMessages.getOrNull(index)
             org.teslasoft.assistant.util.summarizer.SummarizerController.Entry(
                 isBot = it.isBot,
-                text = it.text
+                text = it.text,
+                id = stored?.let { m -> org.teslasoft.assistant.preferences.MessageIdentity.idOf(m) }.orEmpty(),
+                timeMillis = stored?.get(ChatAdapter.KEY_MESSAGE_TIME)?.toString()?.toLongOrNull()
             )
         }
         return org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot(
@@ -5302,24 +5987,73 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Runs a fold-in cycle when the summarizer is on for this chat. [force]
      *  (Update Now) also folds the final partial batch; automatic cycles
      *  wait for a full batch so provider prompt caching keeps applying. */
+    /** Set when an update was held back because the summary or compacted
+     *  text was open for review; it runs when the review screen closes. */
+    private var summarizerCycleHeld = false
+    private var summarySourceChangePending = false
+    private var pendingRetryMessageId: String? = null
+    private var pendingRecompactBoundary: Int? = null
+
+    /** Runs the held-back update once no review screen is open. */
+    private fun releaseHeldSummarizerCycle() {
+        if (!summarizerCycleHeld || org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.isOpen(chatId)) return
+        summarizerCycleHeld = false
+        summarizerCycle(force = preferences?.getSummarizerCatchUpPending() == true)
+    }
+
+    /** Before a review screen opens: an update that would run by the next
+     *  exchange runs now, so the screen shows current text (locked until it
+     *  finishes). Nothing else starts while the screen is open. */
+    private fun runSummaryDueBeforeReview() {
+        if (preferences?.getChatUseSummarizer() != true) return
+        if (preferences?.getUseSummarizedConversationProjection() == false) return
+        val snapshot = summarizerSnapshot() ?: return
+        val prefs = preferences ?: return
+        val sources = snapshot.sources()
+        val sections = org.teslasoft.assistant.util.summarizer.SummarySectionStore.load(prefs, sources) ?: return
+        if (sections.any { it.awaitsRegeneration } ||
+            org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.runsBeforeReview(
+                snapshot.entries.size,
+                snapshot.window,
+                org.teslasoft.assistant.util.summarizer.SummarySections.coveredCount(sections, sources)
+            )
+        ) {
+            summarizerCycle(force = true)
+        }
+    }
+
     private fun summarizerCycle(force: Boolean = false, allowLarge: Boolean = false) {
+        if (summarySourceChangePending || pendingRetryMessageId != null) return
+        if (org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.isOpen(chatId)) {
+            summarizerCycleHeld = true
+            return
+        }
         if (preferences?.getChatUseSummarizer() != true) return
         if (preferences?.getUseSummarizedConversationProjection() == false) return
         val frozen = summarizerSnapshot() ?: return
-        val folded = preferences?.getSummarizerFoldedCount() ?: 0
+        val prefs = preferences ?: return
+        val sources = frozen.sources()
+        val sections = org.teslasoft.assistant.util.summarizer.SummarySectionStore.load(prefs, sources) ?: return
+        val covered = org.teslasoft.assistant.util.summarizer.SummarySections.coveredCount(sections, sources)
         val edge = (frozen.entries.size - frozen.window.coerceAtLeast(1)).coerceAtLeast(0)
-        val pending = if (edge > folded) frozen.entries.subList(folded, edge) else emptyList()
-        if (pending.isEmpty()) {
-            preferences?.setSummarizerCatchUpPending(false)
+        val repairs = sections.filter { it.awaitsRegeneration }
+        val nextRange = org.teslasoft.assistant.util.summarizer.SummarySections.nextRange(
+            sources, covered, edge,
+            org.teslasoft.assistant.util.summarizer.SummarizerController.BATCH_SIZE, force
+        )
+        if (repairs.isEmpty() && nextRange == null) {
+            if (covered >= edge) preferences?.setSummarizerCatchUpPending(false)
             return
         }
+        // Only the messages that will be summarized are sent, never earlier
+        // summaries, so the estimate counts just those.
+        val repairIds = repairs.flatMapTo(HashSet()) { it.messageIds }
+        val pending = frozen.entries.filterIndexed { index, entry ->
+            entry.id in repairIds || (index in covered until edge)
+        }
         val estimatedTokens = org.teslasoft.assistant.util.summarizer
-            .LargeSummarizerOperationPolicy.estimateInputTokens(
-                preferences?.getSummarizerSummary().orEmpty(),
-                pending
-            )
-        val wouldRun = pending.isNotEmpty() &&
-            (force || pending.size >= org.teslasoft.assistant.util.summarizer.SummarizerController.BATCH_SIZE)
+            .LargeSummarizerOperationPolicy.estimateInputTokens("", pending)
+        val wouldRun = true
         if (!allowLarge && wouldRun &&
             org.teslasoft.assistant.util.summarizer.LargeSummarizerOperationPolicy
                 .needsConfirmation(estimatedTokens)
@@ -5340,94 +6074,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         val cyclePreferences = preferences
-        summarizerController?.runCycle(force, chatName, { frozen }) { succeeded ->
+        // Read live: a section is saved only if its messages are unchanged
+        // when the summary comes back.
+        summarizerController?.runCycle(force, chatName, { summarizerSnapshot() }) { succeeded ->
             if (succeeded) cyclePreferences?.setSummarizerCatchUpPending(false)
         }
-    }
-
-    /** Summary view (decision 11): the editable summary and Update Now.
-     *  Edits save automatically when the view closes; Update Now saves them
-     *  first, then folds everything up to the current window edge. */
-    private fun showSummaryView() {
-        val view = layoutInflater.inflate(R.layout.dialog_summary_view, null)
-        val field = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.field_summary_text)
-        val update = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_primary_action)
-        val projection = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_destructive_action)
-        update?.setText(R.string.summarizer_update_now)
-        val usingCondensed = preferences?.getUseSummarizedConversationProjection() != false
-        projection?.setText(
-            if (usingCondensed) R.string.summarizer_send_entire_chat
-            else if (preferences?.getCondensedConversationKind() ==
-                org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
-            ) R.string.summarizer_use_compacted
-            else R.string.summarizer_use_summary
-        )
-        val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true
-        field?.setText(if (compatible) preferences?.getSummarizerSummary().orEmpty() else "")
-
-        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.summarizer_summary_title)
-            .setView(view)
-            .create()
-
-        fun saveEditsIfChanged() {
-            val edited = field?.text?.toString().orEmpty()
-            if (edited != preferences?.getSummarizerSummary().orEmpty()) {
-                preferences?.commitSummarizerSummaryEdit(edited)
-            }
-        }
-        dialog.setOnDismissListener { saveEditsIfChanged() }
-        update?.setOnClickListener {
-            saveEditsIfChanged()
-            dialog.dismiss()
-            summarizerCycle(force = true)
-        }
-        projection?.setOnClickListener {
-            saveEditsIfChanged()
-            val enableCondensed = preferences?.getUseSummarizedConversationProjection() == false
-            preferences?.setUseSummarizedConversationProjection(enableCondensed)
-            if (!enableCondensed) {
-                // Entire-chat transmission is also a true pause for automatic
-                // summarization. Preserve the already committed summary and
-                // bookmark, and remember to catch up when condensed mode is
-                // deliberately restored. Manual compaction is a separate,
-                // explicit operation and is allowed to keep running.
-                preferences?.setSummarizerCatchUpPending(true)
-                val state = summarizerController?.currentOperationState()
-                if (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running &&
-                    state.kind == org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.SUMMARIZING
-                ) {
-                    summarizerController?.cancel()
-                }
-            }
-            showProjectionStatus(enableCondensed)
-            dialog.dismiss()
-            if (enableCondensed) {
-                if (preferences?.getCondensedConversationKind() !=
-                    org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
-                ) {
-                    summarizerCycle(force = true)
-                }
-            }
-        }
-        dialog.show()
-    }
-
-    private fun showProjectionStatus(enableCondensed: Boolean) {
-        projectionStatusVisible = true
-        summarizerOperationChip?.visibility = View.VISIBLE
-        summarizerOperationSpinner?.visibility = View.GONE
-        summarizerOperationSuccess?.visibility = View.VISIBLE
-        summarizerOperationCancel?.visibility = View.GONE
-        summarizerOperationText?.setText(
-            if (!enableCondensed) R.string.summarizer_now_entire_chat
-            else if (preferences?.getCondensedConversationKind() ==
-                org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
-            ) R.string.summarizer_now_compacted
-            else R.string.summarizer_now_summary
-        )
-        summarizerStatusHandler.removeCallbacks(hideSummarizerStatus)
-        summarizerStatusHandler.postDelayed(hideSummarizerStatus, 4000L)
     }
 
     /** Summarizer Errors dialog (decision 16 + errors doc §1, owner ruling
@@ -6685,6 +7336,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             .putExtra("chatId", chatId)
                             .putExtra("name", chatName)
                             .putExtra("pendingConversation", pendingConversation)
+                            .putExtra(SummarizerPromptSession.EXTRA_KEEP_CHOICES, true)
                             .setAction(Intent.ACTION_VIEW)
                     )
                     finishActivity()
@@ -6788,6 +7440,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } catch (_: Exception) {
             false
         }
+        if (!isGenerationRequest && boundContext?.auxiliaryUsage == true) {
+            boundContext.usageAttempt?.let {
+                request.attributes.put(providerUsageAttemptAttribute, it)
+            }
+            return
+        }
         if (isGenerationRequest) {
             recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
             (boundContext?.usageAttempt ?: currentProviderUsageAttempt)?.let {
@@ -6846,6 +7504,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // Injection is best-effort; report honestly that it was not confirmed.
             lastRoutingAttachment = "attachment requested (mutation failed)"
         }
+    }
+
+    /** Attach original PDFs only to the exact frozen generation request that owns them. */
+    private fun augmentRequestWithNativePdfs(request: HttpRequestBuilder) {
+        val payloads = generationRequestContext.get()?.nativePdfs.orEmpty()
+        if (payloads.isEmpty()) return
+        val provider = apiEndpointObject?.let { PdfCapabilityProvider.forEndpoint(it) } ?: return
+        if (!PdfDeliveryPolicy.hasNativeTransport(provider)) return
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val augmented = PdfRequestSerializer.augmentOpenAiChatBody(
+            content.text,
+            payloads,
+            openRouterNative = provider == PdfCapabilityProvider.OPENROUTER
+        )
+        request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
     }
 
     /**
@@ -7366,6 +8040,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             } catch (_: Exception) {
                                 // Non-fatal: send without a reasoning instruction.
                             }
+                            // Unlike optional reasoning, a native PDF must not
+                            // be silently omitted. Any mutation failure aborts
+                            // before dispatch and reaches the normal readable
+                            // failed-request path.
+                            augmentRequestWithNativePdfs(request)
                             proceed(request)
                         }
                     })
@@ -7652,6 +8331,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             row[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
                 row[ChatAdapter.KEY_IMAGE_PROGRESS] == true
         }
+        // New messages receive their permanent ID before they are first saved.
+        org.teslasoft.assistant.preferences.MessageIdentity.ensure(messages)
         val persistableMessages =
             if (messages.any(isTransientImageRow)) {
                 ArrayList(messages.filterNot(isTransientImageRow))
@@ -7696,6 +8377,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // No sends into a chat whose stored history is locked or preserved-
         // corrupt (Round 4) — the blocking dialog owns this screen.
         if (chatStorageUnavailable) return
+        // A new turn never starts with a regeneration left unsettled.
+        if (shouldAdd) settlePendingRegeneration()
         if (preparedTurn != null) {
             // Intentionally do not re-read historical Include state here.
             // Phase 6.2 freezes that state for this dispatch; an edit/reduce/
@@ -7893,6 +8576,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (endpointId.isBlank() || generatorModelId.isBlank()) {
             saveSettings()
             restoreUIState()
+            settlePendingRegeneration()
             MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                 .setTitle(R.string.title_image_generation)
                 .setMessage(R.string.image_gen_configure_message)
@@ -7904,45 +8588,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
 
-        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
-        val capabilities = ImageProviderAdapters.forEndpoint(endpoint).capabilities
-        val resolved = ImagineCommand.resolveOptions(
-            parsed.shapeOverride,
-            parsed.qualityOverride,
-            globalPreferences.getImageGeneratorShape(),
-            globalPreferences.getImageGeneratorQuality(),
-            capabilities
-        )
         val request = ImageGenerationRequest(
             prompt = parsed.prompt,
-            shape = resolved.shape,
-            quality = resolved.quality,
+            shape = parsed.shapeOverride ?: ImageShape.AUTOMATIC,
+            quality = parsed.qualityOverride ?: ImageQuality.AUTOMATIC,
             endpointId = endpointId,
-            modelId = generatorModelId
+            modelId = generatorModelId,
+            parameters = globalPreferences.getImageGeneratorParameters().toMap(),
+            defaultShape = globalPreferences.getImageGeneratorShape(),
+            defaultQuality = globalPreferences.getImageGeneratorQuality()
         )
-
-        if (resolved.unsupportedExplicit.isNotEmpty()) {
-            // §11: an explicitly requested option the selected generator
-            // cannot support is never silently ignored.
-            val optionLabels = resolved.unsupportedExplicit.joinToString(", ") { option ->
-                if (option == ImagineCommand.OPTION_SHAPE) {
-                    getString(R.string.image_gen_row_shape)
-                } else {
-                    getString(R.string.image_gen_row_quality)
-                }
-            }
-            saveSettings()
-            restoreUIState()
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.title_image_generation)
-                .setMessage(getString(R.string.image_gen_unsupported_option_notice, optionLabels))
-                .setPositiveButton(R.string.image_gen_action_continue) { _, _ ->
-                    sendCoordinatorImageRequest(request)
-                }
-                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-                .show()
-            return
-        }
 
         sendCoordinatorImageRequest(request)
     }
@@ -8017,6 +8672,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (fromImagine) restoreUIState()
             }
         }
+        // `/imagine` owns its whole turn, so a regeneration of it ends here.
+        // A tool image is mid-turn; the surrounding reply settles it.
+        if (fromImagine || pendingRegenerationAwaitsImageJob) settlePendingRegeneration()
     }
 
     /** §12: stamp the just-added terminal message with its structured
@@ -8065,6 +8723,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatId == "") return
         ImageGenerationJobRegistry.attach(chatId, this)
         val activeJob = ImageGenerationJobRegistry.activeJob(chatId) ?: return
+        if (pendingRetryVariants == null) {
+            org.teslasoft.assistant.ui.chat.RegenerationRecovery
+                .decode(preferences?.getPendingRegeneration())
+                ?.takeIf { pending ->
+                    messages.lastOrNull()?.let {
+                        org.teslasoft.assistant.preferences.MessageIdentity.idOf(it)
+                    } == pending.precedingMessageId
+                }
+                ?.let { pending ->
+                    pendingRetryOriginal = pending
+                    pendingRetryVariants =
+                        org.teslasoft.assistant.ui.chat.RegenerationRecovery.historyOf(pending.original)
+                    pendingRegenerationAwaitsImageJob = true
+                }
+        }
         showImageProgressCard()
         if (activeJob.origin == ImageGenerationJobRegistry.Origin.IMAGINE) {
             disableTurnControlsUnlessTheyAreStops()
@@ -8447,32 +9120,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return CreateImageTool.errorResult("no image generator is configured")
         }
 
-        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
-        val adapter = ImageProviderAdapters.forEndpoint(endpoint)
-        val resolved = ImagineCommand.resolveOptions(
-            valid.shapeOverride,
-            null,
-            globalPreferences.getImageGeneratorShape(),
-            globalPreferences.getImageGeneratorQuality(),
-            adapter.capabilities
-        )
-        if (resolved.unsupportedExplicit.isNotEmpty() || resolved.silentFallbacks.isNotEmpty()) {
-            // §13: a model-initiated option that fell back to the provider
-            // default — the case the user cannot otherwise see.
-            ImageGenerationEventLog.recordSilentFallback(
-                this,
-                (resolved.unsupportedExplicit + resolved.silentFallbacks).joinToString(", "),
-                endpoint.provider.ifBlank { adapter.providerName },
-                generatorModelId
-            )
-        }
         val request = ImageGenerationRequest(
             prompt = valid.prompt,
-            shape = resolved.shape,
-            quality = resolved.quality,
+            shape = valid.shapeOverride ?: ImageShape.AUTOMATIC,
+            quality = ImageQuality.AUTOMATIC,
             endpointId = endpointId,
             modelId = generatorModelId,
-            description = valid.description
+            description = valid.description,
+            parameters = globalPreferences.getImageGeneratorParameters().toMap(),
+            defaultShape = globalPreferences.getImageGeneratorShape(),
+            defaultQuality = globalPreferences.getImageGeneratorQuality()
         )
 
         if (!requestImageConfirmation(valid.prompt, globalPreferences, shouldPronounce)) {
@@ -8495,18 +9152,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         return when (val terminal = job.await()) {
             is ImageGenerationJobRegistry.Terminal.Complete -> {
-                // §11: a model-initiated unsupported option applies the
-                // fallback and reports it in the tool result instead of
-                // interrupting the user.
-                val fallbackNote = if (resolved.unsupportedExplicit.isNotEmpty() ||
-                    resolved.silentFallbacks.isNotEmpty()
-                ) {
-                    "the requested shape is not supported by the image service; " +
-                        "the provider default was used"
-                } else {
-                    null
-                }
-                CreateImageTool.successResult(terminal.marker, valid.description, fallbackNote)
+                CreateImageTool.successResult(terminal.marker, valid.description)
             }
             is ImageGenerationJobRegistry.Terminal.Failed ->
                 CreateImageTool.errorResult(
@@ -8658,12 +9304,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * this remains correct if two attempts ever overlap on different jobs. */
     private data class GenerationRequestContext(
         val usageAttempt: ProviderUsageAttempt?,
-        val lifecycle: ResponseLifecycleRecorder?
+        val lifecycle: ResponseLifecycleRecorder?,
+        val nativePdfs: List<NativePdfPayload>,
+        /** A Condense/Reduce/reminder request: capture its usage only, with no
+         *  chat-turn diagnostics attached. */
+        val auxiliaryUsage: Boolean = false
     )
     private val generationRequestContext = ThreadLocal<GenerationRequestContext?>()
+    private var currentTurnNativePdfs: List<NativePdfPayload> = emptyList()
 
     private suspend fun <T> withGenerationRequestContext(block: suspend () -> T): T {
-        val context = GenerationRequestContext(currentProviderUsageAttempt, currentLifecycle)
+        val context = GenerationRequestContext(
+            currentProviderUsageAttempt, currentLifecycle, currentTurnNativePdfs
+        )
         return try {
             kotlinx.coroutines.withContext(generationRequestContext.asContextElement(context)) {
                 block()
@@ -9127,6 +9780,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         ) {
             return
         }
+        settlePendingRegeneration()
 
         // A send action always closes the software keyboard. Capacity or
         // capability checks may continue asynchronously, but the tap has
@@ -9200,7 +9854,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     withContext(Dispatchers.Default) {
                         val conversationProjection = freezeConversationProjection(
                             canonical,
-                            summarizerState
+                            summarizerState,
+                            selectedModel
                         )
                         val frozen = buildFrozenRegularRequest(
                             conversationProjection = conversationProjection,
@@ -9264,7 +9919,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     request = frozen.request,
                     payload = frozen.payload,
                     activeMemoryReferences = frozen.activeMemoryReferences,
-                    contextDecision = decision
+                    contextDecision = decision,
+                    nativePdfs = frozen.nativePdfs
                 )
                 val hasFullImages = preparedRequest.first.second
 
@@ -9321,6 +9977,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 requestPreparationInProgress = false
                 restoreUIState()
                 throw e
+            } catch (e: PdfPreparationException) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                showRequestHardBlock(
+                    R.string.pdf_request_failed_title,
+                    getString(
+                        R.string.pdf_request_failed_body,
+                        e.attachmentName,
+                        e.cause?.message ?: getString(R.string.include_error_unknown)
+                    )
+                )
             } catch (e: Exception) {
                 requestPreparationInProgress = false
                 restoreUIState()
@@ -9453,6 +10120,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val decision: ImageCapabilityDecision
     )
 
+    private data class ResolvedPdfCapabilityCheck(
+        val routing: PdfRoutingConfig,
+        val capability: PdfCapability
+    )
+
     @Volatile
     private var activeImageCapabilityScope: String? = null
 
@@ -9502,6 +10174,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
         return ResolvedImageCapabilityCheck(endpoint, modelId, routing, decision)
+    }
+
+    /** Resolve native PDF support from provider evidence without treating vision as proof. */
+    private suspend fun resolvePdfCapability(modelId: String): ResolvedPdfCapabilityCheck {
+        val endpoint = apiEndpointObject ?: ApiEndpointObject("", "", "")
+        val routing = PdfRoutingConfig.from(endpoint, favoriteForActiveEndpoint(modelId))
+        var capability = PdfCapabilityResolver.resolve(endpoint, modelId, routing)
+        if (capability == PdfCapability.UNKNOWN && routing.provider in setOf(
+                PdfCapabilityProvider.OPENROUTER, PdfCapabilityProvider.NANOGPT
+            )) {
+            val live = PdfCapabilityMetadataClient.resolve(endpoint, modelId, routing)
+            var updated = endpoint.pdfCapabilityByModel
+            if (live.model != PdfCapability.UNKNOWN) {
+                updated = PdfCapabilityStore.setMetadata(updated, modelId, live.model)
+            }
+            if (routing.pinned && live.pinnedProvider != PdfCapability.UNKNOWN) {
+                updated = PdfCapabilityStore.setRoute(
+                    updated,
+                    PdfCapabilityResolver.scope(endpoint, modelId, routing),
+                    live.pinnedProvider
+                )
+            }
+            if (updated != endpoint.pdfCapabilityByModel && endpoint.id.isNotBlank()) {
+                endpoint.pdfCapabilityByModel = updated
+                ApiEndpointPreferences.getApiEndpointPreferences(this)
+                    .setApiEndpoint(this, endpoint)
+                apiEndpointObject?.pdfCapabilityByModel = updated
+            }
+            capability = PdfCapabilityResolver.resolve(
+                endpoint, modelId, routing, live.model, live.pinnedProvider
+            )
+        }
+        return ResolvedPdfCapabilityCheck(routing, capability)
     }
 
     private fun showImageCapabilityBlock(decision: ImageCapabilityDecision) {
@@ -9897,7 +10602,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         map["message"] = message
         map["isBot"] = isBot
         map[org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection.MESSAGE_ID_KEY] =
-            java.util.UUID.randomUUID().toString()
+            (if (isBot) pendingRetryMessageId else null) ?: java.util.UUID.randomUUID().toString()
 
         // When this message was created, for the Message Details popup. Stored
         // as a string so it round-trips through the generic Gson history map
@@ -10059,6 +10764,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  reply, which is never versioned. */
     private var pendingRetryVariants: MutableList<HashMap<String, String>>? = null
 
+    /** The reply a Retry removed, kept (and saved) until the regeneration
+     *  settles so it can be put back when no new reply is produced. */
+    private var pendingRetryOriginal: org.teslasoft.assistant.ui.chat.RegenerationRecovery.Pending? = null
+
+    /** A regeneration whose image is still being created after this screen
+     *  was recreated; it settles when that image job finishes. */
+    private var pendingRegenerationAwaitsImageJob = false
+
     /**
      * Fold the just-finished regenerated reply into its turn's version list as
      * the newest version and make it the canonical one, preserving every prior
@@ -10068,15 +10781,110 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun mergePendingRetryVariants() {
         val history = pendingRetryVariants ?: return
-        pendingRetryVariants = null
         val last = messages.lastOrNull() ?: return
         if (last["isBot"] != true) return
+        pendingRetryVariants = null
 
-        history.add(ChatAdapter.snapshotVariant(last))
-        last[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(history)
-        last[ChatAdapter.KEY_CANONICAL_VARIANT] = (history.size - 1).toString()
-        last[ChatAdapter.KEY_DISPLAY_VARIANT] = (history.size - 1).toString()
+        org.teslasoft.assistant.ui.chat.RegenerationRecovery.foldInto(last, history, pendingRetryMessageId)
         adapter?.notifyItemChanged(messages.size - 1)
+        finishPendingRegeneration()
+    }
+
+    /**
+     * A Retry that ends without a reply of its own (stopped before it began,
+     * blocked before it was sent, or a tool-only turn with no text) puts the
+     * removed reply back with every earlier version, instead of leaving the
+     * turn with no reply. A reply that does exist is folded in as usual.
+     */
+    private fun settlePendingRegeneration() {
+        if (pendingRetryVariants == null) return
+        val last = messages.lastOrNull()
+        // An image card still on screen means the turn has not finished.
+        if (last?.get(ChatAdapter.KEY_IMAGE_CONFIRMATION) == true ||
+            last?.get(ChatAdapter.KEY_IMAGE_PROGRESS) == true
+        ) return
+        if (last?.get("isBot") == true) {
+            mergePendingRetryVariants()
+            saveSettings()
+            return
+        }
+        pendingRetryVariants = null
+        val original = pendingRetryOriginal?.original
+        if (original != null && last != null &&
+            org.teslasoft.assistant.preferences.MessageIdentity.idOf(last) == pendingRetryOriginal?.precedingMessageId
+        ) {
+            putRestoredReply(original)
+        }
+        finishPendingRegeneration()
+    }
+
+    /** Startup worker: settles a regeneration saved by a run that ended
+     *  before it could. The history is written before the marker is cleared. */
+    private fun recoverPendingRegeneration(
+        prefs: Preferences,
+        chatPreferences: ChatPreferences,
+        chatId: String,
+        history: ArrayList<HashMap<String, Any>>
+    ) {
+        // An image still being created settles when it finishes (the screen
+        // picks it up in restoreImageGenerationJobState).
+        if (ImageGenerationJobRegistry.activeJob(chatId) != null) return
+        val pending = org.teslasoft.assistant.ui.chat.RegenerationRecovery
+            .decode(prefs.getPendingRegeneration())
+        if (pending == null) {
+            if (prefs.getPendingRegeneration().isNotEmpty()) prefs.clearPendingRegeneration()
+            return
+        }
+        val changed = when (val outcome = org.teslasoft.assistant.ui.chat.RegenerationRecovery.resolve(history, pending)) {
+            is org.teslasoft.assistant.ui.chat.RegenerationRecovery.Outcome.Restore -> {
+                history.add(outcome.original)
+                true
+            }
+            is org.teslasoft.assistant.ui.chat.RegenerationRecovery.Outcome.Fold -> {
+                // Reconcile a reply the app closed during before it is saved
+                // as a version, as the history loader does for every reply.
+                MessageCompletionState.reconcileOnLoad(
+                    outcome.reply[MessageCompletionState.KEY_STATE]?.toString()
+                )?.let {
+                    outcome.reply[MessageCompletionState.KEY_STATE] = it
+                    outcome.reply[MessageCompletionState.KEY_STATE_DETAIL] = MessageCompletionState.DETAIL_PROCESS_DEATH
+                }
+                org.teslasoft.assistant.ui.chat.RegenerationRecovery.foldInto(
+                    outcome.reply,
+                    org.teslasoft.assistant.ui.chat.RegenerationRecovery.historyOf(pending.original),
+                    org.teslasoft.assistant.preferences.MessageIdentity.idOf(pending.original)
+                )
+                true
+            }
+            org.teslasoft.assistant.ui.chat.RegenerationRecovery.Outcome.Unchanged -> false
+        }
+        val saved = !changed || chatPreferences.saveChatHistory(
+            this, chatId, history, synchronous = true
+        ) == ChatStorageHealth.WriteOutcome.OK
+        if (saved) prefs.clearPendingRegeneration()
+    }
+
+    private fun putRestoredReply(original: HashMap<String, Any>) {
+        messages.add(original)
+        adapter?.notifyItemInserted(messages.size - 1)
+        syncChatProjection()
+        saveSettings()
+    }
+
+    private fun finishPendingRegeneration() {
+        pendingRetryMessageId = null
+        pendingRetryOriginal = null
+        pendingRegenerationAwaitsImageJob = false
+        val recompactBoundary = pendingRecompactBoundary
+        pendingRecompactBoundary = null
+        lifecycleScope.launch {
+            // Terminal callers persist the new canonical reply before we read it.
+            kotlinx.coroutines.yield()
+            // A Retry started meanwhile has saved its own reply; keep it.
+            if (pendingRetryVariants == null) preferences?.clearPendingRegeneration()
+            recompactBoundary?.let { askToRecompactAfterDelete(it, sourceChanged = true) }
+            summarizerCycle()
+        }
     }
 
     /** Mark the last assistant reply as completed normally. The caller's
@@ -10112,12 +10920,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Attach only completed requests. Usage-only tool calls use the initiating
      * user message as a durable carrier; visible completions use their assistant
      * message and may mirror compact display metadata. */
-    private fun attachUsageRecords(
+    private suspend fun attachUsageRecords(
         message: HashMap<String, Any>,
         newRecords: List<TurnUsageRecord>,
         mirrorCompactMetadata: Boolean = true
     ) {
         if (newRecords.isEmpty()) return
+        // The chat's usage log is the lasting account: deleting or
+        // regenerating this message later never removes what was spent.
+        appendUsageLog(
+            UsageCategory.CHAT,
+            org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
+            newRecords
+        )
         val records = TokenUsageAccounting.decodeRecords(
             message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString()
         ) + newRecords
@@ -10134,6 +10949,80 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // never an output/completion-token field and stays absent if incomplete.
         records.mapNotNull { it.totalTokens }.takeIf { it.size == records.size }
             ?.sum()?.let { message[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+    }
+
+    /**
+     * Runs one Condense, Reduce or removal-reminder request and logs what it
+     * cost under Summarizing, as [function]. Usage is read from the provider's
+     * own response; a request that fails is logged only when the provider
+     * reported usage.
+     */
+    private suspend fun <T> withAttachmentUsage(
+        requestModel: String,
+        includeId: String,
+        function: UsageFunction,
+        nativePdfs: List<NativePdfPayload> = emptyList(),
+        block: suspend () -> T
+    ): T {
+        val endpoint = apiEndpointObject
+        val attempt = ProviderUsageAttempt(
+            requestedModel = requestModel,
+            fallbackProvider = fallbackServingProvider(),
+            apiEndpoint = endpoint?.host.orEmpty()
+        )
+        val pricing = lifecycleScope.async(Dispatchers.IO) {
+            TokenPricingCatalogClient.load(endpoint, requestModel)
+        }
+        val context = GenerationRequestContext(attempt, null, nativePdfs, auxiliaryUsage = true)
+        var succeeded = false
+        try {
+            val result = kotlinx.coroutines.withContext(
+                generationRequestContext.asContextElement(context)
+            ) { block() }
+            succeeded = true
+            return result
+        } finally {
+            withContext(kotlinx.coroutines.NonCancellable) {
+                val record = auxiliaryUsageRecord(attempt, pricing, succeeded)
+                if (record != null) {
+                    appendUsageLog(UsageCategory.SUMMARIZING, includeOwnerMessageId(includeId), listOf(record), function)
+                }
+            }
+        }
+    }
+
+    private suspend fun auxiliaryUsageRecord(
+        attempt: ProviderUsageAttempt,
+        pricingDeferred: Deferred<TokenPricingCatalog>,
+        succeeded: Boolean
+    ): TurnUsageRecord? = org.teslasoft.assistant.usage.AuxiliaryUsage.record(
+        attempt, pricingDeferred, succeeded
+    ) { reportedModel -> TokenPricingCatalogClient.load(apiEndpointObject, reportedModel) }
+
+    /** The permanent id of the message an attachment was sent with, if sent. */
+    private fun includeOwnerMessageId(includeId: String): String? =
+        messages.firstOrNull { message -> includesOf(message).any { it.id == includeId } }
+            ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }
+            ?.ifBlank { null }
+
+    /** Adds requests to this chat's usage log. Seeding first is a no-op once
+     *  the chat has opened, and runs before [messages] gains these records. */
+    private suspend fun appendUsageLog(
+        category: UsageCategory,
+        messageId: String?,
+        records: List<TurnUsageRecord>,
+        function: UsageFunction? = null
+    ) {
+        val prefs = preferences ?: return
+        if (records.isEmpty() || chatStorageUnavailable) return
+        val snapshot = messages.map { HashMap(it) }
+        withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
+            UsageLogStore.seed(prefs, snapshot)
+            UsageLogStore.append(
+                prefs,
+                records.map { UsageLog.entry(category, messageId?.ifBlank { null }, it, function = function) }
+            )
+        }
     }
 
     private suspend fun completePendingUsageRecord(): TurnUsageRecord? {
@@ -10263,6 +11152,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         }
+        mergePendingRetryVariants()
         saveSettings()
         if (logAsError) {
             try {
@@ -10336,93 +11226,195 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
-     * Resolves every text/image payload immediately from one canonical
-     * snapshot. The returned ChatMessages own their encoded image bytes, so
-     * later Include edits can only affect a later request.
+     * Resolves every text/image/PDF payload immediately from one canonical
+     * snapshot. The returned ChatMessages own their encoded bytes, so later
+     * Include edits can only affect a later request.
+     *
+     * Each attachment is placed inside the user message it was sent with,
+     * after the user's words and introduced by its label (owner ruling,
+     * Oct 6 2026). Attachments whose message was folded into the summary
+     * travel together in [FrozenConversationProjection.foldedIncludes].
      */
     private suspend fun freezeConversationProjection(
         canonical: List<CanonicalConversationMessage>,
-        summarizerState: FrozenSummarizerState
+        summarizerState: FrozenSummarizerState,
+        selectedModel: String
     ): FrozenConversationProjection = withContext(Dispatchers.IO) {
         val projected = SummarizerSafeIncludeProjectionBuilder.build(
             messages = canonical,
             foldedCount = summarizerState.foldedCount
         )
         val cid = chatId
-        val persistent = projected.persistentIncludes.map { unit ->
-            val include = unit.include
-            val content = ProjectedUserMessage(
-                text = StableAttachmentReference.renderPersistentPayload(include),
-                imageParts = IncludeRenderer.imagePartsFor(listOf(include))
+        val nativePdfs = ArrayList<NativePdfPayload>()
+        val endpoint = apiEndpointObject
+        val anyLivePdf = projected.foldedIncludes.any { it.include.hasLivePdfBytes() } ||
+            projected.conversation.any { message -> message.inlineIncludes.any { it.hasLivePdfBytes() } }
+        val resolvedPdf = if (endpoint != null && anyLivePdf) resolvePdfCapability(selectedModel) else null
+
+        val folded = projected.foldedIncludes.map { unit ->
+            buildUserMessage(
+                IncludeRenderer.segmentsFor("", listOf(unit.include)),
+                cid, resolvedPdf, nativePdfs
             )
-            buildMultiPartUserMessage(content, cid)
         }
         val conversation = projected.conversation.map { message ->
             if (message.isBot) {
                 ChatMessage(role = ChatRole.Assistant, content = message.text)
             } else {
-                val content = ProjectedUserMessage(
-                    text = message.text,
-                    imageParts = IncludeRenderer.imagePartsFor(message.inlineIncludes)
+                buildUserMessage(
+                    IncludeRenderer.segmentsFor(message.text, message.inlineIncludes),
+                    cid, resolvedPdf, nativePdfs
                 )
-                buildMultiPartUserMessage(content, cid)
+            }
+        }
+        // Memory recall reads recent turns as words plus attachment markers,
+        // never attachment contents.
+        val memoryContext = projected.conversation.map { message ->
+            if (message.isBot) {
+                ChatMessage(role = ChatRole.Assistant, content = message.text)
+            } else {
+                ChatMessage(
+                    role = ChatRole.User,
+                    content = StableAttachmentReference.renderUserMessage(
+                        message.text, message.inlineIncludes
+                    )
+                )
             }
         }
         FrozenConversationProjection(
-            persistentIncludes = persistent.toList(),
+            foldedIncludes = folded.toList(),
             conversation = conversation.toList(),
+            memoryContext = memoryContext.toList(),
             summaryInjection = summarizerState.summaryInjection,
             hasFullImages = canonical.any { message ->
                 message.includes.any { it.hasLiveImageBytes() }
-            }
+            },
+            nativePdfs = nativePdfs.toList()
         )
     }
 
-    private fun buildMultiPartUserMessage(
-        projection: ProjectedUserMessage,
-        cid: String
+    /**
+     * Builds one user message from its ordered segments. Adjacent text is
+     * joined; each image part and each native PDF slot stays at its own
+     * position, right after its label. A native PDF is represented here by
+     * its stable marker as a separate text part, which the provider boundary
+     * replaces with the file itself ([PdfRequestSerializer.augmentOpenAiChatBody]).
+     */
+    private suspend fun buildUserMessage(
+        segments: List<RenderedSegment>,
+        cid: String,
+        resolvedPdf: ResolvedPdfCapabilityCheck?,
+        nativePdfs: MutableList<NativePdfPayload>
     ): ChatMessage {
         val parts = ArrayList<ContentPart>()
-        if (projection.text.isNotBlank()) {
-            parts.add(TextPart(projection.text))
+        val pendingText = StringBuilder()
+        fun appendText(text: String) {
+            if (text.isEmpty()) return
+            if (pendingText.isNotEmpty()) pendingText.append("\n\n")
+            pendingText.append(text)
         }
-        for (ref in projection.imageParts) {
-            val include = ChatInclude(
-                id = ref.includeId,
-                fileName = ref.fileName,
-                kind = if (ref.imageMimeType == "image/png") IncludeKind.PNG else IncludeKind.JPEG,
-                form = IncludeForm.FULL,
-                fullText = "",
-                imageFileHash = ref.imageFileHash,
-                imageMimeType = ref.imageMimeType
+        fun flushText() {
+            if (pendingText.isNotBlank()) parts.add(TextPart(pendingText.toString()))
+            pendingText.setLength(0)
+        }
+        for (segment in segments) {
+            when (segment) {
+                is RenderedSegment.Text -> appendText(segment.text)
+                is RenderedSegment.Image -> {
+                    flushText()
+                    parts.add(ImagePart(encodeOutboundImage(segment.part, cid)))
+                }
+                is RenderedSegment.Pdf -> {
+                    val include = segment.include
+                    try {
+                        val file = PdfAttachmentStore.pdfFile(this@ChatActivity, cid, include)
+                            ?.takeIf { it.isFile } ?: error("PDF ${include.fileName} is unavailable")
+                        val provider = resolvedPdf?.routing?.provider
+                        val useNative = PdfDeliveryPolicy.useNative(
+                            provider,
+                            resolvedPdf?.capability ?: PdfCapability.UNKNOWN,
+                            file.length()
+                        )
+                        if (useNative) {
+                            nativePdfs += nativePdfPayload(include, file, provider, cid)
+                            flushText()
+                            parts.add(TextPart(StableAttachmentReference.serialize(include)))
+                        } else {
+                            val fallback = PdfFallbackExtractor.extract(this@ChatActivity, cid, include)
+                            appendText(IncludeRenderer.renderLocalPdf(include, fallback.text))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        throw PdfPreparationException(include.fileName, e)
+                    }
+                }
+            }
+        }
+        flushText()
+        return when {
+            parts.isEmpty() -> ChatMessage(role = ChatRole.User, content = "")
+            parts.size == 1 && parts[0] is TextPart ->
+                ChatMessage(role = ChatRole.User, content = (parts[0] as TextPart).text)
+            else -> ChatMessage(role = ChatRole.User, content = parts)
+        }
+    }
+
+    /** The original PDF for a native route: inline bytes, or xAI's uploaded copy. */
+    private suspend fun nativePdfPayload(
+        include: ChatInclude,
+        file: java.io.File,
+        provider: PdfCapabilityProvider?,
+        cid: String
+    ): NativePdfPayload = if (PdfDeliveryPolicy.usesUploadedFile(provider)) {
+        val endpoint = apiEndpointObject ?: error("No selected AI endpoint")
+        NativePdfPayload(
+            include.id,
+            include.fileName,
+            base64Data = "",
+            originalByteSize = file.length(),
+            pageCount = include.pdfPageCount,
+            fileId = XaiPdfFiles.fileIdFor(this, cid, endpoint, include, file)
+        )
+    } else {
+        NativePdfPayload(
+            include.id,
+            include.fileName,
+            Base64.encodeToString(file.readBytes(), Base64.NO_WRAP),
+            originalByteSize = file.length(),
+            pageCount = include.pdfPageCount
+        )
+    }
+
+    private fun encodeOutboundImage(ref: RenderedImagePart, cid: String): String {
+        val include = ChatInclude(
+            id = ref.includeId,
+            fileName = ref.fileName,
+            kind = if (ref.imageMimeType == "image/png") IncludeKind.PNG else IncludeKind.JPEG,
+            form = IncludeForm.FULL,
+            fullText = "",
+            imageFileHash = ref.imageFileHash,
+            imageMimeType = ref.imageMimeType
+        )
+        val file = ImageImporter.imageFile(this, cid, include)
+            ?: throw IllegalStateException(
+                "Include ${ref.includeId} is visible but has no outbound image file"
             )
-            val file = ImageImporter.imageFile(this, cid, include)
-                ?: throw IllegalStateException(
-                    "Include ${ref.includeId} is visible but has no outbound image file"
-                )
-            if (!file.exists()) {
-                throw IllegalStateException(
-                    "Include ${ref.includeId} is visible but its outbound image file is missing"
-                )
-            }
-            val bytes = try {
-                file.readBytes()
-            } catch (error: Exception) {
-                throw IllegalStateException(
-                    "Include ${ref.includeId} is visible but its outbound image file is unreadable",
-                    error
-                )
-            }
-            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            parts.add(ImagePart("data:${ref.imageMimeType};base64,$encoded"))
+        if (!file.exists()) {
+            throw IllegalStateException(
+                "Include ${ref.includeId} is visible but its outbound image file is missing"
+            )
         }
-        return if (parts.isEmpty()) {
-            ChatMessage(role = ChatRole.User, content = "")
-        } else if (parts.size == 1 && parts[0] is TextPart) {
-            ChatMessage(role = ChatRole.User, content = projection.text)
-        } else {
-            ChatMessage(role = ChatRole.User, content = parts)
+        val bytes = try {
+            file.readBytes()
+        } catch (error: Exception) {
+            throw IllegalStateException(
+                "Include ${ref.includeId} is visible but its outbound image file is unreadable",
+                error
+            )
         }
+        val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        return "data:${ref.imageMimeType};base64,$encoded"
     }
 
     private fun conversationHasFullImages(
@@ -10486,6 +11478,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         request: String,
         shouldPronounce: Boolean,
         preparedTurn: PreparedRegularTurn? = null
+    ) {
+        try {
+            generateResponseUnsettled(request, shouldPronounce, preparedTurn)
+        } finally {
+            // Every way a regeneration can end passes here; one that produced
+            // no reply puts the removed reply back.
+            settlePendingRegeneration()
+        }
+    }
+
+    private suspend fun generateResponseUnsettled(
+        request: String,
+        shouldPronounce: Boolean,
+        preparedTurn: PreparedRegularTurn?
     ) {
         // The single generation funnel is also the single guard point: no
         // generation into a chat whose stored history is locked or
@@ -11641,7 +12647,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 personaId = personaId,
                                 userMessage = loreQuery,
                                 recentContext = recentTurnsContext(
-                                    conversationProjection.conversation
+                                    conversationProjection.memoryContext
                                 ),
                                 modelTag = selectedModel,
                                 // Lore is frozen as its own complete request
@@ -11682,6 +12688,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
 
+        // Attachments whose original message was folded away follow the
+        // summary that replaced it, ahead of the retained history.
+        msgs.addAll(conversationProjection.foldedIncludes)
+
         // Conversation history, all active attachments embedded in their user
         // turns, and the current input have already been frozen in this list.
         // Image bytes are loaded from disk and base64-encoded here (IO thread)
@@ -11692,17 +12702,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // regenerated every turn (owner ruling, Aug 15 2026 — memory and lore
         // used to sit ahead of the whole history and broke prefix caching for
         // it on every single turn).
+        // Each attachment rides in the message it was sent with (owner ruling,
+        // Oct 6 2026), so unchanged attachments stay in the cached prefix every
+        // turn. Memory and Lorebook follow, since those are rebuilt every turn.
         val resolvedHistory = conversationProjection.conversation
         msgs.addAll(resolvedHistory.dropLast(1))
-
-        // One payload unit per attachment, in original activation order,
-        // carrying whatever form the user has it in right now. It sits AFTER
-        // the history on purpose (owner ruling, Aug 29 2026): the history above
-        // it only carries permanent markers, so reducing, condensing, editing
-        // or removing an attachment can no longer rewrite the conversation the
-        // provider has already cached. Memory and Lorebook follow, since those
-        // are rebuilt every turn regardless.
-        msgs.addAll(conversationProjection.persistentIncludes)
 
         memoryAssemblyResult?.let { assembly ->
             msgs.add(ChatMessage(role = ChatRole.System, content = assembly.prompt))
@@ -11788,13 +12792,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             frequencyPenalty = frequencyPenalty,
             presencePenalty = presencePenalty,
             seed = seed,
-            logitBias = logitBias
+            logitBias = logitBias,
+            nativeDocuments = conversationProjection.nativePdfs.map { pdf ->
+                FrozenNativeDocumentPayload(
+                    base64Characters = pdf.base64Data.length.toLong(),
+                    // Native providers tokenize extracted text and page imagery,
+                    // not the transport base64. Use a conservative estimate
+                    // from both page count and uncompressed source size.
+                    estimatedDocumentTokens = maxOf(
+                        pdf.pageCount.toLong().coerceAtLeast(1L) * 1_500L,
+                        (pdf.originalByteSize + 3L) / 4L
+                    ).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                )
+            }
         )
         val activeMemoryReferences = ActiveMemoryAttribution.fromFinalSelection(
             memoryAssemblyResult?.memoryIds.orEmpty(),
             injectedLoreMatches.map { it.entry.id }
         )
-        return FrozenRegularRequest(request, payload, activeMemoryReferences)
+        return FrozenRegularRequest(
+            request, payload, activeMemoryReferences, conversationProjection.nativePdfs
+        )
     }
 
     // streamOptions (include-usage) is beta-gated in the client library, like
@@ -11861,7 +12879,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             legacyConversationProjection = try {
                 freezeConversationProjection(
                     legacyCanonical.orEmpty(),
-                    legacySummarizerState ?: FrozenSummarizerState(false, 0, null)
+                    legacySummarizerState ?: FrozenSummarizerState(false, 0, null),
+                    model
                 )
             } finally {
                 releaseRequestImagePayloads()
@@ -12046,9 +13065,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
-        // Retry/voice uses the same immutable Phase 6.2 conversation snapshot
-        // as typed Send: persistent user-authority Includes are already above;
-        // only the summary and reference-only conversation remain here.
+        // Retry/voice uses the same immutable conversation snapshot as typed
+        // Send, with the same layout: summary, attachments of folded messages,
+        // then history whose user messages carry their own attachments.
         if (legacyConversationProjection?.summaryInjection != null) {
             msgs.add(
                 ChatMessage(
@@ -12057,6 +13076,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
             )
         }
+        legacyConversationProjection?.foldedIncludes?.let(msgs::addAll)
 
         // Resolved as one ordered list, then split so memory/lore land right
         // before only the newest message: the retained history above them
@@ -12065,10 +13085,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // same fix as the frozen path above).
         val legacyResolvedHistory = legacyConversationProjection?.conversation.orEmpty()
         msgs.addAll(legacyResolvedHistory.dropLast(1))
-
-        // Attachment payloads after the history, before memory and Lorebook —
-        // the same placement as the frozen builder above.
-        legacyConversationProjection?.persistentIncludes?.let(msgs::addAll)
 
         memoryAssemblyResult?.let { assembly ->
             msgs.add(
@@ -12157,6 +13173,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
         attachActiveMemoryAttribution(activeMemoryReferences)
         }
+
+        currentTurnNativePdfs = preparedTurn?.nativePdfs
+            ?: legacyConversationProjection?.nativePdfs.orEmpty()
 
         // §8 retry support: remembered so a failure of THIS request can be
         // judged as a tools rejection by the wrapper in generateResponse.
@@ -12654,7 +13673,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } else {
             val playback = apiReadback ?: TtsPlayback(this).also { apiReadback = it }
+            val usagePreferences = preferences
             playback.play(selected.sourceId, selected.voiceId, message, TtsOperation.SPEECH,
+                // Read-aloud and hands-free readback belong to this chat. The charge is recorded
+                // when the audio arrives, whatever playback does afterwards.
+                onSynthesized = { billed ->
+                    if (usagePreferences != null && !chatStorageUnavailable) {
+                        TtsUsageRecorder.record(usagePreferences, billed)
+                    }
+                },
                 stillCurrent = { session == readbackSession && !isDestroyed && preferences?.getSelectedTtsVoice() == selected },
                 onPlayer = { next ->
                     if (mediaPlayer !== next) runCatching { mediaPlayer?.release() }
@@ -12845,13 +13872,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // assistant turn's existing version list (or wrap its single current
         // reply) BEFORE it is removed; the regenerated reply is folded in as the
         // newest version once it finishes.
+        settlePendingRegeneration()
         val last = messages.lastOrNull()
+        val imageRetry = last?.get("message")?.toString()?.startsWith("~file:") == true ||
+            (preferences?.getImagineCommandGlobal() == true &&
+                ImagineCommand.isImagineAttempt(findLastUserMessage()["message"].toString()))
+        pendingRetryMessageId = last?.takeIf { it["isBot"] == true && !imageRetry }
+            ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }?.ifBlank { null }
         pendingRetryVariants = if (last != null && last["isBot"] == true) {
             val existing = ChatAdapter.parseVariants(last[ChatAdapter.KEY_VARIANTS]?.toString())
             if (existing.isNotEmpty()) existing
             else mutableListOf(ChatAdapter.snapshotVariant(last))
         } else {
             null
+        }
+        // Saved before the reply is removed, so a regeneration that never
+        // produces a reply (or an app closed mid-way) can put it back. A
+        // generated-image reply's file is kept for the same reason.
+        pendingRetryOriginal = if (pendingRetryVariants != null) {
+            org.teslasoft.assistant.ui.chat.RegenerationRecovery.pendingFor(
+                messages,
+                replyKeepsId = pendingRetryMessageId != null
+            )
+        } else {
+            null
+        }
+        pendingRetryOriginal?.let {
+            preferences?.commitPendingRegeneration(org.teslasoft.assistant.ui.chat.RegenerationRecovery.encode(it))
         }
 
         removeLastAssistantMessageIfAvailable()
@@ -12870,12 +13917,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (messages[position]["isBot"] != true) return
         // Adapter rows explain this with an anchored popup. Keep this guard so
         // stale/recycled UI or any future caller can never bypass the history lock.
-        if (condensedRegenerationLockKind(position) != null) return
+        if (regenerateLockKind(position) != null) return
 
         // The latest turn just adds a version (Stage 1) — nothing follows it, so
         // there is nothing to discard and no warning is needed.
         if (position == messages.size - 1) {
-            onRetryClick()
+            withResummarizeDecision(position) { onRetryClick() }
             return
         }
 
@@ -12889,8 +13936,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Record-only truncation (files preserved), then the turn at
                 // this position is the last one, so the normal regenerate path
                 // applies and keeps this turn's version history.
-                truncateAfter(position)
-                onRetryClick()
+                withResummarizeDecision(position) {
+                    val boundary = preferences?.getManualCompactionBoundary() ?: 0
+                    if (position < boundary) {
+                        preferences?.setCompactionStale(true)
+                        pendingRecompactBoundary = boundary
+                    }
+                    truncateAfter(position)
+                    onRetryClick()
+                }
             }
             .show()
     }
@@ -12905,13 +13959,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @SuppressLint("NotifyDataSetChanged")
     private fun truncateAfter(index: Int) {
         if (index < 0 || index >= messages.size - 1) return
-        while (messages.size > index + 1) {
-            messages.removeAt(messages.size - 1)
-        }
-        val manualBoundary = preferences?.getManualCompactionBoundary() ?: 0
-        if (manualBoundary > messages.size) {
-            preferences?.setManualCompactionBoundary(messages.size)
-        }
+        val end = messages.size
+        messages.subList(index + 1, end).clear()
+        realignCondensedBoundaries(index + 1, end)
         // Rebuild the projections to the shortened thread before rebinding so
         // the adapter never reads a selection slot that no longer exists.
         syncChatProjection()
@@ -12928,7 +13978,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     override fun onMakeVersionCurrent(position: Int) {
         if (position < 0 || position >= messages.size) return
-        if (condensedRegenerationLockKind(position) != null) return
+        if (condensedRegenerationLockKind(position) == CondensedRegenerationLock.Kind.COMPACTION) return
         val msg = messages[position]
         if (msg["isBot"] != true) return
         val variants = ChatAdapter.parseVariants(msg[ChatAdapter.KEY_VARIANTS]?.toString())
@@ -12940,7 +13990,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         if (position == messages.size - 1) {
             // Newest turn: nothing after it to destroy, so switch silently.
-            promoteVersionAt(position, display)
+            changeCanonicalVersion(position, display, discardFollowing = false)
             return
         }
 
@@ -12949,10 +13999,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .setMessage(R.string.make_current_body)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.make_current_confirm) { _, _ ->
-                promoteVersionAt(position, display)
-                truncateAfter(position)
+                changeCanonicalVersion(position, display, discardFollowing = true)
             }
             .show()
+    }
+
+    private fun changeCanonicalVersion(position: Int, display: Int, discardFollowing: Boolean) {
+        val before = org.teslasoft.assistant.util.summarizer.SummarySections
+            .fromJson(preferences?.getSummarySections().orEmpty())
+        summarySourceChangePending = true
+        lifecycleScope.launch {
+            summarizerController?.cancelSummarizingAndWait()
+            val boundary = preferences?.getManualCompactionBoundary() ?: 0
+            promoteVersionAt(position, display)
+            if (discardFollowing) truncateAfter(position)
+            finishSummarySourceChange(before)
+            if (position < boundary) {
+                preferences?.setCompactionStale(true)
+                askToRecompactAfterDelete(boundary, sourceChanged = true)
+            }
+        }
     }
 
     /** Make version [index] of the turn at [position] canonical: mirror it into
@@ -12989,7 +14055,170 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     override fun onMessageEdited() {
+        // Capture before projection readers reconcile away the evidence of this edit.
+        val before = org.teslasoft.assistant.util.summarizer.SummarySections
+            .fromJson(preferences?.getSummarySections().orEmpty())
+        summarySourceChangePending = true
+        lifecycleScope.launch {
+            summarizerController?.cancelSummarizingAndWait()
+            finishSummarySourceChange(before)
+        }
+    }
+
+    private fun finishSummarySourceChange(
+        before: List<org.teslasoft.assistant.util.summarizer.SummarySections.Section>
+    ) {
         syncChatProjection()
+        if (!askToResummarizeEditedSection(before)) {
+            summarySourceChangePending = false
+            summarizerCycle()
+        }
+    }
+
+    /**
+     * After an edit changed messages a summary section was written from,
+     * decides whether that section is rewritten (owner ruling, Oct 4 2026):
+     * "always resummarize" on, or this chat's remembered choice, answers
+     * without asking; otherwise "Resummarize Conversation Section?" asks.
+     * True when the question was shown (it then starts summarizing itself).
+     */
+    private fun askToResummarizeEditedSection(
+        before: List<org.teslasoft.assistant.util.summarizer.SummarySections.Section>
+    ): Boolean {
+        val prefs = preferences ?: return false
+        if (!prefs.getChatUseSummarizer()) return false
+        val sources = summarizerSnapshot()?.sources() ?: return false
+        val reconciled = org.teslasoft.assistant.util.summarizer.SummarySections.reconcile(before, sources).sections
+        val affected = org.teslasoft.assistant.util.summarizer.SummarySections.newlyAffected(before, reconciled)
+        if (affected.isEmpty()) return false
+        val affectedIds = affected.map { it.id }.toSet()
+        val known = resummarizeAnswer(prefs)
+        if (known != null) {
+            saveResummarizeAnswer(prefs, affectedIds, known, asked = false)
+            return false
+        }
+        showResummarizeDialog(prefs, affected.first(), sources) { yes ->
+            saveResummarizeAnswer(prefs, affectedIds, yes, asked = true)
+            summarySourceChangePending = false
+            refreshSummarizerIcons()
+            summarizerCycle()
+        }
+        return true
+    }
+
+    /**
+     * Regenerating a reply a summary section was written from asks the same
+     * question first (owner ruling, Oct 4 2026), then runs [proceed]. A reply
+     * outside every section regenerates without asking.
+     */
+    private fun withResummarizeDecision(position: Int, proceed: () -> Unit) {
+        summarySourceChangePending = true
+        lifecycleScope.launch {
+            summarizerController?.cancelSummarizingAndWait()
+            fun continueChange() {
+                proceed()
+                summarySourceChangePending = false
+            }
+            val prefs = preferences
+            val messageId = messages.getOrNull(position)
+                ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }.orEmpty()
+            if (prefs == null || !prefs.getChatUseSummarizer() || messageId.isBlank()) {
+                continueChange()
+                return@launch
+            }
+            val sections = org.teslasoft.assistant.util.summarizer.SummarySections.fromJson(prefs.getSummarySections())
+            val affected = sections.filter { messageId in it.messageIds || messageId in it.contextIds }
+            if (affected.isEmpty()) {
+                continueChange()
+                return@launch
+            }
+            val ids = affected.map { it.id }.toSet()
+            val known = resummarizeAnswer(prefs)
+            if (known != null) {
+                saveResummarizeAnswer(prefs, ids, known, asked = false)
+                continueChange()
+                return@launch
+            }
+            val sources = summarizerSnapshot()?.sources().orEmpty()
+            showResummarizeDialog(prefs, affected.first(), sources) { yes ->
+                saveResummarizeAnswer(prefs, ids, yes, asked = true)
+                continueChange()
+            }
+        }
+    }
+
+    /** True/false when the answer is already known (the "always resummarize"
+     *  setting, then this chat's remembered choice); null to ask. */
+    private fun resummarizeAnswer(prefs: Preferences): Boolean? = when {
+        prefs.getSummarizerAlwaysResummarize() -> true
+        prefs.getSummaryResummarizeChoice() == "yes" -> true
+        prefs.getSummaryResummarizeChoice() == "no" -> false
+        else -> null
+    }
+
+    /**
+     * Yes rewrites the sections from their current messages; No keeps their
+     * text, marked on the Summary screen as written before the messages
+     * changed. An answer given in the dialog also rewrites a section whose
+     * text the user wrote; an automatic answer never replaces the user's own
+     * wording (that section stays marked, with Rewrite Summary).
+     */
+    private fun saveResummarizeAnswer(
+        prefs: Preferences,
+        affectedIds: Set<String>,
+        yes: Boolean,
+        asked: Boolean
+    ) {
+        val sources = summarizerSnapshot()?.sources()
+        val live = if (sources != null) {
+            org.teslasoft.assistant.util.summarizer.SummarySectionStore.load(prefs, sources) ?: return
+        } else {
+            org.teslasoft.assistant.util.summarizer.SummarySections.fromJson(prefs.getSummarySections())
+        }
+        val updated = live.map {
+            when {
+                it.id !in affectedIds -> it
+                yes && asked -> it.copy(edited = false, legacy = false, kept = false, needsUpdate = true)
+                yes -> it.copy(kept = false, needsUpdate = true)
+                else -> it.copy(kept = true)
+            }
+        }
+        org.teslasoft.assistant.util.summarizer.SummarySectionStore.save(prefs, updated)
+    }
+
+    private fun showResummarizeDialog(
+        prefs: Preferences,
+        section: org.teslasoft.assistant.util.summarizer.SummarySections.Section,
+        sources: List<org.teslasoft.assistant.util.summarizer.SummarySections.SourceMessage>,
+        onAnswer: (yes: Boolean) -> Unit
+    ) {
+        val range = org.teslasoft.assistant.util.summarizer.SummarySections.timeSpan(section, sources)
+            ?.let { (start, end) -> org.teslasoft.assistant.util.summarizer.SummarySectionTime.format(start, end) }
+            ?: getString(R.string.summary_section_time_unknown)
+        val view = layoutInflater.inflate(R.layout.view_dialog_resummarize_section, null)
+        val remember = view.findViewById<com.google.android.material.checkbox.MaterialCheckBox>(
+            R.id.check_resummarize_remember
+        )
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.summary_section_resummarize_title)
+            .setMessage(getString(R.string.summary_section_resummarize_body, range))
+            .setView(view)
+            .setCancelable(false)
+            .create()
+        fun answer(yes: Boolean) {
+            dialog.dismiss()
+            if (remember.isChecked) prefs.setSummaryResummarizeChoice(if (yes) "yes" else "no")
+            onAnswer(yes)
+        }
+        view.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.no)
+            setOnClickListener { answer(false) }
+        }
+        view.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.yes)
+            setOnClickListener { answer(true) }
+        }
+        dialog.show()
     }
 
     override fun onMessageDeleteRequested(position: Int) {
@@ -13026,6 +14255,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // The registry completes only after its terminal callback has saved
             // the final row. Include that row in the deletion, not after it.
             imageJob?.await()
+            // Deleting stops a running summary update before the bookmark is
+            // realigned; its unfinished batch is discarded.
+            summarizerController?.cancelSummarizingAndWait()
+            val compactedBefore = preferences?.getManualCompactionBoundary() ?: 0
             val currentPosition = messages.indexOfFirst { it === target }
             if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@launch
             val end = if (deleteFollowing) messages.size else currentPosition + 1
@@ -13035,10 +14268,79 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
                 messages.addAll(currentPosition, removed)
                 Toast.makeText(this@ChatActivity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+            } else {
+                realignCondensedBoundaries(currentPosition, end)
             }
             syncChatProjection()
             deselectAll()
+            // Resume summarizing from the corrected bookmark.
+            summarizerCycle()
+            askToRecompactAfterDelete(compactedBefore)
         }
+    }
+
+    /**
+     * Deleting messages that were already compacted leaves compacted text
+     * that still describes them, so the chat asks (owner ruling, Oct 4
+     * 2026): "Recompact Conversation?" with Edit Summary, No, and Yes. Yes
+     * compacts the remaining messages up to the marker again from scratch;
+     * Edit Summary opens the Compaction Summary screen to fix the text by
+     * hand; No keeps the text. Until it is rewritten or saved, the
+     * Compaction Summary screen notes that the messages changed.
+     */
+    private fun askToRecompactAfterDelete(compactedBefore: Int, sourceChanged: Boolean = false) {
+        val prefs = preferences ?: return
+        if (prefs.getChatUseSummarizer()) return
+        val compactedAfter = prefs.getManualCompactionBoundary()
+        if (compactedBefore <= 0 || compactedAfter <= 0 ||
+            (!sourceChanged && compactedAfter >= compactedBefore)
+        ) return
+        if (prefs.getSummarizerSummary().isBlank()) return
+        if (isFinishing || isDestroyed) return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.compaction_recompact_after_delete_title)
+            .setCancelable(false)
+            .setNeutralButton(R.string.compaction_edit_summary) { _, _ ->
+                prefs.setCompactionStale(true)
+                openConversationSummary()
+            }
+            .setNegativeButton(R.string.no) { _, _ ->
+                prefs.setCompactionStale(true)
+            }
+            .setPositiveButton(R.string.yes) { _, _ ->
+                prefs.setCompactionStale(true)
+                val snapshot = summarizerSnapshot() ?: return@setPositiveButton
+                val boundary = prefs.getManualCompactionBoundary().coerceAtMost(snapshot.entries.size)
+                if (boundary <= 0) return@setPositiveButton
+                startManualCompaction(snapshot.copy(entries = snapshot.entries.take(boundary)), fromScratch = true)
+            }
+            .show()
+    }
+
+    /** Shrinks the summary bookmark, manual compaction marker, and both
+     *  regeneration locks by the removed stored messages [start, end) each
+     *  one covered, so the first message after a boundary is not skipped. */
+    private fun realignCondensedBoundaries(start: Int, end: Int) {
+        val prefs = preferences ?: return
+        fun realigned(boundary: Int): Int =
+            CondensedBoundaryRealignment.afterRangeRemoval(boundary, start, end)
+
+        val folded = prefs.getSummarizerFoldedCount()
+        if (realigned(folded) != folded) prefs.setSummarizerFoldedCount(realigned(folded))
+        val manualBoundary = prefs.getManualCompactionBoundary()
+        if (realigned(manualBoundary) != manualBoundary) {
+            prefs.setManualCompactionBoundary(realigned(manualBoundary))
+        }
+        val summaryLock = prefs.getSummaryRegenerationLockBoundary()
+        if (realigned(summaryLock) != summaryLock) {
+            prefs.setSummaryRegenerationLockBoundary(realigned(summaryLock))
+        }
+        val compactionLock = prefs.getCompactionRegenerationLockBoundary()
+        if (realigned(compactionLock) != compactionLock) {
+            prefs.setCompactionRegenerationLockBoundary(realigned(compactionLock))
+        }
+        refreshManualCompactionMarker()
+        refreshSummarizerIcons()
     }
 
     override fun onMessageDeleted() {
@@ -13231,75 +14533,87 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .setTitle("Delete selected messages")
             .setMessage("Are you sure you want to delete selected messages?")
             .setPositiveButton("Delete") { _, _ ->
-                val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
-                val manualBoundaryBefore =
-                    preferences?.getManualCompactionBoundary() ?: 0
-                val summaryLockBefore =
-                    preferences?.getSummaryRegenerationLockBoundary() ?: 0
-                val compactionLockBefore =
-                    preferences?.getCompactionRegenerationLockBoundary() ?: 0
-                // §12 cleanup: note the generated-image files the selected
-                // messages reference before they are removed.
-                val deletedImageHashes = GeneratedImageFiles.referencedHashes(
-                    messages.filterIndexed { index, _ ->
-                        index < messagesSelectionProjection.size &&
-                            messagesSelectionProjection[index]["selected"].toString() == "true"
-                    }
-                )
-                var removedBeforeBookmark = 0
-                var removedBeforeManualBoundary = 0
-                var removedBeforeSummaryLock = 0
-                var removedBeforeCompactionLock = 0
-                var pos = 0
-                var p = 0
-                while (pos < messagesSelectionProjection.size) {
-                    if (messagesSelectionProjection[pos]["selected"].toString() == "true") {
-                        // Bulk delete bypasses ChatPreferences.deleteMessage,
-                        // so the fold-in bookmark is realigned here the same
-                        // way: one step per removed already-folded message.
-                        if (pos < foldedBefore) removedBeforeBookmark++
-                        if (pos < manualBoundaryBefore) {
-                            removedBeforeManualBoundary++
-                        }
-                        if (pos < summaryLockBefore) removedBeforeSummaryLock++
-                        if (pos < compactionLockBefore) removedBeforeCompactionLock++
-                        messages.removeAt(pos - p)
-                        p++
-                    }
-
-                    pos++
+                lifecycleScope.launch {
+                    // Deleting stops a running summary update first (see
+                    // deleteMessageRange), then removes and realigns.
+                    summarizerController?.cancelSummarizingAndWait()
+                    deleteBulkSelection()
+                    summarizerCycle()
                 }
-                if (removedBeforeBookmark > 0) {
-                    preferences?.setSummarizerFoldedCount(foldedBefore - removedBeforeBookmark)
-                }
-                if (removedBeforeManualBoundary > 0) {
-                    preferences?.setManualCompactionBoundary(
-                        manualBoundaryBefore - removedBeforeManualBoundary
-                    )
-                }
-                if (removedBeforeSummaryLock > 0) {
-                    preferences?.setSummaryRegenerationLockBoundary(
-                        summaryLockBefore - removedBeforeSummaryLock
-                    )
-                }
-                if (removedBeforeCompactionLock > 0) {
-                    preferences?.setCompactionRegenerationLockBoundary(
-                        compactionLockBefore - removedBeforeCompactionLock
-                    )
-                }
-
-                syncChatProjection()
-                saveSettings()
-                if (deletedImageHashes.isNotEmpty()) {
-                    GeneratedImageFiles.deleteIfUnreferenced(this, deletedImageHashes)
-                }
-                adapter?.notifyDataSetChanged()
-                updateMessagesSelectionProjection()
-                deselectAll()
-                calculateCost()
             }
             .setNegativeButton("Cancel") { _, _ -> }
             .show()
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    private fun deleteBulkSelection() {
+        val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
+        val manualBoundaryBefore =
+            preferences?.getManualCompactionBoundary() ?: 0
+        val summaryLockBefore =
+            preferences?.getSummaryRegenerationLockBoundary() ?: 0
+        val compactionLockBefore =
+            preferences?.getCompactionRegenerationLockBoundary() ?: 0
+        // §12 cleanup: note the generated-image files the selected
+        // messages reference before they are removed.
+        val deletedImageHashes = GeneratedImageFiles.referencedHashes(
+            messages.filterIndexed { index, _ ->
+                index < messagesSelectionProjection.size &&
+                    messagesSelectionProjection[index]["selected"].toString() == "true"
+            }
+        )
+        var removedBeforeBookmark = 0
+        var removedBeforeManualBoundary = 0
+        var removedBeforeSummaryLock = 0
+        var removedBeforeCompactionLock = 0
+        var pos = 0
+        var p = 0
+        while (pos < messagesSelectionProjection.size) {
+            if (messagesSelectionProjection[pos]["selected"].toString() == "true") {
+                // Bulk delete bypasses ChatPreferences.deleteMessage,
+                // so the fold-in bookmark is realigned here the same
+                // way: one step per removed already-folded message.
+                if (pos < foldedBefore) removedBeforeBookmark++
+                if (pos < manualBoundaryBefore) {
+                    removedBeforeManualBoundary++
+                }
+                if (pos < summaryLockBefore) removedBeforeSummaryLock++
+                if (pos < compactionLockBefore) removedBeforeCompactionLock++
+                messages.removeAt(pos - p)
+                p++
+            }
+
+            pos++
+        }
+        if (removedBeforeBookmark > 0) {
+            preferences?.setSummarizerFoldedCount(foldedBefore - removedBeforeBookmark)
+        }
+        if (removedBeforeManualBoundary > 0) {
+            preferences?.setManualCompactionBoundary(
+                manualBoundaryBefore - removedBeforeManualBoundary
+            )
+        }
+        if (removedBeforeSummaryLock > 0) {
+            preferences?.setSummaryRegenerationLockBoundary(
+                summaryLockBefore - removedBeforeSummaryLock
+            )
+        }
+        if (removedBeforeCompactionLock > 0) {
+            preferences?.setCompactionRegenerationLockBoundary(
+                compactionLockBefore - removedBeforeCompactionLock
+            )
+        }
+
+        syncChatProjection()
+        saveSettings()
+        if (deletedImageHashes.isNotEmpty()) {
+            GeneratedImageFiles.deleteIfUnreferenced(this, deletedImageHashes)
+        }
+        adapter?.notifyDataSetChanged()
+        updateMessagesSelectionProjection()
+        deselectAll()
+        calculateCost()
+        askToRecompactAfterDelete(manualBoundaryBefore)
     }
 
     private fun copySelectedMessages() {

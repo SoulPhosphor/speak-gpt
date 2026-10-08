@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Shared multiple-prompt editor (ui-style-guide.md "Prompt tabs"): the
+     wrapping tab row above the prompt editor frame. Included by Edit Companion
+     and Summarizer Prompts and driven by ui.util.PromptVariantEditor, which
+     also supplies the field's hint. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <!-- Wrapping tab row for prompt variants + add button.
+         A vertical LinearLayout whose children are horizontal rows
+         built in code. The row containing the active tab is placed
+         last so it sits flush against the prompt frame below. -->
+    <LinearLayout
+        android:id="@+id/prompt_tab_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+
+    <!-- Prompt editor frame: tab name + three-dot menu + text field -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/prompt_editor_frame"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_prompt_editor"
+        android:padding="0dp">
+
+        <TextView
+            android:id="@+id/prompt_tab_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="8dp"
+            android:textColor="?attr/appSubtleTextColor"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_add_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageButton
+            android:id="@+id/btn_add_prompt"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/btn_add_prompt"
+            android:src="@drawable/ic_add"
+            android:scaleType="centerInside"
+            app:layout_constraintEnd_toStartOf="@+id/btn_prompt_menu"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="?attr/appSubtleTextColor" />
+
+        <ImageButton
+            android:id="@+id/btn_prompt_menu"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginTop="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/prompt_menu_rename"
+            android:src="@drawable/ic_more_vert"
+            android:scaleType="centerInside"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="?attr/appSubtleTextColor" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/field_prompt"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@android:color/transparent"
+            android:padding="12dp"
+            android:gravity="top|start"
+            android:inputType="textMultiLine|textCapSentences"
+            android:minLines="8"
+            android:maxLines="25"
+            android:overScrollMode="always"
+            android:scrollbars="vertical"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/prompt_tab_name" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

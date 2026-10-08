@@ -48,7 +48,7 @@ class ManualCompactionWiringContractTest {
         )
         val manual = controller.substring(
             controller.indexOf("private suspend fun compactSnapshot"),
-            controller.indexOf("private suspend fun foldOneBatch")
+            controller.indexOf("private suspend fun buildOneSection")
         )
         assertTrue(manual.contains("prefs.commitManualCompaction("))
         assertFalse(manual.contains("prefs.commitSummarizerFoldIn("))
@@ -74,7 +74,7 @@ class ManualCompactionWiringContractTest {
         assertTrue(adapter.contains("promote.visibility = View.GONE"))
         assertTrue(adapter.contains("position + 1 == summaryRegenerationLockBoundary"))
         assertTrue(source("src/main/res/values/strings.xml").contains("──────── Summarized ────────"))
-        assertTrue(activity.contains("if (condensedRegenerationLockKind(position) != null) return"))
+        assertTrue(activity.contains("if (condensedRegenerationLockKind(position) == CondensedRegenerationLock.Kind.COMPACTION) return"))
     }
 
     @Test
@@ -101,15 +101,20 @@ class ManualCompactionWiringContractTest {
     }
 
     @Test
-    fun projectionSwitchClosesTheSummaryWindowInBothDirections() {
-        val summaryView = activity.substring(
-            activity.indexOf("private fun showSummaryView()"),
-            activity.indexOf("private fun showProjectionStatus")
+    fun reviewScreenSwitchesBetweenCondensedAndFullTransmission() {
+        val review = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/ConversationSummaryActivity.kt"
         )
-        assertTrue(summaryView.contains("showProjectionStatus(enableCondensed)\n            dialog.dismiss()"))
-        assertTrue(summaryView.contains("setSummarizerCatchUpPending(true)"))
-        assertTrue(summaryView.contains("OperationKind.SUMMARIZING"))
-        assertTrue(summaryView.contains("summarizerController?.cancel()"))
-        assertEquals(1, Regex("dialog\\.show\\(\\)").findAll(summaryView).count())
+        assertTrue(review.contains("setUseSummarizedConversationProjection(false)"))
+        assertTrue(review.contains("setUseSummarizedConversationProjection(true)"))
+        assertTrue(review.contains("setSummarizerCatchUpPending(true)"))
+        assertTrue(review.contains("OperationKind.SUMMARIZING"))
+        assertTrue(review.contains("SummarizerControllerRegistry.cancel(chatId)"))
+    }
+
+    @Test
+    fun compactIsOfferedOnlyWhileTheChatDoesNotUseTheSummarizer() {
+        assertTrue(activity.contains(".isConfigured(this) && preferences?.getChatUseSummarizer() != true"))
+        assertTrue(activity.contains("R.string.compact_unavailable_with_summarizer"))
     }
 }

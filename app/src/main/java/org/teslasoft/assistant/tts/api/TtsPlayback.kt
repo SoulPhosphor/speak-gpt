@@ -57,7 +57,10 @@ class TtsPlayback(
         onPlayer: (MediaPlayer?) -> Unit = {},
         onStart: () -> Unit = {}, onDone: () -> Unit = {},
         onFailure: (TtsFailure) -> Unit,
-        onPlaybackError: (Int, Int) -> Unit = { _, _ -> }, onInvalidated: () -> Unit = {}) {
+        onPlaybackError: (Int, Int) -> Unit = { _, _ -> }, onInvalidated: () -> Unit = {},
+        /** Runs on a background thread once per synthesis the service charged for, as soon
+         *  as valid audio arrives: before playback, and even if Stop or a player error follows. */
+        onSynthesized: (TtsBilledSynthesis) -> Unit = {}) {
         stop()
         stateChanged = onPlayer
         invalidatedCallback = onInvalidated
@@ -76,7 +79,10 @@ class TtsPlayback(
                     target = source.target
                     activeEndpointId = source.endpoint.id
                     endpointName = source.endpoint.label
-                    val audio = transport.synthesize(source, text, token, operation)
+                    val audio = transport.synthesize(source, text, token, operation, onBilled = { billed ->
+                        // Accounting can never break speech.
+                        runCatching { onSynthesized(TtsBilledSynthesis(source, text, operation, billed)) }
+                    })
                     token.check()
                     val latest = resolver.saved(sourceId, voiceId).getOrThrow()
                     if (latest.target != source.target || !latest.endpoint.sameConfiguration(source.endpoint))

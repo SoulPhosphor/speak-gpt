@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import org.teslasoft.assistant.preferences.SecurePrefs
-import org.teslasoft.assistant.tts.voices.OPENAI_COMPATIBLE_FALLBACK_VOICE_NAMES
 
 /** App-wide default voice, independent of conversations and future Companion overrides.
  *  Reuses the existing default-settings store, preserving its saved voice without
@@ -124,7 +123,7 @@ class AppTtsVoicePreferences internal constructor(private val preferences: Share
      * @return voice name
      * */
     fun getOpenAIVoice() : String {
-        return getString("openai_voice", OPENAI_COMPATIBLE_FALLBACK_VOICE_NAMES.first())
+        return getString("openai_voice", "")
     }
 
     fun setOpenAITtsModel(model: String) {

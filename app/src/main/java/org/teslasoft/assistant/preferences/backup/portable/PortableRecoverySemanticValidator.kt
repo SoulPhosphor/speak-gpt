@@ -137,6 +137,11 @@ object PortableRecoverySemanticValidator {
             (PortableChatRestorePlan.parse(source.stagedFile.readText(Charsets.UTF_8)) as?
                 PortableChatRestorePlan.Result.Ok)?.plan ?: return Result.Invalid
         }
+        val pdfAssets = PdfAttachmentPortableBackup.prepareRestore(artifacts) ?: return Result.Invalid
+        if (pdfAssets.isNotEmpty() && chats == null) return Result.Invalid
+        if (chats != null && PdfAttachmentPortableBackup.requiredHashes(chats) != pdfAssets.keys) {
+            return Result.Invalid
+        }
 
         val generated = when (val prepared = GeneratedImagePortableRestoreManager.prepare(artifacts)) {
             is GeneratedImagePortableRestoreManager.PrepareResult.Ready -> prepared.prepared
@@ -359,7 +364,9 @@ object PortableRecoverySemanticValidator {
         artifacts: List<PortablePackage.ValidatedArtifact>
     ): Set<String> = artifacts.filter { artifact ->
         when (category) {
-            PortableRestoreCategory.CHATS -> artifact.type == PortablePackage.TYPE_CHATS_JSON
+            PortableRestoreCategory.CHATS -> artifact.type in setOf(
+                PortablePackage.TYPE_CHATS_JSON, PortablePackage.TYPE_CHAT_PDF_ASSET
+            )
             PortableRestoreCategory.GENERATED_IMAGES -> artifact.type in setOf(
                 PortablePackage.TYPE_GENERATED_IMAGES_CATALOG,
                 PortablePackage.TYPE_GENERATED_IMAGE_ASSET

@@ -155,7 +155,22 @@ data class TurnUsageRecord(
     val uncachedInputCost: Double? = null,
     val cachedInputCost: Double? = null,
     val totalCost: Double? = null,
-    val costSource: String? = null
+    val costSource: String? = null,
+    /** Billed components of a request not billed in text tokens (TTS). Null
+     * for text-token requests. Transient: Gson cannot rebuild this list in a
+     * minified build, so the usage log writes it with [UsageMeterCodec]. */
+    @Transient val meters: List<UsageMeter>? = null,
+    /** Request evidence for image billing. No prompt, credentials, image bytes or download URLs. */
+    val requestId: String? = null,
+    val requestedModel: String? = null,
+    val requestStartedAtMs: Long? = null,
+    val httpStatus: Int? = null,
+    val requestParameters: String? = null,
+    val pricingSource: String? = null,
+    val pricingEvidence: String? = null,
+    val reportedChargeAmount: Double? = null,
+    val reportedChargeCurrency: String? = null,
+    val reportedChargeDecimal: String? = null
 ) {
     val countSource: TokenCountSource get() = TokenCountSource.fromStored(source)
     val storedCostSource: CostSource get() = when {
@@ -201,27 +216,30 @@ data class UsageGroup(
     val hasVariableCachedInputPricing: Boolean,
     val hasVariablePricing: Boolean,
     val containsEstimatedTokens: Boolean,
-    val recordCount: Int
+    val recordCount: Int,
+    /** Metered totals for non-token requests (TTS); null for text tokens.
+     * Transient for the same reason as [TurnUsageRecord.meters]. */
+    @Transient val meters: List<UsageMeterTotal>? = null
 )
 
 data class ConversationUsageSummary(
     val groups: List<UsageGroup>
 ) {
-    val totalInputTokens: Int get() = groups.sumOf { it.inputTokens }
-    val totalOutputTokens: Int get() = groups.sumOf { it.outputTokens }
-    val totalUncachedInputTokens: Int get() = groups.sumOf { it.uncachedInputTokens }
-    val totalCachedInputTokens: Int get() = groups.sumOf { it.cachedInputTokens }
-    val totalCost: Double get() = groups.sumOf { it.totalCost }
+    val totalInputTokens: Int get() = checkedTokenSum(groups.map { it.inputTokens }) ?: 0
+    val totalOutputTokens: Int get() = checkedTokenSum(groups.map { it.outputTokens }) ?: 0
+    val totalUncachedInputTokens: Int get() = checkedTokenSum(groups.map { it.uncachedInputTokens }) ?: 0
+    val totalCachedInputTokens: Int get() = checkedTokenSum(groups.map { it.cachedInputTokens }) ?: 0
+    val totalCost: Double get() = checkedUsageSum(groups.map { it.totalCost }) ?: 0.0
     val isMultiPricing: Boolean get() = groups.size > 1
-    val hasUnknownInputTokens: Boolean get() = groups.any { it.hasUnknownInputTokens }
-    val hasUnknownOutputTokens: Boolean get() = groups.any { it.hasUnknownOutputTokens }
-    val hasUnknownUncachedInputTokens: Boolean get() = groups.any { it.hasUnknownUncachedInputTokens }
-    val hasUnknownCachedInputTokens: Boolean get() = groups.any { it.hasUnknownCachedInputTokens }
-    val hasUnknownInputCost: Boolean get() = groups.any { it.hasUnknownInputCost }
-    val hasUnknownOutputCost: Boolean get() = groups.any { it.hasUnknownOutputCost }
-    val hasUnknownUncachedInputCost: Boolean get() = groups.any { it.hasUnknownUncachedInputCost }
-    val hasUnknownCachedInputCost: Boolean get() = groups.any { it.hasUnknownCachedInputCost }
-    val hasUnknownCost: Boolean get() = groups.any { it.hasUnknownCost }
+    val hasUnknownInputTokens: Boolean get() = groups.any { it.hasUnknownInputTokens } || checkedTokenSum(groups.map { it.inputTokens }) == null
+    val hasUnknownOutputTokens: Boolean get() = groups.any { it.hasUnknownOutputTokens } || checkedTokenSum(groups.map { it.outputTokens }) == null
+    val hasUnknownUncachedInputTokens: Boolean get() = groups.any { it.hasUnknownUncachedInputTokens } || checkedTokenSum(groups.map { it.uncachedInputTokens }) == null
+    val hasUnknownCachedInputTokens: Boolean get() = groups.any { it.hasUnknownCachedInputTokens } || checkedTokenSum(groups.map { it.cachedInputTokens }) == null
+    val hasUnknownInputCost: Boolean get() = groups.any { it.hasUnknownInputCost } || checkedUsageSum(groups.map { it.inputCost }) == null
+    val hasUnknownOutputCost: Boolean get() = groups.any { it.hasUnknownOutputCost } || checkedUsageSum(groups.map { it.outputCost }) == null
+    val hasUnknownUncachedInputCost: Boolean get() = groups.any { it.hasUnknownUncachedInputCost } || checkedUsageSum(groups.map { it.uncachedInputCost }) == null
+    val hasUnknownCachedInputCost: Boolean get() = groups.any { it.hasUnknownCachedInputCost } || checkedUsageSum(groups.map { it.cachedInputCost }) == null
+    val hasUnknownCost: Boolean get() = groups.any { it.hasUnknownCost } || checkedUsageSum(groups.map { it.totalCost }) == null
 }
 
 object TokenUsageAccounting {
@@ -320,7 +338,16 @@ object TokenUsageAccounting {
         }
     }
 
-    fun encodeSummary(summary: ConversationUsageSummary): String = gson.toJson(summary)
+    /** Metered totals are written by hand; see [UsageGroup.meters]. */
+    fun encodeSummary(summary: ConversationUsageSummary): String {
+        val root = gson.toJsonTree(summary).asJsonObject
+        val groups = root.getAsJsonArray("groups")
+        summary.groups.forEachIndexed { index, group ->
+            val meters = group.meters ?: return@forEachIndexed
+            groups[index].asJsonObject.add("meters", UsageMeterCodec.encodeTotals(meters))
+        }
+        return root.toString()
+    }
 
     /**
      * Decode the transport copy handed to the Usage & Cost screen.
@@ -341,7 +368,10 @@ object TokenUsageAccounting {
                 ConversationUsageSummary(emptyList())
             } else {
                 val groups = groupsElement.asJsonArray.mapNotNull { element ->
-                    gson.fromJson<UsageGroup>(element, UsageGroup::class.java)
+                    gson.fromJson<UsageGroup>(element, UsageGroup::class.java)?.let { group ->
+                        val meters = element.takeIf { it.isJsonObject }?.asJsonObject?.get("meters")
+                        group.copy(meters = UsageMeterCodec.decodeTotals(meters))
+                    }
                 }
                 ConversationUsageSummary(groups)
             }
@@ -495,47 +525,57 @@ object TokenUsageAccounting {
                 })
             val displayModel = rows.first().model.trim().ifBlank { MODEL_NOT_REPORTED }
             val displayProvider = rows.first().provider.trim().ifBlank { PROVIDER_NOT_REPORTED }
+            val inputTokens = checkedTokenSum(rows.mapNotNull { it.inputTokens })
+            val outputTokens = checkedTokenSum(rows.mapNotNull { it.outputTokens })
+            val uncachedInputTokens = checkedTokenSum(rows.map { row ->
+                if (row.inputTokens != null && row.cachedInputTokens != null &&
+                    row.inputTokens >= row.cachedInputTokens
+                ) row.inputTokens - row.cachedInputTokens else 0
+            })
+            val cachedInputTokens = checkedTokenSum(rows.mapNotNull { it.cachedInputTokens })
+            val inputCost = checkedUsageSum(rows.mapNotNull { it.inputCost })
+            val outputCost = checkedUsageSum(rows.mapNotNull { it.outputCost })
+            val uncachedInputCost = checkedUsageSum(rows.mapNotNull { it.uncachedInputCost })
+            val cachedInputCost = checkedUsageSum(rows.mapNotNull { it.cachedInputCost })
+            val totalCost = checkedUsageSum(rows.mapNotNull { it.totalCost })
             UsageGroup(
                 model = displayModel,
                 provider = displayProvider,
-                inputTokens = rows.sumOf { it.inputTokens ?: 0 },
-                outputTokens = rows.sumOf { it.outputTokens ?: 0 },
-                uncachedInputTokens = rows.sumOf { row ->
-                    if (row.inputTokens != null && row.cachedInputTokens != null &&
-                        row.inputTokens >= row.cachedInputTokens
-                    ) row.inputTokens - row.cachedInputTokens else 0
-                },
-                cachedInputTokens = rows.sumOf { it.cachedInputTokens ?: 0 },
-                inputCost = rows.sumOf { it.inputCost ?: 0.0 },
-                outputCost = rows.sumOf { it.outputCost ?: 0.0 },
-                uncachedInputCost = rows.sumOf { it.uncachedInputCost ?: 0.0 },
-                cachedInputCost = rows.sumOf { it.cachedInputCost ?: 0.0 },
-                totalCost = rows.sumOf { it.totalCost ?: 0.0 },
+                inputTokens = inputTokens ?: 0,
+                outputTokens = outputTokens ?: 0,
+                uncachedInputTokens = uncachedInputTokens ?: 0,
+                cachedInputTokens = cachedInputTokens ?: 0,
+                inputCost = inputCost ?: 0.0,
+                outputCost = outputCost ?: 0.0,
+                uncachedInputCost = uncachedInputCost ?: 0.0,
+                cachedInputCost = cachedInputCost ?: 0.0,
+                totalCost = totalCost ?: 0.0,
                 inputPricePerToken = inputPrices.singleOrNull()
                     ?.takeIf { rows.all { it.inputPricePerToken != null } },
                 outputPricePerToken = outputPrices.singleOrNull()
                     ?.takeIf { rows.all { it.outputPricePerToken != null } },
                 cachedInputPricePerToken = cachedInputPrices.singleOrNull()
                     ?.takeIf { rows.all { it.cachedInputPricePerToken != null } },
-                hasUnknownInputTokens = rows.any { it.inputTokens == null },
-                hasUnknownOutputTokens = rows.any { it.outputTokens == null },
-                hasUnknownUncachedInputTokens = rows.any {
+                hasUnknownInputTokens = inputTokens == null || rows.any { it.inputTokens == null },
+                hasUnknownOutputTokens = outputTokens == null || rows.any { it.outputTokens == null },
+                hasUnknownUncachedInputTokens = uncachedInputTokens == null || rows.any {
                     it.inputTokens == null || it.cachedInputTokens == null ||
                         it.cachedInputTokens > it.inputTokens
                 },
-                hasUnknownCachedInputTokens = rows.any { it.cachedInputTokens == null },
-                hasUnknownInputCost = rows.any { it.inputCost == null },
-                hasUnknownOutputCost = rows.any { it.outputCost == null },
-                hasUnknownUncachedInputCost = rows.any { it.uncachedInputCost == null },
-                hasUnknownCachedInputCost = rows.any { it.cachedInputCost == null },
-                hasUnknownCost = rows.any { it.totalCost == null },
+                hasUnknownCachedInputTokens = cachedInputTokens == null || rows.any { it.cachedInputTokens == null },
+                hasUnknownInputCost = inputCost == null || rows.any { it.inputCost == null },
+                hasUnknownOutputCost = outputCost == null || rows.any { it.outputCost == null },
+                hasUnknownUncachedInputCost = uncachedInputCost == null || rows.any { it.uncachedInputCost == null },
+                hasUnknownCachedInputCost = cachedInputCost == null || rows.any { it.cachedInputCost == null },
+                hasUnknownCost = totalCost == null || rows.any { it.totalCost == null },
                 hasVariableInputPricing = inputPrices.size > 1 || hasCacheWritePricing,
                 hasVariableOutputPricing = outputPrices.size > 1,
                 hasVariableCachedInputPricing = cachedInputPrices.size > 1,
                 hasVariablePricing = inputPrices.size > 1 || outputPrices.size > 1 ||
                     cachedInputPrices.size > 1 || hasCacheWritePricing,
                 containsEstimatedTokens = rows.any { it.countSource == TokenCountSource.ESTIMATED_CL100K },
-                recordCount = rows.size
+                recordCount = rows.size,
+                meters = MeteredUsageAccounting.aggregate(rows)
             )
         })
     }
@@ -548,43 +588,54 @@ object TokenUsageAccounting {
     ): ConversationUsageSummary {
         val records = mutableListOf<TurnUsageRecord>()
         messages.forEachIndexed { index, message ->
-            val variantRecords = decodeVariantRecords(message[KEY_VARIANTS]?.toString())
-            val stored = if (variantRecords.isNotEmpty()) {
-                variantRecords
-            } else {
-                decodeRecords(message[KEY_USAGE_RECORDS]?.toString())
-            }
+            val stored = durableRecordsOf(message)
             if (stored.isNotEmpty()) {
                 records.addAll(stored)
                 return@forEachIndexed
             }
-            if (message["isBot"] != true && message["isBot"]?.toString() != "true") return@forEachIndexed
-            if (!MessageCompletionState.isComplete(
-                    message[MessageCompletionState.KEY_STATE]?.toString()
-                )
-            ) return@forEachIndexed
-
-            // Compatibility path: responseTokens is legacy provider TOTAL, so
-            // it is deliberately not treated as output. Reconstruct the old
-            // CL100K in/out behavior and label it estimated.
-            val model = message["responseModel"]?.toString()?.trim()?.ifBlank { null }
-                ?: MODEL_NOT_REPORTED
-            val counts = legacyEstimate(index).withDerivedTotal()
-            records.add(
-                createRecord(
-                    model = model,
-                    provider = message["responseProvider"]?.toString()?.trim()?.ifBlank { null }
-                        ?: PROVIDER_NOT_REPORTED,
-                    apiEndpoint = null,
-                    counts = counts,
-                    source = TokenCountSource.ESTIMATED_CL100K,
-                    // Old messages contain no frozen price snapshot. Applying
-                    // current or nominal pricing would fabricate history.
-                    pricing = TokenPricingSnapshot()
-                )
-            )
+            legacyRecordOf(message, index, legacyEstimate)?.let(records::add)
         }
         return aggregate(records)
+    }
+
+    /** A message's frozen request records: its version list when that holds
+     * durable records, otherwise its own records. */
+    fun durableRecordsOf(message: Map<String, Any>): List<TurnUsageRecord> {
+        val variantRecords = decodeVariantRecords(message[KEY_VARIANTS]?.toString())
+        return variantRecords.ifEmpty { decodeRecords(message[KEY_USAGE_RECORDS]?.toString()) }
+    }
+
+    /** The estimated record for a completed reply saved before durable usage
+     * records existed, or null when [message] is not such a reply. */
+    fun legacyRecordOf(
+        message: Map<String, Any>,
+        index: Int,
+        legacyEstimate: (assistantIndex: Int) -> TokenCounts
+    ): TurnUsageRecord? {
+        if (durableRecordsOf(message).isNotEmpty()) return null
+        if (message["isBot"] != true && message["isBot"]?.toString() != "true") return null
+        if (!MessageCompletionState.isComplete(
+                message[MessageCompletionState.KEY_STATE]?.toString()
+            )
+        ) return null
+
+        // Compatibility path: responseTokens is legacy provider TOTAL, so
+        // it is deliberately not treated as output. Reconstruct the old
+        // CL100K in/out behavior and label it estimated.
+        val model = message["responseModel"]?.toString()?.trim()?.ifBlank { null }
+            ?: MODEL_NOT_REPORTED
+        val counts = legacyEstimate(index).withDerivedTotal()
+        return createRecord(
+            model = model,
+            provider = message["responseProvider"]?.toString()?.trim()?.ifBlank { null }
+                ?: PROVIDER_NOT_REPORTED,
+            apiEndpoint = null,
+            counts = counts,
+            source = TokenCountSource.ESTIMATED_CL100K,
+            // Old messages contain no frozen price snapshot. Applying
+            // current or nominal pricing would fabricate history.
+            pricing = TokenPricingSnapshot()
+        )
     }
 
     private fun List<Double>.distinctPriceValues(): List<Double> =
@@ -607,6 +658,20 @@ object UsageValueFormatter {
 
     fun pricePerMillion(pricePerToken: Double?): String = pricePerToken?.let {
         "\$" + String.format(Locale.US, "%.2f", it * 1_000_000)
+    } ?: NOT_REPORTED
+
+    /** A whole-number quantity (characters, bytes, tokens). */
+    fun count(knownSum: Double, hasUnknownPart: Boolean): String =
+        if (hasUnknownPart) NOT_REPORTED else String.format(Locale.US, "%,d", Math.round(knownSum))
+
+    /** Seconds to one decimal place, without the unit. */
+    fun seconds(knownSum: Double): String = String.format(Locale.US, "%.1f", knownSum)
+
+    /** A rate in dollars, never rounded to a misleading zero: at least two decimals and
+     * six significant digits. */
+    fun price(amount: Double?): String = amount?.let {
+        val rounded = java.math.BigDecimal.valueOf(it).round(java.math.MathContext(6)).stripTrailingZeros()
+        "\$" + rounded.setScale(maxOf(2, rounded.scale())).toPlainString()
     } ?: NOT_REPORTED
 
     fun percentage(numerator: Int, denominator: Int, hasUnknownPart: Boolean): String =

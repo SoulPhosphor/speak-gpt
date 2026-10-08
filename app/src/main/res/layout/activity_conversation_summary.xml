@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Summary / Compaction review (owner ruling, Oct 3 2026): the chat's
+     summary or compacted text, editable and saved through the header Save
+     icon, with Unsummarize/Uncompact and Resummarize/Recompact beside it.
+     The screen sets its title and intro for its mode. Read only while the
+     summarizer or compactor runs. Composed from shared style families only. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            app:layout_constraintEnd_toStartOf="@+id/btn_toggle_condensed" />
+
+        <ImageButton
+            android:id="@+id/btn_toggle_condensed"
+            style="@style/Widget.App.ActionBar.ChainedButton"
+            android:contentDescription="@string/compaction_uncompact_desc"
+            android:src="@drawable/ic_docs_add_on"
+            android:tooltipText="@string/compaction_uncompact_desc"
+            app:layout_constraintEnd_toStartOf="@+id/btn_save"
+            app:srcCompat="@drawable/ic_docs_add_on" />
+
+        <ImageButton
+            android:id="@+id/btn_save"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save"
+            app:srcCompat="@drawable/ic_save" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="16dp">
+
+            <TextView
+                android:id="@+id/text_condensed_intro"
+                style="@style/Widget.App.Screen.Intro" />
+
+            <!-- Compaction status: a spinner with "in progress" while the
+                 compactor runs, then the success line. Hidden otherwise. -->
+            <LinearLayout
+                android:id="@+id/row_condensed_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/spinner_condensed"
+                    style="@style/Widget.Material3.CircularProgressIndicator.ExtraSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:indeterminate="true" />
+
+                <TextView
+                    android:id="@+id/text_condensed_status"
+                    style="@style/Widget.App.Screen.Intro"
+                    android:layout_width="0dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/text_condensed_read_only"
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/compaction_summary_read_only"
+                android:visibility="gone" />
+
+            <!-- Summarizer mode: one view_summary_section per section, in
+                 chronological order. Compaction mode uses the single field
+                 below instead. -->
+            <LinearLayout
+                android:id="@+id/summary_sections"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <!-- Compaction mode: compacted messages were deleted and the
+                 text was kept, so it still describes them. -->
+            <TextView
+                android:id="@+id/text_compaction_stale"
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/summary_section_stale_note"
+                android:visibility="gone" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_condensed_text"
+                style="@style/Widget.App.Field.Box"
+                android:layout_marginTop="16dp"
+                android:gravity="top"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="10" />
+
+            <!-- Appears only while the text differs from its last save. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_revert_condensed"
+                style="@style/AppButton.Destructive.Inline"
+                android:layout_gravity="end"
+                android:layout_marginTop="8dp"
+                android:text="@string/prompt_menu_revert"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

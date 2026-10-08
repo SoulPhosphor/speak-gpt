@@ -56,6 +56,9 @@
                      therefore remains available at all times. -->
                 <include layout="@layout/view_quick_settings_roleplay_block" />
 
+                <!-- Conversation summarizer and its prompts for this chat. -->
+                <include layout="@layout/view_quick_settings_summarizer_block" />
+
                 <!-- Detailed generation controls. -->
                 <include layout="@layout/view_quick_settings_model_settings_block" />
 

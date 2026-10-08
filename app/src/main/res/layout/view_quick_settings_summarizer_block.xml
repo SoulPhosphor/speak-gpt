@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Summarizer block (owner ruling, Oct 3 2026): Use Summarizer with its
+     Complete Messages box, then the Summary, Compaction, and Image prompts
+     used by this chat screen. Each prompt is an inline dropdown when its
+     collection holds more than one prompt, otherwise plain text that opens
+     the prompt editor; the gear always opens the prompt editor at that prompt.
+     The whole block is hidden until a summarizer model is configured. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/card_summarizer"
+        style="@style/Widget.App.QuickSettings.Segment.Top"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/row_use_summarizer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_weight="1"
+                app:parameterInfo="@string/quick_summarizer_hint"
+                app:parameterTitle="@string/summarizer_use_toggle" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switch_use_summarizer"
+                style="@style/Widget.App.QuickSettings.Switch" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/row_summarizer_window"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/row_use_summarizer">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/summarizer_complete_messages"
+                android:textColor="?attr/appTextColor"
+                android:textSize="15sp" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_summarizer_window"
+                style="@style/Widget.App.Field.NumberBlank"
+                android:layout_marginStart="12dp"
+                android:ems="4"
+                android:maxLength="4"
+                android:singleLine="true" />
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/row_summary_prompt"
+        style="@style/Widget.App.QuickSettings.Segment.Middle"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/label_summary_prompt"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/summarizer_prompt_kind_summary"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_summary_prompt"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_summary_prompt"
+            app:layout_constraintStart_toEndOf="@+id/label_summary_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Shown instead of the dropdown when the collection holds only one
+             prompt: plain text, like the AI Model value, that opens the
+             prompt editor. -->
+        <TextView
+            android:id="@+id/plain_summary_prompt"
+            style="@style/Widget.App.QuickSettings.ActionValue"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_summary_prompt"
+            app:layout_constraintStart_toEndOf="@+id/label_summary_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/btn_edit_summary_prompt"
+            style="@style/Widget.App.QuickSettings.Gear"
+            android:contentDescription="@string/summarizer_prompts_edit_desc"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/row_compaction_prompt"
+        style="@style/Widget.App.QuickSettings.Segment.Middle"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/label_compaction_prompt"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/summarizer_prompt_kind_compaction"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_compaction_prompt"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_compaction_prompt"
+            app:layout_constraintStart_toEndOf="@+id/label_compaction_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Shown instead of the dropdown when the collection holds only one
+             prompt: plain text, like the AI Model value, that opens the
+             prompt editor. -->
+        <TextView
+            android:id="@+id/plain_compaction_prompt"
+            style="@style/Widget.App.QuickSettings.ActionValue"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_compaction_prompt"
+            app:layout_constraintStart_toEndOf="@+id/label_compaction_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/btn_edit_compaction_prompt"
+            style="@style/Widget.App.QuickSettings.Gear"
+            android:contentDescription="@string/summarizer_prompts_edit_desc"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/row_image_prompt"
+        style="@style/Widget.App.QuickSettings.Segment.Bottom"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/label_image_prompt"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/summarizer_prompt_kind_image"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_image_prompt"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_image_prompt"
+            app:layout_constraintStart_toEndOf="@+id/label_image_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Shown instead of the dropdown when the collection holds only one
+             prompt: plain text, like the AI Model value, that opens the
+             prompt editor. -->
+        <TextView
+            android:id="@+id/plain_image_prompt"
+            style="@style/Widget.App.QuickSettings.ActionValue"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_image_prompt"
+            app:layout_constraintStart_toEndOf="@+id/label_image_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/btn_edit_image_prompt"
+            style="@style/Widget.App.QuickSettings.Gear"
+            android:contentDescription="@string/summarizer_prompts_edit_desc"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</merge>

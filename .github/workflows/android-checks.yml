@@ -36,7 +36,9 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run unit tests
-        run: ./gradlew --no-daemon test
+        # The three app variants have a large Android/PDF/OCR classpath. Keep
+        # their Kotlin compilation and JVM test workers inside runner memory.
+        run: ./gradlew --no-daemon --max-workers=1 test
 
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug
@@ -103,12 +105,33 @@ jobs:
       - name: Install emulator and build dependencies
         run: |
           set -euo pipefail
-          sdkmanager --install \
-            "platform-tools" \
-            "emulator" \
-            "system-images;android-35;google_apis;x86_64" \
-            "ndk;26.3.11579264" \
+          packages=(
+            "platform-tools"
+            "emulator"
+            "system-images;android-35;google_apis;x86_64"
+            "ndk;26.3.11579264"
             "cmake;3.22.1"
+          )
+          # A broken download (for example a truncated emulator zip) fails
+          # this step before any test runs. Retry only the download, clearing
+          # partial files first. Test steps below are never retried.
+          attempts=3
+          for attempt in $(seq 1 "$attempts"); do
+            if sdkmanager --install "${packages[@]}"; then
+              break
+            fi
+            if [ "$attempt" -eq "$attempts" ]; then
+              echo "SDK package download failed after $attempts attempts." >&2
+              exit 1
+            fi
+            echo "SDK package download failed (attempt $attempt of $attempts); clearing partial files and retrying." >&2
+            rm -rf \
+              "$ANDROID_HOME/.temp" \
+              "$ANDROID_HOME/.downloadIntermediates" \
+              "$ANDROID_HOME/emulator" \
+              "$ANDROID_HOME/system-images/android-35/google_apis/x86_64"
+            sleep $((attempt * 15))
+          done
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
           chmod +x ./gradlew
@@ -169,6 +192,8 @@ jobs:
             org.teslasoft.assistant.preferences.memory.MemorySharedRestoreInstrumentedTest
             org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporterImageValidationInstrumentedTest
             org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecoveryInstrumentedTest
+            org.teslasoft.assistant.preferences.includes.PdfAttachmentStoreInstrumentedTest
+            org.teslasoft.assistant.preferences.includes.PdfFallbackExtractorInstrumentedTest
           )
           failed=0
           for class_name in "${classes[@]}"; do

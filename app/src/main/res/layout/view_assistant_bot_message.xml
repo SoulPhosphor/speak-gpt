@@ -298,6 +298,22 @@
                     android:tooltipText="@string/message_details_action"
                     app:srcCompat="@drawable/ic_info" />
 
+                <!-- Summarizer Bookmark (owner-approved design, Oct 4 2026):
+                     directly right of the info button, only on the reply that
+                     begins a summary section. Opens that section. -->
+                <ImageButton
+                    android:id="@+id/btn_summary_bookmark"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginLeft="8dp"
+                    android:background="@color/transparent"
+                    android:contentDescription="@string/summary_section_open_desc"
+                    android:descendantFocusability="blocksDescendants"
+                    android:src="@drawable/ic_bookmark_flag"
+                    android:tooltipText="@string/summary_section_open_desc"
+                    android:visibility="gone"
+                    app:srcCompat="@drawable/ic_bookmark_flag" />
+
                 <!-- Per-message reasoning indicator (owner design, Aug 2026):
                      informational only, sits directly right of the info button.
                      Icon, description, and visibility are set per message in

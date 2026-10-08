@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Protected, app-generated date/time header of a summary section: a quiet
+     rounded surface, distinct from the editable text and from buttons.
+     Colors come from theme attributes only. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorSecondaryContainer">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="?attr/colorSurfaceContainerHigh" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+</ripple>

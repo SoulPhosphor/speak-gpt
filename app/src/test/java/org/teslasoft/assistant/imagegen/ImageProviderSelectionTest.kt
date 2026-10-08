@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.imagegen
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Test
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
@@ -39,13 +40,19 @@ class ImageProviderSelectionTest {
     @Test
     fun openRouterHostsGetTheOpenRouterAdapter() {
         assertSame(
-            OpenRouterImageAdapter,
+            CatalogImageAdapter,
             ImageProviderAdapters.forEndpoint(endpoint("https://openrouter.ai/api/v1/"))
         )
         assertSame(
-            OpenRouterImageAdapter,
+            CatalogImageAdapter,
             ImageProviderAdapters.forEndpoint(endpoint("https://OPENROUTER.AI/api/v1"))
         )
+    }
+
+    @Test
+    fun nativeGoogleAndNanoEndpointsUseTheirImageProtocols() {
+        assertSame(GeminiImageAdapter, ImageProviderAdapters.forEndpoint(endpoint("https://generativelanguage.googleapis.com/v1beta/openai/")))
+        assertSame(CatalogImageAdapter, ImageProviderAdapters.forEndpoint(endpoint("https://nano-gpt.com/api/v1/")))
     }
 
     @Test
@@ -75,6 +82,19 @@ class ImageProviderSelectionTest {
         )
         assertSame(a, b)
         assertSame(b, c)
+    }
+
+    @Test
+    fun generationDoesNotRetryAndPreservesEndpointTimeouts() {
+        val endpoint = endpoint("https://example.com/v1/").apply {
+            connectTimeoutSeconds = 17
+            responseTimeoutSeconds = 123
+        }
+        val client = ImageGeneratorCoordinator.buildClient(endpoint)
+        assertFalse(client.retryOnConnectionFailure)
+        assertEquals(17_000, client.connectTimeoutMillis)
+        assertEquals(123_000, client.readTimeoutMillis)
+        assertEquals(123_000, client.writeTimeoutMillis)
     }
 
     @Test

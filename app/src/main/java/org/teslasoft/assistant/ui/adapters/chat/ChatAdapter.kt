@@ -144,7 +144,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var bulkActionMode = false
     private var manualCompactionBoundary = 0
     private var summaryRegenerationLockBoundary = 0
+
+    // Summarizer Bookmarks (owner-approved design, Oct 4 2026), by message
+    // ID: replies that begin a summary section show the bookmark flag, and
+    // every reply inside a section offers Summary Section in its menu.
+    private var summarySectionStarts: Map<String, String> = emptyMap()
+    private var summarySectionOwners: Map<String, String> = emptyMap()
     private var compactionRegenerationLockBoundary = 0
+    /** Summarized replies regenerate in a chat that uses the Summarizer. */
+    private var summaryRegenerateAllowed = false
 
     // Assistant-side picture, already cascaded by ChatActivity off the main
     // thread (the active Companion's own picture, else the Default AI Avatar).
@@ -218,6 +226,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val MENU_MESSAGE_EDIT = 104
         private const val MENU_MESSAGE_SHARE = 105
         private const val MENU_MESSAGE_DELETE = 106
+        private const val MENU_SUMMARY_SECTION = 107
 
         // Transient inline image-confirmation card row
         // (image-generation-rebuild-plan.md §5). These rows live only in
@@ -409,15 +418,27 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
      */
     fun setCondensedRegenerationLockBoundaries(
         summaryBoundary: Int,
-        compactionBoundary: Int
+        compactionBoundary: Int,
+        summaryRegenerateAllowed: Boolean = false
     ) {
         val nextSummary = summaryBoundary.coerceAtLeast(0)
         val nextCompaction = compactionBoundary.coerceAtLeast(0)
         if (summaryRegenerationLockBoundary == nextSummary &&
-            compactionRegenerationLockBoundary == nextCompaction
+            compactionRegenerationLockBoundary == nextCompaction &&
+            this.summaryRegenerateAllowed == summaryRegenerateAllowed
         ) return
         summaryRegenerationLockBoundary = nextSummary
         compactionRegenerationLockBoundary = nextCompaction
+        this.summaryRegenerateAllowed = summaryRegenerateAllowed
+        notifyDataSetChanged()
+    }
+
+    /** [starts]: section-opening reply ID → section ID. [owners]: every reply
+     *  ID inside a section → its section ID. */
+    fun setSummarySections(starts: Map<String, String>, owners: Map<String, String>) {
+        if (summarySectionStarts == starts && summarySectionOwners == owners) return
+        summarySectionStarts = starts
+        summarySectionOwners = owners
         notifyDataSetChanged()
     }
 
@@ -691,6 +712,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Message Details action on both layouts. Active Memories may precede
         // it on assistant responses whose request carried memory context.
         private val btnDetails: ImageButton = itemView.findViewById(R.id.btn_details)
+        // Summarizer Bookmark flag, right of the info button; assistant only.
+        private val btnSummaryBookmark: ImageButton? = itemView.findViewById(R.id.btn_summary_bookmark)
         // User-only derived persistent-Includes action. It is absent from the
         // assistant layout and is reset on every bind to survive recycling.
         private val btnPersistentIncludes: ImageButton? =
@@ -799,6 +822,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             btnDetails.setOnClickListener { anchor ->
                 if (!bulkActionMode) showMessageDetailsPopup(anchor, display)
+            }
+
+            val bookmarkSection = summarySectionStarts[
+                org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
+            ]
+            btnSummaryBookmark?.visibility = if (bookmarkSection != null) View.VISIBLE else View.GONE
+            btnSummaryBookmark?.setOnClickListener {
+                if (!bulkActionMode && bookmarkSection != null) listener?.onOpenSummarySection(bookmarkSection)
             }
 
             btnMore?.setOnClickListener { anchor ->
@@ -1235,7 +1266,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // shown version is already canonical; resume when it is not, tapping
             // which makes the shown version the canonical response.
             btnVersionPromote?.let { promote ->
-                if (regenerationLockKind(position) != null) {
+                if (regenerationLockKind(position) == CondensedRegenerationLock.Kind.COMPACTION) {
                     promote.visibility = View.GONE
                     promote.setOnClickListener(null)
                     promote.isClickable = false
@@ -1835,7 +1866,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val isLast = position == dataArray.size - 1
             if (isBot && (!isImage || isLast)) {
                 btnRetry.visibility = View.VISIBLE
-                val lockKind = regenerationLockKind(position)
+                // A summarized reply regenerates in a Summarizer chat; its
+                // section is then resummarized or kept (owner ruling, Oct 4 2026).
+                val lockKind = regenerationLockKind(position)?.takeUnless {
+                    it == CondensedRegenerationLock.Kind.SUMMARY && summaryRegenerateAllowed
+                }
                 if (lockKind != null) {
                     btnRetry.setImageResource(R.drawable.ic_rule_settings)
                     btnRetry.contentDescription =
@@ -2315,6 +2350,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (!isGeneratedImage) {
                 popup.menu.add(0, MENU_MESSAGE_EDIT, 0, R.string.btn_msg_edit)
             }
+            // Directly below Edit: open the summary section this reply is in.
+            val owningSection = summarySectionOwners[
+                org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
+            ]
+            if (owningSection != null) {
+                popup.menu.add(0, MENU_SUMMARY_SECTION, 0, R.string.summary_section_menu)
+            }
             popup.menu.add(0, MENU_MESSAGE_SHARE, 1, R.string.message_share_action)
             popup.menu.add(0, MENU_MESSAGE_DELETE, 2, R.string.btn_delete)
             popup.setOnMenuItemClickListener { item ->
@@ -2325,6 +2367,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     }
                     MENU_MESSAGE_SHARE -> {
                         btnShare.callOnClick()
+                        true
+                    }
+                    MENU_SUMMARY_SECTION -> {
+                        owningSection?.let { listener?.onOpenSummarySection(it) }
                         true
                     }
                     MENU_MESSAGE_DELETE -> {
@@ -3222,21 +3268,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     /** Internal retry cleanup; user deletion goes through the host confirmation. */
     fun removeMessageForRetry(position: Int) {
         if (position < 0 || position >= dataArray.size) return
-        // §12 cleanup: note the generated-image file this message references
-        // BEFORE removing it; once the deletion is persisted, the file goes
-        // too unless another stored message still uses it.
-        val deletedImageHash =
-            org.teslasoft.assistant.imagegen.GeneratedImageMetadata
-                .referencedFileHash(dataArray[position])
         deleteMessage(position)
 
-        if (chatId !== "") {
-            ChatPreferences.getChatPreferences().deleteMessage(context, chatId, position)
-        }
-        if (deletedImageHash != null) {
-            org.teslasoft.assistant.imagegen.GeneratedImageFiles
-                .deleteIfUnreferenced(context, listOf(deletedImageHash))
-        }
+        // The host saves the replacement turn. This temporary removal must
+        // not delete its ownership or shrink saved summary/Compact boundaries.
+        // A generated image it showed is kept: the reply comes back if the
+        // regeneration produces nothing, and otherwise stays as an earlier
+        // version of the turn, so its file is still needed either way.
 
         listener?.onMessageDeleted()
     }
@@ -3257,6 +3295,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         fun onMessageEdited()
         fun onMessageDeleted()
+
+        /** Open the Summary screen at this summary section. */
+        fun onOpenSummarySection(sectionId: String) {}
 
         fun onMessageDeleteRequested(position: Int)
         fun onIncludeEdit(includeId: String)

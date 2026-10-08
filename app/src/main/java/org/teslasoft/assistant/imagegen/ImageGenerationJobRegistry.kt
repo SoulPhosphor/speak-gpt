@@ -216,10 +216,13 @@ object ImageGenerationJobRegistry {
      *  terminal state would land in the deleted placeholder id. */
     fun rename(oldChatId: String, newChatId: String) {
         if (oldChatId == newChatId) return
-        jobs.remove(oldChatId)?.let { record ->
-            record.chatId = newChatId
-            if (record.originChatId == oldChatId) record.originChatId = newChatId
-            jobs[newChatId] = record
+        synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+            ImageUsageRecorder.rename(oldChatId, newChatId)
+            jobs.remove(oldChatId)?.let { record ->
+                record.chatId = newChatId
+                if (record.originChatId == oldChatId) record.originChatId = newChatId
+                jobs[newChatId] = record
+            }
         }
         listeners.remove(oldChatId)?.let { listeners[newChatId] = it }
     }
@@ -296,7 +299,11 @@ object ImageGenerationJobRegistry {
         app: Context,
         record: ActiveJob
     ): Terminal {
-        return when (val outcome = ImageGeneratorCoordinator.generate(app, record.request)) {
+        return when (val outcome = ImageGeneratorCoordinator.generate(app, record.request) { endpoint, attempt ->
+            synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+                ImageUsageRecorder.record(app, record.chatId, record.imageId, endpoint, attempt)
+            }
+        }) {
         is ImageGeneratorCoordinator.Outcome.Success -> {
             val bytes = outcome.image.bytes
             val marker = Hash.hash(java.util.Base64.getEncoder().encodeToString(bytes))

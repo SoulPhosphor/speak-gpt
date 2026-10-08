@@ -93,6 +93,22 @@ object ReportedProviderParser {
      * another response shape is the fallback. Comments, `[DONE]`, malformed JSON,
      * and blank/missing values are ignored.
      */
+    /**
+     * Usage, cost and serving provider from one complete (non-streamed)
+     * response body, read the same way as a streamed line.
+     */
+    fun observeCompletedBody(body: String?): RawStreamObservation? {
+        if (body.isNullOrBlank()) return null
+        val oneLine = try {
+            JsonParser.parseString(body).toString()
+        } catch (_: Exception) {
+            return null
+        }
+        val inspector = RawSseInspector()
+        inspector.acceptLine(oneLine)
+        return inspector.finishNormally()
+    }
+
     fun fromResponseLine(line: String): String? {
         val payload = payloadFromLine(line) ?: return null
         if (payload == "[DONE]") return null

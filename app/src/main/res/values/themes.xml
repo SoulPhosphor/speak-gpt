@@ -880,6 +880,397 @@
         <item name="android:textStyle">bold</item>
     </style>
 
+    <!-- Usage & Cost screen (owner ruling, October 6 2026): centered section
+         pills (Chat, Image Generations, Summarizing, STT, TTS) above model
+         cards, each model card holding its provider blocks. Every color is a
+         theme role and every size lives here, so recoloring the screen is a
+         change to these styles and their drawables only. -->
+    <style name="Widget.App.Usage.SectionPill" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">center_horizontal</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">14dp</item>
+        <item name="android:background">@drawable/bg_usage_section_pill</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">28dp</item>
+        <item name="android:paddingEnd">28dp</item>
+        <item name="android:paddingTop">9dp</item>
+        <item name="android:paddingBottom">9dp</item>
+        <item name="android:textColor">?attr/colorOnPrimaryContainer</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Usage.ModelCard" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">20dp</item>
+        <item name="cardBackgroundColor">?attr/colorSurface</item>
+        <item name="cardCornerRadius">@dimen/usage_card_corner_radius</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">?attr/colorOutlineVariant</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.App.Usage.ModelHeader" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:background">@drawable/bg_usage_model_header</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingTop">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:paddingBottom">12dp</item>
+    </style>
+
+    <style name="Widget.App.Usage.ModelName" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Usage.ModelTotal" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Usage.ModelMeta" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">3dp</item>
+        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <!-- What a Summarizing model was used for; hidden in other sections. -->
+    <style name="Widget.App.Usage.ModelFunctions" parent="Widget.App.Usage.ModelMeta">
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:visibility">gone</item>
+    </style>
+
+    <!-- Space between two providers inside one model card. -->
+    <style name="Widget.App.Usage.ProviderGap" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">6dp</item>
+        <item name="android:background">?android:attr/colorBackground</item>
+    </style>
+
+    <!-- Usage & Cost screen frame: the colored header with the Conversation
+         Total, and the scrolling list of sections below it. -->
+    <style name="Widget.App.Usage.Header" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/colorPrimary</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <!-- The back button and title row inside Widget.App.Usage.Header. -->
+    <style name="Widget.App.Usage.HeaderBar" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@color/transparent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <style name="Widget.App.Usage.HeaderTitle" parent="Widget.App.ActionBar.Title">
+        <item name="android:textColor">?attr/colorOnPrimary</item>
+    </style>
+
+    <style name="Widget.App.Usage.TotalLabel" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+    </style>
+
+    <style name="Widget.App.Usage.TotalCost" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:textSize">31sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+    </style>
+
+    <style name="Widget.App.Usage.TotalMeta" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:layout_marginBottom">22dp</item>
+        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+    </style>
+
+    <style name="Widget.App.Usage.Scroll" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:clipToPadding">false</item>
+        <item name="android:paddingBottom">24dp</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+    </style>
+
+    <style name="Widget.App.Usage.Sections" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:paddingTop">16dp</item>
+    </style>
+
+    <!-- A plain vertical stack inside a Usage & Cost card. -->
+    <style name="Widget.App.Usage.Stack" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <!-- The model name and total on one line in Widget.App.Usage.ModelHeader. -->
+    <style name="Widget.App.Usage.ModelHeaderRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <!-- One provider inside its model's card: header, usage chart, cache
+         rate (token requests only), pricing footer. Every section (Chat,
+         Summarizing, TTS, ...) uses these same styles. -->
+    <style name="Widget.App.Usage.ProviderHeader" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/bg_usage_provider_header</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingStart">@dimen/usage_card_padding</item>
+        <item name="android:paddingTop">13dp</item>
+        <item name="android:paddingEnd">@dimen/usage_card_padding</item>
+        <item name="android:paddingBottom">11dp</item>
+    </style>
+
+    <style name="Widget.App.Usage.ProviderNameColumn" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Usage.ProviderName" parent="Widget.App.Row.Title">
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Usage.ProviderMeta" parent="Widget.App.Row.Subtitle">
+        <item name="android:layout_marginTop">3dp</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="Widget.App.Usage.ProviderTotalColumn" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">end</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Usage.ProviderTotal" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Usage.ProviderTotalLabel" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">3dp</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <!-- The usage chart: header row, then rows separated by TableDivider. -->
+    <style name="Widget.App.Usage.Table" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/usage_card_padding</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingEnd">@dimen/usage_card_padding</item>
+        <item name="android:paddingBottom">8dp</item>
+    </style>
+
+    <style name="Widget.App.Usage.TableHeader" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingBottom">5dp</item>
+    </style>
+
+    <style name="Widget.App.Usage.TableHeaderLabel" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="Widget.App.Usage.TableHeaderQuantity" parent="">
+        <item name="android:layout_width">@dimen/usage_quantity_column_width</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">end</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="Widget.App.Usage.TableHeaderCost" parent="Widget.App.Usage.TableHeaderQuantity">
+        <item name="android:layout_width">@dimen/usage_cost_column_width</item>
+    </style>
+
+    <style name="Widget.App.Usage.TableRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">39dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingTop">9dp</item>
+        <item name="android:paddingBottom">9dp</item>
+    </style>
+
+    <style name="Widget.App.Usage.TableLabel" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Widget.App.Usage.TableQuantity" parent="">
+        <item name="android:layout_width">@dimen/usage_quantity_column_width</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">end</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Usage.TableCost" parent="Widget.App.Usage.TableQuantity">
+        <item name="android:layout_width">@dimen/usage_cost_column_width</item>
+    </style>
+
+    <style name="Widget.App.Usage.TableDivider" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/usage_table_divider_height</item>
+        <item name="android:background">?attr/colorOutlineVariant</item>
+    </style>
+
+    <!-- Cache Hit Rate line under a token chart. -->
+    <style name="Widget.App.Usage.CacheRate" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/usage_card_padding</item>
+        <item name="android:layout_marginEnd">@dimen/usage_card_padding</item>
+        <item name="android:layout_marginBottom">10dp</item>
+        <item name="android:background">@drawable/bg_usage_cache_rate</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingStart">11dp</item>
+        <item name="android:paddingEnd">11dp</item>
+        <item name="android:paddingTop">9dp</item>
+        <item name="android:paddingBottom">9dp</item>
+    </style>
+
+    <style name="Widget.App.Usage.CacheRateLabel" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="Widget.App.Usage.CacheRateValue" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Frozen prices at the bottom of a provider: one PriceFact per billed
+         part, then the centered PriceCaption naming the price basis. -->
+    <style name="Widget.App.Usage.PricingFooter" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/bg_usage_pricing_footer</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/usage_card_padding</item>
+        <item name="android:paddingTop">11dp</item>
+        <item name="android:paddingEnd">@dimen/usage_card_padding</item>
+        <item name="android:paddingBottom">13dp</item>
+    </style>
+
+    <style name="Widget.App.Usage.PriceFacts" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="Widget.App.Usage.PriceFact" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Usage.PriceFactLabel" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="Widget.App.Usage.PriceFactValue" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Usage.PriceCaption" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
     <!-- Explanatory text for a section, directly under its Section.Title and
          before that section's first control (see the ordering rule above). -->
     <style name="Widget.App.Section.Hint" parent="">
@@ -896,6 +1287,32 @@
          Row.Subtitle (13sp, muted text_subtitle) - this is normal-weight
          body text at full text_title strength, for a screen-level
          explanation that isn't paired with a heading. -->
+    <!-- Summary section date/time header (owner-approved design, Oct 4 2026):
+         protected, generated metadata in a low-emphasis rounded surface,
+         left-aligned and tappable to open the conversation preview. Not a
+         button and not disabled-looking. -->
+    <style name="Widget.App.SummarySection.Header" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/bg_summary_section_header</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingTop">6dp</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- The bookmark flag beside the summary section reached from the chat. -->
+    <style name="Widget.App.SummarySection.Flag" parent="">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:src">@drawable/ic_bookmark_flag</item>
+    </style>
+
     <style name="Widget.App.Screen.Intro" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -1857,4 +2274,51 @@
         <item name="appDropdownDisabledTextColor">@color/text_subtitle</item>
         <item name="appDropdownDisabledBorderColor">@color/dropdown_disabled_border</item>
     </style>
+
+    <!-- Image settings composition. Labels inherit exactly the toggle typography. -->
+    <style name="Widget.App.ImageGeneration.Root" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Scroll" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:clipToPadding">false</item>
+        <item name="android:paddingBottom">@dimen/image_settings_bottom_padding</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingHorizontal">@dimen/image_settings_content_padding</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Options" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.SettingRow" parent="Widget.App.Row">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:clickable">false</item>
+        <item name="android:focusable">false</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Label" parent="Widget.App.Row.Title">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_marginEnd">@dimen/image_settings_field_gap</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Value" parent="Widget.App.Dropdown.CanonicalValue">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Input" parent="Widget.App.Field.Box">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:minLines">1</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:inputType">text</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.NumberInput" parent="Widget.App.ImageGeneration.Input">
+        <item name="android:inputType">numberDecimal|numberSigned</item>
+    </style>
+
 </resources>

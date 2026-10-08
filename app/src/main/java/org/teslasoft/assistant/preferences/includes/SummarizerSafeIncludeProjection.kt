@@ -43,31 +43,38 @@ data class CanonicalConversationMessage(
 data class ProjectedConversationMessage(
     val isBot: Boolean,
     val text: String,
-    /** Always empty now that every send carries attachment payloads in their
-     *  own later block. Retained so a caller can still ask a conversation
-     *  message for its inline attachments and correctly get none. */
+    /** The attachments this user message owns, in attachment order. Each is
+     *  delivered right after the message's own words, in its current form. */
     val inlineIncludes: List<ChatInclude> = emptyList()
 )
 
-/** One user-authority Include payload in its stable activation slot. */
+/** One attachment whose owning message was folded into the summary. */
 data class PersistentIncludeUnit(val include: ChatInclude)
 
 /**
  * An immutable, provider-neutral projection of one canonical chat snapshot.
- * No unit is persisted separately: ownership remains exclusively on the
- * original user message and the persistent units are derived for each send.
+ * Ownership remains exclusively on the original user message; the request
+ * layout is derived for each send.
  */
 data class SummarizerSafeIncludeProjection(
-    val persistentIncludes: List<PersistentIncludeUnit>,
+    /** Attachments whose owning message is folded away, in activation order.
+     *  They travel together right after the summary, since their message no
+     *  longer exists in the request. */
+    val foldedIncludes: List<PersistentIncludeUnit>,
     val conversation: List<ProjectedConversationMessage>
 )
 
 /**
- * Builds the dual projection from one immutable canonical snapshot. Every
- * send uses it, whether or not the Summarizer is running: history carries
- * only the permanent attachment marker, and the attachment's current payload
- * travels in its own later block. That split is what keeps a Reduce, Condense,
- * Edit or Remove from rewriting the conversation the model already has.
+ * Builds the request projection from one immutable canonical snapshot.
+ *
+ * Each attachment rides inside the user message it was sent with, right after
+ * the user's words (owner ruling, Oct 6 2026, replacing the Aug 29 2026
+ * separate-block layout). History only grows at the end, so an unchanged
+ * attachment is re-sent byte-identically and stays in the provider's prefix
+ * cache every turn. Condense, Reduce, Edit and Remove replace the content in
+ * that same position; the cache is lost from that message onward for one
+ * turn only. The Summarizer still sees only the stable marker
+ * ([summarizerConversation]).
  */
 object SummarizerSafeIncludeProjectionBuilder {
 
@@ -78,18 +85,28 @@ object SummarizerSafeIncludeProjectionBuilder {
         // The first canonical occurrence owns the logical slot. Rebuilding
         // after a form change replaces that slot's payload without moving it.
         val ownerById = owners(messages)
-
-        val persistent = ownerById.values.map { PersistentIncludeUnit(it.second) }
         val start = foldedCount.coerceIn(0, messages.size)
+
+        val folded = ownerById.values
+            .filter { (messageIndex, _) -> messageIndex < start }
+            .map { (_, include) -> PersistentIncludeUnit(include) }
         val conversation = ArrayList<ProjectedConversationMessage>()
-        val allConversation = referenceConversation(messages, ownerById)
-        for (messageIndex in start until allConversation.size) {
-            val message = allConversation[messageIndex]
-            if (message.text.isBlank()) continue
-            conversation.add(message)
+        for (messageIndex in start until messages.size) {
+            val message = messages[messageIndex]
+            if (message.isBot) {
+                if (message.text.isNotBlank()) {
+                    conversation.add(ProjectedConversationMessage(true, message.text))
+                }
+                continue
+            }
+            val ownedHere = message.includes.filter { include ->
+                ownerById[include.id]?.first == messageIndex
+            }
+            if (message.text.isBlank() && ownedHere.isEmpty()) continue
+            conversation.add(ProjectedConversationMessage(false, message.text, ownedHere))
         }
 
-        return SummarizerSafeIncludeProjection(persistent.toList(), conversation.toList())
+        return SummarizerSafeIncludeProjection(folded, conversation.toList())
     }
 
     /**
@@ -102,9 +119,9 @@ object SummarizerSafeIncludeProjectionBuilder {
     ): List<ProjectedConversationMessage> {
         val ownerById = owners(messages)
         return messages.mapIndexed { messageIndex, message ->
-            // Attachment payloads stay exclusively in the independently
-            // projected, user-controlled layer and are never summarized. The
-            // permanent marker does travel here: folding removes the original
+            // Attachment payloads are never summarized; they stay under the
+            // user's control in the request projection. The permanent marker
+            // does travel here: folding removes the original
             // message, so the summary is the only thing left that can say an
             // attachment entered at this point and why it mattered.
             //
@@ -143,23 +160,6 @@ object SummarizerSafeIncludeProjectionBuilder {
         }
         return ownerById
     }
-
-    private fun referenceConversation(
-        messages: List<CanonicalConversationMessage>,
-        ownerById: Map<String, Pair<Int, ChatInclude>>
-    ): List<ProjectedConversationMessage> = messages.mapIndexed { messageIndex, message ->
-        if (message.isBot) {
-            ProjectedConversationMessage(isBot = true, text = message.text)
-        } else {
-            val ownedHere = message.includes.filter { include ->
-                ownerById[include.id]?.first == messageIndex
-            }
-            ProjectedConversationMessage(
-                isBot = false,
-                text = StableAttachmentReference.renderUserMessage(message.text, ownedHere)
-            )
-        }
-    }
 }
 
 /**
@@ -194,16 +194,6 @@ object StableAttachmentReference {
         append("\",\"name\":\"")
         append(jsonString(include.fileName))
         append("\"}</attachment-reference>")
-    }
-
-    /** Stable identity plus this unit's one current payload representation. */
-    fun renderPersistentPayload(include: ChatInclude): String {
-        val payload = IncludeRenderer.renderUserMessage("", listOf(include))
-        return if (payload.isBlank()) {
-            serialize(include)
-        } else {
-            serialize(include) + "\n\n" + payload
-        }
     }
 
     private fun jsonString(value: String): String = buildString(value.length) {

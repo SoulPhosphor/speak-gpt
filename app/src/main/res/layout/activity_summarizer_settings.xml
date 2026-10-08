@@ -18,8 +18,9 @@
 -->
 <!-- Summarizer Settings (conversation-summary-plan.md decision 2): Summary
      Model endpoint/model pickers, the Complete Messages default, the
-     new-chats toggle, Summary Length, and the five renameable prompt slots.
-     Composed from the shared style families only. -->
+     new-chats toggle and the Customize Prompt Summaries row
+     that opens Summarizer Prompts. Composed from the shared style families
+     only. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -88,60 +89,25 @@
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
-            <!-- ============ Summary Length ============ -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+            <!-- ============ Always Resummarize Changed Sections ============ -->
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:paddingEnd="12dp">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        style="@style/Widget.App.Field.Label"
-                        android:text="@string/summarizer_length" />
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_always_resummarize_toggle" />
 
                     <TextView
-                        style="@style/Widget.App.Field.Hint"
-                        android:text="@string/summarizer_length_hint" />
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="10"
+                        android:text="@string/summarizer_always_resummarize_hint" />
                 </LinearLayout>
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_summary_length"
-                    style="@style/Widget.App.Field.NumberBlank"
-                    android:ems="5"
-                    android:maxLength="5"
-                    android:singleLine="true" />
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_summarizer_always_resummarize"
+                    style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
-
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/compacting_cancel_behavior_title" />
-
-            <RadioGroup
-                android:id="@+id/radio_compacting_cancel_behavior"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <com.google.android.material.radiobutton.MaterialRadioButton
-                    android:id="@+id/radio_compacting_cancel_discard"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/compacting_cancel_discard" />
-
-                <com.google.android.material.radiobutton.MaterialRadioButton
-                    android:id="@+id/radio_compacting_cancel_save"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/compacting_cancel_save" />
-            </RadioGroup>
 
             <!-- ============ Complete Messages (default for new chats) ============
                  NumberBlank belongs inline with its label (its own style
@@ -295,102 +261,27 @@
                     android:text="@string/choose_provider_routing_automatic" />
             </LinearLayout>
 
-            <!-- ============ Summary Prompt (five renameable slots) ============ -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/summarizer_section_prompt" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:text="@string/summarizer_section_prompt_hint" />
-
+            <!-- ============ Customize Prompt Summaries ============
+                 Opens Summarizer Prompts (owner ruling, Oct 3 2026). -->
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:id="@+id/row_summarizer_prompts"
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <TextView
-                    style="@style/Widget.App.Dropdown.Label"
-                    android:text="@string/summarizer_prompt_dropdown" />
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
-                <TextView
-                    android:id="@+id/text_prompt_slot"
-                    style="@style/Widget.App.Dropdown.Value"
-                    android:layout_weight="1" />
-            </LinearLayout>
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_prompts_row_title" />
 
-            <!-- Rename / Revert / Save act on the preset selected above. The
-                 prompt box below is a draft: it persists only through Save. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal">
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/summarizer_prompts_row_subtitle" />
+                </LinearLayout>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_rename_slot"
-                    style="@style/AppButton.Primary.Inline"
-                    android:text="@string/summarizer_rename_slot" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_revert_prompt"
-                    style="@style/AppButton.Primary.Inline"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/summarizer_revert_prompt" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_save_prompt"
-                    style="@style/AppButton.Primary.Inline"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/btn_save" />
-            </LinearLayout>
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_prompt"
-                style="@style/Widget.App.Field.Box"
-                android:layout_marginTop="4dp"
-                android:gravity="top"
-                android:inputType="textMultiLine|textCapSentences"
-                android:minLines="8"
-                android:overScrollMode="always"
-                android:scrollbars="vertical" />
-
-            <!-- ============ Image Summary Prompt (single, global) ============
-                 A fixed eight-line window that turns into its own scrollbar
-                 when the prompt is longer. Saved only through its Save button,
-                 like the conversation prompt box above. -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/summarizer_section_image_prompt" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:text="@string/summarizer_section_image_prompt_hint" />
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_image_summary_prompt"
-                style="@style/Widget.App.Field.Box"
-                android:layout_marginTop="8dp"
-                android:gravity="top"
-                android:inputType="textMultiLine|textCapSentences"
-                android:maxLines="8"
-                android:minLines="8"
-                android:overScrollMode="always"
-                android:scrollbars="vertical" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="end"
-                android:orientation="horizontal">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_save_image_summary_prompt"
-                    style="@style/AppButton.Primary.Inline"
-                    android:text="@string/btn_save" />
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/summarizer_prompts_row_title" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

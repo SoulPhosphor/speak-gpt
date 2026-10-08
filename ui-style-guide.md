@@ -105,7 +105,7 @@ The zone attributes implemented so far, which every `ThemeOverlay.Phosphor.*` pa
 
 Every theme that defines one of these must define all of them, including the night themes and every palette overlay — a style resolving an attribute that no theme layer carries crashes at inflation. They are the pattern the remaining zones follow when theme work resumes.
 
-Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton)` (`org.teslasoft.assistant.ui.util`). It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, and Chat Behavior; the other settings screens still carry their own copy until they are moved over.
+Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton, ...headerButtons)` (`org.teslasoft.assistant.ui.util`); trailing header icons such as Save are passed after the back button. It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, Chat Behavior, and Summarizer Prompts; the other settings screens still carry their own copy until they are moved over.
 
 A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
 
@@ -248,6 +248,14 @@ Use `setTitle` for the dialog heading or its single short question.
 Use `setMessage` only for separate explanatory text beneath the title.
 
 A dialog containing only a short question should place that question in the title and omit the message.
+
+### Save confirmation on a header Save icon
+
+Use `SaveIconFlash.flash(button)` (`org.teslasoft.assistant.ui.util`) after a successful save from a header Save icon, together with the save toast. The icon itself turns green, then returns to its normal tint; the button background is never recolored (owner ruling, Oct 3 2026). Current users: Edit Companion and Summarizer Prompts.
+
+### Confirmation with a "hide this hint" switch
+
+Use `HintConfirmDialog.show(...)` (`org.teslasoft.assistant.ui.util`) for an explanatory, non-destructive confirmation that the user may choose to stop seeing. Title and message use the standard dialog, the actions use `dialog_two_actions_cancel_first.xml` (Cancel left, Okay right), and the shared `layout/view_dialog_hint_toggle.xml` puts the hide switch on its own line beneath the buttons in ordinary body text (`Widget.App.CheckOption.Label`), on by default (owner ruling, Oct 3 2026). Current users: the Conversation Summary / Compaction Summary screen's Unsummarize/Uncompact and Resummarize/Recompact.
 
 ### Standard discard-changes dialog
 
@@ -566,10 +574,12 @@ A `ChipGroup` with `singleLine="false"` and `chipSpacingHorizontal/Vertical="10d
 
 ### Prompt editor frame
 
-A `ConstraintLayout` containing:
+The tab row and editor frame are one shared layout, `layout/view_prompt_variant_editor.xml`, driven by one shared controller, `PromptVariantEditor` (`org.teslasoft.assistant.ui.util`). Edit Companion and Summarizer Prompts include the layout; do not copy its XML or menu code into a screen.
+
+The frame is a `ConstraintLayout` containing:
 
 1. **Tab name** — a `TextView` showing the active variant's name, left-aligned. The default prompt's name is prefixed with a green dot (`light_green`).
-2. **Three-dot menu** — an `ImageButton` (36x36dp, `ic_more_vert`) anchored to the trailing edge, opening a `PopupMenu` with: Make Default, Rename, Copy From…, Duplicate, Clear, Delete.
+2. **Three-dot menu** — an `ImageButton` (36x36dp, `ic_more_vert`) anchored to the trailing edge, opening a `PopupMenu` with: Make Default, Rename, Copy From…, Duplicate, Copy, Clear, Revert, Delete. Revert returns only the open prompt's text to its text at the last save (owner ruling, Oct 3 2026). A screen may mark prompts that cannot be deleted; Delete is disabled while one of them is open.
 3. **Text field** — the `field_prompt` `TextInputEditText`, `minLines="8"` and `maxLines="8"` with `scrollbars="vertical"`, transparent background, bordered by `bg_prompt_editor`: a `colorSurfaceContainerHigh` fill (matching the active tab) with a 1dp `colorOutline` stroke and 4dp corners. The bounded height makes the field scroll internally when content overflows.
 
 ## Screen sections
@@ -593,6 +603,14 @@ The required order is:
 3. the section's controls.
 
 The user must receive the explanation before reaching the control that depends on it. Do not place explanatory text beneath the button, switch, field, or other control it explains.
+
+## Summary sections
+
+`Widget.App.SummarySection.Header` — a summary section's protected, generated date/time header on the Conversation Summary screen: left-aligned text in a quiet rounded surface (`bg_summary_section_header`, theme colors only), tappable to open the conversation preview. It is metadata, not a button, and never looks disabled.
+
+`Widget.App.SummarySection.Flag` — the Material bookmark flag (`ic_bookmark_flag`) beside the header of the section reached from the chat, and in the conversation preview at a section's starting point. In the chat it sits directly right of a reply's info button (`btn_summary_bookmark`) on the reply that opens a section.
+
+Each section is `layout/view_summary_section.xml`; the shared editing behaviors (Save disc, Revert, read-only lock, Unsummarize/Resummarize) are the screen's existing ones. The conversation preview is `layout/sheet_conversation_preview.xml`, a nearly full-height bottom sheet closed by the double chevron down or a swipe.
 
 ## Screen intro text
 
@@ -770,7 +788,8 @@ Quick Settings layout or its Kotlin controller.
 
 The current vertical order is intentional: identity and character choices;
 model/provider/endpoint routing; memory controls; independent roleplay context;
-generation parameters; Logit Bias and Seed; usage/cost; Save to Profile. Keep
+the summarizer and its Summary, Compaction, and Image prompts (owner ruling,
+Oct 3 2026); generation parameters; Logit Bias and Seed; usage/cost; Save to Profile. Keep
 that order unless the owner explicitly changes it.
 
 The Lorebooks segment may expand internally. While lorebooks are enabled, its
@@ -955,6 +974,56 @@ Shared layouts:
 - `layout/dialog_include_condense_progress.xml`
 
 Do not assign an id to an XML `<include>` tag that includes these layouts. Android replaces the included root id with the `<include>` id, which breaks code expecting the root's original id.
+
+## Usage & Cost cards
+
+`Widget.App.Usage.SectionPill`, `Widget.App.Usage.ModelCard`,
+`Widget.App.Usage.ModelHeader`, `Widget.App.Usage.ModelHeaderRow`,
+`Widget.App.Usage.ModelName`, `Widget.App.Usage.ModelTotal`,
+`Widget.App.Usage.ModelMeta`, `Widget.App.Usage.ModelFunctions`,
+`Widget.App.Usage.ProviderGap`, `Widget.App.Usage.Stack`
+
+Screen frame: `Widget.App.Usage.Header`, `HeaderBar`, `HeaderTitle`,
+`TotalLabel`, `TotalCost`, `TotalMeta`, `Scroll`, `Sections`.
+
+Provider block: `Widget.App.Usage.ProviderHeader`, `ProviderNameColumn`,
+`ProviderName`, `ProviderMeta`, `ProviderTotalColumn`, `ProviderTotal`,
+`ProviderTotalLabel`; chart `Table`, `TableHeader`, `TableHeaderLabel`,
+`TableHeaderQuantity`, `TableHeaderCost`, `TableRow`, `TableLabel`,
+`TableQuantity`, `TableCost`, `TableDivider`; `CacheRate`, `CacheRateLabel`,
+`CacheRateValue`; pricing footer `PricingFooter`, `PriceFacts`, `PriceFact`,
+`PriceFactLabel`, `PriceFactValue`, `PriceCaption`.
+
+Use only on the Usage & Cost screen (owner ruling, October 6 2026).
+
+Every layout on this screen holds structure only (owner ruling, October 7
+2026): no size, spacing, text size, color, alignment, or background is written
+on a view. Every provider block in every section (Chat, Summarizing, TTS, and
+the rest) is built from the same styles, so they always match. Shared
+measurements are dimens: `usage_card_corner_radius`, `usage_pill_corner_radius`,
+`usage_cache_rate_corner_radius`, `usage_card_padding`,
+`usage_quantity_column_width`, `usage_cost_column_width`,
+`usage_table_divider_height`.
+
+Composition, top to bottom, per section:
+
+1. one centered `SectionPill` (`view_usage_section_pill.xml`) holding only the
+   section title;
+2. one `ModelCard` per model (`view_usage_model_section.xml`): the model header
+   (`view_usage_model_summary.xml`, gradient top) with name and total on one
+   line, the request count below, and, in Summarizing only, the
+   `ModelFunctions` line;
+3. inside that card, one provider block per provider
+   (`view_usage_provider_block.xml`), separated by a `ProviderGap` that is hidden
+   above the first. Only the last provider's pricing footer uses the rounded
+   `bg_usage_pricing_footer`; the others use `bg_usage_pricing_footer_inner`.
+
+Theme readiness: every color in these styles and in `bg_usage_section_pill`,
+`bg_usage_model_header`, `bg_usage_provider_header`, and the two pricing
+footers is a theme role (`colorPrimaryContainer`, `colorSecondaryContainer`,
+`colorSurfaceContainerHigh`, and so on). Corner radii are dimens. Recoloring
+or resizing the screen is a change to these styles, dimens and drawables
+only; nothing is colored or sized in code.
 
 ## Maintaining this guide
 

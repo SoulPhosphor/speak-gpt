@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One summary section on the Conversation Summary screen: the protected
+     date/time header (tap opens the conversation preview), with the bookmark
+     flag beside it only when reached from the chat, then the section's
+     editable text and its Revert, shown only while the text differs from its
+     last save. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="16dp"
+    android:orientation="vertical"
+    android:padding="4dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical|start"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/summary_section_flag"
+            style="@style/Widget.App.SummarySection.Flag"
+            android:contentDescription="@string/summary_section_current_bookmark_desc"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/summary_section_header"
+            style="@style/Widget.App.SummarySection.Header" />
+    </LinearLayout>
+
+    <!-- Shown when this section's messages changed after its text was
+         written and the text was kept (your edit, or an older summary). -->
+    <TextView
+        android:id="@+id/summary_section_stale_note"
+        style="@style/Widget.App.Section.Hint"
+        android:text="@string/summary_section_stale_note"
+        android:visibility="gone" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/summary_section_rewrite"
+        style="@style/AppButton.Primary.Inline"
+        android:layout_marginTop="4dp"
+        android:text="@string/summary_section_rewrite"
+        android:visibility="gone" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/summary_section_text"
+        style="@style/Widget.App.Field.Box"
+        android:layout_marginTop="8dp"
+        android:gravity="top"
+        android:inputType="textMultiLine|textCapSentences"
+        android:minLines="3" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/summary_section_revert"
+        style="@style/AppButton.Destructive.Inline"
+        android:layout_gravity="end"
+        android:layout_marginTop="8dp"
+        android:text="@string/prompt_menu_revert"
+        android:visibility="gone" />
+</LinearLayout>
