@@ -48,6 +48,7 @@ enum class UsageMeterComponent(val key: String) {
     TEXT_OUTPUT("text_output"),
     CACHED_TEXT_INPUT("cached_text_input"),
     CACHED_IMAGE_INPUT("cached_image_input"),
+    CACHED_INPUT("cached_input"),
     INPUT("input"),
     OUTPUT("output"),
     IMAGES("images"),

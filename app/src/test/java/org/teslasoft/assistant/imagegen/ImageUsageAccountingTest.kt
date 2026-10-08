@@ -5,6 +5,49 @@ import org.junit.Test
 import org.teslasoft.assistant.usage.*
 
 class ImageUsageAccountingTest {
+    @Test fun unresolvedInteractionCacheSplitsKeepTheirReportedAggregate() {
+        val body = """{"usage":{"total_input_tokens":10,"input_tokens_by_modality":[{"modality":"text","tokens":10}],"total_output_tokens":54,"output_tokens_by_modality":[{"modality":"image","tokens":50},{"modality":"text","tokens":4}],"total_cached_tokens":3},"steps":[{"type":"model_output","content":[{"type":"image","mime_type":"image/png","data":"Ag=="}]}]}"""
+        val metadata = ImageModelMetadata("new-model", tariffs = listOf(
+            ImageTariff("text_input", "token", 1.0, 1000.0, "USD"),
+            ImageTariff("text_output", "token", 2.0, 1000.0, "USD"),
+            ImageTariff("image_output", "token", 3.0, 1000.0, "USD")))
+        for (bad in listOf(null, "null", "{}", "[]", """[{"modality":"audio","tokens":3}]""",
+                """[{"modality":"text","tokens":"bad"}]""")) {
+            val root = com.google.gson.JsonParser.parseString(body).asJsonObject
+            if (bad != null) root.getAsJsonObject("usage").add("cached_tokens_by_modality", com.google.gson.JsonParser.parseString(bad))
+            val request = attempt(ImageProviderKind.GEMINI, root.toString(), metadata)
+            assertFalse(request.receipt.usageVerified)
+            val record = request.record()
+            assertNull(record.totalCost)
+            assertEquals(3.0, record.meters!!.single { it.component == UsageMeterComponent.CACHED_INPUT }.quantity!!, 0.0)
+            val log = UsageLog.EMPTY.append(listOf(UsageLog.entry(UsageCategory.IMAGE_GENERATION, "cached", record, 1L)))
+            val restored = UsageLog.decode(UsageLog.encode(log))!!.entries.single().record
+            assertEquals(3.0, restored.meters!!.single { it.component == UsageMeterComponent.CACHED_INPUT }.quantity!!, 0.0)
+        }
+    }
+
+    @Test fun thoughtTokenAdditionRequiresAnExactlyRepresentableCombinedCount() {
+        val native = """{"usageMetadata":{"promptTokenCount":10,"promptTokensDetails":[{"modality":"TEXT","tokenCount":10}],"candidatesTokenCount":9007199254740992,"candidatesTokensDetails":[{"modality":"TEXT","tokenCount":9007199254740992},{"modality":"IMAGE","tokenCount":0}],"thoughtsTokenCount":1},"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"AQ=="}}]}}]}"""
+        val interactions = """{"usage":{"total_input_tokens":10,"input_tokens_by_modality":[{"modality":"text","tokens":10}],"total_output_tokens":9007199254740992,"output_tokens_by_modality":[{"modality":"text","tokens":9007199254740992},{"modality":"image","tokens":0}],"total_thought_tokens":1,"total_cached_tokens":0},"steps":[{"type":"model_output","content":[{"type":"image","mime_type":"image/png","data":"Ag=="}]}]}"""
+        val metadata = ImageModelMetadata("new-model", tariffs = listOf(
+            ImageTariff("text_input", "token", 1.0, 1000.0, "USD"),
+            ImageTariff("text_output", "token", 2.0, 1000.0, "USD"),
+            ImageTariff("image_output", "token", 3.0, 1000.0, "USD")))
+        for (body in listOf(native, interactions)) {
+            val request = attempt(ImageProviderKind.GEMINI, body, metadata)
+            assertFalse(request.receipt.usageVerified)
+            assertNull(request.record().totalCost)
+            assertNull(request.record().meters!!.single { it.component == UsageMeterComponent.TEXT_OUTPUT }.quantity)
+            val representable = body.replace("\"thoughtsTokenCount\":1", "\"thoughtsTokenCount\":2")
+                .replace("\"total_thought_tokens\":1", "\"total_thought_tokens\":2")
+            val valid = attempt(ImageProviderKind.GEMINI, representable, metadata)
+            assertTrue(valid.receipt.usageVerified)
+            assertEquals(9007199254740994.0,
+                valid.record().meters!!.single { it.component == UsageMeterComponent.TEXT_OUTPUT }.quantity!!, 0.0)
+            assertNotNull(valid.record().totalCost)
+        }
+    }
+
     @Test fun geminiNativeSplitsMustFullyReconcileBeforeCalculatingCost() {
         val body = """{"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":54,"promptTokensDetails":[{"modality":"TEXT","tokenCount":10}],"candidatesTokensDetails":[{"modality":"IMAGE","tokenCount":50},{"modality":"TEXT","tokenCount":4}],"thoughtsTokenCount":2},"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"AQ=="}}]}}]}"""
         val metadata = ImageModelMetadata("new-model", tariffs = listOf(
@@ -43,7 +86,7 @@ class ImageUsageAccountingTest {
         cached.getAsJsonObject("usageMetadata").addProperty("cachedContentTokenCount", 5)
         val cachedRecord = attempt(ImageProviderKind.GEMINI, cached.toString(), metadata).record()
         assertNull(cachedRecord.totalCost)
-        assertEquals(5.0, cachedRecord.meters!!.single { it.component == UsageMeterComponent.CACHED_TEXT_INPUT }.quantity!!, 0.0)
+        assertEquals(5.0, cachedRecord.meters!!.single { it.component == UsageMeterComponent.CACHED_INPUT }.quantity!!, 0.0)
         for (bad in listOf("-1", "1.5")) {
             val malformedThoughts = com.google.gson.JsonParser.parseString(body).asJsonObject
             malformedThoughts.getAsJsonObject("usageMetadata").add("thoughtsTokenCount", com.google.gson.JsonParser.parseString(bad))

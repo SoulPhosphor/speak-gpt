@@ -32,6 +32,12 @@ object ImageUsageParser {
         }.getOrNull()
     }
 
+    private fun addCounts(first: Double, second: Double): Double? {
+        val exact = java.math.BigDecimal.valueOf(first).add(java.math.BigDecimal.valueOf(second))
+        val result = exact.toDouble().takeIf { it.isFinite() } ?: return null
+        return result.takeIf { java.math.BigDecimal.valueOf(it).compareTo(exact) == 0 }
+    }
+
     private fun split(o: JsonObject?, key: String, totalKey: String, countKey: String): Map<String, Double>? {
         val details = o?.imageArray(key) ?: return null
         val total = count(o, totalKey) ?: return null
@@ -75,8 +81,10 @@ object ImageUsageParser {
             val thoughts = count(usage, "total_thought_tokens")
             val malformedThoughts = usage?.has("total_thought_tokens") == true && thoughts == null
             meters += meter(UsageMeterComponent.IMAGE_OUTPUT, imageOutput)
-            meters += meter(UsageMeterComponent.TEXT_OUTPUT,
-                textOutput?.takeUnless { malformedThoughts }?.let { text -> thoughts?.let { text + it } ?: text })
+            val combinedText = if (malformedThoughts || textOutput == null) null
+                else if (thoughts == null) textOutput else addCounts(textOutput, thoughts)
+            if (textOutput != null && thoughts != null && combinedText == null) usageVerified = false
+            meters += meter(UsageMeterComponent.TEXT_OUTPUT, combinedText)
             // An omitted optional thought counter keeps the final-text split readable.
             // A malformed one makes the billed output quantity and cost unknown.
             if (malformedThoughts) usageVerified = false
@@ -84,7 +92,10 @@ object ImageUsageParser {
             val zeroCache = usage?.has("cached_tokens_by_modality") != true && count(usage, "total_cached_tokens") == 0.0
             meters += meter(UsageMeterComponent.CACHED_TEXT_INPUT, cache?.get("text") ?: 0.0.takeIf { zeroCache || cache != null })
             meters += meter(UsageMeterComponent.CACHED_IMAGE_INPUT, cache?.get("image") ?: 0.0.takeIf { zeroCache || cache != null })
-            if (usage?.has("cached_tokens_by_modality") == true && cache == null) usageVerified = false
+            if (cache == null && !zeroCache) {
+                usageVerified = false
+                count(usage, "total_cached_tokens")?.let { meters += meter(UsageMeterComponent.CACHED_INPUT, it) }
+            }
             count(usage, "total_tool_use_tokens")?.takeIf { it > 0 }?.let { meters += meter(UsageMeterComponent.INPUT, it) }
         } else if (kind == ImageProviderKind.GEMINI) {
             fun modalities(key: String, input: Boolean): Boolean {
@@ -113,12 +124,16 @@ object ImageUsageParser {
             } else thoughts?.let {
                 // Thinking is additional output in the provider's documented usage layout.
                 val index = meters.indexOfFirst { it.component == UsageMeterComponent.TEXT_OUTPUT }
-                if (index >= 0) meters[index] = meter(UsageMeterComponent.TEXT_OUTPUT, meters[index].quantity?.let { value -> value + it })
-                else meters += meter(UsageMeterComponent.TEXT_OUTPUT, null)
+                if (index >= 0) {
+                    val text = meters[index].quantity
+                    val combined = text?.let { value -> addCounts(value, it) }
+                    if (text != null && combined == null) usageVerified = false
+                    meters[index] = meter(UsageMeterComponent.TEXT_OUTPUT, combined)
+                } else meters += meter(UsageMeterComponent.TEXT_OUTPUT, null)
             }
             if (usage?.has("cachedContentTokenCount") == true) {
                 val cached = count(usage, "cachedContentTokenCount")
-                meters += meter(UsageMeterComponent.CACHED_TEXT_INPUT, cached)
+                meters += meter(UsageMeterComponent.CACHED_INPUT, cached)
                 // Cached input needs its own published rate; the standard input rate
                 // cannot establish a complete bill for a discounted request.
                 if (cached == null || cached > 0.0) usageVerified = false

@@ -333,6 +333,7 @@ internal object MeteredUsagePresentation {
         UsageMeterComponent.TEXT_OUTPUT -> R.string.usage_meter_text_output
         UsageMeterComponent.CACHED_TEXT_INPUT -> R.string.usage_meter_cached_text_input
         UsageMeterComponent.CACHED_IMAGE_INPUT -> R.string.usage_meter_cached_image_input
+        UsageMeterComponent.CACHED_INPUT -> R.string.usage_meter_cached_input
         UsageMeterComponent.INPUT -> R.string.usage_input
         UsageMeterComponent.OUTPUT -> R.string.usage_output
         UsageMeterComponent.IMAGES -> R.string.usage_meter_images

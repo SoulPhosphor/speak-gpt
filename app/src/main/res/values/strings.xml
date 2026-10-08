@@ -3990,6 +3990,7 @@
     <string name="usage_meter_text_output">Text Output</string>
     <string name="usage_meter_cached_text_input">Cached Text Input</string>
     <string name="usage_meter_cached_image_input">Cached Image Input</string>
+    <string name="usage_meter_cached_input">Cached Input</string>
     <string name="usage_meter_images">Images</string>
     <string name="usage_meter_credits">Credits</string>
     <string name="usage_price_per_image">Price per Image</string>
