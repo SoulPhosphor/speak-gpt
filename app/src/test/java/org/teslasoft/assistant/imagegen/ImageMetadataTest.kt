@@ -4,6 +4,53 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageMetadataTest {
+    @Test fun unreadableAdvertisedDescriptorsUseDefaultsInsteadOfBlockingSavedSettings() {
+        val request = ImageGenerationRequest("p", ImageShape.AUTOMATIC, ImageQuality.AUTOMATIC, "e", "future",
+            parameters = mapOf("quality" to "precise", "output_format" to "png"))
+        val format = """"output_format":{"type":"enum","values":["png"]}"""
+        for (bad in listOf("[]", "null", "7", "{}", """{"type":"future"}""",
+                """{"type":"enum","values":[]}""", """{"type":"enum","values":["precise",7]}""",
+                """{"type":"number","minimum":"unreadable"}""", """{"type":"number","minimum":9,"maximum":1}""",
+                """{"type":"string","default":{}}""")) {
+            val fields = """{"quality":$bad,$format}"""
+            val catalog = ImageMetadataParser.catalog("""{"data":[{"id":"future","supported_parameters":$fields}]}""", "fixture").single()
+            val endpoint = ImageMetadataParser.endpoints("""{"id":"future","endpoints":[{"supported_parameters":$fields}]}""", ImageModelMetadata("future"))
+            for (model in listOf(catalog, endpoint)) {
+                assertFalse(model.settingsVerified)
+                assertEquals(mapOf("output_format" to "png"), ImageRequestOptions.resolve(
+                    ImageRequestOptions.forMetadataFallback(request, model), model))
+                try { ImageRequestOptions.resolve(ImageRequestOptions.forMetadataFallback(
+                    request.copy(parameters = mapOf("output_format" to "jpeg")), model), model); fail("known format remains strict") }
+                catch (failure: ImageGenerationException) { assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, failure.errorCause) }
+            }
+        }
+        for (bad in listOf("[]", "null", "7")) {
+            val model = ImageMetadataParser.catalog("""{"data":[{"id":"future","supported_parameters":$bad}]}""", "fixture").single()
+            assertFalse(model.settingsVerified)
+            assertTrue(ImageRequestOptions.resolve(ImageRequestOptions.forMetadataFallback(request, model), model).isEmpty())
+            assertFalse(ImageMetadataParser.endpoints("""{"id":"future","endpoints":[{"supported_parameters":$bad}]}""", ImageModelMetadata("future")).settingsVerified)
+        }
+        val valid = """{"quality":{"type":"enum","values":["precise"]},$format,"prompt":[]}"""
+        assertTrue(ImageMetadataParser.catalog("""{"data":[{"id":"future","supported_parameters":$valid}]}""", "fixture").single().settingsVerified)
+        assertEquals(mapOf("quality" to "precise", "output_format" to "png"), request.parameters)
+    }
+
+    @Test fun providerTariffsRejectUnderflowWithoutRejectingRealZeroOrRepresentableValues() {
+        for (value in listOf("1e-999", "\"1e-999\"", "-1e-999", "\"-1e-999\"")) {
+            val pricing = imageJson("""{"pricing":[{"billable":"output_image","unit":"image","cost_usd":$value}]}""")!!.get("pricing")
+            assertTrue(ImageMetadataParser.tariffs(pricing).isEmpty())
+            assertFalse(ImageMetadataParser.tariffsComplete(pricing))
+        }
+        for (value in listOf("0", "\"0.000\"", Double.MIN_VALUE.toString())) {
+            val pricing = imageJson("""{"pricing":[{"billable":"output_image","unit":"image","cost_usd":$value}]}""")!!.get("pricing")
+            assertTrue(ImageMetadataParser.tariffsComplete(pricing))
+            assertEquals(imageDecimal(value.trim('"'))!!, ImageMetadataParser.tariffs(pricing).single().amount, 0.0)
+        }
+        assertNull(imageJson("""{"bound":1e-999}""")!!.imageBound("bound"))
+        assertFalse(ImageParameter("strength", ImageParameterType.NUMBER).accepts("1e-999"))
+        assertTrue(ImageParameter("strength", ImageParameterType.NUMBER).accepts(Double.MIN_VALUE.toString()))
+    }
+
     @Test fun unavailableCompressionBoundsUseDefaultsAndKeepVerifiedSettings() {
         val fields = """{"output_compression":{"type":"boolean"},"output_format":{"type":"enum","values":["png"]}}"""
         val catalogBody = """{"data":[{"id":"future","supported_parameters":$fields}]}"""

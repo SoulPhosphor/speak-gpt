@@ -104,7 +104,7 @@ object GeminiImagePricingParser {
             val prices = Regex("\\$([0-9]+(?:\\.[0-9]+)?)\\s*\\(([^)]+)\\)").findAll(value).toList()
             if (prices.isEmpty()) complete = false
             prices.forEach { price ->
-                val amount = price.groupValues[1].toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }
+                val amount = imageDecimal(price.groupValues[1])?.takeIf { it >= 0 }
                 if (amount == null) { complete = false; return@forEach }
                 val modalities = price.groupValues[2].lowercase().split(Regex("[^a-z]+"))
                 if ("text" in modalities) tariffs += ImageTariff("text_$suffix", "token", amount, quantity, "USD")

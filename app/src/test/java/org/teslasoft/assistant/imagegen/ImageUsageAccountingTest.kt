@@ -5,6 +5,43 @@ import org.junit.Test
 import org.teslasoft.assistant.usage.*
 
 class ImageUsageAccountingTest {
+    @Test fun unrepresentableProviderChargesStayUnknownAndRetainTheirDecimalEvidence() {
+        for (value in listOf("1e-999", "\"1e-999\"")) {
+            val initial = attempt(ImageProviderKind.NANOGPT, """{"cost":$value,"currency":"USD","data":[{}]}""")
+            assertNull(initial.receipt.amount)
+            assertNull(initial.record().totalCost)
+            assertEquals("1e-999", initial.record().reportedChargeDecimal)
+            val billing = ImageUsageParser.billing(ImageProviderKind.NANOGPT,
+                """{"request_id":"request-1","cost":$value,"currency":"USD"}""", "request-1")!!
+            assertNull(billing.amount)
+            assertNull(initial.record(billing).totalCost)
+            assertEquals("1e-999", initial.record(billing).reportedChargeDecimal)
+            val earlierZero = attempt(ImageProviderKind.NANOGPT, """{"cost":0,"currency":"USD","data":[{}]}""")
+            assertNull(earlierZero.record(billing).totalCost)
+            val routed = ImageUsageParser.billing(ImageProviderKind.OPENROUTER,
+                """{"id":"generation-1","total_cost":$value}""", "generation-1")!!
+            assertNull(routed.usd)
+            assertEquals("1e-999", routed.amountDecimal)
+        }
+        for (value in listOf("0", "\"0.000\"", Double.MIN_VALUE.toString())) {
+            val initial = attempt(ImageProviderKind.NANOGPT, """{"cost":$value,"currency":"USD","data":[{}]}""")
+            assertEquals(imageDecimal(value.trim('"'))!!, initial.record().totalCost!!, 0.0)
+        }
+    }
+
+    @Test fun calculatedPricesThatUnderflowOrOverflowRemainUnknown() {
+        val meter = UsageMeter(UsageMeterComponent.IMAGES, UsageMeterUnit.IMAGE, 1.0,
+            UsageQuantitySource.PROVIDER_REPORTED, Double.MIN_VALUE, 1000.0, "USD")
+        assertNull(meter.unitPrice)
+        assertNull(meter.withCalculatedCost().cost)
+        assertNull(MeteredUsageAccounting.record("model", "provider", null, listOf(meter), null).totalCost)
+        val tooLarge = meter.copy(quantity = Double.MAX_VALUE, priceAmount = Double.MAX_VALUE, priceQuantity = 1.0)
+        assertNull(tooLarge.withCalculatedCost().cost)
+        assertNull(MeteredUsageAccounting.record("model", "provider", null,
+            listOf(meter.copy(cost = Double.MAX_VALUE), meter.copy(cost = Double.MAX_VALUE)), null).totalCost)
+        assertEquals(0.0, meter.copy(priceAmount = 0.0).withCalculatedCost().cost!!, 0.0)
+    }
+
     @Test fun cachePolicyMapsPublishedFamilyNamesToDocumentedVariantIdsWithoutIdPrefixes() {
         val guide = """### Cached input pricing
 For Future Image 8 and Future Image 8.5, cached input pricing applies only to the image generation tool in the Responses API. It doesn't apply to direct Images API requests.

@@ -85,6 +85,7 @@ data class UsageMeter(
         get() = if (priceAmount != null && priceQuantity != null && priceQuantity > 0.0)
             BigDecimal.valueOf(priceAmount)
                 .divide(BigDecimal.valueOf(priceQuantity), MathContext.DECIMAL128).toDouble()
+                .takeIf { it.isFinite() && (it != 0.0 || priceAmount == 0.0) }
         else null
 
     /** Costs are calculated only from a known quantity and a frozen US-dollar
@@ -97,8 +98,8 @@ data class UsageMeter(
         if (amount == 0.0) return copy(cost = 0.0)
         val count = quantity ?: return this
         val calculated = BigDecimal.valueOf(count).multiply(BigDecimal.valueOf(amount))
-            .divide(BigDecimal.valueOf(basis), MathContext.DECIMAL128).toDouble()
-        return copy(cost = calculated)
+            .divide(BigDecimal.valueOf(basis), MathContext.DECIMAL128)
+        return copy(cost = calculated.toDouble().takeIf { it.isFinite() && (it != 0.0 || calculated.signum() == 0) })
     }
 }
 
@@ -133,7 +134,7 @@ object MeteredUsageAccounting {
     ): TurnUsageRecord {
         val priced = meters.map { it.withCalculatedCost() }
         val calculated = if (priced.isNotEmpty() && priced.all { it.cost != null })
-            priced.fold(BigDecimal.ZERO) { sum, meter -> sum.add(BigDecimal.valueOf(meter.cost!!)) }.toDouble()
+            priced.fold(BigDecimal.ZERO) { sum, meter -> sum.add(BigDecimal.valueOf(meter.cost!!)) }.toDouble().takeIf { it.isFinite() }
         else null
         val reported = providerTotalCost?.takeIf { it.isFinite() && it >= 0.0 }
         val total = reported ?: calculated

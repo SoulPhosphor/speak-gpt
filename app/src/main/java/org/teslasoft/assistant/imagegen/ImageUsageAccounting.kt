@@ -21,6 +21,8 @@ data class ImageUsageReceipt(
 }
 
 object ImageUsageParser {
+    private fun chargeDecimal(o: JsonObject?, name: String): String? = o?.imageText(name)
+        ?.takeIf { value -> value.toBigDecimalOrNull()?.signum()?.let { it >= 0 } == true }
     private fun count(o: JsonObject?, name: String): Double? = o?.imageNumber(name)?.takeIf { it % 1.0 == 0.0 && it <= Long.MAX_VALUE.toDouble() }
     private fun meter(component: UsageMeterComponent, value: Double?) = UsageMeter(component,
         UsageMeterUnit.TOKEN, value, value?.let { UsageQuantitySource.PROVIDER_REPORTED })
@@ -151,7 +153,8 @@ object ImageUsageParser {
         val amount = usage?.imageNumber("cost") ?: root.imageNumber("cost")
         return ImageUsageReceipt(root.imageText("model") ?: root.imageText("modelVersion"),
             root.imageText("provider") ?: root.imageText("provider_name"), imageIdentifier(requestId),
-            imageIdentifier(generationId) ?: imageIdentifier(root.imageText("id")), images, megapixels, meters, amount, currency)
+            imageIdentifier(generationId) ?: imageIdentifier(root.imageText("id")), images, megapixels, meters, amount, currency,
+            chargeDecimal(usage, "cost") ?: chargeDecimal(root, "cost"))
     }
 
     /** Only a receipt with the exact provider-issued identity can enrich a request. */
@@ -166,8 +169,7 @@ object ImageUsageParser {
         val meters = listOfNotNull(
             (count(usage, "input_tokens") ?: count(o, "native_tokens_prompt"))?.let { meter(UsageMeterComponent.INPUT, it) },
             (count(usage, "output_tokens") ?: count(o, "native_tokens_completion"))?.let { meter(UsageMeterComponent.OUTPUT, it) })
-        val decimal = o.imageText(if (kind == ImageProviderKind.OPENROUTER) "total_cost" else "cost")
-            ?.takeIf { value -> value.toBigDecimalOrNull()?.signum()?.let { it >= 0 } == true }
+        val decimal = chargeDecimal(o, if (kind == ImageProviderKind.OPENROUTER) "total_cost" else "cost")
         return ImageUsageReceipt(o.imageText("model"), o.imageText("provider_name"),
             requestId = if (kind == ImageProviderKind.NANOGPT) id else null,
             generationId = if (kind == ImageProviderKind.OPENROUTER) id else null,
@@ -287,12 +289,13 @@ data class ImageUsageAttempt(
         val informational = setOf(UsageMeterComponent.IMAGES, UsageMeterComponent.CREDITS)
         if (tariffs.none { it.unit == "image" } && meters.any { it.component !in informational && it.quantity != 0.0 &&
                 billed.none { price -> price.component == it.component && price.unit == it.unit } }) completePricing = false
-        val originalCharge = billing?.amount?.let { billing } ?: receipt
-        if (originalCharge.amount != null && !originalCharge.currency.equals("USD", true)) completePricing = false
+        val originalCharge = billing?.takeIf { it.amount != null || it.amountDecimal != null } ?: receipt
+        if (originalCharge.amountDecimal != null && originalCharge.amount == null) completePricing = false
+        if ((originalCharge.amount != null || originalCharge.amountDecimal != null) && !originalCharge.currency.equals("USD", true)) completePricing = false
         val total = if (completePricing) billed.fold(java.math.BigDecimal.ZERO) { sum, meter ->
             sum.add(java.math.BigDecimal.valueOf(meter.cost!!))
         }.toDouble().takeIf { it.isFinite() } else null
-        val reported = billing?.usd ?: receipt.usd
+        val reported = originalCharge.usd
         return MeteredUsageAccounting.record(selectedModel, selectedProvider, endpoint, meters, reported).copy(
             totalCost = reported ?: total,
             costSource = when { reported != null -> CostSource.PROVIDER_REPORTED; total != null -> CostSource.FROZEN_PRICING; else -> CostSource.UNKNOWN }.storedValue,

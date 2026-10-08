@@ -44,8 +44,8 @@ data class ImageParameter(
         ImageParameterType.ENUM -> value in values
         ImageParameterType.STRING -> value.isNotBlank()
         ImageParameterType.BOOLEAN -> value == "true" || value == "false"
-        ImageParameterType.INTEGER, ImageParameterType.NUMBER -> value.toDoubleOrNull()?.let {
-            it.isFinite() && (type != ImageParameterType.INTEGER || value.toLongOrNull() != null) &&
+        ImageParameterType.INTEGER, ImageParameterType.NUMBER -> imageDecimal(value)?.let {
+            (type != ImageParameterType.INTEGER || value.toLongOrNull() != null) &&
                 (minimum == null || it >= minimum) && (maximum == null || it <= maximum)
         } == true
     }
@@ -100,16 +100,21 @@ data class ImageServingMetadata(
 internal fun JsonElement?.imageObject(): JsonObject? = this?.takeIf { it.isJsonObject }?.asJsonObject
 internal fun JsonObject.imageText(key: String): String? = get(key)?.takeIf { it.isJsonPrimitive }
     ?.asString?.trim()?.takeIf { it.isNotEmpty() && it != "null" }
-internal fun JsonObject.imageNumber(key: String): Double? = try {
-    get(key)?.takeIf { it.isJsonPrimitive && !it.asJsonPrimitive.isBoolean }?.asDouble
-        ?.takeIf { it.isFinite() && it >= 0.0 }
-} catch (_: Exception) { null }
+/** Decimal provider values must survive conversion without becoming a false zero. */
+internal fun imageDecimal(value: String?): Double? {
+    val decimal = value?.trim()?.toBigDecimalOrNull() ?: return null
+    val number = decimal.toDouble().takeIf { it.isFinite() } ?: return null
+    return number.takeUnless { it == 0.0 && decimal.signum() != 0 }
+}
+internal fun JsonObject.imageNumber(key: String): Double? = get(key)
+    ?.takeIf { it.isJsonPrimitive && !it.asJsonPrimitive.isBoolean }?.asString
+    ?.let(::imageDecimal)?.takeIf { it >= 0.0 }
 internal fun JsonObject.imageArray(key: String) = get(key)?.takeIf { it.isJsonArray }?.asJsonArray
 internal fun imageIdentifier(value: String?): String? = value?.takeIf {
     it.isNotBlank() && it.length <= 512 && it.all { c -> c.isLetterOrDigit() || c in "-_./:" }
 }
 internal fun JsonObject.imageBound(key: String): Double? = runCatching {
-    get(key)?.takeIf { it.isJsonPrimitive && !it.asJsonPrimitive.isBoolean }?.asDouble?.takeIf { it.isFinite() }
+    get(key)?.takeIf { it.isJsonPrimitive && !it.asJsonPrimitive.isBoolean }?.asString?.let(::imageDecimal)
 }.getOrNull()
 internal fun imageJson(body: String): JsonObject? = runCatching { JsonParser.parseString(body).imageObject() }.getOrNull()
 internal fun JsonObject.imageStrings(key: String): List<String> = get(key)?.takeIf { it.isJsonArray }?.asJsonArray?.mapNotNull {
@@ -132,6 +137,10 @@ object ImageMetadataParser {
     fun parameters(root: JsonObject?, compression: ImageParameter? = null): List<ImageParameter> = root?.entrySet()?.mapNotNull { (key, value) ->
         if (key in reserved) return@mapNotNull null
         val descriptor = value.imageObject() ?: return@mapNotNull null
+        if (listOf("values", "enum").any { field -> descriptor.has(field) &&
+                descriptor.imageArray(field)?.all { it.isJsonPrimitive && it.asJsonPrimitive.isString && it.asString.isNotBlank() } != true }) return@mapNotNull null
+        if (listOf("min", "minimum", "max", "maximum").any { descriptor.has(it) && descriptor.imageBound(it) == null }) return@mapNotNull null
+        if (descriptor.has("default") && descriptor.get("default")?.isJsonPrimitive != true) return@mapNotNull null
         if (descriptor.imageText("type") == "range" && !completeRange(descriptor)) return@mapNotNull null
         val values = descriptor.imageStrings("values").ifEmpty { descriptor.imageStrings("enum") }
         val type = when (descriptor.imageText("type")) {
@@ -149,17 +158,22 @@ object ImageMetadataParser {
         if (type == ImageParameterType.ENUM && values.isEmpty()) return@mapNotNull null
         var minimum = descriptor.imageBound("min") ?: descriptor.imageBound("minimum")
         var maximum = descriptor.imageBound("max") ?: descriptor.imageBound("maximum")
+        if (minimum != null && maximum != null && minimum > maximum) return@mapNotNull null
         if (key == "output_compression" && type in setOf(ImageParameterType.INTEGER, ImageParameterType.NUMBER)) {
             minimum = listOfNotNull(minimum, compression?.minimum).maxOrNull()
             maximum = listOfNotNull(maximum, compression?.maximum).minOrNull()
             if (minimum == null || maximum == null || minimum > maximum) return@mapNotNull null
         }
         ImageParameter(key, type, values, minimum, maximum, descriptor.imageText("default"))
+            .takeIf { it.defaultValue == null || it.accepts(it.defaultValue) }
     }.orEmpty().sortedWith(compareBy({ settingsOrder.indexOf(it.key).takeIf { n -> n >= 0 } ?: Int.MAX_VALUE }, { it.key }))
 
-    /** A published compression field without usable bounds depends on unavailable settings evidence. */
-    private fun settingsVerified(fields: JsonObject?, parsed: List<ImageParameter>): Boolean =
-        fields?.has("output_compression") != true || parsed.any { it.key == "output_compression" }
+    /** Every advertised model setting must have a readable descriptor. */
+    private fun settingsVerified(value: JsonElement?, parsed: List<ImageParameter>): Boolean {
+        if (value == null) return true
+        val fields = value.imageObject() ?: return false
+        return fields.keySet().filterNot { it in reserved }.all { key -> parsed.any { it.key == key } }
+    }
 
     fun tariffs(value: JsonElement?): List<ImageTariff> = value?.takeIf { it.isJsonArray }?.asJsonArray
         ?.mapNotNull { element ->
@@ -191,7 +205,7 @@ object ImageMetadataParser {
             ImageModelMetadata(id, parsedParameters,
                 tariffs = tariffs(model.get("pricing")), sourceUrl = sourceUrl,
                 tariffsComplete = tariffsComplete(model.get("pricing")),
-                settingsVerified = settingsVerified(fields, parsedParameters))
+                settingsVerified = settingsVerified(model.get("supported_parameters"), parsedParameters))
         }
     }
 
@@ -210,7 +224,7 @@ object ImageMetadataParser {
                     descriptor.imageText("type") == "range" && !completeRange(descriptor)
                 } == true } == true) return model.withoutEndpointEvidence()
             val parsedParameters = parameters(fields, compression)
-            verified = verified && settingsVerified(fields, parsedParameters)
+            verified = verified && settingsVerified(endpoint.get("supported_parameters"), parsedParameters)
             ImageServingMetadata(endpoint.imageText("provider_name"), endpoint.imageText("provider_slug"),
                 parsedParameters, tariffs(endpoint.get("pricing")),
                 tariffsComplete(endpoint.get("pricing")))
@@ -295,7 +309,7 @@ object OpenAiImageMetadataParser {
                 // They never substitute for the real token count and token rate.
                 return@forEach
             }
-            val amount = cells[1].removePrefix("$").toDoubleOrNull()?.takeIf { cells[1].startsWith('$') && it.isFinite() && it >= 0 }
+            val amount = imageDecimal(cells[1].removePrefix("$"))?.takeIf { cells[1].startsWith('$') && it >= 0 }
                 ?: return@forEach
             val basis = Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*([km])?\\s*(tokens?|images?)").matchEntire(cells[2]) ?: return@forEach
             val quantity = basis.groupValues[1].toDouble() * when (basis.groupValues[2].lowercase()) {
