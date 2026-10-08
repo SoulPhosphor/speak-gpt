@@ -19,7 +19,8 @@ internal fun checkedUsageSum(values: Iterable<Double>): Double? {
         if (!value.isFinite() || value < 0.0) return null
         sum = sum.add(BigDecimal.valueOf(value))
     }
-    return sum.toDouble().takeIf { it.isFinite() }
+    val result = sum.toDouble().takeIf { it.isFinite() } ?: return null
+    return result.takeIf { BigDecimal.valueOf(it).compareTo(sum) == 0 }
 }
 
 internal fun checkedTokenSum(values: Iterable<Int>): Int? {

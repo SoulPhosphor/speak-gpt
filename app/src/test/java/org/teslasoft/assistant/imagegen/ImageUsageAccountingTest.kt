@@ -5,6 +5,69 @@ import org.junit.Test
 import org.teslasoft.assistant.usage.*
 
 class ImageUsageAccountingTest {
+    @Test fun unresolvedOutputIncludesThoughtsWithoutInventingAModalitySplit() {
+        for ((rootKey, totalKey, splitKey, thoughtsKey, countKey) in listOf(
+            listOf("usageMetadata", "candidatesTokenCount", "candidatesTokensDetails", "thoughtsTokenCount", "tokenCount"),
+            listOf("usage", "total_output_tokens", "output_tokens_by_modality", "total_thought_tokens", "tokens"))) {
+            for (details in listOf(null, "null", "{}", """[{"modality":"audio","$countKey":54}]""")) {
+                val root = com.google.gson.JsonObject()
+                val usage = com.google.gson.JsonObject()
+                usage.addProperty(totalKey, 54)
+                usage.addProperty(thoughtsKey, 2)
+                if (rootKey == "usage") usage.addProperty("total_input_tokens", 0)
+                if (details != null) usage.add(splitKey, com.google.gson.JsonParser.parseString(details))
+                root.add(rootKey, usage)
+                val record = attempt(ImageProviderKind.GEMINI, root.toString()).record()
+                assertNull(record.totalCost)
+                assertEquals(56.0, record.meters!!.single { it.component == UsageMeterComponent.OUTPUT }.quantity!!, 0.0)
+                val log = UsageLog.EMPTY.append(listOf(UsageLog.entry(UsageCategory.IMAGE_GENERATION, "thoughts", record, 1L)))
+                assertEquals(56.0, UsageLog.decode(UsageLog.encode(log))!!.entries.single().record.meters!!
+                    .single { it.component == UsageMeterComponent.OUTPUT }.quantity!!, 0.0)
+                usage.addProperty(totalKey, 9007199254740992L)
+                usage.addProperty(thoughtsKey, 1)
+                assertNull(attempt(ImageProviderKind.GEMINI, root.toString()).record().meters!!
+                    .single { it.component == UsageMeterComponent.OUTPUT }.quantity)
+            }
+        }
+    }
+
+    @Test fun reconciledSplitsRejectInexactModalitySubtotals() {
+        for ((rootKey, totalKey, splitKey, countKey) in listOf(
+            listOf("usageMetadata", "candidatesTokenCount", "candidatesTokensDetails", "tokenCount"),
+            listOf("usage", "total_output_tokens", "output_tokens_by_modality", "tokens"))) {
+            val root = com.google.gson.JsonObject()
+            val usage = com.google.gson.JsonObject()
+            usage.addProperty(totalKey, 9007199254740994L)
+            if (rootKey == "usage") usage.addProperty("total_input_tokens", 0)
+            usage.add(splitKey, com.google.gson.JsonParser.parseString(
+                """[{"modality":"text","$countKey":9007199254740992},{"modality":"text","$countKey":1},{"modality":"image","$countKey":1}]"""))
+            root.add(rootKey, usage)
+            val receipt = ImageUsageParser.response(ImageProviderKind.GEMINI, root.toString(), "request")
+            assertFalse(receipt.usageVerified)
+            assertEquals(9007199254740994.0, receipt.meters.single { it.component == UsageMeterComponent.OUTPUT }.quantity!!, 0.0)
+            assertFalse(receipt.meters.any { it.component == UsageMeterComponent.TEXT_OUTPUT && it.quantity != null })
+        }
+    }
+
+    @Test fun finiteInexactMeterAndConversationSumsStayUnknown() {
+        assertNull(checkedUsageSum(listOf(9007199254740992.0, 1.0)))
+        assertEquals(0.3, checkedUsageSum(listOf(0.1, 0.2))!!, 0.0)
+        val rows = listOf(9007199254740992.0, 1.0).map { value ->
+            TurnUsageRecord("model", "provider", source = TokenCountSource.PROVIDER_REPORTED.storedValue,
+                totalCost = value, meters = listOf(UsageMeter(UsageMeterComponent.IMAGES,
+                    UsageMeterUnit.IMAGE, value, UsageQuantitySource.PROVIDER_REPORTED, cost = value)))
+        }
+        val meters = MeteredUsageAccounting.aggregate(rows)!!.single()
+        assertTrue(meters.hasUnknownQuantity)
+        assertTrue(meters.hasUnknownCost)
+        for (records in listOf(rows, listOf(rows[0], rows[1].copy(model = "other")))) {
+            val summary = TokenUsageAccounting.aggregate(records)
+            assertTrue(summary.hasUnknownCost)
+            assertTrue(summary.totalCost.isFinite())
+            assertTrue(TokenUsageAccounting.decodeSummary(TokenUsageAccounting.encodeSummary(summary)).hasUnknownCost)
+        }
+    }
+
     @Test fun unresolvedInteractionCacheSplitsKeepTheirReportedAggregate() {
         val body = """{"usage":{"total_input_tokens":10,"input_tokens_by_modality":[{"modality":"text","tokens":10}],"total_output_tokens":54,"output_tokens_by_modality":[{"modality":"image","tokens":50},{"modality":"text","tokens":4}],"total_cached_tokens":3},"steps":[{"type":"model_output","content":[{"type":"image","mime_type":"image/png","data":"Ag=="}]}]}"""
         val metadata = ImageModelMetadata("new-model", tariffs = listOf(
@@ -65,7 +128,7 @@ class ImageUsageAccountingTest {
                 val record = request.record()
                 assertNull(record.totalCost)
                 val component = if (key == "promptTokensDetails") UsageMeterComponent.INPUT else UsageMeterComponent.OUTPUT
-                assertEquals(if (key == "promptTokensDetails") 10.0 else 54.0,
+                assertEquals(if (key == "promptTokensDetails") 10.0 else 56.0,
                     record.meters!!.single { it.component == component }.quantity!!, 0.0)
                 root.addProperty("cost", 0.25)
                 root.addProperty("currency", "USD")
@@ -242,7 +305,7 @@ Use `published-bloom-id` or `published-ember-id` directly.
         val missingModalities = body.replace("\"output_tokens_by_modality\":[{\"modality\":\"image\",\"tokens\":50},{\"modality\":\"text\",\"tokens\":4}],", "")
         val incomplete = attempt(ImageProviderKind.GEMINI, missingModalities, metadata).record()
         assertNull(incomplete.totalCost)
-        assertEquals(54.0, incomplete.meters!!.single { it.component == UsageMeterComponent.OUTPUT }.quantity!!, 0.0)
+        assertEquals(56.0, incomplete.meters!!.single { it.component == UsageMeterComponent.OUTPUT }.quantity!!, 0.0)
         assertEquals(1.0, incomplete.meters!!.single { it.component == UsageMeterComponent.IMAGES }.quantity!!, 0.0)
         assertNull(attempt(ImageProviderKind.GEMINI, body.replace("\"total_output_tokens\":54", "\"total_output_tokens\":99"), metadata).record().totalCost)
     }

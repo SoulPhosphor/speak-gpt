@@ -50,7 +50,13 @@ object ImageUsageParser {
         }
         if (counts.values.fold(java.math.BigDecimal.ZERO) { sum, quantity -> sum.add(quantity) }
                 .compareTo(java.math.BigDecimal.valueOf(total)) != 0) return null
-        return counts.mapValues { it.value.toDouble() }
+        val result = linkedMapOf<String, Double>()
+        for ((modality, exact) in counts) {
+            val value = exact.toDouble().takeIf { it.isFinite() } ?: return null
+            if (java.math.BigDecimal.valueOf(value).compareTo(exact) != 0) return null
+            result[modality] = value
+        }
+        return result
     }
     private fun meter(component: UsageMeterComponent, value: Double?) = UsageMeter(component,
         UsageMeterUnit.TOKEN, value, value?.let { UsageQuantitySource.PROVIDER_REPORTED })
@@ -60,6 +66,15 @@ object ImageUsageParser {
         val usage = (root.get("usage") ?: root.get("usageMetadata")).imageObject()
         val meters = mutableListOf<UsageMeter>()
         var usageVerified = true
+        fun preserveUnresolvedThoughts(thoughts: Double?, malformed: Boolean) {
+            val index = meters.indexOfFirst { it.component == UsageMeterComponent.OUTPUT }
+            if (index < 0) return
+            val output = meters[index].quantity
+            val combined = if (malformed) null else if (thoughts == null) output
+                else output?.let { addCounts(it, thoughts) }
+            if (combined == null) usageVerified = false
+            meters[index] = meter(UsageMeterComponent.OUTPUT, combined)
+        }
         if (kind == ImageProviderKind.GEMINI && (root.has("steps") || usage?.has("total_input_tokens") == true)) {
             fun modality(key: String, name: String, total: String): Double? {
                 val verified = split(usage, key, total, "tokens") ?: return null
@@ -85,6 +100,7 @@ object ImageUsageParser {
                 else if (thoughts == null) textOutput else addCounts(textOutput, thoughts)
             if (textOutput != null && thoughts != null && combinedText == null) usageVerified = false
             meters += meter(UsageMeterComponent.TEXT_OUTPUT, combinedText)
+            if (textOutput == null) preserveUnresolvedThoughts(thoughts, malformedThoughts)
             // An omitted optional thought counter keeps the final-text split readable.
             // A malformed one makes the billed output quantity and cost unknown.
             if (malformedThoughts) usageVerified = false
@@ -131,6 +147,7 @@ object ImageUsageParser {
                     meters[index] = meter(UsageMeterComponent.TEXT_OUTPUT, combined)
                 } else meters += meter(UsageMeterComponent.TEXT_OUTPUT, null)
             }
+            preserveUnresolvedThoughts(thoughts, malformedThoughts)
             if (usage?.has("cachedContentTokenCount") == true) {
                 val cached = count(usage, "cachedContentTokenCount")
                 meters += meter(UsageMeterComponent.CACHED_INPUT, cached)
