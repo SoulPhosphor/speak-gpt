@@ -15,7 +15,8 @@ data class ImageUsageReceipt(
     val meters: List<UsageMeter> = emptyList(),
     val amount: Double? = null,
     val currency: String? = null,
-    val amountDecimal: String? = null
+    val amountDecimal: String? = null,
+    val usageVerified: Boolean = true
 ) {
     val usd: Double? get() = amount?.takeIf { currency.equals("USD", true) }
 }
@@ -23,7 +24,28 @@ data class ImageUsageReceipt(
 object ImageUsageParser {
     private fun chargeDecimal(o: JsonObject?, name: String): String? = o?.imageText(name)
         ?.takeIf { value -> value.toBigDecimalOrNull()?.signum()?.let { it >= 0 } == true }
-    private fun count(o: JsonObject?, name: String): Double? = o?.imageNumber(name)?.takeIf { it % 1.0 == 0.0 && it <= Long.MAX_VALUE.toDouble() }
+    private fun count(o: JsonObject?, name: String): Double? {
+        return runCatching {
+            val field = o?.get(name)?.takeIf { it.isJsonPrimitive && !it.asJsonPrimitive.isBoolean } ?: return null
+            val exact = field.asString.toBigDecimal().longValueExact().takeIf { it >= 0 } ?: return null
+            exact.toDouble().takeIf { java.math.BigDecimal.valueOf(it).longValueExact() == exact }
+        }.getOrNull()
+    }
+
+    private fun split(o: JsonObject?, key: String, totalKey: String, countKey: String): Map<String, Double>? {
+        val details = o?.imageArray(key) ?: return null
+        val total = count(o, totalKey) ?: return null
+        val counts = linkedMapOf<String, java.math.BigDecimal>()
+        for (detail in details) {
+            val entry = detail.imageObject() ?: return null
+            val modality = entry.imageText("modality")?.lowercase()?.takeIf { it == "text" || it == "image" } ?: return null
+            val quantity = count(entry, countKey) ?: return null
+            counts[modality] = (counts[modality] ?: java.math.BigDecimal.ZERO).add(java.math.BigDecimal.valueOf(quantity))
+        }
+        if (counts.values.fold(java.math.BigDecimal.ZERO) { sum, quantity -> sum.add(quantity) }
+                .compareTo(java.math.BigDecimal.valueOf(total)) != 0) return null
+        return counts.mapValues { it.value.toDouble() }
+    }
     private fun meter(component: UsageMeterComponent, value: Double?) = UsageMeter(component,
         UsageMeterUnit.TOKEN, value, value?.let { UsageQuantitySource.PROVIDER_REPORTED })
 
@@ -31,75 +53,93 @@ object ImageUsageParser {
         val root = imageJson(body) ?: return ImageUsageReceipt(requestId = requestId, generationId = generationId)
         val usage = (root.get("usage") ?: root.get("usageMetadata")).imageObject()
         val meters = mutableListOf<UsageMeter>()
+        var usageVerified = true
         if (kind == ImageProviderKind.GEMINI && (root.has("steps") || usage?.has("total_input_tokens") == true)) {
             fun modality(key: String, name: String, total: String): Double? {
-                val details = usage?.imageArray(key) ?: return null
-                val matching = details.mapNotNull { it.imageObject() }.filter { it.imageText("modality").equals(name, true) }
-                if (matching.isNotEmpty()) return matching.map { count(it, "tokens") }
-                    .takeIf { it.all { value -> value != null } }?.sumOf { it!! }
-                // An absent modality is zero only when the full reported split reconciles.
-                val values = details.map { count(it.imageObject(), "tokens") }
-                return 0.0.takeIf { values.all { value -> value != null } && values.sumOf { it!! } == count(usage, total) }
+                val verified = split(usage, key, total, "tokens") ?: return null
+                return verified[name] ?: 0.0
             }
             fun unresolvedSplit(key: String, total: String, component: UsageMeterComponent) {
-                val details = usage?.imageArray(key) ?: return
-                val objects = details.map { it.imageObject() }
-                val quantities = objects.map { count(it, "tokens") }
-                val known = objects.all { it?.imageText("modality")?.lowercase() in setOf("text", "image") } &&
-                    quantities.all { it != null }
-                val reported = count(usage, total)
-                if (!known || (reported != null && quantities.sumOf { it!! } != reported))
-                    meters += meter(component, reported)
+                if (split(usage, key, total, "tokens") == null) {
+                    usageVerified = false
+                    meters += meter(component, count(usage, total))
+                }
             }
             unresolvedSplit("input_tokens_by_modality", "total_input_tokens", UsageMeterComponent.INPUT)
             unresolvedSplit("output_tokens_by_modality", "total_output_tokens", UsageMeterComponent.OUTPUT)
             val input = modality("input_tokens_by_modality", "text", "total_input_tokens")
-                ?: count(usage, "total_input_tokens").takeIf { usage?.imageArray("input_tokens_by_modality") == null }
             meters += meter(UsageMeterComponent.TEXT_INPUT, input)
             meters += meter(UsageMeterComponent.IMAGE_INPUT, modality("input_tokens_by_modality", "image", "total_input_tokens"))
             val imageOutput = modality("output_tokens_by_modality", "image", "total_output_tokens")
             val textOutput = modality("output_tokens_by_modality", "text", "total_output_tokens")
             val thoughts = count(usage, "total_thought_tokens")
+            val malformedThoughts = usage?.has("total_thought_tokens") == true && thoughts == null
             meters += meter(UsageMeterComponent.IMAGE_OUTPUT, imageOutput)
-            meters += meter(UsageMeterComponent.TEXT_OUTPUT, textOutput?.let { text -> thoughts?.let { text + it } ?: text })
-            // An omitted optional thought counter does not erase the reported text
-            // split. An explicitly malformed counter still prevents a complete bill.
-            if (usage?.has("total_thought_tokens") == true && thoughts == null)
-                meters += meter(UsageMeterComponent.OUTPUT, null)
-            if (usage?.imageArray("output_tokens_by_modality") == null)
-                meters += meter(UsageMeterComponent.OUTPUT, count(usage, "total_output_tokens"))
-            meters += meter(UsageMeterComponent.CACHED_TEXT_INPUT,
-                modality("cached_tokens_by_modality", "text", "total_cached_tokens")
-                    ?: 0.0.takeIf { count(usage, "total_cached_tokens") == 0.0 })
-            meters += meter(UsageMeterComponent.CACHED_IMAGE_INPUT,
-                modality("cached_tokens_by_modality", "image", "total_cached_tokens")
-                    ?: 0.0.takeIf { count(usage, "total_cached_tokens") == 0.0 })
+            meters += meter(UsageMeterComponent.TEXT_OUTPUT,
+                textOutput?.takeUnless { malformedThoughts }?.let { text -> thoughts?.let { text + it } ?: text })
+            // An omitted optional thought counter keeps the final-text split readable.
+            // A malformed one makes the billed output quantity and cost unknown.
+            if (malformedThoughts) usageVerified = false
+            val cache = split(usage, "cached_tokens_by_modality", "total_cached_tokens", "tokens")
+            val zeroCache = usage?.has("cached_tokens_by_modality") != true && count(usage, "total_cached_tokens") == 0.0
+            meters += meter(UsageMeterComponent.CACHED_TEXT_INPUT, cache?.get("text") ?: 0.0.takeIf { zeroCache || cache != null })
+            meters += meter(UsageMeterComponent.CACHED_IMAGE_INPUT, cache?.get("image") ?: 0.0.takeIf { zeroCache || cache != null })
+            if (usage?.has("cached_tokens_by_modality") == true && cache == null) usageVerified = false
             count(usage, "total_tool_use_tokens")?.takeIf { it > 0 }?.let { meters += meter(UsageMeterComponent.INPUT, it) }
         } else if (kind == ImageProviderKind.GEMINI) {
             fun modalities(key: String, input: Boolean): Boolean {
-                val details = usage?.imageArray(key) ?: return false
-                details.forEach { detail ->
-                    val o = detail.imageObject() ?: return@forEach
-                    val component = when (o.imageText("modality")) {
-                        "TEXT" -> if (input) UsageMeterComponent.TEXT_INPUT else UsageMeterComponent.TEXT_OUTPUT
-                        "IMAGE" -> if (input) UsageMeterComponent.IMAGE_INPUT else UsageMeterComponent.IMAGE_OUTPUT
-                        else -> return@forEach
-                    }
-                    meters += meter(component, count(o, "tokenCount"))
-                }
-                return details.size() > 0
+                val verified = split(usage, key, if (input) "promptTokenCount" else "candidatesTokenCount", "tokenCount")
+                    ?: return false
+                val components = if (input) listOf("text" to UsageMeterComponent.TEXT_INPUT, "image" to UsageMeterComponent.IMAGE_INPUT)
+                    else listOf("text" to UsageMeterComponent.TEXT_OUTPUT, "image" to UsageMeterComponent.IMAGE_OUTPUT)
+                components.forEach { (modality, component) -> meters += meter(component, verified[modality] ?: 0.0) }
+                return true
             }
-            if (!modalities("promptTokensDetails", true)) meters += meter(UsageMeterComponent.TEXT_INPUT, count(usage, "promptTokenCount"))
-            if (!modalities("candidatesTokensDetails", false)) meters += meter(UsageMeterComponent.OUTPUT, count(usage, "candidatesTokenCount"))
-            count(usage, "thoughtsTokenCount")?.let { thoughts ->
-                // Thinking is additional text output in Gemini's documented usage layout.
+            if (!modalities("promptTokensDetails", true)) {
+                usageVerified = false
+                meters += meter(UsageMeterComponent.INPUT, count(usage, "promptTokenCount"))
+            }
+            if (!modalities("candidatesTokensDetails", false)) {
+                usageVerified = false
+                meters += meter(UsageMeterComponent.OUTPUT, count(usage, "candidatesTokenCount"))
+            }
+            val thoughts = count(usage, "thoughtsTokenCount")
+            val malformedThoughts = usage?.has("thoughtsTokenCount") == true && thoughts == null
+            if (malformedThoughts) {
+                usageVerified = false
                 val index = meters.indexOfFirst { it.component == UsageMeterComponent.TEXT_OUTPUT }
-                if (index >= 0 && meters[index].quantity != null) meters[index] = meters[index].copy(quantity = meters[index].quantity!! + thoughts)
-                else meters += meter(UsageMeterComponent.TEXT_OUTPUT, thoughts)
+                if (index >= 0) meters[index] = meter(UsageMeterComponent.TEXT_OUTPUT, null)
+                else meters += meter(UsageMeterComponent.TEXT_OUTPUT, null)
+            } else thoughts?.let {
+                // Thinking is additional output in the provider's documented usage layout.
+                val index = meters.indexOfFirst { it.component == UsageMeterComponent.TEXT_OUTPUT }
+                if (index >= 0) meters[index] = meter(UsageMeterComponent.TEXT_OUTPUT, meters[index].quantity?.let { value -> value + it })
+                else meters += meter(UsageMeterComponent.TEXT_OUTPUT, null)
+            }
+            if (usage?.has("cachedContentTokenCount") == true) {
+                val cached = count(usage, "cachedContentTokenCount")
+                meters += meter(UsageMeterComponent.CACHED_TEXT_INPUT, cached)
+                // Cached input needs its own published rate; the standard input rate
+                // cannot establish a complete bill for a discounted request.
+                if (cached == null || cached > 0.0) usageVerified = false
             }
         } else if (kind == ImageProviderKind.OPENAI) {
             val input = usage?.get("input_tokens_details").imageObject()
             val output = usage?.get("output_tokens_details").imageObject()
+            fun reconcile(details: JsonObject?, key: String, component: UsageMeterComponent) {
+                if (details == null || usage?.has(key) != true) return
+                val text = count(details, "text_tokens")
+                val image = count(details, "image_tokens")
+                val total = count(usage, key)
+                if (text == null || image == null || total == null ||
+                    java.math.BigDecimal.valueOf(text).add(java.math.BigDecimal.valueOf(image))
+                        .compareTo(java.math.BigDecimal.valueOf(total)) != 0) {
+                    usageVerified = false
+                    meters += meter(component, total)
+                }
+            }
+            reconcile(input, "input_tokens", UsageMeterComponent.INPUT)
+            reconcile(output, "output_tokens", UsageMeterComponent.OUTPUT)
             if (input != null) {
                 meters += meter(UsageMeterComponent.TEXT_INPUT, count(input, "text_tokens"))
                 meters += meter(UsageMeterComponent.IMAGE_INPUT, count(input, "image_tokens"))
@@ -157,7 +197,7 @@ object ImageUsageParser {
         return ImageUsageReceipt(root.imageText("model") ?: root.imageText("modelVersion"),
             root.imageText("provider") ?: root.imageText("provider_name"), imageIdentifier(requestId),
             imageIdentifier(generationId) ?: imageIdentifier(root.imageText("id")), images, megapixels, meters, amount, currency,
-            chargeDecimal(charge, "cost"))
+            chargeDecimal(charge, "cost"), usageVerified)
     }
 
     /** Only a receipt with the exact provider-issued identity can enrich a request. */
@@ -199,7 +239,7 @@ data class ImageUsageAttempt(
         // matches the metadata frozen for this request; requested IDs are preserved too.
         val selectedModel = billing?.model ?: receipt.model ?: model
         val sameModel = selectedModel in metadata?.resolvedIds.orEmpty()
-        var completePricing = metadata?.tariffsComplete == true
+        var completePricing = metadata?.tariffsComplete == true && receipt.usageVerified && billing?.usageVerified != false
         val tariffs = if (sameModel) metadata?.let { published ->
             if (published.endpointRecords.isEmpty()) published.tariffs else {
                 val identified = billing?.provider ?: receipt.provider

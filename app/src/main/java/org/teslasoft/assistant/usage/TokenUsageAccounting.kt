@@ -225,21 +225,21 @@ data class UsageGroup(
 data class ConversationUsageSummary(
     val groups: List<UsageGroup>
 ) {
-    val totalInputTokens: Int get() = groups.sumOf { it.inputTokens }
-    val totalOutputTokens: Int get() = groups.sumOf { it.outputTokens }
-    val totalUncachedInputTokens: Int get() = groups.sumOf { it.uncachedInputTokens }
-    val totalCachedInputTokens: Int get() = groups.sumOf { it.cachedInputTokens }
-    val totalCost: Double get() = groups.sumOf { it.totalCost }
+    val totalInputTokens: Int get() = checkedTokenSum(groups.map { it.inputTokens }) ?: 0
+    val totalOutputTokens: Int get() = checkedTokenSum(groups.map { it.outputTokens }) ?: 0
+    val totalUncachedInputTokens: Int get() = checkedTokenSum(groups.map { it.uncachedInputTokens }) ?: 0
+    val totalCachedInputTokens: Int get() = checkedTokenSum(groups.map { it.cachedInputTokens }) ?: 0
+    val totalCost: Double get() = checkedUsageSum(groups.map { it.totalCost }) ?: 0.0
     val isMultiPricing: Boolean get() = groups.size > 1
-    val hasUnknownInputTokens: Boolean get() = groups.any { it.hasUnknownInputTokens }
-    val hasUnknownOutputTokens: Boolean get() = groups.any { it.hasUnknownOutputTokens }
-    val hasUnknownUncachedInputTokens: Boolean get() = groups.any { it.hasUnknownUncachedInputTokens }
-    val hasUnknownCachedInputTokens: Boolean get() = groups.any { it.hasUnknownCachedInputTokens }
-    val hasUnknownInputCost: Boolean get() = groups.any { it.hasUnknownInputCost }
-    val hasUnknownOutputCost: Boolean get() = groups.any { it.hasUnknownOutputCost }
-    val hasUnknownUncachedInputCost: Boolean get() = groups.any { it.hasUnknownUncachedInputCost }
-    val hasUnknownCachedInputCost: Boolean get() = groups.any { it.hasUnknownCachedInputCost }
-    val hasUnknownCost: Boolean get() = groups.any { it.hasUnknownCost }
+    val hasUnknownInputTokens: Boolean get() = groups.any { it.hasUnknownInputTokens } || checkedTokenSum(groups.map { it.inputTokens }) == null
+    val hasUnknownOutputTokens: Boolean get() = groups.any { it.hasUnknownOutputTokens } || checkedTokenSum(groups.map { it.outputTokens }) == null
+    val hasUnknownUncachedInputTokens: Boolean get() = groups.any { it.hasUnknownUncachedInputTokens } || checkedTokenSum(groups.map { it.uncachedInputTokens }) == null
+    val hasUnknownCachedInputTokens: Boolean get() = groups.any { it.hasUnknownCachedInputTokens } || checkedTokenSum(groups.map { it.cachedInputTokens }) == null
+    val hasUnknownInputCost: Boolean get() = groups.any { it.hasUnknownInputCost } || checkedUsageSum(groups.map { it.inputCost }) == null
+    val hasUnknownOutputCost: Boolean get() = groups.any { it.hasUnknownOutputCost } || checkedUsageSum(groups.map { it.outputCost }) == null
+    val hasUnknownUncachedInputCost: Boolean get() = groups.any { it.hasUnknownUncachedInputCost } || checkedUsageSum(groups.map { it.uncachedInputCost }) == null
+    val hasUnknownCachedInputCost: Boolean get() = groups.any { it.hasUnknownCachedInputCost } || checkedUsageSum(groups.map { it.cachedInputCost }) == null
+    val hasUnknownCost: Boolean get() = groups.any { it.hasUnknownCost } || checkedUsageSum(groups.map { it.totalCost }) == null
 }
 
 object TokenUsageAccounting {
@@ -525,40 +525,49 @@ object TokenUsageAccounting {
                 })
             val displayModel = rows.first().model.trim().ifBlank { MODEL_NOT_REPORTED }
             val displayProvider = rows.first().provider.trim().ifBlank { PROVIDER_NOT_REPORTED }
+            val inputTokens = checkedTokenSum(rows.mapNotNull { it.inputTokens })
+            val outputTokens = checkedTokenSum(rows.mapNotNull { it.outputTokens })
+            val uncachedInputTokens = checkedTokenSum(rows.map { row ->
+                if (row.inputTokens != null && row.cachedInputTokens != null &&
+                    row.inputTokens >= row.cachedInputTokens
+                ) row.inputTokens - row.cachedInputTokens else 0
+            })
+            val cachedInputTokens = checkedTokenSum(rows.mapNotNull { it.cachedInputTokens })
+            val inputCost = checkedUsageSum(rows.mapNotNull { it.inputCost })
+            val outputCost = checkedUsageSum(rows.mapNotNull { it.outputCost })
+            val uncachedInputCost = checkedUsageSum(rows.mapNotNull { it.uncachedInputCost })
+            val cachedInputCost = checkedUsageSum(rows.mapNotNull { it.cachedInputCost })
+            val totalCost = checkedUsageSum(rows.mapNotNull { it.totalCost })
             UsageGroup(
                 model = displayModel,
                 provider = displayProvider,
-                inputTokens = rows.sumOf { it.inputTokens ?: 0 },
-                outputTokens = rows.sumOf { it.outputTokens ?: 0 },
-                uncachedInputTokens = rows.sumOf { row ->
-                    if (row.inputTokens != null && row.cachedInputTokens != null &&
-                        row.inputTokens >= row.cachedInputTokens
-                    ) row.inputTokens - row.cachedInputTokens else 0
-                },
-                cachedInputTokens = rows.sumOf { it.cachedInputTokens ?: 0 },
-                inputCost = rows.sumOf { it.inputCost ?: 0.0 },
-                outputCost = rows.sumOf { it.outputCost ?: 0.0 },
-                uncachedInputCost = rows.sumOf { it.uncachedInputCost ?: 0.0 },
-                cachedInputCost = rows.sumOf { it.cachedInputCost ?: 0.0 },
-                totalCost = rows.sumOf { it.totalCost ?: 0.0 },
+                inputTokens = inputTokens ?: 0,
+                outputTokens = outputTokens ?: 0,
+                uncachedInputTokens = uncachedInputTokens ?: 0,
+                cachedInputTokens = cachedInputTokens ?: 0,
+                inputCost = inputCost ?: 0.0,
+                outputCost = outputCost ?: 0.0,
+                uncachedInputCost = uncachedInputCost ?: 0.0,
+                cachedInputCost = cachedInputCost ?: 0.0,
+                totalCost = totalCost ?: 0.0,
                 inputPricePerToken = inputPrices.singleOrNull()
                     ?.takeIf { rows.all { it.inputPricePerToken != null } },
                 outputPricePerToken = outputPrices.singleOrNull()
                     ?.takeIf { rows.all { it.outputPricePerToken != null } },
                 cachedInputPricePerToken = cachedInputPrices.singleOrNull()
                     ?.takeIf { rows.all { it.cachedInputPricePerToken != null } },
-                hasUnknownInputTokens = rows.any { it.inputTokens == null },
-                hasUnknownOutputTokens = rows.any { it.outputTokens == null },
-                hasUnknownUncachedInputTokens = rows.any {
+                hasUnknownInputTokens = inputTokens == null || rows.any { it.inputTokens == null },
+                hasUnknownOutputTokens = outputTokens == null || rows.any { it.outputTokens == null },
+                hasUnknownUncachedInputTokens = uncachedInputTokens == null || rows.any {
                     it.inputTokens == null || it.cachedInputTokens == null ||
                         it.cachedInputTokens > it.inputTokens
                 },
-                hasUnknownCachedInputTokens = rows.any { it.cachedInputTokens == null },
-                hasUnknownInputCost = rows.any { it.inputCost == null },
-                hasUnknownOutputCost = rows.any { it.outputCost == null },
-                hasUnknownUncachedInputCost = rows.any { it.uncachedInputCost == null },
-                hasUnknownCachedInputCost = rows.any { it.cachedInputCost == null },
-                hasUnknownCost = rows.any { it.totalCost == null },
+                hasUnknownCachedInputTokens = cachedInputTokens == null || rows.any { it.cachedInputTokens == null },
+                hasUnknownInputCost = inputCost == null || rows.any { it.inputCost == null },
+                hasUnknownOutputCost = outputCost == null || rows.any { it.outputCost == null },
+                hasUnknownUncachedInputCost = uncachedInputCost == null || rows.any { it.uncachedInputCost == null },
+                hasUnknownCachedInputCost = cachedInputCost == null || rows.any { it.cachedInputCost == null },
+                hasUnknownCost = totalCost == null || rows.any { it.totalCost == null },
                 hasVariableInputPricing = inputPrices.size > 1 || hasCacheWritePricing,
                 hasVariableOutputPricing = outputPrices.size > 1,
                 hasVariableCachedInputPricing = cachedInputPrices.size > 1,

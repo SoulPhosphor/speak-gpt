@@ -12,6 +12,26 @@ import java.math.BigDecimal
 import java.math.MathContext
 import java.util.Locale
 
+/** Null means the sum cannot be represented by the existing summary field. */
+internal fun checkedUsageSum(values: Iterable<Double>): Double? {
+    var sum = BigDecimal.ZERO
+    for (value in values) {
+        if (!value.isFinite() || value < 0.0) return null
+        sum = sum.add(BigDecimal.valueOf(value))
+    }
+    return sum.toDouble().takeIf { it.isFinite() }
+}
+
+internal fun checkedTokenSum(values: Iterable<Int>): Int? {
+    var sum = 0L
+    for (value in values) {
+        if (value < 0) return null
+        sum += value.toLong()
+        if (sum > Int.MAX_VALUE) return null
+    }
+    return sum.toInt()
+}
+
 /**
  * What a billed quantity of a non-token request measures. Text-token requests
  * (Chat, Summarizing) keep their token fields; this is for requests a service
@@ -175,13 +195,15 @@ object MeteredUsageAccounting {
                 String.format(Locale.US, "%.15g", perUnit) + "|" + currency
             }
             val single = distinct.singleOrNull()?.takeIf { prices.size == matching.size }?.third
+            val quantity = checkedUsageSum(present.mapNotNull { it.quantity })
+            val cost = checkedUsageSum(present.mapNotNull { it.cost })
             UsageMeterTotal(
                 component = component,
                 unit = unit,
-                quantity = present.sumOf { it.quantity ?: 0.0 },
-                hasUnknownQuantity = matching.any { it?.quantity == null },
-                cost = present.sumOf { it.cost ?: 0.0 },
-                hasUnknownCost = matching.any { it?.cost == null },
+                quantity = quantity ?: 0.0,
+                hasUnknownQuantity = quantity == null || matching.any { it?.quantity == null },
+                cost = cost ?: 0.0,
+                hasUnknownCost = cost == null || matching.any { it?.cost == null },
                 priceAmount = single?.priceAmount,
                 priceQuantity = single?.priceQuantity,
                 currency = single?.currency,
