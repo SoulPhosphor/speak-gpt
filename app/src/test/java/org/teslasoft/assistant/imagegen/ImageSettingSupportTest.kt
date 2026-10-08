@@ -325,6 +325,19 @@ class ImageSettingSupportTest {
         assertEquals(mapOf("resolution" to "3K"), ImageRequestOptions.prepare(request(mapOf("resolution" to "3K")), model, evidence).parameters)
         // If the default is not published, do not guess that omission means high.
         assertTrue(ImageRequestOptions.prepare(request(), metadata(quality("high", "draft")), evidence).parameters.isEmpty())
+        // Numeric defaults must match the actual numeric value, not its display spelling.
+        val numeric = metadata(ImageParameter("quality", ImageParameterType.NUMBER, listOf("1.0", "3.0"), defaultValue = "3.0"))
+        val numericRequest = request(mapOf("quality" to "3.00"))
+        val numericRejection = CatalogImageAdapter.confirmedIncompatibility(400,
+            """{"error":{"code":"unsupported_value","param":"quality"}}""", numericRequest)!!
+        ImageCatalogClient.rememberIncompatibility(endpoint, "numeric", numericRejection, numeric)
+        val numericEvidence = ImageCatalogClient.confirmedIncompatibilities(endpoint, "numeric")
+        expectBlocked { ImageRequestOptions.prepare(request(), numeric, numericEvidence) }
+        assertEquals(listOf("1.0"), ImageSettingSupport.rows(emptyMap(), numeric, numericEvidence).single().choices)
+        ImageCatalogClient.refreshedSettings(endpoint, metadata(ImageParameter("quality", ImageParameterType.NUMBER,
+            listOf("1", "3"), defaultValue = "3")).copy(id = "numeric"))
+        assertEquals(numericEvidence, ImageCatalogClient.confirmedIncompatibilities(endpoint, "numeric"))
+        assertEquals("3.00", numericRequest.parameters["quality"])
     }
 
     @Test fun unchangedAuthoritativeMetadataDoesNotRepeatAConfirmedRejectedRequest() {

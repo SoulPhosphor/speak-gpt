@@ -88,7 +88,8 @@ object ImageCatalogClient {
     private fun publishedSettings(metadata: ImageModelMetadata?): PublishedSettings? {
         if (metadata?.settingsVerified != true) return null
         fun normalized(parameters: List<ImageParameter>) = parameters.map { parameter ->
-            parameter.copy(values = parameter.values.sorted(), requiresValues = parameter.requiresValues.mapValues { it.value.sorted() })
+            parameter.copy(values = parameter.values.map(parameter::canonicalValue).sorted(),
+                defaultValue = parameter.defaultValue?.let(parameter::canonicalValue), requiresValues = parameter.requiresValues.mapValues { it.value.sorted() })
         }.toSet()
         return PublishedSettings(normalized(metadata.parameters), metadata.endpointRecords.map { normalized(it.parameters) }.toSet(),
             metadata.requiresExplicitOutputFormat)

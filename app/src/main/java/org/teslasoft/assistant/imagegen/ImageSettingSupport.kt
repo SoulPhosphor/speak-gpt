@@ -70,7 +70,7 @@ object ImageSettingSupport {
             val published = if (parameter?.type == ImageParameterType.BOOLEAN)
                 listOf("true", "false").filter(parameter::accepts) else parameter?.selectableValues().orEmpty()
             val choices = published.filter { value -> rejections.none {
-                it.parameter == key && it.selection != null && it.matches(effective + (key to value))
+                it.parameter == key && it.selection != null && it.matches(ImageRequestOptions.effectiveParameters(effective + (key to value), metadata))
             } }
             val availability = when {
                 unavailable -> ImageSettingAvailability.UNSUPPORTED_PARAMETER

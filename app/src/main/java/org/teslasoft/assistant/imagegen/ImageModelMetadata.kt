@@ -40,6 +40,13 @@ data class ImageParameter(
     /** Published dependencies; an absent dependent setting is checked against its published default. */
     val requiresValues: Map<String, List<String>> = emptyMap()
 ) {
+    /** Request numbers have numeric identity; saved/displayed spelling remains untouched. */
+    internal fun canonicalValue(value: String): String = when (type) {
+        ImageParameterType.INTEGER -> imageInteger(value)?.toString() ?: value
+        ImageParameterType.NUMBER -> runCatching { value.toBigDecimal().stripTrailingZeros().toPlainString() }.getOrDefault(value)
+        else -> value
+    }
+
     fun selectableValues(): List<String> = if (key == "output_format")
         values.filter(ImageFormat::supportsOutputName) else values
 
@@ -422,8 +429,11 @@ object ImageRequestOptions {
     }
 
     /** Only published defaults are known effective values; unknown defaults stay unknown. */
-    internal fun effectiveParameters(options: Map<String, String>, metadata: ImageModelMetadata?): Map<String, String> =
-        metadata?.parameters.orEmpty().mapNotNull { field -> field.defaultValue?.let { field.key to it } }.toMap() + options
+    internal fun effectiveParameters(options: Map<String, String>, metadata: ImageModelMetadata?): Map<String, String> {
+        val fields = metadata?.parameters.orEmpty().associateBy { it.key }
+        val defaults = fields.values.mapNotNull { field -> field.defaultValue?.let { field.key to it } }.toMap()
+        return (defaults + options).mapValues { (key, value) -> fields[key]?.canonicalValue(value) ?: value }
+    }
 
     fun prepare(request: ImageGenerationRequest, metadata: ImageModelMetadata?,
         rejections: List<ImageOptionRejection> = emptyList()): ImageGenerationRequest = request.copy(
