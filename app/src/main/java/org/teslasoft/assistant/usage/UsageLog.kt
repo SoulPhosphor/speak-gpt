@@ -246,9 +246,17 @@ object UsageLog {
                 val id = o.get("id")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
                     ?.asString?.takeIf { it.isNotBlank() } ?: return null
                 val recordJson = o.get("record")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+                fun recordText(key: String): String? = recordJson.get(key)
+                    ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+                // Gson bypasses Kotlin constructors, so required strings need explicit validation.
+                val model = recordText("model") ?: return null
+                val provider = recordText("provider") ?: return null
+                val source = if (recordJson.has("source")) recordText("source") ?: return null
+                    else TokenCountSource.ESTIMATED_CL100K.storedValue
                 // Entries written before metered usage have no meters and decode as before.
                 val record = gson.fromJson(recordJson, TurnUsageRecord::class.java)
-                    ?.copy(meters = UsageMeterCodec.decode(recordJson.get("meters"))) ?: return null
+                    ?.copy(model = model, provider = provider, source = source,
+                        meters = UsageMeterCodec.decode(recordJson.get("meters"))) ?: return null
                 UsageLogEntry(
                     id = id,
                     category = UsageCategory.fromKey(o.get("category")?.asString),

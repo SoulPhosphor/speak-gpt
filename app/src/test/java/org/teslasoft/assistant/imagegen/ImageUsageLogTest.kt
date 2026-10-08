@@ -6,6 +6,40 @@ import org.teslasoft.assistant.usage.*
 import kotlinx.coroutines.runBlocking
 
 class ImageUsageLogTest {
+    @Test fun requiredUsageRecordStringsAreValidatedBeforeRecovery() {
+        val valid = UsageLog.encode(UsageLog.EMPTY.putRequest(entry()))
+        val originals = mutableListOf<String>()
+        for (key in listOf("model", "provider", "source")) {
+            for (bad in listOf("null", "7", "true", "{}", "[]")) {
+                val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
+                root.getAsJsonArray("entries").first().asJsonObject.getAsJsonObject("record")
+                    .add(key, com.google.gson.JsonParser.parseString(bad))
+                originals += root.toString()
+            }
+        }
+        for (key in listOf("model", "provider")) {
+            val root = com.google.gson.JsonParser.parseString(valid).asJsonObject
+            root.getAsJsonArray("entries").first().asJsonObject.getAsJsonObject("record").remove(key)
+            originals += root.toString()
+        }
+        val empty = com.google.gson.JsonParser.parseString(valid).asJsonObject
+        empty.getAsJsonArray("entries").first().asJsonObject.add("record", com.google.gson.JsonObject())
+        originals += empty.toString()
+        val receipt = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
+        for (original in originals) {
+            assertNull(UsageLog.decode(original))
+            val restored = UsageLog.decode(UsageLog.encode(UsageLog.requestUpdate(original, receipt, existingOnly = true)!!))!!
+            assertEquals(original, restored.quarantinedLog)
+            assertEquals(1, TokenUsageAccounting.aggregate(restored.entries.map { it.record }).groups.size)
+            assertEquals("real-id", restored.entries.single().record.requestId)
+        }
+        val legacy = com.google.gson.JsonParser.parseString(valid).asJsonObject
+        legacy.getAsJsonArray("entries").first().asJsonObject.getAsJsonObject("record").remove("source")
+        val decoded = UsageLog.decode(legacy.toString())!!
+        assertEquals(TokenCountSource.ESTIMATED_CL100K.storedValue, decoded.entries.single().record.source)
+        assertEquals(1, TokenUsageAccounting.aggregate(decoded.entries.map { it.record }).groups.size)
+    }
+
     @Test fun malformedEntriesQuarantineTheWholeLogInsteadOfSilentlyDiscardingEvidence() {
         val valid = UsageLog.encode(UsageLog.EMPTY.putRequest(entry()))
         val receipt = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
