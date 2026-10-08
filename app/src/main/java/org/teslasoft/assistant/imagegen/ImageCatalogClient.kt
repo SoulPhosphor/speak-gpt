@@ -96,7 +96,10 @@ object ImageCatalogClient {
 
     fun rememberIncompatibility(endpoint: ApiEndpointObject, model: String, rejection: ImageOptionRejection,
         metadata: ImageModelMetadata? = null) {
-        val entry = CachedRejection(rejection, publishedSettings(metadata))
+        val contextual = rejection.selection?.let {
+            rejection.copy(selection = ImageRequestOptions.effectiveParameters(it, metadata))
+        } ?: rejection
+        val entry = CachedRejection(contextual, publishedSettings(metadata))
         incompatibilities.compute(key(endpoint) to model) { _, previous -> (previous.orEmpty() + entry).distinct() }
     }
 

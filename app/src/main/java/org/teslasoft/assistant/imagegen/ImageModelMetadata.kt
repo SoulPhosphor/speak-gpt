@@ -421,6 +421,10 @@ object ImageRequestOptions {
         return request.copy(parameters = request.parameters.filterKeys { it in known })
     }
 
+    /** Only published defaults are known effective values; unknown defaults stay unknown. */
+    internal fun effectiveParameters(options: Map<String, String>, metadata: ImageModelMetadata?): Map<String, String> =
+        metadata?.parameters.orEmpty().mapNotNull { field -> field.defaultValue?.let { field.key to it } }.toMap() + options
+
     fun prepare(request: ImageGenerationRequest, metadata: ImageModelMetadata?,
         rejections: List<ImageOptionRejection> = emptyList()): ImageGenerationRequest = request.copy(
         parameters = resolve(forMetadataFallback(request, metadata), metadata, rejections),
@@ -501,7 +505,7 @@ object ImageRequestOptions {
                 options.remove(key)
             }
         }
-        if (rejections.any { it.selection != null && it.matches(options) }) throw ImageGenerationException(
+        if (rejections.any { it.selection != null && it.matches(effectiveParameters(options, metadata)) }) throw ImageGenerationException(
             ImageErrorCause.UNSUPPORTED_OPTION, "the provider rejected this combination of image settings; change the selected settings before generating")
         metadata?.parameters.orEmpty().forEach { field ->
             if (field.required && options[field.key] == null && field.defaultValue == null) throw ImageGenerationException(

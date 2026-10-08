@@ -305,6 +305,28 @@ class ImageSettingSupportTest {
         assertEquals(ImageSettingAvailability.SUPPORTED, ImageSettingSupport.rows(changed, model, listOf(rejection)).first().availability)
     }
 
+    @Test fun aRejectedCombinationCannotRecurThroughAKnownPublishedDefault() {
+        val endpoint = ApiEndpointObject("test", "https://default-evidence.example/v1/", "key", id = "default-evidence")
+        val model = metadata(quality("high", "draft").copy(defaultValue = "high"),
+            ImageParameter("resolution", ImageParameterType.ENUM, listOf("17K", "3K")))
+        val submitted = request(mapOf("quality" to "high", "resolution" to "17K"))
+        val rejection = CatalogImageAdapter.confirmedIncompatibility(400,
+            """{"error":{"code":"unsupported_value","param":"quality"}}""", submitted)!!
+        ImageCatalogClient.rememberIncompatibility(endpoint, "future", rejection, model)
+        val evidence = ImageCatalogClient.confirmedIncompatibilities(endpoint, "future")
+        // Automatic omits quality, but this model publishes the same rejected effective value.
+        val automatic = mapOf("resolution" to "17K")
+        expectBlocked { ImageRequestOptions.prepare(request(automatic), model, evidence) }
+        assertEquals(ImageSettingAvailability.UNSUPPORTED_VALUE,
+            ImageSettingSupport.rows(automatic, model, evidence).first().availability)
+        assertEquals(listOf("draft"), ImageSettingSupport.rows(automatic, model, evidence).first().choices)
+        val changed = automatic + ("quality" to "draft")
+        assertEquals(changed, ImageRequestOptions.prepare(request(changed), model, evidence).parameters)
+        assertEquals(mapOf("resolution" to "3K"), ImageRequestOptions.prepare(request(mapOf("resolution" to "3K")), model, evidence).parameters)
+        // If the default is not published, do not guess that omission means high.
+        assertTrue(ImageRequestOptions.prepare(request(), metadata(quality("high", "draft")), evidence).parameters.isEmpty())
+    }
+
     @Test fun unchangedAuthoritativeMetadataDoesNotRepeatAConfirmedRejectedRequest() {
         val endpoint = ApiEndpointObject("test", "https://same-metadata.example/v1/", "key", id = "same-settings-evidence")
         val model = metadata(quality("high"))

@@ -61,8 +61,8 @@ object ImageSettingSupport {
         rejections: List<ImageOptionRejection> = emptyList()): List<ImageSettingState> {
         val parameters = metadata?.parameters.orEmpty().associateBy { it.key }
         // Rejection contexts contain dispatched options, so exclude other stale saved fields here too.
-        val effective = saved.filter { (key, value) -> parameters[key]?.accepts(value) == true &&
-            rejections.none { it.parameter == key && it.selection == null } }
+        val effective = ImageRequestOptions.effectiveParameters(saved.filter { (key, value) -> parameters[key]?.accepts(value) == true &&
+            rejections.none { it.parameter == key && it.selection == null } }, metadata)
         return (parameters.keys + saved.keys).map { key ->
             val parameter = parameters[key]
             val selected = saved[key]
@@ -76,9 +76,9 @@ object ImageSettingSupport {
                 unavailable -> ImageSettingAvailability.UNSUPPORTED_PARAMETER
                 parameter == null -> if (metadata?.settingsVerified == true)
                     ImageSettingAvailability.UNSUPPORTED_PARAMETER else ImageSettingAvailability.UNVERIFIED
-                selected != null && (!parameter.accepts(selected) ||
-                    (key == "output_format" && !ImageFormat.supportsOutputName(selected)) ||
-                    rejections.any { it.parameter == key && it.selection != null && it.matches(effective) }) ->
+                (selected != null && (!parameter.accepts(selected) ||
+                    (key == "output_format" && !ImageFormat.supportsOutputName(selected)))) ||
+                    rejections.any { it.parameter == key && it.selection != null && it.matches(effective) } ->
                     ImageSettingAvailability.UNSUPPORTED_VALUE
                 else -> ImageSettingAvailability.SUPPORTED
             }
