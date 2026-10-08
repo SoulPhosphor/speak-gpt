@@ -193,6 +193,17 @@ class ImageSettingSupportTest {
         expectBlocked { ImageRequestOptions.prepare(request().copy(quality = ImageQuality.HIGH), model, listOf(ImageOptionRejection("quality"))) }
     }
 
+    @Test fun unavailableMetadataExplainsUnverifiedOverrideSupportWithoutSubstitutingDefaults() {
+        for (override in listOf(request().copy(shape = ImageShape.LANDSCAPE), request().copy(quality = ImageQuality.HIGH))) {
+            try { ImageRequestOptions.prepare(override, null); fail("explicit overrides must remain strict") }
+            catch (error: ImageGenerationException) {
+                assertEquals(ImageErrorCause.UNSUPPORTED_OPTION, error.errorCause)
+                assertTrue(error.sanitizedDetail!!.contains("unverified"))
+                assertTrue(error.sanitizedDetail!!.contains("refresh Image Generation Settings"))
+            }
+        }
+    }
+
     @Test fun requiredSettingsWithoutAUsableDefaultStopBeforeDispatch() {
         val field = ImageParameter("strength", ImageParameterType.NUMBER, minimum = 0.25, maximum = 0.75, required = true)
         val model = metadata(field)

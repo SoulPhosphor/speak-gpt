@@ -465,7 +465,8 @@ object ImageRequestOptions {
                         }
                     }?.let { field to it }
                 } ?: throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION,
-                    "the selected model does not publish a supported value for this shape")
+                    if (metadata?.settingsVerified == true) "the selected model does not publish a supported value for this shape"
+                    else "shape support is currently unverified; refresh Image Generation Settings before generating")
             val (field, value) = selected
             // An explicit pixel size takes precedence over both other controls.
             // Aspect ratio combines with a resolution tier, but not a saved pixel size.
@@ -483,7 +484,10 @@ object ImageRequestOptions {
         if (request.quality != ImageQuality.AUTOMATIC) {
             val field = metadata?.parameters?.firstOrNull { it.key == "quality" }
             val value = field?.values?.firstOrNull { it.equals(request.quality.storedValue, true) }
-                ?: throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION, "the selected model does not publish this quality")
+                ?: throw ImageGenerationException(ImageErrorCause.UNSUPPORTED_OPTION,
+                    if (field == null && metadata?.settingsVerified != true)
+                        "quality support is currently unverified; refresh Image Generation Settings before generating"
+                    else "the selected model does not publish this quality")
             options[field.key] = value
             explicitKeys += field.key
         }
