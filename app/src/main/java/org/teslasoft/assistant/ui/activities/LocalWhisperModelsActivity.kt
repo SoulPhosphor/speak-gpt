@@ -302,9 +302,12 @@ class LocalWhisperModelsActivity : SettingsPageActivity() {
                 val wasActive = preferences?.getActiveLocalWhisperModel() == model.id
                 LocalWhisperStorage.delete(this, model)
                 if (wasActive) {
-                    // Drop the selection and free the native context so the
-                    // next transcription doesn't point at a deleted file.
-                    preferences?.setActiveLocalWhisperModel("")
+                    // Free the native context so the next transcription doesn't
+                    // point at a deleted file. A remaining installed model takes
+                    // over, the same way the first download becomes active, so an
+                    // installed model is always ready to use.
+                    preferences?.setActiveLocalWhisperModel(
+                        LocalWhisperStorage.installedModels(this).firstOrNull()?.id ?: "")
                     LocalWhisperEngine.get().release()
                 }
                 refreshAll()
