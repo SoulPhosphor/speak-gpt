@@ -318,9 +318,14 @@ class ChatPresentationContractTest {
         assertTrue(adapter.contains("updateSpeakerPlacement(placeOnStart)"))
         assertTrue(adapter.contains("constrainToSpeakerEdge(message, placeOnStart)"))
         assertTrue(adapter.contains("iconParams.setMarginStart(portraitEdge)"))
-        assertTrue(chatActivity.contains(
-            "Rebind existing rows so Staggered Responses takes effect at once."
-        ))
+        assertTrue(chatActivity.contains("adapter?.refreshAppearanceIfChanged()"))
+        val snapshotStart = adapter.indexOf("private fun rowAppearance()")
+        val snapshotEnd = adapter.indexOf("private var renderedRowAppearance", snapshotStart)
+        assertTrue(adapter.substring(snapshotStart, snapshotEnd).contains("preferences.getStaggeredResponses()"))
+        assertTrue(adapter.contains("if (current == renderedRowAppearance) return"))
+        val refreshStart = adapter.indexOf("fun refreshAppearanceIfChanged()")
+        val refreshEnd = adapter.indexOf("\n    }", refreshStart)
+        assertTrue(adapter.substring(refreshStart, refreshEnd).contains("notifyDataSetChanged()"))
     }
 
 }
