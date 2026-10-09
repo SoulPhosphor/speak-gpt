@@ -786,6 +786,13 @@ horizontal margins, vertical padding, and gaps. Do not put a local background,
 background tint, border color, corner size, or copied segment spacing into a
 Quick Settings layout or its Kotlin controller.
 
+The segment fill is `?attr/colorSurfaceContainerHigh`, the neutral elevated
+surface role, for every group and the standalone card (owner correction,
+Oct 8 2026). Do not use `colorSecondaryContainer`: that accent role produced
+the unwanted olive-green backgrounds when the connected groups were redone.
+Keep the fill in the shared segment drawables; do not restore the old
+per-view Kotlin surface tints or hardcode a blue for one palette.
+
 The current vertical order is intentional: identity and character choices;
 model/provider/endpoint routing; memory controls; independent roleplay context;
 the summarizer and its Summary, Compaction, and Image prompts (owner ruling,
