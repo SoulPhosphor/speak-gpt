@@ -1216,6 +1216,31 @@ but blank before a name is selected.
 Typography comes from `ChatNameStyle.apply`, the same resolver used by chat.
 All placement, text appearance, shapes, and spacing belong to XML styles/dimens.
 
+## Edit Companion: Chat Signature Style and linked lorebooks
+
+The **Chat Signature Style** section (owner ruling, Oct 9 2026) is, in order:
+the `Widget.App.Section.Title` heading; the companion's name centered in
+`Widget.App.CompanionEditor.SignaturePreview`; and a title-only navigation
+row, **Change Chat Name Style**, in `Widget.App.CompanionEditor.SignatureRow`
+(the shared `Row.TitleOnly` pieces, inset to the editor's field edges). The
+preview inherits `Widget.App.NameStyle.Preview`, and its typography comes from
+`ChatNameStyle.apply` with the companion's saved Name Style override, else
+the Appearance companion default — exactly what chat shows. The row opens
+Name Style with this companion already chosen. Edit Companion has no font or
+size controls of its own; Name Style is the only place a companion's name
+style is edited, and saving the companion never rewrites that override.
+
+Each linked (additional) lorebook is a `Widget.App.CompanionEditor.LoreBookCard`:
+the Quick Settings standalone segment surface and outline
+(`bg_quick_settings_segment_standalone`: `colorSurfaceContainerHigh` fill,
+`colorOutlineVariant` stroke). Never use `colorSecondaryContainer` or the
+device accent for this card. The book name uses `LoreBookName` (normal app
+text color, bold); the count/tag/description line uses `LoreBookDetails`
+(the shared row subtitle color). The gear, unlink, and delete actions use
+`LoreBookAction`, a bare borderless icon inheriting `Widget.App.QuickTile.EditButton`
+(no background shape). Spacing lives in the `companion_editor_*` and
+`companion_lorebook_*` dimens.
+
 ## Search status
 
 `Widget.App.Search.Status` is the centered subordinate status text used for

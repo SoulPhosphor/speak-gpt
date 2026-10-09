@@ -37,6 +37,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
+import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -86,9 +87,6 @@ class EditPersonaActivity : SettingsPageActivity() {
         const val EXTRA_AUTOLOAD = "autoLoadLastLoreBooks"
         const val EXTRA_LAST_USED_LOREBOOKS = "lastUsedLoreBookIds"
         const val EXTRA_AVATAR_REF = "avatarRef"
-        const val EXTRA_CHAT_NAME_FONT_ID = "chatNameFontId"
-        const val EXTRA_CHAT_NAME_SIZE_SP = "chatNameSizeSp"
-        const val EXTRA_CHAT_NAME_FONT_STYLE = "chatNameFontStyle"
         const val EXTRA_POSITION = "position"
         const val EXTRA_ID = "id"
 
@@ -114,9 +112,6 @@ class EditPersonaActivity : SettingsPageActivity() {
                 .putExtra(EXTRA_AUTOLOAD, persona.autoLoadLastLoreBooks)
                 .putExtra(EXTRA_LAST_USED_LOREBOOKS, persona.lastUsedLoreBookIds)
                 .putExtra(EXTRA_AVATAR_REF, persona.avatarRef)
-                .putExtra(EXTRA_CHAT_NAME_FONT_ID, persona.chatNameFontId)
-                .putExtra(EXTRA_CHAT_NAME_SIZE_SP, persona.chatNameSizeSp)
-                .putExtra(EXTRA_CHAT_NAME_FONT_STYLE, persona.chatNameFontStyle)
                 .putExtra(EXTRA_POSITION, position)
         }
 
@@ -138,10 +133,7 @@ class EditPersonaActivity : SettingsPageActivity() {
                 autoLoadLastLoreBooks = data.getBooleanExtra(EXTRA_AUTOLOAD, false),
                 lastUsedLoreBookIds = data.getStringExtra(EXTRA_LAST_USED_LOREBOOKS) ?: "",
                 avatarRef = data.getStringExtra(EXTRA_AVATAR_REF) ?: "",
-                id = data.getStringExtra(EXTRA_ID) ?: "",
-                chatNameFontId = data.getStringExtra(EXTRA_CHAT_NAME_FONT_ID) ?: "",
-                chatNameSizeSp = data.getIntExtra(EXTRA_CHAT_NAME_SIZE_SP, 0),
-                chatNameFontStyle = data.getStringExtra(EXTRA_CHAT_NAME_FONT_STYLE) ?: ""
+                id = data.getStringExtra(EXTRA_ID) ?: ""
             )
         }
     }
@@ -153,8 +145,7 @@ class EditPersonaActivity : SettingsPageActivity() {
     private var fieldLabel: TextInputEditText? = null
     private var fieldActivationPrompt: TextView? = null
     private var fieldCoreLoreBook: TextView? = null
-    private var fieldChatNameFont: TextView? = null
-    private var fieldChatNameSize: TextView? = null
+    private var textSignaturePreview: TextView? = null
     private var additionalLoreBooksList: LinearLayout? = null
     private var btnAddLoreBooks: MaterialButton? = null
     private var checkboxAutoload: MaterialCheckBox? = null
@@ -175,11 +166,6 @@ class EditPersonaActivity : SettingsPageActivity() {
     private var selectedCoreLoreBookId: String = ""
     private var additionalLoreBookIds: ArrayList<String> = arrayListOf()
     private var selectedAvatarRef: String = ""
-    private var selectedChatNameFontId: String = ""
-    private var selectedChatNameSizeSp: Int = 0
-    // Set only on the Name Style screen; carried through so a save keeps it.
-    private var chatNameFontStyle: String = ""
-
 
     // Registered as an activity field so a pending gallery result survives
     // recreation (owner-approved lifecycle safety carried over from Phase 7).
@@ -234,8 +220,7 @@ class EditPersonaActivity : SettingsPageActivity() {
         fieldLabel = findViewById(R.id.field_label)
         fieldActivationPrompt = findViewById(R.id.field_activation_prompt)
         fieldCoreLoreBook = findViewById(R.id.field_core_lorebook)
-        fieldChatNameFont = findViewById(R.id.field_chat_name_font)
-        fieldChatNameSize = findViewById(R.id.field_chat_name_size)
+        textSignaturePreview = findViewById(R.id.text_signature_preview)
         additionalLoreBooksList = findViewById(R.id.additional_lorebooks_list)
         btnAddLoreBooks = findViewById(R.id.btn_add_lorebooks)
         checkboxAutoload = findViewById(R.id.checkbox_autoload_lorebooks)
@@ -288,9 +273,6 @@ class EditPersonaActivity : SettingsPageActivity() {
         selectedCoreLoreBookId = intent.getStringExtra(EXTRA_CORE_LOREBOOK) ?: ""
         additionalLoreBookIds = PersonaObject.splitIds(intent.getStringExtra(EXTRA_ADDITIONAL_LOREBOOKS) ?: "")
         checkboxAutoload?.isChecked = intent.getBooleanExtra(EXTRA_AUTOLOAD, false)
-        selectedChatNameFontId = intent.getStringExtra(EXTRA_CHAT_NAME_FONT_ID) ?: ""
-        selectedChatNameSizeSp = intent.getIntExtra(EXTRA_CHAT_NAME_SIZE_SP, 0)
-        chatNameFontStyle = intent.getStringExtra(EXTRA_CHAT_NAME_FONT_STYLE) ?: ""
 
         // Restore the pending pick across recreation; else the saved avatarRef.
         selectedAvatarRef = savedInstanceState?.getString(STATE_AVATAR_REF)
@@ -301,13 +283,13 @@ class EditPersonaActivity : SettingsPageActivity() {
         updateAvatarUi()
 
         fieldLabel?.setOnFocusChangeListener { _, _ -> fieldLabelError?.visibility = View.GONE }
+        fieldLabel?.doAfterTextChanged { updateSignaturePreview() }
 
         fieldActivationPrompt?.setOnClickListener { showActivationPromptChooser() }
         fieldCoreLoreBook?.setOnClickListener { showCoreLoreBookChooser() }
-        fieldChatNameFont?.setOnClickListener { showChatNameFontChooser() }
-        fieldChatNameSize?.setOnClickListener { showChatNameSizeChooser() }
-
-        updateChatNameStyleLabels()
+        findViewById<View>(R.id.row_change_chat_name_style)?.setOnClickListener {
+            startActivity(NameStyleActivity.companionIntent(this, personaId))
+        }
 
         btnAddLoreBooks?.setOnClickListener {
             val intent = Intent(this, LoreBooksListActivity::class.java)
@@ -340,6 +322,8 @@ class EditPersonaActivity : SettingsPageActivity() {
         updateCoreLoreBookLabel()
         renderAdditionalLoreBooks()
         updateAvatarUi()
+        // The style may have just been changed on the Name Style screen.
+        refreshSignatureStyle()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -379,41 +363,19 @@ class EditPersonaActivity : SettingsPageActivity() {
 
     /* --------------------------- choosers --------------------------- */
 
-    private fun updateChatNameStyleLabels() {
-        fieldChatNameFont?.text = if (selectedChatNameFontId.isEmpty()) {
-            getString(R.string.appearance_use_default)
-        } else {
-            ChatNameStyle.fontLabel(selectedChatNameFontId)
-        }
-        fieldChatNameSize?.text = if (selectedChatNameSizeSp <= 0) {
-            getString(R.string.appearance_use_default)
-        } else {
-            getString(R.string.appearance_size_sp, selectedChatNameSizeSp)
-        }
+    /** The companion's name exactly as chat shows it: its saved Name Style
+     *  override, else the Appearance companion default. The style is re-read
+     *  on resume; typing in the name field only updates the text. */
+    private fun refreshSignatureStyle() {
+        val preview = textSignaturePreview ?: return
+        val stored = if (personaId.isEmpty()) null
+            else PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+        ChatNameStyle.apply(preview, this, ChatNameStyle.ai(Preferences.getPreferences(this, ""), stored))
+        updateSignaturePreview()
     }
 
-    private fun showChatNameFontChooser() {
-        val ids = listOf("") + ChatNameStyle.fonts.map { it.id }
-        val labels = listOf(getString(R.string.appearance_use_default)) +
-            ChatNameStyle.fonts.map { it.displayName }
-        val current = ids.indexOf(selectedChatNameFontId).coerceAtLeast(0)
-        val dropdown = fieldChatNameFont ?: return
-        AppDropdown.show(dropdown, labels, current) { position ->
-            selectedChatNameFontId = ids[position]
-            updateChatNameStyleLabels()
-        }
-    }
-
-    private fun showChatNameSizeChooser() {
-        val sizes = listOf(0) + ChatNameStyle.sizeOptionsSp
-        val labels = listOf(getString(R.string.appearance_use_default)) +
-            ChatNameStyle.sizeOptionsSp.map { getString(R.string.appearance_size_sp, it) }
-        val current = sizes.indexOf(selectedChatNameSizeSp).coerceAtLeast(0)
-        val dropdown = fieldChatNameSize ?: return
-        AppDropdown.show(dropdown, labels, current) { position ->
-            selectedChatNameSizeSp = sizes[position]
-            updateChatNameStyleLabels()
-        }
+    private fun updateSignaturePreview() {
+        textSignaturePreview?.text = fieldLabel?.text?.toString().orEmpty()
     }
 
     private fun activationPromptLabel(id: String): String {
@@ -594,11 +556,17 @@ class EditPersonaActivity : SettingsPageActivity() {
             autoLoadLastLoreBooks = checkboxAutoload?.isChecked == true,
             lastUsedLoreBookIds = PersonaObject.joinIds(lastUsed),
             avatarRef = selectedAvatarRef,
-            id = personaId,
-            chatNameFontId = selectedChatNameFontId,
-            chatNameSizeSp = selectedChatNameSizeSp,
-            chatNameFontStyle = chatNameFontStyle
-        )
+            id = personaId
+        ).also { persona ->
+            // Name Style owns these overrides and writes them directly; keep
+            // whatever is saved now so this save never reverts that change.
+            if (personaId.isNotEmpty()) {
+                val stored = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+                persona.chatNameFontId = stored.chatNameFontId
+                persona.chatNameSizeSp = stored.chatNameSizeSp
+                persona.chatNameFontStyle = stored.chatNameFontStyle
+            }
+        }
     }
 
     private fun save() {
@@ -638,8 +606,6 @@ class EditPersonaActivity : SettingsPageActivity() {
             .putExtra(EXTRA_AUTOLOAD, persona.autoLoadLastLoreBooks)
             .putExtra(EXTRA_LAST_USED_LOREBOOKS, persona.lastUsedLoreBookIds)
             .putExtra(EXTRA_AVATAR_REF, persona.avatarRef)
-            .putExtra(EXTRA_CHAT_NAME_FONT_ID, persona.chatNameFontId)
-            .putExtra(EXTRA_CHAT_NAME_SIZE_SP, persona.chatNameSizeSp)
         setResult(RESULT_OK, result)
         btnSave?.let { SaveIconFlash.flash(it) }
         finish()
@@ -658,9 +624,7 @@ class EditPersonaActivity : SettingsPageActivity() {
             selectedActivationPromptId,
             selectedCoreLoreBookId,
             PersonaObject.joinIds(additionalLoreBookIds),
-            (checkboxAutoload?.isChecked == true).toString(),
-            selectedChatNameFontId,
-            selectedChatNameSizeSp.toString()
+            (checkboxAutoload?.isChecked == true).toString()
         ).joinToString("\u0001")
     }
 

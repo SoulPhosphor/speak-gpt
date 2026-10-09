@@ -7,6 +7,8 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.ImageButton
@@ -49,6 +51,11 @@ class NameStyleActivity : SettingsPageActivity() {
     companion object {
         private const val DEFAULT_COMPANION = "companion"
         private const val DEFAULT_USER = "user"
+        private const val EXTRA_COMPANION_ID = "companionId"
+
+        /** Opens with [companionId] already chosen as the name being styled. */
+        fun companionIntent(context: Context, companionId: String): Intent =
+            Intent(context, NameStyleActivity::class.java).putExtra(EXTRA_COMPANION_ID, companionId)
     }
     private lateinit var preferences: Preferences
     private lateinit var typeValue: TextView
@@ -124,6 +131,11 @@ class NameStyleActivity : SettingsPageActivity() {
         saveButton.setOnClickListener { selected?.let { saveDrafts(listOf(it), exit = false) } }
         type = savedInstanceState?.getString("type")?.let { value -> Type.entries.firstOrNull { it.name == value } }
         selectedKey = savedInstanceState?.getString("selected")
+        val companionId = intent.getStringExtra(EXTRA_COMPANION_ID).orEmpty()
+        if (savedInstanceState == null && companionId.isNotEmpty()) {
+            type = Type.COMPANION
+            selectedKey = Target(Type.COMPANION, companionId, "", "").key
+        }
         scratch = savedInstanceState?.getString("scratch")?.let { Gson().fromJson(it, ChatNameStyle.Override::class.java) }
             ?: ChatNameStyle.Override()
         val restored = savedInstanceState?.getString("drafts")?.let {

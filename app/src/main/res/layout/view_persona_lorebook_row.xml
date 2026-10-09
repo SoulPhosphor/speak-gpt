@@ -16,43 +16,25 @@
 * limitations under the License.
 **************************************************************************/
 -->
+<!-- One linked lorebook on Edit Companion. Appearance comes from the
+     Widget.App.CompanionEditor.LoreBook* styles; this file holds structure only. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
-    android:background="@drawable/btn_accent_tonal_selector_v3"
-    android:backgroundTint="?attr/colorSecondaryContainer">
+    style="@style/Widget.App.CompanionEditor.LoreBookCard">
 
     <TextView
         android:id="@+id/row_book_name"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="10dp"
-        android:layout_marginEnd="8dp"
-        android:ellipsize="end"
-        android:lines="1"
-        android:textColor="?attr/colorPrimary"
-        android:textSize="16sp"
-        android:textStyle="bold"
+        style="@style/Widget.App.CompanionEditor.LoreBookName"
+        app:layout_constraintBottom_toTopOf="@+id/row_book_subtitle"
         app:layout_constraintEnd_toStartOf="@+id/row_btn_edit"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_chainStyle="packed" />
 
     <TextView
         android:id="@+id/row_book_subtitle"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="2dp"
-        android:layout_marginEnd="8dp"
-        android:layout_marginBottom="10dp"
-        android:ellipsize="end"
-        android:maxLines="2"
-        android:textColor="@color/text_subtitle"
-        android:textSize="13sp"
+        style="@style/Widget.App.CompanionEditor.LoreBookDetails"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/row_btn_edit"
         app:layout_constraintStart_toStartOf="parent"
@@ -60,43 +42,31 @@
 
     <ImageButton
         android:id="@+id/row_btn_edit"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_marginEnd="4dp"
-        android:background="@drawable/btn_accent_tonal_selector_v7"
+        style="@style/Widget.App.CompanionEditor.LoreBookAction"
         android:contentDescription="@string/label_edit_lorebook"
         android:src="@drawable/ic_settings"
         android:tooltipText="@string/label_edit_lorebook"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/row_btn_unlink"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/ic_settings" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <ImageButton
         android:id="@+id/row_btn_unlink"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_marginEnd="4dp"
-        android:background="@drawable/btn_accent_tonal_selector_v7"
+        style="@style/Widget.App.CompanionEditor.LoreBookAction"
         android:contentDescription="@string/btn_unlink_lorebook"
         android:src="@drawable/ic_link_off"
         android:tooltipText="@string/btn_unlink_lorebook"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/row_btn_delete"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/ic_link_off" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <ImageButton
         android:id="@+id/row_btn_delete"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_marginEnd="8dp"
-        android:background="@drawable/btn_accent_tonal_selector_v7"
+        style="@style/Widget.App.CompanionEditor.LoreBookAction"
         android:contentDescription="@string/btn_delete_lorebook"
         android:src="@drawable/ic_delete"
         android:tooltipText="@string/btn_delete_lorebook"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/ic_delete" />
+        app:layout_constraintTop_toTopOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

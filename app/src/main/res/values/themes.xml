@@ -914,6 +914,53 @@
         <item name="android:textColor">?attr/appTextColor</item>
     </style>
 
+    <!-- Edit Companion: Chat Signature Style section. The preview reuses the
+         Name Style preview appearance; typography comes from ChatNameStyle.apply.
+         The row is the shared title-only navigation row, inset to the editor's
+         field edges while its ripple spans the full width. -->
+    <style name="Widget.App.CompanionEditor.SignaturePreview" parent="Widget.App.NameStyle.Preview">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginTop">@dimen/companion_editor_signature_gap</item>
+        <item name="android:layout_marginStart">@dimen/companion_editor_content_inset</item>
+        <item name="android:layout_marginEnd">@dimen/companion_editor_content_inset</item>
+    </style>
+    <style name="Widget.App.CompanionEditor.SignatureRow" parent="Widget.App.Row.TitleOnly">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginTop">@dimen/companion_editor_signature_gap</item>
+        <item name="android:paddingHorizontal">@dimen/companion_editor_content_inset</item>
+    </style>
+
+    <!-- Edit Companion: one linked (additional) lorebook card. The card uses the
+         Quick Settings standalone segment surface and outline; the actions are
+         bare borderless icons like the Quick Settings gear. -->
+    <style name="Widget.App.CompanionEditor.LoreBookCard" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">@dimen/companion_lorebook_card_gap</item>
+        <item name="android:background">@drawable/bg_quick_settings_segment_standalone</item>
+        <item name="android:paddingStart">@dimen/quick_settings_segment_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/companion_lorebook_card_padding_end</item>
+        <item name="android:paddingTop">@dimen/companion_lorebook_card_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/companion_lorebook_card_padding_vertical</item>
+    </style>
+    <style name="Widget.App.CompanionEditor.LoreBookName" parent="Widget.App.Row.Title">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginEnd">@dimen/companion_lorebook_text_action_gap</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:lines">1</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Widget.App.CompanionEditor.LoreBookDetails" parent="Widget.App.Row.Subtitle">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginTop">@dimen/companion_lorebook_details_gap</item>
+        <item name="android:layout_marginEnd">@dimen/companion_lorebook_text_action_gap</item>
+        <item name="android:maxLines">2</item>
+    </style>
+    <style name="Widget.App.CompanionEditor.LoreBookAction" parent="Widget.App.QuickTile.EditButton">
+        <item name="android:layout_marginEnd">@dimen/companion_lorebook_action_gap</item>
+    </style>
+
     <!-- Live character count, right-aligned directly under a field's Box. -->
     <style name="Widget.App.Field.Counter" parent="">
         <item name="android:layout_width">match_parent</item>
