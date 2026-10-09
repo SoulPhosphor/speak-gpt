@@ -961,6 +961,21 @@
         <item name="android:layout_marginEnd">@dimen/companion_lorebook_action_gap</item>
     </style>
 
+    <!-- The shared circled-i information button. It opens the shared
+         information dialog (ParameterInfoDialog); ParameterSectionHeader uses it,
+         and a screen whose title cannot be a ParameterSectionHeader title places
+         it directly after its own label. -->
+    <style name="Widget.App.InfoButton" parent="">
+        <item name="android:layout_width">@dimen/info_button_size</item>
+        <item name="android:layout_height">@dimen/info_button_size</item>
+        <item name="android:layout_gravity">center_vertical</item>
+        <item name="android:layout_marginStart">@dimen/info_button_gap</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:contentDescription">@string/parameter_info_button_desc</item>
+        <item name="android:padding">@dimen/info_button_padding</item>
+        <item name="android:src">@drawable/ic_info</item>
+    </style>
+
     <!-- Message Details popup (the ⓘ message action). As wide as its longest
          line plus padding; no minimum width (owner ruling, Oct 9 2026). -->
     <style name="Widget.App.MessageDetails.Popup" parent="">
@@ -1149,14 +1164,22 @@
 
     <style name="Widget.App.Usage.HeaderTitle" parent="Widget.App.ActionBar.Title" />
 
-    <style name="Widget.App.Usage.TotalLabel" parent="">
+    <!-- "Conversation Total" and its information button, centered as one unit. -->
+    <style name="Widget.App.Usage.TotalLabelRow" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">@dimen/usage_total_top_gap</item>
-        <item name="android:textColor">?attr/appTextColor</item>
-        <item name="android:textSize">12sp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
         <item name="layout_constraintStart_toStartOf">parent</item>
+    </style>
+
+    <style name="Widget.App.Usage.TotalLabel" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">12sp</item>
     </style>
 
     <style name="Widget.App.Usage.TotalCost" parent="">

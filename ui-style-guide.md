@@ -407,6 +407,12 @@ Its icon opens the shared information dialog. The host supplies only the title
 and explanation strings; it must not reproduce the icon, spacing, dialog, or
 placement locally.
 
+The icon itself is `Widget.App.InfoButton`. Where a label cannot be a
+`ParameterSectionHeader` title (a different text style, or a dialog heading that
+differs from the label), place a `Widget.App.InfoButton` directly after the
+label and open `ParameterInfoDialog` from it. Usage & Cost's Conversation Total
+does this: its icon opens **Best Estimated Usage** (owner wording, Oct 9 2026).
+
 ## Selector rows and pick-list rows
 
 ### Selector row
@@ -1065,7 +1071,8 @@ Do not assign an id to an XML `<include>` tag that includes these layouts. Andro
 Screen frame: `Widget.App.Usage.Header`, `HeaderBar`, `HeaderTitle`,
 `Scroll`, `Content`, `TotalBlock`, `TotalLabel`, `TotalCost`, `TotalMeta`,
 `Sections`. Only the header bar stays fixed; the conversation total block
-scrolls with the sections (owner ruling, Oct 9 2026).
+scrolls with the sections (owner ruling, Oct 9 2026). `TotalLabelRow` centers
+"Conversation Total" and its information button as one unit.
 
 The screen header must inherit `Widget.App.ActionBar` and its shared title/back
 button styles, with `ScreenChrome.apply` supplying the same header chrome as

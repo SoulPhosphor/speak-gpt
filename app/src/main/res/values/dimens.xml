@@ -151,4 +151,8 @@
     <dimen name="message_details_padding_vertical">16dp</dimen>
     <dimen name="message_details_line_gap">6dp</dimen>
     <dimen name="message_details_text_size">15sp</dimen>
+    <!-- Shared circled-i information button. -->
+    <dimen name="info_button_size">40dp</dimen>
+    <dimen name="info_button_gap">2dp</dimen>
+    <dimen name="info_button_padding">8dp</dimen>
 </resources>

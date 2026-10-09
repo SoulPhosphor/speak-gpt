@@ -29,12 +29,5 @@
 
     <ImageButton
         android:id="@+id/parameter_info_button"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_gravity="center_vertical"
-        android:layout_marginStart="2dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="@string/parameter_info_button_desc"
-        android:padding="8dp"
-        android:src="@drawable/ic_info" />
+        style="@style/Widget.App.InfoButton" />
 </merge>

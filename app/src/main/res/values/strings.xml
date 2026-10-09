@@ -1055,6 +1055,8 @@
     <string name="cost_price_variable_line">Price: Varies (Historical Rates)</string>
     <string name="token_pricing_details_title">Usage &amp; Cost</string>
     <string name="usage_cost_title">Usage &amp; Cost</string>
+    <string name="usage_estimate_info_title">Best Estimated Usage</string>
+    <string name="usage_estimate_info_body">Usage calculations reflect the best available data returned by the provider. Figures are rounded estimates and may not exactly match final billing statements. Final charges from your provider may differ slightly due to rounding, tiered rates, or dynamic processing fees.</string>
     <string name="usage_conversation_total">Conversation Total</string>
     <string name="usage_conversation_meta">%1$d recorded requests · %2$d models · %3$d providers</string>
     <string name="usage_model_meta">%1$d recorded requests · %2$d providers</string>
