@@ -1,6 +1,9 @@
 <resources>
     <!-- Base application theme. -->
     <style name="Theme.App" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="appUsageModelBackgroundColor">?attr/colorPrimaryContainer</item>
+        <item name="appUsageModelTextColor">?attr/colorOnPrimaryContainer</item>
+        <item name="appUsageProviderBackgroundColor">?attr/colorSurfaceContainerHigh</item>
         <item name="colorPrimary">@color/accent_500</item>
         <item name="colorOnPrimary">@color/white</item>
         <item name="colorSecondary">@color/accent_100</item>
@@ -910,7 +913,7 @@
         <item name="cardCornerRadius">@dimen/usage_card_corner_radius</item>
         <item name="cardElevation">0dp</item>
         <item name="strokeColor">?attr/colorOutlineVariant</item>
-        <item name="strokeWidth">1dp</item>
+        <item name="strokeWidth">@dimen/quick_settings_segment_stroke_width</item>
     </style>
 
     <style name="Widget.App.Usage.ModelHeader" parent="">
@@ -928,7 +931,7 @@
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -936,7 +939,7 @@
     <style name="Widget.App.Usage.ModelTotal" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">18sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -945,19 +948,26 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">3dp</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">11sp</item>
     </style>
 
     <!-- What a Summarizing model was used for; hidden in other sections. -->
     <style name="Widget.App.Usage.ModelFunctions" parent="Widget.App.Usage.ModelMeta">
-        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:visibility">gone</item>
     </style>
 
     <!-- Space between two providers inside one model card. -->
+    <!-- Edge-to-edge zone separators share the card perimeter's color and width. -->
+    <style name="Widget.App.Usage.ZoneDivider" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/quick_settings_segment_stroke_width</item>
+        <item name="android:background">?attr/colorOutlineVariant</item>
+    </style>
+
     <style name="Widget.App.Usage.ProviderGap" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">6dp</item>
@@ -1196,14 +1206,14 @@
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">13sp</item>
     </style>
 
     <style name="Widget.App.Usage.CacheRateValue" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">13sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -2275,6 +2285,9 @@
          every shared row, title, hint, and text style with no layout or style
          changes. Every attribute declared in attrs.xml must be defined here. -->
     <style name="ThemeOverlay.Phosphor.Violet" parent="">
+        <item name="appUsageModelBackgroundColor">?attr/colorPrimaryContainer</item>
+        <item name="appUsageModelTextColor">?attr/colorOnPrimaryContainer</item>
+        <item name="appUsageProviderBackgroundColor">?attr/colorSurfaceContainerHigh</item>
         <item name="appRowTitleColor">@color/text</item>
         <item name="appRowSubtitleColor">@color/text_subtitle</item>
         <item name="appTextColor">@color/text</item>

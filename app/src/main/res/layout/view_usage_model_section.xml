@@ -5,6 +5,7 @@
     <LinearLayout style="@style/Widget.App.Usage.Stack">
 
         <include layout="@layout/view_usage_model_summary" />
+        <include layout="@layout/view_usage_zone_divider" />
 
         <LinearLayout
             android:id="@+id/provider_cards"

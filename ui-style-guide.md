@@ -1053,10 +1053,10 @@ color. Conversation total spacing uses `usage_total_top_gap` and
 the summary area's overall height unchanged.
 
 Section title pills alone use a solid `colorSurfaceContainerHigh` fill (the
-Quick Settings panel surface), `colorOnSurface` text, and a `colorPrimary`
+Quick Settings panel surface), `colorOnSurface` text, and a `colorOutlineVariant`
 outline with the shared `quick_settings_segment_stroke_width`. No gradient or
 lighter accent-container fill behind these titles. This rule does not change
-model headers, provider blocks, tables, or pricing footers.
+the separate card-zone color roles described below.
 
 Provider block: `Widget.App.Usage.ProviderHeader`, `ProviderNameColumn`,
 `ProviderName`, `ProviderMeta`, `ProviderTotalColumn`, `ProviderTotal`,
@@ -1082,13 +1082,28 @@ Composition, top to bottom, per section:
 1. one centered `SectionPill` (`view_usage_section_pill.xml`) holding only the
    section title;
 2. one `ModelCard` per model (`view_usage_model_section.xml`): the model header
-   (`view_usage_model_summary.xml`, gradient top) with name and total on one
+   (`view_usage_model_summary.xml`, rich solid accent surface) with name and total on one
    line, the request count below, and, in Summarizing only, the
    `ModelFunctions` line;
 3. inside that card, one provider block per provider
    (`view_usage_provider_block.xml`), separated by a `ProviderGap` that is hidden
    above the first. Only the last provider's pricing footer uses the rounded
    `bg_usage_pricing_footer`; the others use `bg_usage_pricing_footer_inner`.
+
+Card zones are centrally mapped in `Theme.App` and every palette overlay:
+`appUsageModelBackgroundColor` defaults to `colorPrimaryContainer`, with
+`appUsageModelTextColor` mapped to `colorOnPrimaryContainer`. Model headers
+and Cache Hit Rate use this exact same solid fill and matching text role.
+`appUsageProviderBackgroundColor` defaults to `colorSurfaceContainerHigh` for
+provider headers and pricing footers. These roles provide a richer model zone
+against a quieter provider zone without fixing a literal purple or green color.
+
+The model card perimeter and `Widget.App.Usage.ZoneDivider` use
+`colorOutlineVariant` and `quick_settings_segment_stroke_width`, matching the
+Quick Settings section outlines. Full-width dividers sit below the model header,
+below each provider header, and above each provider's pricing footer. Keep them
+outside the padded content so they meet the perimeter. The section title pills
+also match Quick Settings' solid fill, outline color, and stroke width exactly.
 
 Theme readiness: every color in these styles and in `bg_usage_section_pill`,
 `bg_usage_model_header`, `bg_usage_provider_header`, and the two pricing

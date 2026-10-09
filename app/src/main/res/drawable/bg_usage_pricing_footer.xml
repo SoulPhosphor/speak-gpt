@@ -4,5 +4,5 @@
     <corners
         android:bottomLeftRadius="@dimen/usage_card_corner_radius"
         android:bottomRightRadius="@dimen/usage_card_corner_radius" />
-    <solid android:color="?attr/colorSurfaceContainerHigh" />
+    <solid android:color="?attr/appUsageProviderBackgroundColor" />
 </shape>

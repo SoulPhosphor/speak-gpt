@@ -5,5 +5,5 @@
     <solid android:color="?attr/colorSurfaceContainerHigh" />
     <stroke
         android:width="@dimen/quick_settings_segment_stroke_width"
-        android:color="?attr/colorPrimary" />
+        android:color="?attr/colorOutlineVariant" />
 </shape>
