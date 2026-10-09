@@ -2472,7 +2472,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val permissionResultLauncherV2 = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         run {
             if (result.resultCode == RESULT_OK) {
-                startWhisper()
+                // Resume the engine that asked, through its own checks: an
+                // on-device selection must never start an API upload.
+                when (preferences?.getEffectiveAudioModel()) {
+                    "whisper" -> if (ApiSttSettings.isConfigured(this)) startWhisper() else {
+                        micIdle()
+                        isRecording = false
+                        showApiVoiceServiceMissingDialog()
+                    }
+                    "whisper-local" -> {
+                        isRecording = false
+                        handleLocalWhisperSpeechRecognition()
+                    }
+                    else -> {
+                        micIdle()
+                        isRecording = false
+                    }
+                }
             }
         }
     }
