@@ -380,6 +380,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
 
     companion object {
+        /** Set by the launcher gate on the blank chat it opens at app start. */
+        const val EXTRA_OPENED_AT_LAUNCH = "openedAtLaunch"
+
         /** Replace the current app task with exactly one conversation screen. */
         fun rootIntent(
             context: Context,
@@ -2485,6 +2488,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    private fun openedAtLaunch(): Boolean = intent.getBooleanExtra(EXTRA_OPENED_AT_LAUNCH, false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
             enableEdgeToEdge(
@@ -2511,6 +2516,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
+
+        // At app start nothing sits behind this translucent window but the home
+        // screen, which the theme's dimmed window background would darken while
+        // the chat loads. Show the chat surface instead until the layout exists.
+        if (openedAtLaunch()) {
+            window.setBackgroundDrawableResource(R.drawable.expandable_window_background_24)
+        }
 
         Thread {
             // Round 4 ordering is load-bearing: resolve the storage lock before
@@ -2688,6 +2700,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         setContentView(R.layout.activity_chat)
+        if (openedAtLaunch()) window.setBackgroundDrawableResource(R.color.shadow)
         drawerController = ChatDrawerController.install(
             this,
             findViewById(R.id.expandable_window_root)
@@ -2720,7 +2733,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         registerAudioRouteDiagnostics()
 
         threadLoader = findViewById(R.id.thread_loader)
-        threadLoader?.visibility = View.VISIBLE
+        // The blank chat opened at app start has nothing to load behind the
+        // overlay, so it appears directly instead of flashing the spinner.
+        threadLoader?.visibility = if (openedAtLaunch()) View.GONE else View.VISIBLE
 
         val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
         val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
@@ -3363,7 +3378,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return@setOnTouchListener false
         }}
 
-        Handler(Looper.getMainLooper()).postDelayed({
+        if (threadLoader?.visibility == View.VISIBLE) Handler(Looper.getMainLooper()).postDelayed({
             val fadeOut: Animation = AnimationUtils.loadAnimation(this, R.anim.fade_out)
             threadLoader?.startAnimation(fadeOut)
 
