@@ -6568,6 +6568,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     insertTranscriptIntoBox(transcription)
                 }
             }
+        } catch (e: CancellationException) {
+            // A Stop the user asked for is not a recording failure.
+            throw e
         } catch (_: Exception) {
             Toast.makeText(this, "Failed to record audio", Toast.LENGTH_SHORT).show()
             restoreUIState()
