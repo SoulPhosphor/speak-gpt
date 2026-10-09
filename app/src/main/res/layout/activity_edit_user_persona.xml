@@ -141,7 +141,7 @@
 
             <!-- Display Name (user_personas.display_name, v32): the user's
                  chat name while this Glamour is active; blank falls back to
-                 the Default Displayed Username. -->
+                 the Glamour Name. -->
             <TextView
                 android:id="@+id/label_display_name"
                 style="@style/Widget.App.Field.Label"
