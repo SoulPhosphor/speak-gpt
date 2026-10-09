@@ -961,6 +961,37 @@
         <item name="android:layout_marginEnd">@dimen/companion_lorebook_action_gap</item>
     </style>
 
+    <!-- Message Details popup (the ⓘ message action). As wide as its longest
+         line plus padding; no minimum width (owner ruling, Oct 9 2026). -->
+    <style name="Widget.App.MessageDetails.Popup" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/ui_dialog_rounded</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/message_details_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/message_details_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/message_details_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/message_details_padding_vertical</item>
+    </style>
+    <style name="Widget.App.MessageDetails.FirstValue" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textIsSelectable">true</item>
+        <item name="android:textSize">@dimen/message_details_text_size</item>
+        <item name="android:visibility">gone</item>
+    </style>
+    <style name="Widget.App.MessageDetails.Value" parent="Widget.App.MessageDetails.FirstValue">
+        <item name="android:layout_marginTop">@dimen/message_details_line_gap</item>
+    </style>
+    <style name="Widget.App.MessageDetails.Empty" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/message_details_text_size</item>
+        <item name="android:visibility">gone</item>
+    </style>
+
     <!-- Live character count, right-aligned directly under a field's Box. -->
     <style name="Widget.App.Field.Counter" parent="">
         <item name="android:layout_width">match_parent</item>
@@ -1101,6 +1132,20 @@
 
     <!-- Inherit the Settings header without screen-specific color overrides. -->
     <style name="Widget.App.Usage.HeaderBar" parent="Widget.App.ActionBar" />
+
+    <!-- Everything below the header bar scrolls together: the conversation
+         total block, then the sections. -->
+    <style name="Widget.App.Usage.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Usage.TotalBlock" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/colorSurfaceContainerHigh</item>
+    </style>
 
     <style name="Widget.App.Usage.HeaderTitle" parent="Widget.App.ActionBar.Title" />
 

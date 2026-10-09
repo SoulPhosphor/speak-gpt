@@ -146,4 +146,9 @@
     <dimen name="companion_lorebook_text_action_gap">8dp</dimen>
     <dimen name="companion_lorebook_details_gap">2dp</dimen>
     <dimen name="companion_lorebook_action_gap">0dp</dimen>
+    <!-- Message Details popup. -->
+    <dimen name="message_details_padding_horizontal">20dp</dimen>
+    <dimen name="message_details_padding_vertical">16dp</dimen>
+    <dimen name="message_details_line_gap">6dp</dimen>
+    <dimen name="message_details_text_size">15sp</dimen>
 </resources>

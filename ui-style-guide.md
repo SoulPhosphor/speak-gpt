@@ -1063,7 +1063,9 @@ Do not assign an id to an XML `<include>` tag that includes these layouts. Andro
 `Widget.App.Usage.ProviderGap`, `Widget.App.Usage.Stack`
 
 Screen frame: `Widget.App.Usage.Header`, `HeaderBar`, `HeaderTitle`,
-`TotalLabel`, `TotalCost`, `TotalMeta`, `Scroll`, `Sections`.
+`Scroll`, `Content`, `TotalBlock`, `TotalLabel`, `TotalCost`, `TotalMeta`,
+`Sections`. Only the header bar stays fixed; the conversation total block
+scrolls with the sections (owner ruling, Oct 9 2026).
 
 The screen header must inherit `Widget.App.ActionBar` and its shared title/back
 button styles, with `ScreenChrome.apply` supplying the same header chrome as
@@ -1273,6 +1275,15 @@ text color, bold); the count/tag/description line uses `LoreBookDetails`
 `LoreBookAction`, a bare borderless icon inheriting `Widget.App.QuickTile.EditButton`
 (no background shape). Spacing lives in the `companion_editor_*` and
 `companion_lorebook_*` dimens.
+
+## Message Details popup
+
+The ⓘ message action opens `layout/view_details_popup.xml`:
+`Widget.App.MessageDetails.Popup` (rounded dialog surface), with bare values in
+`MessageDetails.FirstValue` / `MessageDetails.Value` and the empty line in
+`MessageDetails.Empty`. The box is as wide as its longest line plus its
+padding, with no minimum width (owner ruling, Oct 9 2026). Token values use
+Title Case: "1,234 Tokens", "512 Reasoning Tokens".
 
 ## Search status
 

@@ -24,22 +24,6 @@
                 style="@style/Widget.App.Usage.HeaderTitle"
                 android:text="@string/usage_cost_title" />
         </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <TextView
-            android:id="@+id/conversation_total_label"
-            style="@style/Widget.App.Usage.TotalLabel"
-            android:text="@string/usage_conversation_total"
-            app:layout_constraintTop_toBottomOf="@id/action_bar" />
-
-        <TextView
-            android:id="@+id/conversation_total_cost"
-            style="@style/Widget.App.Usage.TotalCost"
-            app:layout_constraintTop_toBottomOf="@id/conversation_total_label" />
-
-        <TextView
-            android:id="@+id/conversation_usage_meta"
-            style="@style/Widget.App.Usage.TotalMeta"
-            app:layout_constraintTop_toBottomOf="@id/conversation_total_cost" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <ScrollView
@@ -47,8 +31,34 @@
         style="@style/Widget.App.Usage.Scroll"
         app:layout_constraintTop_toBottomOf="@id/usage_header">
 
-        <LinearLayout
-            android:id="@+id/pricing_sections"
-            style="@style/Widget.App.Usage.Sections" />
+        <!-- The conversation total scrolls with the sections (owner ruling,
+             Oct 9 2026); only the header bar stays fixed. -->
+        <LinearLayout style="@style/Widget.App.Usage.Content">
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/usage_total_block"
+                style="@style/Widget.App.Usage.TotalBlock">
+
+                <TextView
+                    android:id="@+id/conversation_total_label"
+                    style="@style/Widget.App.Usage.TotalLabel"
+                    android:text="@string/usage_conversation_total"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <TextView
+                    android:id="@+id/conversation_total_cost"
+                    style="@style/Widget.App.Usage.TotalCost"
+                    app:layout_constraintTop_toBottomOf="@id/conversation_total_label" />
+
+                <TextView
+                    android:id="@+id/conversation_usage_meta"
+                    style="@style/Widget.App.Usage.TotalMeta"
+                    app:layout_constraintTop_toBottomOf="@id/conversation_total_cost" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <LinearLayout
+                android:id="@+id/pricing_sections"
+                style="@style/Widget.App.Usage.Sections" />
+        </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
