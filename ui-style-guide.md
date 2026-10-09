@@ -1045,6 +1045,19 @@ Do not assign an id to an XML `<include>` tag that includes these layouts. Andro
 Screen frame: `Widget.App.Usage.Header`, `HeaderBar`, `HeaderTitle`,
 `TotalLabel`, `TotalCost`, `TotalMeta`, `Scroll`, `Sections`.
 
+The screen header must inherit `Widget.App.ActionBar` and its shared title/back
+button styles, with `ScreenChrome.apply` supplying the same header chrome as
+Settings. Do not override it with a Usage-specific accent background or title
+color. Conversation total spacing uses `usage_total_top_gap` and
+`usage_total_bottom_gap`: move space from below the total to above it, keeping
+the summary area's overall height unchanged.
+
+Section title pills alone use a solid `colorSurfaceContainerHigh` fill (the
+Quick Settings panel surface), `colorOnSurface` text, and a `colorPrimary`
+outline with the shared `quick_settings_segment_stroke_width`. No gradient or
+lighter accent-container fill behind these titles. This rule does not change
+model headers, provider blocks, tables, or pricing footers.
+
 Provider block: `Widget.App.Usage.ProviderHeader`, `ProviderNameColumn`,
 `ProviderName`, `ProviderMeta`, `ProviderTotalColumn`, `ProviderTotal`,
 `ProviderTotalLabel`; chart `Table`, `TableHeader`, `TableHeaderLabel`,

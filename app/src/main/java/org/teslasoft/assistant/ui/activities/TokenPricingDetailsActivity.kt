@@ -15,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
+import org.teslasoft.assistant.ui.util.ScreenChrome
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.usage.ConversationUsageSummary
@@ -40,6 +41,7 @@ class TokenPricingDetailsActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_token_pricing_details)
+        ScreenChrome.apply(this, findViewById(R.id.action_bar), findViewById(R.id.btn_back))
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { finish() }
 
         val summary = TokenUsageAccounting.decodeSummary(

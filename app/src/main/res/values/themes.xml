@@ -897,7 +897,7 @@
         <item name="android:paddingEnd">28dp</item>
         <item name="android:paddingTop">9dp</item>
         <item name="android:paddingBottom">9dp</item>
-        <item name="android:textColor">?attr/colorOnPrimaryContainer</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -969,31 +969,22 @@
     <style name="Widget.App.Usage.Header" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">?attr/colorPrimary</item>
+        <item name="android:background">?attr/colorSurfaceContainerHigh</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
         <item name="layout_constraintStart_toStartOf">parent</item>
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
-    <!-- The back button and title row inside Widget.App.Usage.Header. -->
-    <style name="Widget.App.Usage.HeaderBar" parent="">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@color/transparent</item>
-        <item name="layout_constraintEnd_toEndOf">parent</item>
-        <item name="layout_constraintStart_toStartOf">parent</item>
-        <item name="layout_constraintTop_toTopOf">parent</item>
-    </style>
+    <!-- Inherit the Settings header without screen-specific color overrides. -->
+    <style name="Widget.App.Usage.HeaderBar" parent="Widget.App.ActionBar" />
 
-    <style name="Widget.App.Usage.HeaderTitle" parent="Widget.App.ActionBar.Title">
-        <item name="android:textColor">?attr/colorOnPrimary</item>
-    </style>
+    <style name="Widget.App.Usage.HeaderTitle" parent="Widget.App.ActionBar.Title" />
 
     <style name="Widget.App.Usage.TotalLabel" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">4dp</item>
-        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:layout_marginTop">@dimen/usage_total_top_gap</item>
+        <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">12sp</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
         <item name="layout_constraintStart_toStartOf">parent</item>
@@ -1003,7 +994,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">2dp</item>
-        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">31sp</item>
         <item name="android:textStyle">bold</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
@@ -1014,8 +1005,8 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">6dp</item>
-        <item name="android:layout_marginBottom">22dp</item>
-        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:layout_marginBottom">@dimen/usage_total_bottom_gap</item>
+        <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">12sp</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
