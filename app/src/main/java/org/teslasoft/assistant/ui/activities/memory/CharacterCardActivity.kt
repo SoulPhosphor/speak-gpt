@@ -37,11 +37,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -70,7 +70,7 @@ import org.teslasoft.assistant.util.ProfileImageResolver
  * description/arc/played_by columns are dormant and never shown (spec §8a —
  * the cards only carry what the spec lists).
  */
-class CharacterCardActivity : FragmentActivity() {
+class CharacterCardActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId: String = ""

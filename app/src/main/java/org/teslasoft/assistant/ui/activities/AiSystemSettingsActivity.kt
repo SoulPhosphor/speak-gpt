@@ -30,7 +30,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
@@ -52,7 +51,7 @@ import org.teslasoft.assistant.ui.activities.memory.ModelRulesActivity
  * The "Automatically Apply Model Rules" switch is the GLOBAL default; the
  * per-chat "Apply Model Rules" override lives in Quick Settings.
  */
-class AiSystemSettingsActivity : FragmentActivity() {
+class AiSystemSettingsActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""

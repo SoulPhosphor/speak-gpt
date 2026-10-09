@@ -27,7 +27,6 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
@@ -49,7 +48,7 @@ import org.teslasoft.assistant.ui.widgets.AppDropdown
  * The Quantization dropdown is dynamic: the chart passes the quantizations
  * actually present in the loaded provider list via [EXTRA_QUANTIZATIONS].
  */
-class ProviderFilterPanelActivity : FragmentActivity() {
+class ProviderFilterPanelActivity : SettingsPageActivity() {
 
     companion object {
         const val EXTRA_QUANTIZATIONS = "quantizations"
@@ -121,7 +120,7 @@ class ProviderFilterPanelActivity : FragmentActivity() {
     override fun finish() {
         super.finish()
         // Pair with the chart's slide-in entry: slide out to the right.
-        overridePendingTransition(R.anim.anim_hold, R.anim.slide_out_right)
+        if (!usesSettingsPageMotion) overridePendingTransition(R.anim.anim_hold, R.anim.slide_out_right)
     }
 
     /* ------------------------------ bindings ------------------------------ */

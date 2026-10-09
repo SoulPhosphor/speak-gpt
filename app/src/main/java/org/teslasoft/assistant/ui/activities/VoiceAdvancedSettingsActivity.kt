@@ -29,7 +29,6 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -51,7 +50,7 @@ import kotlin.math.roundToInt
  * rest of the app. The voice pipeline reads these per turn, so changes apply
  * from the next mic turn without restarting anything.
  */
-class VoiceAdvancedSettingsActivity : FragmentActivity() {
+class VoiceAdvancedSettingsActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
 

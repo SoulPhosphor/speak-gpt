@@ -7,8 +7,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SettingsSlideContractTest {
-    @Test fun settingsSlidesFromTheRightAtTheDrawerSpeedFromEveryEntry() {
-        val settings = source("java/org/teslasoft/assistant/ui/activities/SettingsActivity.kt")
+    @Test fun mainSettingsPagesShareRightEdgeNavigationAndTiming() {
+        val settings = source("java/org/teslasoft/assistant/ui/activities/SettingsPageActivity.kt")
+        val pages = listOf("SettingsActivity", "CharactersActivity", "AiSystemSettingsActivity",
+            "MemoryManagerActivity", "memory/RoleplayHubActivity", "ProfileImagePropertiesActivity",
+            "VoiceSettingsActivity", "ImageGenerationSettingsActivity", "AppearanceActivity",
+            "MemoryBackupRestoreActivity", "AboutActivity", "AlertDebugMenuActivity",
+            "LogCabinActivity", "DocumentationActivity")
+        pages.forEach { page ->
+            assertTrue(page, source("java/org/teslasoft/assistant/ui/activities/$page.kt").contains(": SettingsPageActivity()"))
+        }
+        listOf("settings_slide_in", "settings_slide_out", "settings_hold").forEach { animation ->
+            assertTrue(source("res/anim/$animation.xml").contains("@integer/settings_page_slide_duration"))
+        }
         assertTrue(settings.contains("overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, R.anim.settings_slide_in, R.anim.settings_hold)"))
         assertTrue(settings.contains("overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, R.anim.settings_hold, R.anim.settings_slide_out)"))
         assertTrue(settings.contains("overridePendingTransition(R.anim.settings_slide_in, R.anim.settings_hold)"))
@@ -22,7 +33,7 @@ class SettingsSlideContractTest {
         assertTrue(slideIn.contains("android:fromXDelta=\"100%p\""))
         assertTrue(slideIn.contains("@interpolator/drawer_settle"))
         assertTrue(source("res/anim/settings_slide_out.xml").contains("android:toXDelta=\"100%p\""))
-        assertTrue(source("res/values/integers.xml").contains("<integer name=\"drawer_slide_duration\">512</integer>"))
+        assertTrue(source("res/values/integers.xml").contains("<integer name=\"settings_page_slide_duration\">600</integer>"))
     }
 
     @Test fun slideCurveMatchesTheDrawerSettleInterpolator() {

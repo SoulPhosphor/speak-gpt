@@ -31,7 +31,6 @@ import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
@@ -54,7 +53,7 @@ import org.teslasoft.assistant.ui.util.DiscardChangesDialog
  * old dialog listener did - so the list refresh, persona cleanup on delete,
  * pick-mode selection, and suggestion assignment all stay in the callers.
  */
-class EditLoreBookActivity : FragmentActivity() {
+class EditLoreBookActivity : SettingsPageActivity() {
 
     companion object {
         const val EXTRA_ID = "id"

@@ -34,7 +34,6 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -84,7 +83,7 @@ import org.teslasoft.assistant.ui.widgets.SamplingParameterSpec
  * - RESULT_OK + extra "deleted"=true → deleted (list just reloads).
  * - RESULT_CANCELED → nothing changed.
  */
-class ApiEndpointEditorActivity : FragmentActivity() {
+class ApiEndpointEditorActivity : SettingsPageActivity() {
 
     companion object {
         /** Visual mask shown when a key is already stored. Fixed-length so it

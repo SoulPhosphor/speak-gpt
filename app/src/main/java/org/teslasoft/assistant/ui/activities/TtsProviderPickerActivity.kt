@@ -77,7 +77,7 @@ class TtsProviderPickerActivity : TtsPickerActivity() {
     private fun openFilters() {
         filters.launch(Intent(this, TtsProviderFiltersActivity::class.java)
             .putExtra(TtsProviderFiltersActivity.EXTRA_SORT, TtsPickerCodec.encodeSort(state.sort)))
-        overridePendingTransition(R.anim.slide_in_right, R.anim.anim_hold)
+        if (!usesSettingsPageMotion) overridePendingTransition(R.anim.slide_in_right, R.anim.anim_hold)
     }
 
     private fun load() {

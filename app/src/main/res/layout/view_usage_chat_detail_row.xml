@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One usage row: what was billed, how much, and its cost. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.Usage.TableRow">
+
+    <TextView
+        android:id="@+id/usage_label"
+        style="@style/Widget.App.Usage.ChatDetailLabel" />
+    <TextView
+        android:id="@+id/usage_tokens"
+        style="@style/Widget.App.Usage.TableQuantity" />
+    <TextView
+        android:id="@+id/usage_cost"
+        style="@style/Widget.App.Usage.TableCost" />
+</LinearLayout>

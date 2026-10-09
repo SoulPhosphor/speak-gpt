@@ -1,6 +1,9 @@
 <resources>
     <!-- Base application theme. -->
     <style name="Theme.App" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="appUsageModelBackgroundColor">?attr/colorPrimaryContainer</item>
+        <item name="appUsageModelTextColor">?attr/colorOnPrimaryContainer</item>
+        <item name="appUsageProviderBackgroundColor">?attr/colorSurfaceContainerHigh</item>
         <item name="colorPrimary">@color/accent_500</item>
         <item name="colorOnPrimary">@color/white</item>
         <item name="colorSecondary">@color/accent_100</item>
@@ -836,6 +839,73 @@
     <!-- Name Style screen: the live, centered preview of the chosen name.
          Only color, placement and spacing live here; the font, size and
          bold/italic come from ChatNameStyle.apply so the preview matches chat. -->
+    <style name="Widget.App.NameStyle.Scroll" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:clipToPadding">false</item>
+    </style>
+    <style name="Widget.App.NameStyle.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingHorizontal">@dimen/name_style_content_inset</item>
+        <item name="android:paddingTop">@dimen/name_style_small_gap</item>
+        <item name="android:paddingBottom">@dimen/name_style_section_gap</item>
+    </style>
+    <style name="Widget.App.NameStyle.SavedPanel" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">@dimen/name_style_small_gap</item>
+        <item name="android:background">@drawable/bg_name_style_saved_panel</item>
+        <item name="android:padding">@dimen/name_style_panel_padding</item>
+    </style>
+    <style name="Widget.App.NameStyle.SavedValues" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minLines">@integer/name_style_saved_panel_min_lines</item>
+        <item name="android:textSize">@dimen/name_style_body_text_size</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:gravity">top|start</item>
+    </style>
+    <!-- Owner-approved exception: a bold text-only button within the saved-style box. -->
+    <style name="Widget.App.NameStyle.RestoreOriginal" parent="AppButton.Primary">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@null</item>
+        <item name="backgroundTint">@null</item>
+        <item name="strokeWidth">0dp</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">@dimen/name_style_body_text_size</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="Widget.App.NameStyle.SectionLabel" parent="Widget.App.Dropdown.CanonicalLabel">
+        <item name="android:layout_marginTop">@dimen/name_style_section_gap</item>
+    </style>
+
+    <style name="Widget.App.NameStyle.SaveBar" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:paddingHorizontal">@dimen/name_style_content_inset</item>
+        <item name="android:paddingTop">@dimen/name_style_small_gap</item>
+        <item name="android:paddingBottom">@dimen/name_style_small_gap</item>
+        <item name="android:background">?attr/colorSurface</item>
+    </style>
+    <style name="Widget.App.NameStyle.SaveButton" parent="AppButton.Primary">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">center_horizontal</item>
+        <item name="android:singleLine">false</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
     <style name="Widget.App.NameStyle.Preview" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -897,7 +967,7 @@
         <item name="android:paddingEnd">28dp</item>
         <item name="android:paddingTop">9dp</item>
         <item name="android:paddingBottom">9dp</item>
-        <item name="android:textColor">?attr/colorOnPrimaryContainer</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -910,7 +980,7 @@
         <item name="cardCornerRadius">@dimen/usage_card_corner_radius</item>
         <item name="cardElevation">0dp</item>
         <item name="strokeColor">?attr/colorOutlineVariant</item>
-        <item name="strokeWidth">1dp</item>
+        <item name="strokeWidth">@dimen/quick_settings_segment_stroke_width</item>
     </style>
 
     <style name="Widget.App.Usage.ModelHeader" parent="">
@@ -928,7 +998,7 @@
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -936,7 +1006,7 @@
     <style name="Widget.App.Usage.ModelTotal" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">18sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -945,19 +1015,26 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">3dp</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">11sp</item>
     </style>
 
     <!-- What a Summarizing model was used for; hidden in other sections. -->
     <style name="Widget.App.Usage.ModelFunctions" parent="Widget.App.Usage.ModelMeta">
-        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:visibility">gone</item>
     </style>
 
     <!-- Space between two providers inside one model card. -->
+    <!-- Edge-to-edge zone separators share the card perimeter's color and width. -->
+    <style name="Widget.App.Usage.ZoneDivider" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/quick_settings_segment_stroke_width</item>
+        <item name="android:background">?attr/colorOutlineVariant</item>
+    </style>
+
     <style name="Widget.App.Usage.ProviderGap" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">6dp</item>
@@ -969,31 +1046,22 @@
     <style name="Widget.App.Usage.Header" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">?attr/colorPrimary</item>
+        <item name="android:background">?attr/colorSurfaceContainerHigh</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
         <item name="layout_constraintStart_toStartOf">parent</item>
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
-    <!-- The back button and title row inside Widget.App.Usage.Header. -->
-    <style name="Widget.App.Usage.HeaderBar" parent="">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@color/transparent</item>
-        <item name="layout_constraintEnd_toEndOf">parent</item>
-        <item name="layout_constraintStart_toStartOf">parent</item>
-        <item name="layout_constraintTop_toTopOf">parent</item>
-    </style>
+    <!-- Inherit the Settings header without screen-specific color overrides. -->
+    <style name="Widget.App.Usage.HeaderBar" parent="Widget.App.ActionBar" />
 
-    <style name="Widget.App.Usage.HeaderTitle" parent="Widget.App.ActionBar.Title">
-        <item name="android:textColor">?attr/colorOnPrimary</item>
-    </style>
+    <style name="Widget.App.Usage.HeaderTitle" parent="Widget.App.ActionBar.Title" />
 
     <style name="Widget.App.Usage.TotalLabel" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">4dp</item>
-        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:layout_marginTop">@dimen/usage_total_top_gap</item>
+        <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">12sp</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
         <item name="layout_constraintStart_toStartOf">parent</item>
@@ -1003,7 +1071,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">2dp</item>
-        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">31sp</item>
         <item name="android:textStyle">bold</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
@@ -1014,8 +1082,8 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">6dp</item>
-        <item name="android:layout_marginBottom">22dp</item>
-        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:layout_marginBottom">@dimen/usage_total_bottom_gap</item>
+        <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">12sp</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
@@ -1186,6 +1254,17 @@
     </style>
 
     <!-- Cache Hit Rate line under a token chart. -->
+    <!-- Chat input breakdown: indent labels and partial rules, keeping columns aligned. -->
+    <style name="Widget.App.Usage.ChatTotalLabel" parent="Widget.App.Usage.TableLabel">
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Widget.App.Usage.ChatDetailLabel" parent="Widget.App.Usage.TableLabel">
+        <item name="android:paddingStart">@dimen/usage_chat_detail_indent</item>
+    </style>
+    <style name="Widget.App.Usage.ChatDetailDivider" parent="Widget.App.Usage.TableDivider">
+        <item name="android:layout_marginStart">@dimen/usage_chat_detail_indent</item>
+    </style>
+
     <style name="Widget.App.Usage.CacheRate" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -1205,14 +1284,14 @@
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">13sp</item>
     </style>
 
     <style name="Widget.App.Usage.CacheRateValue" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">13sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -1248,7 +1327,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">11sp</item>
     </style>
 
@@ -1257,7 +1336,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">2dp</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -1267,7 +1346,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">8dp</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">11sp</item>
     </style>
 
@@ -1976,13 +2055,16 @@
         <item name="android:layout_marginTop">@dimen/sampling_slider_section_gap</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:orientation">horizontal</item>
+        <item name="android:paddingHorizontal">@dimen/quick_settings_segment_padding_horizontal</item>
+        <item name="android:layoutDirection">ltr</item>
     </style>
 
     <style name="Widget.App.SamplingSlider.Value" parent="Widget.App.Field.Box">
-        <item name="android:layout_width">@dimen/sampling_slider_value_width</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:minWidth">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">0dp</item>
-        <item name="android:layout_marginEnd">@dimen/sampling_slider_inline_gap</item>
+        <item name="android:layout_marginStart">@dimen/sampling_slider_inline_gap</item>
         <item name="android:minHeight">@dimen/sampling_slider_value_min_height</item>
         <!-- Compact padding: the value never exceeds two decimals, so the box
              should be small and tidy rather than the full-field 12dp padding
@@ -2005,10 +2087,8 @@
         <item name="android:layout_marginStart">@dimen/sampling_slider_horizontal_margin</item>
         <item name="android:layout_marginEnd">@dimen/sampling_slider_horizontal_margin</item>
         <item name="labelBehavior">gone</item>
-        <!-- Even guide lines are provided by the shared background vector;
-             Material's dense per-step dots remain hidden. -->
-        <item name="android:background">@drawable/bg_sampling_slider_ticks</item>
-        <item name="android:backgroundTint">?attr/colorOutlineVariant</item>
+        <!-- SamplingRulerSlider draws evenly spaced guides below the actual
+             track. Keep Material's per-step dots hidden. -->
         <item name="tickVisible">false</item>
         <item name="trackHeight">@dimen/sampling_slider_track_height</item>
         <item name="thumbRadius">@dimen/sampling_slider_thumb_radius</item>
@@ -2222,6 +2302,27 @@
         <item name="android:textAlignment">center</item>
     </style>
 
+    <!-- Shared info-box heading: ordinary TextView avoids DialogTitle's
+         runtime font reduction. Long titles wrap at the same theme text size. -->
+    <style name="Widget.App.ParameterInfo.TitleRow" parent="MaterialAlertDialog.Material3.Title.Panel">
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+    <style name="Widget.App.ParameterInfo.Icon" parent="MaterialAlertDialog.Material3.Title.Icon">
+        <item name="android:src">@drawable/ic_info</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+    <style name="Widget.App.ParameterInfo.Title" parent="App.MaterialAlertDialog.Title">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:singleLine">false</item>
+        <item name="android:ellipsize">none</item>
+        <item name="android:autoSizeTextType">none</item>
+        <item name="android:gravity">center</item>
+        <item name="android:accessibilityHeading">true</item>
+    </style>
+
     <style name="App.MaterialAlertDialog" parent="MaterialAlertDialog.Material3">
         <item name="buttonBarNegativeButtonStyle">@style/App.NegativeButtonStyle</item>
         <item name="buttonBarPositiveButtonStyle">@style/App.PositiveButtonStyle</item>
@@ -2262,6 +2363,9 @@
          every shared row, title, hint, and text style with no layout or style
          changes. Every attribute declared in attrs.xml must be defined here. -->
     <style name="ThemeOverlay.Phosphor.Violet" parent="">
+        <item name="appUsageModelBackgroundColor">?attr/colorPrimaryContainer</item>
+        <item name="appUsageModelTextColor">?attr/colorOnPrimaryContainer</item>
+        <item name="appUsageProviderBackgroundColor">?attr/colorSurfaceContainerHigh</item>
         <item name="appRowTitleColor">@color/text</item>
         <item name="appRowSubtitleColor">@color/text_subtitle</item>
         <item name="appTextColor">@color/text</item>

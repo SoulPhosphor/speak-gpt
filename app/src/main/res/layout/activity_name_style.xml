@@ -31,11 +31,8 @@
 
     <ScrollView
         android:id="@+id/scroll"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:clipToPadding="false"
-        android:paddingBottom="24dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        style="@style/Widget.App.NameStyle.Scroll"
+        app:layout_constraintBottom_toTopOf="@id/name_style_save_bar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/action_bar">
@@ -44,11 +41,7 @@
              control on one line, the control filling the rest of the width. -->
         <LinearLayout
             android:id="@+id/name_style_content"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingTop="8dp">
+            style="@style/Widget.App.NameStyle.Content">
 
             <include
                 android:id="@+id/row_type"
@@ -58,9 +51,19 @@
                 android:id="@+id/row_name"
                 layout="@layout/view_memory_filter_dropdown" />
 
+            <LinearLayout style="@style/Widget.App.NameStyle.SavedPanel">
+                <TextView
+                    android:id="@+id/saved_style_panel"
+                    style="@style/Widget.App.NameStyle.SavedValues" />
+                <!-- Intentional text-only button: no separate fill or outline. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_restore_original"
+                    style="@style/Widget.App.NameStyle.RestoreOriginal"
+                    android:text="@string/name_style_restore_original" />
+            </LinearLayout>
+
             <TextView
-                style="@style/Widget.App.Dropdown.CanonicalLabel"
-                android:layout_marginTop="20dp"
+                style="@style/Widget.App.NameStyle.SectionLabel"
                 android:text="@string/name_style_select_style" />
 
             <include
@@ -80,4 +83,14 @@
                 style="@style/Widget.App.NameStyle.Preview" />
         </LinearLayout>
     </ScrollView>
+    <LinearLayout
+        android:id="@+id/name_style_save_bar"
+        style="@style/Widget.App.NameStyle.SaveBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_save_style"
+            style="@style/Widget.App.NameStyle.SaveButton" />
+    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

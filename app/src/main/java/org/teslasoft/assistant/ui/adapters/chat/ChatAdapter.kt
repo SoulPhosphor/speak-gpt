@@ -159,6 +159,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     // Row binding never touches storage. Null only when neither exists, in
     // which case the row falls through to the built-in glyph.
     // [companionImageShape] is the current Default Shape to render it with.
+    private data class AvatarImageStamp(val path: String, val modified: Long, val length: Long)
+    private fun imageStamp(file: File?): AvatarImageStamp? = file?.takeIf { it.isFile }?.let {
+        AvatarImageStamp(it.absolutePath, it.lastModified(), it.length())
+    }
+    private var companionImageStamp: AvatarImageStamp? = null
+    private var userImageStamp: AvatarImageStamp? = null
     private var companionImageFile: File? = null
     private var companionImageShape: String = ProfileImageShape.DEFAULT
     private var companionNameStyle: ChatNameStyle.Resolved? = null
@@ -182,6 +188,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         label: String?,
         nameStyle: ChatNameStyle.Resolved
     ) {
+        val stamp = imageStamp(file)
+        if (stamp == companionImageStamp && shape == companionImageShape &&
+            label == companionLabel && nameStyle == companionNameStyle) return
+        companionImageStamp = stamp
         companionImageFile = file
         companionImageShape = shape
         companionLabel = label
@@ -193,6 +203,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
      *  null) plus the current Default Shape. Rebinds visible rows so the user
      *  bubble's avatar reflects the active identity / Personal Default. */
     fun setUserAvatar(file: File?, shape: String) {
+        val stamp = imageStamp(file)
+        if (stamp == userImageStamp && shape == userImageShape) return
+        userImageStamp = stamp
         userImageFile = file
         userImageShape = shape
         notifyDataSetChanged()
@@ -206,6 +219,25 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     fun setUserNameStyles(styles: Map<String, ChatNameStyle.Override>) {
         if (styles == userNameStyles) return
         userNameStyles = styles
+        notifyDataSetChanged()
+    }
+
+    /** Snapshot only visual inputs, not changing chat/accounting state. */
+    private fun rowAppearance(): List<Any?> = listOf(
+        preferences.getShowChatProfileImages(), preferences.getShowChatNames(),
+        preferences.getShowAiBubble(), preferences.getShowUserBubble(),
+        preferences.getStaggeredResponses(), preferences.getShowModelNames(),
+        preferences.getShowTokenUsage(), preferences.getShowThinking(),
+        preferences.getShowThinkingIndicator(), preferences.getTopPositionedAudioControl(),
+        preferences.getAmoledPitchBlack(), preferences.getAvatarType(), preferences.getAvatarId(),
+        ChatNameStyle.user(preferences), ChatNameStyle.companionDefault(preferences)
+    )
+    private var renderedRowAppearance = rowAppearance()
+
+    fun refreshAppearanceIfChanged() {
+        val current = rowAppearance()
+        if (current == renderedRowAppearance) return
+        renderedRowAppearance = current
         notifyDataSetChanged()
     }
 

@@ -5,6 +5,8 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.inputmethod.EditorInfo
 import android.widget.LinearLayout
+import java.text.DecimalFormat
+import kotlin.math.ceil
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
@@ -79,6 +81,17 @@ class SamplingParameterControl @JvmOverloads constructor(
         configured = false
         this.spec = spec
         this.onValueChanged = onValueChanged
+        // Reserve the complete signed value at full precision using the field's
+        // styled font, rather than a fixed width or the current short value.
+        val sizingFormat = DecimalFormat("0").apply {
+            isGroupingUsed = false
+            minimumFractionDigits = SamplingParameterValuePolicy.DECIMAL_PLACES
+            maximumFractionDigits = SamplingParameterValuePolicy.DECIMAL_PLACES
+        }
+        valueField.minimumWidth = ceil(maxOf(
+            valueField.paint.measureText(sizingFormat.format(spec.minimum)),
+            valueField.paint.measureText(sizingFormat.format(spec.maximum))
+        )).toInt() + valueField.compoundPaddingLeft + valueField.compoundPaddingRight
         slider.valueFrom = spec.minimum
         slider.valueTo = spec.maximum
         slider.stepSize = spec.step

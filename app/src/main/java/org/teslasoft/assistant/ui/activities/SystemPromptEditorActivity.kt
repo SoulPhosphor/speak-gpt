@@ -28,7 +28,6 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
@@ -46,7 +45,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * prompt through [SystemPromptsPreferences.applyEffectiveToGlobal], so the
  * generation path stays untouched.
  */
-class SystemPromptEditorActivity : FragmentActivity() {
+class SystemPromptEditorActivity : SettingsPageActivity() {
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null

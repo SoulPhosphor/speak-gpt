@@ -32,11 +32,11 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
@@ -51,7 +51,7 @@ import org.teslasoft.assistant.ui.adapters.memory.MemoryRowAdapter
  * (SQLCipher opens aren't free) and every failure surfaces as a toast, never a
  * crash — the same contract as the rest of the memory UI.
  */
-abstract class MemoryScreenActivity : FragmentActivity(), MemoryRowAdapter.OnRowListener {
+abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.OnRowListener {
 
     protected var preferences: Preferences? = null
     protected var chatId: String = ""

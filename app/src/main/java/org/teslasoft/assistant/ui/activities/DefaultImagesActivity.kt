@@ -24,7 +24,6 @@ import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -48,7 +47,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * preview thumbnail or Remove Picture row on this screen; do not add
  * either without asking first.
  */
-class DefaultImagesActivity : FragmentActivity() {
+class DefaultImagesActivity : SettingsPageActivity() {
 
     private val ioScope = CoroutineScope(Dispatchers.IO)
 

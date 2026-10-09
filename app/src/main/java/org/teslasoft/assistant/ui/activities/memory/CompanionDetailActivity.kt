@@ -30,10 +30,10 @@ import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CompanionDeletionService
@@ -60,7 +60,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * All store work runs off the main thread; every failure degrades to a toast,
  * never a crash — the memory-UI contract.
  */
-class CompanionDetailActivity : FragmentActivity() {
+class CompanionDetailActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""

@@ -241,6 +241,15 @@ Use for every `MaterialAlertDialogBuilder` unless an approved feature-specific d
 
 This theme supplies the standard dialog appearance and centers dialog titles.
 
+Parameter information boxes use `ParameterInfoDialog` and the shared
+`view_parameter_info_title.xml` heading, styled by `Widget.App.ParameterInfo.*`.
+The ordinary title TextView inherits the standard dialog title typography and
+centering, uses the space beside the information icon, and wraps without a
+line limit. It does not use Android's `DialogTitle`, which can shrink a longer
+heading during measurement and retain that smaller size. Keep the body and
+Close action in the standard Material dialog; do not special-case individual
+parameter headings or set their text size in Kotlin.
+
 ### Title and explanatory text
 
 Use `setTitle` for the dialog heading or its single short question.
@@ -279,6 +288,36 @@ Use the shared `@string/btn_ok` string (its value is `Okay`) for affirmative
 dialog buttons rather than the platform `android.R.string.ok`, so a single
 resource carries the approved spelling everywhere. Do not hardcode the literal
 `OK` in a layout, a Kotlin string, or a translation.
+
+## Conversation navigation motion
+
+New Chat and saved-chat selections in the drawer share
+`ChatDrawerController.openConversationFromDrawer`: suppress the activity's
+window animation and reveal the conversation by closing its drawer. Selecting
+the currently open conversation only closes the existing drawer.
+
+Settings and its internal destination pages inherit `SettingsPageActivity`
+(directly or through `MemoryScreenActivity` / `TtsPickerActivity`).
+They enter from the right and leave toward the right, keeping the underlying
+screen still. Both directions use the shared `settings_slide_*` XML resources
+and `settings_page_slide_duration` in `values/integers.xml` (600 ms). Adjust this
+one token to change both speeds; do not hard-code per-page timing. The chat
+drawer keeps its independent `drawer_slide_duration`.
+
+The policy follows the navigation stack rooted at Settings, including Companions,
+Activation Prompts, Glamour Studio, their editors, and nested memory, roleplay,
+model, voice, appearance, image, backup, and diagnostics pages. Internal explicit
+activity launches inherit the policy through the shared base, including Activity
+Result launchers. Quick Settings launches do not opt in; their managers, editors,
+and filter panels keep the existing transitions. Legacy filter animation overrides
+must only run outside the Settings stack so they cannot replace the shared timing.
+Do not change external document/image picker or other system-window transitions.
+
+Returning to Chat must retain
+the current activity, transcript, composer, and loaded presentation; do not
+recreate it from a Settings result callback. Resume refreshes changed request
+settings and presentation in place. Unchanged row appearance, avatars, and
+identity styles must not trigger full message rebinds.
 
 ## Navigation and settings rows
 
@@ -522,6 +561,19 @@ in `SamplingParameterSpec` / `SamplingParameterValuePolicy`: Temperature
 0–2, Top P 0–1, both penalties -2–2, with 0.01 steps and at most two displayed
 decimal places. Add or reuse a spec there rather than multiplying values in a
 screen controller or placing range/default numbers in layout XML.
+
+The slider precedes its compact editable value field: the value stays on the
+right, with a shared horizontal inset keeping its outline inside the card.
+The field reserves the full signed range at the supported decimal precision
+using its styled font metrics; do not use a wide fixed box or size it only for
+the current value. This shared control intentionally retains left-to-right
+placement so the value remains on the right.
+
+`SamplingRulerSlider` draws 21 evenly spaced guide lines below the actual
+track, with longer endpoint and quarter marks. Its geometry and mark counts
+come from shared dimens/integers; its contrast comes from
+`colorOnSurfaceVariant`. These are visual guides, independent of the numeric
+step. Do not use a stretched vector background or faint per-step dots.
 
 Current canonical uses are the four model controls in Quick Settings and both
 API Endpoint editor layouts. Each host supplies only a view id, the shared
@@ -786,6 +838,13 @@ horizontal margins, vertical padding, and gaps. Do not put a local background,
 background tint, border color, corner size, or copied segment spacing into a
 Quick Settings layout or its Kotlin controller.
 
+The segment fill is `?attr/colorSurfaceContainerHigh`, the neutral elevated
+surface role, for every group and the standalone card (owner correction,
+Oct 8 2026). Do not use `colorSecondaryContainer`: that accent role produced
+the unwanted olive-green backgrounds when the connected groups were redone.
+Keep the fill in the shared segment drawables; do not restore the old
+per-view Kotlin surface tints or hardcode a blue for one palette.
+
 The current vertical order is intentional: identity and character choices;
 model/provider/endpoint routing; memory controls; independent roleplay context;
 the summarizer and its Summary, Compaction, and Image prompts (owner ruling,
@@ -986,6 +1045,19 @@ Do not assign an id to an XML `<include>` tag that includes these layouts. Andro
 Screen frame: `Widget.App.Usage.Header`, `HeaderBar`, `HeaderTitle`,
 `TotalLabel`, `TotalCost`, `TotalMeta`, `Scroll`, `Sections`.
 
+The screen header must inherit `Widget.App.ActionBar` and its shared title/back
+button styles, with `ScreenChrome.apply` supplying the same header chrome as
+Settings. Do not override it with a Usage-specific accent background or title
+color. Conversation total spacing uses `usage_total_top_gap` and
+`usage_total_bottom_gap`: move space from below the total to above it, keeping
+the summary area's overall height unchanged.
+
+Section title pills alone use a solid `colorSurfaceContainerHigh` fill (the
+Quick Settings panel surface), `colorOnSurface` text, and a `colorOutlineVariant`
+outline with the shared `quick_settings_segment_stroke_width`. No gradient or
+lighter accent-container fill behind these titles. This rule does not change
+the separate card-zone color roles described below.
+
 Provider block: `Widget.App.Usage.ProviderHeader`, `ProviderNameColumn`,
 `ProviderName`, `ProviderMeta`, `ProviderTotalColumn`, `ProviderTotal`,
 `ProviderTotalLabel`; chart `Table`, `TableHeader`, `TableHeaderLabel`,
@@ -1010,13 +1082,39 @@ Composition, top to bottom, per section:
 1. one centered `SectionPill` (`view_usage_section_pill.xml`) holding only the
    section title;
 2. one `ModelCard` per model (`view_usage_model_section.xml`): the model header
-   (`view_usage_model_summary.xml`, gradient top) with name and total on one
+   (`view_usage_model_summary.xml`, rich solid accent surface) with name and total on one
    line, the request count below, and, in Summarizing only, the
    `ModelFunctions` line;
 3. inside that card, one provider block per provider
    (`view_usage_provider_block.xml`), separated by a `ProviderGap` that is hidden
    above the first. Only the last provider's pricing footer uses the rounded
    `bg_usage_pricing_footer`; the others use `bg_usage_pricing_footer_inner`.
+
+Chat alone uses `view_usage_chat_table`: retain Usage / Tokens / Cost columns,
+show Input tokens as the inclusive total, then indent Cached, Not cached, and
+Cache Hit Rate beneath it; Output is a separate top-level row. Indent only the
+labels, so token and cost columns stay aligned. Child separators are partial
+lines starting at `usage_chat_detail_indent`; group separators span the padded
+table. Cache Hit Rate is an ordinary child row with a percentage in the quantity
+column and no cost; hide the separate cache pill only in Chat. Preserve the
+existing table layouts of all other categories. Use the stored input total and
+its known/unknown flags, rather than relabeling uncached input as total input.
+
+Card zones are centrally mapped in `Theme.App` and every palette overlay:
+`appUsageModelBackgroundColor` defaults to `colorPrimaryContainer`, with
+`appUsageModelTextColor` mapped to `colorOnPrimaryContainer`. Model headers
+and Cache Hit Rate use this exact same solid fill and matching text role.
+`appUsageProviderBackgroundColor` defaults to `colorSurfaceContainerHigh` for
+provider headers. Pricing footers instead share `appUsageModelBackgroundColor`
+and `appUsageModelTextColor` with the model headers in every section. These roles provide a richer model zone
+against a quieter provider zone without fixing a literal purple or green color.
+
+The model card perimeter and `Widget.App.Usage.ZoneDivider` use
+`colorOutlineVariant` and `quick_settings_segment_stroke_width`, matching the
+Quick Settings section outlines. Full-width dividers sit below the model header,
+below each provider header, and above each provider's pricing footer. Keep them
+outside the padded content so they meet the perimeter. The section title pills
+also match Quick Settings' solid fill, outline color, and stroke width exactly.
 
 Theme readiness: every color in these styles and in `bg_usage_section_pill`,
 `bg_usage_model_header`, `bg_usage_provider_header`, and the two pricing
@@ -1083,9 +1181,40 @@ outlined-field geometry, text appearance, padding, and inline error placement.
 The dialog host owns the title, current value, validation policy, and cancel-first
 actions. Add Folder and Rename Folder must use this one composition.
 
-## Name Style preview
+## Name Style
 
-`Widget.App.NameStyle.Preview` is the centered live preview under the Name Style controls. The style owns its color, placement and spacing; the font, size and bold/italic come from `ChatNameStyle.apply`, the same call chat uses, so the preview always matches chat.
+The header uses `Widget.App.ActionBar` and `ScreenChrome`. Dropdowns remain
+available in any order. Before a name is chosen, typography edits stay in an
+unassigned preview draft; the Name dropdown can list names grouped by Type.
+Each selected name keeps its own draft. Nothing writes to preferences or the
+identity store until Save. The centered fixed-bottom `NameStyle.SaveButton`
+inherits `AppButton.Primary`; back navigation offers saving all assigned drafts,
+discarding, or keeping editing. Unassigned edits require selecting a name first.
+Drafts and selection survive activity recreation through saved instance state.
+
+`Widget.App.NameStyle.SavedPanel` sits directly below Name and stays visible,
+empty, with reserved text/action space before selection. Its fill and outline
+match Quick Settings (`colorSurfaceContainerHigh`, `colorOutlineVariant`,
+`quick_settings_segment_stroke_width`); its corners use the same
+`dropdown_corner_radius` as the dropdowns. `NameStyle.SavedValues` uses normal
+body text and shows the last saved values, not the preview draft. Labels are
+Default Companion Style, Default User Style, and Custom Settings. Companions
+inherit the companion default; Glamour and Roleplay inherit the user default.
+For custom settings, also show the matching default values for comparison.
+
+**Intentional owner-approved button exception:** `NameStyle.RestoreOriginal`
+is a bold text-only button on the bottom line inside the saved-style box,
+labeled **Restore Original Style**. It has no outline, separate background,
+checkbox, or confirmation popup. Do not convert it to a filled/outlined button
+or move it outside the box. Clicking restores the selected name's last saved
+overrides into its draft and preview; empty overrides retain true inheritance
+from the appropriate default. It does not save, reset to factory values, or
+replace custom saved settings with defaults. The action space remains reserved
+but blank before a name is selected.
+
+`Widget.App.NameStyle.Preview` is the centered live preview under the controls.
+Typography comes from `ChatNameStyle.apply`, the same resolver used by chat.
+All placement, text appearance, shapes, and spacing belong to XML styles/dimens.
 
 ## Search status
 

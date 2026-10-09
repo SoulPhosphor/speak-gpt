@@ -86,18 +86,20 @@
 
     <!-- Shared editable-value + slider control. Appearance and spacing for
          every sampling-parameter control live here rather than in screens. -->
-    <dimen name="sampling_slider_value_width">72dp</dimen>
     <dimen name="sampling_slider_value_min_height">36dp</dimen>
     <dimen name="sampling_slider_value_text_size">15sp</dimen>
-    <dimen name="sampling_slider_value_padding_horizontal">8dp</dimen>
-    <dimen name="sampling_slider_value_padding_vertical">6dp</dimen>
+    <dimen name="sampling_slider_value_padding_horizontal">4dp</dimen>
+    <dimen name="sampling_slider_value_padding_vertical">4dp</dimen>
     <dimen name="sampling_slider_section_gap">12dp</dimen>
     <dimen name="sampling_slider_value_gap">6dp</dimen>
-    <dimen name="sampling_slider_horizontal_margin">12dp</dimen>
+    <dimen name="sampling_slider_horizontal_margin">0dp</dimen>
     <dimen name="sampling_slider_track_height">6dp</dimen>
     <dimen name="sampling_slider_thumb_radius">9dp</dimen>
     <dimen name="sampling_slider_inline_gap">8dp</dimen>
-    <dimen name="sampling_slider_tick_height">10dp</dimen>
+    <dimen name="sampling_slider_tick_height">5dp</dimen>
+    <dimen name="sampling_slider_major_tick_height">8dp</dimen>
+    <dimen name="sampling_slider_tick_gap">3dp</dimen>
+    <dimen name="sampling_slider_tick_width">1dp</dimen>
 
     <!-- Quick Settings connected blocks. Every block uses these same tokens so
          spacing and corner geometry can be changed in one place. -->
@@ -112,6 +114,10 @@
     <dimen name="quick_settings_seed_width">132dp</dimen>
     <dimen name="quick_settings_lorebook_row_min_height">48dp</dimen>
     <!-- Usage & Cost model cards: the card and its top/bottom backgrounds share one corner. -->
+    <!-- Shift the total down without increasing its overall header area. -->
+    <dimen name="usage_chat_detail_indent">24dp</dimen>
+    <dimen name="usage_total_top_gap">12dp</dimen>
+    <dimen name="usage_total_bottom_gap">14dp</dimen>
     <dimen name="usage_card_corner_radius">16dp</dimen>
     <dimen name="usage_pill_corner_radius">999dp</dimen>
     <dimen name="usage_cache_rate_corner_radius">10dp</dimen>
@@ -123,4 +129,11 @@
     <dimen name="image_settings_content_padding">20dp</dimen>
     <dimen name="image_settings_bottom_padding">24dp</dimen>
     <dimen name="image_settings_field_gap">12dp</dimen>
+    <!-- Shared dropdown geometry and Name Style composition. -->
+    <dimen name="dropdown_corner_radius">5dp</dimen>
+    <dimen name="name_style_content_inset">20dp</dimen>
+    <dimen name="name_style_small_gap">8dp</dimen>
+    <dimen name="name_style_section_gap">20dp</dimen>
+    <dimen name="name_style_panel_padding">12dp</dimen>
+    <dimen name="name_style_body_text_size">16sp</dimen>
 </resources>

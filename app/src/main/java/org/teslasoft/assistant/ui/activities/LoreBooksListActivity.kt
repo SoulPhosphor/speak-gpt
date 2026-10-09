@@ -37,7 +37,6 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.marginBottom
 import androidx.core.view.marginRight
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -67,7 +66,7 @@ import org.teslasoft.assistant.ui.adapters.LoreSuggestionAdapter
  * selection-only mode, which also hides book creation, editing, and excluded
  * Companion-linked books so the screen has one unambiguous purpose.
  */
-class LoreBooksListActivity : FragmentActivity() {
+class LoreBooksListActivity : SettingsPageActivity() {
 
     companion object {
         const val EXTRA_PICK_MODE = "pickMode"

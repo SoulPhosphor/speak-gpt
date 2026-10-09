@@ -34,12 +34,12 @@ import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CampaignRecord
@@ -66,7 +66,7 @@ import org.teslasoft.assistant.ui.util.DiscardChangesDialog
  * story_so_far text is preserved untouched and never shown (spec §8a).
  * Teardown gets its §5 link-warning rework in the 3.6f slice.
  */
-class CampaignDetailActivity : FragmentActivity() {
+class CampaignDetailActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId: String = ""

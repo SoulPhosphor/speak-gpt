@@ -30,13 +30,13 @@ import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CardEntryRecord
@@ -57,7 +57,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * arrive with those cards' build slices. Tags per spec §3, roleplay realm
  * only. No length caps anywhere — multi-line is the rule (spec §6).
  */
-class CardEntryEditorActivity : FragmentActivity() {
+class CardEntryEditorActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
 

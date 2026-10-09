@@ -27,7 +27,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
@@ -48,7 +47,7 @@ import org.teslasoft.assistant.util.summarizer.SummarizerPromptSets
  * editor as Edit Companion; built-in prompts cannot be deleted. Nothing is
  * stored until the header Save icon is tapped.
  */
-class SummarizerPromptsActivity : FragmentActivity() {
+class SummarizerPromptsActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var actionBar: ConstraintLayout? = null

@@ -33,7 +33,6 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
-import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentTransaction
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
 import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
@@ -49,7 +48,7 @@ import kotlin.math.roundToInt
 import androidx.core.view.WindowCompat
 import org.teslasoft.assistant.theme.ThemeManager
 
-class SettingsActivity : FragmentActivity() {
+class SettingsActivity : SettingsPageActivity() {
 
     // Plain rows (not TileFragment) -- row-style conversion review slice, July 18 2026.
     private var rowCharacters: LinearLayout? = null
@@ -149,15 +148,6 @@ class SettingsActivity : FragmentActivity() {
         window.sharedElementExitTransition = transition2
 
         super.onCreate(savedInstanceState)
-        // Settings slides in from the right and back out, at the chat drawer's speed,
-        // wherever it is opened from.
-        if (Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, R.anim.settings_slide_in, R.anim.settings_hold)
-            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, R.anim.settings_hold, R.anim.settings_slide_out)
-        } else {
-            @Suppress("DEPRECATION")
-            overridePendingTransition(R.anim.settings_slide_in, R.anim.settings_hold)
-        }
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_settings)
 
@@ -373,12 +363,4 @@ class SettingsActivity : FragmentActivity() {
     }
 
     private fun finishActivity() = finish()
-
-    override fun finish() {
-        super.finish()
-        if (Build.VERSION.SDK_INT < 34) {
-            @Suppress("DEPRECATION")
-            overridePendingTransition(R.anim.settings_hold, R.anim.settings_slide_out)
-        }
-    }
 }

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chat only: input total and its indented breakdown, followed by output. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+    <include layout="@layout/view_usage_table_header" />
+    <include android:id="@+id/usage_input_row" layout="@layout/view_usage_chat_total_row" />
+    <include layout="@layout/view_usage_table_divider" />
+    <include android:id="@+id/usage_cached_row" layout="@layout/view_usage_chat_detail_row" />
+    <include layout="@layout/view_usage_chat_detail_divider" />
+    <include android:id="@+id/usage_uncached_row" layout="@layout/view_usage_chat_detail_row" />
+    <include layout="@layout/view_usage_chat_detail_divider" />
+    <include android:id="@+id/usage_cache_rate_row" layout="@layout/view_usage_chat_detail_row" />
+    <include layout="@layout/view_usage_table_divider" />
+    <include android:id="@+id/usage_output_row" layout="@layout/view_usage_chat_total_row" />
+</merge>

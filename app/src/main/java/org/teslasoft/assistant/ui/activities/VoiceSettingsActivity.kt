@@ -36,7 +36,6 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.WindowCompat
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.textfield.TextInputEditText
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -74,7 +73,7 @@ import org.teslasoft.assistant.tts.voices.VoiceIdentityRegistry
  * detection radios (with WebRTC's sensitivity dropdown shown only when WebRTC
  * is selected), and the hands-free timer blanks.
  */
-class VoiceSettingsActivity : FragmentActivity() {
+class VoiceSettingsActivity : SettingsPageActivity() {
 
     private var rowVoiceBrowser: LinearLayout? = null
     private var valueVoiceBrowser: TextView? = null

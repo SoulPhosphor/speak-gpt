@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Usage & Cost section heading pill. Theme roles only, so a palette can recolor it. -->
+<!-- Section titles only: neutral Quick Settings panel fill and thin accent outline. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <corners android:radius="@dimen/usage_pill_corner_radius" />
-    <gradient
-        android:angle="0"
-        android:endColor="?attr/colorSurfaceContainerHighest"
-        android:startColor="?attr/colorPrimaryContainer" />
+    <solid android:color="?attr/colorSurfaceContainerHigh" />
+    <stroke
+        android:width="@dimen/quick_settings_segment_stroke_width"
+        android:color="?attr/colorOutlineVariant" />
 </shape>

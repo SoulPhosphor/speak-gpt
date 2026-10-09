@@ -31,7 +31,6 @@ import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
@@ -60,7 +59,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * Reset Memories deliberately does NOT live here — it stays on Memory Controls
  * as the single home for that destructive action (placement ruling 5).
  */
-class AdvancedMemorySettingsActivity : FragmentActivity() {
+class AdvancedMemorySettingsActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""

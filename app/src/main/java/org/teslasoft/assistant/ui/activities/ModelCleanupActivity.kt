@@ -26,7 +26,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
@@ -61,7 +60,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /** Saved, user-triggered availability report for Favorites, Model Rules and saved TTS models. */
-class ModelCleanupActivity : FragmentActivity() {
+class ModelCleanupActivity : SettingsPageActivity() {
 
     private data class ScreenData(
         val references: ModelCleanupReferences,

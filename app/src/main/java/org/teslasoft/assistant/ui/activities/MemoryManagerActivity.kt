@@ -28,7 +28,6 @@ import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
@@ -51,7 +50,7 @@ import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity
  * now its own top row here, and that screen keeps only the plumbing under
  * "Memory Settings".
  */
-class MemoryManagerActivity : FragmentActivity() {
+class MemoryManagerActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""

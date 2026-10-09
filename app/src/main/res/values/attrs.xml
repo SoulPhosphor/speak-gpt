@@ -43,6 +43,11 @@
     <attr name="appDropdownDisabledTextColor" format="color" />
     <attr name="appDropdownDisabledBorderColor" format="color" />
 
+    <!-- Usage card zones: one palette mapping for model/cache and provider surfaces. -->
+    <attr name="appUsageModelBackgroundColor" format="color" />
+    <attr name="appUsageModelTextColor" format="color" />
+    <attr name="appUsageProviderBackgroundColor" format="color" />
+
     <!-- ParameterSectionHeader: a section title paired with the circled-i
          information button used across the app. The title is shown inline; the
          info text is not shown until the button is tapped, when it opens the

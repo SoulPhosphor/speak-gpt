@@ -35,7 +35,6 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -83,7 +82,7 @@ import org.teslasoft.core.api.network.RequestNetwork
  * save; from the Favorite AI Models list's routing gear ([EXTRA_PERSIST_DIRECTLY])
  * Save writes the favorite straight to the store. Back / cancel returns nothing.
  */
-class ChooseProviderActivity : FragmentActivity() {
+class ChooseProviderActivity : SettingsPageActivity() {
 
     companion object {
         const val EXTRA_ENDPOINT_ID = "endpointId"
@@ -946,7 +945,7 @@ class ChooseProviderActivity : FragmentActivity() {
             .putExtra(ProviderFilterPanelActivity.EXTRA_QUANTIZATIONS, quants.toTypedArray())
         startActivity(intent)
         // Pair with the panel's slide-out on close so the transition matches.
-        overridePendingTransition(R.anim.slide_in_right, R.anim.anim_hold)
+        if (!usesSettingsPageMotion) overridePendingTransition(R.anim.slide_in_right, R.anim.anim_hold)
     }
 
     /* ------------------------------ save / cancel ------------------------------ */

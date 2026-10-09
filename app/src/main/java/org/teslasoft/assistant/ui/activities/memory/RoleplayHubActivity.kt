@@ -28,8 +28,8 @@ import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
@@ -42,7 +42,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * Memory manager so fiction/game state never mixes with the companion memory
  * surfaces.
  */
-class RoleplayHubActivity : FragmentActivity() {
+class RoleplayHubActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""

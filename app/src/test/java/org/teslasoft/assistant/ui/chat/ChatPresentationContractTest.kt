@@ -14,6 +14,17 @@ import org.junit.Test
 /** Structural guards for the single adaptable Phase 2 chat presentation. */
 class ChatPresentationContractTest {
 
+    @Test
+    fun restoredNameDraftsAreRetainedBeforeAsynchronousTargetLoading() {
+        val activity = source("src/main/java/org/teslasoft/assistant/ui/activities/NameStyleActivity.kt")
+        val restore = activity.indexOf("drafts.putAll(restored)")
+        val load = activity.indexOf("lifecycleScope.launch", restore)
+        assertTrue(restore >= 0 && load > restore)
+        assertTrue(activity.contains("drafts[draft.target.key]?.copy(target = draft.target) ?: draft"))
+        val saveState = activity.substring(activity.indexOf("override fun onSaveInstanceState"))
+        assertTrue(saveState.contains("Gson().toJson(drafts.values.filter { it.dirty })"))
+    }
+
     private fun source(relative: String): String {
         val candidates = listOf(File(relative), File("app/$relative"), File("../$relative"))
         return candidates.firstOrNull { it.exists() }?.readText()
@@ -79,8 +90,8 @@ class ChatPresentationContractTest {
         assertTrue(preferences.contains("getGlobalBoolean(\"chat_bold_user_name\", false)"))
         assertTrue(preferences.contains("getGlobalBoolean(\"chat_bold_ai_name\", false)"))
         assertTrue(nameStyle.contains("bold && italic -> Typeface.BOLD_ITALIC"))
-        assertTrue(appearance.contains("@+id/switch_bold_user_name"))
-        assertTrue(appearance.contains("@+id/switch_bold_companion_name"))
+        assertFalse(appearance.contains("@+id/switch_bold_user_name"))
+        assertFalse(appearance.contains("@+id/switch_bold_companion_name"))
         for (path in messageLayouts) {
             assertFalse(path, source(path).contains("android:textStyle=\"bold\""))
         }
@@ -318,9 +329,14 @@ class ChatPresentationContractTest {
         assertTrue(adapter.contains("updateSpeakerPlacement(placeOnStart)"))
         assertTrue(adapter.contains("constrainToSpeakerEdge(message, placeOnStart)"))
         assertTrue(adapter.contains("iconParams.setMarginStart(portraitEdge)"))
-        assertTrue(chatActivity.contains(
-            "Rebind existing rows so Staggered Responses takes effect at once."
-        ))
+        assertTrue(chatActivity.contains("adapter?.refreshAppearanceIfChanged()"))
+        val snapshotStart = adapter.indexOf("private fun rowAppearance()")
+        val snapshotEnd = adapter.indexOf("private var renderedRowAppearance", snapshotStart)
+        assertTrue(adapter.substring(snapshotStart, snapshotEnd).contains("preferences.getStaggeredResponses()"))
+        assertTrue(adapter.contains("if (current == renderedRowAppearance) return"))
+        val refreshStart = adapter.indexOf("fun refreshAppearanceIfChanged()")
+        val refreshEnd = adapter.indexOf("\n    }", refreshStart)
+        assertTrue(adapter.substring(refreshStart, refreshEnd).contains("notifyDataSetChanged()"))
     }
 
 }

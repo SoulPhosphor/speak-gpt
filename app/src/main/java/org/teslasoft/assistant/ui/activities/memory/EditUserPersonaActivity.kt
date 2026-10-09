@@ -35,12 +35,12 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -67,7 +67,7 @@ import org.teslasoft.assistant.util.ProfileImageResolver
  * work exactly as its old dialog listener did. Both the Short Description
  * (v16 short_description column) and the picture (imageRef) ride the result.
  */
-class EditUserPersonaActivity : FragmentActivity() {
+class EditUserPersonaActivity : SettingsPageActivity() {
 
     companion object {
         const val EXTRA_PERSONA_ID = "personaId"

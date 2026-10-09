@@ -28,7 +28,6 @@ import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
@@ -48,7 +47,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * they are local-only and must not be gated on the (telemetry) installation
  * id (see CLAUDE.md).
  */
-class LogCabinActivity : FragmentActivity() {
+class LogCabinActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""

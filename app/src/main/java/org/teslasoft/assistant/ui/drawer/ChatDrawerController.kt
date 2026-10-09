@@ -122,9 +122,12 @@ class ChatDrawerController private constructor(
             DrawerRow.Gallery -> activity.startActivity(Intent(activity, ImageGalleryActivity::class.java))
             is DrawerRow.FoldersHeader -> { repository.setFoldersExpanded(!row.expanded); refresh() }
             is DrawerRow.Folder -> { repository.setFolderExpanded(row.value.id, !row.expanded); refresh() }
-            is DrawerRow.Chat -> activity.startActivity(
-                ChatActivity.rootIntent(activity, row.value.id, row.value.name)
-            )
+            is DrawerRow.Chat -> {
+                if (row.value.id == currentChatId()) close()
+                else openConversationFromDrawer(
+                    ChatActivity.rootIntent(activity, row.value.id, row.value.name)
+                )
+            }
             is DrawerRow.Section -> Unit
         }
     }
@@ -208,15 +211,20 @@ class ChatDrawerController private constructor(
             val pending = withContext(Dispatchers.IO) {
                 NewConversationCoordinator(activity).createDefaultPendingConversation()
             }
-            // No window animation: the new chat is revealed by its own drawer pulling back.
-            activity.startActivity(
+            openConversationFromDrawer(
                 ChatActivity.rootIntent(activity, pending.id, pending.name, pendingConversation = true)
-                    .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                    .putExtra(EXTRA_REVEAL_FROM_DRAWER, true)
             )
-            @Suppress("DEPRECATION")
-            activity.overridePendingTransition(0, 0)
         }
+    }
+
+    /** Both new and saved conversations are revealed by the drawer pulling back. */
+    private fun openConversationFromDrawer(intent: Intent) {
+        activity.startActivity(
+            intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                .putExtra(EXTRA_REVEAL_FROM_DRAWER, true)
+        )
+        @Suppress("DEPRECATION")
+        activity.overridePendingTransition(0, 0)
     }
 
     companion object {

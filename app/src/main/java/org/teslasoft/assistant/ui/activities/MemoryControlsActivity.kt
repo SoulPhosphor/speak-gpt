@@ -28,7 +28,6 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
@@ -53,7 +52,7 @@ import org.teslasoft.assistant.ui.widgets.AppDropdown
  * The user-facing name is "Memory Assistant" — never "Archivist" (the internal
  * `Preferences.getArchivist*` accessors keep the code name).
  */
-class MemoryControlsActivity : FragmentActivity() {
+class MemoryControlsActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""

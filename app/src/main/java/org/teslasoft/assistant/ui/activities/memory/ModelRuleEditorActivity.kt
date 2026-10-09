@@ -33,12 +33,12 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -67,7 +67,7 @@ import org.teslasoft.assistant.ui.widgets.AppRemovableChip
  * activates; plain Save keeps a draft a draft. All store work is off the main
  * thread; failures degrade to a toast.
  */
-class ModelRuleEditorActivity : FragmentActivity() {
+class ModelRuleEditorActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId: String = ""

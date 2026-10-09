@@ -3,4 +3,9 @@
     <integer name="conversation_mode_selector_animation_ms">220</integer>
     <!-- A full-width chat drawer settles in (1 + 1) x 256 ms (DrawerLayout's ViewDragHelper). -->
     <integer name="drawer_slide_duration">512</integer>
+    <!-- Shared opening and closing time for Settings and its main pages. -->
+    <integer name="settings_page_slide_duration">600</integer>
+    <integer name="sampling_slider_ruler_intervals">20</integer>
+    <integer name="sampling_slider_ruler_major_interval">5</integer>
+    <integer name="name_style_saved_panel_min_lines">4</integer>
 </resources>

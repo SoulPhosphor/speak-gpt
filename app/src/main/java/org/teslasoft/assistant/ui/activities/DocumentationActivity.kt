@@ -24,13 +24,12 @@ import android.widget.ImageButton
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.DrawableCompat
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 
-class DocumentationActivity : FragmentActivity() {
+class DocumentationActivity : SettingsPageActivity() {
 
     private var btnBack: ImageButton? = null
     private var webview: WebView? = null

@@ -34,7 +34,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
@@ -68,7 +67,7 @@ import java.util.Locale
  * User-facing name is "Memory Assistant"; the `Preferences.getArchivist*`
  * accessors keep the internal code name.
  */
-class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
+class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null

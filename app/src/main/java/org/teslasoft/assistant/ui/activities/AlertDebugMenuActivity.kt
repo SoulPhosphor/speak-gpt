@@ -31,7 +31,6 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
@@ -60,7 +59,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * is only threaded through so the destination screens keep the same intent
  * contract they had when launched from Settings.
  */
-class AlertDebugMenuActivity : FragmentActivity() {
+class AlertDebugMenuActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""
