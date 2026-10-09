@@ -14,6 +14,17 @@ import org.junit.Test
 /** Structural guards for the single adaptable Phase 2 chat presentation. */
 class ChatPresentationContractTest {
 
+    @Test
+    fun restoredNameDraftsAreRetainedBeforeAsynchronousTargetLoading() {
+        val activity = source("src/main/java/org/teslasoft/assistant/ui/activities/NameStyleActivity.kt")
+        val restore = activity.indexOf("drafts.putAll(restored)")
+        val load = activity.indexOf("lifecycleScope.launch", restore)
+        assertTrue(restore >= 0 && load > restore)
+        assertTrue(activity.contains("drafts[draft.target.key]?.copy(target = draft.target) ?: draft"))
+        val saveState = activity.substring(activity.indexOf("override fun onSaveInstanceState"))
+        assertTrue(saveState.contains("Gson().toJson(drafts.values.filter { it.dirty })"))
+    }
+
     private fun source(relative: String): String {
         val candidates = listOf(File(relative), File("app/$relative"), File("../$relative"))
         return candidates.firstOrNull { it.exists() }?.readText()

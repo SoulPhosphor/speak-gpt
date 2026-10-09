@@ -129,6 +129,9 @@ class NameStyleActivity : SettingsPageActivity() {
         val restored = savedInstanceState?.getString("drafts")?.let {
             Gson().fromJson(it, Array<Draft>::class.java).associateBy { draft -> draft.target.key }
         }.orEmpty()
+        // Keep restored edits in the collection serialized by onSaveInstanceState
+        // before target loading suspends, including across another recreation.
+        drafts.putAll(restored)
         render()
         lifecycleScope.launch {
             try {
@@ -138,7 +141,9 @@ class NameStyleActivity : SettingsPageActivity() {
                         Draft(target, NameStyleDraft(saved))
                     }
                 }
-                loaded.forEach { draft -> drafts[draft.target.key] = restored[draft.target.key]?.copy(target = draft.target) ?: draft }
+                val loadedKeys = loaded.map { it.target.key }.toSet()
+                drafts.keys.retainAll(loadedKeys)
+                loaded.forEach { draft -> drafts[draft.target.key] = drafts[draft.target.key]?.copy(target = draft.target) ?: draft }
                 if (selectedKey?.let { it in drafts } != true) selectedKey = null
                 selected?.let {
                     it.state.pending = merge(it.state.pending, scratch)
