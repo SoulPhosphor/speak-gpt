@@ -77,6 +77,9 @@ class AppearanceActivity : SettingsPageActivity() {
         bindSwitch(R.id.switch_token_usage, preferences.getShowTokenUsage()) {
             preferences.setShowTokenUsage(it)
         }
+        bindSwitch(R.id.switch_user_tokens, preferences.getShowUserTokens()) {
+            preferences.setShowUserTokens(it)
+        }
         bindSwitch(
             R.id.switch_hardware_keyboard_shortcuts,
             preferences.getHardwareKeyboardShortcuts()

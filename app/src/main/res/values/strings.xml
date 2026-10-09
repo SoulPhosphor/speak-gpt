@@ -3772,8 +3772,10 @@
     <string name="appearance_user_bubble_hint">Show the user message bubble decoration.</string>
     <string name="appearance_model_names">Model Names</string>
     <string name="appearance_model_names_hint">Show the model that produced each message.</string>
-    <string name="appearance_token_usage">Token Usage</string>
+    <string name="appearance_token_usage">Show AI Response Tokens</string>
     <string name="appearance_token_usage_hint">Show provider-reported token usage for each message.</string>
+    <string name="appearance_user_tokens">Show User Tokens</string>
+    <string name="appearance_user_tokens_hint">Shows the estimated tokens for each user submitted text message.</string>
     <!-- Message Details popup (ⓘ) and the compact metadata line. The popup
          shows bare values (a date/time, the model, the token count) with no
          heading or field labels; the empty line covers a message with nothing
@@ -3836,6 +3838,9 @@
     <!-- Reasoning-token count in Message Details, kept separate from answer
          tokens (chat-redesign-plan.md §7.8), e.g. "512 Reasoning Tokens". -->
     <string name="chat_reasoning_token_count">%1$s Reasoning Tokens</string>
+    <!-- Estimated tokens in the user's own message (Show User Tokens), counted
+         on the device because no service reports one message's tokens. -->
+    <string name="chat_user_token_estimate">About %1$s Tokens</string>
     <!-- Regenerated-response pager on an assistant message. -->
     <string name="version_nav_prev">Previous Response Version</string>
     <string name="version_nav_next">Next Response Version</string>

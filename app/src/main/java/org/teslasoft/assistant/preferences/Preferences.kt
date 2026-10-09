@@ -628,6 +628,14 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_show_token_usage", state)
     }
 
+    /** Show User Tokens (Appearance): the user's own messages show an
+     *  estimated token count in Message Details. Off by default. */
+    fun getShowUserTokens(): Boolean = getGlobalBoolean("chat_show_user_tokens", false)
+
+    fun setShowUserTokens(state: Boolean) {
+        putGlobalBoolean("chat_show_user_tokens", state)
+    }
+
     /** Whether the per-message reasoning-effort glyph is shown on AI replies
      *  (Chat Settings → Thinking Indicator). Default on. Hiding it never
      *  touches the per-message stored level, so turning it back on restores

@@ -1283,7 +1283,10 @@ The ⓘ message action opens `layout/view_details_popup.xml`:
 `MessageDetails.FirstValue` / `MessageDetails.Value` and the empty line in
 `MessageDetails.Empty`. The box is as wide as its longest line plus its
 padding, with no minimum width (owner ruling, Oct 9 2026). Token values use
-Title Case: "1,234 Tokens", "512 Reasoning Tokens".
+Title Case: "1,234 Tokens", "512 Reasoning Tokens". With Appearance → Show
+User Tokens on, the user's own text messages show "About 42 Tokens", counted on
+the device because no service reports one message's tokens (owner ruling,
+Oct 9 2026).
 
 ## Search status
 
