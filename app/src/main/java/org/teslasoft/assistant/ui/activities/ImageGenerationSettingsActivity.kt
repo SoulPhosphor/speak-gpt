@@ -27,7 +27,6 @@ import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -45,7 +44,7 @@ import org.teslasoft.assistant.ui.util.ScreenChrome
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /** Settings are scoped to the endpoint and exact model. Choices come from fetched metadata. */
-class ImageGenerationSettingsActivity : FragmentActivity() {
+class ImageGenerationSettingsActivity : SettingsPageActivity() {
     private lateinit var preferences: Preferences
     private lateinit var endpoints: ApiEndpointPreferences
     private var metadataJob: Job? = null

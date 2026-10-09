@@ -33,7 +33,6 @@ import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import org.teslasoft.assistant.BuildConfig
 import org.teslasoft.assistant.R
@@ -44,7 +43,7 @@ import androidx.core.net.toUri
 import eightbitlab.com.blurview.BlurView
 import org.teslasoft.assistant.theme.ThemeManager
 
-class AboutActivity : FragmentActivity() {
+class AboutActivity : SettingsPageActivity() {
 
     private var appIcon: ImageView? = null
     private var btnProjects: MaterialButton? = null

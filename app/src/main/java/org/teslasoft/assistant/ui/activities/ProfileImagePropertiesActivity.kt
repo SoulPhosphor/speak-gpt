@@ -27,7 +27,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.fragment.app.FragmentActivity
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -43,7 +42,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * rows - Profile Images (the gallery, management mode), Default Images
  * (Global Default / Personal Default), and Default Shape.
  */
-class ProfileImagePropertiesActivity : FragmentActivity() {
+class ProfileImagePropertiesActivity : SettingsPageActivity() {
 
     private val shapeOptions = listOf(
         ProfileImageShape.FLOWER to R.string.shape_flower,

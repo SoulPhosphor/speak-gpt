@@ -30,14 +30,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 
-class CharactersActivity : FragmentActivity() {
+class CharactersActivity : SettingsPageActivity() {
 
     private var btnBack: ImageButton? = null
     private var actionBar: ConstraintLayout? = null

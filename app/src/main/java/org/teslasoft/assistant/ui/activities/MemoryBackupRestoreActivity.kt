@@ -36,7 +36,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -122,7 +121,7 @@ import org.json.JSONArray
  * persistent inline status text or Material dialogs. Location lines show a
  * persisted friendly folder label — never a raw URI or tree document id.
  */
-class MemoryBackupRestoreActivity : FragmentActivity() {
+class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
     companion object {
         /** Intent extra: a BackupType key whose A1 repair dialog should open

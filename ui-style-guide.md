@@ -296,8 +296,18 @@ New Chat and saved-chat selections in the drawer share
 window animation and reveal the conversation by closing its drawer. Selecting
 the currently open conversation only closes the existing drawer.
 
-Settings retains its right-edge slide through the shared `settings_slide_*`
-animation resources and `drawer_slide_duration`. Returning to Chat must retain
+Settings and all main pages opened by its rows inherit `SettingsPageActivity`.
+They enter from the right and leave toward the right, keeping the underlying
+screen still. Both directions use the shared `settings_slide_*` XML resources
+and `settings_page_slide_duration` in `values/integers.xml` (600 ms). Adjust this
+one token to change both speeds; do not hard-code per-page timing. The chat
+drawer keeps its independent `drawer_slide_duration`.
+
+This applies to Characters, AI System Settings, Memory, Roleplay, Profile Images,
+Voice & Speech, Image Generation, Appearance, Backup & Restore, About, Alert
+Debug, Log Cabin, and Documentation, as well as Settings itself.
+
+Returning to Chat must retain
 the current activity, transcript, composer, and loaded presentation; do not
 recreate it from a Settings result callback. Resume refreshes changed request
 settings and presentation in place. Unchanged row appearance, avatars, and

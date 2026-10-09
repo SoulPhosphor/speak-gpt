@@ -18,7 +18,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
@@ -29,7 +28,7 @@ import org.teslasoft.assistant.ui.util.ScreenChrome
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /** Appearance controls consumed by the adaptable chat message shell. */
-class AppearanceActivity : FragmentActivity() {
+class AppearanceActivity : SettingsPageActivity() {
 
     companion object {
         private const val STATE_PREVIEW_TEXT = "appearance_preview_text"
