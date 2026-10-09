@@ -39,7 +39,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
@@ -84,7 +83,6 @@ class EditPersonaActivity : SettingsPageActivity() {
         const val EXTRA_ACTIVATION_ID = "activationPromptId"
         const val EXTRA_CORE_LOREBOOK = "coreLoreBookId"
         const val EXTRA_ADDITIONAL_LOREBOOKS = "additionalLoreBookIds"
-        const val EXTRA_AUTOLOAD = "autoLoadLastLoreBooks"
         const val EXTRA_LAST_USED_LOREBOOKS = "lastUsedLoreBookIds"
         const val EXTRA_AVATAR_REF = "avatarRef"
         const val EXTRA_POSITION = "position"
@@ -109,7 +107,6 @@ class EditPersonaActivity : SettingsPageActivity() {
                 .putExtra(EXTRA_ACTIVATION_ID, persona.activationPromptId)
                 .putExtra(EXTRA_CORE_LOREBOOK, persona.coreLoreBookId)
                 .putExtra(EXTRA_ADDITIONAL_LOREBOOKS, persona.additionalLoreBookIds)
-                .putExtra(EXTRA_AUTOLOAD, persona.autoLoadLastLoreBooks)
                 .putExtra(EXTRA_LAST_USED_LOREBOOKS, persona.lastUsedLoreBookIds)
                 .putExtra(EXTRA_AVATAR_REF, persona.avatarRef)
                 .putExtra(EXTRA_POSITION, position)
@@ -130,7 +127,6 @@ class EditPersonaActivity : SettingsPageActivity() {
                 activationPromptId = data.getStringExtra(EXTRA_ACTIVATION_ID) ?: "",
                 coreLoreBookId = data.getStringExtra(EXTRA_CORE_LOREBOOK) ?: "",
                 additionalLoreBookIds = data.getStringExtra(EXTRA_ADDITIONAL_LOREBOOKS) ?: "",
-                autoLoadLastLoreBooks = data.getBooleanExtra(EXTRA_AUTOLOAD, false),
                 lastUsedLoreBookIds = data.getStringExtra(EXTRA_LAST_USED_LOREBOOKS) ?: "",
                 avatarRef = data.getStringExtra(EXTRA_AVATAR_REF) ?: "",
                 id = data.getStringExtra(EXTRA_ID) ?: ""
@@ -148,7 +144,6 @@ class EditPersonaActivity : SettingsPageActivity() {
     private var textSignaturePreview: TextView? = null
     private var additionalLoreBooksList: LinearLayout? = null
     private var btnAddLoreBooks: MaterialButton? = null
-    private var checkboxAutoload: MaterialCheckBox? = null
     private var imgPersonaAvatar: ImageView? = null
     private var btnSave: ImageButton? = null
     private var btnDelete: ImageButton? = null
@@ -223,7 +218,6 @@ class EditPersonaActivity : SettingsPageActivity() {
         textSignaturePreview = findViewById(R.id.text_signature_preview)
         additionalLoreBooksList = findViewById(R.id.additional_lorebooks_list)
         btnAddLoreBooks = findViewById(R.id.btn_add_lorebooks)
-        checkboxAutoload = findViewById(R.id.checkbox_autoload_lorebooks)
         imgPersonaAvatar = findViewById(R.id.img_persona_avatar)
         btnSave = findViewById(R.id.btn_save)
         btnDelete = findViewById(R.id.btn_delete)
@@ -272,7 +266,6 @@ class EditPersonaActivity : SettingsPageActivity() {
 
         selectedCoreLoreBookId = intent.getStringExtra(EXTRA_CORE_LOREBOOK) ?: ""
         additionalLoreBookIds = PersonaObject.splitIds(intent.getStringExtra(EXTRA_ADDITIONAL_LOREBOOKS) ?: "")
-        checkboxAutoload?.isChecked = intent.getBooleanExtra(EXTRA_AUTOLOAD, false)
 
         // Restore the pending pick across recreation; else the saved avatarRef.
         selectedAvatarRef = savedInstanceState?.getString(STATE_AVATAR_REF)
@@ -553,7 +546,6 @@ class EditPersonaActivity : SettingsPageActivity() {
             activationPromptId = selectedActivationPromptId,
             coreLoreBookId = selectedCoreLoreBookId,
             additionalLoreBookIds = PersonaObject.joinIds(additionalLoreBookIds),
-            autoLoadLastLoreBooks = checkboxAutoload?.isChecked == true,
             lastUsedLoreBookIds = PersonaObject.joinIds(lastUsed),
             avatarRef = selectedAvatarRef,
             id = personaId
@@ -603,7 +595,6 @@ class EditPersonaActivity : SettingsPageActivity() {
             .putExtra(EXTRA_ACTIVATION_ID, persona.activationPromptId)
             .putExtra(EXTRA_CORE_LOREBOOK, persona.coreLoreBookId)
             .putExtra(EXTRA_ADDITIONAL_LOREBOOKS, persona.additionalLoreBookIds)
-            .putExtra(EXTRA_AUTOLOAD, persona.autoLoadLastLoreBooks)
             .putExtra(EXTRA_LAST_USED_LOREBOOKS, persona.lastUsedLoreBookIds)
             .putExtra(EXTRA_AVATAR_REF, persona.avatarRef)
         setResult(RESULT_OK, result)
@@ -623,8 +614,7 @@ class EditPersonaActivity : SettingsPageActivity() {
             promptEditor?.toJson().orEmpty(),
             selectedActivationPromptId,
             selectedCoreLoreBookId,
-            PersonaObject.joinIds(additionalLoreBookIds),
-            (checkboxAutoload?.isChecked == true).toString()
+            PersonaObject.joinIds(additionalLoreBookIds)
         ).joinToString("\u0001")
     }
 

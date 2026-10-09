@@ -139,6 +139,7 @@
     <!-- Edit Companion: Chat Signature Style section and linked lorebook cards. -->
     <dimen name="companion_editor_content_inset">24dp</dimen>
     <dimen name="companion_editor_signature_gap">12dp</dimen>
+    <dimen name="companion_editor_bottom_gap">24dp</dimen>
     <dimen name="companion_lorebook_card_gap">8dp</dimen>
     <dimen name="companion_lorebook_card_padding_vertical">10dp</dimen>
     <dimen name="companion_lorebook_card_padding_end">4dp</dimen>

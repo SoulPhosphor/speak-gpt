@@ -107,6 +107,32 @@ Every theme that defines one of these must define all of them, including the nig
 
 Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton, ...headerButtons)` (`org.teslasoft.assistant.ui.util`); trailing header icons such as Save are passed after the back button. It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, Chat Behavior, and Summarizer Prompts; the other settings screens still carry their own copy until they are moved over.
 
+### Never use the phone's own accent colors (owner ruling, Oct 9 2026)
+
+No screen, style, drawable, or Kotlin code may take a color from the phone's
+own accent or wallpaper colors (Android "Dynamic Color" / Material You, the
+`@android:color/system_accent*` resources) unless this guide names that use as
+an approved exception. Phone colors break the app's color themes. Colors come
+from the app's theme attributes through shared styles and shared drawables.
+
+**Current state, recorded so no one mistakes it for approval:** the app still
+turns on Dynamic Color at startup, and on Android 12 and later the Material
+color roles (`colorPrimary`, `colorSecondaryContainer`,
+`colorSurfaceContainerHigh`, `colorOutlineVariant`, and the rest), along with
+`accent_*` colors mapped to `system_accent1_*`, are supplied by the phone.
+Replacing those with the app's own palette belongs to the paused theme work.
+Until then, new work routes every color through an existing shared style or
+theme attribute, so the palette change happens in one place, and never picks
+an accent-type role such as `colorSecondaryContainer` for a surface.
+
+### Icons have no background of their own (owner ruling, Oct 9 2026)
+
+An icon or icon button shows only the icon: no filled shape, tonal circle,
+or colored background behind it, unless the owner has specified one for that
+control. The touch ripple is allowed. Use a borderless icon style such as
+`Widget.App.QuickTile.EditButton`. Existing icons that already have a
+background are not to be changed on sight; each needs the owner's decision.
+
 A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
 
 Legacy per-screen AMOLED recoloring is not part of the future theme system. Its current status is recorded in `ui-style-adoption.md`.
