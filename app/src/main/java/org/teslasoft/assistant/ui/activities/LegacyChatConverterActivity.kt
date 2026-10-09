@@ -15,7 +15,6 @@ import android.widget.ImageButton
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.CircularProgressIndicator
@@ -30,7 +29,7 @@ import org.teslasoft.assistant.preferences.backup.portable.LegacyChatConversion
 import org.teslasoft.assistant.theme.ThemeManager
 
 /** Temporary, removable bridge from the old logical export to a real chat-recovery file. */
-class LegacyChatConverterActivity : FragmentActivity() {
+class LegacyChatConverterActivity : SettingsPageActivity() {
 
     private var actionBar: ConstraintLayout? = null
     private var chooseButton: MaterialButton? = null

@@ -26,7 +26,6 @@ import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
@@ -45,7 +44,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * screens. All toggles are global preferences; chatId is threaded through only
  * to keep the Preferences contract identical to the old call sites.
  */
-class AudioDebuggingActivity : FragmentActivity() {
+class AudioDebuggingActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""

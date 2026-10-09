@@ -33,11 +33,11 @@ import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CardEntryRecord
@@ -63,7 +63,7 @@ import org.teslasoft.assistant.ui.util.DiscardChangesDialog
  * teardown flow carry over; the teardown gets the §5 link-warning rework in
  * the 3.6f slice.
  */
-class WorldDetailActivity : FragmentActivity() {
+class WorldDetailActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId: String = ""

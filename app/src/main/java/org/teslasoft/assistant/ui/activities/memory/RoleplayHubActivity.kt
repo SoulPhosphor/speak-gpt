@@ -29,9 +29,9 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import com.google.android.material.elevation.SurfaceColors
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.theme.ThemeManager
 
 /**

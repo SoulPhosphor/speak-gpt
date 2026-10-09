@@ -16,7 +16,6 @@ import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,7 +39,7 @@ import org.teslasoft.assistant.ui.widgets.AppDropdown
  * Character's in its own database record. An override left unset inherits
  * the matching Default.
  */
-class NameStyleActivity : FragmentActivity() {
+class NameStyleActivity : SettingsPageActivity() {
 
     private enum class Type(val label: Int) {
         COMPANION(R.string.name_style_type_companion),

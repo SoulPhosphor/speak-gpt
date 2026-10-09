@@ -30,7 +30,6 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
@@ -75,7 +74,7 @@ import org.teslasoft.assistant.ui.widgets.AppDropdown
  * Analysis lists the last five runs (date → information → Rerun on the far
  * right) with the "Some Memories Deleted Later" badge where it applies.
  */
-class MemoryAssistantActivity : FragmentActivity() {
+class MemoryAssistantActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var chatId = ""

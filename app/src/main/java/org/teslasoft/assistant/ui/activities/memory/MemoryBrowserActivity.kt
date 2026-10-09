@@ -114,7 +114,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         startActivity(intent)
         // Pair with the panel's slide-out on close so the transition matches.
         @Suppress("DEPRECATION")
-        overridePendingTransition(R.anim.slide_in_right, R.anim.anim_hold)
+        if (!usesSettingsPageMotion) overridePendingTransition(R.anim.slide_in_right, R.anim.anim_hold)
     }
 
     override fun showModeToggle(): Boolean = true

@@ -26,7 +26,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -52,7 +51,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  *   - installed/inactive → "Make active" button.
  *   - installed/active   → button hidden; row shows the Active label.
  */
-class LocalWhisperModelsActivity : FragmentActivity() {
+class LocalWhisperModelsActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var root: ConstraintLayout? = null

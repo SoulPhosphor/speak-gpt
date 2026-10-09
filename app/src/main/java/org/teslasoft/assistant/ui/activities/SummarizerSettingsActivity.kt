@@ -30,7 +30,6 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
@@ -56,7 +55,7 @@ import java.util.Locale
  * Customize Prompt Summaries row. Values save as they are changed. Prompts
  * are edited on the Summarizer Prompts screen (owner ruling, Oct 3 2026).
  */
-class SummarizerSettingsActivity : FragmentActivity() {
+class SummarizerSettingsActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null

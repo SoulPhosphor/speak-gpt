@@ -26,7 +26,6 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
@@ -42,7 +41,7 @@ import java.util.Locale
  * Phase 1 debug view: shows which memories were injected into recent prompts and
  * why (which trigger matched). Helps confirm the engine is turning over.
  */
-class LoreBookDebugActivity : FragmentActivity() {
+class LoreBookDebugActivity : SettingsPageActivity() {
 
     private var btnBack: ImageButton? = null
     private var btnClear: MaterialButton? = null

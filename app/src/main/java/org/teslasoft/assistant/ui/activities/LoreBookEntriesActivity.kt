@@ -33,7 +33,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.marginBottom
 import androidx.core.view.marginRight
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import org.teslasoft.assistant.R
@@ -49,7 +48,7 @@ import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookEntryDialogFragm
  * Lists the memories inside a single lorebook. The lorebook is passed in via the
  * "lorebookId" / "lorebookName" intent extras.
  */
-class LoreBookEntriesActivity : FragmentActivity() {
+class LoreBookEntriesActivity : SettingsPageActivity() {
 
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var btnBack: ImageButton? = null

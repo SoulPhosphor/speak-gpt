@@ -30,7 +30,6 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.exifinterface.media.ExifInterface
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.slider.Slider
@@ -63,7 +62,7 @@ import kotlin.math.max
  * to the caller (the gallery, Phase 5), which performs the permanent hash,
  * dedup, catalog insert and assignment.
  */
-class ProfileImageFramingActivity : FragmentActivity() {
+class ProfileImageFramingActivity : SettingsPageActivity() {
 
     companion object {
         /** Input: the picked source image (content:// URI string). */

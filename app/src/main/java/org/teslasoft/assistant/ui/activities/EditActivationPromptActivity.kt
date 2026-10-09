@@ -31,7 +31,6 @@ import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
@@ -50,7 +49,7 @@ import org.teslasoft.assistant.ui.util.DiscardChangesDialog
  * the result (save or delete) to the caller ([ActivationPromptsListActivity]),
  * which applies it exactly as the old dialog listener did.
  */
-class EditActivationPromptActivity : FragmentActivity() {
+class EditActivationPromptActivity : SettingsPageActivity() {
 
     companion object {
         const val EXTRA_LABEL = "label"

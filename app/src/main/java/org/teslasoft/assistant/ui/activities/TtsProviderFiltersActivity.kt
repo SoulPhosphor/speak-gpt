@@ -59,6 +59,6 @@ class TtsProviderFiltersActivity : TtsPickerActivity() {
     @Suppress("DEPRECATION")
     override fun finish() {
         super.finish()
-        overridePendingTransition(R.anim.anim_hold, R.anim.slide_out_right)
+        if (!usesSettingsPageMotion) overridePendingTransition(R.anim.anim_hold, R.anim.slide_out_right)
     }
 }

@@ -296,16 +296,22 @@ New Chat and saved-chat selections in the drawer share
 window animation and reveal the conversation by closing its drawer. Selecting
 the currently open conversation only closes the existing drawer.
 
-Settings and all main pages opened by its rows inherit `SettingsPageActivity`.
+Settings and its internal destination pages inherit `SettingsPageActivity`
+(directly or through `MemoryScreenActivity` / `TtsPickerActivity`).
 They enter from the right and leave toward the right, keeping the underlying
 screen still. Both directions use the shared `settings_slide_*` XML resources
 and `settings_page_slide_duration` in `values/integers.xml` (600 ms). Adjust this
 one token to change both speeds; do not hard-code per-page timing. The chat
 drawer keeps its independent `drawer_slide_duration`.
 
-This applies to Characters, AI System Settings, Memory, Roleplay, Profile Images,
-Voice & Speech, Image Generation, Appearance, Backup & Restore, About, Alert
-Debug, Log Cabin, and Documentation, as well as Settings itself.
+The policy follows the navigation stack rooted at Settings, including Companions,
+Activation Prompts, Glamour Studio, their editors, and nested memory, roleplay,
+model, voice, appearance, image, backup, and diagnostics pages. Internal explicit
+activity launches inherit the policy through the shared base, including Activity
+Result launchers. Quick Settings launches do not opt in; their managers, editors,
+and filter panels keep the existing transitions. Legacy filter animation overrides
+must only run outside the Settings stack so they cannot replace the shared timing.
+Do not change external document/image picker or other system-window transitions.
 
 Returning to Chat must retain
 the current activity, transcript, composer, and loaded presentation; do not

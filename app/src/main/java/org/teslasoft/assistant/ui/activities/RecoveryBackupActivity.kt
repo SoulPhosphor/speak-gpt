@@ -37,7 +37,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
@@ -91,7 +90,7 @@ import java.security.MessageDigest
  * finally; entered password/code fields are cleared after use; the copied
  * Recovery Code is marked sensitive on the clipboard.
  */
-class RecoveryBackupActivity : FragmentActivity() {
+class RecoveryBackupActivity : SettingsPageActivity() {
 
     companion object {
         /** Intent extra: the Recovery Type chosen ahead of time on the

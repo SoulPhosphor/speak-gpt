@@ -14,7 +14,6 @@ import android.widget.TextView
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +53,7 @@ import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 
-class VoiceBrowserActivity : FragmentActivity() {
+class VoiceBrowserActivity : SettingsPageActivity() {
     companion object {
         const val EXTRA_CHAT_ID = "chatId"
         const val EXTRA_SUPPRESS_INITIAL_PERMANENT_NOTICE = "suppressInitialPermanentTtsNotice"

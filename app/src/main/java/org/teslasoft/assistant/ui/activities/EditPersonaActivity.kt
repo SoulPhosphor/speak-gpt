@@ -37,7 +37,6 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -75,7 +74,7 @@ import org.teslasoft.assistant.util.ProfileImageBinder
  * and delete still return results to [PersonasListActivity], preserving the
  * caller-owned creation/selection/deletion behaviour.
  */
-class EditPersonaActivity : FragmentActivity() {
+class EditPersonaActivity : SettingsPageActivity() {
 
     companion object {
         const val EXTRA_LABEL = "label"

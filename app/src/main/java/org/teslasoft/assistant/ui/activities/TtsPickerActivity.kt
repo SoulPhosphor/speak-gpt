@@ -8,7 +8,6 @@ import androidx.activity.result.contract.ActivityResultContract
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -47,7 +46,7 @@ private fun pickerResult(code: Int, intent: Intent?): TtsTarget? {
 }
 
 /** TTS-only lifecycle and dialogs; no chat preferences, favorites or player side effects. */
-abstract class TtsPickerActivity : FragmentActivity() {
+abstract class TtsPickerActivity : SettingsPageActivity() {
     companion object { const val EXTRA_TARGET = "tts.picker.target" }
     protected val gate = TtsRequestGate()
     private var notice: androidx.appcompat.app.AlertDialog? = null

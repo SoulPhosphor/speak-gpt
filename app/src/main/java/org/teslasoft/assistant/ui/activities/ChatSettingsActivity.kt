@@ -14,7 +14,6 @@ import android.widget.ImageButton
 import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
@@ -28,7 +27,7 @@ import org.teslasoft.assistant.ui.util.ScreenChrome
  * in Appearance. Optional chat controls, plus the Identity section that sets
  * how the user's own messages are labeled in chat.
  */
-class ChatSettingsActivity : FragmentActivity() {
+class ChatSettingsActivity : SettingsPageActivity() {
 
     private lateinit var preferences: Preferences
     private var actionBar: ConstraintLayout? = null

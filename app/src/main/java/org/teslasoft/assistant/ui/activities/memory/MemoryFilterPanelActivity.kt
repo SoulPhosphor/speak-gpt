@@ -29,11 +29,11 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.elevation.SurfaceColors
+import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
@@ -58,7 +58,7 @@ import org.teslasoft.assistant.ui.widgets.AppDropdown
  * The Tag list is dynamic: the browser passes its currently-known tags as an
  * intent extra so the panel's picker matches what the user can actually see.
  */
-class MemoryFilterPanelActivity : FragmentActivity() {
+class MemoryFilterPanelActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
 
@@ -111,7 +111,7 @@ class MemoryFilterPanelActivity : FragmentActivity() {
     override fun finish() {
         super.finish()
         // Pair with the entry animation from the browser — slide out to the right.
-        overridePendingTransition(R.anim.anim_hold, R.anim.slide_out_right)
+        if (!usesSettingsPageMotion) overridePendingTransition(R.anim.anim_hold, R.anim.slide_out_right)
     }
 
     /* ------------------------------ theme + insets ------------------------------ */

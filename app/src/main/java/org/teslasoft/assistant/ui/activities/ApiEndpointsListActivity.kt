@@ -30,7 +30,6 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.marginBottom
 import androidx.core.view.marginRight
-import androidx.fragment.app.FragmentActivity
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import org.teslasoft.assistant.R
@@ -40,7 +39,7 @@ import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.ApiEndpointListItemAdapter
 import androidx.core.graphics.drawable.toDrawable
 
-class ApiEndpointsListActivity : FragmentActivity() {
+class ApiEndpointsListActivity : SettingsPageActivity() {
 
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var btnBack: ImageButton? = null
