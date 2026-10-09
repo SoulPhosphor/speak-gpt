@@ -54,6 +54,7 @@ import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
+import org.teslasoft.assistant.ui.util.ChatSignatureSection
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 import org.teslasoft.assistant.ui.util.PromptVariantEditor
 import org.teslasoft.assistant.ui.util.SaveIconFlash
@@ -141,7 +142,7 @@ class EditPersonaActivity : SettingsPageActivity() {
     private var fieldLabel: TextInputEditText? = null
     private var fieldActivationPrompt: TextView? = null
     private var fieldCoreLoreBook: TextView? = null
-    private var textSignaturePreview: TextView? = null
+    private var signature: ChatSignatureSection? = null
     private var additionalLoreBooksList: LinearLayout? = null
     private var btnAddLoreBooks: MaterialButton? = null
     private var imgPersonaAvatar: ImageView? = null
@@ -215,7 +216,9 @@ class EditPersonaActivity : SettingsPageActivity() {
         fieldLabel = findViewById(R.id.field_label)
         fieldActivationPrompt = findViewById(R.id.field_activation_prompt)
         fieldCoreLoreBook = findViewById(R.id.field_core_lorebook)
-        textSignaturePreview = findViewById(R.id.text_signature_preview)
+        signature = ChatSignatureSection(findViewById(R.id.chat_signature)) {
+            startActivity(NameStyleActivity.companionIntent(this, personaId))
+        }
         additionalLoreBooksList = findViewById(R.id.additional_lorebooks_list)
         btnAddLoreBooks = findViewById(R.id.btn_add_lorebooks)
         imgPersonaAvatar = findViewById(R.id.img_persona_avatar)
@@ -280,9 +283,6 @@ class EditPersonaActivity : SettingsPageActivity() {
 
         fieldActivationPrompt?.setOnClickListener { showActivationPromptChooser() }
         fieldCoreLoreBook?.setOnClickListener { showCoreLoreBookChooser() }
-        findViewById<View>(R.id.row_change_chat_name_style)?.setOnClickListener {
-            startActivity(NameStyleActivity.companionIntent(this, personaId))
-        }
 
         btnAddLoreBooks?.setOnClickListener {
             val intent = Intent(this, LoreBooksListActivity::class.java)
@@ -360,15 +360,14 @@ class EditPersonaActivity : SettingsPageActivity() {
      *  override, else the Appearance companion default. The style is re-read
      *  on resume; typing in the name field only updates the text. */
     private fun refreshSignatureStyle() {
-        val preview = textSignaturePreview ?: return
         val stored = if (personaId.isEmpty()) null
             else PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
-        ChatNameStyle.apply(preview, this, ChatNameStyle.ai(Preferences.getPreferences(this, ""), stored))
+        signature?.setStyle(ChatNameStyle.ai(Preferences.getPreferences(this, ""), stored))
         updateSignaturePreview()
     }
 
     private fun updateSignaturePreview() {
-        textSignaturePreview?.text = fieldLabel?.text?.toString().orEmpty()
+        signature?.setName(fieldLabel?.text?.toString().orEmpty())
     }
 
     private fun activationPromptLabel(id: String): String {

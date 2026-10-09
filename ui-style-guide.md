@@ -107,24 +107,6 @@ Every theme that defines one of these must define all of them, including the nig
 
 Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton, ...headerButtons)` (`org.teslasoft.assistant.ui.util`); trailing header icons such as Save are passed after the back button. It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, Chat Behavior, and Summarizer Prompts; the other settings screens still carry their own copy until they are moved over.
 
-### Never use the phone's own accent colors (owner ruling, Oct 9 2026)
-
-No screen, style, drawable, or Kotlin code may take a color from the phone's
-own accent or wallpaper colors (Android "Dynamic Color" / Material You, the
-`@android:color/system_accent*` resources) unless this guide names that use as
-an approved exception. Phone colors break the app's color themes. Colors come
-from the app's theme attributes through shared styles and shared drawables.
-
-**Current state, recorded so no one mistakes it for approval:** the app still
-turns on Dynamic Color at startup, and on Android 12 and later the Material
-color roles (`colorPrimary`, `colorSecondaryContainer`,
-`colorSurfaceContainerHigh`, `colorOutlineVariant`, and the rest), along with
-`accent_*` colors mapped to `system_accent1_*`, are supplied by the phone.
-Replacing those with the app's own palette belongs to the paused theme work.
-Until then, new work routes every color through an existing shared style or
-theme attribute, so the palette change happens in one place, and never picks
-an accent-type role such as `colorSecondaryContainer` for a surface.
-
 ### Icons have no background of their own (owner ruling, Oct 9 2026)
 
 An icon or icon button shows only the icon: no filled shape, tonal circle,
@@ -153,6 +135,14 @@ Then use the size or placement variant required by the screen:
 - inline button sized to its label;
 - single dialog action;
 - two-button dialog action row.
+
+Button text is always centered within the button, whatever the button's
+size or position (owner ruling, Oct 9 2026). `AppButton.Primary`, which every
+semantic button style inherits, sets this; never left- or right-align a
+button's text. The owner generally prefers label-sized buttons to buttons that
+stretch across the screen; ask before making a new button full width.
+The one existing approved exception is `NameStyle.RestoreOriginal`, a
+text-only button laid out at the start of the saved-style box.
 
 A button does not become secondary or destructive because it is shorter, narrower, beside another button, or inside a dialog. Size variants must inherit the semantic style.
 
@@ -249,6 +239,10 @@ geometry in a feature-local layout.
 `AppButton.Destructive.Inline`
 
 Use when actions should size to their labels rather than fill the available width.
+
+`AppButton.Primary.Inline.Centered` is the same label-sized button centered on
+its line, for vertical (LinearLayout) hosts. In a ConstraintLayout, center
+`AppButton.Primary.Inline` with start and end constraints instead.
 
 Two-button dialogs use a centered shared layout by default. The existing
 right-aligned Cancel-then-Save row uses `layout/dialog_two_actions_end.xml`
@@ -1242,19 +1236,30 @@ but blank before a name is selected.
 Typography comes from `ChatNameStyle.apply`, the same resolver used by chat.
 All placement, text appearance, shapes, and spacing belong to XML styles/dimens.
 
-## Edit Companion: Chat Signature Style and linked lorebooks
+## Chat Signature Style
 
-The **Chat Signature Style** section (owner ruling, Oct 9 2026) is, in order:
-the `Widget.App.Section.Title` heading; the companion's name centered in
-`Widget.App.CompanionEditor.SignaturePreview`; and a title-only navigation
-row, **Change Chat Name Style**, in `Widget.App.CompanionEditor.SignatureRow`
-(the shared `Row.TitleOnly` pieces, inset to the editor's field edges). The
-preview inherits `Widget.App.NameStyle.Preview`, and its typography comes from
-`ChatNameStyle.apply` with the companion's saved Name Style override, else
-the Appearance companion default — exactly what chat shows. The row opens
-Name Style with this companion already chosen. Edit Companion has no font or
-size controls of its own; Name Style is the only place a companion's name
-style is edited, and saving the companion never rewrites that override.
+One shared section, `layout/view_chat_signature.xml` driven by
+`ChatSignatureSection` (`org.teslasoft.assistant.ui.util`), used on Edit
+Companion (under Companion Name), Edit Glamour (under Display Name), and the
+Roleplay Character card (under Name, above Species; hidden for party members).
+Owner rulings, Oct 9 2026. Do not copy its XML into a screen; include it and
+set only the include's width and placement.
+
+In order: the **Chat Signature Style** heading (`Widget.App.Section.Title`);
+the name centered in `Widget.App.Signature.Preview`; and the **Change Chat
+Name Style** button, `Widget.App.Signature.ChangeButton`, a label-sized
+primary button centered on the screen (`AppButton.Primary.Inline.Centered`).
+The preview inherits `Widget.App.NameStyle.Preview`; its typography comes from
+`ChatNameStyle.apply` with that identity's saved Name Style override over the
+right default (companion default for companions, user default for Glamours
+and Roleplay Characters) — exactly what chat shows. The preview text is the
+name chat shows: the Companion Name, the Glamour's Display Name (not its
+Name), or the Roleplay Character's Name. The button opens Name Style with
+that identity already chosen; back returns to the editor. Editors have no
+font or size controls of their own, and saving an editor never rewrites the
+Name Style override. Spacing lives in `signature_gap` and `signature_host_inset`.
+
+## Edit Companion: linked lorebooks
 
 Each linked (additional) lorebook is a `Widget.App.CompanionEditor.LoreBookCard`:
 the Quick Settings standalone segment surface and outline

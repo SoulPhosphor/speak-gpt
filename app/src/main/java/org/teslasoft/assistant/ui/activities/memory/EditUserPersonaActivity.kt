@@ -35,18 +35,25 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.activities.NameStyleActivity
 import org.teslasoft.assistant.ui.activities.ProfileImagesActivity
+import org.teslasoft.assistant.ui.chat.ChatNameStyle
+import org.teslasoft.assistant.ui.util.ChatSignatureSection
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.ProfileImageResolver
@@ -123,6 +130,7 @@ class EditUserPersonaActivity : SettingsPageActivity() {
     private var fieldName: TextInputEditText? = null
     private var textNameError: TextView? = null
     private var fieldDisplayName: TextInputEditText? = null
+    private var signature: ChatSignatureSection? = null
     private var fieldShortDescription: TextInputEditText? = null
     private var textShortDescriptionWarning: TextView? = null
     private var fieldPresentation: TextInputEditText? = null
@@ -197,6 +205,9 @@ class EditUserPersonaActivity : SettingsPageActivity() {
         fieldName = findViewById(R.id.field_persona_name)
         textNameError = findViewById(R.id.text_persona_name_error)
         fieldDisplayName = findViewById(R.id.field_display_name)
+        signature = ChatSignatureSection(findViewById(R.id.chat_signature)) {
+            startActivity(NameStyleActivity.glamourIntent(this, personaId))
+        }
         fieldShortDescription = findViewById(R.id.field_short_description)
         textShortDescriptionWarning = findViewById(R.id.text_short_description_warning)
         fieldPresentation = findViewById(R.id.field_presentation)
@@ -229,6 +240,10 @@ class EditUserPersonaActivity : SettingsPageActivity() {
         // approved a11y scheme labels an assigned picture "<Name>'s picture").
         fieldName?.doAfterTextChanged { updateAvatarContentDescription() }
 
+        // Chat shows this Glamour's Display Name, so that is what the
+        // signature previews.
+        fieldDisplayName?.doAfterTextChanged { updateSignaturePreview() }
+
         fieldShortDescription?.doAfterTextChanged { updateShortDescriptionWarning() }
         fieldShortDescription?.post { updateShortDescriptionWarning() }
 
@@ -254,6 +269,34 @@ class EditUserPersonaActivity : SettingsPageActivity() {
         // The Default Shape or the Personal Default may have changed on another
         // screen; re-resolve the preview cheaply.
         updateAvatarUi()
+        // The style may have just been changed on the Name Style screen.
+        refreshSignatureStyle()
+    }
+
+    /** This Glamour's saved Name Style override over the user default, read
+     *  off the main thread; the Display Name text follows the field. */
+    private fun refreshSignatureStyle() {
+        updateSignaturePreview()
+        val id = personaId
+        lifecycleScope.launch {
+            val override = withContext(Dispatchers.IO) {
+                try {
+                    if (id.isEmpty() || !MemoryStore.isProvisioned(this@EditUserPersonaActivity)) null
+                    else MemoryStore.getInstance(this@EditUserPersonaActivity).getUserPersona(id)
+                        ?.let { ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle) }
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (isFinishing || isDestroyed) return@launch
+            signature?.setStyle(ChatNameStyle.withOverride(
+                ChatNameStyle.user(Preferences.getPreferences(this@EditUserPersonaActivity, "")), override
+            ))
+        }
+    }
+
+    private fun updateSignaturePreview() {
+        signature?.setName(fieldDisplayName?.text?.toString().orEmpty())
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

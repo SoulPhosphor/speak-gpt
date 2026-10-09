@@ -37,10 +37,14 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
@@ -54,7 +58,10 @@ import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.RpTagRecord
 import org.teslasoft.assistant.preferences.memory.RpTagTargetType
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.activities.NameStyleActivity
 import org.teslasoft.assistant.ui.activities.ProfileImagesActivity
+import org.teslasoft.assistant.ui.chat.ChatNameStyle
+import org.teslasoft.assistant.ui.util.ChatSignatureSection
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.ProfileImageResolver
@@ -107,6 +114,7 @@ class CharacterCardActivity : SettingsPageActivity() {
     private var btnSave: ImageButton? = null
     private var imgCardAvatar: ImageView? = null
     private var btnMemories: MaterialButton? = null
+    private var signature: ChatSignatureSection? = null
     private var textSaveFirst: TextView? = null
     private var sectionsContainer: LinearLayout? = null
 
@@ -170,6 +178,13 @@ class CharacterCardActivity : SettingsPageActivity() {
         btnSave = findViewById(R.id.btn_card_save)
         imgCardAvatar = findViewById(R.id.img_card_avatar)
         btnMemories = findViewById(R.id.btn_card_memories)
+        // Party members have no chat name style, so no signature.
+        findViewById<View>(R.id.chat_signature).visibility = if (isParty) View.GONE else View.VISIBLE
+        if (!isParty) {
+            signature = ChatSignatureSection(findViewById(R.id.chat_signature)) {
+                startActivity(NameStyleActivity.roleplayIntent(this, cardId.orEmpty()))
+            }
+        }
         textSaveFirst = findViewById(R.id.text_save_first)
         sectionsContainer = findViewById(R.id.sections_container)
 
@@ -194,7 +209,10 @@ class CharacterCardActivity : SettingsPageActivity() {
         imgCardAvatar?.setOnClickListener {
             if (ready && !isParty) openGalleryForPicture()
         }
-        fieldName?.doAfterTextChanged { updateAvatarContentDescription() }
+        fieldName?.doAfterTextChanged {
+            updateAvatarContentDescription()
+            updateSignaturePreview()
+        }
 
         CardZoneUi.attachWordCount(this, zone1Fields(), textWordCount, textWarning)
         updateAvatarUi()
@@ -224,6 +242,35 @@ class CharacterCardActivity : SettingsPageActivity() {
         super.onResume()
         updateAvatarUi()
         renderSections()
+        // The style may have just been changed on the Name Style screen.
+        refreshSignatureStyle()
+    }
+
+    /** This character's saved Name Style override over the user default, read
+     *  off the main thread; the name text follows the Name field. */
+    private fun refreshSignatureStyle() {
+        if (signature == null) return
+        updateSignaturePreview()
+        val id = cardId
+        lifecycleScope.launch {
+            val override = withContext(Dispatchers.IO) {
+                try {
+                    if (id == null || !MemoryStore.isProvisioned(this@CharacterCardActivity)) null
+                    else MemoryStore.getInstance(this@CharacterCardActivity).getRoleplayCharacter(id)
+                        ?.let { ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle) }
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (isFinishing || isDestroyed) return@launch
+            signature?.setStyle(ChatNameStyle.withOverride(
+                ChatNameStyle.user(Preferences.getPreferences(this@CharacterCardActivity, "")), override
+            ))
+        }
+    }
+
+    private fun updateSignaturePreview() {
+        signature?.setName(fieldName?.text?.toString().orEmpty())
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -428,6 +475,9 @@ class CharacterCardActivity : SettingsPageActivity() {
                     ).also { runOnUiThread { priorParty = it } }
                 )
             } else {
+                // Name Style writes these directly, possibly while this card
+                // was open; read them fresh so a card save never reverts them.
+                val storedStyle = store.getRoleplayCharacter(id)
                 store.upsertRoleplayCharacter(
                     RoleplayCharacterRecord(
                         roleplayCharacterId = id,
@@ -447,9 +497,9 @@ class CharacterCardActivity : SettingsPageActivity() {
                         goalsDrives = text(fieldGoalsDrives),
                         imageRef = selectedImageRef.ifEmpty { null },
                         // Name Style owns these; a card save keeps them.
-                        nameFontId = priorCharacter?.nameFontId,
-                        nameSizeSp = priorCharacter?.nameSizeSp,
-                        nameFontStyle = priorCharacter?.nameFontStyle
+                        nameFontId = storedStyle?.nameFontId,
+                        nameSizeSp = storedStyle?.nameSizeSp,
+                        nameFontStyle = storedStyle?.nameFontStyle
                     ).also { runOnUiThread { priorCharacter = it } }
                 )
             }

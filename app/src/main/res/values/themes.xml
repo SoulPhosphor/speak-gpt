@@ -59,6 +59,9 @@
     <style name="AppButton.Primary" parent="Widget.Material3.Button">
         <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton</item>
         <item name="android:textAppearance">@style/TextAppearance.App.Button</item>
+        <!-- Button text is always centered, whatever the button's size
+             (owner ruling, Oct 9 2026). -->
+        <item name="android:gravity">center</item>
     </style>
 
     <!-- No distinct Secondary appearance is approved yet (owner ruling, July 29
@@ -149,6 +152,13 @@
     <style name="AppButton.Primary.Inline" parent="AppButton.Primary">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
+    </style>
+
+    <!-- Label-sized primary button centered on its line, for vertical
+         (LinearLayout) hosts. ConstraintLayout hosts center it with
+         start/end constraints instead. -->
+    <style name="AppButton.Primary.Inline.Centered" parent="AppButton.Primary.Inline">
+        <item name="android:layout_gravity">center_horizontal</item>
     </style>
 
     <!-- The outlined counterpart of AppButton.Primary.Inline, for a
@@ -914,20 +924,21 @@
         <item name="android:textColor">?attr/appTextColor</item>
     </style>
 
-    <!-- Edit Companion: Chat Signature Style section. The preview reuses the
-         Name Style preview appearance; typography comes from ChatNameStyle.apply.
-         The row is the shared title-only navigation row, inset to the editor's
-         field edges while its ripple spans the full width. -->
-    <style name="Widget.App.CompanionEditor.SignaturePreview" parent="Widget.App.NameStyle.Preview">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_marginTop">@dimen/companion_editor_signature_gap</item>
-        <item name="android:layout_marginStart">@dimen/companion_editor_content_inset</item>
-        <item name="android:layout_marginEnd">@dimen/companion_editor_content_inset</item>
+    <!-- Shared Chat Signature Style section (layout/view_chat_signature.xml),
+         used on Edit Companion, Edit Glamour, and the Roleplay Character card.
+         The preview reuses the Name Style preview appearance; its typography
+         comes from ChatNameStyle.apply. The button is the label-sized primary
+         button, centered on the screen. -->
+    <style name="Widget.App.Signature" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
     </style>
-    <style name="Widget.App.CompanionEditor.SignatureRow" parent="Widget.App.Row.TitleOnly">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_marginTop">@dimen/companion_editor_signature_gap</item>
-        <item name="android:paddingHorizontal">@dimen/companion_editor_content_inset</item>
+    <style name="Widget.App.Signature.Preview" parent="Widget.App.NameStyle.Preview">
+        <item name="android:layout_marginTop">@dimen/signature_gap</item>
+    </style>
+    <style name="Widget.App.Signature.ChangeButton" parent="AppButton.Primary.Inline.Centered">
+        <item name="android:layout_marginTop">@dimen/signature_gap</item>
     </style>
 
     <!-- Edit Companion: one linked (additional) lorebook card. The card uses the

@@ -143,44 +143,16 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/field_label" />
 
-            <TextView
-                android:id="@+id/label_chat_name_style"
-                style="@style/Widget.App.Section.Title"
+            <include
+                android:id="@+id/chat_signature"
+                layout="@layout/view_chat_signature"
                 android:layout_width="0dp"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/companion_chat_name_style"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/signature_host_inset"
+                android:layout_marginEnd="@dimen/signature_host_inset"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/text_field_label_error" />
-
-            <!-- The companion's name as chat shows it (Name Style override,
-                 else the Appearance default). Style changes live on Name Style. -->
-            <TextView
-                android:id="@+id/text_signature_preview"
-                style="@style/Widget.App.CompanionEditor.SignaturePreview"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/label_chat_name_style" />
-
-            <LinearLayout
-                android:id="@+id/row_change_chat_name_style"
-                style="@style/Widget.App.CompanionEditor.SignatureRow"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/text_signature_preview">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/companion_change_chat_name_style" />
-                </LinearLayout>
-
-                <ImageView
-                    style="@style/Widget.App.Row.Chevron"
-                    android:contentDescription="@string/companion_change_chat_name_style" />
-            </LinearLayout>
 
             <TextView
                 android:id="@+id/label_field_prompt"
@@ -192,7 +164,7 @@
                 android:text="@string/persona_prompt_hint"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/row_change_chat_name_style" />
+                app:layout_constraintTop_toBottomOf="@+id/chat_signature" />
 
             <TextView
                 android:id="@+id/hint_field_prompt"

@@ -51,11 +51,23 @@ class NameStyleActivity : SettingsPageActivity() {
     companion object {
         private const val DEFAULT_COMPANION = "companion"
         private const val DEFAULT_USER = "user"
-        private const val EXTRA_COMPANION_ID = "companionId"
+        private const val EXTRA_TARGET_TYPE = "targetType"
+        private const val EXTRA_TARGET_ID = "targetId"
 
-        /** Opens with [companionId] already chosen as the name being styled. */
+        /** Each opens with that name already chosen as the one being styled. */
         fun companionIntent(context: Context, companionId: String): Intent =
-            Intent(context, NameStyleActivity::class.java).putExtra(EXTRA_COMPANION_ID, companionId)
+            targetIntent(context, Type.COMPANION, companionId)
+
+        fun glamourIntent(context: Context, glamourId: String): Intent =
+            targetIntent(context, Type.GLAMOUR, glamourId)
+
+        fun roleplayIntent(context: Context, roleplayCharacterId: String): Intent =
+            targetIntent(context, Type.ROLEPLAY, roleplayCharacterId)
+
+        private fun targetIntent(context: Context, type: Type, id: String): Intent =
+            Intent(context, NameStyleActivity::class.java)
+                .putExtra(EXTRA_TARGET_TYPE, type.name)
+                .putExtra(EXTRA_TARGET_ID, id)
     }
     private lateinit var preferences: Preferences
     private lateinit var typeValue: TextView
@@ -131,10 +143,11 @@ class NameStyleActivity : SettingsPageActivity() {
         saveButton.setOnClickListener { selected?.let { saveDrafts(listOf(it), exit = false) } }
         type = savedInstanceState?.getString("type")?.let { value -> Type.entries.firstOrNull { it.name == value } }
         selectedKey = savedInstanceState?.getString("selected")
-        val companionId = intent.getStringExtra(EXTRA_COMPANION_ID).orEmpty()
-        if (savedInstanceState == null && companionId.isNotEmpty()) {
-            type = Type.COMPANION
-            selectedKey = Target(Type.COMPANION, companionId, "", "").key
+        val targetType = intent.getStringExtra(EXTRA_TARGET_TYPE)?.let { value -> Type.entries.firstOrNull { it.name == value } }
+        val targetId = intent.getStringExtra(EXTRA_TARGET_ID).orEmpty()
+        if (savedInstanceState == null && targetType != null) {
+            type = targetType
+            if (targetId.isNotEmpty()) selectedKey = Target(targetType, targetId, "", "").key
         }
         scratch = savedInstanceState?.getString("scratch")?.let { Gson().fromJson(it, ChatNameStyle.Override::class.java) }
             ?: ChatNameStyle.Override()

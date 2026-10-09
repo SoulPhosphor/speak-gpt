@@ -3906,8 +3906,8 @@
     <string name="appearance_preview_default">Sample Name</string>
     <string name="appearance_font_previews">Font Previews</string>
     <string name="appearance_size_sp">%1$d sp</string>
-    <string name="companion_chat_name_style">Chat Signature Style</string>
-    <string name="companion_change_chat_name_style">Change Chat Name Style</string>
+    <string name="chat_signature_style">Chat Signature Style</string>
+    <string name="chat_signature_change_name_style">Change Chat Name Style</string>
     <string name="tts_provider_picker_intro">Choose the provider settings for this text-to-speech model. Available providers and routing support depend on the endpoint.</string>
     <string name="tts_provider_col_training">Training/Data Use</string>
     <string name="tts_provider_col_price">Price</string>

@@ -26,16 +26,47 @@ class CompanionSignatureStyleContractTest {
 
     @Test
     fun signatureSectionPreviewsAndOpensNameStyle() {
+        val section = source("src/main/res/layout/view_chat_signature.xml")
+        assertTrue(section.contains("Widget.App.Signature.Preview"))
+        assertTrue(section.contains("Widget.App.Signature.ChangeButton"))
         val layout = source("src/main/res/layout/activity_edit_persona.xml")
-        assertTrue(layout.contains("Widget.App.CompanionEditor.SignaturePreview"))
-        assertTrue(layout.contains("Widget.App.CompanionEditor.SignatureRow"))
+        assertTrue(layout.contains("@layout/view_chat_signature"))
         assertFalse(layout.contains("field_chat_name_font"))
         assertFalse(layout.contains("field_chat_name_size"))
         assertTrue(editor.contains("NameStyleActivity.companionIntent(this, personaId)"))
         assertTrue(editor.contains("ChatNameStyle.ai(Preferences.getPreferences(this, \"\"), stored)"))
         val strings = source("src/main/res/values/strings.xml")
-        assertTrue(strings.contains("<string name=\"companion_chat_name_style\">Chat Signature Style</string>"))
-        assertTrue(strings.contains("<string name=\"companion_change_chat_name_style\">Change Chat Name Style</string>"))
+        assertTrue(strings.contains("<string name=\"chat_signature_style\">Chat Signature Style</string>"))
+        assertTrue(strings.contains("<string name=\"chat_signature_change_name_style\">Change Chat Name Style</string>"))
+    }
+
+    @Test
+    fun glamourAndRoleplayShowTheSameSignature() {
+        val glamourLayout = source("src/main/res/layout/activity_edit_user_persona.xml")
+        assertTrue(glamourLayout.contains("@layout/view_chat_signature"))
+        val glamour = source("src/main/java/org/teslasoft/assistant/ui/activities/memory/EditUserPersonaActivity.kt")
+        assertTrue(glamour.contains("NameStyleActivity.glamourIntent(this, personaId)"))
+        assertTrue(glamour.contains("signature?.setName(fieldDisplayName?.text?.toString().orEmpty())"))
+        val cardLayout = source("src/main/res/layout/activity_character_card.xml")
+        val name = cardLayout.indexOf("@+id/field_card_name")
+        val signature = cardLayout.indexOf("@layout/view_chat_signature")
+        val species = cardLayout.indexOf("@string/card_field_species")
+        assertTrue(name in 0 until signature && signature < species)
+        val card = source("src/main/java/org/teslasoft/assistant/ui/activities/memory/CharacterCardActivity.kt")
+        assertTrue(card.contains("NameStyleActivity.roleplayIntent(this, cardId.orEmpty())"))
+        assertTrue(card.contains("nameFontId = storedStyle?.nameFontId"))
+    }
+
+    @Test
+    fun memoriesButtonIsCenteredLabelSizedPrimaryWithoutIcon() {
+        val cardLayout = source("src/main/res/layout/activity_character_card.xml")
+        val button = cardLayout.substring(cardLayout.indexOf("@+id/btn_card_memories"))
+        val tag = button.substring(0, button.indexOf("/>"))
+        assertTrue(tag.contains("@style/AppButton.Primary.Inline.Centered"))
+        assertFalse(tag.contains("app:icon"))
+        val themes = source("src/main/res/values/themes.xml")
+        val primary = themes.substring(themes.indexOf("<style name=\"AppButton.Primary\" parent="))
+        assertTrue(primary.substring(0, primary.indexOf("</style>")).contains("<item name=\"android:gravity\">center</item>"))
     }
 
     @Test
