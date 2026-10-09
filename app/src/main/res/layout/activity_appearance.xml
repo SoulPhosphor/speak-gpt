@@ -171,6 +171,16 @@
 
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_user_tokens" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_user_tokens_hint" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_user_tokens"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_hardware_keyboard_shortcuts" />
                     <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_hardware_keyboard_shortcuts_hint" />
                 </LinearLayout>

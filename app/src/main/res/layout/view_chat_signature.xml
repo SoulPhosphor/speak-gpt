@@ -16,18 +16,23 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<merge xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- Shared Chat Signature Style section: a heading, the name exactly as chat
+     styles it, and a button into Name Style. Driven by ChatSignatureSection.
+     Hosts set only this include's width and placement. -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.Signature">
 
     <TextView
-        android:id="@+id/parameter_title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_vertical"
-        android:textColor="?attr/colorPrimary"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        style="@style/Widget.App.Section.Title"
+        android:text="@string/chat_signature_style" />
 
-    <ImageButton
-        android:id="@+id/parameter_info_button"
-        style="@style/Widget.App.InfoButton" />
-</merge>
+    <TextView
+        android:id="@+id/signature_preview"
+        style="@style/Widget.App.Signature.Preview" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/signature_change_style"
+        style="@style/Widget.App.Signature.ChangeButton"
+        android:text="@string/chat_signature_change_name_style" />
+</LinearLayout>

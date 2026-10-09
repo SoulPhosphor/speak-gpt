@@ -107,6 +107,14 @@ Every theme that defines one of these must define all of them, including the nig
 
 Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton, ...headerButtons)` (`org.teslasoft.assistant.ui.util`); trailing header icons such as Save are passed after the back button. It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, Chat Behavior, and Summarizer Prompts; the other settings screens still carry their own copy until they are moved over.
 
+### Icons have no background of their own (owner ruling, Oct 9 2026)
+
+An icon or icon button shows only the icon: no filled shape, tonal circle,
+or colored background behind it, unless the owner has specified one for that
+control. The touch ripple is allowed. Use a borderless icon style such as
+`Widget.App.QuickTile.EditButton`. Existing icons that already have a
+background are not to be changed on sight; each needs the owner's decision.
+
 A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
 
 Legacy per-screen AMOLED recoloring is not part of the future theme system. Its current status is recorded in `ui-style-adoption.md`.
@@ -127,6 +135,12 @@ Then use the size or placement variant required by the screen:
 - inline button sized to its label;
 - single dialog action;
 - two-button dialog action row.
+
+Button text is always centered within the button, whatever the button's
+size or position (owner ruling, Oct 9 2026). `AppButton.Primary`, which every
+semantic button style inherits, sets this; never left- or right-align a
+button's text. The owner generally prefers label-sized buttons to buttons that
+stretch across the screen; ask before making a new button full width.
 
 A button does not become secondary or destructive because it is shorter, narrower, beside another button, or inside a dialog. Size variants must inherit the semantic style.
 
@@ -223,6 +237,10 @@ geometry in a feature-local layout.
 `AppButton.Destructive.Inline`
 
 Use when actions should size to their labels rather than fill the available width.
+
+`AppButton.Primary.Inline.Centered` is the same label-sized button centered on
+its line, for vertical (LinearLayout) hosts. In a ConstraintLayout, center
+`AppButton.Primary.Inline` with start and end constraints instead.
 
 Two-button dialogs use a centered shared layout by default. The existing
 right-aligned Cancel-then-Save row uses `layout/dialog_two_actions_end.xml`
@@ -388,6 +406,12 @@ Use `ParameterSectionHeader` for the standard title-and-information pairing.
 Its icon opens the shared information dialog. The host supplies only the title
 and explanation strings; it must not reproduce the icon, spacing, dialog, or
 placement locally.
+
+The icon itself is `Widget.App.InfoButton`. Where a label cannot be a
+`ParameterSectionHeader` title (a different text style, or a dialog heading that
+differs from the label), place a `Widget.App.InfoButton` directly after the
+label and open `ParameterInfoDialog` from it. Usage & Cost's Conversation Total
+does this: its icon opens **Best Estimated Usage** (owner wording, Oct 9 2026).
 
 ## Selector rows and pick-list rows
 
@@ -846,7 +870,9 @@ Keep the fill in the shared segment drawables; do not restore the old
 per-view Kotlin surface tints or hardcode a blue for one palette.
 
 The current vertical order is intentional: identity and character choices;
-model/provider/endpoint routing; memory controls; independent roleplay context;
+this chat's Always Speak Responses, a self-contained `Segment.Standalone`
+toggle (owner ruling, Oct 9 2026; it becomes a connected group if more rows
+join it); model/provider/endpoint routing; memory controls; independent roleplay context;
 the summarizer and its Summary, Compaction, and Image prompts (owner ruling,
 Oct 3 2026); generation parameters; Logit Bias and Seed; usage/cost; Save to Profile. Keep
 that order unless the owner explicitly changes it.
@@ -1043,7 +1069,10 @@ Do not assign an id to an XML `<include>` tag that includes these layouts. Andro
 `Widget.App.Usage.ProviderGap`, `Widget.App.Usage.Stack`
 
 Screen frame: `Widget.App.Usage.Header`, `HeaderBar`, `HeaderTitle`,
-`TotalLabel`, `TotalCost`, `TotalMeta`, `Scroll`, `Sections`.
+`Scroll`, `Content`, `TotalBlock`, `TotalLabel`, `TotalCost`, `TotalMeta`,
+`Sections`. Only the header bar stays fixed; the conversation total block
+scrolls with the sections (owner ruling, Oct 9 2026). `TotalLabelRow` centers
+"Conversation Total" and its information button as one unit.
 
 The screen header must inherit `Widget.App.ActionBar` and its shared title/back
 button styles, with `ScreenChrome.apply` supplying the same header chrome as
@@ -1192,29 +1221,81 @@ inherits `AppButton.Primary`; back navigation offers saving all assigned drafts,
 discarding, or keeping editing. Unassigned edits require selecting a name first.
 Drafts and selection survive activity recreation through saved instance state.
 
-`Widget.App.NameStyle.SavedPanel` sits directly below Name and stays visible,
-empty, with reserved text/action space before selection. Its fill and outline
-match Quick Settings (`colorSurfaceContainerHigh`, `colorOutlineVariant`,
+`Widget.App.NameStyle.SavedPanel` sits directly below Name and stays visible
+before selection. Its fill and outline match Quick Settings
+(`colorSurfaceContainerHigh`, `colorOutlineVariant`,
 `quick_settings_segment_stroke_width`); its corners use the same
 `dropdown_corner_radius` as the dropdowns. `NameStyle.SavedValues` uses normal
-body text and shows the last saved values, not the preview draft. Labels are
-Default Companion Style, Default User Style, and Custom Settings. Companions
-inherit the companion default; Glamour and Roleplay inherit the user default.
-For custom settings, also show the matching default values for comparison.
+body text and shows the last saved values, not the preview draft. It reserves
+no blank lines: the box is as tall as its text plus the button (owner ruling,
+Oct 9 2026). Labels are Default Companion Style, Default User Style, and
+Custom Settings. Companions inherit the companion default; Glamour and
+Roleplay inherit the user default. For custom settings, also show the
+matching default values for comparison.
 
-**Intentional owner-approved button exception:** `NameStyle.RestoreOriginal`
-is a bold text-only button on the bottom line inside the saved-style box,
-labeled **Restore Original Style**. It has no outline, separate background,
-checkbox, or confirmation popup. Do not convert it to a filled/outlined button
-or move it outside the box. Clicking restores the selected name's last saved
-overrides into its draft and preview; empty overrides retain true inheritance
-from the appropriate default. It does not save, reset to factory values, or
-replace custom saved settings with defaults. The action space remains reserved
-but blank before a name is selected.
+`NameStyle.RestoreOriginal`, labeled **Restore Original Style**, is a normal
+label-sized primary button centered at the bottom of the saved-style box
+(`AppButton.Primary.Inline.Centered`; owner ruling, Oct 9 2026, replacing the
+earlier text-only treatment). It has no confirmation popup. Clicking restores
+the selected name's last saved overrides into its draft and preview; empty
+overrides retain true inheritance from the appropriate default. It does not
+save, reset to factory values, or replace custom saved settings with defaults.
+Before a name is selected, the button's space is kept but the button is
+hidden.
 
 `Widget.App.NameStyle.Preview` is the centered live preview under the controls.
 Typography comes from `ChatNameStyle.apply`, the same resolver used by chat.
 All placement, text appearance, shapes, and spacing belong to XML styles/dimens.
+
+## Chat Signature Style
+
+One shared section, `layout/view_chat_signature.xml` driven by
+`ChatSignatureSection` (`org.teslasoft.assistant.ui.util`), used on Edit
+Companion (under Companion Name), Edit Glamour (under Display Name), and the
+Roleplay Character card (under Name, above Species; hidden for party members).
+Owner rulings, Oct 9 2026. Do not copy its XML into a screen; include it and
+set only the include's width and placement.
+
+In order: the **Chat Signature Style** heading (`Widget.App.Section.Title`);
+the name centered in `Widget.App.Signature.Preview`; and the **Change Chat
+Name Style** button, `Widget.App.Signature.ChangeButton`, a label-sized
+primary button centered on the screen (`AppButton.Primary.Inline.Centered`).
+The preview inherits `Widget.App.NameStyle.Preview`; its typography comes from
+`ChatNameStyle.apply` with that identity's saved Name Style override over the
+right default (companion default for companions, user default for Glamours
+and Roleplay Characters) — exactly what chat shows. The preview text is the
+name chat shows: the Companion Name, the Glamour's Display Name (not its
+Name), or the Roleplay Character's Name. The button opens Name Style with
+that identity already chosen; back returns to the editor. Name Style lists
+only saved identities, so the button is hidden until the identity has been
+saved once; the heading and preview always show. Editors have no
+font or size controls of their own, and saving an editor never rewrites the
+Name Style override. Spacing lives in `signature_gap` and `signature_host_inset`.
+
+## Edit Companion: linked lorebooks
+
+Each linked (additional) lorebook is a `Widget.App.CompanionEditor.LoreBookCard`:
+the Quick Settings standalone segment surface and outline
+(`bg_quick_settings_segment_standalone`: `colorSurfaceContainerHigh` fill,
+`colorOutlineVariant` stroke). Never use `colorSecondaryContainer` or the
+device accent for this card. The book name uses `LoreBookName` (normal app
+text color, bold); the count/tag/description line uses `LoreBookDetails`
+(the shared row subtitle color). The gear, unlink, and delete actions use
+`LoreBookAction`, a bare borderless icon inheriting `Widget.App.QuickTile.EditButton`
+(no background shape). Spacing lives in the `companion_editor_*` and
+`companion_lorebook_*` dimens.
+
+## Message Details popup
+
+The ⓘ message action opens `layout/view_details_popup.xml`:
+`Widget.App.MessageDetails.Popup` (rounded dialog surface), with bare values in
+`MessageDetails.FirstValue` / `MessageDetails.Value` and the empty line in
+`MessageDetails.Empty`. The box is as wide as its longest line plus its
+padding, with no minimum width (owner ruling, Oct 9 2026). Token values use
+Title Case: "1,234 Tokens", "512 Reasoning Tokens". With Appearance → Show
+User Tokens on, the user's own text messages show "About 42 Tokens", counted on
+the device because no service reports one message's tokens (owner ruling,
+Oct 9 2026).
 
 ## Search status
 

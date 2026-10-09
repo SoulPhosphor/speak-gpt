@@ -24,67 +24,34 @@
   theme attribute (the rounded surface fill lives in @drawable/ui_dialog_rounded,
   text uses the shared appTextColor zone role), so a future palette or theme
   applies here without touching this layout. The empty line covers a message
-  saved before any details were recorded.
+  saved before any details were recorded. The box is as wide as its longest
+  line plus its padding (owner ruling, Oct 9 2026); every visual value is in
+  the Widget.App.MessageDetails.* styles.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:background="@drawable/ui_dialog_rounded"
-    android:minWidth="200dp"
-    android:orientation="vertical"
-    android:paddingStart="20dp"
-    android:paddingTop="16dp"
-    android:paddingEnd="20dp"
-    android:paddingBottom="16dp">
+    style="@style/Widget.App.MessageDetails.Popup">
 
     <TextView
         android:id="@+id/details_value_datetime"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="?attr/appTextColor"
-        android:textIsSelectable="true"
-        android:textSize="15sp"
-        android:visibility="gone" />
+        style="@style/Widget.App.MessageDetails.FirstValue" />
 
     <TextView
         android:id="@+id/details_value_model"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:textColor="?attr/appTextColor"
-        android:textIsSelectable="true"
-        android:textSize="15sp"
-        android:visibility="gone" />
+        style="@style/Widget.App.MessageDetails.Value" />
 
     <TextView
         android:id="@+id/details_value_tokens"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:textColor="?attr/appTextColor"
-        android:textIsSelectable="true"
-        android:textSize="15sp"
-        android:visibility="gone" />
+        style="@style/Widget.App.MessageDetails.Value" />
 
     <!-- Provider-reported reasoning tokens, kept separate from answer tokens
          (chat-redesign-plan.md §7.8). Shown only when the provider reported a
          reasoning-token count for this reply. -->
     <TextView
         android:id="@+id/details_value_reasoning_tokens"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:textColor="?attr/appTextColor"
-        android:textIsSelectable="true"
-        android:textSize="15sp"
-        android:visibility="gone" />
+        style="@style/Widget.App.MessageDetails.Value" />
 
     <TextView
         android:id="@+id/details_empty"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/message_details_empty"
-        android:textColor="?attr/appSubtleTextColor"
-        android:textSize="15sp"
-        android:visibility="gone" />
+        style="@style/Widget.App.MessageDetails.Empty"
+        android:text="@string/message_details_empty" />
 </LinearLayout>

@@ -128,10 +128,11 @@ class ReasoningSettingsActivity : FragmentActivity() {
         )
 
         // Start from the favorite's saved values; a saved effort the active path
-        // no longer supports resolves to Auto for display (§7.8).
+        // no longer supports resolves to the path's default for display (§7.8):
+        // On for an on/off-only model, where Auto is not offered, else Auto.
         selectedEffort = ReasoningEffort.fromSerialized(favorite.reasoningEffort)
-            ?.takeIf { capability.supports(it) }
-            ?: ReasoningEffort.AUTO
+            ?.takeIf { capability.supports(it) && it in capability.thinkingChoices() }
+            ?: capability.defaultEffort
         showReasoning = favorite.showReasoning
 
         configureRows()
@@ -167,7 +168,11 @@ class ReasoningSettingsActivity : FragmentActivity() {
             rowThinking?.alpha = 0.5f
             rowThinking?.setOnClickListener(null)
         } else {
-            rowThinking?.visibility = View.GONE
+            // No thinking available: a plain, non-interactive "Unavailable".
+            rowThinking?.visibility = View.VISIBLE
+            textThinkingValue?.text = getString(R.string.reasoning_effort_unavailable)
+            rowThinking?.isEnabled = false
+            rowThinking?.alpha = 0.5f
             rowThinking?.setOnClickListener(null)
         }
 

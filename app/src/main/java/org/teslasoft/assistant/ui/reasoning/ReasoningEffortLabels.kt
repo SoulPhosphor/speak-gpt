@@ -33,6 +33,7 @@ object ReasoningEffortLabels {
     fun labelRes(effort: ReasoningEffort): Int = when (effort) {
         ReasoningEffort.AUTO -> R.string.reasoning_effort_auto
         ReasoningEffort.OFF -> R.string.reasoning_effort_off
+        ReasoningEffort.ON -> R.string.reasoning_effort_on
         ReasoningEffort.MINIMAL -> R.string.reasoning_effort_minimal
         ReasoningEffort.LOW -> R.string.reasoning_effort_low
         ReasoningEffort.MEDIUM -> R.string.reasoning_effort_medium

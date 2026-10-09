@@ -7,5 +7,4 @@
     <integer name="settings_page_slide_duration">600</integer>
     <integer name="sampling_slider_ruler_intervals">20</integer>
     <integer name="sampling_slider_ruler_major_interval">5</integer>
-    <integer name="name_style_saved_panel_min_lines">4</integer>
 </resources>

@@ -59,6 +59,9 @@
     <style name="AppButton.Primary" parent="Widget.Material3.Button">
         <item name="shapeAppearanceOverlay">@style/ShapeAppearance.AppButton</item>
         <item name="android:textAppearance">@style/TextAppearance.App.Button</item>
+        <!-- Button text is always centered, whatever the button's size
+             (owner ruling, Oct 9 2026). -->
+        <item name="android:gravity">center</item>
     </style>
 
     <!-- No distinct Secondary appearance is approved yet (owner ruling, July 29
@@ -149,6 +152,13 @@
     <style name="AppButton.Primary.Inline" parent="AppButton.Primary">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
+    </style>
+
+    <!-- Label-sized primary button centered on its line, for vertical
+         (LinearLayout) hosts. ConstraintLayout hosts center it with
+         start/end constraints instead. -->
+    <style name="AppButton.Primary.Inline.Centered" parent="AppButton.Primary.Inline">
+        <item name="android:layout_gravity">center_horizontal</item>
     </style>
 
     <!-- The outlined counterpart of AppButton.Primary.Inline, for a
@@ -863,26 +873,15 @@
     <style name="Widget.App.NameStyle.SavedValues" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:minLines">@integer/name_style_saved_panel_min_lines</item>
         <item name="android:textSize">@dimen/name_style_body_text_size</item>
         <item name="android:textStyle">normal</item>
         <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:gravity">top|start</item>
     </style>
-    <!-- Owner-approved exception: a bold text-only button within the saved-style box. -->
-    <style name="Widget.App.NameStyle.RestoreOriginal" parent="AppButton.Primary">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@null</item>
-        <item name="backgroundTint">@null</item>
-        <item name="strokeWidth">0dp</item>
-        <item name="android:paddingStart">0dp</item>
-        <item name="android:paddingEnd">0dp</item>
-        <item name="android:gravity">start|center_vertical</item>
-        <item name="android:textColor">?attr/appTextColor</item>
-        <item name="android:textSize">@dimen/name_style_body_text_size</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:textAllCaps">false</item>
+    <!-- A normal label-sized primary button, centered in the saved-style box
+         (owner ruling, Oct 9 2026). -->
+    <style name="Widget.App.NameStyle.RestoreOriginal" parent="AppButton.Primary.Inline.Centered">
+        <item name="android:layout_marginTop">@dimen/name_style_small_gap</item>
     </style>
     <style name="Widget.App.NameStyle.SectionLabel" parent="Widget.App.Dropdown.CanonicalLabel">
         <item name="android:layout_marginTop">@dimen/name_style_section_gap</item>
@@ -912,6 +911,100 @@
         <item name="android:layout_marginTop">24dp</item>
         <item name="android:gravity">center</item>
         <item name="android:textColor">?attr/appTextColor</item>
+    </style>
+
+    <!-- Shared Chat Signature Style section (layout/view_chat_signature.xml),
+         used on Edit Companion, Edit Glamour, and the Roleplay Character card.
+         The preview reuses the Name Style preview appearance; its typography
+         comes from ChatNameStyle.apply. The button is the label-sized primary
+         button, centered on the screen. -->
+    <style name="Widget.App.Signature" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+    <style name="Widget.App.Signature.Preview" parent="Widget.App.NameStyle.Preview">
+        <item name="android:layout_marginTop">@dimen/signature_gap</item>
+    </style>
+    <style name="Widget.App.Signature.ChangeButton" parent="AppButton.Primary.Inline.Centered">
+        <item name="android:layout_marginTop">@dimen/signature_gap</item>
+    </style>
+
+    <!-- Edit Companion: one linked (additional) lorebook card. The card uses the
+         Quick Settings standalone segment surface and outline; the actions are
+         bare borderless icons like the Quick Settings gear. -->
+    <style name="Widget.App.CompanionEditor.LoreBookCard" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">@dimen/companion_lorebook_card_gap</item>
+        <item name="android:background">@drawable/bg_quick_settings_segment_standalone</item>
+        <item name="android:paddingStart">@dimen/quick_settings_segment_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/companion_lorebook_card_padding_end</item>
+        <item name="android:paddingTop">@dimen/companion_lorebook_card_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/companion_lorebook_card_padding_vertical</item>
+    </style>
+    <style name="Widget.App.CompanionEditor.LoreBookName" parent="Widget.App.Row.Title">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginEnd">@dimen/companion_lorebook_text_action_gap</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:lines">1</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Widget.App.CompanionEditor.LoreBookDetails" parent="Widget.App.Row.Subtitle">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginTop">@dimen/companion_lorebook_details_gap</item>
+        <item name="android:layout_marginEnd">@dimen/companion_lorebook_text_action_gap</item>
+        <item name="android:maxLines">2</item>
+    </style>
+    <style name="Widget.App.CompanionEditor.LoreBookAction" parent="Widget.App.QuickTile.EditButton">
+        <item name="android:layout_marginEnd">@dimen/companion_lorebook_action_gap</item>
+    </style>
+
+    <!-- The shared circled-i information button. It opens the shared
+         information dialog (ParameterInfoDialog); ParameterSectionHeader uses it,
+         and a screen whose title cannot be a ParameterSectionHeader title places
+         it directly after its own label. -->
+    <style name="Widget.App.InfoButton" parent="">
+        <item name="android:layout_width">@dimen/info_button_size</item>
+        <item name="android:layout_height">@dimen/info_button_size</item>
+        <item name="android:layout_gravity">center_vertical</item>
+        <item name="android:layout_marginStart">@dimen/info_button_gap</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:contentDescription">@string/parameter_info_button_desc</item>
+        <item name="android:padding">@dimen/info_button_padding</item>
+        <item name="android:src">@drawable/ic_info</item>
+    </style>
+
+    <!-- Message Details popup (the ⓘ message action). As wide as its longest
+         line plus padding; no minimum width (owner ruling, Oct 9 2026). -->
+    <style name="Widget.App.MessageDetails.Popup" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/ui_dialog_rounded</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/message_details_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/message_details_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/message_details_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/message_details_padding_vertical</item>
+    </style>
+    <style name="Widget.App.MessageDetails.FirstValue" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textIsSelectable">true</item>
+        <item name="android:textSize">@dimen/message_details_text_size</item>
+        <item name="android:visibility">gone</item>
+    </style>
+    <style name="Widget.App.MessageDetails.Value" parent="Widget.App.MessageDetails.FirstValue">
+        <item name="android:layout_marginTop">@dimen/message_details_line_gap</item>
+    </style>
+    <style name="Widget.App.MessageDetails.Empty" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/message_details_text_size</item>
+        <item name="android:visibility">gone</item>
     </style>
 
     <!-- Live character count, right-aligned directly under a field's Box. -->
@@ -1055,16 +1148,38 @@
     <!-- Inherit the Settings header without screen-specific color overrides. -->
     <style name="Widget.App.Usage.HeaderBar" parent="Widget.App.ActionBar" />
 
+    <!-- Everything below the header bar scrolls together: the conversation
+         total block, then the sections. -->
+    <style name="Widget.App.Usage.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Usage.TotalBlock" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/colorSurfaceContainerHigh</item>
+    </style>
+
     <style name="Widget.App.Usage.HeaderTitle" parent="Widget.App.ActionBar.Title" />
+
+    <!-- "Conversation Total" and its information button, centered as one unit. -->
+    <style name="Widget.App.Usage.TotalLabelRow" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/usage_total_top_gap</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+    </style>
 
     <style name="Widget.App.Usage.TotalLabel" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">@dimen/usage_total_top_gap</item>
         <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">12sp</item>
-        <item name="layout_constraintEnd_toEndOf">parent</item>
-        <item name="layout_constraintStart_toStartOf">parent</item>
     </style>
 
     <style name="Widget.App.Usage.TotalCost" parent="">

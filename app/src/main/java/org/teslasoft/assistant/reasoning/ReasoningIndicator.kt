@@ -57,7 +57,10 @@ enum class ReasoningIndicator(val token: String) {
     XHIGH("xhigh"),
     MAX("max"),
     AUTOMATIC("automatic"),
-    FIXED("fixed");
+    FIXED("fixed"),
+
+    /** Reasoning turned on, on an on/off-only path (one level, on). */
+    ON("on");
 
     companion object {
         /**
@@ -75,6 +78,7 @@ enum class ReasoningIndicator(val token: String) {
             }
             return when (effort) {
                 ReasoningEffort.OFF -> OFF
+                ReasoningEffort.ON -> ON
                 ReasoningEffort.MINIMAL -> MINIMAL
                 ReasoningEffort.LOW -> LOW
                 ReasoningEffort.MEDIUM -> MEDIUM

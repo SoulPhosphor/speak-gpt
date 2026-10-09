@@ -141,7 +141,7 @@
 
             <!-- Display Name (user_personas.display_name, v32): the user's
                  chat name while this Glamour is active; blank falls back to
-                 the Default Displayed Username. -->
+                 the Glamour Name. -->
             <TextView
                 android:id="@+id/label_display_name"
                 style="@style/Widget.App.Field.Label"
@@ -177,6 +177,18 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/hint_display_name" />
 
+            <!-- Chat Signature Style: the Display Name as chat styles it. -->
+            <include
+                android:id="@+id/chat_signature"
+                layout="@layout/view_chat_signature"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/signature_host_inset"
+                android:layout_marginEnd="@dimen/signature_host_inset"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_display_name" />
+
             <!-- Short Description: shown under the persona's name on the My
                  Personas list row (view_memory_row.xml row_subtitle, capped
                  at 3 lines/ellipsis - it had no character maximum to reuse,
@@ -194,7 +206,7 @@
                 android:text="@string/mem_pers_field_short_description"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/field_display_name" />
+                app:layout_constraintTop_toBottomOf="@+id/chat_signature" />
 
             <TextView
                 android:id="@+id/hint_short_description"

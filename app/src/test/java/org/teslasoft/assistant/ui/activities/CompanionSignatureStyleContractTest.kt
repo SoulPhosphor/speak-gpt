@@ -1,0 +1,98 @@
+/**************************************************************************
+ * Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0.
+ **************************************************************************/
+
+package org.teslasoft.assistant.ui.activities
+
+import java.io.File
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/** Edit Companion shows the Chat Signature Style preview and a row into Name
+ *  Style, has no font/size controls of its own, and its linked-lorebook cards
+ *  use the shared app surface rather than the device accent. */
+class CompanionSignatureStyleContractTest {
+
+    private fun source(relative: String): String {
+        val candidates = listOf(File(relative), File("app/$relative"), File("../$relative"))
+        return candidates.firstOrNull { it.exists() }?.readText()
+            ?: throw AssertionError("$relative not found from " + File(".").absolutePath)
+    }
+
+    private val editor get() = source("src/main/java/org/teslasoft/assistant/ui/activities/EditPersonaActivity.kt")
+
+    @Test
+    fun signatureSectionPreviewsAndOpensNameStyle() {
+        val section = source("src/main/res/layout/view_chat_signature.xml")
+        assertTrue(section.contains("Widget.App.Signature.Preview"))
+        assertTrue(section.contains("Widget.App.Signature.ChangeButton"))
+        val layout = source("src/main/res/layout/activity_edit_persona.xml")
+        assertTrue(layout.contains("@layout/view_chat_signature"))
+        assertFalse(layout.contains("field_chat_name_font"))
+        assertFalse(layout.contains("field_chat_name_size"))
+        assertTrue(editor.contains("NameStyleActivity.companionIntent(this, personaId)"))
+        assertTrue(editor.contains("ChatNameStyle.ai(Preferences.getPreferences(this, \"\"), stored)"))
+        val strings = source("src/main/res/values/strings.xml")
+        assertTrue(strings.contains("<string name=\"chat_signature_style\">Chat Signature Style</string>"))
+        assertTrue(strings.contains("<string name=\"chat_signature_change_name_style\">Change Chat Name Style</string>"))
+    }
+
+    @Test
+    fun glamourAndRoleplayShowTheSameSignature() {
+        val glamourLayout = source("src/main/res/layout/activity_edit_user_persona.xml")
+        assertTrue(glamourLayout.contains("@layout/view_chat_signature"))
+        val glamour = source("src/main/java/org/teslasoft/assistant/ui/activities/memory/EditUserPersonaActivity.kt")
+        assertTrue(glamour.contains("NameStyleActivity.glamourIntent(this, personaId)"))
+        assertTrue(glamour.contains("signature?.setName(displayName.ifEmpty { fieldName?.text?.toString()?.trim().orEmpty() })"))
+        val chat = source("src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+        assertTrue(chat.contains("store.getUserPersona(id)?.let { it.displayName?.takeIf(String::isNotBlank) ?: it.name }"))
+        val cardLayout = source("src/main/res/layout/activity_character_card.xml")
+        val name = cardLayout.indexOf("@+id/field_card_name")
+        val signature = cardLayout.indexOf("@layout/view_chat_signature")
+        val species = cardLayout.indexOf("@string/card_field_species")
+        assertTrue(name in 0 until signature && signature < species)
+        val card = source("src/main/java/org/teslasoft/assistant/ui/activities/memory/CharacterCardActivity.kt")
+        assertTrue(card.contains("NameStyleActivity.roleplayIntent(this, cardId.orEmpty())"))
+        assertTrue(card.contains("nameFontId = storedStyle?.nameFontId"))
+        // Name Style lists only saved identities, so the button waits for a save.
+        assertTrue(card.contains("signature?.setCanChangeStyle(cardId != null)"))
+        assertTrue(glamour.contains("signature?.setCanChangeStyle(intent.getStringExtra(EXTRA_PERSONA_ID).orEmpty().isNotEmpty())"))
+    }
+
+    @Test
+    fun memoriesButtonIsCenteredLabelSizedPrimaryWithoutIcon() {
+        val cardLayout = source("src/main/res/layout/activity_character_card.xml")
+        val button = cardLayout.substring(cardLayout.indexOf("@+id/btn_card_memories"))
+        val tag = button.substring(0, button.indexOf("/>"))
+        assertTrue(tag.contains("@style/AppButton.Primary.Inline.Centered"))
+        assertFalse(tag.contains("app:icon"))
+        val themes = source("src/main/res/values/themes.xml")
+        val primary = themes.substring(themes.indexOf("<style name=\"AppButton.Primary\" parent="))
+        assertTrue(primary.substring(0, primary.indexOf("</style>")).contains("<item name=\"android:gravity\">center</item>"))
+    }
+
+    @Test
+    fun savingACompanionKeepsItsNameStyleOverride() {
+        assertFalse(editor.contains("EXTRA_CHAT_NAME_"))
+        val build = editor.substring(editor.indexOf("private fun buildPersonaObject"))
+        assertTrue(build.contains("persona.chatNameFontId = stored.chatNameFontId"))
+        assertTrue(build.contains("persona.chatNameSizeSp = stored.chatNameSizeSp"))
+        assertTrue(build.contains("persona.chatNameFontStyle = stored.chatNameFontStyle"))
+    }
+
+    @Test
+    fun linkedLoreBookCardsUseSharedSurfaceAndBareIcons() {
+        val row = source("src/main/res/layout/view_persona_lorebook_row.xml")
+        assertTrue(row.contains("Widget.App.CompanionEditor.LoreBookCard"))
+        assertFalse(row.contains("colorSecondaryContainer"))
+        assertFalse(row.contains("btn_accent_tonal"))
+        assertFalse(row.contains("android:textColor"))
+        val themes = source("src/main/res/values/themes.xml")
+        val card = themes.substring(themes.indexOf("<style name=\"Widget.App.CompanionEditor.LoreBookCard\""))
+        assertTrue(card.substring(0, card.indexOf("</style>")).contains("@drawable/bg_quick_settings_segment_standalone"))
+        assertTrue(themes.contains("<style name=\"Widget.App.CompanionEditor.LoreBookAction\" parent=\"Widget.App.QuickTile.EditButton\">"))
+    }
+}

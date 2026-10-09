@@ -135,6 +135,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var fieldSeed: TextInputEditText? = null
     private var btnSaveToProfile: MaterialButton? = null
     private var switchChatMemory: MaterialSwitch? = null
+    private var switchChatAlwaysSpeak: MaterialSwitch? = null
     private var switchChatExcluded: MaterialSwitch? = null
     // Per-chat lore books on/off, independent of the memory switch. QUICK
     // SETTINGS IS AUTHORITATIVE (owner ruling, July 10 2026): these two
@@ -723,8 +724,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             row.setOnClickListener(null)
             textReasoningEffort?.setOnClickListener(null)
         } else {
-            // A non-reasoning path hides the tile entirely.
-            row.visibility = View.GONE
+            // No thinking available: a plain, non-interactive "Unavailable"
+            // instead of a dropdown (owner ruling, Oct 9 2026).
+            row.visibility = View.VISIBLE
+            textReasoningEffort?.text = getString(R.string.reasoning_effort_unavailable)
+            row.isEnabled = false
+            row.alpha = 0.5f
             row.setOnClickListener(null)
             textReasoningEffort?.setOnClickListener(null)
         }
@@ -1085,6 +1090,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         )
         setupModelRulesRow()
         setupSummarizerControls()
+        // This chat only: starts from the Settings default, never changes it.
+        switchChatAlwaysSpeak = view.findViewById(R.id.switch_chat_always_speak)
+        switchChatAlwaysSpeak?.isChecked = preferences?.getChatAlwaysSpeak() ?: false
+        switchChatAlwaysSpeak?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setChatAlwaysSpeak(checked)
+        }
         switchChatMemory?.isChecked = preferences?.getChatMemoryEnabled() ?: true
         // "Archive this chat": positive framing. Checked = archive (capture on).
         // The stored pref is still "excluded" (the inverse), so flip both ways.

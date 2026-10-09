@@ -135,6 +135,14 @@
                 android:inputType="textCapSentences"
                 android:singleLine="true" />
 
+            <!-- Chat Signature Style: the character's name as chat styles it.
+                 CharacterCardActivity hides it for party members. -->
+            <include
+                android:id="@+id/chat_signature"
+                layout="@layout/view_chat_signature"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
             <Space
                 android:layout_width="match_parent"
                 android:layout_height="12dp" />
@@ -295,12 +303,9 @@
                  GONE for party members — NPCs aren't a memory scope. -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_card_memories"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                style="@style/AppButton.Primary.Inline.Centered"
                 android:layout_marginTop="16dp"
                 android:visibility="gone"
-                app:icon="@drawable/ic_storage"
                 android:text="@string/title_memories" />
 
             <!-- Zone 2 -->

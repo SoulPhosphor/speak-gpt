@@ -240,7 +240,6 @@
     <string name="persona_core_lorebook_help">Always active while this Companion is used. Optional.</string>
     <string name="persona_additional_lorebooks">Additional Lorebooks</string>
     <string name="persona_no_additional_lorebooks">No lorebooks linked yet.</string>
-    <string name="persona_autoload_lorebooks">Automatically enable the last-used lorebooks in new chats</string>
     <string name="label_lorebook_none">None</string>
     <string name="tile_lorebooks_title">Lorebooks</string>
     <string name="tile_lorebooks_desc">Manage memory collections for role-play and context</string>
@@ -1056,6 +1055,8 @@
     <string name="cost_price_variable_line">Price: Varies (Historical Rates)</string>
     <string name="token_pricing_details_title">Usage &amp; Cost</string>
     <string name="usage_cost_title">Usage &amp; Cost</string>
+    <string name="usage_estimate_info_title">Best Estimated Usage</string>
+    <string name="usage_estimate_info_body">Usage calculations reflect the best available data returned by the provider. Figures are rounded estimates and may not exactly match final billing statements. Final charges from your provider may differ slightly due to rounding, tiered rates, or dynamic processing fees.</string>
     <string name="usage_conversation_total">Conversation Total</string>
     <string name="usage_conversation_meta">%1$d recorded requests · %2$d models · %3$d providers</string>
     <string name="usage_model_meta">%1$d recorded requests · %2$d providers</string>
@@ -2837,7 +2838,7 @@
     <string name="mem_pers_error_name_empty">Please enter a Glamour name</string>
     <!-- Glamour Display Name: the user's chat name while this Glamour is active. -->
     <string name="mem_pers_field_display_name">Display Name</string>
-    <string name="mem_pers_field_display_name_hint">Changes your username displayed in chat. Your default username will show if this is left blank.</string>
+    <string name="mem_pers_field_display_name_hint">Changes your username displayed in chat. Your glamour name will show if this is left blank.</string>
     <string name="mem_pers_field_short_description">Short Description</string>
     <string name="mem_pers_field_short_description_hint">Shown under the Glamour name to help you remember which Glamour is which. This is not sent to the model.</string>
     <string name="mem_pers_short_desc_over">The Glamour can\'t be saved until you remove %1$d characters from this box.</string>
@@ -3773,8 +3774,10 @@
     <string name="appearance_user_bubble_hint">Show the user message bubble decoration.</string>
     <string name="appearance_model_names">Model Names</string>
     <string name="appearance_model_names_hint">Show the model that produced each message.</string>
-    <string name="appearance_token_usage">Token Usage</string>
+    <string name="appearance_token_usage">Show AI Response Tokens</string>
     <string name="appearance_token_usage_hint">Show provider-reported token usage for each message.</string>
+    <string name="appearance_user_tokens">Show User Tokens</string>
+    <string name="appearance_user_tokens_hint">Shows the estimated tokens for each user submitted text message.</string>
     <!-- Message Details popup (ⓘ) and the compact metadata line. The popup
          shows bare values (a date/time, the model, the token count) with no
          heading or field labels; the empty line covers a message with nothing
@@ -3787,6 +3790,9 @@
          means send no explicit effort; "Off" disables reasoning where supported. -->
     <string name="reasoning_effort_auto">Auto</string>
     <string name="reasoning_effort_off">Off</string>
+    <string name="reasoning_effort_on">On</string>
+    <!-- Thinking setting for a model whose provider reports no thinking control. -->
+    <string name="reasoning_effort_unavailable">Unavailable</string>
     <string name="reasoning_effort_minimal">Minimal</string>
     <string name="reasoning_effort_low">Low</string>
     <string name="reasoning_effort_medium">Medium</string>
@@ -3827,16 +3833,20 @@
     <string name="reasoning_indicator_xhigh_desc">Extra High Reasoning</string>
     <string name="reasoning_indicator_max_desc">Max Reasoning</string>
     <string name="reasoning_indicator_automatic_desc">Automatic Reasoning</string>
+    <string name="reasoning_indicator_on_desc">Reasoning On</string>
     <string name="reasoning_indicator_fixed_desc">Fixed Reasoning</string>
     <!-- Accessibility descriptions for the two lightbulb uses (§7.9): the
          actionable favorite shortcut and the informational View All indicator. -->
     <string name="reasoning_settings_bulb_desc">Reasoning settings</string>
     <string name="reasoning_model_indicator_desc">Reasoning model</string>
-    <!-- Token count shown in the compact line and the details popup, e.g. "1,234 tokens". -->
-    <string name="chat_token_count">%1$s tokens</string>
+    <!-- Token count shown in the compact line and the details popup, e.g. "1,234 Tokens". -->
+    <string name="chat_token_count">%1$s Tokens</string>
     <!-- Reasoning-token count in Message Details, kept separate from answer
-         tokens (chat-redesign-plan.md §7.8), e.g. "512 reasoning tokens". -->
-    <string name="chat_reasoning_token_count">%1$s reasoning tokens</string>
+         tokens (chat-redesign-plan.md §7.8), e.g. "512 Reasoning Tokens". -->
+    <string name="chat_reasoning_token_count">%1$s Reasoning Tokens</string>
+    <!-- Estimated tokens in the user's own message (Show User Tokens), counted
+         on the device because no service reports one message's tokens. -->
+    <string name="chat_user_token_estimate">About %1$s Tokens</string>
     <!-- Regenerated-response pager on an assistant message. -->
     <string name="version_nav_prev">Previous Response Version</string>
     <string name="version_nav_next">Next Response Version</string>
@@ -3907,11 +3917,8 @@
     <string name="appearance_preview_default">Sample Name</string>
     <string name="appearance_font_previews">Font Previews</string>
     <string name="appearance_size_sp">%1$d sp</string>
-    <string name="appearance_use_default">Use Appearance Default</string>
-    <string name="companion_chat_name_style">Chat Name Style</string>
-    <string name="companion_chat_name_style_hint">Optionally override the AI name style for this companion.</string>
-    <string name="companion_chat_name_font">AI Name Font</string>
-    <string name="companion_chat_name_size">AI Name Size</string>
+    <string name="chat_signature_style">Chat Signature Style</string>
+    <string name="chat_signature_change_name_style">Change Chat Name Style</string>
     <string name="tts_provider_picker_intro">Choose the provider settings for this text-to-speech model. Available providers and routing support depend on the endpoint.</string>
     <string name="tts_provider_col_training">Training/Data Use</string>
     <string name="tts_provider_col_price">Price</string>

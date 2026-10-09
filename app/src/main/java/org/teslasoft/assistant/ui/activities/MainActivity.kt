@@ -132,15 +132,27 @@ class MainActivity : FragmentActivity() {
                     .setAction(Intent.ACTION_VIEW)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             )
-            is StartupDestination.BlankChat -> startActivity(
-                ChatActivity.rootIntent(
+            is StartupDestination.BlankChat -> {
+                val chatIntent = ChatActivity.rootIntent(
                     this,
                     destination.pending.id,
                     destination.pending.name,
                     pendingConversation = true
-                )
-            )
+                ).putExtra(ChatActivity.EXTRA_OPENED_AT_LAUNCH, true)
+                if (isTaskRoot) {
+                    // This gate is the only screen in the task, so finishing it
+                    // already leaves the chat alone in it. Clearing the task as
+                    // well only replays a full app-launch transition.
+                    chatIntent.removeFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    chatIntent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                }
+                startActivity(chatIntent)
+            }
         }
         finish()
+        if (destination is StartupDestination.BlankChat) {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
     }
 }

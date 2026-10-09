@@ -111,6 +111,18 @@ data class ReasoningCapability(
         get() = effortConfigurable || canDisableReasoning
 
     /**
+     * True when reasoning on this path is only on or off: it reasons, it can be
+     * turned off, and the provider publishes no effort levels.
+     */
+    val isOnOffOnly: Boolean
+        get() = isReasoningCapable && !effortConfigurable && canDisableReasoning
+
+    /** The effort used before the user picks one: On for an on/off-only path
+     *  (owner ruling, Oct 9 2026), otherwise Auto. */
+    val defaultEffort: ReasoningEffort
+        get() = if (isOnOffOnly) ReasoningEffort.ON else ReasoningEffort.AUTO
+
+    /**
      * True only for the genuinely fixed case: the path reasons, offers no
      * adjustable control, AND the app positively knows reasoning is mandatory.
      * This — and only this — is what may be shown as "Fixed". A reasoning path
@@ -142,6 +154,9 @@ data class ReasoningCapability(
      */
     fun thinkingChoices(): List<ReasoningEffort> {
         if (!isEffortAdjustable) return emptyList()
+        // Reasoning that is only on or off offers exactly that: no Auto (which
+        // implies a provider-chosen level) and no invented levels.
+        if (isOnOffOnly) return listOf(ReasoningEffort.ON, ReasoningEffort.OFF)
         val choices = ArrayList<ReasoningEffort>()
         choices.add(ReasoningEffort.AUTO)
         choices.addAll(supportedEfforts.filter { it.isExplicitLevel })
@@ -157,6 +172,7 @@ data class ReasoningCapability(
     fun supports(effort: ReasoningEffort): Boolean = when (effort) {
         ReasoningEffort.AUTO -> true
         ReasoningEffort.OFF -> canDisableReasoning
+        ReasoningEffort.ON -> isOnOffOnly
         else -> effortConfigurable && supportedEfforts.contains(effort)
     }
 

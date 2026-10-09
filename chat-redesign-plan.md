@@ -377,7 +377,7 @@ Tapping the lightbulb opens a dedicated **full-screen Reasoning Settings screen*
 
 The Reasoning Settings screen contains only controls the active model/provider combination can actually support, in this order when present:
 
-1. **Thinking** — a dropdown containing only the reasoning-effort levels supported for that model/provider combination. `Auto` means SpeakGPT does not explicitly request an effort level and allows the provider/model default to apply.
+1. **Thinking** — a dropdown containing only the reasoning-effort levels supported for that model/provider combination. `Auto` means the app does not explicitly request an effort level and allows the provider/model default to apply. A model whose reasoning is only on or off (no published levels) offers **On** and **Off** instead, with no `Auto` and no invented levels (owner ruling, Oct 9 2026). When no thinking control is available, the row stays visible as a non-interactive **Unavailable** (owner ruling, Oct 9 2026).
 2. **Show Reasoning** — an On/Off toggle controlling whether available provider-supplied reasoning is requested/returned for display.
 
 A reasoning-capable model that does not expose configurable effort may therefore have no Thinking dropdown but may still expose Show Reasoning. A model with mandatory reasoning must not present an Off choice merely because another model supports one.
@@ -399,7 +399,7 @@ Reasoning effort is expected to be changed more frequently than the favorite's f
 - Place the **Thinking** dropdown directly beneath **System Prompt** in Quick Settings.
 - Use the same available reasoning levels and capability rules as the favorite Reasoning Settings screen, but apply the selected value to the current conversation rather than silently rewriting the favorite.
 - Keep this control visually lightweight: **do not give the Thinking row/tile a separate card or background treatment** like the larger controls above it. It should read as a simple inline dropdown within the Quick Settings flow.
-- Show it only when the active model/provider combination exposes configurable reasoning.
+- Always show the row. When the active model/provider combination exposes no thinking control (including when the app cannot establish capability), show a non-interactive **Unavailable** instead of hiding the row, so the user can see the app found no thinking control (owner ruling, Oct 9 2026).
 - Do **not** add **Show Reasoning** to Quick Settings at this stage. That lower-frequency preference remains in the favorite's full Reasoning Settings screen.
 
 Inheritance is explicit:
@@ -407,7 +407,7 @@ Inheritance is explicit:
 - when a new conversation is created from or first uses a favorite, its reasoning effort starts from that favorite's saved default;
 - once the user changes Thinking in Quick Settings, that conversation owns and persists its override independently;
 - changing a favorite later does not retroactively rewrite existing conversations that already have their own reasoning setting;
-- if a conversation temporarily switches to a non-reasoning model, hide the Thinking control but preserve the conversation's last applicable reasoning preference so switching back does not erase it;
+- if a conversation temporarily switches to a non-reasoning model, show the Thinking row as **Unavailable** but preserve the conversation's last applicable reasoning preference so switching back does not erase it;
 - `Auto` remains a real persisted choice meaning “send no explicit effort and allow provider/model default behavior,” not an alias for Medium or any other explicit level.
 
 ### 7.6 Reasoning indicator in View All models
@@ -461,7 +461,7 @@ Reasoning capability can change over time as providers update models. The client
 
 These rules close the remaining ambiguity so implementation does not invent product behavior:
 
-- **Default effort is `Auto`.** A newly favorited reasoning-capable model starts with Thinking = Auto unless the user changes it.
+- **Default effort is `Auto`** for a model with published levels. A newly favorited reasoning-capable model starts with Thinking = Auto unless the user changes it. A model whose reasoning is only on or off defaults to **On**, which sends the provider's explicit enable signal (owner ruling, Oct 9 2026).
 - **Default Show Reasoning is On.** For a newly favorited model, display provider-supplied reasoning when the provider actually returns user-visible reasoning. Do not fabricate reasoning and do not force a provider-specific reasoning-enable request solely to satisfy the display toggle.
 - **A reasoning model does not have to be favorited to work correctly.** If the user selects a reasoning-capable model directly from View All and there is no favorite reasoning configuration, use Auto for effort and display any user-visible reasoning the provider returns. The lack of a favorite must not silently disable reasoning support.
 - **Precedence is conversation override → current favorite default → Auto/provider/model default.** A persisted conversation override wins while it exists. If the conversation has no override and the user switches to another favorite, that favorite's saved default becomes effective. If there is neither an override nor a favorite-saved value, use Auto and do not send an explicit effort.

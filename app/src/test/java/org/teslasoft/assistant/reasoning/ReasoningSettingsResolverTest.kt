@@ -33,6 +33,29 @@ class ReasoningSettingsResolverTest {
         source = CapabilitySource.PROVIDER_METADATA
     )
 
+    private val onOffOnly = ReasoningCapability(
+        support = ReasoningSupport.KNOWN,
+        effortConfigurable = false,
+        supportedEfforts = emptyList(),
+        canDisableReasoning = true,
+        canReturnVisibleReasoning = true,
+        source = CapabilitySource.PROVIDER_METADATA
+    )
+
+    @Test
+    fun onOffOnlyPathDefaultsToOnAndTreatsLegacyAutoAsOn() {
+        val unset = ReasoningSettingsResolver.resolve(null, null, null, onOffOnly)
+        assertEquals(ReasoningEffort.ON, unset.effort)
+        assertTrue(unset.enablesReasoning)
+        val legacyAuto = ReasoningSettingsResolver.resolve(ReasoningEffort.AUTO, null, null, onOffOnly)
+        assertEquals(ReasoningEffort.ON, legacyAuto.effort)
+        val off = ReasoningSettingsResolver.resolve(ReasoningEffort.OFF, null, null, onOffOnly)
+        assertEquals(ReasoningEffort.OFF, off.effort)
+        // A leveled path never receives On; it falls back to its default, Auto.
+        val onOnLeveled = ReasoningSettingsResolver.resolve(ReasoningEffort.ON, null, null, fullControl)
+        assertEquals(ReasoningEffort.AUTO, onOnLeveled.effort)
+    }
+
     @Test
     fun conversationOverrideWinsOverFavorite() {
         val r = ReasoningSettingsResolver.resolve(

@@ -49,6 +49,11 @@ enum class ReasoningEffort(val serialized: String) {
     /** Disable reasoning via the provider-appropriate signal (capability-driven). */
     OFF("off"),
 
+    /** Turn reasoning on, for a path whose reasoning is only on or off with no
+     *  published levels (owner ruling, Oct 9 2026). Such a path offers On/Off
+     *  instead of Auto, and On is its default. */
+    ON("on"),
+
     /** Fast, minimal reasoning (e.g. OpenAI gpt-5 `reasoning_effort=minimal`). */
     MINIMAL("minimal"),
 
@@ -72,7 +77,7 @@ enum class ReasoningEffort(val serialized: String) {
      * disable signal rather than a level).
      */
     val isExplicitLevel: Boolean
-        get() = this != AUTO && this != OFF
+        get() = this != AUTO && this != OFF && this != ON
 
     companion object {
         /**

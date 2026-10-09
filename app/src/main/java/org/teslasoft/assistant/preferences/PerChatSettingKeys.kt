@@ -63,6 +63,7 @@ object PerChatSettingKeys {
         // Voice & speech
         "audio",
         "always_speak_mode",
+        "chat_always_speak",
         "autoLangDetect",
 
         // Identity & prompts

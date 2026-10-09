@@ -136,4 +136,23 @@
     <dimen name="name_style_section_gap">20dp</dimen>
     <dimen name="name_style_panel_padding">12dp</dimen>
     <dimen name="name_style_body_text_size">16sp</dimen>
+    <!-- Chat Signature Style section, and Edit Companion layout and linked lorebook cards. -->
+    <dimen name="signature_gap">12dp</dimen>
+    <dimen name="signature_host_inset">24dp</dimen>
+    <dimen name="companion_editor_bottom_gap">24dp</dimen>
+    <dimen name="companion_lorebook_card_gap">8dp</dimen>
+    <dimen name="companion_lorebook_card_padding_vertical">10dp</dimen>
+    <dimen name="companion_lorebook_card_padding_end">4dp</dimen>
+    <dimen name="companion_lorebook_text_action_gap">8dp</dimen>
+    <dimen name="companion_lorebook_details_gap">2dp</dimen>
+    <dimen name="companion_lorebook_action_gap">0dp</dimen>
+    <!-- Message Details popup. -->
+    <dimen name="message_details_padding_horizontal">20dp</dimen>
+    <dimen name="message_details_padding_vertical">16dp</dimen>
+    <dimen name="message_details_line_gap">6dp</dimen>
+    <dimen name="message_details_text_size">15sp</dimen>
+    <!-- Shared circled-i information button. -->
+    <dimen name="info_button_size">40dp</dimen>
+    <dimen name="info_button_gap">2dp</dimen>
+    <dimen name="info_button_padding">8dp</dimen>
 </resources>

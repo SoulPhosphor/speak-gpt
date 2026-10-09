@@ -89,6 +89,8 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.color.MaterialColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.core.spans.CodeBlockSpan
+import com.aallam.ktoken.Encoding
+import com.aallam.ktoken.Tokenizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -249,6 +251,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var speakingPosition = -1
 
     companion object {
+        /** CL100K tokenizer for user-token estimates, loaded once on first use. */
+        @Volatile private var cachedUserTokenizer: Tokenizer? = null
+
+        private suspend fun userTokenizer(): Tokenizer =
+            cachedUserTokenizer ?: Tokenizer.of(Encoding.CL100K_BASE).also { cachedUserTokenizer = it }
+
         private const val TYPE_USER = 0
         private const val TYPE_BOT = 1
         private const val TYPE_IMAGE_CONFIRMATION = 2
@@ -699,6 +707,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     open inner class ViewHolder(itemView: View, private val debugContext: Context) : RecyclerView.ViewHolder(itemView) {
+        // The message this row currently shows. A Message Details popup that
+        // waits on the user-token estimate opens only if the row still shows
+        // the same message, since scrolling can rebind the row meanwhile.
+        private var boundMessageId: String? = null
         private val ui: ConstraintLayout = itemView.findViewById(R.id.ui)
         private val icon: ImageView = itemView.findViewById(R.id.icon)
         // The icon's original XML backing (e.g. the assistant bubble's tonal
@@ -852,6 +864,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateActiveMemories(display)
             updateVersionNav(chatMessage, position)
 
+            boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
             btnDetails.setOnClickListener { anchor ->
                 if (!bulkActionMode) showMessageDetailsPopup(anchor, display)
             }
@@ -1159,6 +1172,32 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * is selectable. Outside tap or Back dismisses.
          */
         private fun showMessageDetailsPopup(anchor: View, chatMessage: HashMap<String, Any>) {
+            val isBot = chatMessage["isBot"] == true
+            val text = chatMessage["message"]?.toString().orEmpty()
+            // Show User Tokens: no service reports one message's own tokens,
+            // so the user's text is counted here and labelled an estimate.
+            if (!isBot && preferences.getShowUserTokens() && text.isNotBlank() && !text.startsWith("~file:")) {
+                val requestedMessageId = boundMessageId
+                context.lifecycleScope.launch {
+                    val count = try {
+                        withContext(Dispatchers.Default) { userTokenizer().encode(text).size }
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (anchor.isAttachedToWindow && boundMessageId == requestedMessageId) {
+                        showMessageDetailsPopup(anchor, chatMessage, count)
+                    }
+                }
+                return
+            }
+            showMessageDetailsPopup(anchor, chatMessage, null)
+        }
+
+        private fun showMessageDetailsPopup(
+            anchor: View,
+            chatMessage: HashMap<String, Any>,
+            userTokenEstimate: Int?
+        ) {
             val content = LayoutInflater.from(context)
                 .inflate(R.layout.view_details_popup, null)
 
@@ -1175,7 +1214,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else null
             anyShown = bindDetailValue(content, R.id.details_value_model, model) || anyShown
 
-            val tokens = if (isBot) tokenCountLabel(chatMessage) else null
+            val tokens = if (isBot) tokenCountLabel(chatMessage) else userTokenEstimate?.let {
+                context.getString(
+                    R.string.chat_user_token_estimate,
+                    NumberFormat.getIntegerInstance(Locale.getDefault()).format(it)
+                )
+            }
             anyShown = bindDetailValue(content, R.id.details_value_tokens, tokens) || anyShown
 
             val reasoningTokens = if (isBot) reasoningTokenCountLabel(chatMessage) else null
@@ -1576,6 +1620,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 // an open owner decision. Accessibility text still says "Max".
                 ReasoningIndicator.MAX -> { icon = R.drawable.ic_signal_wifi_4_bar; desc = R.string.reasoning_indicator_max_desc }
                 ReasoningIndicator.AUTOMATIC -> { icon = R.drawable.ic_network_check; desc = R.string.reasoning_indicator_automatic_desc }
+                // On (an on/off-only model) uses the same speedometer glyph:
+                // one level, on (owner ruling, Oct 9 2026).
+                ReasoningIndicator.ON -> { icon = R.drawable.ic_network_check; desc = R.string.reasoning_indicator_on_desc }
                 ReasoningIndicator.FIXED -> { icon = R.drawable.ic_network_wifi_2_locked; desc = R.string.reasoning_indicator_fixed_desc }
             }
             view.setImageResource(icon)

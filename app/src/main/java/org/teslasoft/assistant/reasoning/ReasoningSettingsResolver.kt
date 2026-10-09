@@ -46,6 +46,9 @@ data class ResolvedReasoning(
     /** Whether the effective choice is the capability-driven disable signal. */
     val disablesReasoning: Boolean get() = effort == ReasoningEffort.OFF
 
+    /** Whether the effective choice turns reasoning on (on/off-only paths). */
+    val enablesReasoning: Boolean get() = effort == ReasoningEffort.ON
+
     enum class Source { CONVERSATION_OVERRIDE, FAVORITE_DEFAULT, DEFAULT_AUTO }
 }
 
@@ -116,8 +119,19 @@ object ReasoningSettingsResolver {
             )
         }
 
-        // Capability clamp (§7.8): drop an unsupported effort to Auto, keeping
-        // the original for diagnostics. AUTO always passes (it sends nothing).
+        // An on/off-only path has no Auto: an unchosen or legacy Auto there
+        // means its default, On (owner ruling, Oct 9 2026).
+        if (capability.isOnOffOnly && requested == ReasoningEffort.AUTO) {
+            return ResolvedReasoning(
+                effort = ReasoningEffort.ON,
+                showReasoning = showReasoning,
+                source = source,
+                clampedFrom = null
+            )
+        }
+
+        // Capability clamp (§7.8): drop an unsupported effort to the path's
+        // default, keeping the original for diagnostics.
         return if (capability.supports(requested)) {
             ResolvedReasoning(
                 effort = requested,
@@ -127,7 +141,7 @@ object ReasoningSettingsResolver {
             )
         } else {
             ResolvedReasoning(
-                effort = ReasoningEffort.AUTO,
+                effort = capability.defaultEffort,
                 showReasoning = showReasoning,
                 source = source,
                 clampedFrom = requested
