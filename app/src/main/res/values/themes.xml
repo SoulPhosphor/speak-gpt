@@ -1187,6 +1187,17 @@
     </style>
 
     <!-- Cache Hit Rate line under a token chart. -->
+    <!-- Chat input breakdown: indent labels and partial rules, keeping columns aligned. -->
+    <style name="Widget.App.Usage.ChatTotalLabel" parent="Widget.App.Usage.TableLabel">
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Widget.App.Usage.ChatDetailLabel" parent="Widget.App.Usage.TableLabel">
+        <item name="android:paddingStart">@dimen/usage_chat_detail_indent</item>
+    </style>
+    <style name="Widget.App.Usage.ChatDetailDivider" parent="Widget.App.Usage.TableDivider">
+        <item name="android:layout_marginStart">@dimen/usage_chat_detail_indent</item>
+    </style>
+
     <style name="Widget.App.Usage.CacheRate" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -1249,7 +1260,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">11sp</item>
     </style>
 
@@ -1258,7 +1269,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">2dp</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -1268,7 +1279,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">8dp</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textColor">?attr/appUsageModelTextColor</item>
         <item name="android:textSize">11sp</item>
     </style>
 

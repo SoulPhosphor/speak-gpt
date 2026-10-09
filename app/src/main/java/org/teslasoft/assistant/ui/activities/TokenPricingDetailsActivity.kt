@@ -68,7 +68,7 @@ class TokenPricingDetailsActivity : FragmentActivity() {
                 val providers = card.findViewById<LinearLayout>(R.id.provider_cards)
                 model.providers.forEachIndexed { index, group ->
                     val block = inflater.inflate(R.layout.view_usage_provider_block, providers, false)
-                    bindProviderCard(block, group)
+                    bindProviderCard(block, group, usageSection.category)
                     block.findViewById<View>(R.id.provider_gap).visibility =
                         if (index == 0) View.GONE else View.VISIBLE
                     // Only the last provider meets the card's rounded bottom.
@@ -149,7 +149,7 @@ class TokenPricingDetailsActivity : FragmentActivity() {
         }
     }
 
-    private fun bindProviderCard(view: View, group: UsageGroup) {
+    private fun bindProviderCard(view: View, group: UsageGroup, category: UsageCategory) {
         view.findViewById<TextView>(R.id.provider_name).text = group.provider
         view.findViewById<TextView>(R.id.provider_meta).text =
             getString(R.string.usage_provider_meta, group.recordCount)
@@ -203,6 +203,29 @@ class TokenPricingDetailsActivity : FragmentActivity() {
             view, R.id.price_cached, R.string.usage_cached,
             group.cachedInputPricePerToken, group.hasVariableCachedInputPricing
         )
+        if (category == UsageCategory.CHAT) bindChatRows(view, group)
+    }
+
+    private fun bindChatRows(view: View, group: UsageGroup) {
+        val table = view.findViewById<LinearLayout>(R.id.usage_table)
+        table.removeAllViews()
+        LayoutInflater.from(this).inflate(R.layout.view_usage_chat_table, table, true)
+        view.findViewById<View>(R.id.cache_hit_rate_box).visibility = View.GONE
+        bindUsageRow(view, R.id.usage_input_row, R.string.usage_input_tokens,
+            UsageValueFormatter.tokens(group.inputTokens, group.hasUnknownInputTokens),
+            UsageValueFormatter.cost(group.inputCost, group.hasUnknownInputCost))
+        bindUsageRow(view, R.id.usage_cached_row, R.string.usage_cached,
+            UsageValueFormatter.tokens(group.cachedInputTokens, group.hasUnknownCachedInputTokens),
+            UsageValueFormatter.cost(group.cachedInputCost, group.hasUnknownCachedInputCost))
+        bindUsageRow(view, R.id.usage_uncached_row, R.string.usage_not_cached,
+            UsageValueFormatter.tokens(group.uncachedInputTokens, group.hasUnknownUncachedInputTokens),
+            UsageValueFormatter.cost(group.uncachedInputCost, group.hasUnknownUncachedInputCost))
+        bindUsageRow(view, R.id.usage_cache_rate_row, R.string.usage_cache_hit_rate,
+            UsageValueFormatter.percentage(group.cachedInputTokens, group.inputTokens,
+                group.hasUnknownCachedInputTokens || group.hasUnknownInputTokens), "")
+        bindUsageRow(view, R.id.usage_output_row, R.string.usage_output,
+            UsageValueFormatter.tokens(group.outputTokens, group.hasUnknownOutputTokens),
+            UsageValueFormatter.cost(group.outputCost, group.hasUnknownOutputCost))
     }
 
     /**

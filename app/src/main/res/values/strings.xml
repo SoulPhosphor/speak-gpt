@@ -1064,6 +1064,8 @@
     <string name="usage_column_usage">Usage</string>
     <string name="usage_column_tokens">Tokens</string>
     <string name="usage_column_cost">Cost</string>
+    <string name="usage_input_tokens">Input tokens</string>
+    <string name="usage_not_cached">Not cached</string>
     <string name="usage_input">Input</string>
     <string name="usage_output">Output</string>
     <string name="usage_cached">Cached</string>

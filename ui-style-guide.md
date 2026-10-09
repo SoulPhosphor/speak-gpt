@@ -1090,12 +1090,23 @@ Composition, top to bottom, per section:
    above the first. Only the last provider's pricing footer uses the rounded
    `bg_usage_pricing_footer`; the others use `bg_usage_pricing_footer_inner`.
 
+Chat alone uses `view_usage_chat_table`: retain Usage / Tokens / Cost columns,
+show Input tokens as the inclusive total, then indent Cached, Not cached, and
+Cache Hit Rate beneath it; Output is a separate top-level row. Indent only the
+labels, so token and cost columns stay aligned. Child separators are partial
+lines starting at `usage_chat_detail_indent`; group separators span the padded
+table. Cache Hit Rate is an ordinary child row with a percentage in the quantity
+column and no cost; hide the separate cache pill only in Chat. Preserve the
+existing table layouts of all other categories. Use the stored input total and
+its known/unknown flags, rather than relabeling uncached input as total input.
+
 Card zones are centrally mapped in `Theme.App` and every palette overlay:
 `appUsageModelBackgroundColor` defaults to `colorPrimaryContainer`, with
 `appUsageModelTextColor` mapped to `colorOnPrimaryContainer`. Model headers
 and Cache Hit Rate use this exact same solid fill and matching text role.
 `appUsageProviderBackgroundColor` defaults to `colorSurfaceContainerHigh` for
-provider headers and pricing footers. These roles provide a richer model zone
+provider headers. Pricing footers instead share `appUsageModelBackgroundColor`
+and `appUsageModelTextColor` with the model headers in every section. These roles provide a richer model zone
 against a quieter provider zone without fixing a literal purple or green color.
 
 The model card perimeter and `Widget.App.Usage.ZoneDivider` use

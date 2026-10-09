@@ -115,6 +115,7 @@
     <dimen name="quick_settings_lorebook_row_min_height">48dp</dimen>
     <!-- Usage & Cost model cards: the card and its top/bottom backgrounds share one corner. -->
     <!-- Shift the total down without increasing its overall header area. -->
+    <dimen name="usage_chat_detail_indent">24dp</dimen>
     <dimen name="usage_total_top_gap">12dp</dimen>
     <dimen name="usage_total_bottom_gap">14dp</dimen>
     <dimen name="usage_card_corner_radius">16dp</dimen>
