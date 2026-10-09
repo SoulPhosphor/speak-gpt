@@ -1163,7 +1163,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             clearColorFilter()
             backgroundTintList = null
             setImageResource(
-                if (!messageInput?.text.isNullOrEmpty()) R.drawable.ic_arrow_up
+                if (!messageInput?.text.isNullOrEmpty()) R.drawable.ic_send
                 else R.drawable.ic_conversation
             )
         }
