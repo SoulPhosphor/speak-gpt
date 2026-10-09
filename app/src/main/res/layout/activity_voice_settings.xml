@@ -231,7 +231,6 @@
                      cog becomes Install. On a phone that cannot run it, the
                      unavailable row replaces the whole line. -->
                 <LinearLayout
-                    android:id="@+id/row_voice_input_whisper_local"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:baselineAligned="false"
@@ -260,7 +259,6 @@
                 </LinearLayout>
 
                 <LinearLayout
-                    android:id="@+id/row_voice_input_whisper_local_unavailable"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:baselineAligned="false"
@@ -269,6 +267,7 @@
                     android:visibility="gone">
 
                     <RadioButton
+                        android:id="@+id/radio_voice_input_whisper_local_unavailable"
                         style="@style/Widget.App.Row.Radio.Unavailable"
                         android:layout_width="0dp"
                         android:layout_weight="1"

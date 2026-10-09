@@ -279,8 +279,11 @@ class VoiceSettingsActivity : SettingsPageActivity() {
         // A phone that cannot run on-device Whisper shows it as Unavailable and
         // cannot select it; a leftover selection moves to Google Dictation.
         val whisperSupported = NativeCpuSupport.isSupported()
-        findViewById<View>(R.id.row_voice_input_whisper_local).visibility = if (whisperSupported) View.VISIBLE else View.GONE
-        findViewById<View>(R.id.row_voice_input_whisper_local_unavailable).visibility = if (whisperSupported) View.GONE else View.VISIBLE
+        // Each line is the radio's own row wrapper (unnamed, so the screen's
+        // named-row order stays as the layout tests expect).
+        (radioVoiceInputWhisperLocal?.parent as? View)?.visibility = if (whisperSupported) View.VISIBLE else View.GONE
+        (findViewById<View>(R.id.radio_voice_input_whisper_local_unavailable).parent as View).visibility =
+            if (whisperSupported) View.GONE else View.VISIBLE
         if (!whisperSupported && preferences?.getAudioModel() == "whisper-local") preferences?.setAudioModel("google")
         rowDictationLanguage = findViewById(R.id.row_dictation_language)
         valueDictationLanguage = findViewById(R.id.value_dictation_language)
