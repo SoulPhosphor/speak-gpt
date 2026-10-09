@@ -121,7 +121,8 @@ class OpenRouterStructuredReasoningTest {
         assertFalse(cap.reasoningMandatory)
         assertFalse(cap.isFixedReasoning)
         assertTrue(cap.hasConfigurableSetting)
-        assertEquals(listOf(ReasoningEffort.AUTO, ReasoningEffort.OFF), cap.thinkingChoices())
+        // On/off-only: On and Off, no Auto (owner ruling, Oct 9 2026).
+        assertEquals(listOf(ReasoningEffort.ON, ReasoningEffort.OFF), cap.thinkingChoices())
     }
 
     @Test

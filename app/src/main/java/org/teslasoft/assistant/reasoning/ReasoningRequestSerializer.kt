@@ -74,6 +74,7 @@ object ReasoningRequestSerializer {
         val reasoning = JsonObject()
         when {
             resolved.disablesReasoning -> reasoning.addProperty("enabled", false)
+            resolved.enablesReasoning -> reasoning.addProperty("enabled", true)
             resolved.sendsExplicitLevel -> reasoning.addProperty("effort", resolved.effort.serialized)
         }
         if (!resolved.showReasoning && !resolved.disablesReasoning) {
@@ -92,7 +93,9 @@ object ReasoningRequestSerializer {
         val effortValue = when {
             resolved.disablesReasoning -> "none"
             resolved.sendsExplicitLevel -> resolved.effort.serialized
-            else -> return null // AUTO — send no explicit effort
+            // AUTO sends no explicit effort. ON has no standard field outside
+            // OpenRouter, so it also leaves the provider's default in place.
+            else -> return null
         }
         val root = JsonObject()
         root.addProperty("reasoning_effort", effortValue)

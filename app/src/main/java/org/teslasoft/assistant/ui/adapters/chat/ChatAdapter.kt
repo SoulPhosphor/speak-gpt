@@ -1612,6 +1612,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 // an open owner decision. Accessibility text still says "Max".
                 ReasoningIndicator.MAX -> { icon = R.drawable.ic_signal_wifi_4_bar; desc = R.string.reasoning_indicator_max_desc }
                 ReasoningIndicator.AUTOMATIC -> { icon = R.drawable.ic_network_check; desc = R.string.reasoning_indicator_automatic_desc }
+                // On (an on/off-only model) uses the same speedometer glyph:
+                // one level, on (owner ruling, Oct 9 2026).
+                ReasoningIndicator.ON -> { icon = R.drawable.ic_network_check; desc = R.string.reasoning_indicator_on_desc }
                 ReasoningIndicator.FIXED -> { icon = R.drawable.ic_network_wifi_2_locked; desc = R.string.reasoning_indicator_fixed_desc }
             }
             view.setImageResource(icon)

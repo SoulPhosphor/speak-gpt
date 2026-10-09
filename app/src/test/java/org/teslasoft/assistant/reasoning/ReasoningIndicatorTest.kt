@@ -126,6 +126,10 @@ class ReasoningIndicatorTest {
             ReasoningIndicator.OFF,
             ReasoningIndicator.forGeneration(disableOnly, ReasoningEffort.OFF)
         )
+        assertEquals(
+            ReasoningIndicator.ON,
+            ReasoningIndicator.forGeneration(disableOnly, ReasoningEffort.ON)
+        )
     }
 
     @Test

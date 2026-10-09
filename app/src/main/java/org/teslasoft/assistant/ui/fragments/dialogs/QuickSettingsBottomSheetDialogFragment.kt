@@ -724,8 +724,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             row.setOnClickListener(null)
             textReasoningEffort?.setOnClickListener(null)
         } else {
-            // A non-reasoning path hides the tile entirely.
-            row.visibility = View.GONE
+            // No thinking available: a plain, non-interactive "Unavailable"
+            // instead of a dropdown (owner ruling, Oct 9 2026).
+            row.visibility = View.VISIBLE
+            textReasoningEffort?.text = getString(R.string.reasoning_effort_unavailable)
+            row.isEnabled = false
+            row.alpha = 0.5f
             row.setOnClickListener(null)
             textReasoningEffort?.setOnClickListener(null)
         }

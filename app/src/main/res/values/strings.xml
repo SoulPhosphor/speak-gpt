@@ -3790,6 +3790,9 @@
          means send no explicit effort; "Off" disables reasoning where supported. -->
     <string name="reasoning_effort_auto">Auto</string>
     <string name="reasoning_effort_off">Off</string>
+    <string name="reasoning_effort_on">On</string>
+    <!-- Thinking setting for a model whose provider reports no thinking control. -->
+    <string name="reasoning_effort_unavailable">Unavailable</string>
     <string name="reasoning_effort_minimal">Minimal</string>
     <string name="reasoning_effort_low">Low</string>
     <string name="reasoning_effort_medium">Medium</string>
@@ -3830,6 +3833,7 @@
     <string name="reasoning_indicator_xhigh_desc">Extra High Reasoning</string>
     <string name="reasoning_indicator_max_desc">Max Reasoning</string>
     <string name="reasoning_indicator_automatic_desc">Automatic Reasoning</string>
+    <string name="reasoning_indicator_on_desc">Reasoning On</string>
     <string name="reasoning_indicator_fixed_desc">Fixed Reasoning</string>
     <!-- Accessibility descriptions for the two lightbulb uses (§7.9): the
          actionable favorite shortcut and the informational View All indicator. -->

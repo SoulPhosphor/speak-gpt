@@ -36,6 +36,7 @@ class ReasoningEffortTest {
         // These strings are persisted; a change would silently reset users.
         assertEquals("auto", ReasoningEffort.AUTO.serialized)
         assertEquals("off", ReasoningEffort.OFF.serialized)
+        assertEquals("on", ReasoningEffort.ON.serialized)
         assertEquals("minimal", ReasoningEffort.MINIMAL.serialized)
         assertEquals("low", ReasoningEffort.LOW.serialized)
         assertEquals("medium", ReasoningEffort.MEDIUM.serialized)

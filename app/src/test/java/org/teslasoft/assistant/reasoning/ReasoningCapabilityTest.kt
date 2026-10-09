@@ -70,7 +70,7 @@ class ReasoningCapabilityTest {
     }
 
     @Test
-    fun disableOnlyModelExposesAutoAndOffWithoutALadder() {
+    fun disableOnlyModelExposesOnAndOffWithoutALadder() {
         // Kimi-like: reasons, no effort ladder, but reasoning can be turned off.
         val disableOnly = ReasoningCapability(
             support = ReasoningSupport.KNOWN,
@@ -80,10 +80,15 @@ class ReasoningCapabilityTest {
             canReturnVisibleReasoning = true,
             source = CapabilitySource.PROVIDER_METADATA
         )
+        // No Auto and no invented levels: On and Off only, On by default
+        // (owner ruling, Oct 9 2026).
         assertEquals(
-            listOf(ReasoningEffort.AUTO, ReasoningEffort.OFF),
+            listOf(ReasoningEffort.ON, ReasoningEffort.OFF),
             disableOnly.thinkingChoices()
         )
+        assertTrue(disableOnly.isOnOffOnly)
+        assertEquals(ReasoningEffort.ON, disableOnly.defaultEffort)
+        assertTrue(disableOnly.supports(ReasoningEffort.ON))
         assertTrue(disableOnly.isEffortAdjustable)
         assertTrue(disableOnly.hasConfigurableSetting)
         assertTrue(disableOnly.supports(ReasoningEffort.OFF))
