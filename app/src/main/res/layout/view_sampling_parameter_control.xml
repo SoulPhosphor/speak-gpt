@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <merge xmlns:android="http://schemas.android.com/apk/res/android">
-
+    <org.teslasoft.assistant.ui.widgets.SamplingRulerSlider
+        android:id="@+id/sampling_parameter_slider"
+        style="@style/Widget.App.SamplingSlider.Control" />
     <com.google.android.material.textfield.TextInputEditText
         android:id="@+id/sampling_parameter_value"
         style="@style/Widget.App.SamplingSlider.Value" />
-
-    <com.google.android.material.slider.Slider
-        android:id="@+id/sampling_parameter_slider"
-        style="@style/Widget.App.SamplingSlider.Control" />
 </merge>

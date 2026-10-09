@@ -3,4 +3,6 @@
     <integer name="conversation_mode_selector_animation_ms">220</integer>
     <!-- A full-width chat drawer settles in (1 + 1) x 256 ms (DrawerLayout's ViewDragHelper). -->
     <integer name="drawer_slide_duration">512</integer>
+    <integer name="sampling_slider_ruler_intervals">20</integer>
+    <integer name="sampling_slider_ruler_major_interval">5</integer>
 </resources>

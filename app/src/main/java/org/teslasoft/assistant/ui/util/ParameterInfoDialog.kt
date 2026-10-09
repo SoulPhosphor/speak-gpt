@@ -17,6 +17,8 @@
 package org.teslasoft.assistant.ui.util
 
 import android.content.Context
+import android.view.LayoutInflater
+import android.widget.TextView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
 
@@ -31,9 +33,11 @@ import org.teslasoft.assistant.R
  */
 object ParameterInfoDialog {
     fun show(context: Context, title: CharSequence, body: CharSequence) {
-        MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
-            .setIcon(R.drawable.ic_info)
-            .setTitle(title)
+        val builder = MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
+        val heading = LayoutInflater.from(builder.context)
+            .inflate(R.layout.view_parameter_info_title, null)
+        heading.findViewById<TextView>(R.id.parameter_info_title).text = title
+        builder.setCustomTitle(heading)
             .setMessage(body)
             .setPositiveButton(R.string.btn_close, null)
             .show()

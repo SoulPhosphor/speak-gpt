@@ -241,6 +241,15 @@ Use for every `MaterialAlertDialogBuilder` unless an approved feature-specific d
 
 This theme supplies the standard dialog appearance and centers dialog titles.
 
+Parameter information boxes use `ParameterInfoDialog` and the shared
+`view_parameter_info_title.xml` heading, styled by `Widget.App.ParameterInfo.*`.
+The ordinary title TextView inherits the standard dialog title typography and
+centering, uses the space beside the information icon, and wraps without a
+line limit. It does not use Android's `DialogTitle`, which can shrink a longer
+heading during measurement and retain that smaller size. Keep the body and
+Close action in the standard Material dialog; do not special-case individual
+parameter headings or set their text size in Kotlin.
+
 ### Title and explanatory text
 
 Use `setTitle` for the dialog heading or its single short question.
@@ -522,6 +531,19 @@ in `SamplingParameterSpec` / `SamplingParameterValuePolicy`: Temperature
 0–2, Top P 0–1, both penalties -2–2, with 0.01 steps and at most two displayed
 decimal places. Add or reuse a spec there rather than multiplying values in a
 screen controller or placing range/default numbers in layout XML.
+
+The slider precedes its compact editable value field: the value stays on the
+right, with a shared horizontal inset keeping its outline inside the card.
+The field reserves the full signed range at the supported decimal precision
+using its styled font metrics; do not use a wide fixed box or size it only for
+the current value. This shared control intentionally retains left-to-right
+placement so the value remains on the right.
+
+`SamplingRulerSlider` draws 21 evenly spaced guide lines below the actual
+track, with longer endpoint and quarter marks. Its geometry and mark counts
+come from shared dimens/integers; its contrast comes from
+`colorOnSurfaceVariant`. These are visual guides, independent of the numeric
+step. Do not use a stretched vector background or faint per-step dots.
 
 Current canonical uses are the four model controls in Quick Settings and both
 API Endpoint editor layouts. Each host supplies only a view id, the shared

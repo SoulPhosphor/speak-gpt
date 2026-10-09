@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.ParameterInfo.TitleRow">
+    <ImageView style="@style/Widget.App.ParameterInfo.Icon" />
+    <TextView
+        android:id="@+id/parameter_info_title"
+        style="@style/Widget.App.ParameterInfo.Title" />
+</LinearLayout>

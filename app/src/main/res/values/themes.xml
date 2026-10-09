@@ -1976,13 +1976,16 @@
         <item name="android:layout_marginTop">@dimen/sampling_slider_section_gap</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:orientation">horizontal</item>
+        <item name="android:paddingHorizontal">@dimen/quick_settings_segment_padding_horizontal</item>
+        <item name="android:layoutDirection">ltr</item>
     </style>
 
     <style name="Widget.App.SamplingSlider.Value" parent="Widget.App.Field.Box">
-        <item name="android:layout_width">@dimen/sampling_slider_value_width</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:minWidth">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">0dp</item>
-        <item name="android:layout_marginEnd">@dimen/sampling_slider_inline_gap</item>
+        <item name="android:layout_marginStart">@dimen/sampling_slider_inline_gap</item>
         <item name="android:minHeight">@dimen/sampling_slider_value_min_height</item>
         <!-- Compact padding: the value never exceeds two decimals, so the box
              should be small and tidy rather than the full-field 12dp padding
@@ -2005,10 +2008,8 @@
         <item name="android:layout_marginStart">@dimen/sampling_slider_horizontal_margin</item>
         <item name="android:layout_marginEnd">@dimen/sampling_slider_horizontal_margin</item>
         <item name="labelBehavior">gone</item>
-        <!-- Even guide lines are provided by the shared background vector;
-             Material's dense per-step dots remain hidden. -->
-        <item name="android:background">@drawable/bg_sampling_slider_ticks</item>
-        <item name="android:backgroundTint">?attr/colorOutlineVariant</item>
+        <!-- SamplingRulerSlider draws evenly spaced guides below the actual
+             track. Keep Material's per-step dots hidden. -->
         <item name="tickVisible">false</item>
         <item name="trackHeight">@dimen/sampling_slider_track_height</item>
         <item name="thumbRadius">@dimen/sampling_slider_thumb_radius</item>
@@ -2220,6 +2221,27 @@
     <style name="App.MaterialAlertDialog.Title" parent="MaterialAlertDialog.Material3.Title.Text">
         <item name="android:gravity">center</item>
         <item name="android:textAlignment">center</item>
+    </style>
+
+    <!-- Shared info-box heading: ordinary TextView avoids DialogTitle's
+         runtime font reduction. Long titles wrap at the same theme text size. -->
+    <style name="Widget.App.ParameterInfo.TitleRow" parent="MaterialAlertDialog.Material3.Title.Panel">
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+    <style name="Widget.App.ParameterInfo.Icon" parent="MaterialAlertDialog.Material3.Title.Icon">
+        <item name="android:src">@drawable/ic_info</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+    <style name="Widget.App.ParameterInfo.Title" parent="App.MaterialAlertDialog.Title">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:singleLine">false</item>
+        <item name="android:ellipsize">none</item>
+        <item name="android:autoSizeTextType">none</item>
+        <item name="android:gravity">center</item>
+        <item name="android:accessibilityHeading">true</item>
     </style>
 
     <style name="App.MaterialAlertDialog" parent="MaterialAlertDialog.Material3">
