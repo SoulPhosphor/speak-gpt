@@ -28,9 +28,16 @@ import org.teslasoft.assistant.ui.chat.ChatNameStyle
  */
 class ChatSignatureSection(root: View, onChangeStyle: () -> Unit) {
     private val preview: TextView = root.findViewById(R.id.signature_preview)
+    private val changeStyle: View = root.findViewById(R.id.signature_change_style)
 
     init {
-        root.findViewById<View>(R.id.signature_change_style).setOnClickListener { onChangeStyle() }
+        changeStyle.setOnClickListener { onChangeStyle() }
+    }
+
+    /** Name Style can only style a saved identity, so the button is hidden
+     *  until the companion, Glamour, or character has been saved once. */
+    fun setCanChangeStyle(saved: Boolean) {
+        changeStyle.visibility = if (saved) View.VISIBLE else View.GONE
     }
 
     fun setName(name: String) {

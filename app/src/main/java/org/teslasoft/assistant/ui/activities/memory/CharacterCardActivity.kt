@@ -184,6 +184,7 @@ class CharacterCardActivity : SettingsPageActivity() {
             signature = ChatSignatureSection(findViewById(R.id.chat_signature)) {
                 startActivity(NameStyleActivity.roleplayIntent(this, cardId.orEmpty()))
             }
+            signature?.setCanChangeStyle(cardId != null)
         }
         textSaveFirst = findViewById(R.id.text_save_first)
         sectionsContainer = findViewById(R.id.sections_container)
@@ -505,6 +506,7 @@ class CharacterCardActivity : SettingsPageActivity() {
             }
             runOnUiThread {
                 cardId = id
+                signature?.setCanChangeStyle(true)
                 initialSnapshot = snapshot()
                 Toast.makeText(this, R.string.card_saved, Toast.LENGTH_SHORT).show()
                 refreshMemoriesButton()

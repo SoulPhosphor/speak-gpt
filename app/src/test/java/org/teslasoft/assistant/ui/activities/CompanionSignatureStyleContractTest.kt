@@ -57,6 +57,9 @@ class CompanionSignatureStyleContractTest {
         val card = source("src/main/java/org/teslasoft/assistant/ui/activities/memory/CharacterCardActivity.kt")
         assertTrue(card.contains("NameStyleActivity.roleplayIntent(this, cardId.orEmpty())"))
         assertTrue(card.contains("nameFontId = storedStyle?.nameFontId"))
+        // Name Style lists only saved identities, so the button waits for a save.
+        assertTrue(card.contains("signature?.setCanChangeStyle(cardId != null)"))
+        assertTrue(glamour.contains("signature?.setCanChangeStyle(intent.getStringExtra(EXTRA_PERSONA_ID).orEmpty().isNotEmpty())"))
     }
 
     @Test

@@ -219,6 +219,7 @@ class EditPersonaActivity : SettingsPageActivity() {
         signature = ChatSignatureSection(findViewById(R.id.chat_signature)) {
             startActivity(NameStyleActivity.companionIntent(this, personaId))
         }
+        signature?.setCanChangeStyle(intent.getStringExtra(EXTRA_ID).orEmpty().isNotEmpty())
         additionalLoreBooksList = findViewById(R.id.additional_lorebooks_list)
         btnAddLoreBooks = findViewById(R.id.btn_add_lorebooks)
         imgPersonaAvatar = findViewById(R.id.img_persona_avatar)

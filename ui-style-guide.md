@@ -1266,7 +1266,9 @@ right default (companion default for companions, user default for Glamours
 and Roleplay Characters) — exactly what chat shows. The preview text is the
 name chat shows: the Companion Name, the Glamour's Display Name (not its
 Name), or the Roleplay Character's Name. The button opens Name Style with
-that identity already chosen; back returns to the editor. Editors have no
+that identity already chosen; back returns to the editor. Name Style lists
+only saved identities, so the button is hidden until the identity has been
+saved once; the heading and preview always show. Editors have no
 font or size controls of their own, and saving an editor never rewrites the
 Name Style override. Spacing lives in `signature_gap` and `signature_host_inset`.
 

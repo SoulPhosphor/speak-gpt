@@ -208,6 +208,7 @@ class EditUserPersonaActivity : SettingsPageActivity() {
         signature = ChatSignatureSection(findViewById(R.id.chat_signature)) {
             startActivity(NameStyleActivity.glamourIntent(this, personaId))
         }
+        signature?.setCanChangeStyle(intent.getStringExtra(EXTRA_PERSONA_ID).orEmpty().isNotEmpty())
         fieldShortDescription = findViewById(R.id.field_short_description)
         textShortDescriptionWarning = findViewById(R.id.text_short_description_warning)
         fieldPresentation = findViewById(R.id.field_presentation)
