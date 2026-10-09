@@ -10,6 +10,7 @@ import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.radiobutton.MaterialRadioButton
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.stt.api.SttWording
 import org.teslasoft.assistant.preferences.tts.TtsRoutingMode
 import org.teslasoft.assistant.tts.api.*
 import org.teslasoft.assistant.ui.widgets.AppDropdown
@@ -50,6 +51,8 @@ class TtsProviderPickerActivity : TtsPickerActivity() {
         findViewById<View>(R.id.btn_back).setOnClickListener { save() }
         findViewById<View>(R.id.btn_save).setOnClickListener { save() }
         findViewById<TextView>(R.id.tts_fixed_model).text = state.request.target.modelId
+        if (transcription) findViewById<TextView>(R.id.text_provider_picker_intro).text =
+            SttWording.adapt(getString(R.string.tts_provider_picker_intro))
         findViewById<TextView>(R.id.field_routing_type).setOnClickListener { view ->
             AppDropdown.show(view as TextView, modes.map(::modeLabel), modes.indexOf(state.routing.mode)) {
                 state.mode(modes[it]); render()

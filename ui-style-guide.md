@@ -551,6 +551,37 @@ Keep field-specific behavior on the individual input, including:
 
 Use `Field.Error` for an inline validation or warning line directly under a field's box, and `Field.Counter` for a live character count right-aligned under the box. Both own their color (`colorError` / `appSubtleTextColor`), text size, and top spacing, so a theme or font change reaches every field at once. The instance sets only its text, visibility, width/margins, and constraints; Kotlin sets text and visibility only, never color. Current example: Edit Glamour (`activity_edit_user_persona.xml`).
 
+### Capped lists
+
+`Widget.App.Field.Counter.Limit` is the counter for a list with a maximum:
+code sets only `isActivated`, and at the cap it takes the error color.
+`Widget.App.Field.Error.Notice` is the red notice line under a capped list's
+entry field, in ordinary body size. Current example: API Voice Service custom
+vocabulary.
+
+### Removable-entry list
+
+`Widget.App.RemovableList.Box` (a `MaxHeightScrollView` with the
+`bg_field_box` skin, about ten rows tall before it scrolls), with rows from
+`layout/view_removable_list_row.xml` (`Widget.App.RemovableList.Row`,
+`.Label`, `.Remove`). Current example: API Voice Service custom vocabulary.
+
+### Page body and control rows
+
+`Widget.App.Page.Content` is a plain page body with the standard side gutter;
+`Widget.App.Page.ControlRow` is one label-and-control line in it. A dropdown
+value after its label uses `Widget.App.Dropdown.CanonicalValue.Trailing`; when
+there is only one choice, `Widget.App.Dropdown.StaticValue` shows it as plain
+text. A label-sized action after a field on the same line uses
+`AppButton.Primary.Inline.Trailing`.
+
+### Dialog checkbox line
+
+`layout/view_dialog_check_option.xml` (`Widget.App.CheckOption.Row.Dialog`)
+places one checkbox beneath a dialog's action buttons. Current example: the
+custom vocabulary removal confirmation's "Do not show this warning for the
+rest of this session."
+
 ### Bounded, internally-scrolling variant
 
 Set `minLines`/`maxLines` and `android:scrollbars="vertical"` (plus `android:isScrollContainer="true"`, or the field never actually scrolls) on the individual `Widget.App.Field.Box` input to pin it to a fixed number of visible lines instead of letting it grow the dialog taller — the same bounded-height-scrolls-past-that idea as the Prompt Editor's `field_prompt`/`bg_prompt_editor` skin above, applied here to the standard `bg_field_box` skin instead. Current example: `dialog_edit_chat_title.xml` (ChatActivity's title-edit dialog, opened by tapping the chat header title) — a 4-line field, since an AI-generated chat title can run far longer than the header ever shows.
@@ -976,6 +1007,22 @@ This is for a persistent on-screen choice. It is not the "checked tile"
 pick-list (`Widget.App.PickList.Row`) used inside a Select pop-up, and it is
 not the equal-width horizontal segmented control
 (`Widget.App.VoiceBrowser.Segment`).
+
+### Radio row states and trailing controls
+
+Approved October 9 2026 for the Voice Input choice:
+
+- `Widget.App.Row.Radio.Flaggable` — an option that can be selected before it
+  is usable. Code sets only `isActivated`; while activated, the label takes
+  the theme's error color (`@color/row_radio_flag_text`).
+- `Widget.App.Row.Radio.Unavailable` — an option this device cannot use: red
+  label and a red X in place of the radio circle, so rows stay aligned. The
+  instance is disabled.
+- `Widget.App.Row.TrailingStatus.Error` — a short red status word at the
+  row's end, where its gear would sit (for example "Unavailable").
+- `Widget.App.Row.Cog` — the trailing settings gear that opens the option's
+  own screen without selecting it. While the option is flagged, an
+  `AppButton.Primary.Inline` action (Install, Set Up) replaces the gear.
 
 ## Chat composer host and surface
 

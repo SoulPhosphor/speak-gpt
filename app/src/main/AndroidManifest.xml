@@ -310,6 +310,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ApiVoiceServiceActivity"
+            android:exported="false"
+            android:label="@string/api_stt_title" />
+
+        <activity
             android:name=".ui.activities.VoiceSettingsActivity"
             android:exported="false"
             android:label="@string/voice_settings_title"

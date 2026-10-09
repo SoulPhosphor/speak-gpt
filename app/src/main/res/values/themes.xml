@@ -486,6 +486,42 @@
         <item name="android:textSize">16sp</item>
     </style>
 
+    <!-- Voice-input option whose label turns the theme's error color while it
+         is selected but not usable yet (activated): on-device Whisper with no
+         model installed, API Voice Service not set up. Code toggles only
+         isActivated; the color lives in row_radio_flag_text. -->
+    <style name="Widget.App.Row.Radio.Flaggable">
+        <item name="android:textColor">@color/row_radio_flag_text</item>
+    </style>
+
+    <!-- An option this device cannot use: red label and a red X in place of
+         the radio circle so the row stays aligned with its neighbours. -->
+    <style name="Widget.App.Row.Radio.Unavailable">
+        <item name="android:textColor">?attr/colorError</item>
+        <item name="android:button">@drawable/ic_close</item>
+        <item name="buttonTint">?attr/colorError</item>
+    </style>
+
+    <!-- Short red status word at a row's end, where its gear would sit
+         (for example "Unavailable"). -->
+    <style name="Widget.App.Row.TrailingStatus.Error" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:gravity">center_vertical|end</item>
+        <item name="android:paddingHorizontal">12dp</item>
+        <item name="android:textColor">?attr/colorError</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- Trailing settings gear on a row: opens that option's own screen. -->
+    <style name="Widget.App.Row.Cog" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:src">@drawable/ic_settings</item>
+        <item name="android:tint">?attr/colorControlNormal</item>
+    </style>
+
     <!-- Pick-one-item list row (owner request, Aug 13 2026): the "checked
          tile" row used by a single-select list opened from a
          Widget.App.Row.Selector (or, later, from any other picker needing
@@ -1015,6 +1051,79 @@
         <item name="android:gravity">end</item>
         <item name="android:textColor">?attr/appSubtleTextColor</item>
         <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- Counter for a capped list: turns the theme's error color once the cap
+         is reached (activated). Code toggles only isActivated. -->
+    <style name="Widget.App.Field.Counter.Limit">
+        <item name="android:textColor">@color/field_counter_limit_text</item>
+    </style>
+
+    <!-- Red notice under a capped list's entry field, ordinary body size. -->
+    <style name="Widget.App.Field.Error.Notice">
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <!-- Bordered list of removable text entries (API Voice Service custom
+         vocabulary). Shows about ten rows, then scrolls inside the box. -->
+    <style name="Widget.App.RemovableList.Box" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:background">@drawable/bg_field_box</item>
+        <item name="android:padding">4dp</item>
+        <item name="scrollMaxHeight">@dimen/removable_list_max_height</item>
+    </style>
+
+    <style name="Widget.App.RemovableList.Row" parent="Widget.App.Include.Row">
+        <item name="android:minHeight">@dimen/removable_list_row_height</item>
+    </style>
+
+    <style name="Widget.App.RemovableList.Label" parent="Widget.App.Include.Name">
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <style name="Widget.App.RemovableList.Remove" parent="Widget.App.VoiceBrowser.Remove" />
+
+    <!-- Plain page body: vertical stack with the standard side gutter. -->
+    <style name="Widget.App.Page.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingHorizontal">24dp</item>
+        <item name="android:paddingBottom">24dp</item>
+    </style>
+
+    <!-- Label-and-control line (dropdown, value, field + action). -->
+    <style name="Widget.App.Page.ControlRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <!-- A dropdown value placed after its label on a ControlRow. -->
+    <style name="Widget.App.Dropdown.CanonicalValue.Trailing">
+        <item name="android:layout_marginStart">16dp</item>
+    </style>
+
+    <!-- The same position as a dropdown value when there is only one choice:
+         plain text, no box or chevron. -->
+    <style name="Widget.App.Dropdown.StaticValue" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">16dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- Label-sized primary action after a field on the same line. -->
+    <style name="AppButton.Primary.Inline.Trailing">
+        <item name="android:layout_marginStart">8dp</item>
     </style>
 
     <!-- Screen-section heading + its explanatory text (owner ruling, July 22
@@ -2068,6 +2177,13 @@
         <item name="android:gravity">center_vertical</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:paddingVertical">6dp</item>
+    </style>
+
+    <!-- CheckOption.Row inside a dialog, beneath its action buttons, aligned
+         with the dialog's text. -->
+    <style name="Widget.App.CheckOption.Row.Dialog">
+        <item name="android:paddingHorizontal">24dp</item>
+        <item name="android:paddingBottom">8dp</item>
     </style>
 
     <style name="Widget.App.CheckOption.Label" parent="">

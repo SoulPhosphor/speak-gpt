@@ -172,7 +172,7 @@ internal fun requestBuilder(endpoint: TtsEndpoint, target: TtsTarget, operation:
     }
     val builder = Request.Builder().url(address)
     val key = endpoint.apiKey.takeUnless { it.isBlank() || it == "null" }
-    if (key == null && endpoint.openRouter && operation in setOf(TtsOperation.SPEECH, TtsOperation.PREVIEW)) {
+    if (key == null && endpoint.openRouter && operation in setOf(TtsOperation.SPEECH, TtsOperation.PREVIEW, TtsOperation.TRANSCRIPTION)) {
         throw TtsException(TtsFailure(operation, target, endpoint.label, TtsFailureKind.KEY_MISSING))
     }
     // Official ElevenLabs accepts its key only in xi-api-key, so its address decides the header.

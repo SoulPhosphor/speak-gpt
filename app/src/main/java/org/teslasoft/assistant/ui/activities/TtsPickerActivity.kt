@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.preferences.tts.SavedTtsSourcesPreferences
+import org.teslasoft.assistant.stt.api.SttWording
 import org.teslasoft.assistant.tts.api.*
 import java.util.concurrent.CancellationException
 
@@ -38,6 +39,19 @@ class TtsProviderPickerContract : ActivityResultContract<TtsPickerRequest, TtsTa
     override fun parseResult(resultCode: Int, intent: Intent?): TtsTarget? = pickerResult(resultCode, intent)
 }
 
+/** The same pickers in API speech-to-text mode: transcription models and STT wording. */
+class SttModelPickerContract : ActivityResultContract<TtsPickerRequest, TtsTarget?>() {
+    override fun createIntent(context: Context, input: TtsPickerRequest) =
+        TtsModelPickerContract().createIntent(context, input).putExtra(TtsPickerActivity.EXTRA_TRANSCRIPTION, true)
+    override fun parseResult(resultCode: Int, intent: Intent?): TtsTarget? = pickerResult(resultCode, intent)
+}
+
+class SttProviderPickerContract : ActivityResultContract<TtsPickerRequest, TtsTarget?>() {
+    override fun createIntent(context: Context, input: TtsPickerRequest) =
+        TtsProviderPickerContract().createIntent(context, input).putExtra(TtsPickerActivity.EXTRA_TRANSCRIPTION, true)
+    override fun parseResult(resultCode: Int, intent: Intent?): TtsTarget? = pickerResult(resultCode, intent)
+}
+
 private fun pickerResult(code: Int, intent: Intent?): TtsTarget? {
     if (code != android.app.Activity.RESULT_OK) return null
     return intent?.getStringExtra(TtsPickerActivity.EXTRA_TARGET)?.let {
@@ -47,7 +61,12 @@ private fun pickerResult(code: Int, intent: Intent?): TtsTarget? {
 
 /** TTS-only lifecycle and dialogs; no chat preferences, favorites or player side effects. */
 abstract class TtsPickerActivity : SettingsPageActivity() {
-    companion object { const val EXTRA_TARGET = "tts.picker.target" }
+    companion object {
+        const val EXTRA_TARGET = "tts.picker.target"
+        const val EXTRA_TRANSCRIPTION = "tts.picker.transcription"
+    }
+    /** True when opened for API speech-to-text rather than API voices. */
+    protected val transcription: Boolean get() = intent.getBooleanExtra(EXTRA_TRANSCRIPTION, false)
     protected val gate = TtsRequestGate()
     private var notice: androidx.appcompat.app.AlertDialog? = null
     private var resumeAttempt: (() -> Unit)? = null
@@ -109,12 +128,16 @@ abstract class TtsPickerActivity : SettingsPageActivity() {
     protected fun showFailure(failure: TtsFailure, retry: () -> Unit) {
         if (isFinishing || isDestroyed) return
         notice?.dismiss()
-        val message = TtsFailures.message(failure)
+        val message = TtsFailures.message(failure).let {
+            if (transcription) it.copy(title = SttWording.adapt(it.title), explanation = SttWording.adapt(it.explanation)) else it
+        }
         val actions = layoutInflater.inflate(if ("Retry" in message.actions)
             R.layout.dialog_two_actions_cancel_first else R.layout.dialog_single_action, null)
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(message.title)
-            .setMessage(TtsAndroidServices.dialogMessage(this, failure, message))
+            .setMessage(TtsAndroidServices.dialogMessage(this, failure, message).let {
+                if (transcription) SttWording.adapt(it) else it
+            })
             .setView(actions).create()
         if ("Retry" in message.actions) {
             actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {

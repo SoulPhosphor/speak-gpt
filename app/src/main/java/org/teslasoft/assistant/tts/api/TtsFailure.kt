@@ -9,7 +9,7 @@ import org.teslasoft.assistant.util.ProviderLimitKind
 enum class TtsOperation(val label: String, val item: String) {
     MODELS("Model List", "model list"), PROVIDERS("Provider List", "provider list"),
     VOICES("Voice List", "voice list"), PREVIEW("Voice Preview", "voice preview"),
-    SPEECH("Text to Speech", "speech")
+    SPEECH("Text to Speech", "speech"), TRANSCRIPTION("Speech to Text", "transcription")
 }
 
 enum class TtsFailureKind {

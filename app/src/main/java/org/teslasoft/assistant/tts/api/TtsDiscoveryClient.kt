@@ -37,6 +37,17 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
         } to response
     }
 
+    /** Speech-to-text models from the endpoint's own model list (see [TtsCatalogParser.transcriptionModels]). */
+    fun transcriptionModels(source: ResolvedTtsSource, token: TtsRequestToken): TtsModelCatalog {
+        val op = TtsOperation.MODELS
+        var url = path(source, "models")
+        if (source.endpoint.openRouter) url = checkedUrl(source, op, url).newBuilder()
+            .addQueryParameter("output_modalities", "transcription").build().toString()
+        val response = get(source, op, url, token)
+        response.requireSuccess(source, op)
+        return parse(source, op, response) { TtsCatalogParser.transcriptionModels(response.text()) }
+    }
+
     fun providers(source: ResolvedTtsSource, token: TtsRequestToken): TtsProviderCatalog {
         requireModel(source, TtsOperation.PROVIDERS)
         val op = TtsOperation.PROVIDERS

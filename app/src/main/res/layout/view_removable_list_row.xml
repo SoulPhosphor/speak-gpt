@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One entry in a Widget.App.RemovableList.Box: its text and a trailing X. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.RemovableList.Row">
+
+    <TextView
+        android:id="@+id/removable_list_label"
+        style="@style/Widget.App.RemovableList.Label" />
+
+    <ImageButton
+        android:id="@+id/removable_list_remove"
+        style="@style/Widget.App.RemovableList.Remove" />
+</LinearLayout>

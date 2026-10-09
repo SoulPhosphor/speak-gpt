@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API Voice Service (speech-to-text) setup. Simple screen header, then one
+     scrolling page: endpoint, model, routing, spoken language, automatic
+     punctuation (shown, not yet wired), custom vocabulary. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/api_stt_title" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/api_stt_scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/action_bar">
+
+        <LinearLayout
+            android:id="@+id/api_stt_content"
+            style="@style/Widget.App.Page.Content">
+
+            <!-- API Endpoint: a dropdown, or plain text with only one endpoint. -->
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/api_stt_endpoint" />
+
+                <TextView
+                    android:id="@+id/api_stt_endpoint"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing"
+                    android:text="@string/tts_manager_select" />
+
+                <TextView
+                    android:id="@+id/api_stt_endpoint_single"
+                    style="@style/Widget.App.Dropdown.StaticValue"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/api_stt_model_row"
+                style="@style/Widget.App.Row.Selector.Flush">
+
+                <TextView
+                    android:id="@+id/api_stt_model_label"
+                    style="@style/Widget.App.Row.Selector.Label.Flush"
+                    android:text="@string/tts_picker_ai_model"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <TextView
+                    android:id="@+id/api_stt_model_value"
+                    style="@style/Widget.App.Row.Selector.Value"
+                    android:text="@string/tts_manager_select"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@id/api_stt_model_label"
+                    app:layout_constraintTop_toTopOf="parent" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <!-- Routing Type: Automatic / Preferred / Only, gear opens the
+                 provider picker for the chosen speech-to-text model. -->
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/api_stt_routing" />
+
+                <TextView
+                    android:id="@+id/api_stt_routing_mode"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing"
+                    android:text="@string/choose_provider_routing_automatic" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <ImageButton
+                    android:id="@+id/api_stt_routing_gear"
+                    style="@style/Widget.App.Row.Cog"
+                    android:contentDescription="@string/endpoint_choose_provider_title" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/api_stt_language" />
+
+                <TextView
+                    android:id="@+id/api_stt_language"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing"
+                    android:text="@string/api_stt_language_automatic" />
+            </LinearLayout>
+
+            <!-- Shown on and greyed out: no supported service offers a
+                 punctuation switch yet (see api-voice-service-plan.md). -->
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        android:id="@+id/api_stt_punctuation_label"
+                        style="@style/Widget.App.Row.Title"
+                        android:enabled="false"
+                        android:text="@string/api_stt_punctuation" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/api_stt_punctuation"
+                    style="@style/Widget.App.Row.Switch"
+                    android:checked="true"
+                    android:enabled="false" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/api_stt_vocabulary_title" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/api_stt_vocabulary_hint" />
+
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/api_stt_vocabulary_field"
+                    style="@style/Widget.App.Field.Box"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:hint="@string/api_stt_vocabulary_field_hint"
+                    android:imeOptions="actionDone"
+                    android:inputType="text"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/api_stt_vocabulary_add"
+                    style="@style/AppButton.Primary.Inline.Trailing"
+                    android:text="@string/api_stt_vocabulary_add" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/api_stt_vocabulary_error"
+                style="@style/Widget.App.Field.Error.Notice"
+                android:visibility="gone" />
+
+            <org.teslasoft.assistant.ui.widgets.MaxHeightScrollView
+                android:id="@+id/api_stt_vocabulary_box"
+                style="@style/Widget.App.RemovableList.Box">
+
+                <LinearLayout
+                    android:id="@+id/api_stt_vocabulary_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </org.teslasoft.assistant.ui.widgets.MaxHeightScrollView>
+
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/api_stt_vocabulary_clear"
+                    style="@style/AppButton.Destructive.Inline"
+                    android:text="@string/api_stt_vocabulary_clear_all" />
+
+                <TextView
+                    android:id="@+id/api_stt_vocabulary_count"
+                    style="@style/Widget.App.Field.Counter.Limit"
+                    android:layout_width="0dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>
