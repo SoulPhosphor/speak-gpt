@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.color.MaterialColors
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import java.util.concurrent.Executors
@@ -29,16 +30,39 @@ class DrawerHierarchyAdapter(
 
     init {
         setHasStableIds(true)
-        if (displayPreferences.getShowMemoryStatusOnChatList()) {
-            metadataExecutor.execute {
-                try {
-                    if (MemoryStore.isProvisioned(activity)) {
-                        memoryStates.putAll(MemoryStore.getInstance(activity).chatReviewStates())
-                        activity.runOnUiThread { notifyDataSetChanged() }
-                    }
-                } catch (_: Exception) { }
-            }
+        if (displayPreferences.getShowMemoryStatusOnChatList()) loadMemoryStates()
+    }
+
+    private fun loadMemoryStates() {
+        metadataExecutor.execute {
+            try {
+                if (MemoryStore.isProvisioned(activity)) {
+                    memoryStates.putAll(MemoryStore.getInstance(activity).chatReviewStates())
+                    activity.runOnUiThread { notifyDataSetChanged() }
+                }
+            } catch (_: Exception) { }
         }
+    }
+
+    /** The chat-list display options rows are drawn with. Rows whose chat data
+     *  is unchanged are not rebound by a list update, so a change to one of
+     *  these is applied by [refreshDisplayIfChanged]. */
+    private fun displayOptions(): List<Any> = listOf(
+        displayPreferences.getShowCompanionImagesInChatList(),
+        displayPreferences.getHideModelNames(),
+        displayPreferences.getShowMemoryStatusOnChatList(),
+        GlobalPreferences.getPreferences(activity).getProfileImageShape()
+    )
+    private var renderedDisplayOptions = displayOptions()
+
+    fun refreshDisplayIfChanged() {
+        val current = displayOptions()
+        if (current == renderedDisplayOptions) return
+        val memoryStatusTurnedOn = displayPreferences.getShowMemoryStatusOnChatList() &&
+            renderedDisplayOptions[2] == false
+        renderedDisplayOptions = current
+        notifyDataSetChanged()
+        if (memoryStatusTurnedOn) loadMemoryStates()
     }
     interface Callbacks {
         fun onClick(row: DrawerRow)

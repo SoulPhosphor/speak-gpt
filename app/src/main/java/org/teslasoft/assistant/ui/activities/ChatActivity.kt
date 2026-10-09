@@ -1766,7 +1766,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         }
                         Triple(
                             rpCharId.takeIf { it.isNotEmpty() }?.let { store.getRoleplayCharacter(it)?.name },
-                            glamourId.takeIf { it.isNotEmpty() }?.let { store.getUserPersona(it)?.displayName },
+                            // A blank Display Name falls back to the Glamour's own Name.
+                            glamourId.takeIf { it.isNotEmpty() }?.let { id ->
+                                store.getUserPersona(id)?.let { it.displayName?.takeIf(String::isNotBlank) ?: it.name }
+                            },
                             styles
                         )
                     }

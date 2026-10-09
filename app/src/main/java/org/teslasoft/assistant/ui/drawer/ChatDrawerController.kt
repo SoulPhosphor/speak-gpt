@@ -97,6 +97,8 @@ class ChatDrawerController private constructor(
     }
 
     fun refresh(onShown: () -> Unit = {}) {
+        // Chat-list display options may have changed in Settings.
+        adapter.refreshDisplayIfChanged()
         activity.lifecycleScope.launch {
             val projection = withContext(Dispatchers.IO) {
                 when (val result = repository.snapshot()) {

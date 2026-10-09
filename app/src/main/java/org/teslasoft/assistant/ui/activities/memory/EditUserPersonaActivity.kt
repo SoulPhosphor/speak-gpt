@@ -238,10 +238,13 @@ class EditUserPersonaActivity : SettingsPageActivity() {
 
         // Keep the picture's screen-reader label in sync with the name (the
         // approved a11y scheme labels an assigned picture "<Name>'s picture").
-        fieldName?.doAfterTextChanged { updateAvatarContentDescription() }
+        fieldName?.doAfterTextChanged {
+            updateAvatarContentDescription()
+            updateSignaturePreview()
+        }
 
-        // Chat shows this Glamour's Display Name, so that is what the
-        // signature previews.
+        // Chat shows this Glamour's Display Name, or its Name while Display
+        // Name is blank, so the signature previews the same.
         fieldDisplayName?.doAfterTextChanged { updateSignaturePreview() }
 
         fieldShortDescription?.doAfterTextChanged { updateShortDescriptionWarning() }
@@ -296,7 +299,8 @@ class EditUserPersonaActivity : SettingsPageActivity() {
     }
 
     private fun updateSignaturePreview() {
-        signature?.setName(fieldDisplayName?.text?.toString().orEmpty())
+        val displayName = fieldDisplayName?.text?.toString()?.trim().orEmpty()
+        signature?.setName(displayName.ifEmpty { fieldName?.text?.toString()?.trim().orEmpty() })
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
