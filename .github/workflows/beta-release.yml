@@ -34,8 +34,12 @@ jobs:
           sdkmanager --install "ndk;26.3.11579264" "cmake;3.22.1"
           chmod +x ./gradlew
 
-      - name: Test and build Beta
-        run: ./gradlew --no-daemon test assembleBeta
+      - name: Run unit tests
+        # Keep variant compilation and test workers within runner memory.
+        run: ./gradlew --no-daemon --max-workers=1 test
+
+      - name: Build Beta
+        run: ./gradlew --no-daemon --max-workers=1 assembleBeta
 
       - name: Assert Beta identity and label
         run: |
