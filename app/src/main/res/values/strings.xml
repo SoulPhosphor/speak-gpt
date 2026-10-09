@@ -750,6 +750,11 @@
     <string name="local_whisper_delete_confirm_title">Delete this model?</string>
     <string name="local_whisper_delete_confirm_msg_fmt">%1$s will be removed from your phone. You can download it again later.</string>
     <string name="local_whisper_fallback_snackbar">On-device Whisper isn\'t connected yet — using cloud Whisper for this transcription.</string>
+    <string name="local_whisper_missing_title">Onboard Whisper Not Downloaded</string>
+    <string name="local_whisper_missing_message">Onboard Whisper must be installed to function. Please install or choose one of the following options.</string>
+    <string name="local_whisper_missing_api">API</string>
+    <string name="local_whisper_missing_download">Download Whisper</string>
+    <string name="voice_engine_whisper_local_install">Install</string>
     <string name="local_whisper_no_model_snackbar">No on-device Whisper model installed yet — using cloud Whisper for this transcription.</string>
     <string name="local_whisper_capture_failed">Could not open the microphone for on-device Whisper. Try again or check permissions.</string>
     <string name="local_whisper_loading_model">Loading speech model…</string>

@@ -241,6 +241,7 @@ import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
 import org.teslasoft.assistant.ui.util.IncludeStripController
 import org.teslasoft.assistant.ui.util.IncludesPopupController
+import org.teslasoft.assistant.ui.util.LocalWhisperMissingDialog
 import org.teslasoft.assistant.util.AvatarRefreshCoordinator
 import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
@@ -6619,17 +6620,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
 
-        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
-        val installed = activeModel.isNotEmpty() &&
-                LocalWhisperModels.byId(activeModel)?.let {
-                    LocalWhisperStorage.isInstalled(this, it)
-                } == true
-        if (!installed) {
-            // Selected on-device but no model on disk yet → fall back to
-            // cloud Whisper for this utterance so the user still gets a
-            // transcript. UI-level snackbar mirrors what the plan calls for.
-            Toast.makeText(this, R.string.local_whisper_no_model_snackbar, Toast.LENGTH_LONG).show()
-            handleWhisperSpeechRecognition()
+        if (!hasActiveLocalWhisperModel()) {
+            // Never fall back to paid cloud Whisper: let the user pick.
+            showLocalWhisperMissingDialog()
             return
         }
 
@@ -6645,6 +6638,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     .setAction(Intent.ACTION_VIEW)
             )
         }
+    }
+
+    // Selected on-device Whisper is usable only when the active model is one
+    // we know and its file is actually on disk.
+    private fun hasActiveLocalWhisperModel(): Boolean {
+        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+        return activeModel.isNotEmpty() &&
+                LocalWhisperModels.byId(activeModel)?.let {
+                    LocalWhisperStorage.isInstalled(this, it)
+                } == true
+    }
+
+    private fun showLocalWhisperMissingDialog() {
+        LocalWhisperMissingDialog.show(
+            this,
+            onUseGoogle = { preferences?.setAudioModel("google") },
+            onDownload = { startActivity(Intent(this, LocalWhisperModelsActivity::class.java)) }
+        )
     }
 
     /** True iff RECORD_AUDIO is granted right now. Re-checked before every arm
@@ -10392,6 +10403,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // single capture, exactly like the mic button, without engaging
             // hands-free.
             handleWhisperSpeechRecognition()
+            return
+        }
+        if (engine == "whisper-local" && !hasActiveLocalWhisperModel()) {
+            showLocalWhisperMissingDialog()
             return
         }
         preferences?.setHandsFreeMode(true)

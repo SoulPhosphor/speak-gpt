@@ -85,17 +85,13 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/model_action_button"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            style="@style/AppButton.Primary.Inline"
             android:minWidth="100dp"
             tools:text="Download" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/model_uninstall_button"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            style="@style/AppButton.Destructive.Inline"
             android:layout_marginTop="2dp"
             android:minWidth="100dp"
             android:text="@string/btn_uninstall"

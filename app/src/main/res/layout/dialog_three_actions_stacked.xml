@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared readable three-action dialog for three equal, non-destructive
+     choices. Same stacked geometry as dialog_three_actions_cancel_first; every
+     action is primary. Top-to-bottom order is the caller's approved order. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="16dp">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_dialog_first_action"
+        style="@style/AppButton.Primary.DialogStacked"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_dialog_second_action"
+        style="@style/AppButton.Primary.DialogStacked"
+        android:layout_marginTop="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btn_dialog_first_action" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_dialog_third_action"
+        style="@style/AppButton.Primary.DialogStacked"
+        android:layout_marginTop="8dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btn_dialog_second_action" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

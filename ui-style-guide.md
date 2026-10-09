@@ -230,6 +230,12 @@ The chat/image deletion choice is the first consumer: **Cancel**, **Delete Chat
 Only**, **Delete All**. Do not reorder those actions or reproduce the stacked
 geometry in a feature-local layout.
 
+For three equal, non-destructive choices with no cancel action, use
+`layout/dialog_three_actions_stacked.xml`: the same stacked geometry with every
+action on `AppButton.Primary.DialogStacked`, in the caller's approved
+top-to-bottom order. First consumer: the on-device Whisper missing-model dialog
+(**API**, **Google Dictation**, **Download Whisper**).
+
 ### Inline actions
 
 `AppButton.Primary.Inline`

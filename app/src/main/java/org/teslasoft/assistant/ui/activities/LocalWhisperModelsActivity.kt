@@ -18,14 +18,19 @@ package org.teslasoft.assistant.ui.activities
 
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -40,6 +45,8 @@ import org.teslasoft.assistant.stt.LocalWhisperEngine
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.util.WindowInsetsUtil
+import java.util.EnumSet
 
 /**
  * Pick which on-device Whisper model is active, and trigger downloads for
@@ -77,6 +84,15 @@ class LocalWhisperModelsActivity : SettingsPageActivity() {
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
+            )
+        }
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_local_whisper_models)
@@ -95,6 +111,14 @@ class LocalWhisperModelsActivity : SettingsPageActivity() {
         buildModelRows()
         refreshAll()
         reloadAmoled()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Same edge-to-edge header as the other settings screens: the header
+        // reaches the top of the screen and pads itself below the status bar.
+        WindowInsetsUtil.adjustPaddings(this, R.id.action_bar, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
+        WindowInsetsUtil.adjustPaddings(this, R.id.footer, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR))
     }
 
     override fun onResume() {
