@@ -27,17 +27,21 @@ class SttTransportTest {
     private fun text(request: okhttp3.Request): String {
         val buffer = Buffer(); request.body!!.writeTo(buffer); return buffer.readUtf8()
     }
-    private val audio = byteArrayOf(1, 2, 3)
+    private val audio = java.io.File.createTempFile("stt", ".m4a").apply {
+        writeBytes(byteArrayOf(1, 2, 3)); deleteOnExit()
+    }
 
     @Test fun openRouterSendsJsonAudioLanguageRoutingAndHintForTheNamedProvider() {
         val request = SttTransport().request(source("https://openrouter.ai/api/v1",
             routing = TtsRoutingSettings(TtsRoutingMode.ONLY, "groq")), audio, "m4a", "en",
-            listOf("Seket", "Phosphor"), encode = { "AQID" })
+            listOf("Seket", "Phosphor"))
         assertEquals("/api/v1/audio/transcriptions", request.url.encodedPath)
         assertEquals("Bearer secret-key", request.header("Authorization"))
         val body = JsonParser.parseString(text(request)).asJsonObject
         assertEquals("openai/whisper-1", body.get("model").asString)
+        // The audio is streamed from the file as base64, and the declared length matches.
         assertEquals("AQID", body.getAsJsonObject("input_audio").get("data").asString)
+        assertEquals(text(request).toByteArray().size.toLong(), request.body!!.contentLength())
         assertEquals("m4a", body.getAsJsonObject("input_audio").get("format").asString)
         assertEquals("en", body.get("language").asString)
         val provider = body.getAsJsonObject("provider")
@@ -47,7 +51,7 @@ class SttTransportTest {
 
     @Test fun openRouterAutomaticOmitsLanguageAndAddsHintForTheModelAuthor() {
         val body = JsonParser.parseString(text(SttTransport().request(source("https://openrouter.ai/api/v1"),
-            audio, "m4a", null, listOf("Seket"), encode = { "x" }))).asJsonObject
+            audio, "m4a", null, listOf("Seket")))).asJsonObject
         assertFalse(body.has("language"))
         val provider = body.getAsJsonObject("provider")
         assertFalse(provider.has("only"))
@@ -56,7 +60,7 @@ class SttTransportTest {
 
     @Test fun openRouterHintReachesEveryProviderServingTheModel() {
         val body = JsonParser.parseString(text(SttTransport().request(source("https://openrouter.ai/api/v1"),
-            audio, "m4a", null, listOf("Seket"), encode = { "x" },
+            audio, "m4a", null, listOf("Seket"),
             hintProviders = listOf("groq", "deepinfra/turbo")))).asJsonObject
         val options = body.getAsJsonObject("provider").getAsJsonObject("options")
         assertEquals(setOf("openai", "groq", "deepinfra"), options.keySet())
@@ -76,7 +80,7 @@ class SttTransportTest {
     @Test fun onlyRoutingWithoutAProviderIsRejectedBeforeSending() {
         val error = runCatching {
             SttTransport().request(source("https://openrouter.ai/api/v1",
-                routing = TtsRoutingSettings(TtsRoutingMode.ONLY, "")), audio, "m4a", null, emptyList(), encode = { "" })
+                routing = TtsRoutingSettings(TtsRoutingMode.ONLY, "")), audio, "m4a", null, emptyList())
         }.exceptionOrNull() as TtsException
         assertEquals(TtsFailureKind.PROVIDER_REQUIRED, error.failure.kind)
     }

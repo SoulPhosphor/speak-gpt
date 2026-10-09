@@ -4,13 +4,16 @@
  **************************************************************************/
 package org.teslasoft.assistant.stt.api
 
-import android.util.Base64
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okio.BufferedSink
+import java.io.File
+import java.io.FilterOutputStream
 import org.teslasoft.assistant.preferences.tts.TtsRoutingMode
 import org.teslasoft.assistant.tts.api.OkHttpTtsExecutor
 import org.teslasoft.assistant.tts.api.ResolvedTtsSource
@@ -44,9 +47,9 @@ class SttTransport(
 ) {
     private val op = TtsOperation.TRANSCRIPTION
 
-    fun request(source: ResolvedTtsSource, audio: ByteArray, format: String, language: String?,
-        vocabulary: List<String>, encode: (ByteArray) -> String = ::base64,
-        hintProviders: List<String> = emptyList()): Request {
+    /** [audio] is streamed from disk, never loaded whole, so recording length cannot exhaust memory. */
+    fun request(source: ResolvedTtsSource, audio: File, format: String, language: String?,
+        vocabulary: List<String>, hintProviders: List<String> = emptyList()): Request {
         val t = source.target
         if (t.endpointId.isBlank()) fail(source, TtsFailureKind.ENDPOINT_REQUIRED)
         if (t.modelId.isBlank()) fail(source, TtsFailureKind.MODEL_REQUIRED)
@@ -59,7 +62,7 @@ class SttTransport(
             val body = JsonObject().apply {
                 addProperty("model", t.modelId)
                 add("input_audio", JsonObject().apply {
-                    addProperty("data", encode(audio)); addProperty("format", format)
+                    addProperty("data", AUDIO_SLOT); addProperty("format", format)
                 })
                 if (language != null) addProperty("language", language)
             }
@@ -68,10 +71,10 @@ class SttTransport(
                 options.add(slug, JsonObject().apply { addProperty("prompt", hint) })
             }
             val composed = TtsRouting.compose(body, t.routing, options)
-            return builder.post(composed.toString().toRequestBody("application/json".toMediaType())).build()
+            return builder.post(StreamedJsonAudioBody(composed.toString(), audio)).build()
         }
         val form = MultipartBody.Builder().setType(MultipartBody.FORM)
-            .addFormDataPart("file", "recording.$format", audio.toRequestBody("audio/$format".toMediaType()))
+            .addFormDataPart("file", "recording.$format", audio.asRequestBody("audio/$format".toMediaType()))
             .addFormDataPart("model", t.modelId)
             .addFormDataPart("response_format", "json")
         if (language != null) form.addFormDataPart("language", language)
@@ -79,7 +82,7 @@ class SttTransport(
         return builder.post(form.build()).build()
     }
 
-    fun transcribe(source: ResolvedTtsSource, audio: ByteArray, format: String, language: String?,
+    fun transcribe(source: ResolvedTtsSource, audio: File, format: String, language: String?,
         vocabulary: List<String>, token: TtsRequestToken): String {
         // Only needed when there is a hint to deliver; a failed lookup still
         // sends the recording, keyed to the providers the routing names.
@@ -113,6 +116,28 @@ class SttTransport(
             JsonParser.parseString(body).asJsonObject.get("text")?.takeIf { it.isJsonPrimitive }?.asString
         }.getOrNull()
 
-        private fun base64(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        /** Placeholder for the audio inside the composed JSON; replaced by streamed base64. */
+        private const val AUDIO_SLOT = "__stt_audio_base64__"
+    }
+
+    /** The composed JSON with the audio's base64 written straight from the file. */
+    private class StreamedJsonAudioBody(json: String, private val audio: File) : RequestBody() {
+        private val prefix = json.substringBefore("\"$AUDIO_SLOT\"") + "\""
+        private val suffix = "\"" + json.substringAfter("\"$AUDIO_SLOT\"")
+
+        override fun contentType() = "application/json".toMediaType()
+
+        override fun contentLength(): Long {
+            val n = audio.length()
+            return prefix.toByteArray().size + 4 * ((n + 2) / 3) + suffix.toByteArray().size
+        }
+
+        override fun writeTo(sink: BufferedSink) {
+            sink.writeUtf8(prefix)
+            // The encoder must not close the sink, which OkHttp still owns.
+            val keepOpen = object : FilterOutputStream(sink.outputStream()) { override fun close() = flush() }
+            java.util.Base64.getEncoder().wrap(keepOpen).use { out -> audio.inputStream().use { it.copyTo(out) } }
+            sink.writeUtf8(suffix)
+        }
     }
 }

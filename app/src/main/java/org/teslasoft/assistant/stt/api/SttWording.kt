@@ -14,6 +14,11 @@ object SttWording {
     private const val HOLD_TITLE = "\u0000stt-title\u0000"
 
     fun adapt(text: String): String = text
+        // Already speech-to-text (for example this feature's own operation
+        // name): keep it, so "Speech" inside it is not swapped.
+        .replace("speech-to-text", HOLD_LOWER)
+        .replace("Speech-to-Text", HOLD_TITLE)
+        .replace("Speech to Text", HOLD_TITLE)
         .replace("text-to-speech", HOLD_LOWER)
         .replace("Text-to-Speech", HOLD_TITLE)
         .replace("Text to Speech", HOLD_TITLE)

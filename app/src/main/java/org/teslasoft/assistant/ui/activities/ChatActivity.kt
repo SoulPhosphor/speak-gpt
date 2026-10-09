@@ -6569,7 +6569,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val settings = ApiSttSettings.get(app)
                 val source = TtsAndroidServices.resolver(app).resolve(settings.target)
                 val language = settings.language.takeIf { it != ApiSttSettings.LANGUAGE_AUTOMATIC }
-                SttTransport().transcribe(source, java.io.File(audioPath).readBytes(), "m4a", language,
+                SttTransport().transcribe(source, java.io.File(audioPath), "m4a", language,
                     settings.vocabulary, token)
             }
         }
