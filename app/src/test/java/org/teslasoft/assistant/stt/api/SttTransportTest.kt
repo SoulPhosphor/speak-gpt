@@ -54,6 +54,15 @@ class SttTransportTest {
         assertEquals("Seket", provider.getAsJsonObject("options").getAsJsonObject("openai").get("prompt").asString)
     }
 
+    @Test fun openRouterHintReachesEveryProviderServingTheModel() {
+        val body = JsonParser.parseString(text(SttTransport().request(source("https://openrouter.ai/api/v1"),
+            audio, "m4a", null, listOf("Seket"), encode = { "x" },
+            hintProviders = listOf("groq", "deepinfra/turbo")))).asJsonObject
+        val options = body.getAsJsonObject("provider").getAsJsonObject("options")
+        assertEquals(setOf("openai", "groq", "deepinfra"), options.keySet())
+        options.keySet().forEach { assertEquals("Seket", options.getAsJsonObject(it).get("prompt").asString) }
+    }
+
     @Test fun otherEndpointsSendOpenAiStyleMultipartWithPromptHint() {
         val request = SttTransport().request(source("https://api.example.com/v1/", "whisper-large"),
             audio, "m4a", "fr", listOf("Seket"))

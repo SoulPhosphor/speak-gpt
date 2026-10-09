@@ -59,10 +59,15 @@ Simple header (back + title "API Voice Service"), then:
 ### Requests
 
 - OpenRouter: JSON to `audio/transcriptions` with base64 audio, `language`
-  when chosen, and provider routing. OpenRouter has no top-level vocabulary
-  field, so the vocabulary hint is sent as `provider.options.<provider>.prompt`
-  for the providers the routing names (Only / Preferred), or the model's
-  author (the part before `/`) in Automatic.
+  when chosen, and the user's provider routing exactly as chosen. Owner
+  ruling (Oct 9 2026): Routing Type and its gear stay fully available, even
+  though OpenRouter currently documents that it does not apply `order` /
+  `only` / `allow_fallbacks` on this endpoint (the same position as API
+  voices). OpenRouter has no top-level vocabulary field and forwards
+  `provider.options` only to the provider that serves the request, so the
+  hint is sent as `provider.options.<provider>.prompt` for every provider
+  serving the model (read from OpenRouter when the list is non-empty) plus
+  any the routing names.
 - Every other endpoint: OpenAI-style multipart upload with `prompt`.
 - Entries are sent oldest first, newest last. Whisper models read only about
   the last 224 tokens of the hint (roughly 40–75 names or short phrases).
@@ -88,6 +93,5 @@ Simple header (back + title "API Voice Service"), then:
   capability data, so its speech-to-text models are not detected yet. The
   API voice feature reads OpenAI's published documentation for this; the same
   could be done here.
-- **OpenRouter Automatic vocabulary delivery:** in Automatic routing the hint
-  is addressed to the model's author only; a request served by another
-  provider will not receive it.
+- **OpenRouter routing enforcement:** if OpenRouter starts applying routing
+  on transcription, the saved choice already goes out with every request.

@@ -14,6 +14,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.teslasoft.assistant.preferences.tts.TtsRoutingMode
 import org.teslasoft.assistant.tts.api.OkHttpTtsExecutor
 import org.teslasoft.assistant.tts.api.ResolvedTtsSource
+import org.teslasoft.assistant.tts.api.TtsDiscoveryClient
 import org.teslasoft.assistant.tts.api.TtsException
 import org.teslasoft.assistant.tts.api.TtsFailure
 import org.teslasoft.assistant.tts.api.TtsFailureKind
@@ -27,17 +28,25 @@ import org.teslasoft.assistant.tts.api.requireSuccess
 /**
  * Sends one recording to the configured API Voice Service and returns its text.
  *
- * OpenRouter takes a JSON body with base64 audio and provider routing; the
- * vocabulary hint rides in provider.options for the providers this request
- * names (or the model's own author in Automatic), since OpenRouter has no
- * top-level hint field. Every other endpoint gets the OpenAI-style multipart
- * upload, where the hint is the `prompt` field.
+ * OpenRouter takes a JSON body with base64 audio and the user's provider
+ * routing (sent as chosen; OpenRouter currently documents that it does not
+ * apply order/only on this endpoint). It forwards provider.options only to the
+ * provider that actually serves the request, so the vocabulary hint is keyed
+ * to every provider serving the model, read from OpenRouter, plus any the
+ * routing names. Every other endpoint gets the OpenAI-style multipart upload,
+ * where the hint is the `prompt` field.
  */
-class SttTransport(private val http: TtsHttpExecutor = OkHttpTtsExecutor()) {
+class SttTransport(
+    private val http: TtsHttpExecutor = OkHttpTtsExecutor(),
+    private val servingProviders: (ResolvedTtsSource, TtsRequestToken) -> List<String> = { source, token ->
+        TtsDiscoveryClient(http).providers(source, token).providers.map { it.id }
+    }
+) {
     private val op = TtsOperation.TRANSCRIPTION
 
     fun request(source: ResolvedTtsSource, audio: ByteArray, format: String, language: String?,
-        vocabulary: List<String>, encode: (ByteArray) -> String = ::base64): Request {
+        vocabulary: List<String>, encode: (ByteArray) -> String = ::base64,
+        hintProviders: List<String> = emptyList()): Request {
         val t = source.target
         if (t.endpointId.isBlank()) fail(source, TtsFailureKind.ENDPOINT_REQUIRED)
         if (t.modelId.isBlank()) fail(source, TtsFailureKind.MODEL_REQUIRED)
@@ -55,7 +64,7 @@ class SttTransport(private val http: TtsHttpExecutor = OkHttpTtsExecutor()) {
                 if (language != null) addProperty("language", language)
             }
             val options = JsonObject()
-            if (hint != null) hintProviders(source).forEach { slug ->
+            if (hint != null) hintKeys(source, hintProviders).forEach { slug ->
                 options.add(slug, JsonObject().apply { addProperty("prompt", hint) })
             }
             val composed = TtsRouting.compose(body, t.routing, options)
@@ -72,8 +81,13 @@ class SttTransport(private val http: TtsHttpExecutor = OkHttpTtsExecutor()) {
 
     fun transcribe(source: ResolvedTtsSource, audio: ByteArray, format: String, language: String?,
         vocabulary: List<String>, token: TtsRequestToken): String {
+        // Only needed when there is a hint to deliver; a failed lookup still
+        // sends the recording, keyed to the providers the routing names.
+        val serving = if (source.endpoint.openRouter && vocabulary.isNotEmpty())
+            try { servingProviders(source, token) } catch (_: TtsException) { token.check(); emptyList() }
+            else emptyList()
         val response = http.execute(source.endpoint, source.target, op,
-            request(source, audio, format, language, vocabulary), token)
+            request(source, audio, format, language, vocabulary, hintProviders = serving), token)
         token.check()
         response.requireSuccess(source, op, if (source.endpoint.openRouter &&
             (source.target.routing.mode != TtsRoutingMode.AUTOMATIC || vocabulary.isNotEmpty())) listOf("provider") else emptyList())
@@ -81,14 +95,14 @@ class SttTransport(private val http: TtsHttpExecutor = OkHttpTtsExecutor()) {
             ?: fail(source, TtsFailureKind.MALFORMED, responseReceived = true)
     }
 
-    private fun hintProviders(source: ResolvedTtsSource): List<String> {
+    private fun hintKeys(source: ResolvedTtsSource, serving: List<String>): List<String> {
         val r = source.target.routing
-        val ids = when (r.mode) {
+        val named = when (r.mode) {
             TtsRoutingMode.ONLY -> listOf(r.selectedProvider)
             TtsRoutingMode.PREFERRED -> r.providerOrder.ifEmpty { listOf(r.selectedProvider) }
             TtsRoutingMode.AUTOMATIC -> listOf(source.target.modelId.substringBefore('/', ""))
         }
-        return ids.map { it.substringBefore('/') }.filter(String::isNotBlank).distinct()
+        return (named + serving).map { it.substringBefore('/') }.filter(String::isNotBlank).distinct()
     }
 
     private fun fail(source: ResolvedTtsSource, kind: TtsFailureKind, responseReceived: Boolean = false): Nothing =
