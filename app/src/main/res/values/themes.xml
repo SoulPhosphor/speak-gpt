@@ -839,6 +839,73 @@
     <!-- Name Style screen: the live, centered preview of the chosen name.
          Only color, placement and spacing live here; the font, size and
          bold/italic come from ChatNameStyle.apply so the preview matches chat. -->
+    <style name="Widget.App.NameStyle.Scroll" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:clipToPadding">false</item>
+    </style>
+    <style name="Widget.App.NameStyle.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingHorizontal">@dimen/name_style_content_inset</item>
+        <item name="android:paddingTop">@dimen/name_style_small_gap</item>
+        <item name="android:paddingBottom">@dimen/name_style_section_gap</item>
+    </style>
+    <style name="Widget.App.NameStyle.SavedPanel" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">@dimen/name_style_small_gap</item>
+        <item name="android:background">@drawable/bg_name_style_saved_panel</item>
+        <item name="android:padding">@dimen/name_style_panel_padding</item>
+    </style>
+    <style name="Widget.App.NameStyle.SavedValues" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minLines">@integer/name_style_saved_panel_min_lines</item>
+        <item name="android:textSize">@dimen/name_style_body_text_size</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:gravity">top|start</item>
+    </style>
+    <!-- Owner-approved exception: a bold text-only button within the saved-style box. -->
+    <style name="Widget.App.NameStyle.RestoreOriginal" parent="AppButton.Primary">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@null</item>
+        <item name="backgroundTint">@null</item>
+        <item name="strokeWidth">0dp</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">@dimen/name_style_body_text_size</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="Widget.App.NameStyle.SectionLabel" parent="Widget.App.Dropdown.CanonicalLabel">
+        <item name="android:layout_marginTop">@dimen/name_style_section_gap</item>
+    </style>
+
+    <style name="Widget.App.NameStyle.SaveBar" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:paddingHorizontal">@dimen/name_style_content_inset</item>
+        <item name="android:paddingTop">@dimen/name_style_small_gap</item>
+        <item name="android:paddingBottom">@dimen/name_style_small_gap</item>
+        <item name="android:background">?attr/colorSurface</item>
+    </style>
+    <style name="Widget.App.NameStyle.SaveButton" parent="AppButton.Primary">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">center_horizontal</item>
+        <item name="android:singleLine">false</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
     <style name="Widget.App.NameStyle.Preview" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

@@ -3857,6 +3857,24 @@
     <string name="appearance_hardware_keyboard_shortcuts">Hardware Keyboard Shortcuts</string>
     <string name="appearance_hardware_keyboard_shortcuts_hint">Press Enter to send and Shift+Enter for a new line.</string>
     <string name="appearance_section_name_style">Name Style</string>
+    <string name="name_style_custom_settings">Custom Settings</string>
+    <string name="name_style_currently_saved">Currently Saved: %1$s</string>
+    <string name="name_style_saved_values">%1$s · %2$s · %3$s</string>
+    <string name="name_style_default_values">%1$s · %2$s · %3$s</string>
+    <string name="name_style_restore_original">Restore Original Style</string>
+    <string name="name_style_save_for">Save Changes for %1$s</string>
+    <string name="name_style_save_changes">Save Changes</string>
+    <string name="name_style_save_all">Save All Changes</string>
+    <string name="name_style_unsaved_title">Unsaved Changes</string>
+    <string name="name_style_unsaved_message">Save your changes before leaving? Each name keeps its own draft.</string>
+    <string name="name_style_unassigned_message">Choose a name to save the style you are previewing, or discard your unsaved changes.</string>
+    <string name="name_style_discard">Discard</string>
+    <string name="name_style_keep_editing">Keep Editing</string>
+    <string name="name_style_preview_sample">Name Preview</string>
+    <string name="name_style_grouped_name">%1$s — %2$s</string>
+    <string name="name_style_loading">Loading names…</string>
+    <string name="name_style_load_failed">Could not load name styles. Reopen this screen to try again.</string>
+    <string name="name_style_no_names">No names in this category.</string>
     <string name="name_style_title">Name Style</string>
     <!-- Name Style screen (owner-specified wording, Sept 2026). Labels keep
          their colons. -->
@@ -3870,8 +3888,8 @@
     <string name="name_style_type_glamour">Glamour</string>
     <string name="name_style_type_roleplay">Roleplay</string>
     <string name="name_style_type_default">Default</string>
-    <string name="name_style_default_companion">Companion</string>
-    <string name="name_style_default_user">User</string>
+    <string name="name_style_default_companion">Default Companion Style</string>
+    <string name="name_style_default_user">Default User Style</string>
     <string name="name_style_font_style_normal">Normal</string>
     <string name="name_style_font_style_bold">Bold</string>
     <string name="name_style_font_style_italic">Italic</string>

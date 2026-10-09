@@ -129,4 +129,11 @@
     <dimen name="image_settings_content_padding">20dp</dimen>
     <dimen name="image_settings_bottom_padding">24dp</dimen>
     <dimen name="image_settings_field_gap">12dp</dimen>
+    <!-- Shared dropdown geometry and Name Style composition. -->
+    <dimen name="dropdown_corner_radius">5dp</dimen>
+    <dimen name="name_style_content_inset">20dp</dimen>
+    <dimen name="name_style_small_gap">8dp</dimen>
+    <dimen name="name_style_section_gap">20dp</dimen>
+    <dimen name="name_style_panel_padding">12dp</dimen>
+    <dimen name="name_style_body_text_size">16sp</dimen>
 </resources>

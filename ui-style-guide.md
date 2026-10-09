@@ -1181,9 +1181,40 @@ outlined-field geometry, text appearance, padding, and inline error placement.
 The dialog host owns the title, current value, validation policy, and cancel-first
 actions. Add Folder and Rename Folder must use this one composition.
 
-## Name Style preview
+## Name Style
 
-`Widget.App.NameStyle.Preview` is the centered live preview under the Name Style controls. The style owns its color, placement and spacing; the font, size and bold/italic come from `ChatNameStyle.apply`, the same call chat uses, so the preview always matches chat.
+The header uses `Widget.App.ActionBar` and `ScreenChrome`. Dropdowns remain
+available in any order. Before a name is chosen, typography edits stay in an
+unassigned preview draft; the Name dropdown can list names grouped by Type.
+Each selected name keeps its own draft. Nothing writes to preferences or the
+identity store until Save. The centered fixed-bottom `NameStyle.SaveButton`
+inherits `AppButton.Primary`; back navigation offers saving all assigned drafts,
+discarding, or keeping editing. Unassigned edits require selecting a name first.
+Drafts and selection survive activity recreation through saved instance state.
+
+`Widget.App.NameStyle.SavedPanel` sits directly below Name and stays visible,
+empty, with reserved text/action space before selection. Its fill and outline
+match Quick Settings (`colorSurfaceContainerHigh`, `colorOutlineVariant`,
+`quick_settings_segment_stroke_width`); its corners use the same
+`dropdown_corner_radius` as the dropdowns. `NameStyle.SavedValues` uses normal
+body text and shows the last saved values, not the preview draft. Labels are
+Default Companion Style, Default User Style, and Custom Settings. Companions
+inherit the companion default; Glamour and Roleplay inherit the user default.
+For custom settings, also show the matching default values for comparison.
+
+**Intentional owner-approved button exception:** `NameStyle.RestoreOriginal`
+is a bold text-only button on the bottom line inside the saved-style box,
+labeled **Restore Original Style**. It has no outline, separate background,
+checkbox, or confirmation popup. Do not convert it to a filled/outlined button
+or move it outside the box. Clicking restores the selected name's last saved
+overrides into its draft and preview; empty overrides retain true inheritance
+from the appropriate default. It does not save, reset to factory values, or
+replace custom saved settings with defaults. The action space remains reserved
+but blank before a name is selected.
+
+`Widget.App.NameStyle.Preview` is the centered live preview under the controls.
+Typography comes from `ChatNameStyle.apply`, the same resolver used by chat.
+All placement, text appearance, shapes, and spacing belong to XML styles/dimens.
 
 ## Search status
 
