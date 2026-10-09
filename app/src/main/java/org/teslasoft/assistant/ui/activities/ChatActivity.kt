@@ -921,6 +921,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun killAllProcesses() {
         onSpeechResultsScope?.coroutineContext?.cancel(CancellationException("Killed"))
+        // The upload runs as a blocking call, so cancel its socket too.
+        sttGate.cancel()
         whisperScope?.coroutineContext?.cancel(CancellationException("Killed"))
         whisperPreloadScope?.coroutineContext?.cancel(CancellationException("Killed"))
         processRecordingScope?.coroutineContext?.cancel(CancellationException("Killed"))
