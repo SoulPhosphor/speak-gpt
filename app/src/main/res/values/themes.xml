@@ -873,26 +873,15 @@
     <style name="Widget.App.NameStyle.SavedValues" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:minLines">@integer/name_style_saved_panel_min_lines</item>
         <item name="android:textSize">@dimen/name_style_body_text_size</item>
         <item name="android:textStyle">normal</item>
         <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:gravity">top|start</item>
     </style>
-    <!-- Owner-approved exception: a bold text-only button within the saved-style box. -->
-    <style name="Widget.App.NameStyle.RestoreOriginal" parent="AppButton.Primary">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@null</item>
-        <item name="backgroundTint">@null</item>
-        <item name="strokeWidth">0dp</item>
-        <item name="android:paddingStart">0dp</item>
-        <item name="android:paddingEnd">0dp</item>
-        <item name="android:gravity">start|center_vertical</item>
-        <item name="android:textColor">?attr/appTextColor</item>
-        <item name="android:textSize">@dimen/name_style_body_text_size</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:textAllCaps">false</item>
+    <!-- A normal label-sized primary button, centered in the saved-style box
+         (owner ruling, Oct 9 2026). -->
+    <style name="Widget.App.NameStyle.RestoreOriginal" parent="AppButton.Primary.Inline.Centered">
+        <item name="android:layout_marginTop">@dimen/name_style_small_gap</item>
     </style>
     <style name="Widget.App.NameStyle.SectionLabel" parent="Widget.App.Dropdown.CanonicalLabel">
         <item name="android:layout_marginTop">@dimen/name_style_section_gap</item>

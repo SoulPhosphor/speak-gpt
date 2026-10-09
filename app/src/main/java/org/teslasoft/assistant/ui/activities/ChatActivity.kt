@@ -287,6 +287,7 @@ import org.teslasoft.assistant.usage.UsageLogStore
 import org.teslasoft.assistant.ui.chat.ChatComposerLayout
 import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportFormatter
+import org.teslasoft.assistant.ui.chat.FirstMessagePortraitInset
 import org.teslasoft.assistant.ui.chat.ChatExportMessage
 import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
@@ -3359,6 +3360,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         val itemTouchHelper = ItemTouchHelper(itemTouchCallback)
         itemTouchHelper.attachToRecyclerView(chat)
+        chat?.addItemDecoration(
+            FirstMessagePortraitInset { preferences?.getShowChatProfileImages() == true }
+        )
 
         chat?.adapter = adapter
 

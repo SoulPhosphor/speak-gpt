@@ -141,8 +141,6 @@ size or position (owner ruling, Oct 9 2026). `AppButton.Primary`, which every
 semantic button style inherits, sets this; never left- or right-align a
 button's text. The owner generally prefers label-sized buttons to buttons that
 stretch across the screen; ask before making a new button full width.
-The one existing approved exception is `NameStyle.RestoreOriginal`, a
-text-only button laid out at the start of the saved-style box.
 
 A button does not become secondary or destructive because it is shorter, narrower, beside another button, or inside a dialog. Size variants must inherit the semantic style.
 
@@ -1212,25 +1210,27 @@ inherits `AppButton.Primary`; back navigation offers saving all assigned drafts,
 discarding, or keeping editing. Unassigned edits require selecting a name first.
 Drafts and selection survive activity recreation through saved instance state.
 
-`Widget.App.NameStyle.SavedPanel` sits directly below Name and stays visible,
-empty, with reserved text/action space before selection. Its fill and outline
-match Quick Settings (`colorSurfaceContainerHigh`, `colorOutlineVariant`,
+`Widget.App.NameStyle.SavedPanel` sits directly below Name and stays visible
+before selection. Its fill and outline match Quick Settings
+(`colorSurfaceContainerHigh`, `colorOutlineVariant`,
 `quick_settings_segment_stroke_width`); its corners use the same
 `dropdown_corner_radius` as the dropdowns. `NameStyle.SavedValues` uses normal
-body text and shows the last saved values, not the preview draft. Labels are
-Default Companion Style, Default User Style, and Custom Settings. Companions
-inherit the companion default; Glamour and Roleplay inherit the user default.
-For custom settings, also show the matching default values for comparison.
+body text and shows the last saved values, not the preview draft. It reserves
+no blank lines: the box is as tall as its text plus the button (owner ruling,
+Oct 9 2026). Labels are Default Companion Style, Default User Style, and
+Custom Settings. Companions inherit the companion default; Glamour and
+Roleplay inherit the user default. For custom settings, also show the
+matching default values for comparison.
 
-**Intentional owner-approved button exception:** `NameStyle.RestoreOriginal`
-is a bold text-only button on the bottom line inside the saved-style box,
-labeled **Restore Original Style**. It has no outline, separate background,
-checkbox, or confirmation popup. Do not convert it to a filled/outlined button
-or move it outside the box. Clicking restores the selected name's last saved
-overrides into its draft and preview; empty overrides retain true inheritance
-from the appropriate default. It does not save, reset to factory values, or
-replace custom saved settings with defaults. The action space remains reserved
-but blank before a name is selected.
+`NameStyle.RestoreOriginal`, labeled **Restore Original Style**, is a normal
+label-sized primary button centered at the bottom of the saved-style box
+(`AppButton.Primary.Inline.Centered`; owner ruling, Oct 9 2026, replacing the
+earlier text-only treatment). It has no confirmation popup. Clicking restores
+the selected name's last saved overrides into its draft and preview; empty
+overrides retain true inheritance from the appropriate default. It does not
+save, reset to factory values, or replace custom saved settings with defaults.
+Before a name is selected, the button's space is kept but the button is
+hidden.
 
 `Widget.App.NameStyle.Preview` is the centered live preview under the controls.
 Typography comes from `ChatNameStyle.apply`, the same resolver used by chat.

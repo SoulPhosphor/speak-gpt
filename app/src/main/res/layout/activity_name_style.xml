@@ -55,7 +55,6 @@
                 <TextView
                     android:id="@+id/saved_style_panel"
                     style="@style/Widget.App.NameStyle.SavedValues" />
-                <!-- Intentional text-only button: no separate fill or outline. -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_restore_original"
                     style="@style/Widget.App.NameStyle.RestoreOriginal"
