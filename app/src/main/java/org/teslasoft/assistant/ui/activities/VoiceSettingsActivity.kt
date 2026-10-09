@@ -44,14 +44,16 @@ import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.preferences.tts.TtsVoiceKind
 import org.teslasoft.assistant.tts.api.*
 import org.teslasoft.assistant.tts.voices.SavedApiVoiceProvider
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.fragments.dialogs.LanguageSelectorDialogFragment
-import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
+import org.teslasoft.assistant.stt.NativeCpuSupport
+import org.teslasoft.assistant.stt.api.ApiSttSettings
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
@@ -83,6 +85,9 @@ class VoiceSettingsActivity : SettingsPageActivity() {
     private var radioVoiceInputWhisperLocal: RadioButton? = null
     private var radioVoiceInputGoogle: RadioButton? = null
     private var cogVoiceInputWhisperLocal: ImageButton? = null
+    private var btnVoiceInputWhisperLocalInstall: MaterialButton? = null
+    private var cogVoiceInputApi: ImageButton? = null
+    private var btnVoiceInputApiSetup: MaterialButton? = null
     private var rowDictationLanguage: ConstraintLayout? = null
     private var valueDictationLanguage: TextView? = null
     private var groupVadMethod: RadioGroup? = null
@@ -267,6 +272,19 @@ class VoiceSettingsActivity : SettingsPageActivity() {
         radioVoiceInputWhisperLocal = findViewById(R.id.radio_voice_input_whisper_local)
         radioVoiceInputGoogle = findViewById(R.id.radio_voice_input_google)
         cogVoiceInputWhisperLocal = findViewById(R.id.cog_voice_input_whisper_local)
+        btnVoiceInputWhisperLocalInstall = findViewById(R.id.btn_voice_input_whisper_local_install)
+        cogVoiceInputApi = findViewById(R.id.cog_voice_input_api)
+        btnVoiceInputApiSetup = findViewById(R.id.btn_voice_input_api_setup)
+
+        // A phone that cannot run on-device Whisper shows it as Unavailable and
+        // cannot select it; a leftover selection moves to Google Dictation.
+        val whisperSupported = NativeCpuSupport.isSupported()
+        // Each line is the radio's own row wrapper (unnamed, so the screen's
+        // named-row order stays as the layout tests expect).
+        (radioVoiceInputWhisperLocal?.parent as? View)?.visibility = if (whisperSupported) View.VISIBLE else View.GONE
+        (findViewById<View>(R.id.radio_voice_input_whisper_local_unavailable).parent as View).visibility =
+            if (whisperSupported) View.GONE else View.VISIBLE
+        if (!whisperSupported && preferences?.getAudioModel() == "whisper-local") preferences?.setAudioModel("google")
         rowDictationLanguage = findViewById(R.id.row_dictation_language)
         valueDictationLanguage = findViewById(R.id.value_dictation_language)
 
@@ -275,9 +293,9 @@ class VoiceSettingsActivity : SettingsPageActivity() {
 
         // The radios manage mutual exclusion by hand because the on-device
         // Whisper row carries a trailing cog and so isn't a direct RadioGroup
-        // child. Picking on-device Whisper opens its screen only when no model
-        // is active yet, so a user is never stranded with nothing to transcribe
-        // with; once a model is active, picking it just selects the engine.
+        // child. Picking on-device Whisper only selects the engine; with no
+        // model installed the row offers Install instead of opening the
+        // download screen automatically.
         radioVoiceInputWhisperCloud?.setOnClickListener { onVoiceInputPicked("whisper") }
         radioVoiceInputWhisperLocal?.setOnClickListener { onVoiceInputPicked("whisper-local") }
         radioVoiceInputGoogle?.setOnClickListener { onVoiceInputPicked("google") }
@@ -286,6 +304,17 @@ class VoiceSettingsActivity : SettingsPageActivity() {
         // not select the engine.
         cogVoiceInputWhisperLocal?.setOnClickListener {
             startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
+        }
+        btnVoiceInputWhisperLocalInstall?.setOnClickListener {
+            startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
+        }
+        // Same for API Voice Service: the gear (or Set Up) opens its screen
+        // without selecting it.
+        cogVoiceInputApi?.setOnClickListener {
+            startActivity(Intent(this, ApiVoiceServiceActivity::class.java))
+        }
+        btnVoiceInputApiSetup?.setOnClickListener {
+            startActivity(Intent(this, ApiVoiceServiceActivity::class.java))
         }
 
         rowDictationLanguage?.setOnClickListener {
@@ -352,24 +381,31 @@ class VoiceSettingsActivity : SettingsPageActivity() {
         radioVoiceInputWhisperLocal?.isChecked = engine == "whisper-local"
         radioVoiceInputGoogle?.isChecked = engine == "google"
         rowDictationLanguage?.visibility = if (engine == "google") View.VISIBLE else View.GONE
+        updateSetupStates()
+    }
+
+    // While on-device Whisper is selected and no model is installed at all,
+    // its label is flagged (the style turns it the theme's error color) and
+    // the cog becomes Install; once any model is installed it is a plain cog.
+    // API Voice Service does the same with Set Up until it is set up.
+    private fun updateSetupStates() {
+        radioVoiceInputWhisperLocal?.let { radio ->
+            val needsInstall = radio.isChecked && LocalWhisperStorage.installedModels(this).isEmpty()
+            radio.isActivated = needsInstall
+            cogVoiceInputWhisperLocal?.visibility = if (needsInstall) View.GONE else View.VISIBLE
+            btnVoiceInputWhisperLocalInstall?.visibility = if (needsInstall) View.VISIBLE else View.GONE
+        }
+        radioVoiceInputWhisperCloud?.let { radio ->
+            val needsSetup = radio.isChecked && !ApiSttSettings.isConfigured(this)
+            radio.isActivated = needsSetup
+            cogVoiceInputApi?.visibility = if (needsSetup) View.GONE else View.VISIBLE
+            btnVoiceInputApiSetup?.visibility = if (needsSetup) View.VISIBLE else View.GONE
+        }
     }
 
     private fun onVoiceInputPicked(engine: String) {
         applyVoiceInputSelection(engine)
         preferences?.setAudioModel(engine)
-        if (engine == "whisper-local" && !hasActiveLocalWhisperModel()) {
-            startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
-        }
-    }
-
-    // True only when the stored active model is one we know and its file is
-    // actually on disk, so a stale selection pointing at a deleted model still
-    // sends the user to the screen to pick one.
-    private fun hasActiveLocalWhisperModel(): Boolean {
-        val activeId = preferences?.getActiveLocalWhisperModel() ?: ""
-        if (activeId.isEmpty()) return false
-        val model = LocalWhisperModels.byId(activeId) ?: return false
-        return LocalWhisperStorage.isInstalled(this, model)
     }
 
     // Voice-activity-detection method as inline radios (Silero / Energy /
@@ -445,6 +481,7 @@ class VoiceSettingsActivity : SettingsPageActivity() {
     override fun onResume() {
         super.onResume()
         updateVoiceBrowserRow()
+        updateSetupStates()
     }
 
     private fun isDarkThemeEnabled(): Boolean {

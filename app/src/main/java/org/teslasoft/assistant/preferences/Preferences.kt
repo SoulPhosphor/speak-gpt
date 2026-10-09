@@ -808,7 +808,7 @@ class Preferences internal constructor(
      *
      * Recognized values:
      *  - "google"        — Android on-device dictation (default)
-     *  - "whisper"       — paid OpenAI Whisper cloud API
+     *  - "whisper"       — API Voice Service (user-configured API speech-to-text)
      *  - "whisper-local" — on-device whisper.cpp (user must download a model)
      *
      * Older releases stored this inside settings.<chatId> and seeded each new

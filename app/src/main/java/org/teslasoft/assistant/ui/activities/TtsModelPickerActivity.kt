@@ -11,6 +11,7 @@ import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.stt.api.SttWording
 import org.teslasoft.assistant.tts.api.*
 
 /** Focused View All purpose. Shares presentation, never the chat adapter's actions or state. */
@@ -93,6 +94,7 @@ class TtsModelPickerActivity : TtsPickerActivity() {
         catalog = TtsModelCatalog(emptyList(), false)
         render()
         findViewById<View>(R.id.progressBar).visibility = View.VISIBLE
+        if (transcription) { loadTranscription(); return }
         discover(target, TtsOperation.MODELS, { source, token ->
             TtsDiscoveryClient().models(source, token).also {
                 if (it.models.isEmpty()) throw TtsException(TtsFailure(TtsOperation.MODELS,
@@ -110,10 +112,28 @@ class TtsModelPickerActivity : TtsPickerActivity() {
         })
     }
 
+    // An endpoint that reports no speech-to-text models gets the owner-approved
+    // explanation in place of the list, not an empty-list error.
+    private fun loadTranscription() {
+        discover(target, TtsOperation.MODELS, { source, token ->
+            TtsDiscoveryClient().transcriptionModels(source, token)
+        }, {
+            catalog = it; loaded = true
+            findViewById<View>(R.id.progressBar).visibility = View.GONE
+            render()
+        }, {
+            findViewById<View>(R.id.progressBar).visibility = View.GONE
+            empty.text = SttWording.adapt(TtsFailures.message(it).explanation)
+            empty.visibility = View.VISIBLE
+            showFailure(it, ::load)
+        })
+    }
+
     private fun render() {
         rows = TtsPickerPresentation.models(catalog, query)
         adapter.notifyDataSetChanged()
-        empty.setText(R.string.tts_no_matching_models)
+        empty.setText(if (transcription && catalog.models.isEmpty()) R.string.stt_no_models_detected
+            else R.string.tts_no_matching_models)
         empty.visibility = if (loaded && rows.isEmpty()) View.VISIBLE else View.GONE
     }
 

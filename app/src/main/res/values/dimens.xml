@@ -155,4 +155,7 @@
     <dimen name="info_button_size">40dp</dimen>
     <dimen name="info_button_gap">2dp</dimen>
     <dimen name="info_button_padding">8dp</dimen>
+    <!-- Removable-entry list: ten rows visible before the box scrolls. -->
+    <dimen name="removable_list_row_height">44dp</dimen>
+    <dimen name="removable_list_max_height">448dp</dimen>
 </resources>

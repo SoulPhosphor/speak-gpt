@@ -175,9 +175,10 @@
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
-            <!-- Voice input engine: stacked single-choice radios. Google
-                 Dictation is last so its language selector appears at the
-                 bottom of the group and pushes no radios down. -->
+            <!-- Voice input engine: stacked single-choice radios. API Voice
+                 Service first, Google Dictation, then on-device Whisper last
+                 because some phones cannot run it. Rows with a trailing gear
+                 are horizontal wrappers, so selection is managed in code. -->
             <TextView
                 style="@style/Widget.App.Field.Label"
                 android:layout_marginStart="20dp"
@@ -192,17 +193,43 @@
                 android:orientation="vertical"
                 android:paddingHorizontal="20dp">
 
-                <RadioButton
-                    android:id="@+id/radio_voice_input_whisper_cloud"
-                    style="@style/Widget.App.Row.Radio"
-                    android:text="@string/voice_engine_whisper_cloud" />
+                <!-- API Voice Service: the gear opens its setup screen; while
+                     it is selected but not set up, the gear becomes Set Up. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <!-- On-device Whisper gets a trailing cog that opens the
-                     on-device Whisper screen. The cog is a separate control:
-                     tapping it navigates without changing the selected engine.
-                     The radio's row is a horizontal wrapper so the cog can sit
-                     beside it; engine selection is managed in code, so the
-                     wrapped radio does not need RadioGroup's auto-exclusion. -->
+                    <RadioButton
+                        android:id="@+id/radio_voice_input_whisper_cloud"
+                        style="@style/Widget.App.Row.Radio.Flaggable"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:text="@string/voice_engine_api_service" />
+
+                    <ImageButton
+                        android:id="@+id/cog_voice_input_api"
+                        style="@style/Widget.App.Row.Cog"
+                        android:contentDescription="@string/api_stt_title" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_voice_input_api_setup"
+                        style="@style/AppButton.Primary.Inline"
+                        android:text="@string/voice_engine_api_setup"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <RadioButton
+                    android:id="@+id/radio_voice_input_google"
+                    style="@style/Widget.App.Row.Radio"
+                    android:text="@string/voice_engine_google" />
+
+                <!-- On-device Whisper: the cog opens its screen without
+                     selecting it; while selected with no model installed, the
+                     cog becomes Install. On a phone that cannot run it, the
+                     unavailable row replaces the whole line. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -212,25 +239,45 @@
 
                     <RadioButton
                         android:id="@+id/radio_voice_input_whisper_local"
-                        style="@style/Widget.App.Row.Radio"
+                        style="@style/Widget.App.Row.Radio.Flaggable"
                         android:layout_width="0dp"
                         android:layout_weight="1"
                         android:text="@string/voice_engine_whisper_local" />
 
                     <ImageButton
                         android:id="@+id/cog_voice_input_whisper_local"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="@string/title_local_whisper"
-                        android:src="@drawable/ic_settings"
-                        android:tint="?attr/colorControlNormal" />
+                        style="@style/Widget.App.Row.Cog"
+                        android:contentDescription="@string/title_local_whisper" />
+
+                    <!-- Replaces the cog only while on-device Whisper is
+                         selected and no model is installed yet. -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_voice_input_whisper_local_install"
+                        style="@style/AppButton.Primary.Inline"
+                        android:text="@string/voice_engine_whisper_local_install"
+                        android:visibility="gone" />
                 </LinearLayout>
 
-                <RadioButton
-                    android:id="@+id/radio_voice_input_google"
-                    style="@style/Widget.App.Row.Radio"
-                    android:text="@string/voice_engine_google" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <RadioButton
+                        android:id="@+id/radio_voice_input_whisper_local_unavailable"
+                        style="@style/Widget.App.Row.Radio.Unavailable"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:enabled="false"
+                        android:text="@string/voice_engine_whisper_local" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.TrailingStatus.Error"
+                        android:text="@string/voice_engine_unavailable" />
+                </LinearLayout>
             </RadioGroup>
 
             <androidx.constraintlayout.widget.ConstraintLayout

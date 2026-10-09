@@ -59,6 +59,23 @@ object TtsCatalogParser {
         return TtsModelCatalog(models, readable && models.isNotEmpty())
     }
 
+    /** Speech-to-text models: only an explicit `transcription` output modality is evidence. A service
+     * whose model list carries no modality data yields an empty catalog rather than a guess. */
+    fun transcriptionModels(body: String): TtsModelCatalog {
+        val root = objectBody(body)
+        val data = root.getAsJsonArrayOrNull("data") ?: throw IllegalArgumentException("Missing data array")
+        val models = data.mapNotNull { element ->
+            val obj = element.objectOrNull() ?: return@mapNotNull null
+            val id = obj.text("id") ?: return@mapNotNull null
+            val output = strings(obj.get("architecture").objectOrNull()?.get("output_modalities")) +
+                strings(obj.get("output_modalities"))
+            if ("transcription" !in output) return@mapNotNull null
+            TtsModel(id, obj.text("name") ?: id, setOf("output_modalities:transcription"),
+                TtsVoiceCatalog.Unavailable, obj.get("links").objectOrNull()?.text("details"))
+        }.distinctBy { it.id }
+        return TtsModelCatalog(models, complete(root) && models.isNotEmpty())
+    }
+
     /** An exact lookup still needs synthesis evidence; aliases retain the caller's requested ID. */
     fun exact(body: String, requestedId: String): TtsModel? {
         val root = objectBody(body)

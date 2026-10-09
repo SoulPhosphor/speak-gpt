@@ -575,6 +575,7 @@ Examples:
 - broad UI redesign work: `ui-redesign-plan.md`
 - document attachment work: `document-includes-plan.md`
 - local speech work: `whisper-local-plan.md`
+- API speech-to-text (API Voice Service): `api-voice-service-plan.md`
 
 For active memory work, do **not** treat the whole `Memory System/` directory
 as a cumulative specification. Follow the named active contract and only the

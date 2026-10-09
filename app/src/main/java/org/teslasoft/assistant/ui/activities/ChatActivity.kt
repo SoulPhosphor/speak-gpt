@@ -111,7 +111,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.aallam.ktoken.Encoding
 import com.aallam.ktoken.Tokenizer
-import com.aallam.openai.api.audio.TranscriptionRequest
 import com.aallam.openai.api.chat.ChatCompletionChunk
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.StreamOptions
@@ -128,7 +127,6 @@ import com.aallam.openai.api.chat.chatCompletionRequest
 import com.aallam.openai.api.completion.CompletionRequest
 import com.aallam.openai.api.completion.TextCompletion
 import com.aallam.openai.api.core.Role
-import com.aallam.openai.api.file.FileSource
 import com.aallam.openai.api.http.Timeout
 import com.aallam.openai.api.logging.LogLevel
 import com.aallam.openai.api.logging.Logger
@@ -241,6 +239,10 @@ import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
 import org.teslasoft.assistant.ui.util.IncludeStripController
 import org.teslasoft.assistant.ui.util.IncludesPopupController
+import org.teslasoft.assistant.ui.util.LocalWhisperMissingDialog
+import org.teslasoft.assistant.stt.api.ApiSttSettings
+import org.teslasoft.assistant.stt.api.SttTransport
+import org.teslasoft.assistant.stt.api.SttWording
 import org.teslasoft.assistant.util.AvatarRefreshCoordinator
 import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
@@ -374,8 +376,6 @@ import kotlin.time.Duration.Companion.seconds
 import androidx.core.content.edit
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.asContextElement
-import okio.FileSystem
-import okio.Path.Companion.toPath
 
 class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
@@ -689,6 +689,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // init AI
     private var ai: OpenAI? = null
     private var openAIAI: OpenAI? = null
+    private val sttGate = TtsRequestGate()
     private var key: String? = null
     private var openAIKey: String? = null
     private var model = ""
@@ -920,6 +921,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun killAllProcesses() {
         onSpeechResultsScope?.coroutineContext?.cancel(CancellationException("Killed"))
+        // The upload runs as a blocking call, so cancel its socket too.
+        sttGate.cancel()
         whisperScope?.coroutineContext?.cancel(CancellationException("Killed"))
         whisperPreloadScope?.coroutineContext?.cancel(CancellationException("Killed"))
         processRecordingScope?.coroutineContext?.cancel(CancellationException("Killed"))
@@ -2469,7 +2472,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val permissionResultLauncherV2 = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         run {
             if (result.resultCode == RESULT_OK) {
-                startWhisper()
+                // Resume the engine that asked, through its own checks: an
+                // on-device selection must never start an API upload.
+                when (preferences?.getEffectiveAudioModel()) {
+                    "whisper" -> if (ApiSttSettings.isConfigured(this)) startWhisper() else {
+                        micIdle()
+                        isRecording = false
+                        showApiVoiceServiceMissingDialog()
+                    }
+                    "whisper-local" -> {
+                        isRecording = false
+                        handleLocalWhisperSpeechRecognition()
+                    }
+                    else -> {
+                        micIdle()
+                        isRecording = false
+                    }
+                }
             }
         }
     }
@@ -6410,10 +6429,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     @Suppress("DEPRECATION")
     private fun startWhisper() {
-        if (openAIKey == null) {
-            openAIMissing("whisper", "")
-            return
-        }
         // Arm-time permission check (the tap entry point checks too; this
         // covers arms that don't come through it). Without the permission
         // MediaRecorder just throws, which used to read as a generic failure.
@@ -6490,6 +6505,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             whisperScope?.launch {
                 progress?.setOnClickListener {
+                    sttGate.cancel()
                     cancel()
                     restoreUIState()
                 }
@@ -6508,14 +6524,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private suspend fun processRecording() {
         try {
-            val transcriptionRequest = TranscriptionRequest(
-                audio = FileSource(
-                    path = "${externalCacheDir?.absolutePath}/tmp.m4a".toPath(),
-                    fileSystem = FileSystem.SYSTEM
-                ),
-                model = ModelId("whisper-1"),
-            )
-            val transcription = openAIAI?.transcription(transcriptionRequest)!!.text
+            val transcription = transcribeWithApiVoiceService() ?: return
 
             if (transcription.trim() == "") {
                 restoreUIState()
@@ -6559,10 +6568,63 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     insertTranscriptIntoBox(transcription)
                 }
             }
+        } catch (e: CancellationException) {
+            // A Stop the user asked for is not a recording failure.
+            throw e
         } catch (_: Exception) {
             Toast.makeText(this, "Failed to record audio", Toast.LENGTH_SHORT).show()
             restoreUIState()
         }
+    }
+
+    // Sends the finished recording to the API Voice Service. On failure the
+    // specific cause is shown and null is returned; nothing is typed or sent.
+    private suspend fun transcribeWithApiVoiceService(): String? {
+        val app = applicationContext
+        val audioPath = "${externalCacheDir?.absolutePath}/tmp.m4a"
+        val token = sttGate.begin()
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                val settings = ApiSttSettings.get(app)
+                val source = TtsAndroidServices.resolver(app).resolve(settings.target)
+                val language = settings.language.takeIf { it != ApiSttSettings.LANGUAGE_AUTOMATIC }
+                SttTransport().transcribe(source, java.io.File(audioPath), "m4a", language,
+                    settings.vocabulary, token)
+            }
+        }
+        val error = result.exceptionOrNull() ?: return result.getOrNull()
+        if (error is CancellationException) throw error
+        restoreUIState()
+        showTranscriptionFailed(error)
+        return null
+    }
+
+    private fun showTranscriptionFailed(error: Throwable) {
+        if (isFinishing || isDestroyed) return
+        val failure = (error as? TtsException)?.failure
+        val reason = if (failure != null) SttWording.adapt(TtsAndroidServices.dialogMessage(this, failure))
+            else getString(R.string.api_stt_transcription_unknown)
+        val actions = layoutInflater.inflate(R.layout.dialog_single_action, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.api_stt_transcription_failed_title)
+            .setMessage(reason + "\n\n" + getString(R.string.api_stt_transcription_nothing_added))
+            .setView(actions)
+            .create()
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_action).apply {
+            setText(R.string.btn_ok)
+            setOnClickListener { dialog.dismiss() }
+        }
+        dialog.show()
+    }
+
+    private fun showApiVoiceServiceMissingDialog() {
+        LocalWhisperMissingDialog.showApiMissing(
+            this,
+            whisperSupported = org.teslasoft.assistant.stt.NativeCpuSupport.isSupported(),
+            onDownload = { startActivity(Intent(this, LocalWhisperModelsActivity::class.java)) },
+            onUseGoogle = { preferences?.setAudioModel("google") },
+            onSetUpApi = { startActivity(Intent(this, ApiVoiceServiceActivity::class.java)) }
+        )
     }
 
     private fun handleWhisperSpeechRecognition() {
@@ -6571,6 +6633,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             isRecording = false
             stopWhisper()
         } else {
+            if (!ApiSttSettings.isConfigured(this)) {
+                showApiVoiceServiceMissingDialog()
+                return
+            }
             micRecording()
             isRecording = true
 
@@ -6609,27 +6675,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         // Pre-A55/A75 arm64 CPUs can't run the shipped native lib (built
-        // with armv8.2 dotprod+fp16) without SIGILL. Detect early and fall
-        // back to cloud Whisper so unsupported devices get a transcript
-        // instead of silently recording into a void (or in hands-free,
-        // looping no-result turns forever).
+        // with armv8.2 dotprod+fp16) without SIGILL. A leftover on-device
+        // selection on such a phone moves to Google Dictation (owner ruling,
+        // Oct 9 2026); settings shows on-device Whisper as Unavailable.
         if (!org.teslasoft.assistant.stt.NativeCpuSupport.isSupported()) {
-            Toast.makeText(this, R.string.local_whisper_no_model_snackbar, Toast.LENGTH_LONG).show()
-            handleWhisperSpeechRecognition()
+            preferences?.setAudioModel("google")
+            handleGoogleSpeechRecognition()
             return
         }
 
-        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
-        val installed = activeModel.isNotEmpty() &&
-                LocalWhisperModels.byId(activeModel)?.let {
-                    LocalWhisperStorage.isInstalled(this, it)
-                } == true
-        if (!installed) {
-            // Selected on-device but no model on disk yet → fall back to
-            // cloud Whisper for this utterance so the user still gets a
-            // transcript. UI-level snackbar mirrors what the plan calls for.
-            Toast.makeText(this, R.string.local_whisper_no_model_snackbar, Toast.LENGTH_LONG).show()
-            handleWhisperSpeechRecognition()
+        if (!hasActiveLocalWhisperModel()) {
+            // Never fall back to paid cloud Whisper: let the user pick.
+            showLocalWhisperMissingDialog()
             return
         }
 
@@ -6645,6 +6702,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     .setAction(Intent.ACTION_VIEW)
             )
         }
+    }
+
+    // Selected on-device Whisper is usable only when the active model is one
+    // we know and its file is actually on disk.
+    private fun hasActiveLocalWhisperModel(): Boolean {
+        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+        return activeModel.isNotEmpty() &&
+                LocalWhisperModels.byId(activeModel)?.let {
+                    LocalWhisperStorage.isInstalled(this, it)
+                } == true
+    }
+
+    private fun showLocalWhisperMissingDialog() {
+        LocalWhisperMissingDialog.show(
+            this,
+            apiConfigured = ApiSttSettings.isConfigured(this),
+            onUseApi = { preferences?.setAudioModel("whisper") },
+            onSetUpApi = { startActivity(Intent(this, ApiVoiceServiceActivity::class.java)) },
+            onUseGoogle = { preferences?.setAudioModel("google") },
+            onDownload = { startActivity(Intent(this, LocalWhisperModelsActivity::class.java)) }
+        )
     }
 
     /** True iff RECORD_AUDIO is granted right now. Re-checked before every arm
@@ -10386,12 +10464,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             cancelAllAiActivity("conversation button tap (busy) on this screen")
             return
         }
-        val engine = preferences!!.getEffectiveAudioModel()
+        var engine = preferences!!.getEffectiveAudioModel()
+        if (engine == "whisper-local" && !org.teslasoft.assistant.stt.NativeCpuSupport.isSupported()) {
+            preferences?.setAudioModel("google")
+            engine = "google"
+        }
         if (engine != "google" && engine != "whisper-local") {
             // Cloud Whisper: no end-of-speech detection → no loop. Fall back to a
             // single capture, exactly like the mic button, without engaging
             // hands-free.
             handleWhisperSpeechRecognition()
+            return
+        }
+        if (engine == "whisper-local" && !hasActiveLocalWhisperModel()) {
+            showLocalWhisperMissingDialog()
             return
         }
         preferences?.setHandsFreeMode(true)
