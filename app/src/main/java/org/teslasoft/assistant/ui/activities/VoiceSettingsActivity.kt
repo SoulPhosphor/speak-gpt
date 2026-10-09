@@ -52,7 +52,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.fragments.dialogs.LanguageSelectorDialogFragment
-import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.util.WindowInsetsUtil
@@ -279,9 +278,9 @@ class VoiceSettingsActivity : SettingsPageActivity() {
 
         // The radios manage mutual exclusion by hand because the on-device
         // Whisper row carries a trailing cog and so isn't a direct RadioGroup
-        // child. Picking on-device Whisper opens its screen only when no model
-        // is active yet, so a user is never stranded with nothing to transcribe
-        // with; once a model is active, picking it just selects the engine.
+        // child. Picking on-device Whisper only selects the engine; with no
+        // model installed the row offers Install instead of opening the
+        // download screen automatically.
         radioVoiceInputWhisperCloud?.setOnClickListener { onVoiceInputPicked("whisper") }
         radioVoiceInputWhisperLocal?.setOnClickListener { onVoiceInputPicked("whisper-local") }
         radioVoiceInputGoogle?.setOnClickListener { onVoiceInputPicked("google") }
@@ -377,19 +376,6 @@ class VoiceSettingsActivity : SettingsPageActivity() {
     private fun onVoiceInputPicked(engine: String) {
         applyVoiceInputSelection(engine)
         preferences?.setAudioModel(engine)
-        if (engine == "whisper-local" && !hasActiveLocalWhisperModel()) {
-            startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
-        }
-    }
-
-    // True only when the stored active model is one we know and its file is
-    // actually on disk, so a stale selection pointing at a deleted model still
-    // sends the user to the screen to pick one.
-    private fun hasActiveLocalWhisperModel(): Boolean {
-        val activeId = preferences?.getActiveLocalWhisperModel() ?: ""
-        if (activeId.isEmpty()) return false
-        val model = LocalWhisperModels.byId(activeId) ?: return false
-        return LocalWhisperStorage.isInstalled(this, model)
     }
 
     // Voice-activity-detection method as inline radios (Silero / Energy /
