@@ -289,6 +289,20 @@ dialog buttons rather than the platform `android.R.string.ok`, so a single
 resource carries the approved spelling everywhere. Do not hardcode the literal
 `OK` in a layout, a Kotlin string, or a translation.
 
+## Conversation navigation motion
+
+New Chat and saved-chat selections in the drawer share
+`ChatDrawerController.openConversationFromDrawer`: suppress the activity's
+window animation and reveal the conversation by closing its drawer. Selecting
+the currently open conversation only closes the existing drawer.
+
+Settings retains its right-edge slide through the shared `settings_slide_*`
+animation resources and `drawer_slide_duration`. Returning to Chat must retain
+the current activity, transcript, composer, and loaded presentation; do not
+recreate it from a Settings result callback. Resume refreshes changed request
+settings and presentation in place. Unchanged row appearance, avatars, and
+identity styles must not trigger full message rebinds.
+
 ## Navigation and settings rows
 
 A navigation row is assembled from shared pieces. Do not copy a completed row's raw XML into another screen.

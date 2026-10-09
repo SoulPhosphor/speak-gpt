@@ -655,6 +655,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var transcriptionInProgress = false
     private var keyboardMode = false
     private var isTTSInitialized = false
+    private var appliedDeviceSpeechSettings: List<Any?>? = null
     private var autoLangDetect = false
     private var cancelState = false
     private var deletingChat = false
@@ -1548,7 +1549,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
             logitBiasPreferences = LogitBiasPreferences(this, preferences?.getLogitBiasesConfigId()!!)
+            val previousConnection = endpointConnection(apiEndpointObject)
             apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
+            key = apiEndpointObject?.apiKey
+            openAIKey = key
+            loadModel()
+            autoLangDetect = preferences!!.getAutoLangDetect()
+            if (isTTSInitialized && deviceSpeechSettings() != appliedDeviceSpeechSettings) ttsPostInit()
+            if (apiEndpointObject != null && endpointConnection(apiEndpointObject) != previousConnection) {
+                initAI(refreshOnly = true)
+            }
         }
 
         // Summarizer Settings may have changed while we were away (endpoint
@@ -1562,9 +1572,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (!summarizerCycleHeld && preferences?.getSummarizerCatchUpPending() == true) {
                 summarizerCycle(force = true)
             }
-            // Appearance may have changed while Settings covered this screen.
-            // Rebind existing rows so Staggered Responses takes effect at once.
-            adapter?.notifyDataSetChanged()
+            // Keep the rendered conversation intact on ordinary returns.
+            // Rebind only when row appearance actually changed in Settings.
+            adapter?.refreshAppearanceIfChanged()
         }
 
         // Catch images that finished while the screen was detached, and retry
@@ -2375,7 +2385,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }, 750)
     }
 
+    private fun deviceSpeechSettings(): List<Any?>? = preferences?.let {
+        listOf(it.getTtsSpeechRate(), it.getTtsPitch(), it.getAutoLangDetect(),
+            it.getLanguage(), it.getVoice())
+    }
+
     private fun ttsPostInit() {
+        appliedDeviceSpeechSettings = deviceSpeechSettings()
         // Delivery tuning (advanced voice settings). Device-TTS only; the
         // OpenAI voice renders server-side and ignores these. Applied with
         // accept/reject verification — see applyTtsDeliveryTuning.
@@ -2450,8 +2466,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
     }
-
-    private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { recreate() }
 
     // Opened from [promptCreateFirstCompanion] when a new chat has no companion
     // to open with because none exist yet. On a companion being created the
@@ -2678,7 +2692,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             this,
             findViewById(R.id.expandable_window_root)
         ) { chatId }
-        // A chat started from the drawer's New Chat is revealed as the drawer pulls back.
+        // A new or saved chat opened from the drawer is revealed as the drawer pulls back.
         if (intent.getBooleanExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER, false)) {
             intent.removeExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER)
             drawerController?.revealChat()
@@ -5018,7 +5032,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         btnSettings?.setOnClickListener {
             // Settings plays its own slide from the right, the same as from the drawer.
-            settingsLauncher.launch(
+            // Resume refreshes changed preferences in place; returning from
+            // Settings must not destroy and reload the visible conversation.
+            startActivity(
                 Intent(this, SettingsActivity::class.java).setAction(Intent.ACTION_VIEW).putExtra("chatId", chatId)
             )
         }
@@ -7830,7 +7846,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    private fun initAI() {
+    /** Values that require rebuilding request clients, without reloading the UI. */
+    private fun endpointConnection(endpoint: ApiEndpointObject?): List<Any?>? = endpoint?.let {
+        listOf(it.host, it.chatEndpoint, it.apiKey, it.authType,
+            it.connectTimeoutSeconds, it.responseTimeoutSeconds)
+    }
+
+    private fun initAI(refreshOnly: Boolean = false) {
         if (key == null) {
             startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
             finishActivity()
@@ -8067,7 +8089,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
             openAIAI = OpenAI(configOpenAI)
             loadModel()
-            setup()
+            // Client refresh must never seed a prompt or start another request.
+            if (!refreshOnly) setup()
         }
     }
 
