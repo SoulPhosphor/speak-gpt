@@ -76,8 +76,12 @@
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <!-- Routing Type: Automatic / Preferred / Only, gear opens the
-                 provider picker for the chosen speech-to-text model. -->
-            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+                 provider picker for the chosen speech-to-text model. Shown
+                 only for OpenRouter endpoints (single-provider services have
+                 nothing to route). -->
+            <LinearLayout
+                android:id="@+id/api_stt_routing_row"
+                style="@style/Widget.App.Page.ControlRow">
 
                 <TextView
                     style="@style/Widget.App.Dropdown.CanonicalLabel"

@@ -33,7 +33,8 @@ Simple header (back + title "API Voice Service"), then:
    endpoint."
 3. **Routing Type** — Automatic / Preferred / Only, and a gear that opens the
    provider picker for the chosen model (so it lists only that endpoint's
-   providers for that speech-to-text model).
+   providers for that speech-to-text model). Shown only for OpenRouter
+   endpoints; a single-provider service such as OpenAI has nothing to route.
 4. **Spoken Language** — Automatic (default) or an ISO 639-1 language from
    the platform list. Automatic sends no language.
 5. **Automatic Punctuation** — shown on and greyed out. Not wired yet.
@@ -79,6 +80,10 @@ Simple header (back + title "API Voice Service"), then:
 (`ApiSttSettingsTest`).
 
 ## Not built yet — remember these
+
+- **NanoGPT support:** the owner wants API Voice Service to work with NanoGPT.
+  Not started; needs its own questions (how NanoGPT lists speech-to-text
+  models, its request format, routing, and vocabulary) before any work.
 
 - **Automatic Punctuation:** wire the toggle up for services that actually
   offer a punctuation switch (for example Deepgram, AssemblyAI, Google Cloud,

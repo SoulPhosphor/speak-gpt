@@ -44,6 +44,7 @@ import java.util.Locale
 class ApiVoiceServiceActivity : SettingsPageActivity() {
     private lateinit var settings: ApiSttSettings
     private var endpoints: List<TtsEndpointChoice> = emptyList()
+    private var openRouterIds: Set<String> = emptySet()
     private val modes = TtsRoutingMode.entries
     private val modelPicker = registerForActivityResult(SttModelPickerContract()) { result ->
         val current = settings.target
@@ -129,10 +130,11 @@ class ApiVoiceServiceActivity : SettingsPageActivity() {
 
     override fun onStart() {
         super.onStart()
-        endpoints = try {
+        val profiles = try {
             ApiEndpointPreferences.getApiEndpointPreferences(this).getApiEndpointsList(this)
-                .map { TtsEndpointChoice(it.id, it.label.ifBlank { it.id }) }.sortedBy { it.label.lowercase() }
         } catch (_: Exception) { emptyList() }
+        endpoints = profiles.map { TtsEndpointChoice(it.id, it.label.ifBlank { it.id }) }.sortedBy { it.label.lowercase() }
+        openRouterIds = profiles.filter { it.hasOpenRouterCatalogAuthority() }.map { it.id }.toSet()
         // With a single endpoint there is nothing to choose: it is the endpoint.
         if (endpoints.size == 1 && settings.target.endpointId != endpoints[0].id) selectEndpoint(endpoints[0].id)
         render()
@@ -161,6 +163,9 @@ class ApiVoiceServiceActivity : SettingsPageActivity() {
             text = endpointLabel.orEmpty()
         }
         findViewById<TextView>(R.id.api_stt_model_value).text = t.modelId.ifBlank { select }
+        // Routing only means something where several providers serve a model.
+        findViewById<View>(R.id.api_stt_routing_row).visibility =
+            if (t.endpointId in openRouterIds) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.api_stt_routing_mode).apply {
             text = modeLabel(t.routing.mode)
             AppDropdown.sizeToOptions(this, modes.map(::modeLabel)) { availableWidth(this) }
