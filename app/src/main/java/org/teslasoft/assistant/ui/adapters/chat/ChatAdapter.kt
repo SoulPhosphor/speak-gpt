@@ -707,6 +707,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     open inner class ViewHolder(itemView: View, private val debugContext: Context) : RecyclerView.ViewHolder(itemView) {
+        // The message this row currently shows. A Message Details popup that
+        // waits on the user-token estimate opens only if the row still shows
+        // the same message, since scrolling can rebind the row meanwhile.
+        private var boundMessageId: String? = null
         private val ui: ConstraintLayout = itemView.findViewById(R.id.ui)
         private val icon: ImageView = itemView.findViewById(R.id.icon)
         // The icon's original XML backing (e.g. the assistant bubble's tonal
@@ -860,6 +864,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateActiveMemories(display)
             updateVersionNav(chatMessage, position)
 
+            boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
             btnDetails.setOnClickListener { anchor ->
                 if (!bulkActionMode) showMessageDetailsPopup(anchor, display)
             }
@@ -1172,13 +1177,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // Show User Tokens: no service reports one message's own tokens,
             // so the user's text is counted here and labelled an estimate.
             if (!isBot && preferences.getShowUserTokens() && text.isNotBlank() && !text.startsWith("~file:")) {
+                val requestedMessageId = boundMessageId
                 context.lifecycleScope.launch {
                     val count = try {
                         withContext(Dispatchers.Default) { userTokenizer().encode(text).size }
                     } catch (_: Exception) {
                         null
                     }
-                    if (anchor.isAttachedToWindow) showMessageDetailsPopup(anchor, chatMessage, count)
+                    if (anchor.isAttachedToWindow && boundMessageId == requestedMessageId) {
+                        showMessageDetailsPopup(anchor, chatMessage, count)
+                    }
                 }
                 return
             }

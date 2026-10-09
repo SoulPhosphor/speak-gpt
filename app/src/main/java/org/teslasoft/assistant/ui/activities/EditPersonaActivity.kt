@@ -557,6 +557,8 @@ class EditPersonaActivity : SettingsPageActivity() {
                 persona.chatNameFontId = stored.chatNameFontId
                 persona.chatNameSizeSp = stored.chatNameSizeSp
                 persona.chatNameFontStyle = stored.chatNameFontStyle
+                // No longer editable here, but still stored and backed up.
+                persona.autoLoadLastLoreBooks = stored.autoLoadLastLoreBooks
             }
         }
     }
