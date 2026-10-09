@@ -426,6 +426,24 @@ class Preferences internal constructor(
     }
 
     /**
+     * This chat's Always Speak Responses, set from Quick Settings (owner ruling,
+     * Oct 9 2026). A chat that has never set it follows the app-wide setting
+     * ([getNotSilence]); setting it here never changes that default. Stored as
+     * a string tri-state ("" = follow the default), like memory_enabled.
+     */
+    fun getChatAlwaysSpeak(): Boolean {
+        return when (getString("chat_always_speak", "")) {
+            "true" -> true
+            "false" -> false
+            else -> getNotSilence()
+        }
+    }
+
+    fun setChatAlwaysSpeak(enabled: Boolean) {
+        putString("chat_always_speak", if (enabled) "true" else "false")
+    }
+
+    /**
      * Migration-only reader for the removed Function Calling feature's
      * stored value (image-generation-rebuild-plan.md §15 removed the
      * feature; §14 seeds Let the AI Create Images from this value once).

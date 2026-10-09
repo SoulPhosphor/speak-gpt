@@ -13503,7 +13503,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // setting — turning Always-speak off must never break hands-free (owner
         // requirement). Ordinary turns are unchanged: st (a voice turn) or
         // Always-speak drive the readback.
-        val willReadAloud = st || preferences!!.getNotSilence() || handsFree
+        val willReadAloud = st || preferences!!.getChatAlwaysSpeak() || handsFree
 
         // TTS lifecycle: proves pronounce() was reached and a readback was
         // expected for this turn — the baseline every later TTS lifecycle

@@ -44,6 +44,9 @@
                      block. Its order and behavior remain unchanged. -->
                 <include layout="@layout/view_quick_settings_character_block" />
 
+                <!-- This chat's Always Speak Responses. -->
+                <include layout="@layout/view_quick_settings_voice_block" />
+
                 <!-- Frequently changed request routing. -->
                 <include layout="@layout/view_quick_settings_provider_block" />
 

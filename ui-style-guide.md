@@ -864,7 +864,9 @@ Keep the fill in the shared segment drawables; do not restore the old
 per-view Kotlin surface tints or hardcode a blue for one palette.
 
 The current vertical order is intentional: identity and character choices;
-model/provider/endpoint routing; memory controls; independent roleplay context;
+this chat's Always Speak Responses, a self-contained `Segment.Standalone`
+toggle (owner ruling, Oct 9 2026; it becomes a connected group if more rows
+join it); model/provider/endpoint routing; memory controls; independent roleplay context;
 the summarizer and its Summary, Compaction, and Image prompts (owner ruling,
 Oct 3 2026); generation parameters; Logit Bias and Seed; usage/cost; Save to Profile. Keep
 that order unless the owner explicitly changes it.
