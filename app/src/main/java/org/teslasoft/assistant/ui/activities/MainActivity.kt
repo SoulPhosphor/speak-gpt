@@ -144,7 +144,7 @@ class MainActivity : FragmentActivity() {
                     // already leaves the chat alone in it. Clearing the task as
                     // well only replays a full app-launch transition.
                     chatIntent.removeFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                        .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                    chatIntent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 }
                 startActivity(chatIntent)
             }
