@@ -103,12 +103,12 @@ object ReadableChatBackup {
                     logUnreadable(context, "the chat list could not be read (state ${listResult.state})")
                     return fail(staged, BuildResult.ChatsUnreadable)
                 }
-                val folderNames = if (format != Format.TEXT) {
-                    val navigation = org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository.get(context).snapshot()
-                    val snapshot = (navigation as? org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult.Success)?.value
-                    snapshot?.let(org.teslasoft.assistant.ui.chat.ChatExportFolders::names)
-                        ?: emptyMap()
-                } else emptyMap()
+                // All formats share one incremental baseline, so collect the same
+                // folder metadata even though only JSON writes it to the export.
+                val navigation = org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository.get(context).snapshot()
+                val snapshot = (navigation as? org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult.Success)?.value
+                val folderNames = snapshot?.let(org.teslasoft.assistant.ui.chat.ChatExportFolders::names)
+                    ?: emptyMap()
                 for (chat in listResult.chats) {
                     // Read the stored ID, with the same missing-ID compatibility
                     // fallback as the chat list. A title change is not a new chat.

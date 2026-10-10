@@ -97,7 +97,80 @@ class MostUsedChatModelTest {
         }
     }
 
-    @Test fun `pre-log durable request history is seeded only in memory`() {
+    @Test fun `newly logged regenerations do not hide older unlogged variants`() {
+        for (newModel in listOf("Claude", "Gemma 4")) {
+            val record = TurnUsageRecord(newModel, "provider")
+            val variants = listOf(
+                mapOf("responseModel" to "Gemma 4", "messageTime" to "10"),
+                mapOf("responseModel" to "Gemma 4", "messageTime" to "20"),
+                mapOf("responseModel" to newModel, "messageTime" to "30",
+                    TokenUsageAccounting.KEY_USAGE_RECORDS to TokenUsageAccounting.encodeRecords(listOf(record)))
+            )
+            val message = mapOf<String, Any>("isBot" to true, "message_id" to "same-reply",
+                "responseModel" to newModel, "variants" to com.google.gson.Gson().toJson(variants))
+            val entries = mutableListOf(
+                UsageLogEntry("new", UsageCategory.CHAT, "same-reply", 30L, record),
+                entry("other1", "Other model", messageId = "other")
+            )
+            if (newModel == "Gemma 4") entries.add(entry("other2", "Other model", messageId = "other"))
+            val log = UsageLogState(true, entries)
+            assertEquals("Gemma 4", MostUsedChatModel.select(log, listOf(message)))
+            // In the different-model case, two old Gemma replies beat a single
+            // Claude regeneration; in the same-model case all three must count.
+        }
+    }
+
+    @Test fun `durable snapshots already present in the log are counted once even before seeding`() {
+        val record = TurnUsageRecord("Gemma 4", "provider")
+        val message = mapOf<String, Any>("isBot" to true, "message_id" to "same-reply",
+            TokenUsageAccounting.KEY_USAGE_RECORDS to TokenUsageAccounting.encodeRecords(listOf(record)))
+        val log = UsageLogState(false, listOf(
+            UsageLogEntry("logged", UsageCategory.CHAT, "same-reply", 10L, record),
+            entry("other", "Other model", messageId = "other")
+        ))
+        assertEquals("Other model", MostUsedChatModel.select(log, listOf(message)))
+        assertFalse(log.seeded)
+    }
+
+    @Test fun `separately logged identical records preserve the number of requests`() {
+        val record = TurnUsageRecord("Gemma 4", "provider")
+        val message = mapOf<String, Any>("isBot" to true, "message_id" to "same-reply",
+            TokenUsageAccounting.KEY_USAGE_RECORDS to TokenUsageAccounting.encodeRecords(listOf(record, record)))
+        val log = UsageLogState(true, listOf(
+            UsageLogEntry("first", UsageCategory.CHAT, "same-reply", 10L, record),
+            UsageLogEntry("second", UsageCategory.CHAT, "same-reply", 20L, record),
+            entry("other", "Other model", messageId = "other")
+        ))
+        assertEquals("Gemma 4", MostUsedChatModel.select(log, listOf(message)))
+    }
+
+    @Test fun `mixed history already seeded into the log does not count legacy versions twice`() {
+        val record = TurnUsageRecord("Claude", "provider")
+        val message = mapOf<String, Any>("isBot" to true, "message_id" to "same-reply", "variants" to
+            com.google.gson.Gson().toJson(listOf(
+                mapOf("responseModel" to "Gemma 4"), mapOf("responseModel" to "Gemma 4"),
+                mapOf("responseModel" to "Claude", TokenUsageAccounting.KEY_USAGE_RECORDS to
+                    TokenUsageAccounting.encodeRecords(listOf(record)))
+            )))
+        val log = UsageLogState(true, listOf(
+            entry("old1", "Gemma 4"), entry("old2", "Gemma 4"),
+            UsageLogEntry("new", UsageCategory.CHAT, "same-reply", 30L, record),
+            entry("other1", "Other model", messageId = "other"),
+            entry("other2", "Other model", messageId = "other"),
+            entry("other3", "Other model", messageId = "other")
+        ))
+        assertEquals("Other model", MostUsedChatModel.select(log, listOf(message)))
+    }
+
+    @Test fun `frozen retry requests carried by a user message still contribute`() {
+        val record = TurnUsageRecord("Gemma 4", "provider")
+        val message = mapOf<String, Any>("isBot" to false,
+            TokenUsageAccounting.KEY_USAGE_RECORDS to TokenUsageAccounting.encodeRecords(listOf(record, record)))
+        val log = UsageLogState(true, listOf(entry("other", "Other model", messageId = "other")))
+        assertEquals("Gemma 4", MostUsedChatModel.select(log, listOf(message)))
+    }
+
+    @Test fun `pre-log durable request history contributes without changing stored logs`() {
         val records = listOf(TurnUsageRecord("Gemma 4", "provider"), TurnUsageRecord("Gemma 4", "provider"))
         val messages = listOf(mapOf<String, Any>("isBot" to true, "message_id" to "old-reply",
             TokenUsageAccounting.KEY_USAGE_RECORDS to TokenUsageAccounting.encodeRecords(records)))
