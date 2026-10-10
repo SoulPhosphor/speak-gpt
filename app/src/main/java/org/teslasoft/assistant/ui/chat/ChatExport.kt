@@ -8,6 +8,7 @@
 package org.teslasoft.assistant.ui.chat
 
 import com.google.gson.Gson
+import org.teslasoft.assistant.preferences.MessageBookmarks
 import java.text.DateFormat
 import java.util.Date
 import java.util.LinkedHashMap
@@ -40,7 +41,9 @@ data class ChatExportMessage(
     val content: String,
     val timestampMillis: Long? = null,
     val model: String? = null,
-    val tokenCount: Int? = null
+    val tokenCount: Int? = null,
+    val bookmarked: Boolean = false,
+    val messageId: String? = null
 )
 
 /**
@@ -48,6 +51,8 @@ data class ChatExportMessage(
  * a compatible record-per-message shape for JSON.
  */
 object ChatExportFormatter {
+
+    const val BOOKMARK_LABEL = "[Bookmark]"
 
     private const val MIDDLE_DOT = " · "
     private const val TOKEN_SUFFIX = " Tokens"
@@ -78,6 +83,7 @@ object ChatExportFormatter {
             parts["tokens"]
         ).joinToString(MIDDLE_DOT)
         return buildString {
+            if (message.bookmarked) append(BOOKMARK_LABEL).append('\n')
             append(message.name)
             if (metadata.isNotEmpty()) {
                 append('\n')
@@ -89,19 +95,24 @@ object ChatExportFormatter {
     /**
      * The JSON export remains an array of message records, matching the
      * dormant chat importer’s historical top-level shape while adding only
-     * the fields selected in the export dialog.
+     * the fields selected in the export dialog. Bookmark flags, stable message
+     * IDs, and available folder names always travel for downstream import.
      */
     fun formatJson(
         messages: List<ChatExportMessage>,
         options: ChatExportOptions,
         locale: Locale = Locale.getDefault(),
-        timeZone: TimeZone = TimeZone.getDefault()
+        timeZone: TimeZone = TimeZone.getDefault(),
+        folderName: String? = null
     ): String {
         val records = messages.map { message ->
             val record = LinkedHashMap<String, Any?>()
             record["message"] = message.content
             record["isBot"] = message.isCompanion
             record["name"] = message.name
+            record[MessageBookmarks.KEY] = message.bookmarked
+            message.messageId?.takeIf { it.isNotBlank() }?.let { record["message_id"] = it }
+            folderName?.let { record["folder_name"] = it }
 
             metadataParts(message, options, locale, timeZone).forEach { (key, value) ->
                 record[key] = value

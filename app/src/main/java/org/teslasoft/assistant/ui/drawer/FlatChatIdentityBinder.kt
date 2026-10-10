@@ -27,6 +27,7 @@ class FlatChatIdentityBinder(
     private val memory: TextView = itemView.findViewById(R.id.flat_chat_memory)
     private val imageFrame: View = itemView.findViewById(R.id.flat_chat_image_frame)
     private val image: ImageView = itemView.findViewById(R.id.flat_chat_image)
+    private val bookmarkIndicator: ImageView = itemView.findViewById(R.id.flat_chat_bookmark_indicator)
     private val bookmarkOverlay: ImageView = itemView.findViewById(R.id.flat_chat_bookmark_overlay)
 
     fun reset() {
@@ -36,6 +37,7 @@ class FlatChatIdentityBinder(
         memory.text = ""
         imageFrame.visibility = View.GONE
         bookmarkOverlay.visibility = View.GONE
+        bookmarkIndicator.visibility = View.GONE
         leading.visibility = View.GONE
         leading.setImageDrawable(null)
         ProfileImageBinder.bind(activity, image, null, ProfileImageShape.DEFAULT) {
@@ -45,7 +47,7 @@ class FlatChatIdentityBinder(
         title.setTypeface(null, android.graphics.Typeface.NORMAL)
     }
 
-    fun bind(chatId: String, displayTitle: String, pinned: Boolean, current: Boolean) {
+    fun bind(chatId: String, displayTitle: String, pinned: Boolean, current: Boolean, details: ChatListDetails? = null) {
         reset()
         title.text = displayTitle
         val chatPreferences = Preferences.getPreferences(activity, chatId)
@@ -69,10 +71,14 @@ class FlatChatIdentityBinder(
                 MaterialColors.getColor(leading, androidx.appcompat.R.attr.colorPrimary)
             )
         }
-        if (!displayPreferences.getHideModelNames()) {
-            model.visibility = View.VISIBLE
-            model.text = chatPreferences.getModel()
-        }
+        bookmarkIndicator.visibility = if (displayPreferences.getShowBookmarkIndicatorInChatList() &&
+            details?.hasBookmarks == true) View.VISIBLE else View.GONE
+        val metadata = ChatListDetails.metadata(
+            if (displayPreferences.getShowChatStartDateInChatList()) details?.startedAt else null,
+            if (displayPreferences.getShowModelNamesInChatList()) details?.mostUsedModel ?: chatPreferences.getModel() else null
+        )
+        model.text = metadata
+        model.visibility = if (metadata.isEmpty()) View.GONE else View.VISIBLE
         if (displayPreferences.getShowMemoryStatusOnChatList()) {
             val state = if (chatPreferences.isChatExcludedFromMemory()) "excluded" else memoryStates[chatId]
             if (state != null) {

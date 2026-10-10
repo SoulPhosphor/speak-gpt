@@ -515,6 +515,13 @@
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
+        <include layout="@layout/view_bookmark_navigation"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/action_bar" />
+
         <org.teslasoft.assistant.ui.chat.ConversationModeSelector
             android:id="@+id/conversation_mode_selector"
             style="@style/Widget.App.ConversationModeSelector"
@@ -523,7 +530,7 @@
             android:visibility="gone"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/action_bar"
+            app:layout_constraintTop_toBottomOf="@id/bookmark_navigation"
             tools:visibility="visible" />
 
         <!-- Database Health A2 banner (§15.2a): persistent, dismissible,

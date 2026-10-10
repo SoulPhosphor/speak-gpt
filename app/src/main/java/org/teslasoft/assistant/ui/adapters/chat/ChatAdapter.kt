@@ -263,6 +263,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val MENU_INCLUDE_REMOVE = 101
         private const val MENU_INCLUDE_CONDENSE = 102
         private const val MENU_INCLUDE_EDIT = 103
+        private const val MENU_MESSAGE_BOOKMARK = 108
         private const val MENU_MESSAGE_EDIT = 104
         private const val MENU_MESSAGE_SHARE = 105
         private const val MENU_MESSAGE_DELETE = 106
@@ -878,7 +879,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
 
             btnMore?.setOnClickListener { anchor ->
-                if (!bulkActionMode && chatMessage["isBot"] == true) {
+                if (!bulkActionMode) {
                     showMessageActionsPopup(anchor, chatMessage, position, display)
                 }
             }
@@ -2075,6 +2076,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 isImage
             )
             updateBubbleDecoration(isBot, showBubble)
+            val bookmarked = org.teslasoft.assistant.preferences.MessageBookmarks.isBookmarked(chatMessage)
+            val marker = if (bookmarked) {
+                androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.ic_bookmark_star)
+                    ?.mutate()?.apply {
+                        androidx.core.graphics.drawable.DrawableCompat.setTint(this, username.currentTextColor)
+                    }
+            } else null
+            // Physical left of the name, regardless of conversation placement.
+            username.setCompoundDrawablesWithIntrinsicBounds(marker, null, null, null)
         }
 
         private fun updateBubbleDecoration(isBot: Boolean, showBubble: Boolean) {
@@ -2429,7 +2439,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (!isGeneratedImage) {
                 popup.menu.add(0, MENU_MESSAGE_EDIT, 0, R.string.btn_msg_edit)
             }
-            // Directly below Edit: open the summary section this reply is in.
+            popup.menu.add(
+                0, MENU_MESSAGE_BOOKMARK, 0,
+                if (org.teslasoft.assistant.preferences.MessageBookmarks.isBookmarked(chatMessage))
+                    R.string.message_remove_bookmark else R.string.message_bookmark
+            )
+            // Summary section follows the user bookmark action.
             val owningSection = summarySectionOwners[
                 org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
             ]
@@ -2442,6 +2457,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 when (item.itemId) {
                     MENU_MESSAGE_EDIT -> {
                         openEditDialog(chatMessage, position)
+                        true
+                    }
+                    MENU_MESSAGE_BOOKMARK -> {
+                        val currentPosition = dataArray.indexOfFirst { it === chatMessage }
+                        if (currentPosition >= 0) listener?.onBookmarkToggle(currentPosition)
                         true
                     }
                     MENU_MESSAGE_SHARE -> {
@@ -3371,6 +3391,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  version silently; on an earlier turn the host confirms ("Make Current
          *  Response?") and truncates everything after that turn. */
         fun onMakeVersionCurrent(position: Int)
+
+        fun onBookmarkToggle(position: Int) {}
 
         fun onMessageEdited()
         fun onMessageDeleted()

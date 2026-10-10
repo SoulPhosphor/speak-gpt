@@ -22,11 +22,7 @@ import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
-/**
- * Chat Behavior (owner ruling, Sept 2026): opened from the Chat Behavior row
- * in Appearance. Optional chat controls, plus the Identity section that sets
- * how the user's own messages are labeled in chat.
- */
+/** Chat appearance, information, interface, and identity controls. */
 class ChatSettingsActivity : SettingsPageActivity() {
 
     private lateinit var preferences: Preferences
@@ -53,6 +49,37 @@ class ChatSettingsActivity : SettingsPageActivity() {
     private fun bindControls() {
         btnBack?.setOnClickListener { finish() }
 
+        bindSwitch(R.id.switch_staggered_responses, preferences.getStaggeredResponses()) {
+            preferences.setStaggeredResponses(it)
+        }
+        bindSwitch(R.id.switch_profile_images, preferences.getShowChatProfileImages()) {
+            preferences.setShowChatProfileImages(it)
+        }
+        bindSwitch(R.id.switch_names, preferences.getShowChatNames()) {
+            preferences.setShowChatNames(it)
+        }
+        bindSwitch(R.id.switch_ai_bubble, preferences.getShowAiBubble()) {
+            preferences.setShowAiBubble(it)
+        }
+        bindSwitch(R.id.switch_user_bubble, preferences.getShowUserBubble()) {
+            preferences.setShowUserBubble(it)
+        }
+        bindSwitch(R.id.switch_model_names, preferences.getShowModelNames()) {
+            preferences.setShowModelNames(it)
+        }
+        bindSwitch(R.id.switch_token_usage, preferences.getShowTokenUsage()) {
+            preferences.setShowTokenUsage(it)
+        }
+        bindSwitch(R.id.switch_user_tokens, preferences.getShowUserTokens()) {
+            preferences.setShowUserTokens(it)
+        }
+        bindSwitch(
+            R.id.switch_hardware_keyboard_shortcuts,
+            preferences.getHardwareKeyboardShortcuts()
+        ) {
+            preferences.setHardwareKeyboardShortcuts(it)
+        }
+
         findViewById<MaterialSwitch>(R.id.switch_top_positioned_audio_control)?.apply {
             isChecked = preferences.getTopPositionedAudioControl()
             setOnCheckedChangeListener { _, value ->
@@ -68,13 +95,6 @@ class ChatSettingsActivity : SettingsPageActivity() {
         findViewById<MaterialSwitch>(R.id.switch_show_thinking)?.apply {
             isChecked = preferences.getShowThinking()
             setOnCheckedChangeListener { _, value -> preferences.setShowThinking(value) }
-        }
-
-        findViewById<MaterialSwitch>(R.id.switch_chat_list_companion_images)?.apply {
-            isChecked = preferences.getShowCompanionImagesInChatList()
-            setOnCheckedChangeListener { _, value ->
-                preferences.setShowCompanionImagesInChatList(value)
-            }
         }
 
         findViewById<TextInputEditText>(R.id.field_default_username)?.apply {
@@ -94,6 +114,13 @@ class ChatSettingsActivity : SettingsPageActivity() {
             ChatSearchIndexManager.get(this).rebuild {
                 runOnUiThread { if (!isFinishing && !isDestroyed) button.isEnabled = true }
             }
+        }
+    }
+
+    private fun bindSwitch(id: Int, checked: Boolean, save: (Boolean) -> Unit) {
+        findViewById<MaterialSwitch>(id)?.apply {
+            isChecked = checked
+            setOnCheckedChangeListener { _, value -> save(value) }
         }
     }
 

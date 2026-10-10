@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/bookmark_navigation"
+    style="@style/Widget.App.Bookmark.Panel"
+    android:visibility="gone">
+
+    <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Bookmark.Row">
+        <ImageButton android:id="@+id/bookmark_close"
+            style="@style/Widget.App.Bookmark.Action"
+            android:contentDescription="@string/bookmark_close_navigation"
+            app:srcCompat="@drawable/ic_close"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+        <ImageButton android:id="@+id/bookmark_toggle_search"
+            style="@style/Widget.App.Bookmark.Action"
+            android:contentDescription="@string/bookmark_toggle_search"
+            app:srcCompat="@drawable/ic_search"
+            app:layout_constraintStart_toEndOf="@id/bookmark_close"
+            app:layout_constraintTop_toTopOf="parent" />
+        <TextView android:id="@+id/bookmark_count"
+            style="@style/Widget.App.Bookmark.Counter"
+            android:accessibilityLiveRegion="polite"
+            app:layout_constraintStart_toEndOf="@id/bookmark_toggle_search"
+            app:layout_constraintEnd_toStartOf="@id/bookmark_previous"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+        <ImageButton android:id="@+id/bookmark_previous"
+            style="@style/Widget.App.Bookmark.Action"
+            android:contentDescription="@string/bookmark_previous"
+            app:srcCompat="@drawable/ic_bookmark_double_arrow_up"
+            app:layout_constraintEnd_toStartOf="@id/bookmark_next"
+            app:layout_constraintTop_toTopOf="parent" />
+        <ImageButton android:id="@+id/bookmark_next"
+            style="@style/Widget.App.Bookmark.Action"
+            android:contentDescription="@string/bookmark_next"
+            app:srcCompat="@drawable/ic_bookmark_double_arrow_down"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/bookmark_search_strip"
+        style="@style/Widget.App.Bookmark.Row" android:visibility="gone">
+        <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/bookmark_search_box"
+            style="@style/Widget.App.Bookmark.SearchBox"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/bookmark_search_submit"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent">
+            <ImageView android:id="@+id/bookmark_search_icon"
+                style="@style/Widget.App.Bookmark.SearchIcon"
+                app:srcCompat="@drawable/ic_search"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+            <EditText android:id="@+id/bookmark_search_input"
+                style="@style/Widget.App.Bookmark.SearchField"
+                android:hint="@string/hint_search"
+                android:inputType="text"
+                android:imeOptions="actionSearch"
+                android:saveEnabled="false"
+                android:importantForAutofill="no"
+                app:layout_constraintStart_toEndOf="@id/bookmark_search_icon"
+                app:layout_constraintEnd_toStartOf="@id/bookmark_search_clear"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+            <ImageButton android:id="@+id/bookmark_search_clear"
+                style="@style/Widget.App.Bookmark.Action"
+                android:contentDescription="@string/bookmark_clear_search"
+                android:visibility="gone"
+                app:srcCompat="@drawable/ic_close"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+        <com.google.android.material.button.MaterialButton android:id="@+id/bookmark_search_submit"
+            style="@style/AppButton.Primary.Inline.BookmarkSearch"
+            android:text="@string/search_title"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

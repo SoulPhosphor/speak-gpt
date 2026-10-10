@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.backup.readable
 
 import org.json.JSONArray
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.MessageBookmarks
 import java.security.MessageDigest
 
 /**
@@ -91,6 +92,7 @@ object ReadableChatFormats {
         sb.append(title).append('\n')
         for (message in messages) {
             sb.append('\n')
+            if (MessageBookmarks.isBookmarked(message)) sb.append("[Bookmark]\n")
             val isBot = message["isBot"] == true || message["isBot"]?.toString() == "true"
             sb.append(if (isBot) "Assistant:" else "You:").append('\n')
             val text = message["message"]?.toString().orEmpty()
@@ -111,21 +113,26 @@ object ReadableChatFormats {
      * gets everything the app had). [messagesJson] is the Gson rendering of
      * the stored message list.
      */
-    fun formatJson(title: String, messagesJson: String): String {
+    fun formatJson(title: String, messagesJson: String, folderName: String? = null): String {
         val obj = JSONObject()
         obj.put("name", title)
         obj.put("messages", JSONArray(messagesJson))
+        folderName?.let { obj.put("folder_name", it) }
         return obj.toString(2)
     }
 
     /** Content fingerprint of one chat (title + full message JSON), hex
      *  SHA-256. Identical content -> identical fingerprint, so the
      *  incremental diff is exact. */
-    fun fingerprint(name: String, messagesJson: String): String {
+    fun fingerprint(name: String, messagesJson: String, folderName: String? = null): String {
         val md = MessageDigest.getInstance("SHA-256")
         md.update(name.toByteArray(Charsets.UTF_8))
         md.update(0)
         md.update(messagesJson.toByteArray(Charsets.UTF_8))
+        if (folderName != null) {
+            md.update(0)
+            md.update(folderName.toByteArray(Charsets.UTF_8))
+        }
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 

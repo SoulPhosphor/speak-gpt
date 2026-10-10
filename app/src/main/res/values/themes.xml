@@ -2656,4 +2656,75 @@
         <item name="android:inputType">numberDecimal|numberSigned</item>
     </style>
 
+    <!-- Chat bookmark presentation: appearance stays in the central theme layer. -->
+    <style name="Widget.App.Bookmark.Panel" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/bookmark_panel_side_padding</item>
+        <item name="android:paddingEnd">@dimen/bookmark_panel_side_padding</item>
+        <item name="android:background">?attr/colorSurface</item>
+    </style>
+    <style name="Widget.App.Bookmark.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">@dimen/bookmark_action_size</item>
+    </style>
+    <style name="Widget.App.Bookmark.Action" parent="">
+        <item name="android:layout_width">@dimen/bookmark_action_size</item>
+        <item name="android:layout_height">@dimen/bookmark_action_size</item>
+        <item name="android:padding">@dimen/bookmark_action_padding</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:tint">@color/bookmark_action_tint</item>
+    </style>
+    <style name="Widget.App.Bookmark.Counter" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">@dimen/bookmark_counter_text_size</item>
+    </style>
+    <style name="Widget.App.Bookmark.SearchBox" parent="Widget.App.Field.Box">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:padding">0dp</item>
+        <item name="android:minHeight">@dimen/bookmark_action_size</item>
+    </style>
+    <style name="Widget.App.Bookmark.SearchIcon" parent="Widget.App.Bookmark.Action">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:tint">?attr/appSubtleTextColor</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+    <style name="Widget.App.Bookmark.SearchField" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">@dimen/bookmark_action_size</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textColorHint">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/bookmark_counter_text_size</item>
+    </style>
+    <style name="AppButton.Primary.Inline.BookmarkSearch" parent="AppButton.Primary.Inline">
+        <item name="android:layout_marginStart">@dimen/bookmark_search_gap</item>
+    </style>
+    <style name="Widget.App.Bookmark.SpeakerMarker" parent="">
+        <item name="android:drawablePadding">@dimen/bookmark_marker_gap</item>
+    </style>
+    <style name="Widget.App.Bookmark.MessageAction" parent="Widget.App.Bookmark.Action">
+        <item name="android:layout_width">@dimen/bookmark_message_action_size</item>
+        <item name="android:layout_height">@dimen/bookmark_message_action_size</item>
+        <item name="android:layout_marginStart">@dimen/bookmark_search_gap</item>
+        <item name="android:padding">0dp</item>
+        <item name="android:descendantFocusability">blocksDescendants</item>
+    </style>
+    <style name="Widget.App.FlatChatRow.BookmarkIndicator" parent="">
+        <item name="android:layout_width">@dimen/chat_list_bookmark_size</item>
+        <item name="android:layout_height">@dimen/chat_list_bookmark_size</item>
+        <item name="android:layout_marginEnd">@dimen/bookmark_marker_gap</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+    <style name="Widget.App.Section.Title.BeforeField" parent="Widget.App.Section.Title">
+        <item name="android:paddingBottom">@dimen/section_title_field_gap</item>
+    </style>
 </resources>

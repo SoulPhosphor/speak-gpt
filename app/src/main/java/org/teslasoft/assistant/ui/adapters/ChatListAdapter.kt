@@ -51,6 +51,8 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.ui.drawer.ChatListDetails
+import org.teslasoft.assistant.ui.drawer.ChatListDetailsReader
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageShape
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.util.ProfileImageResolver
@@ -162,7 +164,8 @@ class ChatListAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = if (Preferences.getPreferences(mContext.requireActivity(), "").getHideModelNames()) {
+        val display = Preferences.getPreferences(mContext.requireActivity(), "")
+        val view = if (!display.getShowModelNamesInChatList() && !display.getShowChatStartDateInChatList()) {
             LayoutInflater.from(parent.context).inflate(R.layout.view_chat_name_min, parent, false)
         } else {
             LayoutInflater.from(parent.context).inflate(R.layout.view_chat_name, parent, false)
@@ -229,6 +232,8 @@ class ChatListAdapter(
         }
 
         val appContext = mContext.context?.applicationContext ?: return
+        val startedAt = dataArray.firstOrNull { ChatPreferences.storedChatId(it) == chatId }?.get("created_at")?.toLongOrNull()
+        val includeModel = Preferences.getPreferences(appContext, "").getShowModelNamesInChatList()
         previewLoader.execute {
             try {
                 val result = ChatPreferences.getChatPreferences()
@@ -238,6 +243,8 @@ class ChatListAdapter(
                 } else {
                     EMPTY_CHAT_PREVIEW
                 }
+                val details = ChatListDetailsReader.fromMessages(appContext, chatId, result.messages, startedAt, includeModel)
+                ChatPreferences.getChatPreferences().rememberChatStartDate(appContext, chatId, details.startedAt)
                 val noGoodReply =
                     if (MessageCompletionState.chatShowsErrorAvatar(result.messages)) "true" else "false"
 
@@ -252,12 +259,18 @@ class ChatListAdapter(
                     // The error-avatar flag drives the icon, which is not part
                     // of the lightweight preview payload — a change to it needs a
                     // full rebind, not just a preview-text refresh.
+                    val detailsChanged = chat["has_bookmarks"] != details.hasBookmarks.toString() ||
+                        chat["chat_started_at"] != details.startedAt?.toString().orEmpty() ||
+                        chat["most_used_model"] != details.mostUsedModel.orEmpty()
+                    chat["most_used_model"] = details.mostUsedModel.orEmpty()
+                    chat["has_bookmarks"] = details.hasBookmarks.toString()
+                    chat["chat_started_at"] = details.startedAt?.toString().orEmpty()
                     val avatarChanged = chat["no_good_reply"] != noGoodReply
                     val previewChanged = chat["first_message"] != preview
                     chat["first_message"] = preview
                     chat["no_good_reply"] = noGoodReply
                     when {
-                        avatarChanged -> notifyItemChanged(position)
+                        avatarChanged || detailsChanged -> notifyItemChanged(position)
                         previewChanged -> notifyItemChanged(position, PAYLOAD_CHAT_PREVIEW)
                     }
                 }
@@ -410,7 +423,22 @@ class ChatListAdapter(
 
             icon.contentDescription = name.text
 
-            modelName.text = model
+            val metadata = ChatListDetails.metadata(
+                if (preferences!!.getShowChatStartDateInChatList()) chatMessage["chat_started_at"]?.toLongOrNull() else null,
+                if (preferences!!.getShowModelNamesInChatList()) chatMessage["most_used_model"]?.takeIf { it.isNotBlank() } ?: model else null
+            )
+            modelName.text = metadata
+            modelName.visibility = if (metadata.isEmpty()) View.GONE else View.VISIBLE
+            val marker = if (preferences!!.getShowBookmarkIndicatorInChatList() && chatMessage["has_bookmarks"] == "true") {
+                androidx.appcompat.content.res.AppCompatResources.getDrawable(mContext.requireActivity(), R.drawable.ic_bookmark_star)
+                    ?.mutate()?.apply {
+                        val size = itemView.resources.getDimensionPixelSize(R.dimen.chat_list_bookmark_size)
+                        setBounds(0, 0, size, size)
+                        DrawableCompat.setTint(this, name.currentTextColor)
+                    }
+            } else null
+            name.compoundDrawablePadding = itemView.resources.getDimensionPixelSize(R.dimen.bookmark_marker_gap)
+            name.setCompoundDrawables(marker, null, null, null)
             initModelName(model)
 
             if (bulkActionMode && (projection["selected"] ?: "false") == "true") {

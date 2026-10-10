@@ -33,7 +33,7 @@ class UserTokenEstimateContractTest {
         assertTrue(strings.contains("<string name=\"appearance_token_usage\">Show AI Response Tokens</string>"))
         assertTrue(strings.contains("<string name=\"appearance_user_tokens\">Show User Tokens</string>"))
         assertTrue(strings.contains("<string name=\"appearance_user_tokens_hint\">Shows the estimated tokens for each user submitted text message.</string>"))
-        val appearance = source("src/main/res/layout/activity_appearance.xml")
+        val appearance = source("src/main/res/layout/activity_chat_settings.xml")
         assertTrue(appearance.indexOf("switch_token_usage") < appearance.indexOf("switch_user_tokens"))
     }
 }

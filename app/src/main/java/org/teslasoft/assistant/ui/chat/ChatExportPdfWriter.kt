@@ -80,7 +80,8 @@ object ChatExportPdfWriter {
         val markwon = ChatMarkdownRenderer.builder(context, BODY_TEXT_SIZE).build()
 
         messages.forEachIndexed { index, message ->
-            val nameStart = renderedDocument.length
+            val nameStart = renderedDocument.length +
+                if (message.bookmarked) ChatExportFormatter.BOOKMARK_LABEL.length + 1 else 0
             renderedDocument.append(
                 ChatExportFormatter.formatHeader(message, options, locale, timeZone)
             )

@@ -285,9 +285,9 @@ class ChatPresentationContractTest {
 
     @Test
     fun staggeredResponsesDefaultsOnAndMovesUserRowsToAssistantPlacement() {
-        val appearanceLayout = source("src/main/res/layout/activity_appearance.xml")
+        val appearanceLayout = source("src/main/res/layout/activity_chat_settings.xml")
         val appearanceActivity = source(
-            "src/main/java/org/teslasoft/assistant/ui/activities/AppearanceActivity.kt"
+            "src/main/java/org/teslasoft/assistant/ui/activities/ChatSettingsActivity.kt"
         )
         val preferences = source(
             "src/main/java/org/teslasoft/assistant/preferences/Preferences.kt"
@@ -301,11 +301,10 @@ class ChatPresentationContractTest {
         val strings = source("src/main/res/values/strings.xml")
 
         val staggered = appearanceLayout.indexOf("@+id/switch_staggered_responses")
-        val profileImages = appearanceLayout.indexOf("@+id/switch_profile_images")
-        assertTrue(
-            "Staggered Responses must be the first Appearance toggle",
-            staggered in 0 until profileImages
-        )
+        val interfaceHeader = appearanceLayout.indexOf("@string/chat_settings_section_interface")
+        val audioControl = appearanceLayout.indexOf("@+id/switch_top_positioned_audio_control")
+        assertTrue("Staggered Responses starts Chat Interface", interfaceHeader in 0 until staggered)
+        assertTrue("Audio control follows Staggered Responses", staggered in 0 until audioControl)
 
         val textColumnStart = appearanceLayout.lastIndexOf("<LinearLayout", staggered)
         val rowStart = appearanceLayout.lastIndexOf("<LinearLayout", textColumnStart - 1)

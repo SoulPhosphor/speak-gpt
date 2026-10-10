@@ -290,6 +290,9 @@ import org.teslasoft.assistant.ui.chat.ChatComposerLayout
 import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportFormatter
 import org.teslasoft.assistant.ui.chat.FirstMessagePortraitInset
+import org.teslasoft.assistant.preferences.MessageBookmarks
+import org.teslasoft.assistant.ui.chat.BookmarkNavigation
+import org.teslasoft.assistant.ui.chat.BookmarkNavigationController
 import org.teslasoft.assistant.ui.chat.ChatExportMessage
 import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
@@ -612,6 +615,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var blurToolView: BlurView? = null
 
     // Init chat
+    private var bookmarkNavigation: BookmarkNavigationController? = null
     private var messages: ArrayList<HashMap<String, Any>> = arrayListOf()
 
     /** True when this chat's stored history is LOCKED or CORRUPT (Round 4):
@@ -2604,6 +2608,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
         val chatPreferences = ChatPreferences.getChatPreferences()
         val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId)
+        chatPreferences.rememberChatStartDate(
+            this, preparedChatId,
+            org.teslasoft.assistant.ui.drawer.ChatListDetails.fromMessages(historyResult.messages).startedAt
+        )
         val coordinator = NewConversationCoordinator(this)
         var preparedPending = intent.getBooleanExtra("pendingConversation", false) ||
             coordinator.isPending(preparedChatId)
@@ -2868,6 +2876,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
+        bookmarkNavigation?.dispose()
+        bookmarkNavigation = null
         PortableRestoreOutcomeFlow.onActivityDestroyed(this)
         // Tombstone for the event log: when the OS (or a navigation flow)
         // destroys this screen while a voice conversation is live, everything
@@ -3117,6 +3127,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnSettings = findViewById(R.id.btn_settings)
         btnChatMenu = findViewById(R.id.btn_chat_menu)
         chat = findViewById(R.id.messages)
+        bookmarkNavigation?.dispose()
+        bookmarkNavigation = BookmarkNavigationController(
+            findViewById(R.id.bookmark_navigation), chat!!, adapter!!
+        ) {
+            messages.mapIndexedNotNull { position, message ->
+                if (MessageBookmarks.isBookmarked(message)) BookmarkNavigation.Target(
+                    org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
+                    position, message["message"]?.toString().orEmpty()
+                ) else null
+            }
+        }
         messageInput = findViewById(R.id.message_input)
         btnSend = findViewById(R.id.btn_send)
         progress = findViewById(R.id.progress)
@@ -5125,6 +5146,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         if (it.pinned) R.string.chat_menu_unpin else R.string.chat_menu_pin
                     )
                 }
+                if (bookmarkNavigation?.hasBookmarks() == true) {
+                    menu.add(Menu.NONE, 6, 1, R.string.navigate_bookmarks)
+                }
                 if (savedChat != null) {
                     menu.add(Menu.NONE, 1, 1, R.string.chat_menu_export)
                 }
@@ -5142,6 +5166,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                         .setChatPinned(chat.id, !chat.pinned)
                                 }
                             }
+                            true
+                        }
+                        6 -> {
+                            bookmarkNavigation?.open()
                             true
                         }
                         1 -> {
@@ -5229,6 +5257,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     } else {
                         ChatSpeakerNames.userName(this, message)
                     },
+                    bookmarked = MessageBookmarks.isBookmarked(message),
+                    messageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
                     content = message["message"]?.toString().orEmpty(),
                     timestampMillis = message[ChatAdapter.KEY_MESSAGE_TIME]
                         ?.toString()
@@ -5242,6 +5272,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
 
         lifecycleScope.launch {
+            val folderName = if (options.format == ChatExportFormat.JSON) withContext(Dispatchers.IO) {
+                val result = ChatNavigationRepository.get(this@ChatActivity).snapshot()
+                val snapshot = (result as? org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult.Success)?.value
+                snapshot?.let { org.teslasoft.assistant.ui.chat.ChatExportFolders.names(it)[chatId] }
+            } else null
             val bytes = withContext(Dispatchers.Default) {
                 val tokenized = if (
                     options.includeUserTokenCount || options.includeCompanionTokenCount
@@ -5269,7 +5304,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 when (options.format) {
                     ChatExportFormat.JSON ->
-                        ChatExportFormatter.formatJson(tokenized, options)
+                        ChatExportFormatter.formatJson(tokenized, options, folderName = folderName)
                             .toByteArray(Charsets.UTF_8)
                     ChatExportFormat.TEXT,
                     ChatExportFormat.MARKDOWN ->
@@ -8437,7 +8472,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** SYSTEM INITIALIZATION END **/
 
     private fun saveSettings(
-        synchronous: Boolean = false
+        synchronous: Boolean = false,
+        bookmarkChanged: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
         if (deletingChat) return ChatStorageHealth.WriteOutcome.FAILED
         // Guarded save (Round 4): ChatPreferences refuses the write when the
@@ -8466,7 +8502,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             this,
             chatId,
             persistableMessages,
-            synchronous = synchronous
+            synchronous = synchronous,
+            bookmarkChanged = bookmarkChanged
         )
     }
 
@@ -10732,6 +10769,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         map["message"] = message
         map["isBot"] = isBot
+        // A regenerated version retains the original turn's user bookmark.
+        // Copy at creation so removing it while the reply streams stays removed.
+        if (isBot && pendingRetryOriginal?.original?.let(MessageBookmarks::isBookmarked) == true) {
+            MessageBookmarks.set(map, true)
+        }
         map[org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection.MESSAGE_ID_KEY] =
             (if (isBot) pendingRetryMessageId else null) ?: java.util.UUID.randomUUID().toString()
 
@@ -14167,6 +14209,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         rebuildModelProjection()
         adapter?.notifyItemChanged(position)
         saveSettings()
+    }
+
+    override fun onBookmarkToggle(position: Int) {
+        if (chatStorageUnavailable || deletingChat) return
+        val message = messages.getOrNull(position) ?: return
+        val previous = message[MessageBookmarks.KEY]
+        MessageBookmarks.set(message, !MessageBookmarks.isBookmarked(message))
+        if (saveSettings(synchronous = true, bookmarkChanged = true) != ChatStorageHealth.WriteOutcome.OK) {
+            if (previous == null) message.remove(MessageBookmarks.KEY) else message[MessageBookmarks.KEY] = previous
+            Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
+        }
+        adapter?.notifyItemChanged(position)
+        bookmarkNavigation?.refresh()
     }
 
     override fun onResponseVersionChanged() {
