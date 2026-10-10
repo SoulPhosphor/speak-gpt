@@ -223,6 +223,11 @@ object ChatMergePlanner {
         for (key in ORGANIZATION_KEYS) {
             current.listRow[key]?.let { row[key] = it } ?: row.remove(key)
         }
+        // An older-format backup cannot erase a known creation date for this UUID.
+        if (row["created_at"]?.toLongOrNull()?.let { it > 0L } != true) {
+            current.listRow["created_at"]?.takeIf { it.toLongOrNull()?.let { date -> date > 0L } == true }
+                ?.let { row["created_at"] = it }
+        }
         return incoming.copy(listRow = row)
     }
 

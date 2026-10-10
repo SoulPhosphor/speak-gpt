@@ -36,6 +36,16 @@ class ChatMergePlannerTest {
     }
 
     @Test
+    fun newerOldFormatBackupPreservesTheKnownCreationDateWhenReplacingContent() {
+        val current = plan(chat(chatId, """[{"message":"current"}]""",
+            mapOf("timestamp" to "100", "created_at" to "50")))
+        val backup = plan(chat(chatId, """[{"message":"updated"}]""", mapOf("timestamp" to "200")))
+        val ready = ChatMergePlanner.plan(current, backup) as ChatMergePlanner.Result.Ready
+        assertEquals(backup.chats.single().messagesJson, ready.plan.chats.single().messagesJson)
+        assertEquals("50", ready.plan.chats.single().listRow["created_at"])
+    }
+
+    @Test
     fun divergentStableIdentityWithNoNewerVersionNeedsAChoice() {
         val current = plan(chat(chatId, """[{"message":"current"}]"""))
         val backup = plan(chat(chatId, """[{"message":"backup"}]"""))
