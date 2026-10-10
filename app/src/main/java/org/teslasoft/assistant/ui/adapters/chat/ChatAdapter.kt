@@ -844,7 +844,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             val isGeneratedImage = display["message"].toString().startsWith("~file:")
             btnEdit.visibility = if (isGeneratedImage) View.GONE else if (chatMessage["isBot"] == true) View.GONE else View.VISIBLE
-            btnMore?.visibility = if (chatMessage["isBot"] == true) View.VISIBLE else View.GONE
+            btnMore?.visibility = View.VISIBLE
             if (isGeneratedImage) btnShare.isEnabled = false
 
             val hasAttachments = updateIncludeSummary(chatMessage, position)
