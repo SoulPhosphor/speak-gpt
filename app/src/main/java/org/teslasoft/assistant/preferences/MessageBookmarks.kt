@@ -11,14 +11,12 @@ object MessageBookmarks {
         if (bookmarked) message[KEY] = true else message.remove(KEY)
     }
 
-    /** Failed Android commits may still install the changed value in process memory. */
+    /** The storage callback must roll back failed writes before returning false. */
     fun toggleAndSave(message: MutableMap<String, Any>, save: (bookmarkChanged: Boolean) -> Boolean): Boolean {
         val previous = message[KEY]
         set(message, !isBookmarked(message))
         if (save(true)) return true
         if (previous == null) message.remove(KEY) else message[KEY] = previous
-        // Install the restored history in preferences too, even if disk writes fail again.
-        save(false)
         return false
     }
 }

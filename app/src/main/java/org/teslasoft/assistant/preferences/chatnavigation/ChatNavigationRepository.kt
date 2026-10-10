@@ -16,6 +16,7 @@ import java.util.Locale
 import java.util.UUID
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
+import org.teslasoft.assistant.preferences.PreferenceCommitRollback
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.SnapshotRegistry
@@ -110,10 +111,12 @@ class ChatNavigationRepository internal constructor(
                     // payload with nothing in it is recoverable whatever the
                     // marker says, and requiring a match is what turned this
                     // into a permanent dead end.
-                    val repaired = chatListPreferences.edit()
+                    val editor = chatListPreferences.edit()
                         .putString(FOLDERS_KEY, encodeFolders(emptyList()))
                         .putInt(SCHEMA_VERSION_KEY, SCHEMA_VERSION)
-                        .commit()
+                    val repaired = PreferenceCommitRollback.commit(
+                        chatListPreferences, editor, setOf(FOLDERS_KEY, SCHEMA_VERSION_KEY)
+                    )
                     return@synchronized if (repaired) success(Unit)
                     else failure(ChatNavigationFailure.COMMIT_FAILED)
                 }
@@ -128,14 +131,15 @@ class ChatNavigationRepository internal constructor(
         val editor = chatListPreferences.edit()
         if (!rawPresent) editor.putString(FOLDERS_KEY, encodeFolders(emptyList()))
         editor.putInt(SCHEMA_VERSION_KEY, SCHEMA_VERSION)
-        if (editor.commit()) success(Unit) else failure(ChatNavigationFailure.COMMIT_FAILED)
+        if (PreferenceCommitRollback.commit(chatListPreferences, editor, setOf(FOLDERS_KEY, SCHEMA_VERSION_KEY)))
+            success(Unit) else failure(ChatNavigationFailure.COMMIT_FAILED)
     }
 
     fun snapshot(locale: Locale = Locale.getDefault()): ChatNavigationResult<ChatNavigationSnapshot> =
         synchronized(ChatPreferences.CHAT_LIST_LOCK) {
             // A folder-metadata problem must never withhold the chat list.
             // Only the chat store itself being unreadable can fail this read.
-            migrateSchema()
+            val migration = migrateSchema()
             val result = readChatList()
             if (!ChatStorageHealth.isAuthoritative(result.state)) return@synchronized unavailable()
             val read = readFolders()
@@ -147,7 +151,7 @@ class ChatNavigationRepository internal constructor(
                 // unfiled; folder changes stay blocked by the mutation paths.
                 FolderRead.Corrupt, FolderRead.Unsupported, FolderRead.Unavailable -> emptyList()
             }
-            val foldersUnavailable = read is FolderRead.Corrupt ||
+            val foldersUnavailable = migration is ChatNavigationResult.Failure || read is FolderRead.Corrupt ||
                 read is FolderRead.Unsupported || read is FolderRead.Unavailable
             val items = result.chats.map(::toNavigationItem)
             success(
