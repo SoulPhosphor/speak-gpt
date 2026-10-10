@@ -6,6 +6,16 @@ import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.chatnavigation.*
 
 class ChatExportFoldersTest {
+    @Test fun unreadableFolderMetadataCannotBeExportedAsAnEmptyFolderMap() {
+        val snapshot = ChatNavigationSnapshot(
+            ChatStorageHealth.ReadState.OK, emptyList(), emptyList(), emptyList(), emptyList(),
+            foldersUnavailable = true
+        )
+        assertNull(ChatExportFolders.names(snapshot))
+        assertNull(ChatExportFolders.names(null))
+        assertEquals(emptyMap<String, String>(), ChatExportFolders.names(snapshot.copy(foldersUnavailable = false)))
+    }
+
     @Test fun pinnedChatsKeepTheirFolderNameEvenWhenAbsentFromTheFolderRows() {
         val pinned = ChatNavigationItem("chat", "Chat", 0, true, "folder")
         val unfiled = ChatNavigationItem("other", "Other", 0, false, null)

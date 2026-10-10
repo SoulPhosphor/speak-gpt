@@ -107,8 +107,11 @@ object ReadableChatBackup {
                 // folder metadata even though only JSON writes it to the export.
                 val navigation = org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository.get(context).snapshot()
                 val snapshot = (navigation as? org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult.Success)?.value
-                val folderNames = snapshot?.let(org.teslasoft.assistant.ui.chat.ChatExportFolders::names)
-                    ?: emptyMap()
+                val folderNames = org.teslasoft.assistant.ui.chat.ChatExportFolders.names(snapshot)
+                if (folderNames == null) {
+                    logUnreadable(context, "chat folder metadata could not be read")
+                    return fail(staged, BuildResult.ChatsUnreadable)
+                }
                 for (chat in listResult.chats) {
                     // Read the stored ID, with the same missing-ID compatibility
                     // fallback as the chat list. A title change is not a new chat.

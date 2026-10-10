@@ -5272,11 +5272,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
 
         lifecycleScope.launch {
-            val folderName = if (options.format == ChatExportFormat.JSON) withContext(Dispatchers.IO) {
+            val folderNames = if (options.format == ChatExportFormat.JSON && snapshot.isNotEmpty()) withContext(Dispatchers.IO) {
                 val result = ChatNavigationRepository.get(this@ChatActivity).snapshot()
-                val snapshot = (result as? org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult.Success)?.value
-                snapshot?.let { org.teslasoft.assistant.ui.chat.ChatExportFolders.names(it)[chatId] }
-            } else null
+                val navigationSnapshot = (result as? org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult.Success)?.value
+                org.teslasoft.assistant.ui.chat.ChatExportFolders.names(navigationSnapshot)
+            } else emptyMap()
+            if (folderNames == null) {
+                Toast.makeText(this@ChatActivity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            val folderName = folderNames[chatId]
             val bytes = withContext(Dispatchers.Default) {
                 val tokenized = if (
                     options.includeUserTokenCount || options.includeCompanionTokenCount
@@ -14214,12 +14219,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     override fun onBookmarkToggle(position: Int) {
         if (chatStorageUnavailable || deletingChat) return
         val message = messages.getOrNull(position) ?: return
-        val previous = message[MessageBookmarks.KEY]
-        MessageBookmarks.set(message, !MessageBookmarks.isBookmarked(message))
-        if (saveSettings(synchronous = true, bookmarkChanged = true) != ChatStorageHealth.WriteOutcome.OK) {
-            if (previous == null) message.remove(MessageBookmarks.KEY) else message[MessageBookmarks.KEY] = previous
-            Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
+        val saved = MessageBookmarks.toggleAndSave(message) { bookmarkChanged ->
+            saveSettings(synchronous = true, bookmarkChanged = bookmarkChanged) == ChatStorageHealth.WriteOutcome.OK
         }
+        if (!saved) Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
         adapter?.notifyItemChanged(position)
         bookmarkNavigation?.refresh()
     }

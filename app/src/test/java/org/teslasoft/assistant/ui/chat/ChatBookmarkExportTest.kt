@@ -41,6 +41,13 @@ class ChatBookmarkExportTest {
         assertFalse(MessageBookmarks.isBookmarked(restored[2]))
     }
 
+    @Test fun emptyDirectExportsKeepTheArrayContractWhileReadableBackupsCarryChatMetadata() {
+        assertEquals("[]", ChatExportFormatter.formatJson(emptyList(), ChatExportOptions(), folderName = "Research"))
+        val backup = JsonParser.parseString(ReadableChatFormats.formatJson("Empty chat", "[]", "Research")).asJsonObject
+        assertEquals("Research", backup["folder_name"].asString)
+        assertEquals(0, backup["messages"].asJsonArray.size())
+    }
+
     @Test fun unfiledJsonDoesNotInventAFolderAndTextDoesNotIncludeFolders() {
         val json = ChatExportFormatter.formatJson(messages, ChatExportOptions())
         assertFalse(JsonParser.parseString(json).asJsonArray[0].asJsonObject.has("folder_name"))
