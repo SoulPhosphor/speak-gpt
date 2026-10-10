@@ -258,5 +258,6 @@ object ChatMergePlanner {
 
     private val ORGANIZATION_KEYS = setOf("pinned", ChatNavigationRepository.FOLDER_ID_KEY)
     private val COMPARISON_IGNORED_KEYS = ORGANIZATION_KEYS +
-        setOf("timestamp", CONTENT_MODIFIED_AT_KEY)
+        // Backfilled creation dates describe the list, not a content edit.
+        setOf("timestamp", "created_at", CONTENT_MODIFIED_AT_KEY)
 }

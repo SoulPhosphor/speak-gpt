@@ -70,6 +70,33 @@ class MostUsedChatModelTest {
         assertEquals("Gemma 4", MostUsedChatModel.select(stored, replies))
     }
 
+    @Test fun `legacy regenerated snapshots count individually without counting the canonical reply twice`() {
+        val message = mapOf<String, Any>("isBot" to true, "responseModel" to "Gemma 4",
+            "variants" to """[{"responseModel":"Gemma 4","messageTime":"10"},
+                {"responseModel":"Claude","messageTime":"20"}]""")
+        // A tie uses the latest snapshot, even when an older one is canonical.
+        assertEquals("Claude", MostUsedChatModel.select(UsageLog.EMPTY, listOf(message)))
+        val moreGemma = message + ("variants" to """[{"responseModel":"Gemma 4","messageTime":"10"},
+            {"responseModel":"Gemma 4","messageTime":"20"},
+            {"responseModel":"Claude","messageTime":"30"}]""") + ("responseModel" to "Claude")
+        assertEquals("Gemma 4", MostUsedChatModel.select(UsageLog.EMPTY, listOf(moreGemma)))
+    }
+
+    @Test fun `legacy versions ignore incomplete snapshots even when the current reply is incomplete`() {
+        val message = mapOf<String, Any>("isBot" to true, "responseModel" to "Claude", "state" to "streaming",
+            "variants" to """[{"responseModel":"Gemma 4","state":"done"},
+                {"responseModel":"Claude","state":"interrupted"},
+                {"responseModel":"Claude","state":"streaming"}]""")
+        assertEquals("Gemma 4", MostUsedChatModel.select(UsageLog.EMPTY, listOf(message)))
+    }
+
+    @Test fun `unreadable legacy versions fall back to the canonical reply`() {
+        for (variants in listOf("not json", "[]", "[null]")) {
+            val message = mapOf<String, Any>("isBot" to true, "responseModel" to "Gemma 4", "variants" to variants)
+            assertEquals("Gemma 4", MostUsedChatModel.select(UsageLog.EMPTY, listOf(message)))
+        }
+    }
+
     @Test fun `pre-log durable request history is seeded only in memory`() {
         val records = listOf(TurnUsageRecord("Gemma 4", "provider"), TurnUsageRecord("Gemma 4", "provider"))
         val messages = listOf(mapOf<String, Any>("isBot" to true, "message_id" to "old-reply",
