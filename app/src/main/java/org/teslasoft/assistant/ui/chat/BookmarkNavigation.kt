@@ -2,6 +2,19 @@ package org.teslasoft.assistant.ui.chat
 
 /** Transient navigation only; closing it forgets the search and selection. */
 class BookmarkNavigation {
+    companion object {
+        /** Mirrors the response pager without changing the canonical conversation. */
+        fun displayedText(message: Map<String, Any>, variants: List<Map<String, String>>): String {
+            val canonicalText = message["message"]?.toString().orEmpty()
+            if (variants.size < 2) return canonicalText
+            val canonical = (message["canonicalVariant"]?.toString()?.toIntOrNull()
+                ?: variants.lastIndex).coerceIn(variants.indices)
+            val display = (message["displayVariant"]?.toString()?.toIntOrNull()
+                ?: canonical).coerceIn(variants.indices)
+            return if (display == canonical) canonicalText else variants[display]["message"].orEmpty()
+        }
+    }
+
     data class Target(val id: String, val position: Int, val text: String)
 
     private var targets: List<Target> = emptyList()

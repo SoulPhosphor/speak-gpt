@@ -11,6 +11,37 @@ class BookmarkNavigationTest {
     )
     private fun navigation() = BookmarkNavigation().apply { refresh(targets); open() }
 
+    @Test fun searchesTheResponseVersionDisplayedByThePager() {
+        val message = hashMapOf<String, Any>(
+            "message" to "Canonical reply", "canonicalVariant" to "1", "displayVariant" to "0"
+        )
+        val variants = listOf(mapOf("message" to "Earlier blue dragons"), mapOf("message" to "Canonical reply"))
+        val nav = BookmarkNavigation().apply {
+            refresh(listOf(BookmarkNavigation.Target("a", 0, BookmarkNavigation.displayedText(message, variants))))
+        }
+        assertEquals("a", nav.search("blue dragon")?.id)
+        assertNull(nav.search("Canonical"))
+        message["displayVariant"] = "1"
+        nav.refresh(listOf(BookmarkNavigation.Target("a", 0, BookmarkNavigation.displayedText(message, variants))))
+        assertEquals("a", nav.current?.id)
+        assertNull(nav.search("blue dragon"))
+        assertEquals("Canonical reply", message["message"])
+    }
+
+    @Test fun displayedTextUsesTheSameDefaultsAndClampedIndicesAsThePager() {
+        val message = hashMapOf<String, Any>("message" to "Live canonical")
+        val variants = listOf(mapOf("message" to "First reply"), emptyMap())
+        assertEquals("Live canonical", BookmarkNavigation.displayedText(message, variants))
+        message["displayVariant"] = "-1"
+        assertEquals("First reply", BookmarkNavigation.displayedText(message, variants))
+        message["displayVariant"] = "999"
+        assertEquals("Live canonical", BookmarkNavigation.displayedText(message, variants))
+        message["canonicalVariant"] = "0"
+        assertEquals("", BookmarkNavigation.displayedText(message, variants))
+        assertEquals("Live canonical", BookmarkNavigation.displayedText(message, variants.take(1)))
+        assertEquals("Live canonical", BookmarkNavigation.displayedText(message, emptyList()))
+    }
+
     @Test fun wrapsInBothDirectionsInConversationOrder() {
         val nav = navigation()
         assertEquals(1, nav.ordinal)

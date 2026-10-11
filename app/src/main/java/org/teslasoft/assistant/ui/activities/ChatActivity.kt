@@ -3134,7 +3134,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             messages.mapIndexedNotNull { position, message ->
                 if (MessageBookmarks.isBookmarked(message)) BookmarkNavigation.Target(
                     org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
-                    position, message["message"]?.toString().orEmpty()
+                    position, BookmarkNavigation.displayedText(
+                        message, ChatAdapter.parseVariants(message[ChatAdapter.KEY_VARIANTS]?.toString())
+                    )
                 ) else null
             }
         }
