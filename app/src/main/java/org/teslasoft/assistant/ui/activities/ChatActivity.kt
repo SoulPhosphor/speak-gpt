@@ -7573,9 +7573,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     /**
      * Bind lifecycle diagnostics to the exact Ktor request BEFORE dispatch.
-     * Auxiliary requests share this client, so request identity is attached to
-     * streamed generations and to the current chat's completed-response path,
-     * but not to unrelated completed requests such as auto-naming.
+     * Auxiliary requests share this client, so their explicit request context
+     * binds usage without borrowing the visible generation's lifecycle.
      */
     private fun bindLifecycleRecorderToGenerationRequest(request: HttpRequestBuilder) {
         if (request.attributes.contains(responseLifecycleRecorderAttribute) ||
@@ -11189,16 +11188,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         message.remove(ChatAdapter.KEY_MESSAGE_TOKENS)
     }
 
-    /**
-     * Runs one Condense, Reduce or removal-reminder request and logs what it
-     * cost under Summarizing, as [function]. Usage is read from the provider's
-     * own response; a request that fails is logged only when the provider
-     * reported usage.
-     */
+    /** Runs one attachment-processing request and attributes it to its owner. */
     private suspend fun <T> withAttachmentUsage(
         requestModel: String,
         includeId: String,
         function: UsageFunction,
+        nativePdfs: List<NativePdfPayload> = emptyList(),
+        block: suspend () -> T
+    ): T = withAuxiliaryTextUsage(
+        requestModel = requestModel,
+        category = UsageCategory.SUMMARIZING,
+        messageId = includeOwnerMessageId(includeId),
+        function = function,
+        nativePdfs = nativePdfs,
+        block = block
+    )
+
+    /**
+     * Runs one non-reply text request and logs its provider usage. A failed
+     * request is recorded only when the provider still reported usage.
+     */
+    private suspend fun <T> withAuxiliaryTextUsage(
+        requestModel: String,
+        category: UsageCategory,
+        messageId: String?,
+        function: UsageFunction? = null,
         nativePdfs: List<NativePdfPayload> = emptyList(),
         block: suspend () -> T
     ): T {
@@ -11223,7 +11237,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             withContext(kotlinx.coroutines.NonCancellable) {
                 val record = auxiliaryUsageRecord(attempt, pricing, succeeded)
                 if (record != null) {
-                    appendUsageLog(UsageCategory.SUMMARIZING, includeOwnerMessageId(includeId), listOf(record), function)
+                    appendUsageLog(category, messageId, listOf(record), function)
                 }
             }
         }
@@ -11243,8 +11257,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }
             ?.ifBlank { null }
 
-    /** Adds requests to this chat's usage log. Seeding first is a no-op once
-     *  the chat has opened, and runs before [messages] gains these records. */
+    /** Adds requests to this chat's usage log. Seeding first also repairs any
+     * older message-backed request that a previous append failed to persist. */
     private suspend fun appendUsageLog(
         category: UsageCategory,
         messageId: String?,
@@ -13634,7 +13648,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // name. One catch-all used to swallow both — including a
                 // half-applied settings copy.
                 val newChatName: String? = try {
-                    val rawName = ai!!.chatCompletion(chatCompletionRequest2)
+                    val rawName = withAuxiliaryTextUsage(
+                        requestModel = titleModel,
+                        category = UsageCategory.SUMMARIZING,
+                        messageId = null,
+                        function = UsageFunction.SUMMARIZING
+                    ) { ai!!.chatCompletion(chatCompletionRequest2) }
                         .choices.firstOrNull()?.message?.content
                     rawName
                         ?.trim()

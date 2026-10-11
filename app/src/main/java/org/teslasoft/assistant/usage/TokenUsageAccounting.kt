@@ -413,7 +413,8 @@ object TokenUsageAccounting {
         pricing: TokenPricingSnapshot,
         providerCost: ProviderReportedCost?
     ): TurnUsageRecord {
-        val costsApplicable = PricingSource.forUrl(apiEndpoint) != PricingSource.FEATHERLESS ||
+        val pricingSource = PricingSource.forUrl(apiEndpoint)
+        val costsApplicable = pricingSource != PricingSource.FEATHERLESS ||
             pricing.featherlessRequestPricingConfirmed == true
         // Featherless does not document receipt fields in ordinary completions.
         // Do not mistake generic-looking fields for a billed charge, especially
@@ -461,7 +462,9 @@ object TokenUsageAccounting {
         // omitted its cache split. The conversation total can still retain the
         // old, useful estimate by pricing all reported input at the regular
         // input rate. A provider-reported total always wins below.
-        val regularInputCostEstimate = if (counts.cachedInputTokens == null) {
+        val regularInputCostEstimate = if (
+            counts.cachedInputTokens == null && pricingSource != PricingSource.FEATHERLESS
+        ) {
             counts.inputTokens?.takeIf { costsApplicable }?.let { count ->
                 applied.inputPricePerToken?.let { count * it }
             }

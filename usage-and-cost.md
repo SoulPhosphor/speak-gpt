@@ -347,7 +347,9 @@ smaller positive value that would round to zero is shown as `<$0.0001`.
 - **Summarizing section:** every Summarizer section (Summarizing), Compact
   fold-in (Compacting), Condense (Condensing), Reduce (Reducing), Summarizer
   image description (Image Description), and the short reminder written when
-  an attachment is removed (Removal) is a paid request and is counted.
+  an attachment is removed (Removal) is a paid request and is counted. The
+  automatic request that creates a new chat's short title is also counted as
+  Summarizing.
 - **Auxiliary requests:** counts and charges come only from the service's
   report, and prices are frozen when the request finishes. A finished
   auxiliary request with no usage report is still counted, with its values
@@ -381,6 +383,10 @@ another version current, or compacting never removes usage already spent.
   is appended to the log, including a second request whose numbers happen to
   be identical. Existing log entries are never removed, so requests belonging
   to deleted messages or old versions remain counted.
+- **Partial corruption:** readable entries remain usable, while the exact
+  original log is quarantined whenever any entry fails validation. A later
+  append never silently overwrites that evidence with only the entries that
+  happened to decode.
 - **Each entry** keeps the request's frozen record, what it was for (chat,
   its section and, for Summarizing, its function), and the permanent id of the message
   it served, when there is one. Neither depends on a message's position.
