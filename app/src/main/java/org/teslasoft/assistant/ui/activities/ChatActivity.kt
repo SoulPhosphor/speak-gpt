@@ -378,6 +378,7 @@ import java.util.EnumSet
 import java.util.Locale
 import java.text.NumberFormat
 import java.util.Optional
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.seconds
 import androidx.core.content.edit
@@ -9673,8 +9674,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
         val pricingEndpoint = apiEndpointObject
         currentPricingCatalogEndpointFingerprint = promptCachingEndpointFingerprint(pricingEndpoint)
+        val pricingCompletedAtElapsedMs = AtomicLong(-1L)
+        currentPricingCatalogCompletedAtElapsedMs = pricingCompletedAtElapsedMs
         currentPricingCatalog = lifecycleScope.async(Dispatchers.IO) {
-            TokenPricingCatalogClient.load(pricingEndpoint, usedModel)
+            TokenPricingCatalogClient.load(pricingEndpoint, usedModel).also {
+                pricingCompletedAtElapsedMs.set(android.os.SystemClock.elapsedRealtime())
+            }
         }
         if (preferences?.getResponseLifecycleLogging() != true) {
             currentLifecycle = null
@@ -9732,10 +9737,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             pendingCompletedPricingCatalog = currentPricingCatalog
             pendingCompletedPricingCatalogEndpointFingerprint =
                 currentPricingCatalogEndpointFingerprint
+            pendingCompletedPricingCatalogCompletedAtElapsedMs =
+                currentPricingCatalogCompletedAtElapsedMs
         }
         currentProviderUsageAttempt = null
         currentPricingCatalog = null
         currentPricingCatalogEndpointFingerprint = null
+        currentPricingCatalogCompletedAtElapsedMs = null
         val r = currentLifecycle ?: return providerDiagnostics
         if (r.finalized) return providerDiagnostics
         val n = if (r.nonStreamingResponse) {
@@ -9762,10 +9770,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         currentPricingCatalog?.cancel()
         currentPricingCatalog = null
         currentPricingCatalogEndpointFingerprint = null
+        currentPricingCatalogCompletedAtElapsedMs = null
         pendingProviderUsageSnapshot = null
         pendingCompletedPricingCatalog?.cancel()
         pendingCompletedPricingCatalog = null
         pendingCompletedPricingCatalogEndpointFingerprint = null
+        pendingCompletedPricingCatalogCompletedAtElapsedMs = null
         terminalRecord?.let { record ->
             val carrier = messages.lastOrNull { it["isBot"] == true }
                 ?: messages.lastOrNull { it["isBot"] != true }
@@ -10997,6 +11007,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             pendingProviderUsageSnapshot = null
             pendingCompletedPricingCatalog = null
             pendingCompletedPricingCatalogEndpointFingerprint = null
+            pendingCompletedPricingCatalogCompletedAtElapsedMs = null
             // Fresh reasoning accumulator for this turn. Unknown paths, visible
             // reasoning, and OpenRouter tool continuations attach it as needed.
             currentTurnReasoning = org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator()
@@ -11042,10 +11053,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var currentProviderUsageAttempt: ProviderUsageAttempt? = null
     private var currentPricingCatalog: Deferred<TokenPricingCatalog>? = null
     private var currentPricingCatalogEndpointFingerprint: String? = null
+    private var currentPricingCatalogCompletedAtElapsedMs: AtomicLong? = null
     @Volatile private var lastPromptCachingCatalog: PromptCachingCatalogEvidence? = null
     private var pendingProviderUsageSnapshot: ProviderUsageSnapshot? = null
     private var pendingCompletedPricingCatalog: Deferred<TokenPricingCatalog>? = null
     private var pendingCompletedPricingCatalogEndpointFingerprint: String? = null
+    private var pendingCompletedPricingCatalogCompletedAtElapsedMs: AtomicLong? = null
 
     /** While a Retry is in flight, the versions the regenerated reply will be
      *  folded into: the prior turn's existing version list, or its single
@@ -11349,6 +11362,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pendingCompletedPricingCatalog = null
         val pricingEndpointFingerprint = pendingCompletedPricingCatalogEndpointFingerprint
         pendingCompletedPricingCatalogEndpointFingerprint = null
+        val pricingCompletedAtElapsedMs = pendingCompletedPricingCatalogCompletedAtElapsedMs
+        pendingCompletedPricingCatalogCompletedAtElapsedMs = null
 
         val estimate = if (snapshot.counts.hasAnyValue()) {
             null
@@ -11367,11 +11382,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 TokenPricingCatalogClient.load(apiEndpointObject, snapshot.model)
             }
         }
-        if (promptCachingCatalog != null && pricingEndpointFingerprint != null) {
+        val completedAtElapsedMs = pricingCompletedAtElapsedMs?.get()?.takeIf { it >= 0L }
+        if (promptCachingCatalog != null && pricingEndpointFingerprint != null &&
+            completedAtElapsedMs != null
+        ) {
             lastPromptCachingCatalog = PromptCachingCatalogEvidence(
                 pricingEndpointFingerprint,
                 promptCachingCatalog,
-                android.os.SystemClock.elapsedRealtime()
+                completedAtElapsedMs
             )
         }
         val pricing = catalog?.pricingFor(snapshot.provider)
