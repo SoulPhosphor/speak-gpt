@@ -72,5 +72,5 @@ object PromptCachingPolicy {
         slug.equals(value, ignoreCase = true) || providerName.equals(value, ignoreCase = true)
 
     private fun ProviderEndpointInfo.matchesAny(values: Set<String>): Boolean =
-        values.any(::matches)
+        values.any { value -> matches(value) }
 }

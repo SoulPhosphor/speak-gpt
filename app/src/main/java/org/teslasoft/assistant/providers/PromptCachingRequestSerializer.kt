@@ -49,13 +49,15 @@ object PromptCachingRequestSerializer {
                 ?.takeIf { it.isJsonArray }
                 ?.asJsonArray
                 ?: return body
+            var changed = false
             cacheKey?.takeIf { it.isNotBlank() }?.take(256)?.let {
                 root.addProperty("prompt_cache_key", it)
+                changed = true
             }
             if (addExplicitBreakpoint && messages.size() >= 2) {
-                markLastReusableText(messages)
+                changed = markLastReusableText(messages) || changed
             }
-            root.toString()
+            if (changed) root.toString() else body
         } catch (_: Exception) {
             body
         }
