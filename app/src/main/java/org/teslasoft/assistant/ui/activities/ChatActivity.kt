@@ -189,6 +189,7 @@ import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.ReportedProviderParser
 import org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot
+import org.teslasoft.assistant.providers.PromptCachingPolicy
 import org.teslasoft.assistant.providers.PromptCachingRequestSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.preferences.GlobalPreferences
@@ -7675,20 +7676,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
-     * Opt ordinary multi-turn OpenRouter chat requests into explicit prompt
-     * caching. The serializer marks the reusable prefix immediately before the
-     * newest message, so providers such as Alibaba that require a breakpoint
-     * can cache it while implicitly cached providers keep their normal behavior.
-     * Auxiliary requests are excluded by the generation-request attribute.
+     * Give every ordinary OpenRouter chat request a stable cache-routing key.
+     * Message content is changed into explicit-cache blocks only when live
+     * endpoint data proves that every provider this request can reach uses
+     * cache-write pricing and does not advertise implicit caching. Auxiliary
+     * requests are excluded by the generation-request attribute.
      */
-    private fun augmentRequestWithPromptCaching(request: HttpRequestBuilder) {
+    private suspend fun augmentRequestWithPromptCaching(request: HttpRequestBuilder) {
         if (apiEndpointObject?.isOpenRouterRouting() != true) return
         if (!request.attributes.contains(generationRequestAttribute)) return
         val content = request.body as? TextContent ?: return
         if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val model = try {
+            com.google.gson.JsonParser.parseString(content.text).asJsonObject
+                .get("model")?.takeUnless { it.isJsonNull }?.asString
+        } catch (_: Exception) {
+            null
+        } ?: return
+        val contextCatalog = generationRequestContext.get()?.pricingCatalog
+            ?.takeIf { it.isCompleted }
+            ?.let { runCatching { it.await() }.getOrNull() }
+        val catalog = contextCatalog?.takeIf { it.model.equals(model, ignoreCase = true) }
+            ?: lastPromptCachingCatalog?.takeIf { it.model.equals(model, ignoreCase = true) }
+        val explicitBreakpoint = PromptCachingPolicy.shouldAddExplicitBreakpoint(
+            catalog?.providerPrices.orEmpty(),
+            favoriteForActiveEndpoint(model),
+            catalogAuthoritative = catalog?.providerPricesAuthoritative == true
+        )
         val augmented = PromptCachingRequestSerializer.augmentOpenRouterChatBody(
             content.text,
-            chatId.takeIf { it.isNotBlank() }
+            chatId.takeIf { it.isNotBlank() },
+            addExplicitBreakpoint = explicitBreakpoint
         )
         if (augmented != content.text) {
             request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
@@ -9516,6 +9534,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private data class GenerationRequestContext(
         val usageAttempt: ProviderUsageAttempt?,
         val lifecycle: ResponseLifecycleRecorder?,
+        val pricingCatalog: Deferred<TokenPricingCatalog>?,
         val nativePdfs: List<NativePdfPayload>,
         /** A Condense/Reduce/reminder request: capture its usage only, with no
          *  chat-turn diagnostics attached. */
@@ -9526,7 +9545,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private suspend fun <T> withGenerationRequestContext(block: suspend () -> T): T {
         val context = GenerationRequestContext(
-            currentProviderUsageAttempt, currentLifecycle, currentTurnNativePdfs
+            currentProviderUsageAttempt, currentLifecycle, currentPricingCatalog, currentTurnNativePdfs
         )
         return try {
             kotlinx.coroutines.withContext(generationRequestContext.asContextElement(context)) {
@@ -10979,6 +10998,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @Volatile
     private var currentProviderUsageAttempt: ProviderUsageAttempt? = null
     private var currentPricingCatalog: Deferred<TokenPricingCatalog>? = null
+    @Volatile private var lastPromptCachingCatalog: TokenPricingCatalog? = null
     private var pendingProviderUsageSnapshot: ProviderUsageSnapshot? = null
     private var pendingCompletedPricingCatalog: Deferred<TokenPricingCatalog>? = null
 
@@ -11225,7 +11245,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val pricing = lifecycleScope.async(Dispatchers.IO) {
             TokenPricingCatalogClient.load(endpoint, requestModel)
         }
-        val context = GenerationRequestContext(attempt, null, nativePdfs, auxiliaryUsage = true)
+        val context = GenerationRequestContext(attempt, null, pricing, nativePdfs, auxiliaryUsage = true)
         var succeeded = false
         try {
             val result = kotlinx.coroutines.withContext(
@@ -11299,6 +11319,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 TokenPricingCatalogClient.load(apiEndpointObject, snapshot.model)
             }
         }
+        if (catalog != null) lastPromptCachingCatalog = catalog
         val pricing = catalog?.pricingFor(snapshot.provider)
             ?: TokenPricingSnapshot()
         return TokenUsageAccounting.createRecord(

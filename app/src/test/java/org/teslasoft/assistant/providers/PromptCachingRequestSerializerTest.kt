@@ -9,10 +9,15 @@ import org.junit.Test
 class PromptCachingRequestSerializerTest {
 
     @Test
-    fun singleMessageRequestIsUnchanged() {
+    fun singleMessageRequestGetsCacheKeyWithoutChangingContentShape() {
         val body = """{"model":"qwen/test","messages":[{"role":"user","content":"Hello"}]}"""
 
-        assertEquals(body, PromptCachingRequestSerializer.augmentOpenRouterChatBody(body))
+        val root = JsonParser.parseString(
+            PromptCachingRequestSerializer.augmentOpenRouterChatBody(body, "chat-123")
+        ).asJsonObject
+
+        assertEquals("chat-123", root.get("prompt_cache_key").asString)
+        assertTrue(root.getAsJsonArray("messages")[0].asJsonObject.get("content").isJsonPrimitive)
     }
 
     @Test
@@ -28,7 +33,9 @@ class PromptCachingRequestSerializerTest {
         }""".trimIndent()
 
         val root = JsonParser.parseString(
-            PromptCachingRequestSerializer.augmentOpenRouterChatBody(body, "chat-123")
+            PromptCachingRequestSerializer.augmentOpenRouterChatBody(
+                body, "chat-123", addExplicitBreakpoint = true
+            )
         ).asJsonObject
         val messages = root.getAsJsonArray("messages")
         val markedContent = messages[2].asJsonObject.getAsJsonArray("content")
@@ -59,7 +66,9 @@ class PromptCachingRequestSerializerTest {
         }""".trimIndent()
 
         val root = JsonParser.parseString(
-            PromptCachingRequestSerializer.augmentOpenRouterChatBody(body)
+            PromptCachingRequestSerializer.augmentOpenRouterChatBody(
+                body, addExplicitBreakpoint = true
+            )
         ).asJsonObject
         val messages = root.getAsJsonArray("messages")
         val marked = messages[1].asJsonObject.getAsJsonArray("content")[0].asJsonObject
@@ -82,7 +91,9 @@ class PromptCachingRequestSerializerTest {
         }""".trimIndent()
 
         val root = JsonParser.parseString(
-            PromptCachingRequestSerializer.augmentOpenRouterChatBody(body)
+            PromptCachingRequestSerializer.augmentOpenRouterChatBody(
+                body, addExplicitBreakpoint = true
+            )
         ).asJsonObject
         val messages = root.getAsJsonArray("messages")
         val marked = messages[0].asJsonObject.getAsJsonArray("content")[0].asJsonObject
@@ -101,8 +112,12 @@ class PromptCachingRequestSerializerTest {
             ]
         }""".trimIndent()
 
-        val once = PromptCachingRequestSerializer.augmentOpenRouterChatBody(body)
-        val twice = PromptCachingRequestSerializer.augmentOpenRouterChatBody(once)
+        val once = PromptCachingRequestSerializer.augmentOpenRouterChatBody(
+            body, addExplicitBreakpoint = true
+        )
+        val twice = PromptCachingRequestSerializer.augmentOpenRouterChatBody(
+            once, addExplicitBreakpoint = true
+        )
 
         assertEquals(JsonParser.parseString(once), JsonParser.parseString(twice))
     }
@@ -130,5 +145,23 @@ class PromptCachingRequestSerializerTest {
         ).asJsonObject
 
         assertEquals(256, root.get("prompt_cache_key").asString.length)
+    }
+
+    @Test
+    fun cacheKeyDoesNotRequireExplicitBreakpoint() {
+        val body = """{
+            "model":"openai/test",
+            "messages":[
+                {"role":"assistant","content":"Earlier answer"},
+                {"role":"user","content":"Continue"}
+            ]
+        }""".trimIndent()
+
+        val root = JsonParser.parseString(
+            PromptCachingRequestSerializer.augmentOpenRouterChatBody(body, "chat-123")
+        ).asJsonObject
+
+        assertEquals("chat-123", root.get("prompt_cache_key").asString)
+        assertTrue(root.getAsJsonArray("messages")[0].asJsonObject.get("content").isJsonPrimitive)
     }
 }

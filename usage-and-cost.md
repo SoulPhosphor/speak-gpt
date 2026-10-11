@@ -71,13 +71,21 @@ whole-request usage report.
 
 Every request records its own token counts from what the AI service reports.
 
-OpenRouter chat requests place one ephemeral cache breakpoint at the end of
-the reusable conversation prefix, immediately before the newest message. This
-opts providers that require an explicit breakpoint into caching while allowing
-providers with automatic caching to keep their normal behavior. The breakpoint
-moves forward as the conversation grows. The chat's stable identifier is also
-sent as `prompt_cache_key` so OpenRouter can keep the same chat on a cache-aware
-route even when its opening prompt changes.
+Every OpenRouter chat request sends the chat's stable identifier as
+`prompt_cache_key` so OpenRouter can keep the same chat on a cache-aware route
+even when its opening prompt changes. The key is independent of explicit cache
+markers and does not change message content.
+
+An ephemeral cache breakpoint is added at the end of the reusable conversation
+prefix only when the live endpoint catalog shows that every provider the
+request can reach has a cache-write price and does not advertise implicit
+caching. A cache-read price alone is not proof of explicit-breakpoint support.
+In Automatic or fallback routing, one incompatible or unknown candidate leaves
+the messages unchanged. The breakpoint moves forward as the conversation grows.
+Explicit caches generally require a minimum reusable prefix (Alibaba: 1,024
+tokens). Alibaba charges a new cached prefix at 125% of regular input and a
+successful read at 10%; a prefix written but never reused can therefore cost
+slightly more, while one successful reuse more than recovers the write premium.
 
 - **Input and output counts** are read from the reply's usage report. Both the
   OpenAI-style names (`prompt_tokens`, `completion_tokens`) and the

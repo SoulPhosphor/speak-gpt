@@ -22,7 +22,10 @@ import java.util.concurrent.TimeUnit
 data class TokenPricingCatalog(
     val model: String,
     val providerPrices: List<ProviderEndpointInfo> = emptyList(),
-    val modelPricing: TokenPricingSnapshot? = null
+    val modelPricing: TokenPricingSnapshot? = null,
+    /** True only when [providerPrices] is the complete, unpaginated endpoint
+     * list, so an absent candidate can safely be treated as absent. */
+    val providerPricesAuthoritative: Boolean = false
 ) {
     fun pricingFor(provider: String): TokenPricingSnapshot? {
         val providerPrice = providerPrices.firstOrNull {
@@ -168,7 +171,11 @@ object TokenPricingCatalogClient {
             .replace("{model}", model)
         val body = fetch(endpoint, base + path) ?: return null
         val parsed = ProviderEndpointsParser.parse(body) ?: return null
-        return TokenPricingCatalog(model, providerPrices = parsed.endpoints)
+        return TokenPricingCatalog(
+            model,
+            providerPrices = parsed.endpoints,
+            providerPricesAuthoritative = parsed.authoritative
+        )
     }
 
     /** Any other service: its own model list, if it uses the OpenRouter-style

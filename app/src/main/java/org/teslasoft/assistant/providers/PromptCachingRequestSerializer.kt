@@ -22,8 +22,9 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 
 /**
- * Adds one OpenRouter-compatible ephemeral cache breakpoint to an ordinary
- * multi-message Chat Completions request.
+ * Adds OpenRouter's stable conversation key to an ordinary Chat Completions
+ * request and, only when the caller has proved it is compatible with every
+ * possible routed endpoint, one ephemeral cache breakpoint.
  *
  * The newest message is deliberately excluded. The last text block before it
  * is the reusable conversation prefix: on the next turn that same prefix can
@@ -37,19 +38,22 @@ import com.google.gson.JsonParser
  */
 object PromptCachingRequestSerializer {
 
-    fun augmentOpenRouterChatBody(body: String, cacheKey: String? = null): String {
+    fun augmentOpenRouterChatBody(
+        body: String,
+        cacheKey: String? = null,
+        addExplicitBreakpoint: Boolean = false
+    ): String {
         return try {
             val root = JsonParser.parseString(body).asJsonObject
             val messages = root.get("messages")
                 ?.takeIf { it.isJsonArray }
                 ?.asJsonArray
                 ?: return body
-            if (messages.size() < 2) return body
-
-            val marked = markLastReusableText(messages)
-            if (!marked) return body
             cacheKey?.takeIf { it.isNotBlank() }?.take(256)?.let {
                 root.addProperty("prompt_cache_key", it)
+            }
+            if (addExplicitBreakpoint && messages.size() >= 2) {
+                markLastReusableText(messages)
             }
             root.toString()
         } catch (_: Exception) {
