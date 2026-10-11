@@ -64,6 +64,20 @@ class MessageBookmarksTest {
         }
     }
 
+    @Test fun unreadableRollbackSnapshotStopsTheWriteWithoutChangingTheMessageOrStoredHistory() {
+        val message = hashMapOf<String, Any>("message" to "answer")
+        val backing = FakeSharedPreferences().apply { edit().putString("chat", Gson().toJson(message)).commit() }
+        val previous = backing.all
+        val prefs = object : SharedPreferences by backing {
+            override fun getAll(): MutableMap<String, *> = throw IllegalStateException("unreadable")
+        }
+        assertFalse(MessageBookmarks.toggleAndSave(message) {
+            PreferenceCommitRollback.commit(prefs, prefs.edit().putString("chat", Gson().toJson(message)), keys)
+        })
+        assertFalse(MessageBookmarks.isBookmarked(message))
+        assertEquals(previous, backing.all)
+    }
+
     @Test fun failedRemovalRestoresTheExactPreviousMarkerAndAllExistingMetadata() {
         for (original in listOf(true, "true")) {
             val message = hashMapOf<String, Any>("message" to "answer", MessageBookmarks.KEY to original)

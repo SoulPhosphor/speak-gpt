@@ -5,9 +5,11 @@ import android.content.SharedPreferences
 /** Reverts both process-local values and persisted values after a failed synchronous write. */
 internal object PreferenceCommitRollback {
     fun commit(prefs: SharedPreferences, editor: SharedPreferences.Editor, keys: Set<String>): Boolean {
-        val previous = prefs.all.filterKeys { it in keys }.mapValues { (_, value) ->
-            if (value is Set<*>) value.toSet() else value
-        }
+        val previous = try {
+            prefs.all.filterKeys { it in keys }.mapValues { (_, value) ->
+                if (value is Set<*>) value.toSet() else value
+            }
+        } catch (_: Exception) { return false }
         val committed = try { editor.commit() } catch (_: Exception) { false }
         if (committed) return true
         try {

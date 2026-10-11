@@ -100,6 +100,19 @@ class ChatNavigationStorageHealthTest {
         }
     }
 
+    @Test fun unavailablePreferenceSnapshotDoesNotHideChatsOrPretendThatFoldersWereInitialized() {
+        val backing = FakeSharedPreferences()
+        val store = object : SharedPreferences by backing {
+            override fun getAll(): MutableMap<String, *> = throw IllegalStateException("unreadable")
+        }
+        val repo = repository(rows = listOf(chatRow("chat-id", "Chat", 1)), chatStore = store)
+        val value = (repo.snapshot() as ChatNavigationResult.Success).value
+        assertEquals("chat-id", value.allChats.single().id)
+        assertTrue(value.foldersUnavailable)
+        assertFalse(backing.contains(ChatNavigationRepository.FOLDERS_KEY))
+        assertFalse(backing.contains(ChatNavigationRepository.SCHEMA_VERSION_KEY))
+    }
+
     @Test fun minifiedEmptyFolderWrapperIsPreservedThenRepairedWhenSchemaMarkerMatches() {
         val store = FakeSharedPreferences().apply {
             edit()
