@@ -75,7 +75,8 @@ class FlatChatIdentityBinder(
             details?.hasBookmarks == true) View.VISIBLE else View.GONE
         val metadata = ChatListDetails.metadata(
             if (displayPreferences.getShowChatStartDateInChatList()) details?.startedAt else null,
-            if (displayPreferences.getShowModelNamesInChatList()) details?.mostUsedModel ?: chatPreferences.getModel() else null
+            if (displayPreferences.getShowModelNamesInChatList() && details != null)
+                details.mostUsedModel ?: chatPreferences.getModel() else null
         )
         model.text = metadata
         model.visibility = if (metadata.isEmpty()) View.GONE else View.VISIBLE
