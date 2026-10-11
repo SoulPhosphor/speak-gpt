@@ -296,7 +296,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         //   KEY_MESSAGE_MODEL  — the model that produced this assistant reply,
         //                        frozen when the reply began so a later model
         //                        switch never relabels past turns.
-        //   KEY_MESSAGE_TOKENS — provider-reported total tokens for that turn.
+        //   KEY_MESSAGE_TOKENS — provider-reported output tokens for that turn.
         //   KEY_MESSAGE_TIME   — epoch-millis timestamp of when the message was
         //                        created (both roles).
         const val KEY_MESSAGE_MODEL = "responseModel"
@@ -304,9 +304,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         const val KEY_MESSAGE_TOKENS = "responseTokens"
         const val KEY_MESSAGE_TIME = "messageTime"
 
-        // Durable accounting for completed API requests. responseTokens above
-        // remains a legacy/display total-token field; it must never be read as
-        // completion/output tokens. The JSON records preserve prompt,
+        // Durable accounting for completed API requests. For current records,
+        // the display derives output tokens from this JSON rather than trusting
+        // older responseTokens metadata that stored provider total tokens. The
+        // JSON records preserve prompt,
         // completion and total independently, plus model/provider attribution,
         // source and the price/cost snapshot from completion time.
         const val KEY_TOKEN_USAGE_RECORDS =
@@ -1106,7 +1107,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /**
          * The compact metadata line beneath the identity (chat-redesign-plan.md
          * §4.3). Present only on the assistant layout. Shows the producing model
-         * when Model Names is on, the provider token total when Token Usage is
+         * when Model Names is on, the provider output-token count when Token Usage is
          * on, joined by a centered dot when both are present and both enabled
          * and the two fit on one line. When a long model name would otherwise
          * push the token count past the row's edge, the token count drops to
@@ -1141,20 +1142,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
-        /** The provider token total for this turn, worded per the approved
+        /** The provider output-token count for this turn, worded per the approved
          *  format (e.g. "1,234 tokens"), or null when this turn stored no
          *  usable count so the caller omits it. */
         private fun tokenCountLabel(chatMessage: HashMap<String, Any>): String? {
-            val raw = chatMessage[KEY_MESSAGE_TOKENS]?.toString()?.takeIf { it.isNotBlank() }
+            val count = org.teslasoft.assistant.usage.TokenUsageAccounting
+                .outputTokensForDisplay(chatMessage)
                 ?: return null
-            val count = raw.toLongOrNull() ?: return null
             val grouped = NumberFormat.getIntegerInstance(Locale.getDefault()).format(count)
             return context.getString(R.string.chat_token_count, grouped)
         }
 
-        /** The provider-reported reasoning-token count for this turn, kept
-         *  separate from the answer-token total (§7.8), or null when this reply
-         *  stored no reasoning-token count. */
+        /** The provider-reported reasoning-token count for this turn. It is
+         *  displayed separately for detail but is already included in the
+         *  output count (§7.8), or null when this reply stored no count. */
         private fun reasoningTokenCountLabel(chatMessage: HashMap<String, Any>): String? {
             val raw = chatMessage[KEY_MESSAGE_REASONING_TOKENS]?.toString()?.takeIf { it.isNotBlank() }
                 ?: return null
@@ -1167,7 +1168,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * The anchored Message Details popup (chat-redesign-plan.md §5). Always
          * reachable regardless of the compact-display toggles. Shows only the
          * fields stored for this message — date & time, and, for an assistant
-         * reply, the producing model and provider token total. Fields never
+         * reply, the producing model and provider output-token count. Fields never
          * recorded (older messages, or a turn the provider gave no usage for)
          * are omitted; a message with nothing stored shows the empty line. Text
          * is selectable. Outside tap or Back dismisses.

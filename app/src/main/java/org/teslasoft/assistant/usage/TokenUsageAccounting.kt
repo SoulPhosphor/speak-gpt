@@ -457,6 +457,15 @@ object TokenUsageAccounting {
         val calculatedOutputCost = counts.outputTokens?.takeIf { costsApplicable }?.let { count ->
             applied.outputPricePerToken?.let { count * it }
         }
+        // The exact cached/uncached rows must remain unknown when the provider
+        // omitted its cache split. The conversation total can still retain the
+        // old, useful estimate by pricing all reported input at the regular
+        // input rate. A provider-reported total always wins below.
+        val regularInputCostEstimate = if (counts.cachedInputTokens == null) {
+            counts.inputTokens?.takeIf { costsApplicable }?.let { count ->
+                applied.inputPricePerToken?.let { count * it }
+            }
+        } else null
         val inputCost: Double?
         val outputCost: Double?
         val uncachedInputCost: Double?
@@ -471,14 +480,17 @@ object TokenUsageAccounting {
             uncachedInputCost = calculatedUncachedInputCost
             inputCost = exactCost.inputCost ?: calculatedSplitInputCost
             outputCost = exactCost.outputCost ?: calculatedOutputCost
-            totalCost = exactCost.totalCost
+            totalCost = exactCost.totalCost ?: estimatedTotal(
+                inputCost ?: regularInputCostEstimate,
+                outputCost
+            )
             costSource = CostSource.PROVIDER_REPORTED
         } else {
             uncachedInputCost = calculatedUncachedInputCost
             cachedInputCost = calculatedCachedInputCost
             inputCost = calculatedSplitInputCost
             outputCost = calculatedOutputCost
-            totalCost = if (inputCost != null && outputCost != null) inputCost + outputCost else null
+            totalCost = estimatedTotal(inputCost ?: regularInputCostEstimate, outputCost)
             costSource = if (inputCost != null || outputCost != null || totalCost != null) {
                 CostSource.FROZEN_PRICING
             } else {
@@ -537,7 +549,11 @@ object TokenUsageAccounting {
             val outputCost = checkedUsageSum(rows.mapNotNull { it.outputCost })
             val uncachedInputCost = checkedUsageSum(rows.mapNotNull { it.uncachedInputCost })
             val cachedInputCost = checkedUsageSum(rows.mapNotNull { it.cachedInputCost })
-            val totalCost = checkedUsageSum(rows.mapNotNull { it.totalCost })
+            // Old records written before the regular-input fallback can be
+            // repaired at read time without rewriting history. Component rows
+            // remain unknown; only the overall estimate is recovered.
+            val effectiveTotals = rows.map { it.effectiveTotalCost() }
+            val totalCost = checkedUsageSum(effectiveTotals.mapNotNull { it })
             UsageGroup(
                 model = displayModel,
                 provider = displayProvider,
@@ -567,7 +583,7 @@ object TokenUsageAccounting {
                 hasUnknownOutputCost = outputCost == null || rows.any { it.outputCost == null },
                 hasUnknownUncachedInputCost = uncachedInputCost == null || rows.any { it.uncachedInputCost == null },
                 hasUnknownCachedInputCost = cachedInputCost == null || rows.any { it.cachedInputCost == null },
-                hasUnknownCost = totalCost == null || rows.any { it.totalCost == null },
+                hasUnknownCost = totalCost == null || effectiveTotals.any { it == null },
                 hasVariableInputPricing = inputPrices.size > 1 || hasCacheWritePricing,
                 hasVariableOutputPricing = outputPrices.size > 1,
                 hasVariableCachedInputPricing = cachedInputPrices.size > 1,
@@ -605,6 +621,15 @@ object TokenUsageAccounting {
         return variantRecords.ifEmpty { decodeRecords(message[KEY_USAGE_RECORDS]?.toString()) }
     }
 
+    /** Completion/output tokens for the currently displayed message snapshot.
+     * [ChatAdapter] applies a selected regeneration variant before calling
+     * this, so only the selected response's request records are summed. */
+    fun outputTokensForDisplay(message: Map<String, Any>): Long? {
+        val records = decodeRecords(message[KEY_USAGE_RECORDS]?.toString())
+        if (records.isEmpty() || records.any { it.outputTokens == null }) return null
+        return records.sumOf { it.outputTokens!!.toLong() }
+    }
+
     /** The estimated record for a completed reply saved before durable usage
      * records existed, or null when [message] is not such a reply. */
     fun legacyRecordOf(
@@ -640,9 +665,37 @@ object TokenUsageAccounting {
 
     private fun List<Double>.distinctPriceValues(): List<Double> =
         distinctBy { String.format(Locale.US, "%.15g", it) }
+
+    private fun estimatedTotal(inputCost: Double?, outputCost: Double?): Double? {
+        if (inputCost == null || outputCost == null) return null
+        val total = inputCost + outputCost
+        return total.takeIf { it.isFinite() && it >= 0.0 }
+    }
+
+    private fun TurnUsageRecord.effectiveTotalCost(): Double? {
+        totalCost?.takeIf { it.isFinite() && it >= 0.0 }?.let { return it }
+        if (meters != null || PricingSource.forUrl(apiEndpoint) == PricingSource.FEATHERLESS) {
+            return null
+        }
+        val effectiveInput = inputCost ?: if (cachedInputTokens == null) {
+            val count = inputTokens
+            val price = inputPricePerToken
+            if (count != null && price != null && count >= 0 && price >= 0.0 && price.isFinite()) {
+                count * price
+            } else null
+        } else null
+        val effectiveOutput = outputCost ?: run {
+            val count = outputTokens
+            val price = outputPricePerToken
+            if (count != null && price != null && count >= 0 && price >= 0.0 && price.isFinite()) {
+                count * price
+            } else null
+        }
+        return estimatedTotal(effectiveInput, effectiveOutput)
+    }
 }
 
-/** UI boundary for nullable accounting. Known zero remains "0"/"$0.00000";
+/** UI boundary for nullable accounting. Known zero remains "0"/"$0.0000";
  * an incomplete aggregate is never rendered as its partial known sum. */
 object UsageValueFormatter {
     const val NOT_REPORTED = "Not Reported"
@@ -652,8 +705,8 @@ object UsageValueFormatter {
 
     fun cost(knownSum: Double, hasUnknownPart: Boolean): String = when {
         hasUnknownPart -> NOT_REPORTED
-        knownSum > 0.0 && knownSum < MIN_DISPLAYED_COST -> "<\$0.00001"
-        else -> "\$" + String.format(Locale.US, "%.5f", knownSum)
+        knownSum > 0.0 && knownSum < MIN_ROUNDED_COST -> "<\$0.0001"
+        else -> "\$" + String.format(Locale.US, "%.4f", knownSum)
     }
 
     fun pricePerMillion(pricePerToken: Double?): String = pricePerToken?.let {
@@ -678,5 +731,7 @@ object UsageValueFormatter {
         if (hasUnknownPart || denominator <= 0) NOT_REPORTED
         else String.format(Locale.US, "%.1f%%", numerator.toDouble() * 100.0 / denominator)
 
-    private const val MIN_DISPLAYED_COST = 0.00001
+    /** Values below half of the smallest displayed unit would otherwise round
+     * to a misleading zero at four decimal places. */
+    private const val MIN_ROUNDED_COST = 0.00005
 }

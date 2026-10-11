@@ -270,8 +270,13 @@ A service's own `/models` list is used only when it has OpenRouter's
   even if no cached price is published.
 - **Output cost:** output tokens × output price.
 - **Total:** input cost + cached cost + output cost.
-- **Missing pieces:** if a needed price or the cache split is unknown, that
-  piece is unknown, and the Total is unknown too.
+- **Cache split not reported:** the Cached, Not cached, and Input-cost rows
+  stay unknown. When total input, output, and their regular prices are known,
+  the overall Total is still estimated by pricing all input at the regular
+  input rate. This is a best-effort estimate and never replaces a
+  service-reported charge.
+- **Other missing pieces:** if a needed token count or regular price is
+  unknown, that piece and the Total remain unknown.
 
 ## 4. What the screen adds up
 
@@ -303,8 +308,11 @@ chat's usage log (section 5) at the moment it opens.
 
 ### "Not Reported" rule
 
-A sum shows "Not Reported" if any request in it is missing that value. A
-partial sum is never shown as if it were complete.
+A component sum shows "Not Reported" if any request in it is missing that
+component. A partial sum is never shown as if it were complete. The overall
+Total uses the regular-input estimate described in section 3 when only the
+cache split is missing. Dollar costs are rounded to four decimal places; a
+smaller positive value that would round to zero is shown as `<$0.0001`.
 
 ## 5. Which requests are counted
 

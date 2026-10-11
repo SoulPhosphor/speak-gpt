@@ -1,11 +1,39 @@
 package org.teslasoft.assistant.usage
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.teslasoft.assistant.preferences.RawStreamObservation
 
 class ProviderUsageAttemptTest {
+    @Test fun prearmedSnapshotWaitsForRawOnlyCostAndCacheFields() = runBlocking {
+        val attempt = ProviderUsageAttempt(
+            "model", "Provider", "https://openrouter.ai/api/v1/"
+        )
+        attempt.noteTypedUsage(100, 20, 120)
+        attempt.beginObservation()
+        launch {
+            delay(10)
+            attempt.noteRawObservation(
+                RawStreamObservation(
+                    promptTokens = 100,
+                    completionTokens = 20,
+                    totalTokens = 120,
+                    cachedInputTokens = 80,
+                    cacheWriteInputTokens = 0,
+                    totalCost = 0.0042
+                )
+            )
+            attempt.finishObservation()
+        }
+
+        val result = attempt.snapshot()
+        assertEquals(80, result.counts.cachedInputTokens)
+        assertEquals(0.0042, result.providerCost.totalCost!!, 1e-12)
+    }
+
     @Test fun responseReportedAttributionAndUsageOverrideRequestFallbacks() = runBlocking {
         val attempt = ProviderUsageAttempt("requested-model", "Configured Provider", "https://endpoint")
         attempt.noteTypedUsage(10, 20, 30)

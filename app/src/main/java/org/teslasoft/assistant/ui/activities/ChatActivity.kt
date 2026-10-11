@@ -7600,6 +7600,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         if (!isGenerationRequest && boundContext?.auxiliaryUsage == true) {
             boundContext.usageAttempt?.let {
+                // Arm the wait before dispatch. ResponseObserver starts on a
+                // separate coroutine and can otherwise lose the race with
+                // terminal usage finalization, dropping raw-only cost/cache.
+                it.beginObservation()
                 request.attributes.put(providerUsageAttemptAttribute, it)
             }
             return
@@ -7607,6 +7611,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (isGenerationRequest) {
             recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
             (boundContext?.usageAttempt ?: currentProviderUsageAttempt)?.let {
+                // Raw OpenRouter usage (cost and cache details) is richer than
+                // the typed SDK usage. Finalization must wait for that observer.
+                it.beginObservation()
                 request.attributes.put(providerUsageAttemptAttribute, it)
             }
             request.attributes.put(generationRequestAttribute, true)
@@ -8089,11 +8096,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         onResponse { response ->
                             try {
                                 if (!response.status.isSuccess()) {
-                                    val body = response.bodyAsText()
                                     val attrs = response.call.request.attributes
-                                    if (attrs.contains(providerUsageAttemptAttribute)) {
+                                    val usageAttempt = if (attrs.contains(providerUsageAttemptAttribute)) {
                                         attrs[providerUsageAttemptAttribute]
-                                            .noteHttpResponse(response.status.value, body)
+                                    } else {
+                                        null
+                                    }
+                                    try {
+                                        val body = response.bodyAsText()
+                                        usageAttempt?.noteHttpResponse(response.status.value, body)
+                                    } finally {
+                                        usageAttempt?.finishObservation()
                                     }
                                 } else {
                                     val attrs = response.call.request.attributes
@@ -11125,10 +11138,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?.let { message[ChatAdapter.KEY_MESSAGE_MODEL] = it }
         records.last().provider.takeIf { it != TokenUsageAccounting.PROVIDER_NOT_REPORTED }
             ?.let { message[ChatAdapter.KEY_MESSAGE_PROVIDER] = it }
-        // responseTokens remains total-token compatibility metadata. It is
-        // never an output/completion-token field and stays absent if incomplete.
-        records.mapNotNull { it.totalTokens }.takeIf { it.size == records.size }
-            ?.sum()?.let { message[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+        // responseTokens is the historical storage key, but its displayed
+        // meaning is response/output tokens. Sum every completed request in
+        // the turn (including tool continuations) and stay absent if partial.
+        records.mapNotNull { it.outputTokens }.takeIf { it.size == records.size }
+            ?.sumOf { it.toLong() }
+            ?.let { message[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
     }
 
     /**
