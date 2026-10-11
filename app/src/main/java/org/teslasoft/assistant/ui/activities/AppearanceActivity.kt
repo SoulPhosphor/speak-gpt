@@ -15,16 +15,13 @@ import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
-import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
-/** Appearance controls consumed by the adaptable chat message shell. */
+/** Appearance destinations: app appearance, name style, and chat settings. */
 class AppearanceActivity : SettingsPageActivity() {
 
-    private lateinit var preferences: Preferences
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,7 +29,6 @@ class AppearanceActivity : SettingsPageActivity() {
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_appearance)
 
-        preferences = Preferences.getPreferences(this, "")
         bindViews()
         applyTheme()
         bindControls()
@@ -49,49 +45,14 @@ class AppearanceActivity : SettingsPageActivity() {
 
     private fun bindControls() {
         btnBack?.setOnClickListener { finish() }
+        findViewById<View>(R.id.row_app_appearance)?.setOnClickListener {
+            startActivity(Intent(this, AppAppearanceActivity::class.java))
+        }
         findViewById<View>(R.id.row_name_style)?.setOnClickListener {
             startActivity(Intent(this, NameStyleActivity::class.java))
         }
         findViewById<View>(R.id.row_chat_behavior)?.setOnClickListener {
             startActivity(Intent(this, ChatSettingsActivity::class.java))
-        }
-
-        bindSwitch(R.id.switch_staggered_responses, preferences.getStaggeredResponses()) {
-            preferences.setStaggeredResponses(it)
-        }
-        bindSwitch(R.id.switch_profile_images, preferences.getShowChatProfileImages()) {
-            preferences.setShowChatProfileImages(it)
-        }
-        bindSwitch(R.id.switch_names, preferences.getShowChatNames()) {
-            preferences.setShowChatNames(it)
-        }
-        bindSwitch(R.id.switch_ai_bubble, preferences.getShowAiBubble()) {
-            preferences.setShowAiBubble(it)
-        }
-        bindSwitch(R.id.switch_user_bubble, preferences.getShowUserBubble()) {
-            preferences.setShowUserBubble(it)
-        }
-        bindSwitch(R.id.switch_model_names, preferences.getShowModelNames()) {
-            preferences.setShowModelNames(it)
-        }
-        bindSwitch(R.id.switch_token_usage, preferences.getShowTokenUsage()) {
-            preferences.setShowTokenUsage(it)
-        }
-        bindSwitch(R.id.switch_user_tokens, preferences.getShowUserTokens()) {
-            preferences.setShowUserTokens(it)
-        }
-        bindSwitch(
-            R.id.switch_hardware_keyboard_shortcuts,
-            preferences.getHardwareKeyboardShortcuts()
-        ) {
-            preferences.setHardwareKeyboardShortcuts(it)
-        }
-    }
-
-    private fun bindSwitch(id: Int, checked: Boolean, save: (Boolean) -> Unit) {
-        findViewById<MaterialSwitch>(id)?.apply {
-            isChecked = checked
-            setOnCheckedChangeListener { _, value -> save(value) }
         }
     }
 

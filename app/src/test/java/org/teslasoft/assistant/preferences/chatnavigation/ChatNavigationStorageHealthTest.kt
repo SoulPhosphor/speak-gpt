@@ -1,5 +1,6 @@
 package org.teslasoft.assistant.preferences.chatnavigation
 
+import android.content.SharedPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -56,6 +57,60 @@ class ChatNavigationStorageHealthTest {
         assertEquals(ChatNavigationFailure.COMMIT_FAILED,
             (result as ChatNavigationResult.Failure).reason)
         assertFalse(store.contains(ChatNavigationRepository.FOLDERS_KEY))
+    }
+
+    @Test fun failedMigrationKeepsChatsVisibleButFolderMetadataUnavailableUntilACommitSucceeds() {
+        for (original in listOf<String?>(null, "{}")) {
+            val backing = FakeSharedPreferences().apply {
+                if (original != null) edit().putString(ChatNavigationRepository.FOLDERS_KEY, original).commit()
+            }
+            var rejectWrites = true
+            val store = object : SharedPreferences by backing {
+                override fun edit(): SharedPreferences.Editor {
+                    val editor = backing.edit()
+                    return object : SharedPreferences.Editor by editor {
+                        override fun putString(key: String?, value: String?): SharedPreferences.Editor {
+                            editor.putString(key, value)
+                            return this
+                        }
+                        override fun putInt(key: String?, value: Int): SharedPreferences.Editor {
+                            editor.putInt(key, value)
+                            return this
+                        }
+                        override fun commit(): Boolean {
+                            editor.commit() // Android may install process-local values before failure.
+                            return !rejectWrites
+                        }
+                    }
+                }
+            }
+            val repo = repository(rows = listOf(chatRow("chat-id", "Chat", 1)), chatStore = store)
+            repeat(2) {
+                val value = (repo.snapshot() as ChatNavigationResult.Success).value
+                assertEquals("chat-id", value.allChats.single().id)
+                assertTrue(value.foldersUnavailable)
+                assertEquals(original, backing.getString(ChatNavigationRepository.FOLDERS_KEY, null))
+                assertFalse(backing.contains(ChatNavigationRepository.SCHEMA_VERSION_KEY))
+            }
+            rejectWrites = false
+            val recovered = (repo.snapshot() as ChatNavigationResult.Success).value
+            assertEquals("chat-id", recovered.allChats.single().id)
+            assertFalse(recovered.foldersUnavailable)
+            assertTrue(backing.contains(ChatNavigationRepository.FOLDERS_KEY))
+        }
+    }
+
+    @Test fun unavailablePreferenceSnapshotDoesNotHideChatsOrPretendThatFoldersWereInitialized() {
+        val backing = FakeSharedPreferences()
+        val store = object : SharedPreferences by backing {
+            override fun getAll(): MutableMap<String, *> = throw IllegalStateException("unreadable")
+        }
+        val repo = repository(rows = listOf(chatRow("chat-id", "Chat", 1)), chatStore = store)
+        val value = (repo.snapshot() as ChatNavigationResult.Success).value
+        assertEquals("chat-id", value.allChats.single().id)
+        assertTrue(value.foldersUnavailable)
+        assertFalse(backing.contains(ChatNavigationRepository.FOLDERS_KEY))
+        assertFalse(backing.contains(ChatNavigationRepository.SCHEMA_VERSION_KEY))
     }
 
     @Test fun minifiedEmptyFolderWrapperIsPreservedThenRepairedWhenSchemaMarkerMatches() {

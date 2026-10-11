@@ -677,7 +677,9 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
 
         appearanceFlags["debug_mode"] = preferences!!.getDebugMode()
         appearanceFlags["amoled_pitch_black"] = preferences!!.getAmoledPitchBlack()
-        appearanceFlags["hide_model_names"] = preferences!!.getHideModelNames()
+        appearanceFlags["chat_list_model_names"] = preferences!!.getShowModelNamesInChatList()
+        appearanceFlags["chat_list_start_date"] = preferences!!.getShowChatStartDateInChatList()
+        appearanceFlags["chat_list_bookmark_indicator"] = preferences!!.getShowBookmarkIndicatorInChatList()
         appearanceFlags["show_memory_status_on_chat_list"] = preferences!!.getShowMemoryStatusOnChatList()
 
         // R8 went fuck himself...
@@ -778,7 +780,9 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         val adapterRebuildRequired =
             appearanceFlags["debug_mode"] != preferences!!.getDebugMode() ||
             appearanceFlags["amoled_pitch_black"] != preferences!!.getAmoledPitchBlack() ||
-            appearanceFlags["hide_model_names"] != preferences!!.getHideModelNames()
+            appearanceFlags["chat_list_model_names"] != preferences!!.getShowModelNamesInChatList() ||
+            appearanceFlags["chat_list_start_date"] != preferences!!.getShowChatStartDateInChatList() ||
+            appearanceFlags["chat_list_bookmark_indicator"] != preferences!!.getShowBookmarkIndicatorInChatList()
 
         if (!suppressInitialRefresh) {
             when {
@@ -787,7 +791,8 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
                     appearanceFlags["show_memory_status_on_chat_list"] = showMemoryStatus
                     adapter?.setShowMemoryStatus(showMemoryStatus)
                 }
-                !chats.isNullOrEmpty() -> initSettings(onlyIfChanged = true)
+                !chats.isNullOrEmpty() -> initSettings(onlyIfChanged =
+                    !preferences!!.getShowBookmarkIndicatorInChatList() && !preferences!!.getShowChatStartDateInChatList())
             }
         }
     }

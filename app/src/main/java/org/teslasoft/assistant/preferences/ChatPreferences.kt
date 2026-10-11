@@ -317,6 +317,18 @@ class ChatPreferences private constructor() {
         }
     }
 
+    /** Preserve the creation date separately from the mutable sort timestamp. */
+    fun rememberChatStartDate(context: Context, chatId: String, startedAt: Long?) {
+        if (startedAt == null || startedAt <= 0 || chatWriteBlocked(context, "chat_list", "save chat start date")) return
+        synchronized(CHAT_LIST_LOCK) {
+            val list = getChatMetadataList(context)
+            val row = list.firstOrNull { storedChatId(it) == chatId } ?: return
+            if (row["created_at"]?.toLongOrNull()?.let { it > 0 } == true) return
+            row["created_at"] = startedAt.toString()
+            SecurePrefs.get(context, "chat_list").edit { putString("data", Gson().toJson(list)) }
+        }
+    }
+
     fun putTimestampToChatById(context: Context, chatId: String) {
         val timestamp = System.currentTimeMillis().toString()
 
@@ -467,7 +479,8 @@ class ChatPreferences private constructor() {
         context: Context,
         chatId: String,
         messages: List<HashMap<String, Any>>,
-        synchronous: Boolean = false
+        synchronous: Boolean = false,
+        bookmarkChanged: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
         if (PortableRestoreProcessGate.blocksCurrentProcess(context)) {
             return ChatStorageHealth.WriteOutcome.FAILED
@@ -482,6 +495,7 @@ class ChatPreferences private constructor() {
             chatWriteBlocked(context, name, "save chat history")
             return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
         }
+        var rollbackJournal: (() -> Unit)? = null
         return try {
             val prefs = SecurePrefs.get(context, name)
             val fingerprint = SearchableMessageProjection.projectionFingerprint(messages)
@@ -490,7 +504,16 @@ class ChatPreferences private constructor() {
             )
             val searchableChanged = fingerprint != previousFingerprint
             val revision = if (searchableChanged) ChatSearchIndexManager.newRevision() else null
-            if (revision != null && !ChatSearchIndexJournal.get(context).record(chatId, revision)) {
+            val journal = revision?.let { ChatSearchIndexJournal.get(context) }
+            val previousJournalRevision = if (bookmarkChanged) journal?.revision(chatId) else null
+            rollbackJournal = {
+                if (revision != null) {
+                    if (bookmarkChanged && previousJournalRevision != null) journal?.record(chatId, previousJournalRevision)
+                    else journal?.clearExact(chatId, revision)
+                }
+            }
+            if (revision != null && journal?.record(chatId, revision) != true) {
+                if (bookmarkChanged) rollbackJournal.invoke()
                 return ChatStorageHealth.WriteOutcome.FAILED
             }
             val editor = prefs.edit().putString("chat", Gson().toJson(messages))
@@ -498,18 +521,30 @@ class ChatPreferences private constructor() {
                 .putString(ChatSearchIndexManager.SEARCH_REVISION_KEY, revision)
                 .putString(ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, fingerprint)
                 .putLong(CHAT_CONTENT_MODIFIED_AT_KEY, System.currentTimeMillis())
-            val committed = if (synchronous || searchableChanged) editor.commit() else {
+            if (bookmarkChanged) editor.putLong(CHAT_CONTENT_MODIFIED_AT_KEY, System.currentTimeMillis())
+            val committed = if (bookmarkChanged) PreferenceCommitRollback.commit(
+                prefs, editor, setOf(
+                    "chat", ChatSearchIndexManager.SEARCH_REVISION_KEY,
+                    ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, CHAT_CONTENT_MODIFIED_AT_KEY
+                )
+            ) else if (synchronous || searchableChanged) editor.commit() else {
                 editor.apply()
                 true
             }
             if (!committed) {
-                revision?.let { ChatSearchIndexJournal.get(context).clearExact(chatId, it) }
+                rollbackJournal.invoke()
                 ChatStorageHealth.WriteOutcome.FAILED
             } else {
-                if (revision != null) ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision)
+                if (revision != null) {
+                    if (bookmarkChanged) {
+                        // The durable bookmark is saved; derived-index work can retry from its journal.
+                        runCatching { ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision) }
+                    } else ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision)
+                }
                 ChatStorageHealth.WriteOutcome.OK
             }
         } catch (_: Exception) {
+            if (bookmarkChanged) runCatching { rollbackJournal?.invoke() }
             ChatStorageHealth.WriteOutcome.FAILED
         }
     }
@@ -769,6 +804,7 @@ class ChatPreferences private constructor() {
                 "name" to committedName,
                 "id" to chatId,
                 "timestamp" to createdAt,
+                "created_at" to createdAt,
                 CHAT_CONTENT_MODIFIED_AT_KEY to createdAt,
                 "pinned" to "false",
                 "search_title_revision" to ChatSearchIndexManager.newRevision(),

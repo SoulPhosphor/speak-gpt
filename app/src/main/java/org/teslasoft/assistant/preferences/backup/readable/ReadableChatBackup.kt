@@ -81,7 +81,8 @@ object ReadableChatBackup {
     private data class ChatData(
         val title: String,
         val messages: List<Map<String, Any?>>,
-        val messagesJson: String
+        val messagesJson: String,
+        val folderName: String?
     )
 
     /**
@@ -102,6 +103,15 @@ object ReadableChatBackup {
                     logUnreadable(context, "the chat list could not be read (state ${listResult.state})")
                     return fail(staged, BuildResult.ChatsUnreadable)
                 }
+                // All formats share one incremental baseline, so collect the same
+                // folder metadata even though only JSON writes it to the export.
+                val navigation = org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository.get(context).snapshot()
+                val snapshot = (navigation as? org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult.Success)?.value
+                val folderNames = org.teslasoft.assistant.ui.chat.ChatExportFolders.names(snapshot)
+                if (folderNames == null) {
+                    logUnreadable(context, "chat folder metadata could not be read")
+                    return fail(staged, BuildResult.ChatsUnreadable)
+                }
                 for (chat in listResult.chats) {
                     // Read the stored ID, with the same missing-ID compatibility
                     // fallback as the chat list. A title change is not a new chat.
@@ -113,8 +123,9 @@ object ReadableChatBackup {
                         return fail(staged, BuildResult.ChatsUnreadable)
                     }
                     val messagesJson = gson.toJson(history.messages)
-                    fingerprints[chatId] = ReadableChatFormats.fingerprint(name, messagesJson)
-                    collected.add(ChatData(name, history.messages, messagesJson))
+                    val folderName = folderNames[chatId]
+                    fingerprints[chatId] = ReadableChatFormats.fingerprint(name, messagesJson, folderName)
+                    collected.add(ChatData(name, history.messages, messagesJson, folderName))
                 }
             }
 
@@ -153,7 +164,7 @@ object ReadableChatBackup {
                     if (format == Format.JSON || format == Format.BOTH) {
                         val entryName = "$base.json"
                         zip.putNextEntry(ZipEntry(entryName))
-                        zip.write(ReadableChatFormats.formatJson(chat.title, chat.messagesJson).toByteArray(Charsets.UTF_8))
+                        zip.write(ReadableChatFormats.formatJson(chat.title, chat.messagesJson, chat.folderName).toByteArray(Charsets.UTF_8))
                         zip.closeEntry()
                         expectedEntries.add(entryName)
                     }

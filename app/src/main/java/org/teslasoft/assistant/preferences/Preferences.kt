@@ -557,6 +557,27 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_show_profile_images", state, true)
     }
 
+    fun getShowBookmarkIndicatorInChatList(): Boolean =
+        getGlobalBoolean("chat_list_bookmark_indicator", true)
+
+    fun setShowBookmarkIndicatorInChatList(state: Boolean) {
+        putGlobalBoolean("chat_list_bookmark_indicator", state, true)
+    }
+
+    fun getShowModelNamesInChatList(): Boolean =
+        getGlobalBoolean("chat_list_model_names", false)
+
+    fun setShowModelNamesInChatList(state: Boolean) {
+        putGlobalBoolean("chat_list_model_names", state, false)
+    }
+
+    fun getShowChatStartDateInChatList(): Boolean =
+        getGlobalBoolean("chat_list_start_date", false)
+
+    fun setShowChatStartDateInChatList(state: Boolean) {
+        putGlobalBoolean("chat_list_start_date", state, false)
+    }
+
     fun getShowCompanionImagesInChatList(): Boolean =
         getGlobalBoolean("chat_list_companion_images", false)
 

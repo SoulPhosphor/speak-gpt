@@ -15,9 +15,12 @@ class ChatSearchSourceContractTest {
         val preferences = source("java/org/teslasoft/assistant/preferences/ChatPreferences.kt")
         val save = preferences.substringAfter("fun saveChatHistory(").substringBefore("// The upstream fork")
 
-        assertTrue(save.contains("ChatSearchIndexJournal.get(context).record(chatId, revision)"))
+        assertTrue(save.contains("val journal = revision?.let { ChatSearchIndexJournal.get(context) }"))
+        assertTrue(save.contains("journal?.record(chatId, revision) != true"))
+        assertTrue(save.indexOf("journal?.record(chatId, revision) != true") < save.indexOf("prefs.edit()"))
         assertTrue(save.indexOf(".putString(\"chat\"") < save.indexOf("SEARCH_REVISION_KEY"))
         assertTrue(save.contains("if (synchronous || searchableChanged) editor.commit()"))
+        assertTrue(save.contains("if (bookmarkChanged) PreferenceCommitRollback.commit("))
         assertTrue(preferences.contains("saveChatHistory(context, chatId, list, synchronous = true)"))
         assertTrue(preferences.contains("fun importChatHistoryJson"))
         assertFalse(preferences.substringAfter("fun importChatHistoryJson").substringBefore("/**").contains(

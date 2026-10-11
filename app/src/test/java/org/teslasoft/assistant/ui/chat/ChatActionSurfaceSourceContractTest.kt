@@ -47,6 +47,22 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     @Test
+    fun userAndAssistantMessagesBothExposeTheBookmarkMenu() {
+        val userLayout = source("main/res/layout/view_assistant_user_message.xml")
+        val assistantLayout = source("main/res/layout/view_assistant_bot_message.xml")
+        val adapter = source("main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt")
+
+        assertOrdered(userLayout, "@+id/btn_edit", "@+id/btn_more")
+        assertTrue(assistantLayout.contains("@+id/btn_more"))
+        val visibilityAssignments = adapter.lineSequence().filter {
+            it.contains("btnMore?.visibility =")
+        }.toList()
+        assertTrue("Both message roles need the bookmark menu", visibilityAssignments.size == 1)
+        assertTrue(visibilityAssignments.single().trim() == "btnMore?.visibility = View.VISIBLE")
+        assertTrue(adapter.contains("MENU_MESSAGE_BOOKMARK"))
+    }
+
+    @Test
     fun expandIsBesideMicrophoneAndContentTogglesUseTheBareSharedStyle() {
         val layout = source("main/res/layout/activity_chat.xml")
         assertOrdered(layout, "@+id/composer_controls_spacer", "@+id/btn_expand_content")

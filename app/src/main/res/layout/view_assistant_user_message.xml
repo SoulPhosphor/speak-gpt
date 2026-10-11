@@ -297,6 +297,11 @@
                     android:src="@drawable/ic_edit"
                     android:tooltipText="@string/btn_msg_edit"
                     app:srcCompat="@drawable/ic_edit" />
+                <ImageButton android:id="@+id/btn_more"
+                    style="@style/Widget.App.Bookmark.MessageAction"
+                    android:contentDescription="@string/message_more_actions"
+                    android:tooltipText="@string/message_more_actions"
+                    app:srcCompat="@drawable/ic_more_vert" />
             </LinearLayout>
 
             <!-- Record of what was attached to this message (document-includes-plan.md).
@@ -345,6 +350,7 @@
 
     <TextView
         android:id="@+id/username"
+        style="@style/Widget.App.Bookmark.SpeakerMarker"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/chat_name_portrait_top"

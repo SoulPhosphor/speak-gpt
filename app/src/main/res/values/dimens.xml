@@ -158,4 +158,15 @@
     <!-- Removable-entry list: ten rows visible before the box scrolls. -->
     <dimen name="removable_list_row_height">44dp</dimen>
     <dimen name="removable_list_max_height">448dp</dimen>
+    <!-- Bookmark navigation and message markers. -->
+    <dimen name="bookmark_panel_side_padding">8dp</dimen>
+    <dimen name="bookmark_action_size">48dp</dimen>
+    <dimen name="bookmark_action_padding">12dp</dimen>
+    <dimen name="bookmark_icon_size">24dp</dimen>
+    <dimen name="bookmark_marker_gap">6dp</dimen>
+    <dimen name="bookmark_search_gap">8dp</dimen>
+    <dimen name="bookmark_counter_text_size">14sp</dimen>
+    <dimen name="bookmark_message_action_size">32dp</dimen>
+    <dimen name="chat_list_bookmark_size">16dp</dimen>
+    <dimen name="section_title_field_gap">8dp</dimen>
 </resources>

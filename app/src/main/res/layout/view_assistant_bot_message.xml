@@ -482,6 +482,7 @@
 
     <TextView
         android:id="@+id/username"
+        style="@style/Widget.App.Bookmark.SpeakerMarker"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/chat_name_portrait_edge_inset"

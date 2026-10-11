@@ -11,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Turning a chat-list display option on or off (companion images, model
- *  names, memory status, image shape) redraws the list on the next return,
+ *  names, bookmarks, start date, memory status, image shape) redraws the list on the next return,
  *  even though no chat in it changed. */
 class DrawerDisplayRefreshContractTest {
 
@@ -25,9 +25,12 @@ class DrawerDisplayRefreshContractTest {
     fun displayOptionChangesRebindTheList() {
         val adapter = source("src/main/java/org/teslasoft/assistant/ui/drawer/DrawerHierarchyAdapter.kt")
         val options = adapter.substring(adapter.indexOf("private fun displayOptions()"))
-        val body = options.substring(0, options.indexOf(")\n"))
+        val body = options.substring(0, options.indexOf("\n    )"))
         assertTrue(body.contains("getShowCompanionImagesInChatList()"))
-        assertTrue(body.contains("getHideModelNames()"))
+        assertTrue(body.contains("getShowModelNamesInChatList()"))
+        assertTrue(body.contains("getShowBookmarkIndicatorInChatList()"))
+        assertTrue(body.contains("getShowChatStartDateInChatList()"))
+        assertTrue(!body.contains("getHideModelNames()"))
         assertTrue(body.contains("getShowMemoryStatusOnChatList()"))
         assertTrue(adapter.contains("fun refreshDisplayIfChanged()"))
         val controller = source("src/main/java/org/teslasoft/assistant/ui/drawer/ChatDrawerController.kt")

@@ -105,7 +105,7 @@ The zone attributes implemented so far, which every `ThemeOverlay.Phosphor.*` pa
 
 Every theme that defines one of these must define all of them, including the night themes and every palette overlay — a style resolving an attribute that no theme layer carries crashes at inflation. They are the pattern the remaining zones follow when theme work resumes.
 
-Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton, ...headerButtons)` (`org.teslasoft.assistant.ui.util`); trailing header icons such as Save are passed after the back button. It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, Chat Behavior, and Summarizer Prompts; the other settings screens still carry their own copy until they are moved over.
+Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton, ...headerButtons)` (`org.teslasoft.assistant.ui.util`); trailing header icons such as Save are passed after the back button. It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, Chat Settings, and Summarizer Prompts; the other settings screens still carry their own copy until they are moved over.
 
 ### Icons have no background of their own (owner ruling, Oct 9 2026)
 
@@ -703,6 +703,10 @@ The frame is a `ConstraintLayout` containing:
 
 Use for the heading of a settings-style screen section.
 
+`Widget.App.Section.Title.BeforeField` adds a small centralized gap when a
+section heading leads directly into a field label. Chat Settings uses this
+for Identity; toggle rows already provide their own spacing.
+
 ### Section explanation
 
 `Widget.App.Section.Hint`
@@ -1249,7 +1253,8 @@ Use the complete `Widget.App.FlatChatRow*` family with
 - `.Metadata` owns optional model, memory-state, and date lines;
 - `.Snippet` owns Search's matching-context line only.
 
-The shared layout has optional leading icon, companion-image, bookmark overlay,
+The shared layout has optional leading icon, companion-image, pinned-chat overlay,
+message-bookmark indicator beside the title,
 chevron, metadata, snippet, and date slots. Every adapter bind must reset every
 slot. When companion images are disabled the image frame is `GONE`, so the row
 reserves no empty column. Folder children add only the centralized
@@ -1390,3 +1395,29 @@ Do not add:
 - feature behavior unrelated to choosing and composing the style.
 
 When this guide and current style definitions disagree, inspect `themes.xml`, verify the intended behavior, and correct the stale documentation before using it as authority.
+
+## Chat bookmarks
+
+`Widget.App.Bookmark.*` owns the fixed bookmark navigation strip, centered
+counter, borderless navigation controls, expandable search field, user-message
+overflow button, and speaker-marker spacing. `AppButton.Primary.Inline.BookmarkSearch`
+inherits the shared label-sized Search button. Measurements live in `dimens.xml`;
+`bookmark_action_tint` resolves enabled and disabled colors from theme attributes.
+The strip is part of the chat layout beneath its header and above the transcript;
+it reserves space rather than covering messages or portraits. It is independent
+of the existing summarizer section flags. The bookmark-star and double-arrow
+glyphs come from Google Material Symbols Outlined.
+
+## App Appearance
+
+The App Appearance destination at the top of Appearance uses the existing
+`Widget.App.Row.TitleOnly` navigation row, `Row.Icon` palette glyph, and
+`Row.Chevron`. Its page uses `Widget.App.ActionBar`, `Widget.App.Page.Content`,
+`Widget.App.Section.Title`, and the existing `Row.Toggle` / `TextColumn` /
+`Title` / `Subtitle` / `Switch` family.
+
+Chat-list display choices are separate from message appearance. The optional
+message-bookmark star uses `Widget.App.FlatChatRow.BookmarkIndicator` immediately
+before the title, without changing the companion-image slot. Date and model
+share the existing `.Metadata` line. Search retains its separate result date
+and leaves the new message-bookmark slot hidden.

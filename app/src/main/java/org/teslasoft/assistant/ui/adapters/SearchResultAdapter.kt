@@ -20,8 +20,11 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.chatsearch.SearchDocumentKind
 import org.teslasoft.assistant.preferences.chatsearch.SearchResult
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.ui.drawer.FlatChatIdentityBinder
+import org.teslasoft.assistant.ui.drawer.ChatListDetails
+import org.teslasoft.assistant.ui.drawer.ChatListDetailsReader
 import java.util.concurrent.Executors
 import java.util.concurrent.ConcurrentHashMap
 
@@ -31,6 +34,13 @@ class SearchResultAdapter(
 ) : ListAdapter<SearchResult, SearchResultAdapter.Holder>(DIFF) {
     private val preferences = Preferences.getPreferences(activity, "")
     private val memoryStates = ConcurrentHashMap<String, String>()
+    private val details = HashMap<String, ChatListDetails>()
+    private val detailRequests = HashSet<String>()
+    @Volatile private var detailsGeneration = 0
+    @Volatile private var disposed = false
+    // Accessed only by the single metadata worker.
+    private var startDatesGeneration = -1
+    private var startDates = emptyMap<String, Long?>()
     private val metadataExecutor = Executors.newSingleThreadExecutor { Thread(it, "search-metadata") }
 
     init {
@@ -50,6 +60,45 @@ class SearchResultAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(getItem(position))
 
+    override fun onCurrentListChanged(previousList: MutableList<SearchResult>, currentList: MutableList<SearchResult>) {
+        super.onCurrentListChanged(previousList, currentList)
+        detailsGeneration++
+        details.clear()
+        detailRequests.clear()
+        notifyDataSetChanged()
+    }
+
+    private fun requestDetails(chatId: String) {
+        if (disposed || details.containsKey(chatId) || !(
+            preferences.getShowChatStartDateInChatList() ||
+                preferences.getShowModelNamesInChatList()
+        ) || !detailRequests.add(chatId)) return
+        val generation = detailsGeneration
+        val includeModel = preferences.getShowModelNamesInChatList()
+        metadataExecutor.execute {
+            if (disposed || generation != detailsGeneration) return@execute
+            val loaded = try {
+                val context = activity.applicationContext
+                if (startDatesGeneration != generation) {
+                    startDates = ChatPreferences.getChatPreferences()
+                        .getChatListResult(context, includeFirstMessage = false).chats.associate {
+                            ChatPreferences.storedChatId(it) to it["created_at"]?.toLongOrNull()
+                        }
+                    startDatesGeneration = generation
+                }
+                if (disposed || generation != detailsGeneration) return@execute
+                ChatListDetailsReader.read(context, chatId, startDates[chatId], includeModel)
+            } catch (_: Exception) { ChatListDetails(false, null) }
+            activity.runOnUiThread {
+                if (disposed || generation != detailsGeneration) return@runOnUiThread
+                details[chatId] = loaded
+                currentList.forEachIndexed { position, result ->
+                    if (result.chatId == chatId) notifyItemChanged(position)
+                }
+            }
+        }
+    }
+
     inner class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val title: TextView = itemView.findViewById(R.id.flat_chat_title)
         private val snippet: TextView = itemView.findViewById(R.id.flat_chat_snippet)
@@ -58,7 +107,9 @@ class SearchResultAdapter(
         private val identity = FlatChatIdentityBinder(activity, itemView, preferences, memoryStates)
 
         fun bind(result: SearchResult) {
-            identity.bind(result.chatId, result.chatTitle, pinned = result.chatPinned, current = false)
+            requestDetails(result.chatId)
+            identity.bind(result.chatId, result.chatTitle, pinned = result.chatPinned, current = false,
+                details = details[result.chatId], showBookmarkIndicator = false)
             chevron.visibility = View.GONE
             if (result.kind == SearchDocumentKind.TITLE) {
                 title.text = highlighted(result.matchedText, result.highlightRanges)
@@ -107,6 +158,7 @@ class SearchResultAdapter(
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        disposed = true
         metadataExecutor.shutdownNow()
         super.onDetachedFromRecyclerView(recyclerView)
     }

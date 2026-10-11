@@ -16,6 +16,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.Executors
 import java.util.concurrent.ConcurrentHashMap
 
@@ -25,6 +26,10 @@ class DrawerHierarchyAdapter(
     private val callbacks: Callbacks
 ) : ListAdapter<DrawerRow, DrawerHierarchyAdapter.Holder>(DIFF) {
     private val displayPreferences = Preferences.getPreferences(activity, "")
+    private val details = HashMap<String, ChatListDetails>()
+    private val detailRequests = HashSet<String>()
+    private val detailsGeneration = AtomicInteger(0)
+    private var disposed = false
     private val memoryStates = ConcurrentHashMap<String, String>()
     private val metadataExecutor = Executors.newSingleThreadExecutor { Thread(it, "drawer-metadata") }
 
@@ -49,21 +54,52 @@ class DrawerHierarchyAdapter(
      *  these is applied by [refreshDisplayIfChanged]. */
     private fun displayOptions(): List<Any> = listOf(
         displayPreferences.getShowCompanionImagesInChatList(),
-        displayPreferences.getHideModelNames(),
+        displayPreferences.getShowModelNamesInChatList(),
         displayPreferences.getShowMemoryStatusOnChatList(),
-        GlobalPreferences.getPreferences(activity).getProfileImageShape()
+        GlobalPreferences.getPreferences(activity).getProfileImageShape(),
+        displayPreferences.getShowBookmarkIndicatorInChatList(),
+        displayPreferences.getShowChatStartDateInChatList()
     )
     private var renderedDisplayOptions = displayOptions()
 
     fun refreshDisplayIfChanged() {
         val current = displayOptions()
-        if (current == renderedDisplayOptions) return
+        // A conversation can change without changing its drawer title or ordering.
+        detailsGeneration.incrementAndGet()
+        details.clear()
+        detailRequests.clear()
+        if (current == renderedDisplayOptions) {
+            if (needsDetails()) notifyDataSetChanged()
+            return
+        }
         val memoryStatusTurnedOn = displayPreferences.getShowMemoryStatusOnChatList() &&
             renderedDisplayOptions[2] == false
         renderedDisplayOptions = current
         notifyDataSetChanged()
         if (memoryStatusTurnedOn) loadMemoryStates()
     }
+    private fun needsDetails() = displayPreferences.getShowBookmarkIndicatorInChatList() ||
+        displayPreferences.getShowChatStartDateInChatList() || displayPreferences.getShowModelNamesInChatList()
+
+    private fun requestDetails(chatId: String, startedAt: Long?) {
+        if (disposed || !needsDetails() || details.containsKey(chatId) || !detailRequests.add(chatId)) return
+        val generation = detailsGeneration.get()
+        val includeModel = displayPreferences.getShowModelNamesInChatList()
+        metadataExecutor.execute {
+            if (generation != detailsGeneration.get()) return@execute
+            val loaded = try {
+                ChatListDetailsReader.read(activity.applicationContext, chatId, startedAt, includeModel)
+            } catch (_: Exception) { ChatListDetails(false, null) }
+            activity.runOnUiThread {
+                if (disposed || generation != detailsGeneration.get()) return@runOnUiThread
+                details[chatId] = loaded
+                currentList.forEachIndexed { position, row ->
+                    if (row is DrawerRow.Chat && row.value.id == chatId) notifyItemChanged(position)
+                }
+            }
+        }
+    }
+
     interface Callbacks {
         fun onClick(row: DrawerRow)
         fun onLongClick(anchor: View, row: DrawerRow)
@@ -127,8 +163,10 @@ class DrawerHierarchyAdapter(
                         row.value.id,
                         displayTitle,
                         pinned = row.value.pinned,
-                        current = row.value.id == currentChatId()
+                        current = row.value.id == currentChatId(),
+                        details = details[row.value.id] ?: ChatListDetails(false, row.value.startedAt)
                     )
+                    requestDetails(row.value.id, row.value.startedAt)
                     if (row.nested) root.updatePadding(left = baseStart + nestedExtra, right = baseStart)
                 }
             }
@@ -165,6 +203,8 @@ class DrawerHierarchyAdapter(
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        disposed = true
+        detailsGeneration.incrementAndGet()
         metadataExecutor.shutdownNow()
         super.onDetachedFromRecyclerView(recyclerView)
     }

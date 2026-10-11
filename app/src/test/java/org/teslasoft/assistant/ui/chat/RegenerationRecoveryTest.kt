@@ -17,6 +17,26 @@ import org.teslasoft.assistant.ui.chat.RegenerationRecovery.Outcome
 @Config(manifest = Config.NONE, sdk = [28], application = Application::class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class RegenerationRecoveryTest {
+    @Test fun `bookmarks survive pending regeneration recovery`() {
+        val original = reply("r1", "first answer", "100")
+        org.teslasoft.assistant.preferences.MessageBookmarks.set(original, true)
+        val pending = RegenerationRecovery.decode(RegenerationRecovery.encode(
+            pendingOver(user("u1"), original)
+        ))!!
+        val outcome = RegenerationRecovery.resolve(listOf(user("u1")), pending) as Outcome.Restore
+        assertTrue(org.teslasoft.assistant.preferences.MessageBookmarks.isBookmarked(outcome.original))
+    }
+
+    @Test fun `switching reply versions preserves the message bookmark`() {
+        val current = reply("r1", "second answer", "200")
+        org.teslasoft.assistant.preferences.MessageBookmarks.set(current, true)
+        val previous = ChatAdapter.snapshotVariant(reply("r1", "first answer", "100"))
+        RegenerationRecovery.foldInto(current, mutableListOf(previous), "r1")
+        ChatAdapter.applyVariant(current, previous)
+        assertEquals("first answer", current["message"])
+        assertTrue(org.teslasoft.assistant.preferences.MessageBookmarks.isBookmarked(current))
+    }
+
     private fun user(id: String) = hashMapOf<String, Any>(
         "isBot" to false, "message" to "question", MessageIdentity.KEY to id
     )
