@@ -47,7 +47,8 @@ class FlatChatIdentityBinder(
         title.setTypeface(null, android.graphics.Typeface.NORMAL)
     }
 
-    fun bind(chatId: String, displayTitle: String, pinned: Boolean, current: Boolean, details: ChatListDetails? = null) {
+    fun bind(chatId: String, displayTitle: String, pinned: Boolean, current: Boolean,
+        details: ChatListDetails? = null, showBookmarkIndicator: Boolean = true) {
         reset()
         title.text = displayTitle
         val chatPreferences = Preferences.getPreferences(activity, chatId)
@@ -71,7 +72,7 @@ class FlatChatIdentityBinder(
                 MaterialColors.getColor(leading, androidx.appcompat.R.attr.colorPrimary)
             )
         }
-        bookmarkIndicator.visibility = if (displayPreferences.getShowBookmarkIndicatorInChatList() &&
+        bookmarkIndicator.visibility = if (showBookmarkIndicator && displayPreferences.getShowBookmarkIndicatorInChatList() &&
             details?.hasBookmarks == true) View.VISIBLE else View.GONE
         val metadata = ChatListDetails.metadata(
             if (displayPreferences.getShowChatStartDateInChatList()) details?.startedAt else null,

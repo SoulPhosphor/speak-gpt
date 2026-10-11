@@ -38,6 +38,9 @@ class SearchResultAdapter(
     private val detailRequests = HashSet<String>()
     @Volatile private var detailsGeneration = 0
     @Volatile private var disposed = false
+    // Accessed only by the single metadata worker.
+    private var startDatesGeneration = -1
+    private var startDates = emptyMap<String, Long?>()
     private val metadataExecutor = Executors.newSingleThreadExecutor { Thread(it, "search-metadata") }
 
     init {
@@ -67,7 +70,7 @@ class SearchResultAdapter(
 
     private fun requestDetails(chatId: String) {
         if (disposed || details.containsKey(chatId) || !(
-            preferences.getShowBookmarkIndicatorInChatList() || preferences.getShowChatStartDateInChatList() ||
+            preferences.getShowChatStartDateInChatList() ||
                 preferences.getShowModelNamesInChatList()
         ) || !detailRequests.add(chatId)) return
         val generation = detailsGeneration
@@ -76,9 +79,15 @@ class SearchResultAdapter(
             if (disposed || generation != detailsGeneration) return@execute
             val loaded = try {
                 val context = activity.applicationContext
-                val row = ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false)
-                    .chats.firstOrNull { ChatPreferences.storedChatId(it) == chatId }
-                ChatListDetailsReader.read(context, chatId, row?.get("created_at")?.toLongOrNull(), includeModel)
+                if (startDatesGeneration != generation) {
+                    startDates = ChatPreferences.getChatPreferences()
+                        .getChatListResult(context, includeFirstMessage = false).chats.associate {
+                            ChatPreferences.storedChatId(it) to it["created_at"]?.toLongOrNull()
+                        }
+                    startDatesGeneration = generation
+                }
+                if (disposed || generation != detailsGeneration) return@execute
+                ChatListDetailsReader.read(context, chatId, startDates[chatId], includeModel)
             } catch (_: Exception) { ChatListDetails(false, null) }
             activity.runOnUiThread {
                 if (disposed || generation != detailsGeneration) return@runOnUiThread
@@ -100,7 +109,7 @@ class SearchResultAdapter(
         fun bind(result: SearchResult) {
             requestDetails(result.chatId)
             identity.bind(result.chatId, result.chatTitle, pinned = result.chatPinned, current = false,
-                details = details[result.chatId])
+                details = details[result.chatId], showBookmarkIndicator = false)
             chevron.visibility = View.GONE
             if (result.kind == SearchDocumentKind.TITLE) {
                 title.text = highlighted(result.matchedText, result.highlightRanges)
