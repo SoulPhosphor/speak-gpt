@@ -33,6 +33,9 @@ class UserTokenEstimateContractTest {
         val compactMetadata = adapter.indexOf("updateMessageMeta(display", bindStart)
         assertTrue(boundId in bindStart until compactMetadata)
         val estimateStart = adapter.indexOf("private fun scheduleAssistantTokenEstimate")
+        val streamingGuard = adapter.indexOf("MessageCompletionState.STREAMING", estimateStart)
+        val tokenizerLaunch = adapter.indexOf("context.lifecycleScope.launch", estimateStart)
+        assertTrue(streamingGuard in estimateStart until tokenizerLaunch)
         val staleTextGuard = adapter.indexOf(
             "chatMessage[\"message\"]?.toString() != text",
             estimateStart

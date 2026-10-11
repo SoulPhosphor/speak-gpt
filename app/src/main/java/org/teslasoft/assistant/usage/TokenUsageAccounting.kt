@@ -460,14 +460,18 @@ object TokenUsageAccounting {
         }
         // The exact cached/uncached rows must remain unknown when the provider
         // omitted its cache split. The conversation total can still retain the
-        // old, useful estimate by pricing all reported input at the regular
-        // input rate. A provider-reported total always wins below.
+        // old, useful estimate by treating an unreported cache-read remainder
+        // as regular input. A reported cache-write tier is still honored. A
+        // provider-reported total always wins below.
         val regularInputCostEstimate = if (
             counts.cachedInputTokens == null && pricingSource != PricingSource.FEATHERLESS
         ) {
-            counts.inputTokens?.takeIf { costsApplicable }?.let { count ->
-                applied.inputPricePerToken?.let { count * it }
-            }
+            if (costsApplicable) estimateInputCostWithoutCacheReadSplit(
+                inputTokens = counts.inputTokens,
+                cacheWriteInputTokens = counts.cacheWriteInputTokens,
+                inputPricePerToken = applied.inputPricePerToken,
+                cacheWriteInputPricePerToken = applied.cacheWriteInputPricePerToken
+            ) else null
         } else null
         val inputCost: Double?
         val outputCost: Double?
@@ -666,17 +670,41 @@ object TokenUsageAccounting {
         return total.takeIf { it.isFinite() && it >= 0.0 }
     }
 
+    /** Estimates only the missing cache-read split. Any separately reported
+     * cache-write tokens retain their frozen write rate. */
+    private fun estimateInputCostWithoutCacheReadSplit(
+        inputTokens: Int?,
+        cacheWriteInputTokens: Int?,
+        inputPricePerToken: Double?,
+        cacheWriteInputPricePerToken: Double?
+    ): Double? {
+        val input = inputTokens?.takeIf { it >= 0 } ?: return null
+        val regularPrice = inputPricePerToken
+            ?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
+        val write = cacheWriteInputTokens ?: 0
+        if (write < 0 || write > input) return null
+        val cost = if (write == 0) {
+            input * regularPrice
+        } else {
+            val writePrice = cacheWriteInputPricePerToken
+                ?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
+            (input - write) * regularPrice + write * writePrice
+        }
+        return cost.takeIf { it.isFinite() && it >= 0.0 }
+    }
+
     private fun TurnUsageRecord.effectiveTotalCost(): Double? {
         totalCost?.takeIf { it.isFinite() && it >= 0.0 }?.let { return it }
         if (meters != null || PricingSource.forUrl(apiEndpoint) == PricingSource.FEATHERLESS) {
             return null
         }
         val effectiveInput = inputCost ?: if (cachedInputTokens == null) {
-            val count = inputTokens
-            val price = inputPricePerToken
-            if (count != null && price != null && count >= 0 && price >= 0.0 && price.isFinite()) {
-                count * price
-            } else null
+            estimateInputCostWithoutCacheReadSplit(
+                inputTokens = inputTokens,
+                cacheWriteInputTokens = cacheWriteInputTokens,
+                inputPricePerToken = inputPricePerToken,
+                cacheWriteInputPricePerToken = cacheWriteInputPricePerToken
+            )
         } else null
         val effectiveOutput = outputCost ?: run {
             val count = outputTokens

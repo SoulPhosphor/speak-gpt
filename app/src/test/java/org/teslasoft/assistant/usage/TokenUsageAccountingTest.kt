@@ -508,6 +508,31 @@ class TokenUsageAccountingTest {
         assertEquals(0.0012, group.totalCost, 1e-12)
     }
 
+    @Test fun unreportedCacheReadSplitStillHonorsReportedCacheWriteTier() {
+        val record = TokenUsageAccounting.createRecord(
+            "m", "Provider", null,
+            TokenCounts(
+                1_000, 100, 1_100,
+                cachedInputTokens = null,
+                cacheWriteInputTokens = 200
+            ),
+            TokenCountSource.PROVIDER_REPORTED,
+            TokenPricingSnapshot(
+                inputPricePerToken = 0.001,
+                outputPricePerToken = 0.002,
+                cachedInputPricePerToken = 0.0001,
+                cacheWriteInputPricePerToken = 0.00125
+            )
+        )
+        assertNull(record.inputCost)
+        assertEquals(1.25, record.totalCost!!, 1e-12)
+
+        val historical = record.copy(totalCost = null)
+        val group = TokenUsageAccounting.aggregate(listOf(historical)).groups.single()
+        assertFalse(group.hasUnknownCost)
+        assertEquals(1.25, group.totalCost, 1e-12)
+    }
+
     @Test fun historicalRecordWithoutCacheSplitRecoversOnlyItsOverallEstimate() {
         val historical = TurnUsageRecord(
             model = "m", provider = "Provider", inputTokens = 1_000,

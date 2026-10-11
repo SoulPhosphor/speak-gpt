@@ -1169,6 +1169,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /** Backfills old replies in memory without trusting their historical
          * responseTokens field, whose meaning was whole-request usage. */
         private fun scheduleAssistantTokenEstimate(chatMessage: HashMap<String, Any>) {
+            // Finalization stores the completed reply's estimate. Tokenizing
+            // every streamed prefix would queue redundant full-prefix work.
+            if (chatMessage[MessageCompletionState.KEY_STATE]?.toString() ==
+                MessageCompletionState.STREAMING
+            ) return
             val text = chatMessage["message"]?.toString()?.takeIf { it.isNotBlank() }
                 ?: return
             if (text.trim().startsWith("~file:")) return
