@@ -18,11 +18,17 @@ a detail; the file list at the end shows where each part lives.
 - **Request:** one call to the AI service. One reply can involve several
   requests (for example, a tool call and its continuation).
 
+The token number shown on an individual user or AI message is separate from
+this screen. It is an app estimate of that message's visible text only. It does
+not include the other conversation history, instructions, memory, attachments,
+tools, reasoning, or other request data that may be included in the provider's
+whole-request usage report.
+
 ## The short version
 
 | Number on screen | Where it comes from |
 | --- | --- |
-| Token counts | Reported by the AI service in each reply. Never guessed for new replies. |
+| Token counts | Reported by the AI service when available. Otherwise the app uses a generic CL100K estimate and records that it was estimated. |
 | Total cost | The actual charge, when the service reports one in US dollars. Otherwise the sum of the calculated parts. |
 | Input / Output / Cached cost | Calculated: reported tokens × the published price saved with that request. Never provider-reported values unless the service itemizes them. |
 | Prices | Fetched when the request starts and saved with the request. Never re-fetched later. |
@@ -65,6 +71,14 @@ a detail; the file list at the end shows where each part lives.
 
 Every request records its own token counts from what the AI service reports.
 
+OpenRouter chat requests place one ephemeral cache breakpoint at the end of
+the reusable conversation prefix, immediately before the newest message. This
+opts providers that require an explicit breakpoint into caching while allowing
+providers with automatic caching to keep their normal behavior. The breakpoint
+moves forward as the conversation grows. The chat's stable identifier is also
+sent as `prompt_cache_key` so OpenRouter can keep the same chat on a cache-aware
+route even when its opening prompt changes.
+
 - **Input and output counts** are read from the reply's usage report. Both the
   OpenAI-style names (`prompt_tokens`, `completion_tokens`) and the
   Claude-style names (`input_tokens`, `output_tokens`) are understood.
@@ -97,13 +111,14 @@ Every request records its own token counts from what the AI service reports.
 - **A later usage report never erases an earlier count.** If a service sends
   usage in several pieces and a later piece leaves out a number, the earlier
   number is kept.
-- **Missing counts stay missing.** If the service reports no usage at all,
-  the request has no counts. New replies are never estimated.
+- **Missing counts are estimated for a completed visible chat reply.** If the
+  service reports no usage at all, the app estimates the request's input from
+  the conversation messages and the output from the visible reply with a
+  generic CL100K tokenizer. Provider-reported counts always win when present.
 
-**Old replies only:** replies saved before durable usage records existed have
-no stored counts. For those, the app estimates input and output with a
-generic tokenizer (CL100K) and marks the record as estimated. These records
-have no prices and no cache information.
+Replies saved before durable usage records existed also have no stored counts.
+For those, the app makes the same generic CL100K estimate and marks the record
+as estimated. These older records have no prices and no cache information.
 
 ## 2. Prices
 
@@ -333,10 +348,12 @@ smaller positive value that would round to zero is shown as `<$0.0001`.
   fold-in (Compacting), Condense (Condensing), Reduce (Reducing), Summarizer
   image description (Image Description), and the short reminder written when
   an attachment is removed (Removal) is a paid request and is counted.
-- **Recorded the same way as chat replies:** counts and charges come only from
-  the service's report, and prices are frozen when the request finishes. A
-  finished request with no usage report is still counted, with its values
-  "Not Reported"; a failed one only when the service reported usage.
+- **Auxiliary requests:** counts and charges come only from the service's
+  report, and prices are frozen when the request finishes. A finished
+  auxiliary request with no usage report is still counted, with its values
+  "Not Reported"; a failed one only when the service reported usage. The
+  visible-chat-reply estimate described in section 1 does not apply to these
+  hidden requests.
 - **TTS section:** every API voice request that returned audio is counted.
   Section 7 explains how.
 - **Image Generations:** `/imagine` and AI `create_image` jobs record each

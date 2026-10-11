@@ -525,22 +525,6 @@ class TokenUsageAccountingTest {
         assertTrue(group.hasUnknownCachedInputTokens)
     }
 
-    @Test fun perMessageDisplayUsesDurableOutputInsteadOfLegacyRequestTotal() {
-        val record = TokenUsageAccounting.createRecord(
-            "m", "Provider", null, TokenCounts(1_000, 100, 1_100),
-            TokenCountSource.PROVIDER_REPORTED, TokenPricingSnapshot()
-        )
-        val message = mapOf<String, Any>(
-            "responseTokens" to "1100",
-            TokenUsageAccounting.KEY_USAGE_RECORDS to
-                TokenUsageAccounting.encodeRecords(listOf(record, record.copy(outputTokens = 25)))
-        )
-        assertEquals(125L, TokenUsageAccounting.outputTokensForDisplay(message))
-        assertNull(TokenUsageAccounting.outputTokensForDisplay(
-            mapOf("responseTokens" to "1100")
-        ))
-    }
-
     @Test fun modelDocumentedWithoutCachingHasZeroCachedUsage() {
         val record = TokenUsageAccounting.createRecord(
             "venice-uncensored", "Venice", null, TokenCounts(1_000, 100, 1_100),

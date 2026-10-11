@@ -251,11 +251,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var speakingPosition = -1
 
     companion object {
-        /** CL100K tokenizer for user-token estimates, loaded once on first use. */
-        @Volatile private var cachedUserTokenizer: Tokenizer? = null
+        /** Generic tokenizer for visible-message estimates, loaded once on first use. */
+        @Volatile private var cachedMessageTokenizer: Tokenizer? = null
 
-        private suspend fun userTokenizer(): Tokenizer =
-            cachedUserTokenizer ?: Tokenizer.of(Encoding.CL100K_BASE).also { cachedUserTokenizer = it }
+        private suspend fun messageTokenizer(): Tokenizer =
+            cachedMessageTokenizer ?: Tokenizer.of(Encoding.CL100K_BASE).also {
+                cachedMessageTokenizer = it
+            }
 
         private const val TYPE_USER = 0
         private const val TYPE_BOT = 1
@@ -296,18 +298,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         //   KEY_MESSAGE_MODEL  — the model that produced this assistant reply,
         //                        frozen when the reply began so a later model
         //                        switch never relabels past turns.
-        //   KEY_MESSAGE_TOKENS — provider-reported output tokens for that turn.
+        //   KEY_MESSAGE_TOKENS — legacy provider accounting metadata. Current
+        //                        message token display estimates visible text.
         //   KEY_MESSAGE_TIME   — epoch-millis timestamp of when the message was
         //                        created (both roles).
         const val KEY_MESSAGE_MODEL = "responseModel"
         const val KEY_MESSAGE_PROVIDER = "responseProvider"
         const val KEY_MESSAGE_TOKENS = "responseTokens"
+        const val KEY_MESSAGE_TOKEN_ESTIMATE = "visibleTextTokenEstimate"
         const val KEY_MESSAGE_TIME = "messageTime"
 
-        // Durable accounting for completed API requests. For current records,
-        // the display derives output tokens from this JSON rather than trusting
-        // older responseTokens metadata that stored provider total tokens. The
-        // JSON records preserve prompt,
+        // Durable accounting for completed API requests. Usage & Cost reads
+        // this JSON; the per-message token display does not. The JSON records preserve prompt,
         // completion and total independently, plus model/provider attribution,
         // source and the price/cost snapshot from completion time.
         const val KEY_TOKEN_USAGE_RECORDS =
@@ -372,6 +374,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             KEY_MESSAGE_MODEL,
             KEY_MESSAGE_PROVIDER,
             KEY_MESSAGE_TOKENS,
+            KEY_MESSAGE_TOKEN_ESTIMATE,
             KEY_TOKEN_USAGE_RECORDS,
             KEY_MESSAGE_TIME,
             KEY_MESSAGE_REASONING,
@@ -1107,7 +1110,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /**
          * The compact metadata line beneath the identity (chat-redesign-plan.md
          * §4.3). Present only on the assistant layout. Shows the producing model
-         * when Model Names is on, the provider output-token count when Token Usage is
+         * when Model Names is on, the visible-message token estimate when Token Usage is
          * on, joined by a centered dot when both are present and both enabled
          * and the two fit on one line. When a long model name would otherwise
          * push the token count past the row's edge, the token count drops to
@@ -1131,7 +1134,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val modelPart = if (preferences.getShowModelNames()) {
                 chatMessage[KEY_MESSAGE_MODEL]?.toString()?.takeIf { it.isNotBlank() }
             } else null
-            val tokenPart = if (preferences.getShowTokenUsage()) tokenCountLabel(chatMessage) else null
+            val tokenPart = if (preferences.getShowTokenUsage()) {
+                tokenCountLabel(chatMessage) ?: run {
+                    scheduleAssistantTokenEstimate(chatMessage)
+                    null
+                }
+            } else null
 
             if (modelPart == null && tokenPart == null) {
                 meta.visibility = View.GONE
@@ -1142,15 +1150,37 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
-        /** The provider output-token count for this turn, worded per the approved
-         *  format (e.g. "1,234 tokens"), or null when this turn stored no
-         *  usable count so the caller omits it. */
+        /** An app estimate of the visible assistant text only, worded per the
+         * approved compact format. It deliberately does not use provider request
+         * accounting, which belongs to Usage & Cost. */
         private fun tokenCountLabel(chatMessage: HashMap<String, Any>): String? {
-            val count = org.teslasoft.assistant.usage.TokenUsageAccounting
-                .outputTokensForDisplay(chatMessage)
+            val count = chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE]
+                ?.toString()
+                ?.toIntOrNull()
+                ?.takeIf { it > 0 }
                 ?: return null
             val grouped = NumberFormat.getIntegerInstance(Locale.getDefault()).format(count)
             return context.getString(R.string.chat_token_count, grouped)
+        }
+
+        /** Backfills old replies in memory without trusting their historical
+         * responseTokens field, whose meaning was whole-request usage. */
+        private fun scheduleAssistantTokenEstimate(chatMessage: HashMap<String, Any>) {
+            val text = chatMessage["message"]?.toString()?.takeIf { it.isNotBlank() }
+                ?: return
+            if (text.trim().startsWith("~file:")) return
+            val requestedMessageId = boundMessageId
+            context.lifecycleScope.launch {
+                val count = try {
+                    withContext(Dispatchers.Default) { messageTokenizer().encode(text).size }
+                } catch (_: Exception) {
+                    null
+                } ?: return@launch
+                chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+                if (boundMessageId == requestedMessageId) {
+                    bindCompactMetadata(chatMessage, isGeneratedImage = false)
+                }
+            }
         }
 
         /** The provider-reported reasoning-token count for this turn. It is
@@ -1168,7 +1198,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * The anchored Message Details popup (chat-redesign-plan.md §5). Always
          * reachable regardless of the compact-display toggles. Shows only the
          * fields stored for this message — date & time, and, for an assistant
-         * reply, the producing model and provider output-token count. Fields never
+         * reply, the producing model and visible-message token estimate. Fields never
          * recorded (older messages, or a turn the provider gave no usage for)
          * are omitted; a message with nothing stored shows the empty line. Text
          * is selectable. Outside tap or Back dismisses.
@@ -1176,15 +1206,21 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun showMessageDetailsPopup(anchor: View, chatMessage: HashMap<String, Any>) {
             val isBot = chatMessage["isBot"] == true
             val text = chatMessage["message"]?.toString().orEmpty()
-            // Show User Tokens: no service reports one message's own tokens,
-            // so the user's text is counted here and labelled an estimate.
-            if (!isBot && preferences.getShowUserTokens() && text.isNotBlank() && !text.startsWith("~file:")) {
+            // No service reports one visible message's own tokens, so both
+            // roles use the same generic tokenizer and are labelled estimates.
+            val needsEstimate = text.isNotBlank() && !text.startsWith("~file:") &&
+                if (isBot) tokenCountLabel(chatMessage) == null
+                else preferences.getShowUserTokens()
+            if (needsEstimate) {
                 val requestedMessageId = boundMessageId
                 context.lifecycleScope.launch {
                     val count = try {
-                        withContext(Dispatchers.Default) { userTokenizer().encode(text).size }
+                        withContext(Dispatchers.Default) { messageTokenizer().encode(text).size }
                     } catch (_: Exception) {
                         null
+                    }
+                    if (isBot && count != null) {
+                        chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
                     }
                     if (anchor.isAttachedToWindow && boundMessageId == requestedMessageId) {
                         showMessageDetailsPopup(anchor, chatMessage, count)

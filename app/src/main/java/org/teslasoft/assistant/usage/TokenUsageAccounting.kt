@@ -621,15 +621,6 @@ object TokenUsageAccounting {
         return variantRecords.ifEmpty { decodeRecords(message[KEY_USAGE_RECORDS]?.toString()) }
     }
 
-    /** Completion/output tokens for the currently displayed message snapshot.
-     * [ChatAdapter] applies a selected regeneration variant before calling
-     * this, so only the selected response's request records are summed. */
-    fun outputTokensForDisplay(message: Map<String, Any>): Long? {
-        val records = decodeRecords(message[KEY_USAGE_RECORDS]?.toString())
-        if (records.isEmpty() || records.any { it.outputTokens == null }) return null
-        return records.sumOf { it.outputTokens!!.toLong() }
-    }
-
     /** The estimated record for a completed reply saved before durable usage
      * records existed, or null when [message] is not such a reply. */
     fun legacyRecordOf(

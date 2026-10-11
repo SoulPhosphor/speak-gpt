@@ -62,7 +62,7 @@
                 app:layout_constraintTop_toTopOf="parent" />
 
             <!-- Compact per-message metadata (chat-redesign-plan.md §4.3): the
-                 producing model and/or provider token count, each gated by its
+                 producing model and/or visible-text token estimate, each gated by its
                  own Appearance toggle and shown only when that turn actually
                  carries the value. Sits beneath the identity line, above the
                  reply. GONE (a zero-height point) whenever nothing is enabled or

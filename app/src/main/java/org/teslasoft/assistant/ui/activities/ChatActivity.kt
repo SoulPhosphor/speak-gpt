@@ -189,6 +189,7 @@ import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.ReportedProviderParser
 import org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot
+import org.teslasoft.assistant.providers.PromptCachingRequestSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
@@ -7671,6 +7672,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /**
+     * Opt ordinary multi-turn OpenRouter chat requests into explicit prompt
+     * caching. The serializer marks the reusable prefix immediately before the
+     * newest message, so providers such as Alibaba that require a breakpoint
+     * can cache it while implicitly cached providers keep their normal behavior.
+     * Auxiliary requests are excluded by the generation-request attribute.
+     */
+    private fun augmentRequestWithPromptCaching(request: HttpRequestBuilder) {
+        if (apiEndpointObject?.isOpenRouterRouting() != true) return
+        if (!request.attributes.contains(generationRequestAttribute)) return
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val augmented = PromptCachingRequestSerializer.augmentOpenRouterChatBody(
+            content.text,
+            chatId.takeIf { it.isNotBlank() }
+        )
+        if (augmented != content.text) {
+            request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
+        }
+    }
+
     /** Attach original PDFs only to the exact frozen generation request that owns them. */
     private fun augmentRequestWithNativePdfs(request: HttpRequestBuilder) {
         val payloads = generationRequestContext.get()?.nativePdfs.orEmpty()
@@ -8216,6 +8238,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 augmentRequestWithReasoning(request)
                             } catch (_: Exception) {
                                 // Non-fatal: send without a reasoning instruction.
+                            }
+                            try {
+                                // A moving explicit breakpoint opts supported
+                                // OpenRouter providers into multi-turn caching.
+                                augmentRequestWithPromptCaching(request)
+                            } catch (_: Exception) {
+                                // Non-fatal: send without an explicit breakpoint.
                             }
                             // Unlike optional reasoning, a native PDF must not
                             // be silently omitted. Any mutation failure aborts
@@ -11087,6 +11116,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
+            val visibleText = last["message"]?.toString().orEmpty()
+            if (visibleText.isNotBlank() && !visibleText.trim().startsWith("~file:")) {
+                val estimate = try {
+                    withContext(Dispatchers.Default) {
+                        Tokenizer.of(Encoding.CL100K_BASE).encode(visibleText).size
+                    }
+                } catch (_: Exception) {
+                    null
+                }
+                estimate?.let {
+                    last[ChatAdapter.KEY_MESSAGE_TOKEN_ESTIMATE] = it.toString()
+                }
+            }
             val records = listOfNotNull(completePendingUsageRecord())
             attachUsageRecords(last, records)
             // A regeneration folds this finished reply into the turn's version
@@ -11138,12 +11180,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?.let { message[ChatAdapter.KEY_MESSAGE_MODEL] = it }
         records.last().provider.takeIf { it != TokenUsageAccounting.PROVIDER_NOT_REPORTED }
             ?.let { message[ChatAdapter.KEY_MESSAGE_PROVIDER] = it }
-        // responseTokens is the historical storage key, but its displayed
-        // meaning is response/output tokens. Sum every completed request in
-        // the turn (including tool continuations) and stay absent if partial.
-        records.mapNotNull { it.outputTokens }.takeIf { it.size == records.size }
-            ?.sumOf { it.toLong() }
-            ?.let { message[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+        // Provider request accounting stays in tokenUsageRecords. The message
+        // UI estimates only this bubble's visible text and must not mirror a
+        // whole-request or provider-output count into responseTokens.
+        message.remove(ChatAdapter.KEY_MESSAGE_TOKENS)
     }
 
     /**

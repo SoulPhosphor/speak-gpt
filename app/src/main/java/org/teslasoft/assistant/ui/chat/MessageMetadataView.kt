@@ -15,7 +15,7 @@ import androidx.appcompat.widget.AppCompatTextView
 import kotlin.math.ceil
 
 /**
- * Displays the producing model and output-token count without clipping the token
+ * Displays the producing model and visible-text token estimate without clipping the token
  * label. Both values share one line while they fit in this view's real measured
  * space; otherwise the complete token label moves beneath the complete model
  * name. A single enabled value always occupies the first line.
