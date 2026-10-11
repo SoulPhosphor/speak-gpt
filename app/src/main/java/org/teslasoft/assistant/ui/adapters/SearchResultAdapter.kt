@@ -36,8 +36,8 @@ class SearchResultAdapter(
     private val memoryStates = ConcurrentHashMap<String, String>()
     private val details = HashMap<String, ChatListDetails>()
     private val detailRequests = HashSet<String>()
-    private var detailsGeneration = 0
-    private var disposed = false
+    @Volatile private var detailsGeneration = 0
+    @Volatile private var disposed = false
     private val metadataExecutor = Executors.newSingleThreadExecutor { Thread(it, "search-metadata") }
 
     init {
@@ -73,6 +73,7 @@ class SearchResultAdapter(
         val generation = detailsGeneration
         val includeModel = preferences.getShowModelNamesInChatList()
         metadataExecutor.execute {
+            if (disposed || generation != detailsGeneration) return@execute
             val loaded = try {
                 val context = activity.applicationContext
                 val row = ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false)
