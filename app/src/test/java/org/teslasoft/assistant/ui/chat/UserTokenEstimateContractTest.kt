@@ -59,6 +59,11 @@ class UserTokenEstimateContractTest {
         val persistence = adapter.substring(persistenceStart, persistenceEnd)
         assertTrue(persistence.contains("variant[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()"))
         assertTrue(persistence.contains("sourceMessage[KEY_VARIANTS] = variantsToJson(variants)"))
+        assertTrue(persistence.contains("listener?.onTokenEstimateStored()"))
+        val activity = source("src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+        val saveCallback = activity.substringAfter("override fun onTokenEstimateStored()")
+            .substringBefore("private fun syncChatProjection")
+        assertTrue(saveCallback.contains("saveSettings()"))
         val detailsStart = adapter.indexOf("private fun showMessageDetailsPopup")
         val detailsEstimateWrite = adapter.indexOf(
             "storeAssistantTokenEstimate(",

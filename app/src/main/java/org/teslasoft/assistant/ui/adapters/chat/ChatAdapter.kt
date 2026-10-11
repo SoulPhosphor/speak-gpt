@@ -1250,6 +1250,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 sourceMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
             }
             displayMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+            listener?.onTokenEstimateStored()
             return true
         }
 
@@ -3546,6 +3547,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  the host just persists the new pager position; it never truncates
          *  history or changes which version the conversation continues from. */
         fun onResponseVersionChanged()
+
+        /** A legacy visible-text estimate was newly added to message storage. */
+        fun onTokenEstimateStored()
 
         /** The inline image-confirmation card's Create (true) or Cancel
          *  (false) tap (image-generation-rebuild-plan.md §5). */

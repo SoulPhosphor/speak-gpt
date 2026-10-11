@@ -14409,6 +14409,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         saveSettings()
     }
 
+    override fun onTokenEstimateStored() {
+        saveSettings()
+    }
+
     private fun syncChatProjection() {
         rebuildModelProjection()
         updateMessagesSelectionProjection()
