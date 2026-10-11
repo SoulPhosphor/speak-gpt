@@ -189,6 +189,8 @@ import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.ReportedProviderParser
 import org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot
+import org.teslasoft.assistant.providers.PromptCachingCatalogEvidence
+import org.teslasoft.assistant.providers.PromptCachingCatalogReusePolicy
 import org.teslasoft.assistant.providers.PromptCachingPolicy
 import org.teslasoft.assistant.providers.PromptCachingRequestSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
@@ -7683,7 +7685,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * requests are excluded by the generation-request attribute.
      */
     private suspend fun augmentRequestWithPromptCaching(request: HttpRequestBuilder) {
-        if (apiEndpointObject?.isOpenRouterRouting() != true) return
+        val endpoint = apiEndpointObject?.takeIf { it.isOpenRouterRouting() } ?: return
         if (!request.attributes.contains(generationRequestAttribute)) return
         val content = request.body as? TextContent ?: return
         if (content.contentType?.match(ContentType.Application.Json) != true) return
@@ -7693,11 +7695,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } catch (_: Exception) {
             null
         } ?: return
-        val contextCatalog = generationRequestContext.get()?.pricingCatalog
+        val endpointFingerprint = promptCachingEndpointFingerprint(endpoint)
+        val requestContext = generationRequestContext.get()
+        val requestEndpointFingerprint = requestContext?.pricingCatalogEndpointFingerprint
+        val contextCatalog = requestContext?.pricingCatalog
             ?.takeIf { it.isCompleted }
             ?.let { runCatching { it.await() }.getOrNull() }
-        val catalog = contextCatalog?.takeIf { it.model.equals(model, ignoreCase = true) }
-            ?: lastPromptCachingCatalog?.takeIf { it.model.equals(model, ignoreCase = true) }
+            ?.takeIf {
+                requestEndpointFingerprint == endpointFingerprint &&
+                    it.model.equals(model, ignoreCase = true)
+            }
+        val catalog = contextCatalog ?: PromptCachingCatalogReusePolicy.reusableCatalog(
+            lastPromptCachingCatalog,
+            endpointFingerprint,
+            model,
+            android.os.SystemClock.elapsedRealtime()
+        )
         val explicitBreakpoint = PromptCachingPolicy.shouldAddExplicitBreakpoint(
             catalog?.providerPrices.orEmpty(),
             favoriteForActiveEndpoint(model),
@@ -7711,6 +7724,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (augmented != content.text) {
             request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
         }
+    }
+
+    /**
+     * Provider catalogs can vary by saved OpenRouter profile, discovery path,
+     * and account. Hash the credential rather than retaining it in cache
+     * metadata; any profile edit then invalidates earlier evidence.
+     */
+    private fun promptCachingEndpointFingerprint(endpoint: ApiEndpointObject?): String? {
+        if (endpoint?.isOpenRouterRouting() != true) return null
+        return listOf(
+            endpoint.id.trim(),
+            endpoint.host.trim().trimEnd('/').lowercase(Locale.ROOT),
+            endpoint.providerDiscoveryPath.trim()
+                .ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH },
+            endpoint.authType.trim().lowercase(Locale.ROOT),
+            Hash.hash(endpoint.apiKey)
+        ).joinToString("\u001f")
     }
 
     /** Attach original PDFs only to the exact frozen generation request that owns them. */
@@ -9536,6 +9566,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val lifecycle: ResponseLifecycleRecorder?,
         val pricingCatalog: Deferred<TokenPricingCatalog>?,
         val nativePdfs: List<NativePdfPayload>,
+        val pricingCatalogEndpointFingerprint: String? = null,
         /** A Condense/Reduce/reminder request: capture its usage only, with no
          *  chat-turn diagnostics attached. */
         val auxiliaryUsage: Boolean = false
@@ -9545,7 +9576,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private suspend fun <T> withGenerationRequestContext(block: suspend () -> T): T {
         val context = GenerationRequestContext(
-            currentProviderUsageAttempt, currentLifecycle, currentPricingCatalog, currentTurnNativePdfs
+            currentProviderUsageAttempt,
+            currentLifecycle,
+            currentPricingCatalog,
+            currentTurnNativePdfs,
+            currentPricingCatalogEndpointFingerprint
         )
         return try {
             kotlinx.coroutines.withContext(generationRequestContext.asContextElement(context)) {
@@ -9636,8 +9671,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             fallbackProvider = fallbackServingProvider(),
             apiEndpoint = apiEndpointObject?.host.orEmpty()
         )
+        val pricingEndpoint = apiEndpointObject
+        currentPricingCatalogEndpointFingerprint = promptCachingEndpointFingerprint(pricingEndpoint)
         currentPricingCatalog = lifecycleScope.async(Dispatchers.IO) {
-            TokenPricingCatalogClient.load(apiEndpointObject, usedModel)
+            TokenPricingCatalogClient.load(pricingEndpoint, usedModel)
         }
         if (preferences?.getResponseLifecycleLogging() != true) {
             currentLifecycle = null
@@ -9693,9 +9730,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         usageAttempt?.let {
             pendingProviderUsageSnapshot = it.snapshot()
             pendingCompletedPricingCatalog = currentPricingCatalog
+            pendingCompletedPricingCatalogEndpointFingerprint =
+                currentPricingCatalogEndpointFingerprint
         }
         currentProviderUsageAttempt = null
         currentPricingCatalog = null
+        currentPricingCatalogEndpointFingerprint = null
         val r = currentLifecycle ?: return providerDiagnostics
         if (r.finalized) return providerDiagnostics
         val n = if (r.nonStreamingResponse) {
@@ -9721,9 +9761,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         currentProviderUsageAttempt = null
         currentPricingCatalog?.cancel()
         currentPricingCatalog = null
+        currentPricingCatalogEndpointFingerprint = null
         pendingProviderUsageSnapshot = null
         pendingCompletedPricingCatalog?.cancel()
         pendingCompletedPricingCatalog = null
+        pendingCompletedPricingCatalogEndpointFingerprint = null
         terminalRecord?.let { record ->
             val carrier = messages.lastOrNull { it["isBot"] == true }
                 ?: messages.lastOrNull { it["isBot"] != true }
@@ -10954,6 +10996,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // reply being attached after a terminal race.
             pendingProviderUsageSnapshot = null
             pendingCompletedPricingCatalog = null
+            pendingCompletedPricingCatalogEndpointFingerprint = null
             // Fresh reasoning accumulator for this turn. Unknown paths, visible
             // reasoning, and OpenRouter tool continuations attach it as needed.
             currentTurnReasoning = org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator()
@@ -10998,9 +11041,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @Volatile
     private var currentProviderUsageAttempt: ProviderUsageAttempt? = null
     private var currentPricingCatalog: Deferred<TokenPricingCatalog>? = null
-    @Volatile private var lastPromptCachingCatalog: TokenPricingCatalog? = null
+    private var currentPricingCatalogEndpointFingerprint: String? = null
+    @Volatile private var lastPromptCachingCatalog: PromptCachingCatalogEvidence? = null
     private var pendingProviderUsageSnapshot: ProviderUsageSnapshot? = null
     private var pendingCompletedPricingCatalog: Deferred<TokenPricingCatalog>? = null
+    private var pendingCompletedPricingCatalogEndpointFingerprint: String? = null
 
     /** While a Retry is in flight, the versions the regenerated reply will be
      *  folded into: the prior turn's existing version list, or its single
@@ -11302,6 +11347,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pendingProviderUsageSnapshot = null
         val pricingDeferred = pendingCompletedPricingCatalog
         pendingCompletedPricingCatalog = null
+        val pricingEndpointFingerprint = pendingCompletedPricingCatalogEndpointFingerprint
+        pendingCompletedPricingCatalogEndpointFingerprint = null
 
         val estimate = if (snapshot.counts.hasAnyValue()) {
             null
@@ -11314,12 +11361,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         var catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) { pricingDeferred?.await() }
         if (catalog == null) pricingDeferred?.cancel()
+        val promptCachingCatalog = catalog
         if (catalog != null && !catalog.model.equals(snapshot.model, ignoreCase = true)) {
             catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) {
                 TokenPricingCatalogClient.load(apiEndpointObject, snapshot.model)
             }
         }
-        if (catalog != null) lastPromptCachingCatalog = catalog
+        if (promptCachingCatalog != null && pricingEndpointFingerprint != null) {
+            lastPromptCachingCatalog = PromptCachingCatalogEvidence(
+                pricingEndpointFingerprint,
+                promptCachingCatalog,
+                android.os.SystemClock.elapsedRealtime()
+            )
+        }
         val pricing = catalog?.pricingFor(snapshot.provider)
             ?: TokenPricingSnapshot()
         return TokenUsageAccounting.createRecord(
