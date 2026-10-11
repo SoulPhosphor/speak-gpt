@@ -867,14 +867,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateShareButton(chatMessage)
             updateSpeakButton(display, position)
             updateStatusMarker(display)
-            updateMessageMeta(display, isGeneratedImage)
+            updateMessageMeta(display, isGeneratedImage, chatMessage)
             updateReasoning(display, position)
             updateReasoningIndicator(display, isGeneratedImage)
             updateActiveMemories(display)
             updateVersionNav(chatMessage, position)
 
             btnDetails.setOnClickListener { anchor ->
-                if (!bulkActionMode) showMessageDetailsPopup(anchor, display)
+                if (!bulkActionMode) showMessageDetailsPopup(anchor, display, chatMessage)
             }
 
             val bookmarkSection = summarySectionStarts[
@@ -1122,7 +1122,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * Anything not enabled or not stored on this turn is simply omitted; the
          * whole line is GONE when nothing remains. Never invents a value.
          */
-        private fun updateMessageMeta(chatMessage: HashMap<String, Any>, isGeneratedImage: Boolean) {
+        private fun updateMessageMeta(
+            chatMessage: HashMap<String, Any>,
+            isGeneratedImage: Boolean,
+            sourceMessage: HashMap<String, Any>
+        ) {
             val meta = messageMeta ?: return
 
             // Generated images are produced by the image service, not a chat
@@ -1139,7 +1143,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else null
             val tokenPart = if (preferences.getShowTokenUsage()) {
                 tokenCountLabel(chatMessage) ?: run {
-                    scheduleAssistantTokenEstimate(chatMessage)
+                    scheduleAssistantTokenEstimate(chatMessage, sourceMessage)
                     null
                 }
             } else null
@@ -1168,7 +1172,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         /** Backfills old replies in memory without trusting their historical
          * responseTokens field, whose meaning was whole-request usage. */
-        private fun scheduleAssistantTokenEstimate(chatMessage: HashMap<String, Any>) {
+        private fun scheduleAssistantTokenEstimate(
+            chatMessage: HashMap<String, Any>,
+            sourceMessage: HashMap<String, Any>
+        ) {
             // Finalization stores the completed reply's estimate. Tokenizing
             // every streamed prefix would queue redundant full-prefix work.
             if (chatMessage[MessageCompletionState.KEY_STATE]?.toString() ==
@@ -1192,13 +1199,58 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 if (chatMessage["message"]?.toString() != text ||
                     chatMessage.containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)
                 ) return@launch
-                chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+                if (!storeAssistantTokenEstimate(
+                        chatMessage,
+                        sourceMessage,
+                        requestedVariantIndex,
+                        text,
+                        count
+                    )
+                ) return@launch
                 if (boundMessageId == requestedMessageId &&
                     boundDisplayedVariantIndex == requestedVariantIndex
                 ) {
-                    updateMessageMeta(chatMessage, isGeneratedImage = false)
+                    updateMessageMeta(
+                        chatMessage,
+                        isGeneratedImage = false,
+                        sourceMessage = sourceMessage
+                    )
                 }
             }
+        }
+
+        /** Persists a backfilled estimate in the selected version snapshot,
+         * not only in the temporary map used to display a legacy variant. */
+        private fun storeAssistantTokenEstimate(
+            displayMessage: HashMap<String, Any>,
+            sourceMessage: HashMap<String, Any>,
+            variantIndex: Int,
+            expectedText: String,
+            count: Int
+        ): Boolean {
+            val variants = parseVariants(sourceMessage[KEY_VARIANTS]?.toString())
+            if (variants.size >= 2) {
+                val variant = variants.getOrNull(variantIndex) ?: return false
+                if (variant["message"] != expectedText) return false
+                variant[KEY_MESSAGE_TOKEN_ESTIMATE]?.let { existing ->
+                    displayMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = existing
+                    return true
+                }
+                variant[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+                sourceMessage[KEY_VARIANTS] = variantsToJson(variants)
+                if (variantIndex == canonicalIndexOf(sourceMessage, variants.size)) {
+                    sourceMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+                }
+            } else {
+                if (sourceMessage["message"]?.toString() != expectedText) return false
+                sourceMessage[KEY_MESSAGE_TOKEN_ESTIMATE]?.let { existing ->
+                    displayMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = existing
+                    return true
+                }
+                sourceMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+            }
+            displayMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+            return true
         }
 
         /** The provider-reported reasoning-token count for this turn. It is
@@ -1221,7 +1273,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * are omitted; a message with nothing stored shows the empty line. Text
          * is selectable. Outside tap or Back dismisses.
          */
-        private fun showMessageDetailsPopup(anchor: View, chatMessage: HashMap<String, Any>) {
+        private fun showMessageDetailsPopup(
+            anchor: View,
+            chatMessage: HashMap<String, Any>,
+            sourceMessage: HashMap<String, Any>
+        ) {
             val isBot = chatMessage["isBot"] == true
             val text = chatMessage["message"]?.toString().orEmpty()
             // No service reports one visible message's own tokens, so both
@@ -1242,7 +1298,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     if (isBot && count != null && textStillMatches &&
                         !chatMessage.containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)
                     ) {
-                        chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+                        storeAssistantTokenEstimate(
+                            chatMessage,
+                            sourceMessage,
+                            requestedVariantIndex,
+                            text,
+                            count
+                        )
                     }
                     if (anchor.isAttachedToWindow && boundMessageId == requestedMessageId &&
                         boundDisplayedVariantIndex == requestedVariantIndex
@@ -1256,7 +1318,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 }
                 return
             }
-            showMessageDetailsPopup(anchor, chatMessage, null)
+            showMessageDetailsPopup(anchor, chatMessage, userTokenEstimate = null)
         }
 
         private fun showMessageDetailsPopup(

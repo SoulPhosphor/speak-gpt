@@ -40,23 +40,28 @@ class UserTokenEstimateContractTest {
             "chatMessage[\"message\"]?.toString() != text",
             estimateStart
         )
-        val estimateWrite = adapter.indexOf(
-            "chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()",
+        val estimateStore = adapter.indexOf(
+            "if (!storeAssistantTokenEstimate(",
             estimateStart
         )
-        assertTrue(staleTextGuard in estimateStart until estimateWrite)
+        assertTrue(staleTextGuard in estimateStart until estimateStore)
         assertTrue(
-            adapter.substring(staleTextGuard, estimateWrite)
+            adapter.substring(staleTextGuard, estimateStore)
                 .contains("containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)")
         )
-        val estimateRefresh = adapter.indexOf("updateMessageMeta(chatMessage", estimateWrite)
+        val estimateRefresh = adapter.indexOf("updateMessageMeta(", estimateStore)
         assertTrue(
-            adapter.substring(estimateWrite, estimateRefresh)
+            adapter.substring(estimateStore, estimateRefresh)
                 .contains("boundDisplayedVariantIndex == requestedVariantIndex")
         )
+        val persistenceStart = adapter.indexOf("private fun storeAssistantTokenEstimate")
+        val persistenceEnd = adapter.indexOf("private fun reasoningTokenCountLabel", persistenceStart)
+        val persistence = adapter.substring(persistenceStart, persistenceEnd)
+        assertTrue(persistence.contains("variant[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()"))
+        assertTrue(persistence.contains("sourceMessage[KEY_VARIANTS] = variantsToJson(variants)"))
         val detailsStart = adapter.indexOf("private fun showMessageDetailsPopup")
         val detailsEstimateWrite = adapter.indexOf(
-            "chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()",
+            "storeAssistantTokenEstimate(",
             detailsStart
         )
         assertTrue(detailsEstimateWrite > detailsStart)
