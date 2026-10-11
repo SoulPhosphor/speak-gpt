@@ -7736,7 +7736,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (endpoint?.isOpenRouterRouting() != true) return null
         return listOf(
             endpoint.id.trim(),
-            endpoint.host.trim().trimEnd('/').lowercase(Locale.ROOT),
+            // Preserve URL path case: hosts are case-insensitive, but a proxy
+            // may route /API/v1 and /api/v1 to different backends. Treating a
+            // scheme/host case-only edit as a cache miss is safely conservative.
+            endpoint.host.trim().trimEnd('/'),
             endpoint.providerDiscoveryPath.trim()
                 .ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH },
             endpoint.authType.trim().lowercase(Locale.ROOT),
