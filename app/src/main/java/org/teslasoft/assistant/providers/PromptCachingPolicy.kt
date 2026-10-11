@@ -61,7 +61,8 @@ object PromptCachingPolicy {
         }
 
         return candidates.isNotEmpty() && candidates.all {
-            it.supportsCaching != true && it.cacheWritePrice != null
+            it.supportsCaching != true &&
+                it.cacheWritePrice?.let { price -> price.isFinite() && price >= 0.0 } == true
         }
     }
 

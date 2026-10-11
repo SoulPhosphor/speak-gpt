@@ -845,6 +845,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // and metadata laid over the message, without disturbing the stored
             // canonical version used for context and saving.
             val display = displayVariantMap(chatMessage)
+            boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
 
             val isGeneratedImage = display["message"].toString().startsWith("~file:")
             btnEdit.visibility = if (isGeneratedImage) View.GONE else if (chatMessage["isBot"] == true) View.GONE else View.VISIBLE
@@ -869,7 +870,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateActiveMemories(display)
             updateVersionNav(chatMessage, position)
 
-            boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
             btnDetails.setOnClickListener { anchor ->
                 if (!bulkActionMode) showMessageDetailsPopup(anchor, display)
             }

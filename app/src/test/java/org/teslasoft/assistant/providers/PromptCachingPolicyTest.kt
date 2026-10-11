@@ -84,6 +84,17 @@ class PromptCachingPolicyTest {
         ))
     }
 
+    @Test
+    fun invalidCacheWritePricesNeverAuthorizeExplicitCaching() {
+        for (price in listOf(Double.NaN, Double.POSITIVE_INFINITY, -0.000001)) {
+            assertFalse(PromptCachingPolicy.shouldAddExplicitBreakpoint(
+                listOf(endpoint("invalid", cacheWrite = price, implicit = false)),
+                favorite(FavoriteModelObject.ROUTING_AUTOMATIC),
+                catalogAuthoritative = true
+            ))
+        }
+    }
+
     private fun favorite(routing: String) = FavoriteModelObject(
         modelId = "model", endpointId = "openrouter", routingType = routing
     )
