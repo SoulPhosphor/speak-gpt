@@ -81,7 +81,8 @@ data class UsageSection(
  *
  * [seeded] records that the chat's pre-log message records were copied in.
  * Until then an entry may be appended (for example by the summarizer) without
- * losing the older history, which [seed] merges in exactly once.
+ * losing the older history. Later [seed] calls reconcile durable message
+ * records so a rejected append cannot leave a completed request invisible.
  */
 data class UsageLogState(
     val seeded: Boolean,
@@ -101,16 +102,47 @@ data class UsageLogState(
         return copy(entries = updated)
     }
 
-    /** Copies the durable records already stored in [messages] once. */
+    /** Copies durable message records on first use, then repairs any later
+     * log append that did not persist. Matching is a multiset per message so
+     * two identical paid requests remain two requests. Existing entries are
+     * never removed because they may belong to a deleted message or version. */
     fun seed(messages: List<Map<String, Any>>, nowMs: Long): UsageLogState {
-        if (seeded) return this
-        val fromMessages = messages.flatMap { message ->
-            val messageId = MessageIdentity.idOf(message).ifBlank { null }
-            TokenUsageAccounting.durableRecordsOf(message).map { record ->
-                UsageLog.entry(UsageCategory.CHAT, messageId, record, nowMs)
+        val initial = if (seeded) this else {
+            val fromMessages = messages.flatMap { message ->
+                val messageId = MessageIdentity.idOf(message).ifBlank { null }
+                TokenUsageAccounting.durableRecordsOf(message).map { record ->
+                    UsageLog.entry(UsageCategory.CHAT, messageId, record, nowMs)
+                }
+            }
+            copy(seeded = true, entries = fromMessages + entries)
+        }
+        val availableByMessage = initial.entries
+            .filter { it.category == UsageCategory.CHAT && !it.messageId.isNullOrBlank() }
+            .groupBy { it.messageId!! }
+            .mapValues { (_, value) -> value.toMutableList() }
+            .toMutableMap()
+        val missing = mutableListOf<UsageLogEntry>()
+        messages.forEach { message ->
+            val messageId = MessageIdentity.idOf(message).takeIf { it.isNotBlank() }
+                ?: return@forEach
+            val available = availableByMessage.getOrPut(messageId) { mutableListOf() }
+            TokenUsageAccounting.durableRecordsOf(message).forEach { record ->
+                val requestId = record.requestId?.takeIf { it.isNotBlank() }
+                val match = available.indexOfFirst { entry ->
+                    if (requestId != null && !entry.record.requestId.isNullOrBlank()) {
+                        entry.record.requestId == requestId
+                    } else {
+                        entry.record == record
+                    }
+                }
+                if (match >= 0) {
+                    available.removeAt(match)
+                } else {
+                    missing += UsageLog.entry(UsageCategory.CHAT, messageId, record, nowMs)
+                }
             }
         }
-        return copy(seeded = true, entries = fromMessages + entries)
+        return if (missing.isEmpty()) initial else initial.copy(entries = initial.entries + missing)
     }
 
     /**
@@ -336,16 +368,16 @@ object UsageLogStore {
     fun read(prefs: org.teslasoft.assistant.preferences.Preferences): UsageLogState =
         UsageLog.recover(prefs.getUsageLog())
 
-    /** Copies the chat's message records in once, before anything can delete them. */
+    /** Copies the chat's message records before anything can delete them and
+     * repairs any durable message record missing from an already-seeded log. */
     fun seed(
         prefs: org.teslasoft.assistant.preferences.Preferences,
         messages: List<Map<String, Any>>,
         nowMs: Long = System.currentTimeMillis()
     ): UsageLogState = synchronized(lock) {
         val current = read(prefs)
-        if (current.seeded) return current
         val seeded = current.seed(messages, nowMs)
-        prefs.commitUsageLog(UsageLog.encode(seeded))
+        if (seeded != current) prefs.commitUsageLog(UsageLog.encode(seeded))
         seeded
     }
 

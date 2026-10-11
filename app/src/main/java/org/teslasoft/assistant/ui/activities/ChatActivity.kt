@@ -1214,7 +1214,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val estimate: (Int) -> TokenCounts = { index ->
                     legacyCounts[index] ?: TokenCounts(null, null, null)
                 }
-                val log = preferences?.let { UsageLogStore.read(it) }
+                // Reconcile durable message records before summarizing. A
+                // rejected/skipped usage-log append must not make a completed
+                // request disappear from this screen.
+                val log = preferences?.let { UsageLogStore.seed(it, snapshot) }
                 if (log != null && log.seeded) {
                     kotlin.Pair(log.summarize(snapshot, estimate), log.sections(snapshot, estimate))
                 } else {

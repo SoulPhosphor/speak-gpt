@@ -374,8 +374,13 @@ regenerating (including an earlier reply, which removes everything after it), ma
 another version current, or compacting never removes usage already spent.
 
 - **First open:** the records already stored in the chat's messages are copied
-  into the log once. Requests recorded before that (for example by the
-  Summarizer) are kept and merged.
+  into the log. Requests recorded before that (for example by the Summarizer)
+  are kept and merged.
+- **Self-repair:** later opens and Usage-screen refreshes compare the log with
+  the durable records still stored on messages. A missing request occurrence
+  is appended to the log, including a second request whose numbers happen to
+  be identical. Existing log entries are never removed, so requests belonging
+  to deleted messages or old versions remain counted.
 - **Each entry** keeps the request's frozen record, what it was for (chat,
   its section and, for Summarizing, its function), and the permanent id of the message
   it served, when there is one. Neither depends on a message's position.

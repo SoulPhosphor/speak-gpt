@@ -1178,7 +1178,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 } ?: return@launch
                 chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
                 if (boundMessageId == requestedMessageId) {
-                    bindCompactMetadata(chatMessage, isGeneratedImage = false)
+                    updateMessageMeta(chatMessage, isGeneratedImage = false)
                 }
             }
         }

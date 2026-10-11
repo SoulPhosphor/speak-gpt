@@ -26,7 +26,7 @@ class UsageLogTest {
 
     private val noEstimate: (Int) -> TokenCounts = { TokenCounts(null, null, null) }
 
-    @Test fun `seeding copies message records once with their message ids`() {
+    @Test fun `seeding copies message records and later reconciles new ones`() {
         val messages = listOf(reply("m1", record("a", 10, 5, 1.0)), reply("m2", record("b", 20, 5, 2.0)))
 
         val seeded = UsageLog.EMPTY.seed(messages, nowMs = 7L)
@@ -35,7 +35,43 @@ class UsageLogTest {
         assertTrue(seeded.seeded)
         assertEquals(listOf("m1", "m2"), seeded.entries.map { it.messageId })
         assertTrue(seeded.entries.all { it.category == UsageCategory.CHAT })
-        assertEquals(seeded, again)
+        assertEquals(listOf("m1", "m2", "m3"), again.entries.map { it.messageId })
+    }
+
+    @Test fun `seeded log repairs message records whose append did not persist`() {
+        val first = record("a", 10, 5, 1.0)
+        val second = record("a", 20, 5, 2.0)
+        val stored = UsageLogState(
+            seeded = true,
+            entries = listOf(UsageLog.entry(UsageCategory.CHAT, "m1", first, 1L))
+        )
+
+        val repaired = stored.seed(listOf(reply("m1", first), reply("m2", second)), nowMs = 2L)
+
+        assertEquals(2, repaired.entries.size)
+        assertEquals(listOf(1.0, 2.0), repaired.entries.map { it.record.totalCost })
+    }
+
+    @Test fun `repair preserves the multiplicity of identical requests`() {
+        val same = record("a", 10, 5, 1.0)
+        val stored = UsageLogState(
+            seeded = true,
+            entries = listOf(UsageLog.entry(UsageCategory.CHAT, "m1", same, 1L))
+        )
+
+        val repaired = stored.seed(listOf(reply("m1", same, same)), nowMs = 2L)
+
+        assertEquals(2, repaired.entries.size)
+        assertEquals(2.0, repaired.summarize(emptyList(), noEstimate).totalCost, 1e-9)
+    }
+
+    @Test fun `repair never removes usage for messages no longer in history`() {
+        val deleted = UsageLog.entry(UsageCategory.CHAT, "deleted", record("a", 10, 5, 1.0), 1L)
+        val stored = UsageLogState(seeded = true, entries = listOf(deleted))
+
+        val repaired = stored.seed(emptyList(), nowMs = 2L)
+
+        assertEquals(stored, repaired)
     }
 
     @Test fun `deleting messages never removes usage already logged`() {
