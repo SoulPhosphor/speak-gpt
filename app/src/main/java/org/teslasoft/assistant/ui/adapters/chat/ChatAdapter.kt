@@ -716,6 +716,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // waits on the user-token estimate opens only if the row still shows
         // the same message, since scrolling can rebind the row meanwhile.
         private var boundMessageId: String? = null
+        // Distinguishes regenerated variants of the same permanent message.
+        private var boundDisplayedVariantIndex: Int = 0
         private val ui: ConstraintLayout = itemView.findViewById(R.id.ui)
         private val icon: ImageView = itemView.findViewById(R.id.icon)
         // The icon's original XML backing (e.g. the assistant bubble's tonal
@@ -846,6 +848,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // canonical version used for context and saving.
             val display = displayVariantMap(chatMessage)
             boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
+            boundDisplayedVariantIndex = displayedVariantIndex(chatMessage)
 
             val isGeneratedImage = display["message"].toString().startsWith("~file:")
             btnEdit.visibility = if (isGeneratedImage) View.GONE else if (chatMessage["isBot"] == true) View.GONE else View.VISIBLE
@@ -1170,6 +1173,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 ?: return
             if (text.trim().startsWith("~file:")) return
             val requestedMessageId = boundMessageId
+            val requestedVariantIndex = boundDisplayedVariantIndex
             context.lifecycleScope.launch {
                 val count = try {
                     withContext(Dispatchers.Default) { messageTokenizer().encode(text).size }
@@ -1184,7 +1188,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     chatMessage.containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)
                 ) return@launch
                 chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
-                if (boundMessageId == requestedMessageId) {
+                if (boundMessageId == requestedMessageId &&
+                    boundDisplayedVariantIndex == requestedVariantIndex
+                ) {
                     updateMessageMeta(chatMessage, isGeneratedImage = false)
                 }
             }
@@ -1220,17 +1226,27 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 else preferences.getShowUserTokens()
             if (needsEstimate) {
                 val requestedMessageId = boundMessageId
+                val requestedVariantIndex = boundDisplayedVariantIndex
                 context.lifecycleScope.launch {
                     val count = try {
                         withContext(Dispatchers.Default) { messageTokenizer().encode(text).size }
                     } catch (_: Exception) {
                         null
                     }
-                    if (isBot && count != null) {
+                    val textStillMatches = chatMessage["message"]?.toString() == text
+                    if (isBot && count != null && textStillMatches &&
+                        !chatMessage.containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)
+                    ) {
                         chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
                     }
-                    if (anchor.isAttachedToWindow && boundMessageId == requestedMessageId) {
-                        showMessageDetailsPopup(anchor, chatMessage, count)
+                    if (anchor.isAttachedToWindow && boundMessageId == requestedMessageId &&
+                        boundDisplayedVariantIndex == requestedVariantIndex
+                    ) {
+                        showMessageDetailsPopup(
+                            anchor,
+                            chatMessage,
+                            count.takeIf { textStillMatches }
+                        )
                     }
                 }
                 return
@@ -1325,6 +1341,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val copy = HashMap<String, Any>(chatMessage)
             applyVariant(copy, variants[displayIndex])
             return copy
+        }
+
+        private fun displayedVariantIndex(chatMessage: Map<String, Any>): Int {
+            val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
+            if (variants.size < 2) return 0
+            val canonical = canonicalIndexOf(chatMessage, variants.size)
+            return displayIndexOf(chatMessage, variants.size, canonical)
         }
 
         private fun canonicalIndexOf(chatMessage: Map<String, Any>, count: Int): Int =

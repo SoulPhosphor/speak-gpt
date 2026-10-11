@@ -46,6 +46,25 @@ class UserTokenEstimateContractTest {
             adapter.substring(staleTextGuard, estimateWrite)
                 .contains("containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)")
         )
+        val estimateRefresh = adapter.indexOf("updateMessageMeta(chatMessage", estimateWrite)
+        assertTrue(
+            adapter.substring(estimateWrite, estimateRefresh)
+                .contains("boundDisplayedVariantIndex == requestedVariantIndex")
+        )
+        val detailsStart = adapter.indexOf("private fun showMessageDetailsPopup")
+        val detailsEstimateWrite = adapter.indexOf(
+            "chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()",
+            detailsStart
+        )
+        assertTrue(detailsEstimateWrite > detailsStart)
+        assertTrue(
+            adapter.substring(detailsStart, detailsEstimateWrite)
+                .contains("textStillMatches")
+        )
+        assertTrue(
+            adapter.substring(detailsStart, detailsEstimateWrite)
+                .contains("!chatMessage.containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)")
+        )
         val strings = source("src/main/res/values/strings.xml")
         assertTrue(strings.contains("<string name=\"chat_user_token_estimate\">About %1\$s Tokens</string>"))
         assertTrue(strings.contains("<string name=\"chat_token_count\">%1\$s Tokens</string>"))
