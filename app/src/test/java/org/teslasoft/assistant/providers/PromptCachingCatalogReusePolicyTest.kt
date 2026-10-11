@@ -14,13 +14,16 @@ class PromptCachingCatalogReusePolicyTest {
         val evidence = PromptCachingCatalogEvidence("profile-a", catalog, 1_000L)
 
         assertSame(catalog, PromptCachingCatalogReusePolicy.reusableCatalog(
-            evidence, "profile-a", "QWEN/MODEL", 2_000L
+            evidence, "profile-a", "qwen/model", 2_000L
         ))
         assertNull(PromptCachingCatalogReusePolicy.reusableCatalog(
             evidence, "profile-b", "qwen/model", 2_000L
         ))
         assertNull(PromptCachingCatalogReusePolicy.reusableCatalog(
             evidence, "profile-a", "other/model", 2_000L
+        ))
+        assertNull(PromptCachingCatalogReusePolicy.reusableCatalog(
+            evidence, "profile-a", "QWEN/MODEL", 2_000L
         ))
     }
 

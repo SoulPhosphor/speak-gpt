@@ -41,7 +41,7 @@ object PromptCachingCatalogReusePolicy {
     ): TokenPricingCatalog? {
         if (evidence == null || endpointFingerprint.isNullOrBlank()) return null
         if (evidence.endpointFingerprint != endpointFingerprint) return null
-        if (!evidence.catalog.model.equals(model, ignoreCase = true)) return null
+        if (evidence.catalog.model != model) return null
         val age = nowElapsedMs - evidence.completedAtElapsedMs
         if (age !in 0..MAX_AGE_MS) return null
         return evidence.catalog

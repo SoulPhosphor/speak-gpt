@@ -7704,7 +7704,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?.let { runCatching { it.await() }.getOrNull() }
             ?.takeIf {
                 requestEndpointFingerprint == endpointFingerprint &&
-                    it.model.equals(model, ignoreCase = true)
+                    it.model == model
             }
         val catalog = contextCatalog ?: PromptCachingCatalogReusePolicy.reusableCatalog(
             lastPromptCachingCatalog,
