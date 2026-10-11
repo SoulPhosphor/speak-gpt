@@ -1176,6 +1176,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 } catch (_: Exception) {
                     null
                 } ?: return@launch
+                // A streamed reply may have grown, or finalization/another
+                // backfill may already have stored the estimate while this
+                // tokenizer ran. Never replace newer evidence with this stale
+                // snapshot's count.
+                if (chatMessage["message"]?.toString() != text ||
+                    chatMessage.containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)
+                ) return@launch
                 chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
                 if (boundMessageId == requestedMessageId) {
                     updateMessageMeta(chatMessage, isGeneratedImage = false)

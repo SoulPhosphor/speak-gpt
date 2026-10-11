@@ -32,6 +32,20 @@ class UserTokenEstimateContractTest {
         val boundId = adapter.indexOf("boundMessageId =", bindStart)
         val compactMetadata = adapter.indexOf("updateMessageMeta(display", bindStart)
         assertTrue(boundId in bindStart until compactMetadata)
+        val estimateStart = adapter.indexOf("private fun scheduleAssistantTokenEstimate")
+        val staleTextGuard = adapter.indexOf(
+            "chatMessage[\"message\"]?.toString() != text",
+            estimateStart
+        )
+        val estimateWrite = adapter.indexOf(
+            "chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()",
+            estimateStart
+        )
+        assertTrue(staleTextGuard in estimateStart until estimateWrite)
+        assertTrue(
+            adapter.substring(staleTextGuard, estimateWrite)
+                .contains("containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)")
+        )
         val strings = source("src/main/res/values/strings.xml")
         assertTrue(strings.contains("<string name=\"chat_user_token_estimate\">About %1\$s Tokens</string>"))
         assertTrue(strings.contains("<string name=\"chat_token_count\">%1\$s Tokens</string>"))
