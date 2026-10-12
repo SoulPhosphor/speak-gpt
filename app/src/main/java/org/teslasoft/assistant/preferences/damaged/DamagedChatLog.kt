@@ -31,6 +31,7 @@ object DamagedChatLog {
 
     private const val FILE = "damaged_chat_log"
     private const val KEY = "detections"
+    private const val UNREADABLE_PREFIX = "unreadable_detections_"
 
     data class DamagedChat(
         val chatId: String,
@@ -177,8 +178,16 @@ object DamagedChatLog {
             if (!commit(context, pending)) return pending
             unsaved = null
         }
-        val raw = SecurePrefs.get(context, FILE).getString(KEY, null) ?: return emptyList()
-        return decode(raw)
+        val prefs = SecurePrefs.get(context, FILE)
+        val raw = prefs.getString(KEY, null) ?: return emptyList()
+        decodeOrNull(raw)?.let { return it }
+        // The stored log cannot be read. Keep its exact contents under a
+        // separate key before anything writes a new log over it; if that
+        // copy cannot be saved, nothing is rewritten.
+        val kept = prefs.edit().putString("$UNREADABLE_PREFIX${System.currentTimeMillis()}", raw)
+            .remove(KEY).commit()
+        check(kept) { "damaged chat log unreadable and could not be preserved" }
+        return emptyList()
     }
 
     private fun write(context: Context, detections: List<Detection>) {
@@ -213,7 +222,10 @@ object DamagedChatLog {
         }
     }.toString()
 
-    internal fun decode(raw: String): List<Detection> = try {
+    internal fun decode(raw: String): List<Detection> = decodeOrNull(raw) ?: emptyList()
+
+    /** Null when [raw] is not a readable log. */
+    internal fun decodeOrNull(raw: String): List<Detection>? = try {
         val array = JSONArray(raw)
         (0 until array.length()).mapNotNull { i ->
             val d = array.getJSONObject(i)
@@ -238,6 +250,6 @@ object DamagedChatLog {
             )
         }
     } catch (_: Exception) {
-        emptyList()
+        null
     }
 }
