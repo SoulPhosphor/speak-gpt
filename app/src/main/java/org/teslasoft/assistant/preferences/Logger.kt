@@ -505,13 +505,15 @@ class Logger {
             val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
             // Same richer detail the user sees under the failed reply (owner
             // ruling, Aug 1 2026), so the log and the on-screen block match.
+            // Function sits directly under the date so the failing feature
+            // is visible at a glance (owner ruling, Oct 12 2026).
             val entry = "[$timestamp]\n" +
+                "Function: $function\n" +
                 "Provider Error: $providerError\n" +
                 "API Provider: $apiProvider\n" +
                 "Requested/Routed Model Provider: ${requestedRoutedProvider ?: "Not Reported"}\n" +
                 "Model Service Provider: $modelServiceProvider\n" +
                 "Model: $model\n" +
-                "Function: $function\n" +
                 "Outer HTTP Status: ${outerHttpStatus ?: "Not Reported"}\n" +
                 "Embedded Provider Status: ${embeddedProviderStatus ?: "Not Reported"}\n" +
                 "Provider Code: ${providerCode ?: "Not Reported"}\n" +

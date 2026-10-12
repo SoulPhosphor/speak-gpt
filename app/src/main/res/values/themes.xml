@@ -1716,6 +1716,14 @@
         <item name="android:paddingBottom">12dp</item>
     </style>
 
+    <!-- Failure detail text: the provider error block under a failed chat
+         reply and at the bottom of the Condense/Reduce result pop-up. -->
+    <style name="Widget.App.FailureDetail" parent="">
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">italic</item>
+    </style>
+
     <!-- One moving automatic-summary boundary in ordinary centered text. -->
     <style name="Widget.App.Chat.SummaryMarker" parent="">
         <item name="android:layout_width">0dp</item>

@@ -25,6 +25,17 @@
         android:textColor="@color/text"
         android:textSize="16sp" />
 
+    <!-- Provider/app failure detail, shown only after a failure. -->
+    <TextView
+        android:id="@+id/include_failure_detail"
+        style="@style/Widget.App.FailureDetail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="24dp"
+        android:paddingBottom="8dp"
+        android:textIsSelectable="true"
+        android:visibility="gone" />
+
     <include layout="@layout/dialog_single_action" />
 
 </LinearLayout>

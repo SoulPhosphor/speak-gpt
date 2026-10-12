@@ -4754,11 +4754,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val stillCurrent = latest?.form == IncludeForm.FULL &&
                     latest.fullText == sourceText
 
+            var failureDetail: String? = null
             val completionMessage = when {
                 result.isFailure -> {
                     result.exceptionOrNull()?.let { error ->
-                        val classified = GenerationErrorClassifier.classify(error)
-                        logGenerationError(classified, error, "document condense")
+                        failureDetail = logIncludeSummaryFailure(error, include, "document condense")
                     }
                     getString(R.string.include_condense_failed)
                 }
@@ -4786,9 +4786,66 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             spinner?.visibility = View.GONE
             status?.text = completionMessage
+            failureDetail?.let { detailText ->
+                view.findViewById<TextView>(R.id.include_failure_detail)?.apply {
+                    text = detailText
+                    visibility = View.VISIBLE
+                }
+            }
             okay?.visibility = View.VISIBLE
             condenseJob = null
         }
+    }
+
+    /**
+     * Where a failed document or image summary is recorded (owner ruling,
+     * Oct 12 2026). A provider failure goes to the Provider Failure Log, in
+     * the same shape as a chat failure, with the function named after what was
+     * being summarized ("Summarize JPEG"). Any other failure is an app-side
+     * problem and goes to the Error Log as before.
+     *
+     * Returns the text shown at the bottom of the result pop-up: the same
+     * explanation and provider details a failed chat reply shows, then which
+     * log holds the message.
+     */
+    private fun logIncludeSummaryFailure(error: Throwable, include: ChatInclude, trigger: String): String {
+        val classified = GenerationErrorClassifier.classify(error)
+        val notReported = getString(R.string.provider_value_not_reported)
+        val apiProviderName = apiEndpointObject?.label?.trim()?.ifBlank { null }
+            ?: apiEndpointObject?.host?.trim()?.ifBlank { null } ?: notReported
+        val modelName = model.trim().ifBlank { null }
+            ?: preferences?.getModel()?.trim()?.ifBlank { null } ?: notReported
+        // Name the type the user recognizes: the file's own extension (a JSON
+        // file read as text is still "JSON"), else the stored kind.
+        val fileType = include.fileName.substringAfterLast('.', "").trim()
+            .ifBlank { include.kind.key }
+            .uppercase(java.util.Locale.ROOT)
+        val functionLabel = getString(R.string.provider_function_summarize_file, fileType)
+        val detail = (classified.providerLimitMessage(this, forErrorLog = true)
+            ?: classified.chatMessage(this, forErrorLog = true)) + "\n" +
+            classified.providerDetailBlock(
+                this, error.message, apiProviderName, notReported, modelName, functionLabel
+            )
+
+        if (!classified.reachedServer()) {
+            logGenerationError(classified, error, trigger)
+            return detail + "\n\n" + getString(R.string.include_failure_in_error_log)
+        }
+        if (preferences?.getLogChatFailures() != true) return detail
+
+        val providerError = error.message?.trim()?.ifBlank { null }
+            ?: classified.httpStatus?.toString() ?: "(no message)"
+        val appContext = applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                    appContext, apiProviderName, notReported, modelName,
+                    functionLabel, providerError,
+                    outerHttpStatus = classified.httpStatus
+                )
+            } catch (_: Exception) { /* never let diagnostics break the dialog */ }
+        }
+        return detail + "\n\n" + getString(R.string.include_failure_in_provider_log)
     }
 
     /**
@@ -4945,11 +5002,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val stillCurrent = latest?.form == IncludeForm.FULL &&
                     latest.kind.isImage() && latest.imageFileHash == include.imageFileHash
 
+            var failureDetail: String? = null
             val completionMessage = when {
                 result.isFailure -> {
                     result.exceptionOrNull()?.let { error ->
-                        val classified = GenerationErrorClassifier.classify(error)
-                        logGenerationError(classified, error, "image reduce")
+                        failureDetail = logIncludeSummaryFailure(error, include, "image reduce")
                     }
                     getString(R.string.include_reduce_failed)
                 }
@@ -4968,6 +5025,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             spinner?.visibility = View.GONE
             status?.text = completionMessage
+            failureDetail?.let { detailText ->
+                view.findViewById<TextView>(R.id.include_failure_detail)?.apply {
+                    text = detailText
+                    visibility = View.VISIBLE
+                }
+            }
             okay?.visibility = View.VISIBLE
             reduceJob = null
         }

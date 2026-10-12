@@ -1077,6 +1077,8 @@
     <string name="provider_parsing_error_line">Parsing Error: %1$s</string>
     <string name="provider_raw_response_line">Raw Provider Response: %1$s</string>
     <string name="provider_function_chat">Chat</string>
+    <!-- Function line for a failed document or image summary; %1$s is the file type, e.g. JPEG. -->
+    <string name="provider_function_summarize_file">Summarize %1$s</string>
     <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried.</string>
     <string name="provider_unknown_limit_log_note">Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
@@ -3482,6 +3484,9 @@
     <string name="include_condense_working">Document is being condensed.</string>
     <string name="include_condense_complete">Complete</string>
     <string name="include_condense_failed">Document could not be condensed. The full document is still included.</string>
+    <!-- Last line of the failure details in the Condense/Reduce pop-up. -->
+    <string name="include_failure_in_provider_log">This message can be found in the Provider Failure Log.</string>
+    <string name="include_failure_in_error_log">This message can be found in the Error Log.</string>
     <string name="include_condense_not_shorter">The AI did not return a shorter summary. The full document is still included.</string>
     <string name="include_edit_empty">Summary cannot be empty.</string>
 
