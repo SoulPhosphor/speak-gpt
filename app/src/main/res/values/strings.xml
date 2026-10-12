@@ -909,9 +909,6 @@
     <string name="damaged_most_used_model">Most-Used Model: %1$s</string>
     <string name="damaged_value_unavailable">Unavailable</string>
     <string name="damaged_try_repair">Try Repair</string>
-    <string name="damaged_backup_before_repair">It\'s highly recommended you do a full chat backup prior to attempting repair.</string>
-    <string name="damaged_proceed_without_backup">Proceed Without Backup</string>
-    <string name="damaged_back_up">Back Up</string>
     <string name="damaged_repair_fully_successful">Repair Fully Successful!</string>
     <string name="damaged_retry_renaming_question">Try previous renaming again?</string>
     <string name="damaged_not_now">Not Now</string>

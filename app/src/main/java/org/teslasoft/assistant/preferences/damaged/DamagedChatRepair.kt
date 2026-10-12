@@ -21,7 +21,8 @@ import java.security.MessageDigest
 
 /**
  * Repair of the chats in the Damaged Chat Files log (owner rulings, Oct 12
- * 2026). Try Repair works on every damaged chat at once, and a chat
+ * 2026). Try Repair works on every damaged chat at once, with no backup
+ * step asked of the user, and a chat
  * replacement from a backup uses the same per-chat transaction.
  *
  * Every attempt first copies the chat's file into the preserved-copies
