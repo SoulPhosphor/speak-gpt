@@ -47,7 +47,6 @@
             android:id="@+id/confirmation_prompt"
             style="@style/Widget.App.Row.Subtitle"
             android:layout_marginTop="8dp"
-            android:maxLines="200"
             android:visibility="gone" />
 
         <LinearLayout

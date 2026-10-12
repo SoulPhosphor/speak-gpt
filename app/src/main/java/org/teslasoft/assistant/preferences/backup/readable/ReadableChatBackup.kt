@@ -16,11 +16,16 @@
 
 package org.teslasoft.assistant.preferences.backup.readable
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import com.google.gson.Gson
+import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.PersonaPreferences
+import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.util.Hash
 import java.io.File
@@ -45,7 +50,13 @@ import java.util.zip.ZipOutputStream
  *    is serialized faithfully, never dropped and never a failure (the app
  *    itself displays such a chat; the backup mirrors the app).
  *  - Only chat titles and messages travel. Per-chat settings — and with them
- *    any credential-shaped value — are not part of a readable chat export.
+ *    any credential-shaped value — are not part of a readable chat export;
+ *    the chat's selected companion is read only to name older companion
+ *    messages. Token counts never travel; thinking travels only when the
+ *    user leaves Include Thinking on.
+ *  - Folder locations travel only when the user turns on Include Chat Folder
+ *    Location: chats are then placed in ZIP folders named after their chat
+ *    folders, and the JSON records the folder name.
  *  - The whole read runs inside CHAT_LIST_LOCK so the list and histories
  *    form one consistent set; runs on a background thread only.
  *  - Failure logging carries chat IDS (already hashes) and counts — never a
@@ -81,15 +92,22 @@ object ReadableChatBackup {
     private data class ChatData(
         val title: String,
         val messages: List<Map<String, Any?>>,
-        val messagesJson: String,
-        val folderName: String?
+        val folderName: String?,
+        val names: ReadableChatFormats.SpeakerNames
     )
 
     /**
      * Build the ZIP into [staged]. On every result other than Ok, [staged]
      * is deleted before returning.
      */
-    fun build(context: Context, staged: File, allChats: Boolean, format: Format): BuildResult {
+    fun build(
+        context: Context,
+        staged: File,
+        allChats: Boolean,
+        format: Format,
+        includeFolders: Boolean,
+        includeThinking: Boolean
+    ): BuildResult {
         try {
             val gson = Gson()
             val chatPreferences = ChatPreferences.getChatPreferences()
@@ -104,7 +122,7 @@ object ReadableChatBackup {
                     return fail(staged, BuildResult.ChatsUnreadable)
                 }
                 // All formats share one incremental baseline, so collect the same
-                // folder metadata even though only JSON writes it to the export.
+                // folder metadata whether or not folder locations are included.
                 val navigation = org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository.get(context).snapshot()
                 val snapshot = (navigation as? org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult.Success)?.value
                 val folderNames = org.teslasoft.assistant.ui.chat.ChatExportFolders.names(snapshot)
@@ -117,15 +135,36 @@ object ReadableChatBackup {
                     // fallback as the chat list. A title change is not a new chat.
                     val name = chat["name"].toString()
                     val chatId = ChatPreferences.storedChatId(chat)
-                    val history = chatPreferences.getChatByIdResult(context, chatId)
+                    val history = chatPreferences.getChatByIdResult(context, chatId, DamagedChatOperation.READABLE_BACKUP)
                     if (!ChatStorageHealth.isAuthoritative(history.state)) {
                         logUnreadable(context, "chat $chatId could not be read (state ${history.state})")
                         return fail(staged, BuildResult.ChatsUnreadable)
                     }
+                    // The chat's own username and selected companion name its
+                    // messages; a locked settings store reads as unset, so it
+                    // is unreadable here rather than silently exported without them.
+                    SecurePrefs.get(context, "settings.$chatId")
+                    if (SecurePrefs.isLockedName("settings.$chatId")) {
+                        return fail(staged, BuildResult.ChatsUnreadable)
+                    }
                     val messagesJson = gson.toJson(history.messages)
                     val folderName = folderNames[chatId]
-                    fingerprints[chatId] = ReadableChatFormats.fingerprint(name, messagesJson, folderName)
-                    collected.add(ChatData(name, history.messages, messagesJson, folderName))
+                    val companionName = currentCompanionName(context, chatId)
+                    val ownUsername = chatUsername(context, chatId)
+                    if (companionName == null || ownUsername == null) {
+                        return fail(staged, BuildResult.ChatsUnreadable)
+                    }
+                    val names = ReadableChatFormats.SpeakerNames(
+                        currentCompanion = companionName,
+                        userFallback = context.getString(R.string.chat_role_user),
+                        companionFallback = context.getString(R.string.chat_role_assistant),
+                        chatUsername = ownUsername
+                    )
+                    fingerprints[chatId] = ReadableChatFormats.fingerprint(
+                        name, messagesJson, folderName,
+                        ReadableChatFormats.renderFingerprint(names, includeThinking, includeFolders, format.name)
+                    )
+                    collected.add(ChatData(name, history.messages, folderName, names))
                 }
             }
 
@@ -145,8 +184,10 @@ object ReadableChatBackup {
                 return fail(staged, if (allChats) BuildResult.NothingToBackUp else BuildResult.NothingNew)
             }
 
-            val baseNames = ReadableChatFormats.assignBaseNames(
-                selectedIndices.map { ReadableChatFormats.sanitizeTitle(collected[it].title) }
+            val baseNames = ReadableChatFormats.assignEntryPaths(
+                selectedIndices.map { ReadableChatFormats.sanitizeTitle(collected[it].title) },
+                selectedIndices.map { collected[it].folderName },
+                includeFolders
             )
 
             val expectedEntries = LinkedHashSet<String>()
@@ -157,14 +198,16 @@ object ReadableChatBackup {
                     if (format == Format.TEXT || format == Format.BOTH) {
                         val entryName = "$base.txt"
                         zip.putNextEntry(ZipEntry(entryName))
-                        zip.write(ReadableChatFormats.formatText(chat.title, chat.messages).toByteArray(Charsets.UTF_8))
+                        zip.write(ReadableChatFormats.formatText(chat.title, chat.messages, chat.names, includeThinking).toByteArray(Charsets.UTF_8))
                         zip.closeEntry()
                         expectedEntries.add(entryName)
                     }
                     if (format == Format.JSON || format == Format.BOTH) {
                         val entryName = "$base.json"
                         zip.putNextEntry(ZipEntry(entryName))
-                        zip.write(ReadableChatFormats.formatJson(chat.title, chat.messagesJson, chat.folderName).toByteArray(Charsets.UTF_8))
+                        val records = gson.toJson(ReadableChatFormats.jsonRecords(chat.messages, chat.names, includeThinking))
+                        val folder = if (includeFolders) chat.folderName else null
+                        zip.write(ReadableChatFormats.formatJson(chat.title, records, folder).toByteArray(Charsets.UTF_8))
                         zip.closeEntry()
                         expectedEntries.add(entryName)
                     }
@@ -205,6 +248,24 @@ object ReadableChatBackup {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** The chat's selected companion name, for companion messages stored
+     *  before names were stamped. Empty when none is selected; null when it
+     *  could not be read, which makes the chat unreadable for this backup. */
+    private fun currentCompanionName(context: Context, chatId: String): String? = try {
+        val personaId = Preferences.getPreferences(context, chatId).getPersonaId()
+        if (personaId.isEmpty()) "" else PersonaPreferences.getPersonaPreferences(context).getPersona(personaId).label
+    } catch (_: Exception) {
+        null
+    }
+
+    /** The chat's own username (Change Username), "" when unset, or null
+     *  when it could not be read. */
+    private fun chatUsername(context: Context, chatId: String): String? = try {
+        Preferences.getPreferences(context, chatId).getChatUsername()
+    } catch (_: Exception) {
+        null
     }
 
     private fun fail(staged: File, result: BuildResult): BuildResult {

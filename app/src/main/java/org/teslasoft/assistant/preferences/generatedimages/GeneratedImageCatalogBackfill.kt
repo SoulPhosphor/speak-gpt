@@ -7,6 +7,7 @@
 
 package org.teslasoft.assistant.preferences.generatedimages
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -50,7 +51,7 @@ object GeneratedImageCatalogBackfill {
             }
             if (already.value) continue
 
-            val history = chatPreferences.getChatByIdResult(app, chatId)
+            val history = chatPreferences.getChatByIdResult(app, chatId, DamagedChatOperation.IMAGE_GALLERY)
             if (!ChatStorageHealth.isAuthoritative(history.state)) {
                 allAuthoritative = false
                 continue

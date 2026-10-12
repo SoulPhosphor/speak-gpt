@@ -24,6 +24,7 @@ import android.os.HandlerThread
 import cat.ereza.customactivityoncrash.config.CaocConfig
 import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
+import org.teslasoft.assistant.preferences.username.DefaultUsernameFill
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.imagegen.ImageGenerationMigration
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogMaintenance
@@ -261,6 +262,17 @@ class MainApplication : Application() {
             } catch (_: Exception) {
                 // The encrypted journal remains authoritative and retries later.
             }
+            try {
+                // Every step that can restore or add chats has now settled
+                // (portable and chat recovery, the outage merge, and new chats'
+                // first saves just above): resume a username fill left pending
+                // by a restore, a lock or a full store. Not while a chat
+                // recovery is still unfinished, or it would fill histories
+                // about to be replaced.
+                if (!org.teslasoft.assistant.preferences.backup.ChatRestoreManager.hasPendingRecovery(this)) {
+                    DefaultUsernameFill.onStartupSettled(this)
+                }
+            } catch (_: Exception) { }
             try {
                 ChatNavigationRepository.get(this).migrateSchema()
             } catch (_: Exception) {

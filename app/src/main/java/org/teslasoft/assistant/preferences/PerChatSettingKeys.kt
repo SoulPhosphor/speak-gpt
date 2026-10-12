@@ -96,6 +96,9 @@ object PerChatSettingKeys {
         "memory_user_persona_id",
         "memory_project_id",
 
+        // This chat's own displayed username (Change Username)
+        "chat_username_override",
+
         // Conversation-level memory policy (canonical recovery plan §4.4/§4.5,
         // Phase 1): retrieval access per pool, extraction streams, do-not-
         // analyze, analysis note, use-default-vs-custom, and processing method.

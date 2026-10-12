@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.tts.api.*
 import org.teslasoft.assistant.preferences.tts.TtsVoiceSelection
 import org.teslasoft.assistant.preferences.tts.TtsVoiceKind
@@ -141,6 +142,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.progressindicator.CircularProgressIndicator
+import com.google.android.material.snackbar.Snackbar
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.languageid.LanguageIdentifier
 import eightbitlab.com.blurview.BlurView
@@ -176,6 +178,7 @@ import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
+import org.teslasoft.assistant.preferences.username.DefaultUsernameFill
 import org.teslasoft.assistant.reasoning.LegacyReasoningRepair
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.ResponseLifecycle
@@ -237,6 +240,8 @@ import org.teslasoft.assistant.preferences.includes.StableAttachmentReference
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatFormats
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.chatsearch.SearchTargetResolver
+import org.teslasoft.assistant.ui.util.ChangeUsernameDialog
+import org.teslasoft.assistant.ui.util.UsernameFillNoticeDialog
 import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.ui.util.ChatExportDialog
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
@@ -518,6 +523,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // screen goes away.
     private var btnConversationSummary: ImageButton? = null
     private var btnSummarizerErrors: ImageButton? = null
+    private var btnActiveProfile: ImageButton? = null
     private var summarizerErrorBadge: TextView? = null
     private var summarizerController: org.teslasoft.assistant.util.summarizer.SummarizerController? = null
     private var summarizerOperationChip: com.google.android.material.card.MaterialCardView? = null
@@ -654,6 +660,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var lastUserMessageForLore = ""
 
     private var chatId = ""
+    // The chat registered with DefaultUsernameFill as open on this screen.
+    @Volatile private var fillOpenChatId: String? = null
     private var chatName = ""
     private var languageIdentifier: LanguageIdentifier? = null
 
@@ -1552,12 +1560,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (PortableRestoreRecoveryFlow.showIfPending(this)) return
         if (PortableRestoreProcessGate.blocksCurrentProcess(this)) return
         if (chatStartupComplete && PortableRestoreOutcomeFlow.showIfPending(this)) return
+        UsernameFillNoticeDialog.showIfPending(this)
 
         preloadAmoled()
         reloadAmoled()
 
         if (chatStartupComplete && chatId != "") {
             preferences = Preferences.getPreferences(this, chatId)
+            fillOpenChatUsernames()
             observeSpeechSelection()
             val recoveryToken = speechRecoveryGate.begin()
             lifecycleScope.launch {
@@ -1762,48 +1772,124 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  override so each user message renders in its own identity's style.
      *  Display-only and best-effort; never provisions the store. */
     private fun refreshUserIdentity() {
+        refreshActiveProfileButton()
         val rpCharId = preferences?.getChatRoleplayCharacterId().orEmpty()
         val glamourId = preferences?.getChatUserPersonaId().orEmpty()
+        identityRefreshesPending++
         CoroutineScope(Dispatchers.Main).launch {
-            val loaded = withContext(Dispatchers.IO) {
-                try {
+            try {
+                applyUserIdentityRefresh(rpCharId, glamourId)
+            } finally {
+                identityRefreshesPending--
+            }
+        }
+    }
+
+    /** Main-thread count of identity loads still running; while any is, a
+     *  message reads the names directly instead of trusting the cache. */
+    private var identityRefreshesPending = 0
+
+    private suspend fun applyUserIdentityRefresh(rpCharId: String, glamourId: String) {
+        val loaded = withContext(Dispatchers.IO) {
+            try {
+                if (!MemoryStore.isProvisioned(this@ChatActivity)) {
+                    null
+                } else {
+                    val store = MemoryStore.getInstance(this@ChatActivity)
+                    val styles = HashMap<String, ChatNameStyle.Override>()
+                    store.getAllUserPersonas().forEach {
+                        styles[ChatSpeakerNames.GLAMOUR_SOURCE + it.personaId] =
+                            ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
+                    }
+                    store.getAllRoleplayCharacters().forEach {
+                        styles[ChatSpeakerNames.ROLEPLAY_SOURCE + it.roleplayCharacterId] =
+                            ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
+                    }
+                    Triple(
+                        rpCharId.takeIf { it.isNotEmpty() }?.let { store.getRoleplayCharacter(it)?.name },
+                        // A blank Display Name falls back to the Glamour's own Name.
+                        glamourId.takeIf { it.isNotEmpty() }?.let { id ->
+                            store.getUserPersona(id)?.let { it.displayName?.takeIf(String::isNotBlank) ?: it.name }
+                        },
+                        styles
+                    )
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+        if (isFinishing || isDestroyed) return
+        // Drop a result whose identities changed while it was loading.
+        if (preferences?.getChatRoleplayCharacterId().orEmpty() != rpCharId ||
+            preferences?.getChatUserPersonaId().orEmpty() != glamourId
+        ) return
+        activeRoleplayUserId = rpCharId
+        activeRoleplayUserName = loaded?.first
+        activeGlamourId = glamourId
+        activeGlamourDisplayName = loaded?.second
+        loaded?.third?.let { userNameStyles = it }
+        adapter?.setUserNameStyles(userNameStyles)
+    }
+
+    /** Apply to Previous Chats with No Name, for this open chat: the
+     *  background fill skips open chats, so the screen fills its own loaded
+     *  messages and saves them through the normal path. */
+    private fun fillOpenChatUsernames() {
+        if (adapter == null || chatStorageUnavailable || deletingChat) return
+        val name = DefaultUsernameFill.activeName(this) ?: return
+        if (DefaultUsernameFill.fillNameless(messages, name)) {
+            adapter?.notifyDataSetChanged()
+            saveSettings()
+        }
+    }
+
+    /** Shows the Active Profile button only while this chat has its own
+     *  username AND a Glamour or Roleplay identity is active: the name on
+     *  screen then differs from the identity the model is getting. */
+    private fun refreshActiveProfileButton() {
+        val hasChatUsername = preferences?.getChatUsername().orEmpty().isNotBlank()
+        val hasIdentity = preferences?.getChatUserPersonaId().orEmpty().isNotEmpty() ||
+            preferences?.getChatRoleplayCharacterId().orEmpty().isNotEmpty()
+        btnActiveProfile?.visibility =
+            if (hasChatUsername && hasIdentity) View.VISIBLE else View.GONE
+    }
+
+    /** Names every identity being served to the model right now: the
+     *  Glamour (its Display Name, else its Name) and the Roleplay Character. */
+    private fun showActiveProfile() {
+        val rpCharId = preferences?.getChatRoleplayCharacterId().orEmpty()
+        val glamourId = preferences?.getChatUserPersonaId().orEmpty()
+        lifecycleScope.launch {
+            val names = withContext(Dispatchers.IO) {
+                val loaded = try {
                     if (!MemoryStore.isProvisioned(this@ChatActivity)) {
                         null
                     } else {
                         val store = MemoryStore.getInstance(this@ChatActivity)
-                        val styles = HashMap<String, ChatNameStyle.Override>()
-                        store.getAllUserPersonas().forEach {
-                            styles[ChatSpeakerNames.GLAMOUR_SOURCE + it.personaId] =
-                                ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
-                        }
-                        store.getAllRoleplayCharacters().forEach {
-                            styles[ChatSpeakerNames.ROLEPLAY_SOURCE + it.roleplayCharacterId] =
-                                ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
-                        }
-                        Triple(
-                            rpCharId.takeIf { it.isNotEmpty() }?.let { store.getRoleplayCharacter(it)?.name },
-                            // A blank Display Name falls back to the Glamour's own Name.
+                        Pair(
                             glamourId.takeIf { it.isNotEmpty() }?.let { id ->
                                 store.getUserPersona(id)?.let { it.displayName?.takeIf(String::isNotBlank) ?: it.name }
                             },
-                            styles
+                            rpCharId.takeIf { it.isNotEmpty() }?.let { store.getRoleplayCharacter(it)?.name }
                         )
                     }
                 } catch (_: Exception) {
                     null
                 }
+                listOfNotNull(
+                    (loaded?.first ?: activeGlamourDisplayName.takeIf { glamourId.isNotEmpty() })
+                        ?.trim()?.takeIf { it.isNotEmpty() },
+                    (loaded?.second ?: activeRoleplayUserName.takeIf { rpCharId.isNotEmpty() })
+                        ?.trim()?.takeIf { it.isNotEmpty() }
+                )
             }
             if (isFinishing || isDestroyed) return@launch
-            // Drop a result whose identities changed while it was loading.
-            if (preferences?.getChatRoleplayCharacterId().orEmpty() != rpCharId ||
-                preferences?.getChatUserPersonaId().orEmpty() != glamourId
-            ) return@launch
-            activeRoleplayUserId = rpCharId
-            activeRoleplayUserName = loaded?.first
-            activeGlamourId = glamourId
-            activeGlamourDisplayName = loaded?.second
-            loaded?.third?.let { userNameStyles = it }
-            adapter?.setUserNameStyles(userNameStyles)
+            val text = when (names.size) {
+                0 -> return@launch
+                1 -> getString(R.string.chat_active_profile_one, names[0])
+                else -> getString(R.string.chat_active_profile_two, names[0], names[1])
+            }
+            Snackbar.make(findViewById(android.R.id.content), text, Snackbar.LENGTH_LONG).show()
         }
     }
 
@@ -2615,7 +2701,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             preparedPreferences.getApiEndpointId()
         )
         val chatPreferences = ChatPreferences.getChatPreferences()
-        val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId)
+        // Registered before the read so a background username fill of this
+        // chat finishes first and never writes while the chat is open.
+        DefaultUsernameFill.markOpen(preparedChatId)
+        fillOpenChatId = preparedChatId
+        val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId, DamagedChatOperation.OPENING_A_CHAT)
         chatPreferences.rememberChatStartDate(
             this, preparedChatId,
             org.teslasoft.assistant.ui.drawer.ChatListDetails.fromMessages(historyResult.messages).startedAt
@@ -2637,9 +2727,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         // Every stored message gets its permanent ID once (MessageIdentity);
         // older chats receive them here, the first time they are opened.
+        val fillName = DefaultUsernameFill.activeName(this)
         if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
             (LegacyReasoningRepair.repairHistory(historyResult.messages) or
-                org.teslasoft.assistant.preferences.MessageIdentity.ensure(historyResult.messages))
+                org.teslasoft.assistant.preferences.MessageIdentity.ensure(historyResult.messages) or
+                (fillName != null && DefaultUsernameFill.fillNameless(historyResult.messages, fillName)))
         ) {
             // This method already runs on the startup storage worker. Update
             // the encrypted preference before binding, but let SharedPreferences
@@ -2800,6 +2892,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         chatStartupComplete = true
+        // onResume may have run before this chat's preferences were installed;
+        // load the active user identity now so the first message is stamped
+        // with the Roleplay or Glamour name in effect.
+        refreshUserIdentity()
         if (!PortableRestoreRecoveryFlow.showIfPending(this)) {
             if (!PortableRestoreOutcomeFlow.showIfPending(this)) {
                 DatabaseRecoveryFlows.showPendingNoticeIfAny(this)
@@ -3005,6 +3101,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             NewConversationCoordinator(this).abandonPendingConversation(chatId, chatName)
         }
         super.onDestroy()
+        fillOpenChatId?.let { DefaultUsernameFill.markClosed(it) }
+        fillOpenChatId = null
     }
 
     /** SYSTEM INITIALIZATION START **/
@@ -3014,7 +3112,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val currentChatId = chatId
         Thread {
             val historyResult = ChatPreferences.getChatPreferences()
-                .getChatByIdResult(appContext, currentChatId)
+                .getChatByIdResult(appContext, currentChatId, DamagedChatOperation.OPENING_A_CHAT)
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) initSettings(historyResult)
             }
@@ -3111,12 +3209,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
 
             adapter = ChatAdapter(messages, messagesSelectionProjection, this, preferences!!, chatId)
+            adapter?.setChatUsername(preferences?.getChatUsername().orEmpty())
             adapter?.setManualCompactionBoundary(
                 preferences?.getManualCompactionBoundary() ?: 0
             )
             adapter?.setOnUpdateListener(this)
 
             initUI()
+            refreshActiveProfileButton()
             reloadAmoled()
             initSpeechListener()
             initTTS()
@@ -3157,6 +3257,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnBack = findViewById(R.id.btn_back)
         btnConversationSummary = findViewById(R.id.btn_conversation_summary)
         btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
+        btnActiveProfile = findViewById(R.id.btn_active_profile)
+        btnActiveProfile?.setOnClickListener { showActiveProfile() }
         summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
         summarizerOperationChip = findViewById(R.id.summarizer_operation_chip)
         summarizerOperationSpinner = findViewById(R.id.summarizer_operation_spinner)
@@ -5165,7 +5267,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 menu.add(Menu.NONE, 5, 2, R.string.usage_cost_title)
                 menu.add(Menu.NONE, 2, 3, R.string.alert_debug_section_logs)
                 if (savedChat != null) {
-                    menu.add(Menu.NONE, 3, 4, R.string.btn_delete)
+                    menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)
+                    menu.add(Menu.NONE, 3, 5, R.string.btn_delete)
                 }
                 setOnMenuItemClickListener { item ->
                     when (item.itemId) {
@@ -5180,6 +5283,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         }
                         6 -> {
                             bookmarkNavigation?.open()
+                            true
+                        }
+                        7 -> {
+                            ChangeUsernameDialog.show(this@ChatActivity) { name ->
+                                preferences?.setChatUsername(name)
+                                adapter?.setChatUsername(name)
+                                refreshActiveProfileButton()
+                            }
                             true
                         }
                         1 -> {
@@ -5252,6 +5363,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatStorageUnavailable || deletingChat) return
 
         val currentCompanion = currentCompanionLabel()
+        val chatUsername = preferences?.getChatUsername()
         val snapshot = messages
             .filterNot {
                 it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
@@ -5265,7 +5377,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     name = if (isCompanion) {
                         ChatSpeakerNames.companionName(this, message, currentCompanion)
                     } else {
-                        ChatSpeakerNames.userName(this, message)
+                        ChatSpeakerNames.displayedUserName(this, message, chatUsername)
                     },
                     bookmarked = MessageBookmarks.isBookmarked(message),
                     messageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
@@ -5275,6 +5387,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         ?.toLongOrNull(),
                     model = if (isCompanion) {
                         message[ChatAdapter.KEY_MESSAGE_MODEL]?.toString()
+                    } else {
+                        null
+                    },
+                    thinking = if (isCompanion) {
+                        message[ChatAdapter.KEY_MESSAGE_REASONING]?.toString()
                     } else {
                         null
                     }
@@ -5904,7 +6021,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             savePartialOnCancel = false,
             stillCurrent = {
                 val stored = org.teslasoft.assistant.preferences.ChatPreferences
-                    .getChatPreferences().getChatById(app, frozenChatId)
+                    .getChatPreferences().getChatById(app, frozenChatId, DamagedChatOperation.OPENING_A_CHAT)
                 org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard
                     .prefixStillCurrent(
                         frozenRows,
@@ -8558,6 +8675,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             "isBot" to false,
             ChatAdapter.KEY_MESSAGE_TIME to System.currentTimeMillis().toString()
         )
+        stampUserIdentity(first)
         val payload = arrayListOf(first)
         val result = NewConversationCoordinator(this).commitPendingConversation(
             PendingConversationState(chatId, chatName, ConversationMode.PLAYGROUND),
@@ -8681,6 +8799,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     "isBot" to false,
                     ChatAdapter.KEY_MESSAGE_TIME to System.currentTimeMillis().toString()
                 )
+                stampUserIdentity(first)
                 val firstIncludes = (preparedTurn?.pendingIncludes ?: pendingIncludes)
                     .map { it.forSentMessage() }
                 if (firstIncludes.isNotEmpty()) {
@@ -10889,6 +11008,49 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?: TokenUsageAccounting.PROVIDER_NOT_REPORTED
     }
 
+    /** Locks a user message's label: the name that applies at send time,
+     *  plus which identity supplied it so its style follows. */
+    private fun stampUserIdentity(map: MutableMap<String, Any>) {
+        // The identity names load in the background (when the chat opens and
+        // on every return to it). A message sent while a load is still running
+        // reads them directly, so it is never stamped with a stale name.
+        val rpId = preferences?.getChatRoleplayCharacterId().orEmpty()
+        val glamourId = preferences?.getChatUserPersonaId().orEmpty()
+        val loaded = identityRefreshesPending == 0 &&
+            rpId == activeRoleplayUserId && glamourId == activeGlamourId
+        val names = if (loaded) {
+            activeRoleplayUserName to activeGlamourDisplayName
+        } else {
+            identityNamesNow(rpId, glamourId)
+        }
+        val identity = ChatSpeakerNames.activeUserIdentity(
+            roleplayId = rpId,
+            roleplayName = names.first,
+            glamourId = glamourId,
+            glamourName = names.second,
+            defaultName = preferences?.getDefaultDisplayedUsername(),
+            roleplayWins = preferences?.getRoleplayNamesReplaceGlamour() ?: true
+        )
+        identity.name?.let { map[ChatSpeakerNames.USER_NAME_KEY] = it }
+        identity.sourceKey?.let { map[ChatSpeakerNames.USER_NAME_SOURCE_KEY] = it }
+    }
+
+    /** The Roleplay Character and Glamour names for these ids, read now.
+     *  A blank Glamour Display Name falls back to the Glamour's own Name. */
+    private fun identityNamesNow(rpId: String, glamourId: String): kotlin.Pair<String?, String?> = try {
+        if (!MemoryStore.isProvisioned(this)) {
+            null to null
+        } else {
+            val store = MemoryStore.getInstance(this)
+            rpId.takeIf { it.isNotEmpty() }?.let { store.getRoleplayCharacter(it)?.name } to
+                glamourId.takeIf { it.isNotEmpty() }?.let { id ->
+                    store.getUserPersona(id)?.let { it.displayName?.takeIf(String::isNotBlank) ?: it.name }
+                }
+        }
+    } catch (_: Exception) {
+        null to null
+    }
+
     private fun putMessage(message: String, isBot: Boolean) {
         val map: HashMap<String, Any> = HashMap()
 
@@ -10914,18 +11076,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val companion = currentCompanionLabel()
             if (companion.isNotBlank()) map[ChatAdapter.KEY_COMPANION_NAME] = companion
         } else {
-            // Same locking for the user's own label: the name that applies at
-            // send time, plus which identity supplied it so its style follows.
-            val identity = ChatSpeakerNames.activeUserIdentity(
-                roleplayId = activeRoleplayUserId,
-                roleplayName = activeRoleplayUserName,
-                glamourId = activeGlamourId,
-                glamourName = activeGlamourDisplayName,
-                defaultName = preferences?.getDefaultDisplayedUsername(),
-                roleplayWins = preferences?.getRoleplayNamesReplaceGlamour() ?: true
-            )
-            identity.name?.let { map[ChatSpeakerNames.USER_NAME_KEY] = it }
-            identity.sourceKey?.let { map[ChatSpeakerNames.USER_NAME_SOURCE_KEY] = it }
+            stampUserIdentity(map)
         }
 
         messages.add(map)

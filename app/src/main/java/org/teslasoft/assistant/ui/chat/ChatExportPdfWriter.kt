@@ -96,6 +96,11 @@ object ChatExportPdfWriter {
             }
 
             renderedDocument.append('\n')
+            ChatExportFormatter.exportedThinking(message, options)?.let { thinking ->
+                renderedDocument.append(ChatExportFormatter.THINKING_LABEL).append('\n')
+                renderedDocument.append(thinking).append("\n\n")
+                renderedDocument.append(ChatExportFormatter.RESPONSE_LABEL).append('\n')
+            }
             if (message.isCompanion) {
                 renderedDocument.append(
                     markwon.toMarkdown(ChatMarkdownRenderer.prepare(message.content))

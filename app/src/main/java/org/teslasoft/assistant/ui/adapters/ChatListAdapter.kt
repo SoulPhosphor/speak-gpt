@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.adapters
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
@@ -237,7 +238,7 @@ class ChatListAdapter(
         previewLoader.execute {
             try {
                 val result = ChatPreferences.getChatPreferences()
-                    .getChatByIdResult(appContext, chatId)
+                    .getChatByIdResult(appContext, chatId, DamagedChatOperation.CHAT_LIST)
                 val preview = if (result.messages.isNotEmpty()) {
                     result.messages[0]["message"].toString()
                 } else {

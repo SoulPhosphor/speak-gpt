@@ -117,6 +117,13 @@ object SecurePrefs {
         return encrypted
     }
 
+    /** The on-disk encrypted file behind [name]. */
+    fun encryptedFile(context: Context, name: String): File =
+        File(File(context.dataDir, "shared_prefs"), "$ENC_PREFIX$name.xml")
+
+    /** The folder where preserved copies of storage files are kept. */
+    fun recoveryDir(context: Context): File = File(context.filesDir, RECOVERY_DIR)
+
     /** True while [name] is in the LOCKED state in this process. */
     @Synchronized
     fun isLockedName(name: String): Boolean = name in lockedThisProcess

@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.UsernameFillNoticeDialog
 
 /** Shared right-edge motion for the navigation stack rooted at Settings. */
 abstract class SettingsPageActivity : FragmentActivity() {
@@ -37,6 +38,12 @@ abstract class SettingsPageActivity : FragmentActivity() {
             intent.putExtra(EXTRA_SETTINGS_PAGE_MOTION, true)
         }
         super.startActivityForResult(intent, requestCode, options)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Notices queued by background work while no screen was open.
+        UsernameFillNoticeDialog.showIfPending(this)
     }
 
     override fun finish() {

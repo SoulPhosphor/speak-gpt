@@ -5,6 +5,7 @@
 
 package org.teslasoft.assistant.conversation
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import com.google.gson.JsonParser
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
@@ -66,7 +67,7 @@ class NewConversationCoordinator(private val context: Context) {
             val saved = ChatPreferences.getChatPreferences()
                 .getChatListResult(app, includeFirstMessage = false)
                 .chats.any { ChatPreferences.storedChatId(it) == id }
-            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, id)
+            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, id, DamagedChatOperation.NEW_CHAT)
             if (!saved && ChatStorageHealth.isAuthoritative(history.state)) {
                 if (history.messages.isEmpty()) {
                     return PendingConversationState(id, name, readMode(id))
@@ -177,6 +178,44 @@ class NewConversationCoordinator(private val context: Context) {
     }
 
     /**
+     * Whether a conversation may still join the chat list later with turns
+     * already in it: a first commit still journaled, or a provisional
+     * conversation outside the list whose history is not provably empty
+     * (unreadable, or holding turns that orphan recovery could not commit).
+     * Unreadable or locked state counts as unsettled.
+     */
+    fun hasUnsettledProvisionalTurns(): Boolean = try {
+        if (hasPendingFirstCommit()) {
+            true
+        } else {
+            val listed = ChatPreferences.getChatPreferences()
+                .getChatListResult(app, includeFirstMessage = false)
+            if (!ChatStorageHealth.isAuthoritative(listed.state)) {
+                true
+            } else {
+                val listedIds = listed.chats.mapTo(HashSet()) { ChatPreferences.storedChatId(it) }
+                // A locked store reads as empty rather than failing, so check
+                // the lock state of the index and each candidate's settings.
+                val indexed = pendingIndex().all.keys.filter { it.isNotBlank() && it != INDEX_BACKFILLED_KEY }
+                val metadataLocked = SecurePrefs.isLockedName(PENDING_INDEX_FILE) ||
+                    indexed.any { chatId ->
+                        val settings = "$SETTINGS_PREFIX$chatId"
+                        SecurePrefs.get(app, settings)
+                        SecurePrefs.isLockedName(settings)
+                    }
+                metadataLocked || pendingConversationIds().any { chatId ->
+                    if (chatId in listedIds) return@any false
+                    val history = ChatPreferences.getChatPreferences()
+                        .getChatByIdResult(app, chatId, DamagedChatOperation.NEW_CHAT)
+                    !ChatStorageHealth.isAuthoritative(history.state) || history.messages.isNotEmpty()
+                }
+            }
+        }
+    } catch (_: Exception) {
+        true
+    }
+
+    /**
      * A provisional conversation still open (Phase 9.1 settle-or-refuse): the
      * retained startup blank session, or any indexed conversation still flagged
      * provisional. Its per-chat files live in chat storage and would be swept by
@@ -248,7 +287,7 @@ class NewConversationCoordinator(private val context: Context) {
             val raw = encoded as? String ?: return@forEach
             val entry = decodePendingJournalEntry(raw) ?: return@forEach
             if (entry.id != journalId || entry.id.isBlank() || entry.name.isBlank()) return@forEach
-            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, entry.id)
+            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, entry.id, DamagedChatOperation.NEW_CHAT)
             if (!ChatStorageHealth.isAuthoritative(history.state) || history.messages.isEmpty()) {
                 return@forEach
             }
@@ -278,7 +317,7 @@ class NewConversationCoordinator(private val context: Context) {
         val listedIds = listed.chats.mapTo(HashSet()) { ChatPreferences.storedChatId(it) }
         pendingConversationIds().forEach { chatId ->
             if (chatId in listedIds) return@forEach
-            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId)
+            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId, DamagedChatOperation.NEW_CHAT)
             if (!ChatStorageHealth.isAuthoritative(history.state) || history.messages.isEmpty()) {
                 return@forEach
             }
@@ -366,7 +405,7 @@ class NewConversationCoordinator(private val context: Context) {
             clearPendingIndex(chatId)
             return false
         }
-        val stored = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId)
+        val stored = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId, DamagedChatOperation.NEW_CHAT)
         if (!ChatStorageHealth.isAuthoritative(stored.state)) return false
         if (stored.messages.isNotEmpty()) {
             val name = chatName.ifBlank { retainedName(chatId) }.ifBlank { nextPlaceholderName() }

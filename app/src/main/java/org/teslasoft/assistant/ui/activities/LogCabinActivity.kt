@@ -65,6 +65,7 @@ class LogCabinActivity : SettingsPageActivity() {
     private var rowImageGenErrorsLog: LinearLayout? = null
     private var rowImageGenLog: LinearLayout? = null
     private var rowTtsLifecycleLog: LinearLayout? = null
+    private var rowDamagedChatFiles: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +94,7 @@ class LogCabinActivity : SettingsPageActivity() {
         rowImageGenErrorsLog = findViewById(R.id.row_image_gen_errors_log)
         rowImageGenLog = findViewById(R.id.row_image_gen_log)
         rowTtsLifecycleLog = findViewById(R.id.row_tts_lifecycle_log)
+        rowDamagedChatFiles = findViewById(R.id.row_damaged_chat_files)
     }
 
     @Suppress("DEPRECATION")
@@ -150,6 +152,9 @@ class LogCabinActivity : SettingsPageActivity() {
         }
         rowTtsLifecycleLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "tts_lifecycle").putExtra("chatId", chatId))
+        }
+        rowDamagedChatFiles?.setOnClickListener {
+            startActivity(Intent(this, DamagedChatLogActivity::class.java))
         }
     }
 

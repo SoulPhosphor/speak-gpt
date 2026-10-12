@@ -170,7 +170,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="4"
                         android:text="@string/endpoint_choose_provider_subtitle" />
                 </LinearLayout>
 

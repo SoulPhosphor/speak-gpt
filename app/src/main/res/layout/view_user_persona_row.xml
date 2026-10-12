@@ -49,9 +49,7 @@
         <TextView
             android:id="@+id/persona_subtitle"
             style="@style/Widget.App.Row.Subtitle"
-            android:layout_marginTop="2dp"
-            android:ellipsize="end"
-            android:maxLines="3" />
+            android:layout_marginTop="2dp" />
     </LinearLayout>
 
     <!-- Purely decorative - the whole row above is the tap target (ui's own

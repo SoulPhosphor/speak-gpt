@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Damaged Chat Files log (owner ruling, Oct 12 2026): every chat found
+     damaged, by any operation. Detections are added in code from
+     view_damaged_chat_detection.xml / view_damaged_chat_entry.xml. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/damaged_chat_logs_title" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp">
+
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/damaged_chat_section_detected" />
+
+            <LinearLayout
+                android:id="@+id/damaged_chat_detections"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <!-- Try Repair works on every damaged chat at once. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_damaged_try_repair"
+                style="@style/AppButton.Primary.Inline.Centered"
+                android:text="@string/damaged_try_repair"
+                android:visibility="gone" />
+
+            <!-- Chats whose direct repair was tried and failed. -->
+            <LinearLayout
+                android:id="@+id/damaged_irreparable_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.Section.Title"
+                    android:text="@string/damaged_irreparable_section" />
+
+                <TextView
+                    style="@style/Widget.App.Section.Hint"
+                    android:text="@string/damaged_repair_from_backup_hint" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_damaged_replace_from_backup"
+                    style="@style/AppButton.Primary.Inline.Centered"
+                    android:text="@string/damaged_replace_from_backup" />
+
+                <LinearLayout
+                    android:id="@+id/damaged_irreparable_detections"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

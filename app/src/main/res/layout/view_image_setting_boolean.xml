@@ -5,5 +5,5 @@
         <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/image_setting_boolean" style="@style/Widget.App.Row.Switch" />
     </LinearLayout>
     <TextView android:id="@+id/image_setting_previous" style="@style/Widget.App.Row.Subtitle" android:visibility="gone" />
-    <TextView android:id="@+id/image_setting_subtitle" style="@style/Widget.App.Row.Subtitle" android:maxLines="3" android:visibility="gone" />
+    <TextView android:id="@+id/image_setting_subtitle" style="@style/Widget.App.Row.Subtitle" android:visibility="gone" />
 </LinearLayout>

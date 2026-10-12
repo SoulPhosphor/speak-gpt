@@ -32,7 +32,6 @@ class ChatExportFormatterTest {
             messages,
             ChatExportOptions(
                 format = ChatExportFormat.TEXT,
-                includeModel = true,
                 includeUserTokenCount = true,
                 includeCompanionTokenCount = true
             )
@@ -46,7 +45,7 @@ class ChatExportFormatterTest {
     }
 
     @Test
-    fun dateAndTimeShareOneMetadataSegmentWithoutASeparatorBetweenThem() {
+    fun dateAndTimeAreAlwaysIncludedInOneMetadataSegment() {
         val result = ChatExportFormatter.formatText(
             listOf(
                 ChatExportMessage(
@@ -56,11 +55,7 @@ class ChatExportFormatterTest {
                     timestampMillis = 0L
                 )
             ),
-            ChatExportOptions(
-                format = ChatExportFormat.TEXT,
-                includeDate = true,
-                includeTime = true
-            ),
+            ChatExportOptions(format = ChatExportFormat.TEXT),
             locale = Locale.US,
             timeZone = TimeZone.getTimeZone("UTC")
         )
@@ -72,7 +67,7 @@ class ChatExportFormatterTest {
     }
 
     @Test
-    fun disabledFieldsAreNotWrittenToJson() {
+    fun jsonAlwaysCarriesDateTimeAndModelButTokensOnlyWhenSelected() {
         val result = ChatExportFormatter.formatJson(
             listOf(
                 ChatExportMessage(
@@ -93,10 +88,34 @@ class ChatExportFormatterTest {
         assertEquals("reply", record.get("message").asString)
         assertEquals("Moon", record.get("name").asString)
         assertTrue(record.has("isBot"))
-        assertFalse(record.has("date"))
-        assertFalse(record.has("time"))
-        assertFalse(record.has("model"))
+        assertEquals("Jan 1, 1970", record.get("date").asString)
+        assertTrue(record.has("time"))
+        assertEquals("provider/model", record.get("model").asString)
         assertFalse(record.has("tokens"))
+    }
+
+    @Test
+    fun thinkingIsLabeledOnlyWhenIncludedAndPresent() {
+        val messages = listOf(
+            ChatExportMessage(true, "Moon", "reply", thinking = "pondering"),
+            ChatExportMessage(true, "Moon", "plain")
+        )
+        assertEquals(
+            "Moon\nThinking:\npondering\n\nResponse:\nreply\n\nMoon\nplain",
+            ChatExportFormatter.formatText(messages, ChatExportOptions(format = ChatExportFormat.TEXT))
+        )
+        assertEquals(
+            "Moon\nreply\n\nMoon\nplain",
+            ChatExportFormatter.formatText(
+                messages,
+                ChatExportOptions(format = ChatExportFormat.TEXT, includeThinking = false)
+            )
+        )
+        val on = JsonParser.parseString(ChatExportFormatter.formatJson(messages, ChatExportOptions())).asJsonArray
+        assertEquals("pondering", on[0].asJsonObject.get("thinking").asString)
+        assertFalse(on[1].asJsonObject.has("thinking"))
+        val off = ChatExportFormatter.formatJson(messages, ChatExportOptions(includeThinking = false))
+        assertFalse(off.contains("thinking"))
     }
 
     @Test

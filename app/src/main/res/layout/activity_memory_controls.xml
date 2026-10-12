@@ -88,7 +88,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/memory_controls_use_in_new_chats_hint" />
                 </LinearLayout>
 
@@ -107,7 +106,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/memory_controls_companion_roleplay_hint" />
                 </LinearLayout>
 
@@ -126,7 +124,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/memory_controls_chat_list_status_hint" />
                 </LinearLayout>
 
@@ -145,7 +142,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/memory_controls_importance_ratings_hint" />
                 </LinearLayout>
 
@@ -174,7 +170,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/memory_controls_row_engine_hint" />
                 </LinearLayout>
 

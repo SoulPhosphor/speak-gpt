@@ -4,6 +4,7 @@
  **************************************************************************/
 package org.teslasoft.assistant.ui.fragments.dialogs
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -66,7 +67,7 @@ class ConversationPreviewSheet : BottomSheetDialogFragment() {
         val sectionId = requireArguments().getString(ARG_SECTION_ID).orEmpty()
         view.findViewById<View>(R.id.btn_close_preview).setOnClickListener { dismiss() }
 
-        val stored = ChatPreferences.getChatPreferences().getChatById(requireContext(), chatId)
+        val stored = ChatPreferences.getChatPreferences().getChatById(requireContext(), chatId, DamagedChatOperation.CHAT_PREVIEW)
         val section = SummarySections.fromJson(
             Preferences.getPreferences(requireContext(), chatId).getSummarySections()
         ).firstOrNull { it.id == sectionId }

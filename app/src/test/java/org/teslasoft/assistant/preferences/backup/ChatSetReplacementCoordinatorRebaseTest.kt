@@ -191,7 +191,7 @@ class ChatSetReplacementCoordinatorRebaseTest {
         assertTrue(listed.any { ChatPreferences.storedChatId(it) == pending.id })
         assertTrue(
             ChatPreferences.getChatPreferences()
-                .getChatByIdResult(context, pending.id)
+                .getChatByIdResult(context, pending.id, org.teslasoft.assistant.preferences.damaged.DamagedChatOperation.OPENING_A_CHAT)
                 .messages.isNotEmpty()
         )
         assertNull(ChatSetReplacementCoordinator.pendingBlockNow(context))

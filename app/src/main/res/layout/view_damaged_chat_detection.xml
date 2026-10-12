@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One detection in the Damaged Chat Files log: the operation and date,
+     followed by its chats (view_damaged_chat_entry.xml). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="20dp">
+
+    <TextView
+        android:id="@+id/damaged_detected_during"
+        style="@style/Widget.App.Row.Title" />
+
+    <TextView
+        android:id="@+id/damaged_detected_date"
+        style="@style/Widget.App.Row.Subtitle" />
+
+    <LinearLayout
+        android:id="@+id/damaged_detection_chats"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+</LinearLayout>

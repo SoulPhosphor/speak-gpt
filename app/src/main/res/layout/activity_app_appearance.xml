@@ -49,7 +49,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/chat_list_bookmark_indicator" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/chat_list_bookmark_indicator_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/chat_list_bookmark_indicator_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_chat_list_bookmarks" style="@style/Widget.App.Row.Switch" />

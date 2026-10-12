@@ -110,7 +110,6 @@
                 style="@style/Widget.App.Row.Subtitle"
                 android:layout_marginBottom="4dp"
                 android:paddingHorizontal="20dp"
-                android:maxLines="2"
                 android:text="@string/voice_language_subtitle" />
 
             <!-- Section: Response Preferences -->
@@ -418,7 +417,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_voice_advanced_subtitle" />
                 </LinearLayout>
 

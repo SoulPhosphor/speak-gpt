@@ -60,7 +60,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_profile_images" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_profile_images_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_profile_images_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_profile_images"
@@ -70,7 +70,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_names" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_names_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_names_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_names"
@@ -80,7 +80,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_ai_bubble" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_ai_bubble_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_ai_bubble_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_ai_bubble"
@@ -90,7 +90,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_user_bubble" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_user_bubble_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_user_bubble_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_user_bubble"
@@ -103,7 +103,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_model_names" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_model_names_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_model_names_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_model_names"
@@ -113,7 +113,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_token_usage" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_token_usage_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_token_usage_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_token_usage"
@@ -123,7 +123,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_user_tokens" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_user_tokens_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_user_tokens_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_user_tokens"
@@ -158,7 +158,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_staggered_responses" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_staggered_responses_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_staggered_responses_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_staggered_responses"
@@ -179,7 +179,7 @@
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_hardware_keyboard_shortcuts" />
-                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_hardware_keyboard_shortcuts_hint" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_hardware_keyboard_shortcuts_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_hardware_keyboard_shortcuts"
@@ -196,6 +196,16 @@
             <TextView
                 style="@style/Widget.App.Field.Hint"
                 android:text="@string/chat_behavior_default_username_hint" />
+
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/chat_behavior_apply_previous_chats" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/chat_behavior_apply_previous_chats_hint" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_apply_previous_chats"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/field_default_username"

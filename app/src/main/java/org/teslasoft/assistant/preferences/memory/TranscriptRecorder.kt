@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.preferences.memory
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
@@ -181,7 +182,7 @@ object TranscriptRecorder {
                 if (store.hasAnyTranscriptForChat(chatId)) continue
 
                 val prefs = Preferences.getPreferences(context, chatId)
-                val messages = chatPrefs.getChatById(context, chatId)
+                val messages = chatPrefs.getChatById(context, chatId, DamagedChatOperation.MEMORY)
                 if (messages.isEmpty()) continue
 
                 val turns = JSONArray()

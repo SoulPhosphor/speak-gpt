@@ -1,5 +1,6 @@
 package org.teslasoft.assistant.preferences.chatsearch
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import java.util.Locale
 import java.util.UUID
@@ -202,7 +203,7 @@ class ChatSearchIndexManager private constructor(context: Context) {
             activeStore.beginGeneration(newGeneration, locale.toLanguageTag())
             var skipped = 0
             for (chat in navigation.allChats) {
-                val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chat.id)
+                val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chat.id, DamagedChatOperation.CHAT_SEARCH)
                 if (!ChatStorageHealth.isAuthoritative(history.state)) {
                     skipped++
                     continue
@@ -220,7 +221,7 @@ class ChatSearchIndexManager private constructor(context: Context) {
             journal.entries().forEach { (chatId, revision) ->
                 val current = currentNavigation.allChats.firstOrNull { it.id == chatId }
                 if (current != null) {
-                    val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId)
+                    val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId, DamagedChatOperation.CHAT_SEARCH)
                     if (ChatStorageHealth.isAuthoritative(history.state)) {
                         activeStore.replaceChat(
                             newGeneration,
@@ -299,7 +300,7 @@ class ChatSearchIndexManager private constructor(context: Context) {
                 expectedRevision?.let { journal.clearExact(chatId, it) }
                 return
             }
-            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId)
+            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId, DamagedChatOperation.CHAT_SEARCH)
             if (!ChatStorageHealth.isAuthoritative(history.state)) return
             val currentRevision = sourceRevision(chatId)
             if (expectedRevision != null &&

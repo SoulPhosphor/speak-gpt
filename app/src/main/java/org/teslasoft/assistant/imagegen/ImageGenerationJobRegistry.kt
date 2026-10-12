@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.imagegen
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -495,28 +496,33 @@ object ImageGenerationJobRegistry {
         }
         try {
             withContext(Dispatchers.IO) {
-                val chatPreferences = ChatPreferences.getChatPreferences()
-                val result = chatPreferences.getChatByIdResult(app, record.chatId)
-                // A locked or preserved-corrupt history must never be
-                // overwritten with a fresh list (Round 4 guard).
-                if (!ChatStorageHealth.isAuthoritative(result.state)) return@withContext
-                val history = result.messages
-                val map = HashMap<String, Any>()
-                map["message"] = message
-                map["isBot"] = true
-                // §12: the structured record travels with the message; the
-                // `~file:` text above is only the rendering projection.
-                map[GeneratedImageMetadata.KEY] = terminal.metadata.toJson()
-                if (terminal is Terminal.Failed) {
-                    map[MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
-                    map[MessageCompletionState.KEY_STATE_DETAIL] = terminal.cause.name
-                    map[MessageCompletionState.KEY_ERROR_TEXT] =
-                        imageFailureProviderDetailBlock(app, terminal)
-                }
-                history.add(map)
-                chatPreferences.saveChatHistory(app, record.chatId, history)
-                if (terminal is Terminal.Complete) {
-                    chatPreferences.putTimestampToChatById(app, record.chatId)
+                // Read-modify-write under the chat list lock, the same lock the
+                // background username fill and chat repair hold, so neither can
+                // overwrite the other's change to this history.
+                synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+                    val chatPreferences = ChatPreferences.getChatPreferences()
+                    val result = chatPreferences.getChatByIdResult(app, record.chatId, DamagedChatOperation.IMAGE_GALLERY)
+                    // A locked or preserved-corrupt history must never be
+                    // overwritten with a fresh list (Round 4 guard).
+                    if (!ChatStorageHealth.isAuthoritative(result.state)) return@withContext
+                    val history = result.messages
+                    val map = HashMap<String, Any>()
+                    map["message"] = message
+                    map["isBot"] = true
+                    // §12: the structured record travels with the message; the
+                    // `~file:` text above is only the rendering projection.
+                    map[GeneratedImageMetadata.KEY] = terminal.metadata.toJson()
+                    if (terminal is Terminal.Failed) {
+                        map[MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
+                        map[MessageCompletionState.KEY_STATE_DETAIL] = terminal.cause.name
+                        map[MessageCompletionState.KEY_ERROR_TEXT] =
+                            imageFailureProviderDetailBlock(app, terminal)
+                    }
+                    history.add(map)
+                    chatPreferences.saveChatHistory(app, record.chatId, history)
+                    if (terminal is Terminal.Complete) {
+                        chatPreferences.putTimestampToChatById(app, record.chatId)
+                    }
                 }
             }
         } catch (_: Exception) { /* delivery must never crash the app */ }

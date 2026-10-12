@@ -19,6 +19,7 @@ import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
+import org.teslasoft.assistant.preferences.username.DefaultUsernameFill
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
@@ -26,8 +27,31 @@ import org.teslasoft.assistant.ui.util.ScreenChrome
 class ChatSettingsActivity : SettingsPageActivity() {
 
     private lateinit var preferences: Preferences
+    // The Default Displayed Username saves on every keystroke; the background
+    // fill runs once the user leaves the screen (after turning Apply to
+    // Previous Chats on, or with a changed name), so a half-typed name is
+    // never written into old chats.
+    private var usernameWhenShown: String? = null
+    private var applyTurnedOn = false
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
+
+    override fun onResume() {
+        super.onResume()
+        usernameWhenShown = preferences.getDefaultDisplayedUsername()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        val name = preferences.getDefaultDisplayedUsername()
+        if ((applyTurnedOn || name != usernameWhenShown) &&
+            preferences.getApplyDefaultUsernameToPreviousChats()
+        ) {
+            DefaultUsernameFill.schedule(this)
+        }
+        usernameWhenShown = name
+        applyTurnedOn = false
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,6 +125,14 @@ class ChatSettingsActivity : SettingsPageActivity() {
             setText(preferences.getDefaultDisplayedUsername())
             doAfterTextChanged {
                 preferences.setDefaultDisplayedUsername(it?.toString()?.trim().orEmpty())
+            }
+        }
+
+        findViewById<MaterialSwitch>(R.id.switch_apply_previous_chats)?.apply {
+            isChecked = preferences.getApplyDefaultUsernameToPreviousChats()
+            setOnCheckedChangeListener { _, value ->
+                preferences.setApplyDefaultUsernameToPreviousChats(value)
+                applyTurnedOn = value
             }
         }
 

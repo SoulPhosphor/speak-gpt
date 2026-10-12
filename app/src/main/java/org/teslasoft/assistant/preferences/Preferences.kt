@@ -594,6 +594,15 @@ class Preferences internal constructor(
         putGlobalString("chat_default_displayed_username", name, "")
     }
 
+    /** Apply to Previous Chats with No Name. Default off: until turned on,
+     *  the Default Displayed Username only reaches messages sent afterward. */
+    fun getApplyDefaultUsernameToPreviousChats(): Boolean =
+        getGlobalBoolean("chat_default_username_apply_previous", false)
+
+    fun setApplyDefaultUsernameToPreviousChats(state: Boolean) {
+        putGlobalBoolean("chat_default_username_apply_previous", state, false)
+    }
+
     /** Chat Behavior > Identity: when both a Roleplay Character and a Glamour
      *  name apply, the Roleplay Character's name wins. Default on. */
     fun getRoleplayNamesReplaceGlamour(): Boolean =
@@ -676,6 +685,15 @@ class Preferences internal constructor(
 
     fun setShowThinking(state: Boolean) {
         putGlobalBoolean("chat_show_thinking", state, true)
+    }
+
+    /** Include Thinking in the individual chat export dialog. Default on;
+     *  remembered between exports. */
+    fun getChatExportIncludeThinking(): Boolean =
+        getGlobalBoolean("chat_export_include_thinking", true)
+
+    fun setChatExportIncludeThinking(state: Boolean) {
+        putGlobalBoolean("chat_export_include_thinking", state, true)
     }
 
     /** Places the per-response read-aloud control beside the assistant name.
@@ -2435,6 +2453,17 @@ class Preferences internal constructor(
 
     fun setChatUserPersonaId(id: String) {
         putString("memory_user_persona_id", id)
+    }
+
+    /** This chat's own displayed username (Change Username), or "" when the
+     *  chat shows its normal names. Display only: it never changes which
+     *  identity's information is sent to the model. */
+    fun getChatUsername() : String {
+        return getString("chat_username_override", "")
+    }
+
+    fun setChatUsername(name: String) {
+        putString("chat_username_override", name)
     }
 
     /**
