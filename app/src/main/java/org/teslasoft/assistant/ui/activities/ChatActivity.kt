@@ -1775,47 +1775,60 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         refreshActiveProfileButton()
         val rpCharId = preferences?.getChatRoleplayCharacterId().orEmpty()
         val glamourId = preferences?.getChatUserPersonaId().orEmpty()
+        identityRefreshesPending++
         CoroutineScope(Dispatchers.Main).launch {
-            val loaded = withContext(Dispatchers.IO) {
-                try {
-                    if (!MemoryStore.isProvisioned(this@ChatActivity)) {
-                        null
-                    } else {
-                        val store = MemoryStore.getInstance(this@ChatActivity)
-                        val styles = HashMap<String, ChatNameStyle.Override>()
-                        store.getAllUserPersonas().forEach {
-                            styles[ChatSpeakerNames.GLAMOUR_SOURCE + it.personaId] =
-                                ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
-                        }
-                        store.getAllRoleplayCharacters().forEach {
-                            styles[ChatSpeakerNames.ROLEPLAY_SOURCE + it.roleplayCharacterId] =
-                                ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
-                        }
-                        Triple(
-                            rpCharId.takeIf { it.isNotEmpty() }?.let { store.getRoleplayCharacter(it)?.name },
-                            // A blank Display Name falls back to the Glamour's own Name.
-                            glamourId.takeIf { it.isNotEmpty() }?.let { id ->
-                                store.getUserPersona(id)?.let { it.displayName?.takeIf(String::isNotBlank) ?: it.name }
-                            },
-                            styles
-                        )
-                    }
-                } catch (_: Exception) {
-                    null
-                }
+            try {
+                applyUserIdentityRefresh(rpCharId, glamourId)
+            } finally {
+                identityRefreshesPending--
             }
-            if (isFinishing || isDestroyed) return@launch
-            // Drop a result whose identities changed while it was loading.
-            if (preferences?.getChatRoleplayCharacterId().orEmpty() != rpCharId ||
-                preferences?.getChatUserPersonaId().orEmpty() != glamourId
-            ) return@launch
-            activeRoleplayUserId = rpCharId
-            activeRoleplayUserName = loaded?.first
-            activeGlamourId = glamourId
-            activeGlamourDisplayName = loaded?.second
-            loaded?.third?.let { userNameStyles = it }
-            adapter?.setUserNameStyles(userNameStyles)
         }
+    }
+
+    /** Main-thread count of identity loads still running; while any is, a
+     *  message reads the names directly instead of trusting the cache. */
+    private var identityRefreshesPending = 0
+
+    private suspend fun applyUserIdentityRefresh(rpCharId: String, glamourId: String) {
+        val loaded = withContext(Dispatchers.IO) {
+            try {
+                if (!MemoryStore.isProvisioned(this@ChatActivity)) {
+                    null
+                } else {
+                    val store = MemoryStore.getInstance(this@ChatActivity)
+                    val styles = HashMap<String, ChatNameStyle.Override>()
+                    store.getAllUserPersonas().forEach {
+                        styles[ChatSpeakerNames.GLAMOUR_SOURCE + it.personaId] =
+                            ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
+                    }
+                    store.getAllRoleplayCharacters().forEach {
+                        styles[ChatSpeakerNames.ROLEPLAY_SOURCE + it.roleplayCharacterId] =
+                            ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
+                    }
+                    Triple(
+                        rpCharId.takeIf { it.isNotEmpty() }?.let { store.getRoleplayCharacter(it)?.name },
+                        // A blank Display Name falls back to the Glamour's own Name.
+                        glamourId.takeIf { it.isNotEmpty() }?.let { id ->
+                            store.getUserPersona(id)?.let { it.displayName?.takeIf(String::isNotBlank) ?: it.name }
+                        },
+                        styles
+                    )
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+        if (isFinishing || isDestroyed) return
+        // Drop a result whose identities changed while it was loading.
+        if (preferences?.getChatRoleplayCharacterId().orEmpty() != rpCharId ||
+            preferences?.getChatUserPersonaId().orEmpty() != glamourId
+        ) return
+        activeRoleplayUserId = rpCharId
+        activeRoleplayUserName = loaded?.first
+        activeGlamourId = glamourId
+        activeGlamourDisplayName = loaded?.second
+        loaded?.third?.let { userNameStyles = it }
+        adapter?.setUserNameStyles(userNameStyles)
     }
 
     /** Apply to Previous Chats with No Name, for this open chat: the
@@ -10998,12 +11011,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Locks a user message's label: the name that applies at send time,
      *  plus which identity supplied it so its style follows. */
     private fun stampUserIdentity(map: MutableMap<String, Any>) {
-        // The identity names load in the background when the chat opens. A
-        // message sent before that load has finished reads them directly, so
-        // it is never stamped with a name that is not the one in effect.
+        // The identity names load in the background (when the chat opens and
+        // on every return to it). A message sent while a load is still running
+        // reads them directly, so it is never stamped with a stale name.
         val rpId = preferences?.getChatRoleplayCharacterId().orEmpty()
         val glamourId = preferences?.getChatUserPersonaId().orEmpty()
-        val loaded = rpId == activeRoleplayUserId && glamourId == activeGlamourId
+        val loaded = identityRefreshesPending == 0 &&
+            rpId == activeRoleplayUserId && glamourId == activeGlamourId
         val names = if (loaded) {
             activeRoleplayUserName to activeGlamourDisplayName
         } else {
