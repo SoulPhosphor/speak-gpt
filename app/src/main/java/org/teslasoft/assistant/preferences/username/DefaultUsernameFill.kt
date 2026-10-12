@@ -15,6 +15,7 @@ import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.StartupHealth
 import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
@@ -121,48 +122,54 @@ object DefaultUsernameFill {
      * unfinished, queues the matching notices, and keeps a retry pending for
      * the next app start. Damaged chats are skipped and never written.
      */
-    fun runAll(context: Context) {
+    /** Runs the fill and records its result. Returns false only when that
+     *  result could not be durably recorded (the caller then retries). */
+    fun runAll(context: Context): Boolean {
         // Startup recovery (restores, the outage merge, rename and deletion
         // recovery, new chats' first saves) can still be adding or replacing
         // chats. A run queued before the app restarted waits for it; the
         // startup thread resumes the fill once everything has settled.
         synchronized(startupLock) {
             if (!startupSettled) {
-                if (PortableRestoreProcessGate.blocksCurrentProcess(context)) {
+                return if (PortableRestoreProcessGate.blocksCurrentProcess(context)) {
                     UsernameFillState.finish(context, RunOutcome(restoreInProgress = true), complete = false)
                 } else {
                     UsernameFillState.deferToNextStart(context)
                 }
-                return
             }
         }
         // A chat recovery still replacing histories: filling now would write
         // histories about to be replaced. Wait for the next start.
         if (ChatRestoreManager.hasPendingRecovery(context)) {
-            UsernameFillState.deferToNextStart(context)
-            return
+            return UsernameFillState.deferToNextStart(context)
         }
         val name = activeName(context)
-        if (name == null) {
-            UsernameFillState.finish(context, RunOutcome(), complete = true)
-            return
-        }
+            ?: return UsernameFillState.finish(context, RunOutcome(), complete = true)
         val before = listedChatIds(context)
         val outcome = fill(context, name)
         // The completion decision is made under the chat list lock, which a
-        // new chat's first save also holds, so no chat can join the list
-        // between this check and the recorded result. A new chat whose turns
-        // have not reached the list yet (first save pending, or an unlisted
-        // provisional chat that is unreadable, locked or holds turns), or a
-        // chat that joined the list during the pass, keeps the fill pending
-        // so it is filled on a later start.
-        synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+        // new chat's first save and a chat-set replacement also hold, so the
+        // chat set cannot change between this check and the recorded result.
+        // The fill stays pending for a later start when:
+        //  - a new chat's turns have not reached the list yet (first save
+        //    pending, or an unlisted provisional chat that is unreadable,
+        //    locked or holds turns);
+        //  - a chat joined the list during the pass;
+        //  - a restore began during the pass (it may have put back histories
+        //    already filled);
+        //  - storage-outage recovery has not fully settled (a deferred outage
+        //    file can still bring chats back on a later start).
+        return synchronized(ChatPreferences.CHAT_LIST_LOCK) {
             val unsettled = NewConversationCoordinator(context).hasUnsettledProvisionalTurns()
             val after = listedChatIds(context)
             val joinedDuringPass = before == null || after == null || !before.containsAll(after)
+            val restoreStarted = PortableRestoreProcessGate.blocksCurrentProcess(context) ||
+                ChatRestoreManager.hasPendingRecovery(context)
+            val outageUnsettled = !StartupHealth.isRecoveryScanSettled(context)
             UsernameFillState.finish(
                 context, outcome,
-                complete = !outcome.needsRetry && !unsettled && !joinedDuringPass
+                complete = !outcome.needsRetry && !unsettled && !joinedDuringPass &&
+                    !restoreStarted && !outageUnsettled
             )
         }
     }

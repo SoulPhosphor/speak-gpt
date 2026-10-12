@@ -13,11 +13,13 @@ import androidx.work.WorkerParameters
 
 /** Background runner for [DefaultUsernameFill]. Unfinished work is kept as a
  *  pending retry for the next app start (UsernameFillState), not retried
- *  here: a locked or full store does not recover within the same process. */
+ *  here: a locked or full store does not recover within the same process.
+ *  Only when that pending state itself could not be saved is the job retried
+ *  here, so the work is never silently dropped. */
 class DefaultUsernameFillWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
 
     override fun doWork(): Result {
-        try {
+        val recorded = try {
             DefaultUsernameFill.runAll(applicationContext)
         } catch (_: Throwable) {
             UsernameFillState.finish(
@@ -26,6 +28,6 @@ class DefaultUsernameFillWorker(context: Context, params: WorkerParameters) : Wo
                 complete = false
             )
         }
-        return Result.success()
+        return if (recorded) Result.success() else Result.retry()
     }
 }

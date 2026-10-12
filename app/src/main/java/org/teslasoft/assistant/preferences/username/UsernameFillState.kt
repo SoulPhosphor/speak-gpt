@@ -43,34 +43,37 @@ object UsernameFillState {
         false
     }
 
-    /** Keeps the fill pending for the next app start without queuing a notice. */
-    internal fun deferToNextStart(context: Context) {
-        try {
-            synchronized(lock) { prefs(context).edit(commit = true) { putBoolean(KEY_RETRY, true) } }
-        } catch (_: Exception) { }
+    /** Keeps the fill pending for the next app start without queuing a
+     *  notice. Returns whether that was durably recorded. */
+    internal fun deferToNextStart(context: Context): Boolean = try {
+        synchronized(lock) { prefs(context).edit().putBoolean(KEY_RETRY, true).commit() }
+    } catch (_: Exception) {
+        false
     }
 
-    internal fun finish(context: Context, outcome: DefaultUsernameFill.RunOutcome, complete: Boolean) {
-        try {
-            synchronized(lock) {
-                val p = prefs(context)
-                val queued = names(p.getStringSet(KEY_QUEUED, null))
-                val shown = names(p.getStringSet(KEY_SHOWN, null))
-                val update = NoticeRules.afterRun(
-                    queued, shown,
-                    p.getStringSet(KEY_QUEUED_DAMAGED, null).orEmpty(),
-                    p.getStringSet(KEY_SHOWN_DAMAGED, null).orEmpty(),
-                    outcome
-                )
-                p.edit(commit = true) {
-                    putBoolean(KEY_RETRY, !complete)
-                    putStringSet(KEY_QUEUED, update.queued.mapTo(HashSet()) { it.name })
-                    putStringSet(KEY_SHOWN, update.shown.mapTo(HashSet()) { it.name })
-                    putStringSet(KEY_QUEUED_DAMAGED, HashSet(update.queuedDamaged))
-                    putStringSet(KEY_SHOWN_DAMAGED, HashSet(update.shownDamaged))
-                }
-            }
-        } catch (_: Exception) { }
+    /** Records the run's result and notices. Returns whether that was
+     *  durably recorded. */
+    internal fun finish(context: Context, outcome: DefaultUsernameFill.RunOutcome, complete: Boolean): Boolean = try {
+        synchronized(lock) {
+            val p = prefs(context)
+            val queued = names(p.getStringSet(KEY_QUEUED, null))
+            val shown = names(p.getStringSet(KEY_SHOWN, null))
+            val update = NoticeRules.afterRun(
+                queued, shown,
+                p.getStringSet(KEY_QUEUED_DAMAGED, null).orEmpty(),
+                p.getStringSet(KEY_SHOWN_DAMAGED, null).orEmpty(),
+                outcome
+            )
+            p.edit()
+                .putBoolean(KEY_RETRY, !complete)
+                .putStringSet(KEY_QUEUED, update.queued.mapTo(HashSet()) { it.name })
+                .putStringSet(KEY_SHOWN, update.shown.mapTo(HashSet()) { it.name })
+                .putStringSet(KEY_QUEUED_DAMAGED, HashSet(update.queuedDamaged))
+                .putStringSet(KEY_SHOWN_DAMAGED, HashSet(update.shownDamaged))
+                .commit()
+        }
+    } catch (_: Exception) {
+        false
     }
 
     /** The queued notices, without consuming them. */
