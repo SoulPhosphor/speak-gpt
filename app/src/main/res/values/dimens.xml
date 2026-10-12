@@ -169,7 +169,4 @@
     <dimen name="bookmark_message_action_size">32dp</dimen>
     <dimen name="chat_list_bookmark_size">16dp</dimen>
     <dimen name="section_title_field_gap">8dp</dimen>
-    <!-- Opacity of the selected-text highlight in chat messages, applied to
-         the message's own text color so it shows on any bubble or theme. -->
-    <item name="chat_selection_highlight_alpha" format="float" type="dimen">0.35</item>
 </resources>
