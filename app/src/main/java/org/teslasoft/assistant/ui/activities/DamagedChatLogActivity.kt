@@ -198,23 +198,25 @@ class DamagedChatLogActivity : SettingsPageActivity() {
         }.start()
     }
 
-    private fun copyBackup(uri: Uri, destination: File): Boolean = try {
-        var total = 0L
-        contentResolver.openInputStream(uri)?.use { input ->
-            destination.outputStream().buffered().use { output ->
-                val buffer = ByteArray(64 * 1024)
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    total += count
-                    if (total > PackageCrypto.MAX_PACKAGE_BYTES) return false
-                    output.write(buffer, 0, count)
+    private fun copyBackup(uri: Uri, destination: File): Boolean {
+        return try {
+            var total = 0L
+            contentResolver.openInputStream(uri)?.use { input ->
+                destination.outputStream().buffered().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > PackageCrypto.MAX_PACKAGE_BYTES) return false
+                        output.write(buffer, 0, count)
+                    }
                 }
-            }
-        } ?: return false
-        PackageCrypto.withinSizeCap(destination)
-    } catch (_: Exception) {
-        false
+            } ?: return false
+            PackageCrypto.withinSizeCap(destination)
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun showUnlockChoices() {
