@@ -1079,6 +1079,7 @@
     <string name="provider_function_chat">Chat</string>
     <!-- Function line for a failed document or image summary; %1$s is the file type, e.g. JPEG. -->
     <string name="provider_function_summarize_file">Summarize %1$s</string>
+    <string name="provider_function_summarize_image_prompt">Summarize Image Prompt</string>
     <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried.</string>
     <string name="provider_unknown_limit_log_note">Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>

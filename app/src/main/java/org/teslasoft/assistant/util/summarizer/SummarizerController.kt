@@ -409,10 +409,11 @@ class SummarizerController(
      * One-shot image-prompt summary (owner request, Aug 16 2026). Sends the
      * single [imagePrompt] to the configured Summary Model under the Image
      * Summary Prompt and returns the model's short version, or null when the
-     * summarizer is not configured or the call fails. Deliberately silent: an
-     * image summary is a token-saving convenience, so a failure never writes a
+     * summarizer is not configured or the call fails. Silent in chat: an image
+     * summary is a token-saving convenience, so a failure never writes a
      * Summarizer Error, never interrupts chat, and simply leaves the caller to
-     * fall back to the full prompt and try again on a later turn.
+     * fall back to the full prompt and try again on a later turn. The failure
+     * is still recorded in the Provider Failure Log or Error Log.
      */
     suspend fun summarizeImagePrompt(imagePrompt: String): String? {
         if (imagePrompt.isBlank()) return null
@@ -427,7 +428,9 @@ class SummarizerController(
             chatIdProvider()
         )
         val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
-        return try {
+        val evidence = SummarizerDiagnostics.RequestEvidence()
+        val privateValues = listOf(body, imagePrompt, endpoint.apiKey)
+        val text = try {
             withContext(Dispatchers.IO) {
                 val request = ChatCompletionRequest(
                     model = ModelId(model),
@@ -439,15 +442,81 @@ class SummarizerController(
                     endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
                     UsageFunction.IMAGE_DESCRIPTION
                 ) { attempt ->
-                    buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
-                        .chatCompletion(request)
+                    val client = buildClient(endpoint, routingResolution.providerJson, evidence, attempt)
+                    evidence.dispatched = true
+                    client.chatCompletion(request)
                 }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
-            }.trim().ifBlank { null }
+            }.trim()
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
+            recordImagePromptFailure(
+                prefs, SummarizerDiagnostics.owner(e, classified, evidence), e, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues
+            )
+            return null
         }
+        if (text.isBlank()) {
+            recordImagePromptFailure(
+                prefs, SummarizerDiagnostics.Owner.EXTERNAL, null, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues
+            )
+            return null
+        }
+        return text
+    }
+
+    /**
+     * A failed image prompt summary is still silent in chat, but is recorded
+     * in exactly one log (owner ruling, Oct 12 2026): a provider failure in the
+     * Provider Failure Log as "Summarize Image Prompt", anything else in the
+     * Error Log. Cancellation and missing setup are not recorded.
+     */
+    private fun recordImagePromptFailure(
+        prefs: Preferences,
+        owner: SummarizerDiagnostics.Owner,
+        error: Throwable?,
+        evidence: SummarizerDiagnostics.RequestEvidence,
+        endpoint: ApiEndpointObject,
+        model: String,
+        requestedProvider: String?,
+        privateValues: List<String>
+    ) {
+        val function = appContext.getString(R.string.provider_function_summarize_image_prompt)
+        val allPrivate = privateValues + evidence.privateResponseValues()
+        val providerEvidence = evidence.snapshot()
+        SummarizerDiagnostics.record(
+            owner,
+            logProviders = prefs.getLogChatFailures(),
+            local = {
+                org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
+                    SummarizerDiagnostics.localDetail(
+                        function, error ?: IllegalStateException("Local $function failure"), allPrivate
+                    ))
+            },
+            external = {
+                val message = SummarizerDetailSanitizer.sanitize(
+                    providerEvidence.errorMessages.joinToString("\n").ifBlank { null }
+                        ?: error?.message, allPrivate
+                ) ?: "Provider returned no usable completion"
+                scope.launch(Dispatchers.IO) {
+                    org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                        appContext, SummarizerDetailSanitizer.sanitize(endpoint.label, allPrivate) ?: "Not Reported",
+                        SummarizerDetailSanitizer.sanitize(providerEvidence.actualServingProvider, allPrivate) ?: "Not Reported",
+                        SummarizerDetailSanitizer.sanitize(model, allPrivate) ?: "Not Reported", function, message,
+                        requestedRoutedProvider = SummarizerDetailSanitizer.sanitize(requestedProvider, allPrivate),
+                        outerHttpStatus = providerEvidence.outerHttpStatus,
+                        embeddedProviderStatus = providerEvidence.embeddedHttpStatus,
+                        providerCode = SummarizerDetailSanitizer.sanitize(providerEvidence.providerCode, allPrivate),
+                        providerType = SummarizerDetailSanitizer.sanitize(providerEvidence.providerType, allPrivate),
+                        providerErrorType = SummarizerDetailSanitizer.sanitize(providerEvidence.providerErrorType, allPrivate),
+                        contentFilterSide = providerEvidence.contentFilterSide?.wire,
+                        attemptId = providerEvidence.attemptId
+                    )
+                }
+            }
+        )
     }
 
     /**
