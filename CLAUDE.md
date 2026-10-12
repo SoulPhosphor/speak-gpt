@@ -428,6 +428,17 @@ Current priorities belong in the active conversation, issue, work order, or bran
 
 ## 11. Technical workflow
 
+### Which client to work on (owner ruling, October 12 2026)
+
+The app currently has two clients on purpose. `beta/new-client` is the new
+client and is where active work goes. `main` is the old client, kept unchanged
+as a fallback while data is brought across; it is not the base for new work.
+
+Before writing any code, confirm the work branch starts from
+`beta/new-client`. If the owner has not said which client to work on, stop and
+ask — the likelier explanation is that the owner forgot to say, not that the
+work belongs on `main`. Work on `main` only when the owner says so.
+
 - Inspect the relevant current code before proposing a change.
 - Read the relevant feature specification before changing that feature.
 - Make the smallest coherent change that satisfies the approved requirement.
