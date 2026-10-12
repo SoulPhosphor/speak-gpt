@@ -15,6 +15,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.widgets.AppDropdown
@@ -39,6 +40,13 @@ object ChatExportDialog {
             }
         }
 
+        val preferences = Preferences.getPreferences(context, "")
+        val includeThinking = body.findViewById<MaterialSwitch>(R.id.chat_export_include_thinking)
+        includeThinking.isChecked = preferences.getChatExportIncludeThinking()
+        includeThinking.setOnCheckedChangeListener { _, include ->
+            preferences.setChatExportIncludeThinking(include)
+        }
+
         val actions = LayoutInflater.from(context)
             .inflate(R.layout.dialog_two_actions_cancel_first, null)
         val cancel = actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)
@@ -60,6 +68,7 @@ object ChatExportDialog {
         export.setOnClickListener {
             val options = ChatExportOptions(
                 format = selectedFormat,
+                includeThinking = includeThinking.isChecked,
                 includeUserTokenCount = body.findViewById<MaterialSwitch>(R.id.chat_export_include_user_tokens).isChecked,
                 includeCompanionTokenCount =
                     body.findViewById<MaterialSwitch>(R.id.chat_export_include_companion_tokens).isChecked

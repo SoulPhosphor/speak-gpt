@@ -24,7 +24,7 @@
         app:layout_constraintStart_toEndOf="@id/voice_selected"
         app:layout_constraintTop_toTopOf="parent">
         <TextView android:id="@+id/voice_name" style="@style/Widget.App.Row.Title" />
-        <TextView android:id="@+id/voice_metadata" style="@style/Widget.App.Row.Subtitle" android:maxLines="2" />
+        <TextView android:id="@+id/voice_metadata" style="@style/Widget.App.Row.Subtitle" />
     </LinearLayout>
     <!-- Only manually saved Voice IDs show this. GONE on every other row, so those
          rows keep their existing width and the Preview action stays at the edge. -->

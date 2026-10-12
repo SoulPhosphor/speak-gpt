@@ -23,20 +23,24 @@ class ChatExportWiringContractTest {
         assertTrue(layout.contains("app:layout_constraintEnd_toStartOf=\"@+id/btn_chat_menu\""))
         assertTrue(
             layout.contains(
-                "btn_summarizer_errors,btn_quick_settings,btn_settings,btn_conversation_summary,btn_chat_menu"
+                "btn_summarizer_errors,btn_active_profile,btn_quick_settings,btn_settings,btn_conversation_summary,btn_chat_menu"
             )
         )
         assertFalse(layout.contains("btn_debug_log"))
     }
 
     @Test
-    fun onlyTheTokenOptionsAreSlideSwitchesAndStartOff() {
+    fun thinkingAndTokenOptionsAreSlideSwitchesAndOnlyTokensStartOff() {
         val layout = source("src/main/res/layout/dialog_chat_export.xml")
 
-        assertEquals(2, Regex("materialswitch.MaterialSwitch").findAll(layout).count())
-        assertEquals(2, Regex("Widget.App.Row.Toggle").findAll(layout).count())
-        assertEquals(2, Regex("Widget.App.Row.Switch").findAll(layout).count())
+        assertEquals(3, Regex("materialswitch.MaterialSwitch").findAll(layout).count())
+        assertEquals(3, Regex("Widget.App.Row.Toggle").findAll(layout).count())
+        assertEquals(3, Regex("Widget.App.Row.Switch").findAll(layout).count())
         assertEquals(2, Regex("android:checked=\"false\"").findAll(layout).count())
+        assertTrue(
+            layout.indexOf("@+id/chat_export_format_value") < layout.indexOf("@+id/chat_export_include_thinking") &&
+                layout.indexOf("@+id/chat_export_include_thinking") < layout.indexOf("@+id/chat_export_include_user_tokens")
+        )
         assertTrue(layout.contains("@+id/chat_export_include_user_tokens"))
         assertTrue(layout.contains("@+id/chat_export_include_companion_tokens"))
         assertFalse(layout.contains("chat_export_include_date"))
@@ -73,7 +77,8 @@ class ChatExportWiringContractTest {
             "menu.add(Menu.NONE, 1, 1, R.string.chat_menu_export)",
             "menu.add(Menu.NONE, 5, 2, R.string.usage_cost_title)",
             "menu.add(Menu.NONE, 2, 3, R.string.alert_debug_section_logs)",
-            "menu.add(Menu.NONE, 3, 4, R.string.btn_delete)"
+            "menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)",
+            "menu.add(Menu.NONE, 3, 5, R.string.btn_delete)"
         )
         assertTrue(activity.contains("Intent(this@ChatActivity, LogCabinActivity::class.java)"))
         assertFalse(activity.contains("updateDebugLogButtonVisibility"))
@@ -89,6 +94,9 @@ class ChatExportWiringContractTest {
         assertTrue(strings.contains("<string name=\"chat_menu_export\">Export Chat</string>"))
         assertTrue(strings.contains("<string name=\"chat_export_cancel\">Cancel</string>"))
         assertTrue(strings.contains("<string name=\"chat_export_action\">Export</string>"))
+        assertTrue(strings.contains("<string name=\"chat_export_include_thinking\">Include Thinking</string>"))
+        assertTrue(strings.contains("<string name=\"chat_menu_change_username\">Change Username</string>"))
+        assertTrue(strings.contains("<string name=\"chat_change_username_title\">Change Your Username</string>"))
         assertTrue(strings.contains("<string name=\"chat_delete_title\">Delete Chat</string>"))
     }
 

@@ -94,7 +94,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/memory_controls_max_suggestions_hint" />
                 </LinearLayout>
 
@@ -172,7 +171,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/memory_controls_row_assistant_endpoint_hint" />
                 </LinearLayout>
 
@@ -220,7 +218,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/memory_controls_row_assistant_model_hint" />
                 </LinearLayout>
 
@@ -324,7 +321,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/memory_assistant_adv_min_importance_hint" />
                 </LinearLayout>
 

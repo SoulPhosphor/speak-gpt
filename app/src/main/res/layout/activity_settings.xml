@@ -125,7 +125,6 @@
 
                         <TextView
                             style="@style/Widget.App.Row.Subtitle"
-                            android:maxLines="3"
                             android:text="@string/tile_characters_desc" />
                     </LinearLayout>
 
@@ -158,7 +157,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_ai_system_settings_desc" />
                 </LinearLayout>
 
@@ -189,7 +187,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_memory_system_desc" />
                 </LinearLayout>
 
@@ -220,7 +217,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_roleplay_desc" />
                 </LinearLayout>
 
@@ -255,7 +251,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_profile_image_properties_desc" />
                 </LinearLayout>
 
@@ -286,7 +281,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_images_desc" />
                 </LinearLayout>
 
@@ -317,7 +311,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_voice_settings_subtitle" />
                 </LinearLayout>
 
@@ -348,7 +341,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/appearance_subtitle" />
                 </LinearLayout>
 
@@ -379,7 +371,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/row_memory_backup_restore_subtitle" />
                 </LinearLayout>
 
@@ -410,7 +401,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_about_app_subtitle" />
                 </LinearLayout>
 
@@ -468,7 +458,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_alert_debug_menu_subtitle" />
                 </LinearLayout>
 
@@ -499,7 +488,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_log_cabin_subtitle" />
                 </LinearLayout>
 

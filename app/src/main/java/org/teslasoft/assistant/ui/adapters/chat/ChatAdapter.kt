@@ -218,6 +218,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     // Resolved by ChatActivity; rows only look them up.
     private var userNameStyles: Map<String, ChatNameStyle.Override> = emptyMap()
 
+    // This chat's own username (Change Username); replaces every user name
+    // shown in the chat. Each message keeps its own name style.
+    private var chatUsername: String = ""
+
+    fun setChatUsername(name: String) {
+        if (name == chatUsername) return
+        chatUsername = name
+        notifyDataSetChanged()
+    }
+
     fun setUserNameStyles(styles: Map<String, ChatNameStyle.Override>) {
         if (styles == userNameStyles) return
         userNameStyles = styles
@@ -2179,7 +2189,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val nameText = if (isBot) {
                 resolveAssistantLabel(chatMessage)
             } else {
-                ChatSpeakerNames.userName(context, chatMessage)
+                ChatSpeakerNames.displayedUserName(context, chatMessage, chatUsername)
             }
             val nameStyle = if (isBot) {
                 companionNameStyle ?: ChatNameStyle.ai(preferences)

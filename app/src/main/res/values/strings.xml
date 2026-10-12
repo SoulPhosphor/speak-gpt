@@ -170,9 +170,15 @@
     <string name="chat_options">Chat Options</string>
     <string name="chat_menu_export">Export Chat</string>
     <string name="chat_export_format">Format</string>
+    <string name="chat_export_include_thinking">Include Thinking</string>
     <string name="chat_export_include_user_tokens">Include User Token Count</string>
     <string name="chat_export_include_companion_tokens">Include Companion Token Count</string>
     <string name="chat_export_cancel">Cancel</string>
+    <string name="chat_menu_change_username">Change Username</string>
+    <string name="chat_change_username_title">Change Your Username</string>
+    <string name="chat_active_profile_desc">Active Profile</string>
+    <string name="chat_active_profile_one">This chat is using the %1$s profile.</string>
+    <string name="chat_active_profile_two">This chat is using the %1$s and %2$s profiles.</string>
     <string name="chat_export_action">Export</string>
     <string name="chat_delete_title">Delete Chat</string>
     <string name="chat_delete_selected_message">Would you like to delete selected chats?</string>
@@ -2416,6 +2422,7 @@
     <string name="backup_readable_content_title">Choose Readable Content</string>
     <string name="backup_readable_content_all">All Content</string>
     <string name="backup_readable_content_none">No Content Selected</string>
+    <string name="backup_readable_include_thinking">Include Thinking</string>
     <string name="backup_readable_include_folders">Include Chat Folder Location</string>
     <string name="backup_readable_category_identities">Companions, Glamours, Roleplay &amp; Prompts</string>
     <string name="backup_readable_select_content">Select at least one type of content to back up.</string>
@@ -3785,6 +3792,8 @@
     <string name="chat_settings_tile_title">Chat Settings</string>
     <string name="chat_behavior_section_identity">Identity</string>
     <string name="chat_behavior_default_username">Default Displayed Username</string>
+    <string name="chat_behavior_apply_previous_chats">Apply to Previous Chats with No Name</string>
+    <string name="chat_behavior_apply_previous_chats_hint">This will only apply to chats that have the default user name User. Other custom user names will not be affected. When off, this only affects future chats.</string>
     <string name="chat_behavior_default_username_hint">This is not sent to the model. It will only change what name is displayed next to your chat messages unless glamour or roleplay identities are used.</string>
     <!-- Deliberately sentence case (owner ruling). -->
     <string name="chat_behavior_roleplay_names_replace_glamour">Roleplay names replace glamour names when both are in use</string>

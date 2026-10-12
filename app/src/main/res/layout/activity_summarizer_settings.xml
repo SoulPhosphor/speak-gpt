@@ -100,7 +100,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/summarizer_always_resummarize_hint" />
                 </LinearLayout>
 
@@ -170,7 +169,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/summarizer_row_endpoint_hint" />
                 </LinearLayout>
 
@@ -218,7 +216,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/summarizer_row_model_hint" />
                 </LinearLayout>
 
@@ -275,7 +272,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/summarizer_prompts_row_subtitle" />
                 </LinearLayout>
 

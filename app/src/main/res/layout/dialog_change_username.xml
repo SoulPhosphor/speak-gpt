@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Body of the per-chat Change Your Username dialog (ChatActivity overflow
+  menu): one empty single-line box. The centered title comes from the
+  standard dialog theme; the Cancel/Save pair from
+  dialog_two_actions_cancel_first.xml.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp">
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/chat_username_edit_text"
+        style="@style/Widget.App.Field.Box"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textPersonName|textCapWords"
+        android:maxLines="1" />
+</LinearLayout>

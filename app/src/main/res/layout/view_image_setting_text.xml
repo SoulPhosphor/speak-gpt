@@ -5,5 +5,5 @@
         <EditText android:id="@+id/image_setting_input" style="@style/Widget.App.ImageGeneration.Input" />
     </LinearLayout>
     <TextView android:id="@+id/image_setting_previous" style="@style/Widget.App.Row.Subtitle" android:visibility="gone" />
-    <TextView android:id="@+id/image_setting_subtitle" style="@style/Widget.App.Row.Subtitle" android:maxLines="3" android:visibility="gone" />
+    <TextView android:id="@+id/image_setting_subtitle" style="@style/Widget.App.Row.Subtitle" android:visibility="gone" />
 </LinearLayout>

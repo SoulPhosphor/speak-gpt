@@ -372,7 +372,7 @@ Use these pieces in order:
 
 Use when the row opens another screen and the subtitle helps explain the destination or current state.
 
-`Widget.App.Row.Subtitle` is one line with end ellipsis by default. Override the line count only when approved content genuinely needs more room.
+`Widget.App.Row.Subtitle` always wraps to show its full text. Subtext is never truncated (owner ruling, Oct 12 2026): do not set `maxLines` or `ellipsize` on it or on styles that inherit from it, in XML or in code.
 
 ### Leading image choices
 

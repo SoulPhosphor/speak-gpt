@@ -50,7 +50,8 @@ import java.util.zip.ZipOutputStream
  *  - Only chat titles and messages travel. Per-chat settings — and with them
  *    any credential-shaped value — are not part of a readable chat export;
  *    the chat's selected companion is read only to name older companion
- *    messages. Token counts never travel.
+ *    messages. Token counts never travel; thinking travels only when the
+ *    user leaves Include Thinking on.
  *  - Folder locations travel only when the user turns on Include Chat Folder
  *    Location: chats are then placed in ZIP folders named after their chat
  *    folders, and the JSON records the folder name.
@@ -102,7 +103,8 @@ object ReadableChatBackup {
         staged: File,
         allChats: Boolean,
         format: Format,
-        includeFolders: Boolean
+        includeFolders: Boolean,
+        includeThinking: Boolean
     ): BuildResult {
         try {
             val gson = Gson()
@@ -142,7 +144,8 @@ object ReadableChatBackup {
                     val names = ReadableChatFormats.SpeakerNames(
                         currentCompanion = currentCompanionName(context, chatId),
                         userFallback = context.getString(R.string.chat_role_user),
-                        companionFallback = context.getString(R.string.chat_role_assistant)
+                        companionFallback = context.getString(R.string.chat_role_assistant),
+                        chatUsername = chatUsername(context, chatId)
                     )
                     collected.add(ChatData(name, history.messages, folderName, names))
                 }
@@ -178,14 +181,14 @@ object ReadableChatBackup {
                     if (format == Format.TEXT || format == Format.BOTH) {
                         val entryName = "$base.txt"
                         zip.putNextEntry(ZipEntry(entryName))
-                        zip.write(ReadableChatFormats.formatText(chat.title, chat.messages, chat.names).toByteArray(Charsets.UTF_8))
+                        zip.write(ReadableChatFormats.formatText(chat.title, chat.messages, chat.names, includeThinking).toByteArray(Charsets.UTF_8))
                         zip.closeEntry()
                         expectedEntries.add(entryName)
                     }
                     if (format == Format.JSON || format == Format.BOTH) {
                         val entryName = "$base.json"
                         zip.putNextEntry(ZipEntry(entryName))
-                        val records = gson.toJson(ReadableChatFormats.jsonRecords(chat.messages, chat.names))
+                        val records = gson.toJson(ReadableChatFormats.jsonRecords(chat.messages, chat.names, includeThinking))
                         val folder = if (includeFolders) chat.folderName else null
                         zip.write(ReadableChatFormats.formatJson(chat.title, records, folder).toByteArray(Charsets.UTF_8))
                         zip.closeEntry()
@@ -235,6 +238,13 @@ object ReadableChatBackup {
     private fun currentCompanionName(context: Context, chatId: String): String = try {
         val personaId = Preferences.getPreferences(context, chatId).getPersonaId()
         if (personaId.isEmpty()) "" else PersonaPreferences.getPersonaPreferences(context).getPersona(personaId).label
+    } catch (_: Exception) {
+        ""
+    }
+
+    /** The chat's own username (Change Username), or "" when unset/unreadable. */
+    private fun chatUsername(context: Context, chatId: String): String = try {
+        Preferences.getPreferences(context, chatId).getChatUsername()
     } catch (_: Exception) {
         ""
     }

@@ -95,6 +95,30 @@ class ChatExportFormatterTest {
     }
 
     @Test
+    fun thinkingIsLabeledOnlyWhenIncludedAndPresent() {
+        val messages = listOf(
+            ChatExportMessage(true, "Moon", "reply", thinking = "pondering"),
+            ChatExportMessage(true, "Moon", "plain")
+        )
+        assertEquals(
+            "Moon\nThinking:\npondering\n\nResponse:\nreply\n\nMoon\nplain",
+            ChatExportFormatter.formatText(messages, ChatExportOptions(format = ChatExportFormat.TEXT))
+        )
+        assertEquals(
+            "Moon\nreply\n\nMoon\nplain",
+            ChatExportFormatter.formatText(
+                messages,
+                ChatExportOptions(format = ChatExportFormat.TEXT, includeThinking = false)
+            )
+        )
+        val on = JsonParser.parseString(ChatExportFormatter.formatJson(messages, ChatExportOptions())).asJsonArray
+        assertEquals("pondering", on[0].asJsonObject.get("thinking").asString)
+        assertFalse(on[1].asJsonObject.has("thinking"))
+        val off = ChatExportFormatter.formatJson(messages, ChatExportOptions(includeThinking = false))
+        assertFalse(off.contains("thinking"))
+    }
+
+    @Test
     fun tokenSwitchesOnlyApplyToTheirSpeaker() {
         val result = ChatExportFormatter.formatText(
             listOf(

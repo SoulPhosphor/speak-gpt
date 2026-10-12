@@ -90,14 +90,17 @@ object ReadableChatFormats {
     }
 
     /**
-     * Speaker-name fallbacks for one chat. A message's own stored name (the
-     * name shown when it was sent) always wins; [currentCompanion] covers
-     * older companion messages stored before names were stamped.
+     * Speaker names for one chat, matching what the chat displays. The
+     * chat's own username ([chatUsername], from Change Username) replaces
+     * every user name; otherwise a message's own stored name (the name shown
+     * when it was sent) wins. [currentCompanion] covers older companion
+     * messages stored before names were stamped.
      */
     data class SpeakerNames(
         val currentCompanion: String?,
         val userFallback: String,
-        val companionFallback: String
+        val companionFallback: String,
+        val chatUsername: String? = null
     )
 
     /** Token accounting never travels in a readable export (owner rule). */
@@ -108,10 +111,20 @@ object ReadableChatFormats {
         ChatAdapter.KEY_MESSAGE_REASONING_TOKENS
     )
 
+    /** Thinking data, removed everywhere when Include Thinking is off. */
+    private val THINKING_KEYS = setOf(
+        ChatAdapter.KEY_MESSAGE_REASONING,
+        ChatAdapter.KEY_MESSAGE_REASONING_FORMAT,
+        ChatAdapter.KEY_MESSAGE_REASONING_SUMMARY
+    )
+
     private fun isCompanion(message: Map<String, Any?>): Boolean =
         message["isBot"] == true || message["isBot"]?.toString() == "true"
 
     fun speakerName(message: Map<String, Any?>, names: SpeakerNames): String {
+        if (!isCompanion(message)) {
+            names.chatUsername?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        }
         val key = if (isCompanion(message)) ChatSpeakerNames.COMPANION_NAME_KEY else ChatSpeakerNames.USER_NAME_KEY
         message[key]?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
         return if (isCompanion(message)) {
@@ -120,6 +133,13 @@ object ReadableChatFormats {
             names.userFallback
         }
     }
+
+    private fun thinking(message: Map<String, Any?>): String? =
+        if (isCompanion(message)) {
+            message[ChatAdapter.KEY_MESSAGE_REASONING]?.toString()?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
 
     private fun timestamp(message: Map<String, Any?>): Long? =
         message[ChatAdapter.KEY_MESSAGE_TIME]?.toString()?.toLongOrNull()
@@ -134,19 +154,22 @@ object ReadableChatFormats {
     /**
      * One chat as a plain-text file: the title, then each message under the
      * same header the individual chat export writes (bookmark, speaker name,
-     * date and time, the companion's model). Internal bookkeeping keys are
-     * not printed — this is the human-facing rendering.
+     * date and time, the companion's model), then the thinking and response
+     * labeled when [includeThinking] is on and the message has thinking.
+     * Internal bookkeeping keys are not printed — this is the human-facing
+     * rendering.
      */
     fun formatText(
         title: String,
         messages: List<Map<String, Any?>>,
         names: SpeakerNames,
+        includeThinking: Boolean,
         locale: Locale = Locale.getDefault(),
         timeZone: TimeZone = TimeZone.getDefault()
     ): String {
         val sb = StringBuilder()
         sb.append(title).append('\n')
-        val options = ChatExportOptions(format = ChatExportFormat.TEXT)
+        val options = ChatExportOptions(format = ChatExportFormat.TEXT, includeThinking = includeThinking)
         for (message in messages) {
             sb.append('\n')
             val header = ChatExportMessage(
@@ -155,9 +178,15 @@ object ReadableChatFormats {
                 content = "",
                 timestampMillis = timestamp(message),
                 model = model(message),
+                thinking = thinking(message),
                 bookmarked = MessageBookmarks.isBookmarked(message)
             )
             sb.append(ChatExportFormatter.formatHeader(header, options, locale, timeZone)).append('\n')
+            ChatExportFormatter.exportedThinking(header, options)?.let {
+                sb.append(ChatExportFormatter.THINKING_LABEL).append('\n')
+                sb.append(it).append("\n\n")
+                sb.append(ChatExportFormatter.RESPONSE_LABEL).append('\n')
+            }
             val text = message["message"]?.toString().orEmpty()
             if (text.isNotEmpty()) {
                 sb.append(text).append('\n')
@@ -174,35 +203,40 @@ object ReadableChatFormats {
      * The message records for the JSON file: each stored record with every
      * token field removed (at any depth, so regenerated versions are covered
      * too), plus the speaker name, formatted date and time, and the
-     * companion's model.
+     * companion's model. With [includeThinking] on, a companion message with
+     * thinking also gets a "thinking" field; with it off, every thinking
+     * field is removed at any depth.
      */
     fun jsonRecords(
         messages: List<Map<String, Any?>>,
         names: SpeakerNames,
+        includeThinking: Boolean,
         locale: Locale = Locale.getDefault(),
         timeZone: TimeZone = TimeZone.getDefault()
     ): List<Map<String, Any?>> = messages.map { message ->
         @Suppress("UNCHECKED_CAST")
-        val record = LinkedHashMap(stripTokens(message) as Map<String, Any?>)
+        val removed = if (includeThinking) TOKEN_KEYS else TOKEN_KEYS + THINKING_KEYS
+        val record = LinkedHashMap(strip(message, removed) as Map<String, Any?>)
         record["name"] = speakerName(message, names)
         timestamp(message)?.let { millis ->
             record["date"] = ChatExportFormatter.formatDate(millis, locale, timeZone)
             record["time"] = ChatExportFormatter.formatTime(millis, locale, timeZone)
         }
         model(message)?.let { record["model"] = it }
+        if (includeThinking) thinking(message)?.let { record["thinking"] = it }
         record
     }
 
-    private fun stripTokens(value: Any?): Any? = when (value) {
+    private fun strip(value: Any?, removed: Set<String>): Any? = when (value) {
         is Map<*, *> -> {
             val out = LinkedHashMap<String, Any?>()
             for ((k, v) in value) {
                 val key = k.toString()
-                if (key !in TOKEN_KEYS) out[key] = stripTokens(v)
+                if (key !in removed) out[key] = strip(v, removed)
             }
             out
         }
-        is List<*> -> value.map(::stripTokens)
+        is List<*> -> value.map { strip(it, removed) }
         else -> value
     }
 

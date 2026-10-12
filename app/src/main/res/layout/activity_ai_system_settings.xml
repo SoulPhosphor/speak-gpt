@@ -125,8 +125,6 @@
                          own unbounded wrapping instead of the style's default. -->
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:ellipsize="none"
-                        android:maxLines="6"
                         android:text="@string/row_model_rules_subtitle" />
                 </LinearLayout>
 
@@ -150,8 +148,6 @@
                          own unbounded wrapping instead of the style's default. -->
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:ellipsize="none"
-                        android:maxLines="6"
                         android:text="@string/label_auto_apply_model_rules_desc" />
                 </LinearLayout>
 
@@ -175,7 +171,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/tile_summarizer_settings_subtitle" />
                 </LinearLayout>
 
@@ -197,8 +192,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:ellipsize="none"
-                        android:maxLines="3"
                         android:text="@string/model_cleanup_settings_subtitle" />
                 </LinearLayout>
 

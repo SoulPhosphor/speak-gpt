@@ -67,7 +67,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/row_memory_browser_subtitle" />
                 </LinearLayout>
 
@@ -89,7 +88,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/row_memory_assistant_subtitle" />
                 </LinearLayout>
 
@@ -113,7 +111,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/memory_controls_row_advanced_assistant_subtitle" />
                 </LinearLayout>
 
@@ -137,7 +134,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/row_lorebooks_subtitle" />
                 </LinearLayout>
 
@@ -160,7 +156,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/row_memory_settings_subtitle" />
                 </LinearLayout>
 
@@ -183,7 +178,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/memory_controls_row_advanced_subtitle" />
                 </LinearLayout>
 

@@ -511,6 +511,20 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Title"
+                        android:text="@string/backup_readable_include_thinking" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_include_thinking"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
                         android:text="@string/backup_readable_include_folders" />
                 </LinearLayout>
 
@@ -689,7 +703,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="10"
                         android:text="@string/restore_chat_always_newer_desc" />
                 </LinearLayout>
 

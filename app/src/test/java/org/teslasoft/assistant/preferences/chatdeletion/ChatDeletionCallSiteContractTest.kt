@@ -78,7 +78,8 @@ class ChatDeletionCallSiteContractTest {
             "menu.add(Menu.NONE, 1, 1, R.string.chat_menu_export)",
             "menu.add(Menu.NONE, 5, 2, R.string.usage_cost_title)",
             "menu.add(Menu.NONE, 2, 3, R.string.alert_debug_section_logs)",
-            "menu.add(Menu.NONE, 3, 4, R.string.btn_delete)"
+            "menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)",
+            "menu.add(Menu.NONE, 3, 5, R.string.btn_delete)"
         )
     }
 

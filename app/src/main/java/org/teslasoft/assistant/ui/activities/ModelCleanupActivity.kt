@@ -325,7 +325,6 @@ class ModelCleanupActivity : SettingsPageActivity() {
                 models.sortedBy { it.modelId.lowercase(Locale.getDefault()) }.forEach { target ->
                     parent.addView(TextView(this, null, 0, R.style.Widget_App_Row_Subtitle).apply {
                         text = target.modelId
-                        maxLines = 2
                         setPadding(dp(12), dp(5), 0, dp(5))
                     })
                 }

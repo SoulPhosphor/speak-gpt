@@ -68,7 +68,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/row_profile_images_subtitle" />
                 </LinearLayout>
 
@@ -89,7 +88,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/row_default_images_subtitle" />
                 </LinearLayout>
 
@@ -110,7 +108,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/row_default_shape_subtitle" />
                 </LinearLayout>
 

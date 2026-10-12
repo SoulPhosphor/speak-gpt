@@ -38,6 +38,18 @@ object ChatSpeakerNames {
             ?: configuredName?.trim()?.takeIf { it.isNotEmpty() }
             ?: context.getString(R.string.chat_role_user)
 
+    /**
+     * The user name a message displays: the chat's own username (Change
+     * Username) when set, which replaces every user name in that chat, else
+     * the message's own stored name, else the built-in "User" label.
+     */
+    fun displayedUserName(
+        context: Context,
+        message: Map<String, *>,
+        chatUsername: String?
+    ): String =
+        chatUsername?.trim()?.takeIf { it.isNotEmpty() } ?: userName(context, message)
+
     /** The name to stamp on a user message and the identity it came from
      *  (null source = the Default Displayed Username or nothing). */
     data class UserIdentity(val name: String?, val sourceKey: String?)

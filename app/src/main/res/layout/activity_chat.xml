@@ -439,6 +439,24 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_history_edu" />
 
+            <!-- Active Profile: shown while this chat has its own username AND
+                 a Glamour or Roleplay identity is active, so the user can see
+                 whose information the model is actually getting. -->
+            <ImageButton
+                android:id="@+id/btn_active_profile"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/btn_accent_tonal_v4"
+                android:contentDescription="@string/chat_active_profile_desc"
+                android:tooltipText="@string/chat_active_profile_desc"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_theater_comedy"
+                tools:visibility="visible" />
+
             <!-- Summarizer Errors (decision 16): first in the icon row,
                  visible while this chat's error log has entries. The badge
                  shows the stored-error count (1–5). -->
@@ -452,7 +470,7 @@
                 android:tooltipText="@string/summarizer_icon_errors_desc"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
+                app:layout_constraintEnd_toStartOf="@+id/btn_active_profile"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_report"
                 tools:visibility="visible" />
@@ -481,7 +499,7 @@
                 android:layout_height="wrap_content"
                 app:barrierAllowsGoneWidgets="false"
                 app:barrierDirection="start"
-                app:constraint_referenced_ids="btn_summarizer_errors,btn_quick_settings,btn_settings,btn_conversation_summary,btn_chat_menu" />
+                app:constraint_referenced_ids="btn_summarizer_errors,btn_active_profile,btn_quick_settings,btn_settings,btn_conversation_summary,btn_chat_menu" />
 
             <ImageButton
                 android:id="@+id/btn_back"

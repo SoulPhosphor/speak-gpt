@@ -75,7 +75,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/mm_roleplay_desc" />
                 </LinearLayout>
 
@@ -97,7 +96,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/mm_worlds_desc" />
                 </LinearLayout>
 
@@ -119,7 +117,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/mm_party_desc" />
                 </LinearLayout>
 
@@ -141,7 +138,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/mm_campaigns_desc" />
                 </LinearLayout>
 
@@ -163,7 +159,6 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
                         android:text="@string/mm_rp_tags_desc" />
                 </LinearLayout>
 

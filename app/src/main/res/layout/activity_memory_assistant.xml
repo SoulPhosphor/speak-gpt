@@ -211,19 +211,16 @@
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
                         android:layout_marginTop="6dp"
-                        android:maxLines="10"
                         android:text="@string/memory_analysis_type_p1" />
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
                         android:layout_marginTop="10dp"
-                        android:maxLines="10"
                         android:text="@string/memory_analysis_type_p2" />
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
                         android:layout_marginTop="10dp"
-                        android:maxLines="10"
                         android:text="@string/memory_analysis_type_p3" />
                 </LinearLayout>
 

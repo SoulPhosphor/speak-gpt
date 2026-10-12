@@ -105,7 +105,8 @@ class ReadableChatFormatsTest {
                 mapOf("message" to "older reply", "isBot" to true),
                 mapOf("message" to "unnamed", "isBot" to false)
             ),
-            fallbackNames
+            fallbackNames,
+            includeThinking = true
         )
         assertTrue(text.startsWith("My Chat\n"))
         assertTrue(text.contains("\nRobin\nhello\n"))
@@ -127,6 +128,7 @@ class ReadableChatFormatsTest {
                     "responseTokens" to "42")
             ),
             fallbackNames,
+            includeThinking = true,
             Locale.US,
             TimeZone.getTimeZone("UTC")
         )
@@ -155,6 +157,7 @@ class ReadableChatFormatsTest {
                 )
             ),
             fallbackNames,
+            includeThinking = true,
             Locale.US,
             TimeZone.getTimeZone("UTC")
         )
@@ -174,10 +177,67 @@ class ReadableChatFormatsTest {
     fun userRecordsCarryNoModel() {
         val record = ReadableChatFormats.jsonRecords(
             listOf(mapOf("message" to "q", "isBot" to false, "responseModel" to "x")),
-            fallbackNames
+            fallbackNames,
+            includeThinking = true
         ).single()
         assertFalse(record.containsKey("model"))
         assertEquals("User", record["name"])
+    }
+
+    @Test
+    fun chatUsernameReplacesEveryUserNameButNoCompanionName() {
+        val names = fallbackNames.copy(chatUsername = "Mary")
+        val text = ReadableChatFormats.formatText(
+            "Chat",
+            listOf(
+                mapOf("message" to "a", "isBot" to false, "userName" to "Cindy"),
+                mapOf("message" to "b", "isBot" to false),
+                mapOf("message" to "c", "isBot" to true, "companionName" to "Sol")
+            ),
+            names,
+            includeThinking = true
+        )
+        assertTrue(text.contains("\nMary\na\n"))
+        assertTrue(text.contains("\nMary\nb\n"))
+        assertTrue(text.contains("\nSol\nc\n"))
+        assertFalse(text.contains("Cindy"))
+    }
+
+    // ---- thinking ----
+
+    private val thinkingMessages = listOf(
+        mapOf("message" to "q", "isBot" to false),
+        mapOf("message" to "answer", "isBot" to true, "reasoningText" to "pondering",
+            "reasoningIsSummary" to "true", "variants" to listOf(mapOf("reasoningText" to "older"))),
+        mapOf("message" to "plain", "isBot" to true)
+    )
+
+    @Test
+    fun textLabelsThinkingAndResponseOnlyWhenThinkingIsIncludedAndPresent() {
+        val on = ReadableChatFormats.formatText("Chat", thinkingMessages, fallbackNames, includeThinking = true)
+        assertTrue(on.contains("\nThinking:\npondering\n\nResponse:\nanswer\n"))
+        assertFalse(on.contains("Summary"))
+        assertTrue(on.contains("\nMoon\nplain\n"))
+        assertEquals(1, Regex("Response:").findAll(on).count())
+
+        val off = ReadableChatFormats.formatText("Chat", thinkingMessages, fallbackNames, includeThinking = false)
+        assertFalse(off.contains("Thinking:"))
+        assertFalse(off.contains("Response:"))
+        assertFalse(off.contains("pondering"))
+        assertTrue(off.contains("\nMoon\nanswer\n"))
+    }
+
+    @Test
+    fun jsonCarriesThinkingOnlyWhenIncluded() {
+        val on = ReadableChatFormats.jsonRecords(thinkingMessages, fallbackNames, includeThinking = true)
+        assertEquals("pondering", on[1]["thinking"])
+        assertFalse(on[0].containsKey("thinking"))
+        assertFalse(on[2].containsKey("thinking"))
+
+        val off = Gson().toJson(ReadableChatFormats.jsonRecords(thinkingMessages, fallbackNames, includeThinking = false))
+        for (key in listOf("\"thinking\"", "reasoningText", "reasoningIsSummary", "pondering", "older")) {
+            assertFalse("$key must not be exported", off.contains(key))
+        }
     }
 
     // ---- folder locations ----

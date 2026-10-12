@@ -28,6 +28,7 @@ enum class ChatExportFormat(
 
 data class ChatExportOptions(
     val format: ChatExportFormat = ChatExportFormat.JSON,
+    val includeThinking: Boolean = true,
     val includeUserTokenCount: Boolean = false,
     val includeCompanionTokenCount: Boolean = false
 )
@@ -38,6 +39,7 @@ data class ChatExportMessage(
     val content: String,
     val timestampMillis: Long? = null,
     val model: String? = null,
+    val thinking: String? = null,
     val tokenCount: Int? = null,
     val bookmarked: Boolean = false,
     val messageId: String? = null
@@ -50,6 +52,8 @@ data class ChatExportMessage(
 object ChatExportFormatter {
 
     const val BOOKMARK_LABEL = "[Bookmark]"
+    const val THINKING_LABEL = "Thinking:"
+    const val RESPONSE_LABEL = "Response:"
 
     private const val MIDDLE_DOT = " · "
     private const val TOKEN_SUFFIX = " Tokens"
@@ -92,8 +96,8 @@ object ChatExportFormatter {
     /**
      * The JSON export remains an array of message records, matching the
      * dormant chat importer’s historical top-level shape. Date, time, and
-     * the companion's model always travel; token counts only when selected in
-     * the export dialog. Bookmark flags, stable message IDs, and available
+     * the companion's model always travel; thinking and token counts only
+     * when selected in the export dialog. Bookmark flags, stable message IDs, and available
      * folder names always travel for downstream import.
      */
     fun formatJson(
@@ -115,6 +119,7 @@ object ChatExportFormatter {
             metadataParts(message, options, locale, timeZone).forEach { (key, value) ->
                 record[key] = value
             }
+            exportedThinking(message, options)?.let { record["thinking"] = it }
             record
         }
         return Gson().toJson(records)
@@ -129,9 +134,21 @@ object ChatExportFormatter {
         return buildString {
             append(formatHeader(message, options, locale, timeZone))
             append('\n')
+            val thinking = exportedThinking(message, options)
+            if (thinking != null) {
+                append(THINKING_LABEL).append('\n')
+                append(thinking).append("\n\n")
+                append(RESPONSE_LABEL).append('\n')
+            }
             append(message.content)
         }
     }
+
+    /** The thinking to write for [message], or null when the user turned
+     *  Include Thinking off or the message has none. The Thinking/Response
+     *  labels appear only when this is non-null. */
+    fun exportedThinking(message: ChatExportMessage, options: ChatExportOptions): String? =
+        if (options.includeThinking) message.thinking?.takeIf { it.isNotBlank() } else null
 
     private fun metadataParts(
         message: ChatExportMessage,
