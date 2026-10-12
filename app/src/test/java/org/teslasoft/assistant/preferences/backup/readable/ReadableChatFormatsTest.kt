@@ -232,11 +232,12 @@ class ReadableChatFormatsTest {
             names: ReadableChatFormats.SpeakerNames = fallbackNames,
             thinking: Boolean = true,
             folders: Boolean = false,
+            format: String = "TEXT",
             locale: Locale = Locale.US,
             zone: String = "UTC"
         ) = ReadableChatFormats.fingerprint(
             "Chat", "[]", null,
-            ReadableChatFormats.renderFingerprint(names, thinking, folders, locale, TimeZone.getTimeZone(zone))
+            ReadableChatFormats.renderFingerprint(names, thinking, folders, format, locale, TimeZone.getTimeZone(zone))
         )
         val base = render()
         assertEquals(base, render())
@@ -246,6 +247,7 @@ class ReadableChatFormatsTest {
             render(names = fallbackNames.copy(userFallback = "Utilisateur")),
             render(thinking = false),
             render(folders = true),
+            render(format = "JSON"),
             render(locale = Locale.FRANCE),
             render(zone = "Asia/Tokyo")
         )) assertNotEquals(base, changed)

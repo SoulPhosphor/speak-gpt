@@ -149,7 +149,7 @@ object ReadableChatBackup {
                     )
                     fingerprints[chatId] = ReadableChatFormats.fingerprint(
                         name, messagesJson, folderName,
-                        ReadableChatFormats.renderFingerprint(names, includeThinking, includeFolders)
+                        ReadableChatFormats.renderFingerprint(names, includeThinking, includeFolders, format.name)
                     )
                     collected.add(ChatData(name, history.messages, folderName, names))
                 }

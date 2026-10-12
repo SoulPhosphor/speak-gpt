@@ -105,8 +105,13 @@ object DamagedChatRepair {
             } else {
                 writeVerified(context, chatId, operation, ArrayList(merged), rollbackTo = current.messages, preserved)
             }
-            if (outcome == Outcome.REPAIRED) markConsumed(context, savedCopies.map { it.id })
-            outcome
+            // The chat leaves the log only once its saved copies are durably
+            // recorded as used; otherwise it stays to be tried again.
+            if (outcome == Outcome.REPAIRED && !markConsumed(context, savedCopies.map { it.id })) {
+                Outcome.NOT_ATTEMPTED
+            } else {
+                outcome
+            }
         }
     }
 
@@ -178,12 +183,14 @@ object DamagedChatRepair {
         emptySet()
     }
 
-    private fun markConsumed(context: Context, ids: List<String>) {
-        if (ids.isEmpty()) return
-        try {
+    private fun markConsumed(context: Context, ids: List<String>): Boolean {
+        if (ids.isEmpty()) return true
+        return try {
             val prefs = context.applicationContext.getSharedPreferences(STATE_FILE, Context.MODE_PRIVATE)
             prefs.edit().putStringSet(KEY_CONSUMED, HashSet(consumedCopies(context) + ids)).commit()
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /** The verified copy taken before a change; [copy] is null when the

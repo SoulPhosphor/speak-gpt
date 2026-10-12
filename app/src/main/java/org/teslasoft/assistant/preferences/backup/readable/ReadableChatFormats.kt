@@ -334,13 +334,15 @@ object ReadableChatFormats {
      * folder: the export layout version, the names used for speakers (the
      * chat's own username, the current companion, the built-in fallbacks),
      * the language and time zone that format dates and times, and the Include
-     * Thinking and Include Chat Folder Location settings. Any change makes
+     * Thinking and Include Chat Folder Location settings, and the selected
+     * file format. Any change makes
      * "New and Updated Chats" export the chat again.
      */
     fun renderFingerprint(
         names: SpeakerNames,
         includeThinking: Boolean,
         includeFolders: Boolean,
+        format: String,
         locale: Locale = Locale.getDefault(),
         timeZone: TimeZone = TimeZone.getDefault()
     ): String = listOf(
@@ -352,7 +354,8 @@ object ReadableChatFormats {
         locale.toLanguageTag(),
         timeZone.id,
         includeThinking.toString(),
-        includeFolders.toString()
+        includeFolders.toString(),
+        format
     ).joinToString("\u0000")
 
     /** Bumped whenever the rendered export layout changes. */
