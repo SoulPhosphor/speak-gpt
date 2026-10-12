@@ -24,6 +24,7 @@ import android.os.HandlerThread
 import cat.ereza.customactivityoncrash.config.CaocConfig
 import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
+import org.teslasoft.assistant.preferences.username.DefaultUsernameFill
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.imagegen.ImageGenerationMigration
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogMaintenance
@@ -162,6 +163,11 @@ class MainApplication : Application() {
                     return@Thread
                 }
                 PortableRestoreProcessGate.finishStartupRecovery(true)
+                // Any restore has now finished successfully: resume a username
+                // fill left pending by a restore, a lock or a full store.
+                try {
+                    DefaultUsernameFill.resumeIfPending(this)
+                } catch (_: Exception) { }
             } catch (_: Exception) {
                 PortableRestoreProcessGate.finishStartupRecovery(false)
                 return@Thread

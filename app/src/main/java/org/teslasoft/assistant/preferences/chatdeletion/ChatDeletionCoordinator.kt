@@ -5,6 +5,7 @@
 
 package org.teslasoft.assistant.preferences.chatdeletion
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import android.content.Context
 import java.util.UUID
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -132,8 +133,12 @@ class ChatDeletionCoordinator internal constructor(
                 },
                 journal = ChatDeletionJournalStore.get(app),
                 cleanup = object : ChatDeletionCleanupGateway {
-                    override fun cleanupChat(chatId: String): Boolean =
-                        ChatPreferences.getChatPreferences().cleanupDeletedChatData(app, chatId)
+                    override fun cleanupChat(chatId: String): Boolean {
+                        // A deleted chat no longer exists here, so it leaves the
+                        // Damaged Chat Files log too.
+                        DamagedChatLog.remove(app, chatId)
+                        return ChatPreferences.getChatPreferences().cleanupDeletedChatData(app, chatId)
+                    }
                 },
                 deleteImagesWithChat = {
                     Preferences.getPreferences(app, "").getDeleteImagesWithChat()

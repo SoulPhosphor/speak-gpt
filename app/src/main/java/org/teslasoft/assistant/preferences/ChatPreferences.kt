@@ -23,6 +23,8 @@ import android.os.Looper
 import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexJournal
@@ -256,7 +258,7 @@ class ChatPreferences private constructor() {
         // freezing the UI past the ANR threshold once histories grew large.
         if (includeFirstMessage) {
             for (chat in list) {
-                val messagesList = getChatById(context, storedChatId(chat))
+                val messagesList = getChatById(context, storedChatId(chat), DamagedChatOperation.CHAT_LIST)
 
                 if (messagesList.isNotEmpty()) {
                     val firstMessage = messagesList[0]["message"].toString()
@@ -367,7 +369,11 @@ class ChatPreferences private constructor() {
      * empty conversation. ChatActivity shows the owner-approved "Chat
      * unavailable" state on CORRUPT and blocks saving into that chat.
      */
-    fun getChatByIdResult(context: Context, chatId: String): ChatHistoryResult {
+    fun getChatByIdResult(
+        context: Context,
+        chatId: String,
+        detectedDuring: DamagedChatOperation
+    ): ChatHistoryResult {
         val name = "chat_$chatId"
         val chat: SharedPreferences = SecurePrefs.get(context, name)
         if (SecurePrefs.isLockedName(name)) {
@@ -385,6 +391,7 @@ class ChatPreferences private constructor() {
             // the chat stays write-blocked until an explicit user action
             // (see chatWriteBlocked) resolves it.
             onUndecryptableValue(context, name, "chat history", e)
+            DamagedChatLog.record(context, chatId, detectedDuring)
             return ChatHistoryResult(ChatStorageHealth.ReadState.CORRUPT, arrayListOf())
         }
         ChatStorageHealth.clearReadFailure(context, name)
@@ -396,6 +403,7 @@ class ChatPreferences private constructor() {
             gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, Any>>
         } catch (e: Exception) {
             preserveCorruptData(context, name, "chat", json, "chat history")
+            DamagedChatLog.record(context, chatId, detectedDuring)
             return ChatHistoryResult(ChatStorageHealth.ReadState.CORRUPT, arrayListOf())
         }
 
@@ -410,8 +418,12 @@ class ChatPreferences private constructor() {
     }
 
     /** Legacy history read — payload only; see [getChatList]'s contract note. */
-    fun getChatById(context: Context, chatId: String) : ArrayList<HashMap<String, Any>> =
-        getChatByIdResult(context, chatId).messages
+    fun getChatById(
+        context: Context,
+        chatId: String,
+        detectedDuring: DamagedChatOperation
+    ) : ArrayList<HashMap<String, Any>> =
+        getChatByIdResult(context, chatId, detectedDuring).messages
 
     /** Validates an imported transcript, then routes it through the guarded
      * source/revision commit so Search never has an unobservable import path. */
@@ -612,7 +624,7 @@ class ChatPreferences private constructor() {
 
     fun editMessage(context: Context, chatId: String, position: Int, newMessage: String) {
         if (chatWriteBlocked(context, "chat_$chatId", "edit a message")) return
-        val list = getChatById(context, chatId)
+        val list = getChatById(context, chatId, DamagedChatOperation.OPENING_A_CHAT)
 
         // The position comes from the in-memory adapter list, which can briefly
         // be longer than the persisted list (e.g. a pending turn added in memory
@@ -640,7 +652,7 @@ class ChatPreferences private constructor() {
 
     fun deleteMessage(context: Context, chatId: String, position: Int) {
         if (chatWriteBlocked(context, "chat_$chatId", "delete a message")) return
-        val list = getChatById(context, chatId)
+        val list = getChatById(context, chatId, DamagedChatOperation.OPENING_A_CHAT)
 
         // Same desync guard as editMessage: removeAt(position) on a stale/shorter
         // persisted list threw IndexOutOfBoundsException (Index N out of bounds

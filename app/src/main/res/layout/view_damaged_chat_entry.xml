@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One damaged chat inside a detection; the top padding spaces chats apart. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="12dp">
+
+    <TextView
+        android:id="@+id/damaged_chat_title"
+        style="@style/Widget.App.Row.Subtitle" />
+
+    <TextView
+        android:id="@+id/damaged_chat_started"
+        style="@style/Widget.App.Row.Subtitle" />
+
+    <TextView
+        android:id="@+id/damaged_chat_first_username"
+        style="@style/Widget.App.Row.Subtitle" />
+
+    <TextView
+        android:id="@+id/damaged_chat_first_companion"
+        style="@style/Widget.App.Row.Subtitle" />
+
+    <TextView
+        android:id="@+id/damaged_chat_model"
+        style="@style/Widget.App.Row.Subtitle" />
+</LinearLayout>

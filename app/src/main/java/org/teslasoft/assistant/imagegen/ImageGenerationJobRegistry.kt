@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.imagegen
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -496,7 +497,7 @@ object ImageGenerationJobRegistry {
         try {
             withContext(Dispatchers.IO) {
                 val chatPreferences = ChatPreferences.getChatPreferences()
-                val result = chatPreferences.getChatByIdResult(app, record.chatId)
+                val result = chatPreferences.getChatByIdResult(app, record.chatId, DamagedChatOperation.IMAGE_GALLERY)
                 // A locked or preserved-corrupt history must never be
                 // overwritten with a fresh list (Round 4 guard).
                 if (!ChatStorageHealth.isAuthoritative(result.state)) return@withContext

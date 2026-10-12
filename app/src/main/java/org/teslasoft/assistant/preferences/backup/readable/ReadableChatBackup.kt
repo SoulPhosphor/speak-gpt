@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.preferences.backup.readable
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import com.google.gson.Gson
 import org.teslasoft.assistant.R
@@ -133,7 +134,7 @@ object ReadableChatBackup {
                     // fallback as the chat list. A title change is not a new chat.
                     val name = chat["name"].toString()
                     val chatId = ChatPreferences.storedChatId(chat)
-                    val history = chatPreferences.getChatByIdResult(context, chatId)
+                    val history = chatPreferences.getChatByIdResult(context, chatId, DamagedChatOperation.READABLE_BACKUP)
                     if (!ChatStorageHealth.isAuthoritative(history.state)) {
                         logUnreadable(context, "chat $chatId could not be read (state ${history.state})")
                         return fail(staged, BuildResult.ChatsUnreadable)

@@ -11,24 +11,21 @@ import android.content.Context
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 
-/** Background runner for [DefaultUsernameFill]: retries a few times when a
- *  chat could not be read or saved, then stops until the next trigger. */
+/** Background runner for [DefaultUsernameFill]. Unfinished work is kept as a
+ *  pending retry for the next app start (UsernameFillState), not retried
+ *  here: a locked or full store does not recover within the same process. */
 class DefaultUsernameFillWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
 
     override fun doWork(): Result {
-        val complete = try {
+        try {
             DefaultUsernameFill.runAll(applicationContext)
         } catch (_: Throwable) {
-            false
+            UsernameFillState.finish(
+                applicationContext,
+                DefaultUsernameFill.RunOutcome(otherFailure = true),
+                complete = false
+            )
         }
-        return when {
-            complete -> Result.success()
-            runAttemptCount < MAX_RETRIES -> Result.retry()
-            else -> Result.success()
-        }
-    }
-
-    private companion object {
-        const val MAX_RETRIES = 3
+        return Result.success()
     }
 }

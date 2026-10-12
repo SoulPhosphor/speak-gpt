@@ -5,6 +5,7 @@
 
 package org.teslasoft.assistant.conversation
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import com.google.gson.JsonParser
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
@@ -66,7 +67,7 @@ class NewConversationCoordinator(private val context: Context) {
             val saved = ChatPreferences.getChatPreferences()
                 .getChatListResult(app, includeFirstMessage = false)
                 .chats.any { ChatPreferences.storedChatId(it) == id }
-            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, id)
+            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, id, DamagedChatOperation.NEW_CHAT)
             if (!saved && ChatStorageHealth.isAuthoritative(history.state)) {
                 if (history.messages.isEmpty()) {
                     return PendingConversationState(id, name, readMode(id))
@@ -248,7 +249,7 @@ class NewConversationCoordinator(private val context: Context) {
             val raw = encoded as? String ?: return@forEach
             val entry = decodePendingJournalEntry(raw) ?: return@forEach
             if (entry.id != journalId || entry.id.isBlank() || entry.name.isBlank()) return@forEach
-            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, entry.id)
+            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, entry.id, DamagedChatOperation.NEW_CHAT)
             if (!ChatStorageHealth.isAuthoritative(history.state) || history.messages.isEmpty()) {
                 return@forEach
             }
@@ -278,7 +279,7 @@ class NewConversationCoordinator(private val context: Context) {
         val listedIds = listed.chats.mapTo(HashSet()) { ChatPreferences.storedChatId(it) }
         pendingConversationIds().forEach { chatId ->
             if (chatId in listedIds) return@forEach
-            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId)
+            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId, DamagedChatOperation.NEW_CHAT)
             if (!ChatStorageHealth.isAuthoritative(history.state) || history.messages.isEmpty()) {
                 return@forEach
             }
@@ -366,7 +367,7 @@ class NewConversationCoordinator(private val context: Context) {
             clearPendingIndex(chatId)
             return false
         }
-        val stored = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId)
+        val stored = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId, DamagedChatOperation.NEW_CHAT)
         if (!ChatStorageHealth.isAuthoritative(stored.state)) return false
         if (stored.messages.isNotEmpty()) {
             val name = chatName.ifBlank { retainedName(chatId) }.ifBlank { nextPlaceholderName() }

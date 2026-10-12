@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.imagegen
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,7 +74,7 @@ object GeneratedImageFiles {
                 for (chat in chats) {
                     if (remaining.isEmpty()) break
                     val chatId = ChatPreferences.storedChatId(chat)
-                    val history = chatPreferences.getChatByIdResult(app, chatId)
+                    val history = chatPreferences.getChatByIdResult(app, chatId, DamagedChatOperation.IMAGE_GALLERY)
                     // A LOCKED/CORRUPT/FAILED history might still reference
                     // the file — abort and keep everything rather than guess.
                     if (!org.teslasoft.assistant.preferences.ChatStorageHealth

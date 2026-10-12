@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -301,7 +302,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
     /** The chat's stored messages as the panel needs them: identity, role,
      *  and time (for the date/time headers). */
     private fun storedMessages(): List<SummarySections.SourceMessage> =
-        ChatPreferences.getChatPreferences().getChatById(this, chatId).map {
+        ChatPreferences.getChatPreferences().getChatById(this, chatId, DamagedChatOperation.CONVERSATION_SUMMARY).map {
             SummarySections.SourceMessage(
                 MessageIdentity.idOf(it),
                 it["isBot"] == true,

@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.preferences.memory
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import com.google.gson.Gson
 import org.json.JSONArray
@@ -158,7 +159,7 @@ object MemoryExporter {
             for ((key, value) in chat) {
                 if (key != "name" && key != "first_message") obj.put(key, value)
             }
-            val history = chatPreferences.getChatByIdResult(context, ChatPreferences.storedChatId(chat))
+            val history = chatPreferences.getChatByIdResult(context, ChatPreferences.storedChatId(chat), DamagedChatOperation.MEMORY)
             if (ChatStorageHealth.isAuthoritative(history.state)) {
                 obj.put("messages", JSONArray(gson.toJson(history.messages)))
             } else {

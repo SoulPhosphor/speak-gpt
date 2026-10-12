@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.tts.api.*
 import org.teslasoft.assistant.preferences.tts.TtsVoiceSelection
 import org.teslasoft.assistant.preferences.tts.TtsVoiceKind
@@ -240,6 +241,7 @@ import org.teslasoft.assistant.preferences.backup.readable.ReadableChatFormats
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.chatsearch.SearchTargetResolver
 import org.teslasoft.assistant.ui.util.ChangeUsernameDialog
+import org.teslasoft.assistant.ui.util.UsernameFillNoticeDialog
 import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.ui.util.ChatExportDialog
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
@@ -1558,6 +1560,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (PortableRestoreRecoveryFlow.showIfPending(this)) return
         if (PortableRestoreProcessGate.blocksCurrentProcess(this)) return
         if (chatStartupComplete && PortableRestoreOutcomeFlow.showIfPending(this)) return
+        UsernameFillNoticeDialog.showIfPending(this)
 
         preloadAmoled()
         reloadAmoled()
@@ -2689,7 +2692,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // chat finishes first and never writes while the chat is open.
         DefaultUsernameFill.markOpen(preparedChatId)
         fillOpenChatId = preparedChatId
-        val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId)
+        val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId, DamagedChatOperation.OPENING_A_CHAT)
         chatPreferences.rememberChatStartDate(
             this, preparedChatId,
             org.teslasoft.assistant.ui.drawer.ChatListDetails.fromMessages(historyResult.messages).startedAt
@@ -3092,7 +3095,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val currentChatId = chatId
         Thread {
             val historyResult = ChatPreferences.getChatPreferences()
-                .getChatByIdResult(appContext, currentChatId)
+                .getChatByIdResult(appContext, currentChatId, DamagedChatOperation.OPENING_A_CHAT)
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) initSettings(historyResult)
             }
@@ -6001,7 +6004,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             savePartialOnCancel = false,
             stillCurrent = {
                 val stored = org.teslasoft.assistant.preferences.ChatPreferences
-                    .getChatPreferences().getChatById(app, frozenChatId)
+                    .getChatPreferences().getChatById(app, frozenChatId, DamagedChatOperation.OPENING_A_CHAT)
                 org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard
                     .prefixStillCurrent(
                         frozenRows,

@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.fragments.tabs
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -136,7 +137,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
                 val imported = ChatPreferences.getChatPreferences()
                     .importChatHistoryJson(context, id, selectedFile)
                 val history = ChatPreferences.getChatPreferences()
-                    .getChatByIdResult(context, id).messages
+                    .getChatByIdResult(context, id, DamagedChatOperation.CHAT_LIST).messages
                 launchPending = history.isEmpty()
                 val committed = imported && (history.isEmpty() ||
                     NewConversationCoordinator(context).commitPendingConversation(

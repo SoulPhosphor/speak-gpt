@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.preferences.backup.portable
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import com.google.gson.Gson
 import org.json.JSONArray
@@ -133,7 +134,7 @@ object ChatLogicalSerializer {
                 val name = storedNameForId(storedName)
                 val chatId = ChatPreferences.storedChatId(chat)
 
-                val history = chatPreferences.getChatByIdResult(context, chatId)
+                val history = chatPreferences.getChatByIdResult(context, chatId, DamagedChatOperation.RECOVERY_BACKUP)
                 if (!ChatStorageHealth.isAuthoritative(history.state)) {
                     logFailure(context, FailureCategory.HISTORY,
                         "the history of chat $chatId could not be read (state ${history.state})")

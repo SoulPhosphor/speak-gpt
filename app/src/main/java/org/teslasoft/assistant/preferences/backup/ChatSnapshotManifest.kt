@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.preferences.backup
 
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import com.google.gson.Gson
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
@@ -90,7 +91,7 @@ object ChatSnapshotManifest {
             for (chat in listResult.chats) {
                 val name = chat["name"] ?: continue
                 val chatId = ChatPreferences.storedChatId(chat)
-                val history = chatPreferences.getChatByIdResult(context, chatId)
+                val history = chatPreferences.getChatByIdResult(context, chatId, DamagedChatOperation.RECOVERY_BACKUP)
                 if (ChatStorageHealth.isAuthoritative(history.state)) {
                     val payload = gson.toJson(history.messages)
                     entries.add(ChatEntry(chatId, name, available = true, contentHash = sha256(payload)))
