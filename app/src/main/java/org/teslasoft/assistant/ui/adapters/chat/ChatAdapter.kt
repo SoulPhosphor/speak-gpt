@@ -2232,11 +2232,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             username.setCompoundDrawablesWithIntrinsicBounds(marker, null, null, null)
         }
 
+        /** Selected text is shaded with the message's own text color, faded,
+         *  so a highlight always shows on its bubble whatever the theme or
+         *  palette (the default highlight follows the main color, which the
+         *  user bubble is filled with). */
+        private fun applySelectionHighlight(foreground: Int) {
+            val alpha = ResourcesCompat.getFloat(context.resources, R.dimen.chat_selection_highlight_alpha)
+            message.highlightColor = androidx.core.graphics.ColorUtils.setAlphaComponent(
+                foreground, (alpha * 255).toInt().coerceIn(0, 255)
+            )
+        }
+
         private fun updateBubbleDecoration(isBot: Boolean, showBubble: Boolean) {
             if (!showBubble) {
                 bubbleBg.background = null
                 val foreground = resolveThemeColor(R.attr.appTextColor)
                 message.setTextColor(foreground)
+                applySelectionHighlight(foreground)
                 username.setTextColor(foreground)
                 bubbleName?.setTextColor(foreground)
                 applyMetaForeground(foreground)
@@ -2264,6 +2276,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 )
             }
             message.setTextColor(foreground)
+            applySelectionHighlight(foreground)
             username.setTextColor(foreground)
             bubbleName?.setTextColor(foreground)
             applyMetaForeground(foreground)
