@@ -251,11 +251,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var speakingPosition = -1
 
     companion object {
-        /** CL100K tokenizer for user-token estimates, loaded once on first use. */
-        @Volatile private var cachedUserTokenizer: Tokenizer? = null
+        /** Generic tokenizer for visible-message estimates, loaded once on first use. */
+        @Volatile private var cachedMessageTokenizer: Tokenizer? = null
 
-        private suspend fun userTokenizer(): Tokenizer =
-            cachedUserTokenizer ?: Tokenizer.of(Encoding.CL100K_BASE).also { cachedUserTokenizer = it }
+        private suspend fun messageTokenizer(): Tokenizer =
+            cachedMessageTokenizer ?: Tokenizer.of(Encoding.CL100K_BASE).also {
+                cachedMessageTokenizer = it
+            }
 
         private const val TYPE_USER = 0
         private const val TYPE_BOT = 1
@@ -296,17 +298,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         //   KEY_MESSAGE_MODEL  — the model that produced this assistant reply,
         //                        frozen when the reply began so a later model
         //                        switch never relabels past turns.
-        //   KEY_MESSAGE_TOKENS — provider-reported total tokens for that turn.
+        //   KEY_MESSAGE_TOKENS — legacy provider accounting metadata. Current
+        //                        message token display estimates visible text.
         //   KEY_MESSAGE_TIME   — epoch-millis timestamp of when the message was
         //                        created (both roles).
         const val KEY_MESSAGE_MODEL = "responseModel"
         const val KEY_MESSAGE_PROVIDER = "responseProvider"
         const val KEY_MESSAGE_TOKENS = "responseTokens"
+        const val KEY_MESSAGE_TOKEN_ESTIMATE = "visibleTextTokenEstimate"
         const val KEY_MESSAGE_TIME = "messageTime"
 
-        // Durable accounting for completed API requests. responseTokens above
-        // remains a legacy/display total-token field; it must never be read as
-        // completion/output tokens. The JSON records preserve prompt,
+        // Durable accounting for completed API requests. Usage & Cost reads
+        // this JSON; the per-message token display does not. The JSON records preserve prompt,
         // completion and total independently, plus model/provider attribution,
         // source and the price/cost snapshot from completion time.
         const val KEY_TOKEN_USAGE_RECORDS =
@@ -371,6 +374,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             KEY_MESSAGE_MODEL,
             KEY_MESSAGE_PROVIDER,
             KEY_MESSAGE_TOKENS,
+            KEY_MESSAGE_TOKEN_ESTIMATE,
             KEY_TOKEN_USAGE_RECORDS,
             KEY_MESSAGE_TIME,
             KEY_MESSAGE_REASONING,
@@ -712,6 +716,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // waits on the user-token estimate opens only if the row still shows
         // the same message, since scrolling can rebind the row meanwhile.
         private var boundMessageId: String? = null
+        // Distinguishes regenerated variants of the same permanent message.
+        private var boundDisplayedVariantIndex: Int = 0
         private val ui: ConstraintLayout = itemView.findViewById(R.id.ui)
         private val icon: ImageView = itemView.findViewById(R.id.icon)
         // The icon's original XML backing (e.g. the assistant bubble's tonal
@@ -841,6 +847,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // and metadata laid over the message, without disturbing the stored
             // canonical version used for context and saving.
             val display = displayVariantMap(chatMessage)
+            boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
+            boundDisplayedVariantIndex = displayedVariantIndex(chatMessage)
 
             val isGeneratedImage = display["message"].toString().startsWith("~file:")
             btnEdit.visibility = if (isGeneratedImage) View.GONE else if (chatMessage["isBot"] == true) View.GONE else View.VISIBLE
@@ -859,15 +867,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateShareButton(chatMessage)
             updateSpeakButton(display, position)
             updateStatusMarker(display)
-            updateMessageMeta(display, isGeneratedImage)
+            updateMessageMeta(display, isGeneratedImage, chatMessage)
             updateReasoning(display, position)
             updateReasoningIndicator(display, isGeneratedImage)
             updateActiveMemories(display)
             updateVersionNav(chatMessage, position)
 
-            boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
             btnDetails.setOnClickListener { anchor ->
-                if (!bulkActionMode) showMessageDetailsPopup(anchor, display)
+                if (!bulkActionMode) showMessageDetailsPopup(anchor, display, chatMessage)
             }
 
             val bookmarkSection = summarySectionStarts[
@@ -1106,7 +1113,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /**
          * The compact metadata line beneath the identity (chat-redesign-plan.md
          * §4.3). Present only on the assistant layout. Shows the producing model
-         * when Model Names is on, the provider token total when Token Usage is
+         * when Model Names is on, the visible-message token estimate when Token Usage is
          * on, joined by a centered dot when both are present and both enabled
          * and the two fit on one line. When a long model name would otherwise
          * push the token count past the row's edge, the token count drops to
@@ -1115,7 +1122,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * Anything not enabled or not stored on this turn is simply omitted; the
          * whole line is GONE when nothing remains. Never invents a value.
          */
-        private fun updateMessageMeta(chatMessage: HashMap<String, Any>, isGeneratedImage: Boolean) {
+        private fun updateMessageMeta(
+            chatMessage: HashMap<String, Any>,
+            isGeneratedImage: Boolean,
+            sourceMessage: HashMap<String, Any>
+        ) {
             val meta = messageMeta ?: return
 
             // Generated images are produced by the image service, not a chat
@@ -1130,7 +1141,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val modelPart = if (preferences.getShowModelNames()) {
                 chatMessage[KEY_MESSAGE_MODEL]?.toString()?.takeIf { it.isNotBlank() }
             } else null
-            val tokenPart = if (preferences.getShowTokenUsage()) tokenCountLabel(chatMessage) else null
+            val tokenPart = if (preferences.getShowTokenUsage()) {
+                tokenCountLabel(chatMessage) ?: run {
+                    scheduleAssistantTokenEstimate(chatMessage, sourceMessage)
+                    null
+                }
+            } else null
 
             if (modelPart == null && tokenPart == null) {
                 meta.visibility = View.GONE
@@ -1141,20 +1157,106 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
-        /** The provider token total for this turn, worded per the approved
-         *  format (e.g. "1,234 tokens"), or null when this turn stored no
-         *  usable count so the caller omits it. */
+        /** An app estimate of the visible assistant text only, worded per the
+         * approved compact format. It deliberately does not use provider request
+         * accounting, which belongs to Usage & Cost. */
         private fun tokenCountLabel(chatMessage: HashMap<String, Any>): String? {
-            val raw = chatMessage[KEY_MESSAGE_TOKENS]?.toString()?.takeIf { it.isNotBlank() }
+            val count = chatMessage[KEY_MESSAGE_TOKEN_ESTIMATE]
+                ?.toString()
+                ?.toIntOrNull()
+                ?.takeIf { it > 0 }
                 ?: return null
-            val count = raw.toLongOrNull() ?: return null
             val grouped = NumberFormat.getIntegerInstance(Locale.getDefault()).format(count)
             return context.getString(R.string.chat_token_count, grouped)
         }
 
-        /** The provider-reported reasoning-token count for this turn, kept
-         *  separate from the answer-token total (§7.8), or null when this reply
-         *  stored no reasoning-token count. */
+        /** Backfills old replies in memory without trusting their historical
+         * responseTokens field, whose meaning was whole-request usage. */
+        private fun scheduleAssistantTokenEstimate(
+            chatMessage: HashMap<String, Any>,
+            sourceMessage: HashMap<String, Any>
+        ) {
+            // Finalization stores the completed reply's estimate. Tokenizing
+            // every streamed prefix would queue redundant full-prefix work.
+            if (chatMessage[MessageCompletionState.KEY_STATE]?.toString() ==
+                MessageCompletionState.STREAMING
+            ) return
+            val text = chatMessage["message"]?.toString()?.takeIf { it.isNotBlank() }
+                ?: return
+            if (text.trim().startsWith("~file:")) return
+            val requestedMessageId = boundMessageId
+            val requestedVariantIndex = boundDisplayedVariantIndex
+            context.lifecycleScope.launch {
+                val count = try {
+                    withContext(Dispatchers.Default) { messageTokenizer().encode(text).size }
+                } catch (_: Exception) {
+                    null
+                } ?: return@launch
+                // A streamed reply may have grown, or finalization/another
+                // backfill may already have stored the estimate while this
+                // tokenizer ran. Never replace newer evidence with this stale
+                // snapshot's count.
+                if (chatMessage["message"]?.toString() != text ||
+                    chatMessage.containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)
+                ) return@launch
+                if (!storeAssistantTokenEstimate(
+                        chatMessage,
+                        sourceMessage,
+                        requestedVariantIndex,
+                        text,
+                        count
+                    )
+                ) return@launch
+                if (boundMessageId == requestedMessageId &&
+                    boundDisplayedVariantIndex == requestedVariantIndex
+                ) {
+                    updateMessageMeta(
+                        chatMessage,
+                        isGeneratedImage = false,
+                        sourceMessage = sourceMessage
+                    )
+                }
+            }
+        }
+
+        /** Persists a backfilled estimate in the selected version snapshot,
+         * not only in the temporary map used to display a legacy variant. */
+        private fun storeAssistantTokenEstimate(
+            displayMessage: HashMap<String, Any>,
+            sourceMessage: HashMap<String, Any>,
+            variantIndex: Int,
+            expectedText: String,
+            count: Int
+        ): Boolean {
+            val variants = parseVariants(sourceMessage[KEY_VARIANTS]?.toString())
+            if (variants.size >= 2) {
+                val variant = variants.getOrNull(variantIndex) ?: return false
+                if (variant["message"] != expectedText) return false
+                variant[KEY_MESSAGE_TOKEN_ESTIMATE]?.let { existing ->
+                    displayMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = existing
+                    return true
+                }
+                variant[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+                sourceMessage[KEY_VARIANTS] = variantsToJson(variants)
+                if (variantIndex == canonicalIndexOf(sourceMessage, variants.size)) {
+                    sourceMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+                }
+            } else {
+                if (sourceMessage["message"]?.toString() != expectedText) return false
+                sourceMessage[KEY_MESSAGE_TOKEN_ESTIMATE]?.let { existing ->
+                    displayMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = existing
+                    return true
+                }
+                sourceMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+            }
+            displayMessage[KEY_MESSAGE_TOKEN_ESTIMATE] = count.toString()
+            listener?.onTokenEstimateStored()
+            return true
+        }
+
+        /** The provider-reported reasoning-token count for this turn. It is
+         *  displayed separately for detail but is already included in the
+         *  output count (§7.8), or null when this reply stored no count. */
         private fun reasoningTokenCountLabel(chatMessage: HashMap<String, Any>): String? {
             val raw = chatMessage[KEY_MESSAGE_REASONING_TOKENS]?.toString()?.takeIf { it.isNotBlank() }
                 ?: return null
@@ -1167,31 +1269,57 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * The anchored Message Details popup (chat-redesign-plan.md §5). Always
          * reachable regardless of the compact-display toggles. Shows only the
          * fields stored for this message — date & time, and, for an assistant
-         * reply, the producing model and provider token total. Fields never
+         * reply, the producing model and visible-message token estimate. Fields never
          * recorded (older messages, or a turn the provider gave no usage for)
          * are omitted; a message with nothing stored shows the empty line. Text
          * is selectable. Outside tap or Back dismisses.
          */
-        private fun showMessageDetailsPopup(anchor: View, chatMessage: HashMap<String, Any>) {
+        private fun showMessageDetailsPopup(
+            anchor: View,
+            chatMessage: HashMap<String, Any>,
+            sourceMessage: HashMap<String, Any>
+        ) {
             val isBot = chatMessage["isBot"] == true
             val text = chatMessage["message"]?.toString().orEmpty()
-            // Show User Tokens: no service reports one message's own tokens,
-            // so the user's text is counted here and labelled an estimate.
-            if (!isBot && preferences.getShowUserTokens() && text.isNotBlank() && !text.startsWith("~file:")) {
+            // No service reports one visible message's own tokens, so both
+            // roles use the same generic tokenizer and are labelled estimates.
+            val needsEstimate = text.isNotBlank() && !text.startsWith("~file:") &&
+                if (isBot) tokenCountLabel(chatMessage) == null
+                else preferences.getShowUserTokens()
+            if (needsEstimate) {
                 val requestedMessageId = boundMessageId
+                val requestedVariantIndex = boundDisplayedVariantIndex
                 context.lifecycleScope.launch {
                     val count = try {
-                        withContext(Dispatchers.Default) { userTokenizer().encode(text).size }
+                        withContext(Dispatchers.Default) { messageTokenizer().encode(text).size }
                     } catch (_: Exception) {
                         null
                     }
-                    if (anchor.isAttachedToWindow && boundMessageId == requestedMessageId) {
-                        showMessageDetailsPopup(anchor, chatMessage, count)
+                    val textStillMatches = chatMessage["message"]?.toString() == text
+                    if (isBot && count != null && textStillMatches &&
+                        !chatMessage.containsKey(KEY_MESSAGE_TOKEN_ESTIMATE)
+                    ) {
+                        storeAssistantTokenEstimate(
+                            chatMessage,
+                            sourceMessage,
+                            requestedVariantIndex,
+                            text,
+                            count
+                        )
+                    }
+                    if (anchor.isAttachedToWindow && boundMessageId == requestedMessageId &&
+                        boundDisplayedVariantIndex == requestedVariantIndex
+                    ) {
+                        showMessageDetailsPopup(
+                            anchor,
+                            chatMessage,
+                            count.takeIf { textStillMatches }
+                        )
                     }
                 }
                 return
             }
-            showMessageDetailsPopup(anchor, chatMessage, null)
+            showMessageDetailsPopup(anchor, chatMessage, userTokenEstimate = null)
         }
 
         private fun showMessageDetailsPopup(
@@ -1281,6 +1409,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val copy = HashMap<String, Any>(chatMessage)
             applyVariant(copy, variants[displayIndex])
             return copy
+        }
+
+        private fun displayedVariantIndex(chatMessage: Map<String, Any>): Int {
+            val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
+            if (variants.size < 2) return 0
+            val canonical = canonicalIndexOf(chatMessage, variants.size)
+            return displayIndexOf(chatMessage, variants.size, canonical)
         }
 
         private fun canonicalIndexOf(chatMessage: Map<String, Any>, count: Int): Int =
@@ -3412,6 +3547,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  the host just persists the new pager position; it never truncates
          *  history or changes which version the conversation continues from. */
         fun onResponseVersionChanged()
+
+        /** A legacy visible-text estimate was newly added to message storage. */
+        fun onTokenEstimateStored()
 
         /** The inline image-confirmation card's Create (true) or Cancel
          *  (false) tap (image-generation-rebuild-plan.md §5). */

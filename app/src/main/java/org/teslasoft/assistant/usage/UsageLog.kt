@@ -81,7 +81,8 @@ data class UsageSection(
  *
  * [seeded] records that the chat's pre-log message records were copied in.
  * Until then an entry may be appended (for example by the summarizer) without
- * losing the older history, which [seed] merges in exactly once.
+ * losing the older history. Later [seed] calls reconcile durable message
+ * records so a rejected append cannot leave a completed request invisible.
  */
 data class UsageLogState(
     val seeded: Boolean,
@@ -101,16 +102,47 @@ data class UsageLogState(
         return copy(entries = updated)
     }
 
-    /** Copies the durable records already stored in [messages] once. */
+    /** Copies durable message records on first use, then repairs any later
+     * log append that did not persist. Matching is a multiset per message so
+     * two identical paid requests remain two requests. Existing entries are
+     * never removed because they may belong to a deleted message or version. */
     fun seed(messages: List<Map<String, Any>>, nowMs: Long): UsageLogState {
-        if (seeded) return this
-        val fromMessages = messages.flatMap { message ->
-            val messageId = MessageIdentity.idOf(message).ifBlank { null }
-            TokenUsageAccounting.durableRecordsOf(message).map { record ->
-                UsageLog.entry(UsageCategory.CHAT, messageId, record, nowMs)
+        val initial = if (seeded) this else {
+            val fromMessages = messages.flatMap { message ->
+                val messageId = MessageIdentity.idOf(message).ifBlank { null }
+                TokenUsageAccounting.durableRecordsOf(message).map { record ->
+                    UsageLog.entry(UsageCategory.CHAT, messageId, record, nowMs)
+                }
+            }
+            copy(seeded = true, entries = fromMessages + entries)
+        }
+        val availableByMessage = initial.entries
+            .filter { it.category == UsageCategory.CHAT && !it.messageId.isNullOrBlank() }
+            .groupBy { it.messageId!! }
+            .mapValues { (_, value) -> value.toMutableList() }
+            .toMutableMap()
+        val missing = mutableListOf<UsageLogEntry>()
+        messages.forEach { message ->
+            val messageId = MessageIdentity.idOf(message).takeIf { it.isNotBlank() }
+                ?: return@forEach
+            val available = availableByMessage.getOrPut(messageId) { mutableListOf() }
+            TokenUsageAccounting.durableRecordsOf(message).forEach { record ->
+                val requestId = record.requestId?.takeIf { it.isNotBlank() }
+                val match = available.indexOfFirst { entry ->
+                    if (requestId != null && !entry.record.requestId.isNullOrBlank()) {
+                        entry.record.requestId == requestId
+                    } else {
+                        entry.record == record
+                    }
+                }
+                if (match >= 0) {
+                    available.removeAt(match)
+                } else {
+                    missing += UsageLog.entry(UsageCategory.CHAT, messageId, record, nowMs)
+                }
             }
         }
-        return copy(seeded = true, entries = fromMessages + entries)
+        return if (missing.isEmpty()) initial else initial.copy(entries = initial.entries + missing)
     }
 
     /**
@@ -251,58 +283,59 @@ object UsageLog {
             }
             val array = root.get("entries")?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
             val seenIds = mutableSetOf<String>()
+            var discardedEntry = false
             val entries = array.mapNotNull { element ->
-                runCatching {
-                    val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+                val parsed = runCatching decodeEntry@ {
+                    val o = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@decodeEntry null
                     val id = o.get("id")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
-                        ?.asString?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        ?.asString?.takeIf { it.isNotBlank() } ?: return@decodeEntry null
                     val categoryKey = o.get("category")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
-                        ?.asString ?: return@mapNotNull null
-                    if (UsageCategory.entries.none { it.key == categoryKey } && categoryKey !in listOf("summarization", "attachments")) return@mapNotNull null
+                        ?.asString ?: return@decodeEntry null
+                    if (UsageCategory.entries.none { it.key == categoryKey } && categoryKey !in listOf("summarization", "attachments")) return@decodeEntry null
                     val function = o.get("function")?.takeUnless { it.isJsonNull }?.let {
-                        if (!it.isJsonPrimitive || !it.asJsonPrimitive.isString) return@mapNotNull null
-                        UsageFunction.fromKey(it.asString) ?: return@mapNotNull null
+                        if (!it.isJsonPrimitive || !it.asJsonPrimitive.isString) return@decodeEntry null
+                        UsageFunction.fromKey(it.asString) ?: return@decodeEntry null
                     }
                     val messageId = o.get("messageId")?.takeUnless { it.isJsonNull }?.let {
-                        if (!it.isJsonPrimitive || !it.asJsonPrimitive.isString) return@mapNotNull null
+                        if (!it.isJsonPrimitive || !it.asJsonPrimitive.isString) return@decodeEntry null
                         it.asString
                     }
                     val recordedAtMs = o.get("recordedAtMs")?.let {
-                        if (!it.isJsonPrimitive || !it.asJsonPrimitive.isNumber) return@mapNotNull null
+                        if (!it.isJsonPrimitive || !it.asJsonPrimitive.isNumber) return@decodeEntry null
                         it.asBigDecimal.longValueExact()
                     } ?: 0L
-                    val recordJson = o.get("record")?.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+                    val recordJson = o.get("record")?.takeIf { it.isJsonObject }?.asJsonObject ?: return@decodeEntry null
                     fun validOptional(key: String, valid: (com.google.gson.JsonPrimitive) -> Boolean): Boolean {
                         val field = recordJson.get(key) ?: return true
                         return field.isJsonNull || (field.isJsonPrimitive && valid(field.asJsonPrimitive))
                     }
                     if (listOf("inputTokens", "outputTokens", "totalTokens", "cachedInputTokens", "cacheWriteInputTokens")
-                            .any { !validOptional(it) { field -> field.isNumber && runCatching { field.asBigDecimal.intValueExact() >= 0 }.getOrDefault(false) } }) return@mapNotNull null
-                    if (!validOptional("httpStatus") { it.isNumber && runCatching { it.asBigDecimal.intValueExact() }.isSuccess }) return@mapNotNull null
-                    if (!validOptional("requestStartedAtMs") { it.isNumber && runCatching { it.asBigDecimal.longValueExact() }.isSuccess }) return@mapNotNull null
+                            .any { !validOptional(it) { field -> field.isNumber && runCatching { field.asBigDecimal.intValueExact() >= 0 }.getOrDefault(false) } }) return@decodeEntry null
+                    if (!validOptional("httpStatus") { it.isNumber && runCatching { it.asBigDecimal.intValueExact() }.isSuccess }) return@decodeEntry null
+                    if (!validOptional("requestStartedAtMs") { it.isNumber && runCatching { it.asBigDecimal.longValueExact() }.isSuccess }) return@decodeEntry null
                     if (listOf("inputPricePerToken", "outputPricePerToken", "cachedInputPricePerToken", "cacheWriteInputPricePerToken",
                             "inputCost", "outputCost", "uncachedInputCost", "cachedInputCost", "totalCost", "reportedChargeAmount")
                             .any { !validOptional(it) { field -> field.isNumber && field.asDouble.isFinite() &&
                                 runCatching { val sign = field.asBigDecimal.signum()
-                                    sign >= 0 && (field.asDouble != 0.0 || sign == 0) }.getOrDefault(false) } }) return@mapNotNull null
+                                    sign >= 0 && (field.asDouble != 0.0 || sign == 0) }.getOrDefault(false) } }) return@decodeEntry null
                     if (listOf("apiEndpoint", "costSource", "requestId", "requestedModel", "requestParameters", "pricingSource",
                             "pricingEvidence", "reportedChargeCurrency", "reportedChargeDecimal")
-                            .any { !validOptional(it) { field -> field.isString } }) return@mapNotNull null
+                            .any { !validOptional(it) { field -> field.isString } }) return@decodeEntry null
                     if (!validOptional("reportedChargeDecimal") { it.isString &&
-                            it.asString.toBigDecimalOrNull()?.signum()?.let { sign -> sign >= 0 } == true }) return@mapNotNull null
+                            it.asString.toBigDecimalOrNull()?.signum()?.let { sign -> sign >= 0 } == true }) return@decodeEntry null
                     fun recordText(key: String): String? = recordJson.get(key)
                         ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
                     // Gson bypasses Kotlin constructors, so required strings need explicit validation.
-                    val model = recordText("model") ?: return@mapNotNull null
-                    val provider = recordText("provider") ?: return@mapNotNull null
-                    val source = if (recordJson.has("source")) recordText("source") ?: return@mapNotNull null
+                    val model = recordText("model") ?: return@decodeEntry null
+                    val provider = recordText("provider") ?: return@decodeEntry null
+                    val source = if (recordJson.has("source")) recordText("source") ?: return@decodeEntry null
                         else TokenCountSource.ESTIMATED_CL100K.storedValue
                     // Entries written before metered usage have no meters and decode as before.
                     val meters = UsageMeterCodec.decode(recordJson.get("meters"))
                     val record = gson.fromJson(recordJson.deepCopy().apply { remove("meters") }, TurnUsageRecord::class.java)
                         ?.copy(model = model, provider = provider, source = source,
-                            meters = meters) ?: return@mapNotNull null
-                    if (!seenIds.add(id)) return@mapNotNull null
+                            meters = meters) ?: return@decodeEntry null
+                    if (!seenIds.add(id)) return@decodeEntry null
                     UsageLogEntry(
                         id = id,
                         category = UsageCategory.fromKey(categoryKey),
@@ -312,12 +345,19 @@ object UsageLog {
                         function = function
                     )
                 }.getOrNull()
+                if (parsed == null) discardedEntry = true
+                parsed
             }
             // Recover readable history preserved by the former all-or-nothing parser.
             // Current entries win so a delayed receipt cannot revert to its older charge.
             val preservedEntries = quarantined?.let { decode(it)?.entries }.orEmpty()
-            UsageLogState(seeded = seeded, entries = (entries + preservedEntries).distinctBy { it.id },
-                quarantinedLog = quarantined)
+            UsageLogState(
+                seeded = seeded,
+                entries = (entries + preservedEntries).distinctBy { it.id },
+                // Preserve the exact partially readable source before any
+                // append can serialize only the entries validation accepted.
+                quarantinedLog = if (discardedEntry) value else quarantined
+            )
         } catch (_: Exception) {
             null
         }
@@ -336,16 +376,16 @@ object UsageLogStore {
     fun read(prefs: org.teslasoft.assistant.preferences.Preferences): UsageLogState =
         UsageLog.recover(prefs.getUsageLog())
 
-    /** Copies the chat's message records in once, before anything can delete them. */
+    /** Copies the chat's message records before anything can delete them and
+     * repairs any durable message record missing from an already-seeded log. */
     fun seed(
         prefs: org.teslasoft.assistant.preferences.Preferences,
         messages: List<Map<String, Any>>,
         nowMs: Long = System.currentTimeMillis()
     ): UsageLogState = synchronized(lock) {
         val current = read(prefs)
-        if (current.seeded) return current
         val seeded = current.seed(messages, nowMs)
-        prefs.commitUsageLog(UsageLog.encode(seeded))
+        if (seeded != current) prefs.commitUsageLog(UsageLog.encode(seeded))
         seeded
     }
 

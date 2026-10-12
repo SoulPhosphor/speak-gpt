@@ -13,14 +13,16 @@ class ImageUsageLogTest {
         val root = com.google.gson.JsonParser.parseString(original).asJsonObject
         root.getAsJsonArray("entries").add(com.google.gson.JsonParser.parseString(
             UsageLog.encode(UsageLog.EMPTY.append(listOf(healthy)))).asJsonObject.getAsJsonArray("entries").single())
-        val decoded = UsageLog.decode(root.toString())!!
+        val partialLog = root.toString()
+        val decoded = UsageLog.decode(partialLog)!!
         assertEquals(listOf(healthy.id), decoded.entries.map { it.id })
         assertEquals(0.0012, decoded.entries.single().record.totalCost!!, 0.0)
-        assertNull(decoded.quarantinedLog)
+        assertEquals(partialLog, decoded.quarantinedLog)
         val received = entry(ImageUsageReceipt(requestId = "real-id", images = 1.0, amount = 0.12, currency = "USD"))
-        val updated = UsageLog.requestUpdate(root.toString(), received)!!
+        val updated = UsageLog.requestUpdate(partialLog, received)!!
         val restored = UsageLog.decode(UsageLog.encode(updated))!!
         assertEquals(2, restored.entries.size)
+        assertEquals(partialLog, restored.quarantinedLog)
         assertEquals(0.0012, restored.entries.single { it.id == healthy.id }.record.totalCost!!, 0.0)
         assertEquals(0.12, restored.entries.single { it.id == received.id }.record.totalCost!!, 0.0)
     }
@@ -291,11 +293,11 @@ class ImageUsageLogTest {
                 assertEquals(original, UsageLog.recover(original).quarantinedLog)
             } else {
                 assertEquals(1, UsageLog.decode(original)!!.entries.size)
-                assertNull(UsageLog.recover(original).quarantinedLog)
+                assertEquals(original, UsageLog.recover(original).quarantinedLog)
             }
             val received = UsageLog.requestUpdate(original, receipt, existingOnly = true)!!
             val restored = UsageLog.decode(UsageLog.encode(received))!!
-            assertEquals(if (index < 2) original else null, restored.quarantinedLog)
+            assertEquals(original, restored.quarantinedLog)
             assertEquals(1, restored.entries.size)
             assertEquals("real-id", restored.entries.single().record.requestId)
             assertEquals(0.12, restored.entries.single().record.totalCost!!, 0.0)

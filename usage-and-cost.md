@@ -18,11 +18,17 @@ a detail; the file list at the end shows where each part lives.
 - **Request:** one call to the AI service. One reply can involve several
   requests (for example, a tool call and its continuation).
 
+The token number shown on an individual user or AI message is separate from
+this screen. It is an app estimate of that message's visible text only. It does
+not include the other conversation history, instructions, memory, attachments,
+tools, reasoning, or other request data that may be included in the provider's
+whole-request usage report.
+
 ## The short version
 
 | Number on screen | Where it comes from |
 | --- | --- |
-| Token counts | Reported by the AI service in each reply. Never guessed for new replies. |
+| Token counts | Reported by the AI service when available. Otherwise the app uses a generic CL100K estimate and records that it was estimated. |
 | Total cost | The actual charge, when the service reports one in US dollars. Otherwise the sum of the calculated parts. |
 | Input / Output / Cached cost | Calculated: reported tokens × the published price saved with that request. Never provider-reported values unless the service itemizes them. |
 | Prices | Fetched when the request starts and saved with the request. Never re-fetched later. |
@@ -65,6 +71,22 @@ a detail; the file list at the end shows where each part lives.
 
 Every request records its own token counts from what the AI service reports.
 
+Every OpenRouter chat request sends the chat's stable identifier as
+`prompt_cache_key` so OpenRouter can keep the same chat on a cache-aware route
+even when its opening prompt changes. The key is independent of explicit cache
+markers and does not change message content.
+
+An ephemeral cache breakpoint is added at the end of the reusable conversation
+prefix only when the live endpoint catalog shows that every provider the
+request can reach has a cache-write price and does not advertise implicit
+caching. A cache-read price alone is not proof of explicit-breakpoint support.
+In Automatic or fallback routing, one incompatible or unknown candidate leaves
+the messages unchanged. The breakpoint moves forward as the conversation grows.
+Explicit caches generally require a minimum reusable prefix (Alibaba: 1,024
+tokens). Alibaba charges a new cached prefix at 125% of regular input and a
+successful read at 10%; a prefix written but never reused can therefore cost
+slightly more, while one successful reuse more than recovers the write premium.
+
 - **Input and output counts** are read from the reply's usage report. Both the
   OpenAI-style names (`prompt_tokens`, `completion_tokens`) and the
   Claude-style names (`input_tokens`, `output_tokens`) are understood.
@@ -97,13 +119,14 @@ Every request records its own token counts from what the AI service reports.
 - **A later usage report never erases an earlier count.** If a service sends
   usage in several pieces and a later piece leaves out a number, the earlier
   number is kept.
-- **Missing counts stay missing.** If the service reports no usage at all,
-  the request has no counts. New replies are never estimated.
+- **Missing counts are estimated for a completed visible chat reply.** If the
+  service reports no usage at all, the app estimates the request's input from
+  the conversation messages and the output from the visible reply with a
+  generic CL100K tokenizer. Provider-reported counts always win when present.
 
-**Old replies only:** replies saved before durable usage records existed have
-no stored counts. For those, the app estimates input and output with a
-generic tokenizer (CL100K) and marks the record as estimated. These records
-have no prices and no cache information.
+Replies saved before durable usage records existed also have no stored counts.
+For those, the app makes the same generic CL100K estimate and marks the record
+as estimated. These older records have no prices and no cache information.
 
 ## 2. Prices
 
@@ -270,8 +293,13 @@ A service's own `/models` list is used only when it has OpenRouter's
   even if no cached price is published.
 - **Output cost:** output tokens × output price.
 - **Total:** input cost + cached cost + output cost.
-- **Missing pieces:** if a needed price or the cache split is unknown, that
-  piece is unknown, and the Total is unknown too.
+- **Cache split not reported:** the Cached, Not cached, and Input-cost rows
+  stay unknown. When total input, output, and their regular prices are known,
+  the overall Total is still estimated by pricing all input at the regular
+  input rate. This is a best-effort estimate and never replaces a
+  service-reported charge.
+- **Other missing pieces:** if a needed token count or regular price is
+  unknown, that piece and the Total remain unknown.
 
 ## 4. What the screen adds up
 
@@ -303,8 +331,11 @@ chat's usage log (section 5) at the moment it opens.
 
 ### "Not Reported" rule
 
-A sum shows "Not Reported" if any request in it is missing that value. A
-partial sum is never shown as if it were complete.
+A component sum shows "Not Reported" if any request in it is missing that
+component. A partial sum is never shown as if it were complete. The overall
+Total uses the regular-input estimate described in section 3 when only the
+cache split is missing. Dollar costs are rounded to four decimal places; a
+smaller positive value that would round to zero is shown as `<$0.0001`.
 
 ## 5. Which requests are counted
 
@@ -324,11 +355,15 @@ partial sum is never shown as if it were complete.
 - **Summarizing section:** every Summarizer section (Summarizing), Compact
   fold-in (Compacting), Condense (Condensing), Reduce (Reducing), Summarizer
   image description (Image Description), and the short reminder written when
-  an attachment is removed (Removal) is a paid request and is counted.
-- **Recorded the same way as chat replies:** counts and charges come only from
-  the service's report, and prices are frozen when the request finishes. A
-  finished request with no usage report is still counted, with its values
-  "Not Reported"; a failed one only when the service reported usage.
+  an attachment is removed (Removal) is a paid request and is counted. The
+  automatic request that creates a new chat's short title is also counted as
+  Summarizing.
+- **Auxiliary requests:** counts and charges come only from the service's
+  report, and prices are frozen when the request finishes. A finished
+  auxiliary request with no usage report is still counted, with its values
+  "Not Reported"; a failed one only when the service reported usage. The
+  visible-chat-reply estimate described in section 1 does not apply to these
+  hidden requests.
 - **TTS section:** every API voice request that returned audio is counted.
   Section 7 explains how.
 - **Image Generations:** `/imagine` and AI `create_image` jobs record each
@@ -349,8 +384,17 @@ regenerating (including an earlier reply, which removes everything after it), ma
 another version current, or compacting never removes usage already spent.
 
 - **First open:** the records already stored in the chat's messages are copied
-  into the log once. Requests recorded before that (for example by the
-  Summarizer) are kept and merged.
+  into the log. Requests recorded before that (for example by the Summarizer)
+  are kept and merged.
+- **Self-repair:** later opens and Usage-screen refreshes compare the log with
+  the durable records still stored on messages. A missing request occurrence
+  is appended to the log, including a second request whose numbers happen to
+  be identical. Existing log entries are never removed, so requests belonging
+  to deleted messages or old versions remain counted.
+- **Partial corruption:** readable entries remain usable, while the exact
+  original log is quarantined whenever any entry fails validation. A later
+  append never silently overwrites that evidence with only the entries that
+  happened to decode.
 - **Each entry** keeps the request's frozen record, what it was for (chat,
   its section and, for Summarizing, its function), and the permanent id of the message
   it served, when there is one. Neither depends on a message's position.

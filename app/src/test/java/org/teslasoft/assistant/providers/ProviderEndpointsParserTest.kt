@@ -162,6 +162,15 @@ class ProviderEndpointsParserTest {
         assertTrue(ProviderEndpointsParser.parse(body)!!.authoritative)
     }
 
+    @Test
+    fun discardedEndpointRowsMakeTheResultNonAuthoritative() {
+        val body = """{"data":{"endpoints":[{"provider_name":"A"},{"pricing":{}}]}}"""
+        val result = ProviderEndpointsParser.parse(body)!!
+
+        assertEquals(1, result.endpoints.size)
+        assertFalse(result.authoritative)
+    }
+
     /* ------------------------------ ZDR list ------------------------------ */
 
     private val zdrBody = """

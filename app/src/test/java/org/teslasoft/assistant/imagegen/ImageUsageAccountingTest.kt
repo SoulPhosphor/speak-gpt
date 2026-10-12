@@ -86,7 +86,7 @@ class ImageUsageAccountingTest {
             val summary = TokenUsageAccounting.aggregate(records)
             assertFalse(summary.hasUnknownCost)
             assertEquals(0.1, summary.totalCost, 0.0)
-            assertEquals("$0.10000", UsageValueFormatter.cost(summary.totalCost, summary.hasUnknownCost))
+            assertEquals("$0.1000", UsageValueFormatter.cost(summary.totalCost, summary.hasUnknownCost))
             assertFalse(TokenUsageAccounting.decodeSummary(TokenUsageAccounting.encodeSummary(summary)).hasUnknownCost)
         }
     }

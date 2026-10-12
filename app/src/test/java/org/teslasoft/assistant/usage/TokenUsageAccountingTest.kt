@@ -231,12 +231,13 @@ class TokenUsageAccountingTest {
         val group = TokenUsageAccounting.aggregate(listOf(free)).groups.single()
         assertFalse(group.hasUnknownCost)
         assertEquals(0.0, group.totalCost, 0.0)
-        assertEquals("\$0.00000", UsageValueFormatter.cost(group.totalCost, group.hasUnknownCost))
+        assertEquals("\$0.0000", UsageValueFormatter.cost(group.totalCost, group.hasUnknownCost))
     }
 
     @Test fun tinyKnownNonzeroCostNeverLooksLikeAFreeRequest() {
-        assertEquals("<\$0.00001", UsageValueFormatter.cost(0.000001, false))
-        assertEquals("\$0.00000", UsageValueFormatter.cost(0.0, false))
+        assertEquals("<\$0.0001", UsageValueFormatter.cost(0.000001, false))
+        assertEquals("\$0.0001", UsageValueFormatter.cost(0.00006, false))
+        assertEquals("\$0.0000", UsageValueFormatter.cost(0.0, false))
     }
 
     @Test fun multiPricingConversationWithIncompleteUsageReportsUnknownComponents() {
@@ -488,7 +489,7 @@ class TokenUsageAccountingTest {
         assertEquals(0.0012, record.totalCost!!, 1e-12)
     }
 
-    @Test fun unreportedCacheSplitLeavesInputCostUnknownInsteadOfAssumingNoCache() {
+    @Test fun unreportedCacheSplitKeepsRowsUnknownButEstimatesOverallTotalAtRegularRate() {
         val record = TokenUsageAccounting.createRecord(
             "m", "Provider", null, TokenCounts(1_000, 100, 1_100),
             TokenCountSource.PROVIDER_REPORTED, TokenPricingSnapshot(0.000001, 0.000002)
@@ -497,7 +498,56 @@ class TokenUsageAccountingTest {
         assertNull(record.cachedInputTokens)
         assertNull(record.inputCost)
         assertEquals(0.0002, record.outputCost!!, 1e-12)
-        assertNull(record.totalCost)
+        assertEquals(0.0012, record.totalCost!!, 1e-12)
+
+        val group = TokenUsageAccounting.aggregate(listOf(record)).groups.single()
+        assertTrue(group.hasUnknownInputCost)
+        assertTrue(group.hasUnknownCachedInputCost)
+        assertTrue(group.hasUnknownUncachedInputCost)
+        assertFalse(group.hasUnknownCost)
+        assertEquals(0.0012, group.totalCost, 1e-12)
+    }
+
+    @Test fun unreportedCacheReadSplitStillHonorsReportedCacheWriteTier() {
+        val record = TokenUsageAccounting.createRecord(
+            "m", "Provider", null,
+            TokenCounts(
+                1_000, 100, 1_100,
+                cachedInputTokens = null,
+                cacheWriteInputTokens = 200
+            ),
+            TokenCountSource.PROVIDER_REPORTED,
+            TokenPricingSnapshot(
+                inputPricePerToken = 0.001,
+                outputPricePerToken = 0.002,
+                cachedInputPricePerToken = 0.0001,
+                cacheWriteInputPricePerToken = 0.00125
+            )
+        )
+        assertNull(record.inputCost)
+        assertEquals(1.25, record.totalCost!!, 1e-12)
+
+        val historical = record.copy(totalCost = null)
+        val group = TokenUsageAccounting.aggregate(listOf(historical)).groups.single()
+        assertFalse(group.hasUnknownCost)
+        assertEquals(1.25, group.totalCost, 1e-12)
+    }
+
+    @Test fun historicalRecordWithoutCacheSplitRecoversOnlyItsOverallEstimate() {
+        val historical = TurnUsageRecord(
+            model = "m", provider = "Provider", inputTokens = 1_000,
+            outputTokens = 100, totalTokens = 1_100,
+            source = TokenCountSource.PROVIDER_REPORTED.storedValue,
+            inputPricePerToken = 0.000001,
+            outputPricePerToken = 0.000002,
+            outputCost = 0.0002,
+            costSource = CostSource.FROZEN_PRICING.storedValue
+        )
+        val group = TokenUsageAccounting.aggregate(listOf(historical)).groups.single()
+        assertFalse(group.hasUnknownCost)
+        assertEquals(0.0012, group.totalCost, 1e-12)
+        assertTrue(group.hasUnknownInputCost)
+        assertTrue(group.hasUnknownCachedInputTokens)
     }
 
     @Test fun modelDocumentedWithoutCachingHasZeroCachedUsage() {

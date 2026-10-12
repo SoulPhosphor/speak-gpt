@@ -189,6 +189,10 @@ import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.ReportedProviderParser
 import org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot
+import org.teslasoft.assistant.providers.PromptCachingCatalogEvidence
+import org.teslasoft.assistant.providers.PromptCachingCatalogReusePolicy
+import org.teslasoft.assistant.providers.PromptCachingPolicy
+import org.teslasoft.assistant.providers.PromptCachingRequestSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
@@ -374,6 +378,7 @@ import java.util.EnumSet
 import java.util.Locale
 import java.text.NumberFormat
 import java.util.Optional
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.seconds
 import androidx.core.content.edit
@@ -1213,7 +1218,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val estimate: (Int) -> TokenCounts = { index ->
                     legacyCounts[index] ?: TokenCounts(null, null, null)
                 }
-                val log = preferences?.let { UsageLogStore.read(it) }
+                // Reconcile durable message records before summarizing. A
+                // rejected/skipped usage-log append must not make a completed
+                // request disappear from this screen.
+                val log = preferences?.let { UsageLogStore.seed(it, snapshot) }
                 if (log != null && log.seeded) {
                     kotlin.Pair(log.summarize(snapshot, estimate), log.sections(snapshot, estimate))
                 } else {
@@ -7569,9 +7577,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     /**
      * Bind lifecycle diagnostics to the exact Ktor request BEFORE dispatch.
-     * Auxiliary requests share this client, so request identity is attached to
-     * streamed generations and to the current chat's completed-response path,
-     * but not to unrelated completed requests such as auto-naming.
+     * Auxiliary requests share this client, so their explicit request context
+     * binds usage without borrowing the visible generation's lifecycle.
      */
     private fun bindLifecycleRecorderToGenerationRequest(request: HttpRequestBuilder) {
         if (request.attributes.contains(responseLifecycleRecorderAttribute) ||
@@ -7600,6 +7607,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         if (!isGenerationRequest && boundContext?.auxiliaryUsage == true) {
             boundContext.usageAttempt?.let {
+                // Arm the wait before dispatch. ResponseObserver starts on a
+                // separate coroutine and can otherwise lose the race with
+                // terminal usage finalization, dropping raw-only cost/cache.
+                it.beginObservation()
                 request.attributes.put(providerUsageAttemptAttribute, it)
             }
             return
@@ -7607,6 +7618,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (isGenerationRequest) {
             recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
             (boundContext?.usageAttempt ?: currentProviderUsageAttempt)?.let {
+                // Raw OpenRouter usage (cost and cache details) is richer than
+                // the typed SDK usage. Finalization must wait for that observer.
+                it.beginObservation()
                 request.attributes.put(providerUsageAttemptAttribute, it)
             }
             request.attributes.put(generationRequestAttribute, true)
@@ -7662,6 +7676,75 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // Injection is best-effort; report honestly that it was not confirmed.
             lastRoutingAttachment = "attachment requested (mutation failed)"
         }
+    }
+
+    /**
+     * Give every ordinary OpenRouter chat request a stable cache-routing key.
+     * Message content is changed into explicit-cache blocks only when live
+     * endpoint data proves that every provider this request can reach uses
+     * cache-write pricing and does not advertise implicit caching. Auxiliary
+     * requests are excluded by the generation-request attribute.
+     */
+    private suspend fun augmentRequestWithPromptCaching(request: HttpRequestBuilder) {
+        val endpoint = apiEndpointObject?.takeIf { it.isOpenRouterRouting() } ?: return
+        if (!request.attributes.contains(generationRequestAttribute)) return
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val model = try {
+            com.google.gson.JsonParser.parseString(content.text).asJsonObject
+                .get("model")?.takeUnless { it.isJsonNull }?.asString
+        } catch (_: Exception) {
+            null
+        } ?: return
+        val endpointFingerprint = promptCachingEndpointFingerprint(endpoint)
+        val requestContext = generationRequestContext.get()
+        val requestEndpointFingerprint = requestContext?.pricingCatalogEndpointFingerprint
+        val contextCatalog = requestContext?.pricingCatalog
+            ?.takeIf { it.isCompleted }
+            ?.let { runCatching { it.await() }.getOrNull() }
+            ?.takeIf {
+                requestEndpointFingerprint == endpointFingerprint &&
+                    it.model == model
+            }
+        val catalog = contextCatalog ?: PromptCachingCatalogReusePolicy.reusableCatalog(
+            lastPromptCachingCatalog,
+            endpointFingerprint,
+            model,
+            android.os.SystemClock.elapsedRealtime()
+        )
+        val explicitBreakpoint = PromptCachingPolicy.shouldAddExplicitBreakpoint(
+            catalog?.providerPrices.orEmpty(),
+            favoriteForActiveEndpoint(model),
+            catalogAuthoritative = catalog?.providerPricesAuthoritative == true
+        )
+        val augmented = PromptCachingRequestSerializer.augmentOpenRouterChatBody(
+            content.text,
+            chatId.takeIf { it.isNotBlank() },
+            addExplicitBreakpoint = explicitBreakpoint
+        )
+        if (augmented != content.text) {
+            request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
+        }
+    }
+
+    /**
+     * Provider catalogs can vary by saved OpenRouter profile, discovery path,
+     * and account. Hash the credential rather than retaining it in cache
+     * metadata; any profile edit then invalidates earlier evidence.
+     */
+    private fun promptCachingEndpointFingerprint(endpoint: ApiEndpointObject?): String? {
+        if (endpoint?.isOpenRouterRouting() != true) return null
+        return listOf(
+            endpoint.id.trim(),
+            // Preserve URL path case: hosts are case-insensitive, but a proxy
+            // may route /API/v1 and /api/v1 to different backends. Treating a
+            // scheme/host case-only edit as a cache miss is safely conservative.
+            endpoint.host.trim().trimEnd('/'),
+            endpoint.providerDiscoveryPath.trim()
+                .ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH },
+            endpoint.authType.trim().lowercase(Locale.ROOT),
+            Hash.hash(endpoint.apiKey)
+        ).joinToString("\u001f")
     }
 
     /** Attach original PDFs only to the exact frozen generation request that owns them. */
@@ -8089,11 +8172,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         onResponse { response ->
                             try {
                                 if (!response.status.isSuccess()) {
-                                    val body = response.bodyAsText()
                                     val attrs = response.call.request.attributes
-                                    if (attrs.contains(providerUsageAttemptAttribute)) {
+                                    val usageAttempt = if (attrs.contains(providerUsageAttemptAttribute)) {
                                         attrs[providerUsageAttemptAttribute]
-                                            .noteHttpResponse(response.status.value, body)
+                                    } else {
+                                        null
+                                    }
+                                    try {
+                                        val body = response.bodyAsText()
+                                        usageAttempt?.noteHttpResponse(response.status.value, body)
+                                    } finally {
+                                        usageAttempt?.finishObservation()
                                     }
                                 } else {
                                     val attrs = response.call.request.attributes
@@ -8203,6 +8292,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 augmentRequestWithReasoning(request)
                             } catch (_: Exception) {
                                 // Non-fatal: send without a reasoning instruction.
+                            }
+                            try {
+                                // A moving explicit breakpoint opts supported
+                                // OpenRouter providers into multi-turn caching.
+                                augmentRequestWithPromptCaching(request)
+                            } catch (_: Exception) {
+                                // Non-fatal: send without an explicit breakpoint.
                             }
                             // Unlike optional reasoning, a native PDF must not
                             // be silently omitted. Any mutation failure aborts
@@ -9472,7 +9568,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private data class GenerationRequestContext(
         val usageAttempt: ProviderUsageAttempt?,
         val lifecycle: ResponseLifecycleRecorder?,
+        val pricingCatalog: Deferred<TokenPricingCatalog>?,
         val nativePdfs: List<NativePdfPayload>,
+        val pricingCatalogEndpointFingerprint: String? = null,
         /** A Condense/Reduce/reminder request: capture its usage only, with no
          *  chat-turn diagnostics attached. */
         val auxiliaryUsage: Boolean = false
@@ -9482,7 +9580,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private suspend fun <T> withGenerationRequestContext(block: suspend () -> T): T {
         val context = GenerationRequestContext(
-            currentProviderUsageAttempt, currentLifecycle, currentTurnNativePdfs
+            currentProviderUsageAttempt,
+            currentLifecycle,
+            currentPricingCatalog,
+            currentTurnNativePdfs,
+            currentPricingCatalogEndpointFingerprint
         )
         return try {
             kotlinx.coroutines.withContext(generationRequestContext.asContextElement(context)) {
@@ -9573,8 +9675,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             fallbackProvider = fallbackServingProvider(),
             apiEndpoint = apiEndpointObject?.host.orEmpty()
         )
+        val pricingEndpoint = apiEndpointObject
+        currentPricingCatalogEndpointFingerprint = promptCachingEndpointFingerprint(pricingEndpoint)
+        val pricingCompletedAtElapsedMs = AtomicLong(-1L)
+        currentPricingCatalogCompletedAtElapsedMs = pricingCompletedAtElapsedMs
         currentPricingCatalog = lifecycleScope.async(Dispatchers.IO) {
-            TokenPricingCatalogClient.load(apiEndpointObject, usedModel)
+            TokenPricingCatalogClient.load(pricingEndpoint, usedModel).also {
+                pricingCompletedAtElapsedMs.set(android.os.SystemClock.elapsedRealtime())
+            }
         }
         if (preferences?.getResponseLifecycleLogging() != true) {
             currentLifecycle = null
@@ -9630,9 +9738,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         usageAttempt?.let {
             pendingProviderUsageSnapshot = it.snapshot()
             pendingCompletedPricingCatalog = currentPricingCatalog
+            pendingCompletedPricingCatalogEndpointFingerprint =
+                currentPricingCatalogEndpointFingerprint
+            pendingCompletedPricingCatalogCompletedAtElapsedMs =
+                currentPricingCatalogCompletedAtElapsedMs
         }
         currentProviderUsageAttempt = null
         currentPricingCatalog = null
+        currentPricingCatalogEndpointFingerprint = null
+        currentPricingCatalogCompletedAtElapsedMs = null
         val r = currentLifecycle ?: return providerDiagnostics
         if (r.finalized) return providerDiagnostics
         val n = if (r.nonStreamingResponse) {
@@ -9658,9 +9772,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         currentProviderUsageAttempt = null
         currentPricingCatalog?.cancel()
         currentPricingCatalog = null
+        currentPricingCatalogEndpointFingerprint = null
+        currentPricingCatalogCompletedAtElapsedMs = null
         pendingProviderUsageSnapshot = null
         pendingCompletedPricingCatalog?.cancel()
         pendingCompletedPricingCatalog = null
+        pendingCompletedPricingCatalogEndpointFingerprint = null
+        pendingCompletedPricingCatalogCompletedAtElapsedMs = null
         terminalRecord?.let { record ->
             val carrier = messages.lastOrNull { it["isBot"] == true }
                 ?: messages.lastOrNull { it["isBot"] != true }
@@ -10891,6 +11009,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // reply being attached after a terminal race.
             pendingProviderUsageSnapshot = null
             pendingCompletedPricingCatalog = null
+            pendingCompletedPricingCatalogEndpointFingerprint = null
+            pendingCompletedPricingCatalogCompletedAtElapsedMs = null
             // Fresh reasoning accumulator for this turn. Unknown paths, visible
             // reasoning, and OpenRouter tool continuations attach it as needed.
             currentTurnReasoning = org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator()
@@ -10935,8 +11055,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @Volatile
     private var currentProviderUsageAttempt: ProviderUsageAttempt? = null
     private var currentPricingCatalog: Deferred<TokenPricingCatalog>? = null
+    private var currentPricingCatalogEndpointFingerprint: String? = null
+    private var currentPricingCatalogCompletedAtElapsedMs: AtomicLong? = null
+    @Volatile private var lastPromptCachingCatalog: PromptCachingCatalogEvidence? = null
     private var pendingProviderUsageSnapshot: ProviderUsageSnapshot? = null
     private var pendingCompletedPricingCatalog: Deferred<TokenPricingCatalog>? = null
+    private var pendingCompletedPricingCatalogEndpointFingerprint: String? = null
+    private var pendingCompletedPricingCatalogCompletedAtElapsedMs: AtomicLong? = null
 
     /** While a Retry is in flight, the versions the regenerated reply will be
      *  folded into: the prior turn's existing version list, or its single
@@ -11074,6 +11199,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
+            val visibleText = last["message"]?.toString().orEmpty()
+            if (visibleText.isNotBlank() && !visibleText.trim().startsWith("~file:")) {
+                val estimate = try {
+                    withContext(Dispatchers.Default) {
+                        Tokenizer.of(Encoding.CL100K_BASE).encode(visibleText).size
+                    }
+                } catch (_: Exception) {
+                    null
+                }
+                estimate?.let {
+                    last[ChatAdapter.KEY_MESSAGE_TOKEN_ESTIMATE] = it.toString()
+                }
+            }
             val records = listOfNotNull(completePendingUsageRecord())
             attachUsageRecords(last, records)
             // A regeneration folds this finished reply into the turn's version
@@ -11125,22 +11263,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?.let { message[ChatAdapter.KEY_MESSAGE_MODEL] = it }
         records.last().provider.takeIf { it != TokenUsageAccounting.PROVIDER_NOT_REPORTED }
             ?.let { message[ChatAdapter.KEY_MESSAGE_PROVIDER] = it }
-        // responseTokens remains total-token compatibility metadata. It is
-        // never an output/completion-token field and stays absent if incomplete.
-        records.mapNotNull { it.totalTokens }.takeIf { it.size == records.size }
-            ?.sum()?.let { message[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+        // Provider request accounting stays in tokenUsageRecords. The message
+        // UI estimates only this bubble's visible text and must not mirror a
+        // whole-request or provider-output count into responseTokens.
+        message.remove(ChatAdapter.KEY_MESSAGE_TOKENS)
     }
 
-    /**
-     * Runs one Condense, Reduce or removal-reminder request and logs what it
-     * cost under Summarizing, as [function]. Usage is read from the provider's
-     * own response; a request that fails is logged only when the provider
-     * reported usage.
-     */
+    /** Runs one attachment-processing request and attributes it to its owner. */
     private suspend fun <T> withAttachmentUsage(
         requestModel: String,
         includeId: String,
         function: UsageFunction,
+        nativePdfs: List<NativePdfPayload> = emptyList(),
+        block: suspend () -> T
+    ): T = withAuxiliaryTextUsage(
+        requestModel = requestModel,
+        category = UsageCategory.SUMMARIZING,
+        messageId = includeOwnerMessageId(includeId),
+        function = function,
+        nativePdfs = nativePdfs,
+        block = block
+    )
+
+    /**
+     * Runs one non-reply text request and logs its provider usage. A failed
+     * request is recorded only when the provider still reported usage.
+     */
+    private suspend fun <T> withAuxiliaryTextUsage(
+        requestModel: String,
+        category: UsageCategory,
+        messageId: String?,
+        function: UsageFunction? = null,
         nativePdfs: List<NativePdfPayload> = emptyList(),
         block: suspend () -> T
     ): T {
@@ -11153,7 +11306,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val pricing = lifecycleScope.async(Dispatchers.IO) {
             TokenPricingCatalogClient.load(endpoint, requestModel)
         }
-        val context = GenerationRequestContext(attempt, null, nativePdfs, auxiliaryUsage = true)
+        val context = GenerationRequestContext(attempt, null, pricing, nativePdfs, auxiliaryUsage = true)
         var succeeded = false
         try {
             val result = kotlinx.coroutines.withContext(
@@ -11165,7 +11318,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             withContext(kotlinx.coroutines.NonCancellable) {
                 val record = auxiliaryUsageRecord(attempt, pricing, succeeded)
                 if (record != null) {
-                    appendUsageLog(UsageCategory.SUMMARIZING, includeOwnerMessageId(includeId), listOf(record), function)
+                    appendUsageLog(category, messageId, listOf(record), function)
                 }
             }
         }
@@ -11185,8 +11338,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }
             ?.ifBlank { null }
 
-    /** Adds requests to this chat's usage log. Seeding first is a no-op once
-     *  the chat has opened, and runs before [messages] gains these records. */
+    /** Adds requests to this chat's usage log. Seeding first also repairs any
+     * older message-backed request that a previous append failed to persist. */
     private suspend fun appendUsageLog(
         category: UsageCategory,
         messageId: String?,
@@ -11210,6 +11363,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pendingProviderUsageSnapshot = null
         val pricingDeferred = pendingCompletedPricingCatalog
         pendingCompletedPricingCatalog = null
+        val pricingEndpointFingerprint = pendingCompletedPricingCatalogEndpointFingerprint
+        pendingCompletedPricingCatalogEndpointFingerprint = null
+        val pricingCompletedAtElapsedMs = pendingCompletedPricingCatalogCompletedAtElapsedMs
+        pendingCompletedPricingCatalogCompletedAtElapsedMs = null
 
         val estimate = if (snapshot.counts.hasAnyValue()) {
             null
@@ -11222,10 +11379,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         var catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) { pricingDeferred?.await() }
         if (catalog == null) pricingDeferred?.cancel()
+        val promptCachingCatalog = catalog
         if (catalog != null && !catalog.model.equals(snapshot.model, ignoreCase = true)) {
             catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) {
                 TokenPricingCatalogClient.load(apiEndpointObject, snapshot.model)
             }
+        }
+        val completedAtElapsedMs = pricingCompletedAtElapsedMs?.get()?.takeIf { it >= 0L }
+        if (promptCachingCatalog != null && pricingEndpointFingerprint != null &&
+            completedAtElapsedMs != null
+        ) {
+            lastPromptCachingCatalog = PromptCachingCatalogEvidence(
+                pricingEndpointFingerprint,
+                promptCachingCatalog,
+                completedAtElapsedMs
+            )
         }
         val pricing = catalog?.pricingFor(snapshot.provider)
             ?: TokenPricingSnapshot()
@@ -13576,7 +13744,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // name. One catch-all used to swallow both — including a
                 // half-applied settings copy.
                 val newChatName: String? = try {
-                    val rawName = ai!!.chatCompletion(chatCompletionRequest2)
+                    val rawName = withAuxiliaryTextUsage(
+                        requestModel = titleModel,
+                        category = UsageCategory.SUMMARIZING,
+                        messageId = null,
+                        function = UsageFunction.SUMMARIZING
+                    ) { ai!!.chatCompletion(chatCompletionRequest2) }
                         .choices.firstOrNull()?.message?.content
                     rawName
                         ?.trim()
@@ -14233,6 +14406,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Browsing is display-only: persist the pager position so it survives a
         // reopen, but never truncate history or rebuild the model projection —
         // the canonical version the conversation uses is unchanged.
+        saveSettings()
+    }
+
+    override fun onTokenEstimateStored() {
         saveSettings()
     }
 

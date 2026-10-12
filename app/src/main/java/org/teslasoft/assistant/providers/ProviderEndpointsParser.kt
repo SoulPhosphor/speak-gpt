@@ -98,7 +98,10 @@ object ProviderEndpointsParser {
                 zdr = bool(obj, "is_zdr") ?: bool(obj, "zdr")
             )
         }
-        return ProviderDiscoveryResult(list, isCompleteResult(root, data, list))
+        return ProviderDiscoveryResult(
+            list,
+            isCompleteResult(root, data, list, endpoints.size())
+        )
     }
 
     /**
@@ -109,8 +112,13 @@ object ProviderEndpointsParser {
      * metadata, or a links.next) — or an empty list, which cannot confirm
      * any absence — makes the result non-authoritative.
      */
-    private fun isCompleteResult(root: JsonObject, data: JsonObject?, list: List<ProviderEndpointInfo>): Boolean {
-        if (list.isEmpty()) return false
+    private fun isCompleteResult(
+        root: JsonObject,
+        data: JsonObject?,
+        list: List<ProviderEndpointInfo>,
+        sourceEndpointCount: Int
+    ): Boolean {
+        if (list.isEmpty() || list.size != sourceEndpointCount) return false
         for (obj in listOfNotNull(root, data)) {
             if (bool(obj, "has_more") == true) return false
             for (key in arrayOf("next", "next_page", "next_cursor", "cursor", "pagination", "page", "total_pages")) {

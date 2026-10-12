@@ -72,7 +72,7 @@ class UsageCostTtsRenderingTest {
     }
 
     @Test fun durationAndBytePricedRequestsShowTheirOwnUnits() {
-        assertEquals(listOf(MeteredUsagePresentation.Row(R.string.usage_meter_audio_output, "12.4 sec", "\$0.12400")),
+        assertEquals(listOf(MeteredUsagePresentation.Row(R.string.usage_meter_audio_output, "12.4 sec", "\$0.1240")),
             rows("Seconds Co"))
         assertEquals("\$0.60", prices("Seconds Co").single().value)
         assertEquals(listOf(R.string.usage_price_per_minute_audio), captions("Seconds Co"))
