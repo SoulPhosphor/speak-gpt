@@ -922,6 +922,7 @@
     <string name="username_fill_notice_restore">App restore in progress. User names will be replaced when restoration is complete.</string>
     <string name="username_fill_notice_storage">Rename failed due to insufficient storage space. Free up some space and restart the app to try again.</string>
     <string name="username_fill_notice_locked">Chat files are currently locked. No changes were made. Another attempt will be made the next time you open the app.</string>
+    <string name="username_fill_notice_other">Some usernames could not be updated. The app will try again the next time you open it.</string>
     <string name="username_fill_notice_damaged">These chats could not have the names changed as the files are damaged. In order to preserve your chat, no data can be written to or changed on this chat. Please see the damaged chat log for details.</string>
     <string name="row_audio_debugging_title">Audio Debugging</string>
     <string name="row_audio_debugging_subtitle">Microphone, voice detection &amp; transcription diagnostics</string>

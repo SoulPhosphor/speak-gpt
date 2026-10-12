@@ -43,6 +43,7 @@ object UsernameFillNoticeDialog {
             if (UsernameFillState.Notice.RESTORE in pending.notices) parts.add(app.getString(R.string.username_fill_notice_restore))
             if (UsernameFillState.Notice.STORAGE in pending.notices) parts.add(app.getString(R.string.username_fill_notice_storage))
             if (UsernameFillState.Notice.LOCKED in pending.notices) parts.add(app.getString(R.string.username_fill_notice_locked))
+            if (UsernameFillState.Notice.OTHER in pending.notices) parts.add(app.getString(R.string.username_fill_notice_other))
             if (UsernameFillState.Notice.DAMAGED in pending.notices && damagedTitles.isNotEmpty()) {
                 parts.add(app.getString(R.string.username_fill_notice_damaged) + "\n\n" + damagedTitles.joinToString("\n"))
             }

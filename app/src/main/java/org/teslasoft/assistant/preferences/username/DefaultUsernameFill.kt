@@ -7,7 +7,6 @@
 
 package org.teslasoft.assistant.preferences.username
 
-import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder

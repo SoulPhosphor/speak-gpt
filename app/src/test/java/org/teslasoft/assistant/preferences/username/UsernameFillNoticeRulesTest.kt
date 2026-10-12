@@ -55,6 +55,12 @@ class UsernameFillNoticeRulesTest {
     }
 
     @Test
+    fun anUnclassifiedSaveFailureQueuesItsOwnNotice() {
+        val update = run(DefaultUsernameFill.RunOutcome(otherFailure = true))
+        assertEquals(setOf(Notice.OTHER), update.queued)
+    }
+
+    @Test
     fun retryIsNeededForEverythingButDamage() {
         assertTrue(DefaultUsernameFill.RunOutcome(restoreInProgress = true).needsRetry)
         assertTrue(DefaultUsernameFill.RunOutcome(locked = true).needsRetry)

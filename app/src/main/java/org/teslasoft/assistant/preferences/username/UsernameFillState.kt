@@ -28,7 +28,7 @@ object UsernameFillState {
     private const val KEY_QUEUED_DAMAGED = "queued_damaged"
     private const val KEY_SHOWN_DAMAGED = "shown_damaged"
 
-    enum class Notice { RESTORE, STORAGE, LOCKED, DAMAGED }
+    enum class Notice { RESTORE, STORAGE, LOCKED, OTHER, DAMAGED }
 
     data class Pending(val notices: Set<Notice>, val damagedChatIds: Set<String>)
 
@@ -132,6 +132,7 @@ object UsernameFillState {
             apply(Notice.RESTORE, outcome.restoreInProgress, resolvedWhenAbsent = true)
             apply(Notice.STORAGE, outcome.insufficientStorage, resolvedWhenAbsent = ranFully)
             apply(Notice.LOCKED, outcome.locked, resolvedWhenAbsent = ranFully)
+            apply(Notice.OTHER, outcome.otherFailure, resolvedWhenAbsent = ranFully)
 
             val newDamaged = outcome.damagedChatIds - shownDamaged
             val nowQueuedDamaged = queuedDamaged + newDamaged
