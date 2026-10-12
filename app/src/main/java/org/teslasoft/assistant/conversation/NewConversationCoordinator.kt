@@ -182,7 +182,7 @@ class NewConversationCoordinator(private val context: Context) {
      * already in it: a first commit still journaled, or a provisional
      * conversation outside the list whose history is not provably empty
      * (unreadable, or holding turns that orphan recovery could not commit).
-     * Unreadable state counts as unsettled.
+     * Unreadable or locked state counts as unsettled.
      */
     fun hasUnsettledProvisionalTurns(): Boolean = try {
         if (hasPendingFirstCommit()) {
@@ -194,7 +194,16 @@ class NewConversationCoordinator(private val context: Context) {
                 true
             } else {
                 val listedIds = listed.chats.mapTo(HashSet()) { ChatPreferences.storedChatId(it) }
-                pendingConversationIds().any { chatId ->
+                // A locked store reads as empty rather than failing, so check
+                // the lock state of the index and each candidate's settings.
+                val indexed = pendingIndex().all.keys.filter { it.isNotBlank() && it != INDEX_BACKFILLED_KEY }
+                val metadataLocked = SecurePrefs.isLockedName(PENDING_INDEX_FILE) ||
+                    indexed.any { chatId ->
+                        val settings = "$SETTINGS_PREFIX$chatId"
+                        SecurePrefs.get(app, settings)
+                        SecurePrefs.isLockedName(settings)
+                    }
+                metadataLocked || pendingConversationIds().any { chatId ->
                     if (chatId in listedIds) return@any false
                     val history = ChatPreferences.getChatPreferences()
                         .getChatByIdResult(app, chatId, DamagedChatOperation.NEW_CHAT)

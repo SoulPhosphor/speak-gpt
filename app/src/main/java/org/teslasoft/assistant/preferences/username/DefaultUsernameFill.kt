@@ -133,13 +133,32 @@ object DefaultUsernameFill {
             UsernameFillState.finish(context, RunOutcome(), complete = true)
             return
         }
+        val before = listedChatIds(context)
         val outcome = fill(context, name)
         // A new chat whose turns have not reached the chat list yet (first
         // save still pending, or an unlisted provisional chat that is
         // unreadable or holds turns) is not filled here; keep the fill pending
-        // so it is filled once listed.
+        // so it is filled once listed. A chat that joined the list during this
+        // pass may have been missed by it, so it keeps the fill pending too.
         val unsettled = NewConversationCoordinator(context).hasUnsettledProvisionalTurns()
-        UsernameFillState.finish(context, outcome, complete = !outcome.needsRetry && !unsettled)
+        val after = listedChatIds(context)
+        val joinedDuringPass = before == null || after == null || !before.containsAll(after)
+        UsernameFillState.finish(
+            context, outcome,
+            complete = !outcome.needsRetry && !unsettled && !joinedDuringPass
+        )
+    }
+
+    /** The listed chat ids, or null when the list cannot be read. */
+    private fun listedChatIds(context: Context): Set<String>? = try {
+        val listed = ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false)
+        if (ChatStorageHealth.isAuthoritative(listed.state)) {
+            listed.chats.mapTo(HashSet()) { ChatPreferences.storedChatId(it) }
+        } else {
+            null
+        }
+    } catch (_: Exception) {
+        null
     }
 
     private fun fill(context: Context, name: String): RunOutcome {
