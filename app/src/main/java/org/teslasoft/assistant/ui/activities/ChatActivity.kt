@@ -8658,6 +8658,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             "isBot" to false,
             ChatAdapter.KEY_MESSAGE_TIME to System.currentTimeMillis().toString()
         )
+        stampUserIdentity(first)
         val payload = arrayListOf(first)
         val result = NewConversationCoordinator(this).commitPendingConversation(
             PendingConversationState(chatId, chatName, ConversationMode.PLAYGROUND),
