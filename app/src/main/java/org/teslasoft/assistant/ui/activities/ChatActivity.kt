@@ -10998,16 +10998,43 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Locks a user message's label: the name that applies at send time,
      *  plus which identity supplied it so its style follows. */
     private fun stampUserIdentity(map: MutableMap<String, Any>) {
+        // The identity names load in the background when the chat opens. A
+        // message sent before that load has finished reads them directly, so
+        // it is never stamped with a name that is not the one in effect.
+        val rpId = preferences?.getChatRoleplayCharacterId().orEmpty()
+        val glamourId = preferences?.getChatUserPersonaId().orEmpty()
+        val loaded = rpId == activeRoleplayUserId && glamourId == activeGlamourId
+        val names = if (loaded) {
+            activeRoleplayUserName to activeGlamourDisplayName
+        } else {
+            identityNamesNow(rpId, glamourId)
+        }
         val identity = ChatSpeakerNames.activeUserIdentity(
-            roleplayId = activeRoleplayUserId,
-            roleplayName = activeRoleplayUserName,
-            glamourId = activeGlamourId,
-            glamourName = activeGlamourDisplayName,
+            roleplayId = rpId,
+            roleplayName = names.first,
+            glamourId = glamourId,
+            glamourName = names.second,
             defaultName = preferences?.getDefaultDisplayedUsername(),
             roleplayWins = preferences?.getRoleplayNamesReplaceGlamour() ?: true
         )
         identity.name?.let { map[ChatSpeakerNames.USER_NAME_KEY] = it }
         identity.sourceKey?.let { map[ChatSpeakerNames.USER_NAME_SOURCE_KEY] = it }
+    }
+
+    /** The Roleplay Character and Glamour names for these ids, read now.
+     *  A blank Glamour Display Name falls back to the Glamour's own Name. */
+    private fun identityNamesNow(rpId: String, glamourId: String): Pair<String?, String?> = try {
+        if (!MemoryStore.isProvisioned(this)) {
+            null to null
+        } else {
+            val store = MemoryStore.getInstance(this)
+            rpId.takeIf { it.isNotEmpty() }?.let { store.getRoleplayCharacter(it)?.name } to
+                glamourId.takeIf { it.isNotEmpty() }?.let { id ->
+                    store.getUserPersona(id)?.let { it.displayName?.takeIf(String::isNotBlank) ?: it.name }
+                }
+        }
+    } catch (_: Exception) {
+        null to null
     }
 
     private fun putMessage(message: String, isBot: Boolean) {
