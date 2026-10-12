@@ -270,7 +270,7 @@ class MainApplication : Application() {
                 // recovery is still unfinished, or it would fill histories
                 // about to be replaced.
                 if (!org.teslasoft.assistant.preferences.backup.ChatRestoreManager.hasPendingRecovery(this)) {
-                    DefaultUsernameFill.resumeIfPending(this)
+                    DefaultUsernameFill.onStartupSettled(this)
                 }
             } catch (_: Exception) { }
             try {

@@ -122,8 +122,22 @@ object DefaultUsernameFill {
      * the next app start. Damaged chats are skipped and never written.
      */
     fun runAll(context: Context) {
-        // A chat recovery still replacing histories at startup: filling now
-        // would write histories about to be replaced. Wait for the next start.
+        // Startup recovery (restores, the outage merge, rename and deletion
+        // recovery, new chats' first saves) can still be adding or replacing
+        // chats. A run queued before the app restarted waits for it; the
+        // startup thread resumes the fill once everything has settled.
+        synchronized(startupLock) {
+            if (!startupSettled) {
+                if (PortableRestoreProcessGate.blocksCurrentProcess(context)) {
+                    UsernameFillState.finish(context, RunOutcome(restoreInProgress = true), complete = false)
+                } else {
+                    UsernameFillState.deferToNextStart(context)
+                }
+                return
+            }
+        }
+        // A chat recovery still replacing histories: filling now would write
+        // histories about to be replaced. Wait for the next start.
         if (ChatRestoreManager.hasPendingRecovery(context)) {
             UsernameFillState.deferToNextStart(context)
             return
@@ -135,18 +149,36 @@ object DefaultUsernameFill {
         }
         val before = listedChatIds(context)
         val outcome = fill(context, name)
-        // A new chat whose turns have not reached the chat list yet (first
-        // save still pending, or an unlisted provisional chat that is
-        // unreadable or holds turns) is not filled here; keep the fill pending
-        // so it is filled once listed. A chat that joined the list during this
-        // pass may have been missed by it, so it keeps the fill pending too.
-        val unsettled = NewConversationCoordinator(context).hasUnsettledProvisionalTurns()
-        val after = listedChatIds(context)
-        val joinedDuringPass = before == null || after == null || !before.containsAll(after)
-        UsernameFillState.finish(
-            context, outcome,
-            complete = !outcome.needsRetry && !unsettled && !joinedDuringPass
-        )
+        // The completion decision is made under the chat list lock, which a
+        // new chat's first save also holds, so no chat can join the list
+        // between this check and the recorded result. A new chat whose turns
+        // have not reached the list yet (first save pending, or an unlisted
+        // provisional chat that is unreadable, locked or holds turns), or a
+        // chat that joined the list during the pass, keeps the fill pending
+        // so it is filled on a later start.
+        synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+            val unsettled = NewConversationCoordinator(context).hasUnsettledProvisionalTurns()
+            val after = listedChatIds(context)
+            val joinedDuringPass = before == null || after == null || !before.containsAll(after)
+            UsernameFillState.finish(
+                context, outcome,
+                complete = !outcome.needsRetry && !unsettled && !joinedDuringPass
+            )
+        }
+    }
+
+    private val startupLock = Any()
+    private var startupSettled = false
+
+    /**
+     * Called by the app's startup thread once every startup step that can
+     * restore, replace or add chats has finished: lets the fill run in this
+     * process and resumes one left pending (including a run that waited for
+     * this point). Not called while a chat recovery is still unfinished.
+     */
+    fun onStartupSettled(context: Context) {
+        synchronized(startupLock) { startupSettled = true }
+        resumeIfPending(context)
     }
 
     /** The listed chat ids, or null when the list cannot be read. */
