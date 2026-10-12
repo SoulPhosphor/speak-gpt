@@ -25,6 +25,7 @@ import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.util.Hash
 import java.io.File
@@ -137,6 +138,13 @@ object ReadableChatBackup {
                     val history = chatPreferences.getChatByIdResult(context, chatId, DamagedChatOperation.READABLE_BACKUP)
                     if (!ChatStorageHealth.isAuthoritative(history.state)) {
                         logUnreadable(context, "chat $chatId could not be read (state ${history.state})")
+                        return fail(staged, BuildResult.ChatsUnreadable)
+                    }
+                    // The chat's own username and selected companion name its
+                    // messages; a locked settings store reads as unset, so it
+                    // is unreadable here rather than silently exported without them.
+                    SecurePrefs.get(context, "settings.$chatId")
+                    if (SecurePrefs.isLockedName("settings.$chatId")) {
                         return fail(staged, BuildResult.ChatsUnreadable)
                     }
                     val messagesJson = gson.toJson(history.messages)
