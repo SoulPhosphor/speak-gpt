@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.preferences.backup
 
+import org.teslasoft.assistant.preferences.username.UsernameFillState
 import android.content.Context
 import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.preferences.RenameJournal
@@ -214,6 +215,11 @@ object ChatSetReplacementCoordinator {
             ChatSetSourceGeneration.advance(appContext) != null
         }.getOrDefault(false)
         if (!sourceGenerationAdvanced) return RebaseResult(false, false)
+
+        // The replaced histories may hold user messages without a stored name:
+        // keep the username fill (Apply to Previous Chats) pending so it runs
+        // over the new set once startup has settled.
+        runCatching { UsernameFillState.deferToNextStart(appContext) }
 
         // Step 10: evict cached handles for every replaced name (the chat list
         // plus each restored chat's history and settings).

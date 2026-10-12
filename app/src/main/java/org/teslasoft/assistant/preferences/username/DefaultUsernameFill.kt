@@ -17,6 +17,7 @@ import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.StartupHealth
 import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
+import org.teslasoft.assistant.preferences.backup.ChatSetReplacementCoordinator
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
@@ -146,6 +147,7 @@ object DefaultUsernameFill {
         val name = activeName(context)
             ?: return UsernameFillState.finish(context, RunOutcome(), complete = true)
         val before = listedChatIds(context)
+        val generation = chatSetGeneration(context)
         val outcome = fill(context, name)
         // The completion decision is made under the chat list lock, which a
         // new chat's first save and a chat-set replacement also hold, so the
@@ -155,8 +157,10 @@ object DefaultUsernameFill {
         //    pending, or an unlisted provisional chat that is unreadable,
         //    locked or holds turns);
         //  - a chat joined the list during the pass;
-        //  - a restore began during the pass (it may have put back histories
-        //    already filled);
+        //  - a restore began or replaced the chat set during the pass (it may
+        //    have put back histories already filled). A replacement that
+        //    lands after this decision marks the fill pending itself, under
+        //    the same lock;
         //  - storage-outage recovery has not fully settled (a deferred outage
         //    file can still bring chats back on a later start).
         return synchronized(ChatPreferences.CHAT_LIST_LOCK) {
@@ -164,7 +168,8 @@ object DefaultUsernameFill {
             val after = listedChatIds(context)
             val joinedDuringPass = before == null || after == null || !before.containsAll(after)
             val restoreStarted = PortableRestoreProcessGate.blocksCurrentProcess(context) ||
-                ChatRestoreManager.hasPendingRecovery(context)
+                ChatRestoreManager.hasPendingRecovery(context) ||
+                generation == null || chatSetGeneration(context) != generation
             val outageUnsettled = !StartupHealth.isRecoveryScanSettled(context)
             UsernameFillState.finish(
                 context, outcome,
@@ -186,6 +191,13 @@ object DefaultUsernameFill {
     fun onStartupSettled(context: Context) {
         synchronized(startupLock) { startupSettled = true }
         resumeIfPending(context)
+    }
+
+    /** The chat set's replacement counter, or null when it cannot be read. */
+    private fun chatSetGeneration(context: Context): Long? = try {
+        ChatSetReplacementCoordinator.sourceGeneration(context)
+    } catch (_: Exception) {
+        null
     }
 
     /** The listed chat ids, or null when the list cannot be read. */

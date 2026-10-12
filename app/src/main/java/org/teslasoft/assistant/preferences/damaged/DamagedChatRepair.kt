@@ -123,13 +123,33 @@ object DamagedChatRepair {
             val current = chats.getChatByIdResult(context, chatId, operation)
             val readable = ChatStorageHealth.isAuthoritative(current.state)
             if (current.state == ChatStorageHealth.ReadState.LOCKED) return Outcome.NOT_ATTEMPTED
-            val merged = DamagedChatSalvage.merge(backupMessages, if (readable) current.messages else emptyList())
+            // Saved-aside contents not yet used by a repair are merged in too,
+            // then recorded as used, so a later repair never replays them and
+            // brings back messages deleted after this replacement.
+            val consumed = consumedCopies(context)
+            val savedCopies = SnapshotRegistry.entries(context)
+                .filter { it.chatId == chatId && it.origin == SnapshotRegistry.ORIGIN_CORRUPT_JSON && it.id !in consumed }
+                .sortedBy { it.createdAt }
+            var merged = DamagedChatSalvage.merge(backupMessages, if (readable) current.messages else emptyList())
+            for (copy in savedCopies) {
+                val prefs = SecurePrefs.get(context, copy.snapshotName)
+                if (SecurePrefs.isLockedName(copy.snapshotName)) return Outcome.NOT_ATTEMPTED
+                val recovered = DamagedChatSalvage.salvage(
+                    try { prefs.getString("chat", null) } catch (_: Exception) { null }
+                )
+                merged = DamagedChatSalvage.merge(recovered, merged)
+            }
             if (!readable) {
                 // The unreadable contents are preserved (verified copy above);
                 // this explicit replacement is what lifts the write block.
                 ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
             }
-            writeVerified(context, chatId, operation, merged, rollbackTo = if (readable) current.messages else null, preserved)
+            val outcome = writeVerified(context, chatId, operation, merged, rollbackTo = if (readable) current.messages else null, preserved)
+            if (outcome == Outcome.REPAIRED && !markConsumed(context, savedCopies.map { it.id })) {
+                Outcome.NOT_ATTEMPTED
+            } else {
+                outcome
+            }
         }
     }
 

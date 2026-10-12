@@ -45,7 +45,7 @@ object UsernameFillState {
 
     /** Keeps the fill pending for the next app start without queuing a
      *  notice. Returns whether that was durably recorded. */
-    internal fun deferToNextStart(context: Context): Boolean = try {
+    fun deferToNextStart(context: Context): Boolean = try {
         synchronized(lock) { prefs(context).edit().putBoolean(KEY_RETRY, true).commit() }
     } catch (_: Exception) {
         false
