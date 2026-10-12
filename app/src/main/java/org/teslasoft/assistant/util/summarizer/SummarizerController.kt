@@ -539,7 +539,6 @@ class SummarizerController(
             withContext(Dispatchers.IO) {
                 val request = ChatCompletionRequest(
                     model = ModelId(model),
-                    maxTokens = 128,
                     messages = messages
                 )
                 withSummarizerUsage(
