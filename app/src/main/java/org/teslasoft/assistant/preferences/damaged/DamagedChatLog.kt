@@ -10,6 +10,7 @@ package org.teslasoft.assistant.preferences.damaged
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.SecurePrefs
 
@@ -131,18 +132,28 @@ object DamagedChatLog {
     }
 
     /**
-     * The detections to show, oldest first. Chats that no longer exist in the
-     * chat list (deleted, or replaced by a restore) are left out; when the
-     * chat list cannot be read, everything recorded is shown.
+     * The detections to show, oldest first. Chats that no longer exist (not in
+     * the chat list and not a new chat still waiting for its first save) are
+     * left out; when the chat list cannot be read, everything recorded is
+     * shown.
      */
     fun detections(context: Context): List<Detection> {
         val all = try { synchronized(lock) { read(context) } } catch (_: Exception) { emptyList() }
         val existing = chatListRows(context)?.map { ChatPreferences.storedChatId(it) }?.toSet()
             ?: return all
         return all.mapNotNull { d ->
-            val kept = d.chats.filter { it.chatId in existing }
+            val kept = d.chats.filter { it.chatId in existing || isProvisional(context, it.chatId) }
             if (kept.isEmpty()) null else d.copy(chats = kept)
         }
+    }
+
+    /** A new chat that holds files but is not in the chat list yet (its first
+     *  save has not been folded into the list). */
+    internal fun isProvisional(context: Context, chatId: String): Boolean = try {
+        SecurePrefs.encryptedFile(context, "settings.$chatId").exists() &&
+            NewConversationCoordinator(context).isPending(chatId)
+    } catch (_: Exception) {
+        false
     }
 
     private fun chatListRows(context: Context): List<Map<String, String>>? {

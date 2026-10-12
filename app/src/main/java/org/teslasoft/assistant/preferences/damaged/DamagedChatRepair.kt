@@ -152,6 +152,8 @@ object DamagedChatRepair {
         if (saveAndVerify(context, chatId, operation, messages)) return Outcome.REPAIRED
         val undone = rollbackTo != null && saveAndVerify(context, chatId, operation, rollbackTo)
         if (!undone) {
+            // Writes stay blocked whether or not the copy went back; when it
+            // did not, the verified copy is still kept in saved copies.
             restoreOriginal(context, "chat_$chatId", preserved.copy)
             ChatStorageHealth.recordReadFailure(context, "chat_$chatId", null)
         }
@@ -197,7 +199,8 @@ object DamagedChatRepair {
      *  chat had no file, so there was nothing to lose. */
     private class Preserved(val copy: File?)
 
-    /** Null unless the chat may be changed: it still exists, is not open on
+    /** Null unless the chat may be changed: it still exists (listed, or a new
+     *  chat not yet in the list), is not open on
      *  screen, no restore is running, and its file was copied aside and
      *  verified byte for byte. */
     private fun prepare(context: Context, chatId: String): Preserved? {
@@ -205,7 +208,9 @@ object DamagedChatRepair {
         if (DefaultUsernameFill.isOpen(chatId)) return null
         val listed = ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false)
         if (!ChatStorageHealth.isAuthoritative(listed.state)) return null
-        if (listed.chats.none { ChatPreferences.storedChatId(it) == chatId }) return null
+        if (listed.chats.none { ChatPreferences.storedChatId(it) == chatId } &&
+            !DamagedChatLog.isProvisional(context, chatId)
+        ) return null
         return preserveVerified(context, "chat_$chatId")
     }
 
@@ -233,18 +238,34 @@ object DamagedChatRepair {
         null
     }
 
-    /** Writes the verified copy back over the chat's file and checks it
-     *  matches byte for byte, so a failed attempt leaves the file exactly as
-     *  it was; the copy itself is kept. Writes stay blocked (the caller
-     *  records a read failure) until the app restarts and reads it afresh. */
-    private fun restoreOriginal(context: Context, name: String, copy: File?) {
-        if (copy == null) return
-        try {
-            val target = SecurePrefs.encryptedFile(context, name)
-            copy.copyTo(target, overwrite = true)
-            if (!sha256(target).contentEquals(sha256(copy))) copy.copyTo(target, overwrite = true)
-            SecurePrefs.invalidateCache(listOf(name))
-        } catch (_: Exception) { }
+    /** Puts the chat's file back exactly as it was and reports whether it
+     *  verifiably is. The copy is written to a temporary file beside the
+     *  chat's file, checked byte for byte, and only then renamed over it, so
+     *  the live file is never left half-written; the result is checked again
+     *  after the rename. When the chat had no file, the attempt's file is
+     *  removed. The verified copy itself is always kept. */
+    private fun restoreOriginal(context: Context, name: String, copy: File?): Boolean = try {
+        val target = SecurePrefs.encryptedFile(context, name)
+        val restored = if (copy == null) {
+            !target.exists() || target.delete()
+        } else {
+            val expected = sha256(copy)
+            (1..2).any { restoreOnce(copy, target, expected) }
+        }
+        SecurePrefs.invalidateCache(listOf(name))
+        restored
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun restoreOnce(copy: File, target: File, expected: ByteArray): Boolean = try {
+        val temp = File(target.parentFile, "${target.name}.restore")
+        copy.copyTo(temp, overwrite = true)
+        val placed = sha256(temp).contentEquals(expected) && temp.renameTo(target)
+        if (!placed) temp.delete()
+        placed && sha256(target).contentEquals(expected)
+    } catch (_: Exception) {
+        false
     }
 
     private fun sha256(file: File): ByteArray {

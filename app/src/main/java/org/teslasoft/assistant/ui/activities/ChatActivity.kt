@@ -8781,6 +8781,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     "isBot" to false,
                     ChatAdapter.KEY_MESSAGE_TIME to System.currentTimeMillis().toString()
                 )
+                stampUserIdentity(first)
                 val firstIncludes = (preparedTurn?.pendingIncludes ?: pendingIncludes)
                     .map { it.forSentMessage() }
                 if (firstIncludes.isNotEmpty()) {
@@ -10989,6 +10990,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?: TokenUsageAccounting.PROVIDER_NOT_REPORTED
     }
 
+    /** Locks a user message's label: the name that applies at send time,
+     *  plus which identity supplied it so its style follows. */
+    private fun stampUserIdentity(map: MutableMap<String, Any>) {
+        val identity = ChatSpeakerNames.activeUserIdentity(
+            roleplayId = activeRoleplayUserId,
+            roleplayName = activeRoleplayUserName,
+            glamourId = activeGlamourId,
+            glamourName = activeGlamourDisplayName,
+            defaultName = preferences?.getDefaultDisplayedUsername(),
+            roleplayWins = preferences?.getRoleplayNamesReplaceGlamour() ?: true
+        )
+        identity.name?.let { map[ChatSpeakerNames.USER_NAME_KEY] = it }
+        identity.sourceKey?.let { map[ChatSpeakerNames.USER_NAME_SOURCE_KEY] = it }
+    }
+
     private fun putMessage(message: String, isBot: Boolean) {
         val map: HashMap<String, Any> = HashMap()
 
@@ -11014,18 +11030,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val companion = currentCompanionLabel()
             if (companion.isNotBlank()) map[ChatAdapter.KEY_COMPANION_NAME] = companion
         } else {
-            // Same locking for the user's own label: the name that applies at
-            // send time, plus which identity supplied it so its style follows.
-            val identity = ChatSpeakerNames.activeUserIdentity(
-                roleplayId = activeRoleplayUserId,
-                roleplayName = activeRoleplayUserName,
-                glamourId = activeGlamourId,
-                glamourName = activeGlamourDisplayName,
-                defaultName = preferences?.getDefaultDisplayedUsername(),
-                roleplayWins = preferences?.getRoleplayNamesReplaceGlamour() ?: true
-            )
-            identity.name?.let { map[ChatSpeakerNames.USER_NAME_KEY] = it }
-            identity.sourceKey?.let { map[ChatSpeakerNames.USER_NAME_SOURCE_KEY] = it }
+            stampUserIdentity(map)
         }
 
         messages.add(map)
