@@ -165,13 +165,28 @@ object DamagedChatLog {
         }
     }
 
+    /** The log's latest contents when saving them failed; kept in this
+     *  process and saved again on every later access until a save lands, so
+     *  a failed save never drops a detection while the app is running. */
+    private var unsaved: List<Detection>? = null
+
     private fun read(context: Context): List<Detection> {
+        unsaved?.let { pending ->
+            if (!commit(context, pending)) return pending
+            unsaved = null
+        }
         val raw = SecurePrefs.get(context, FILE).getString(KEY, null) ?: return emptyList()
         return decode(raw)
     }
 
     private fun write(context: Context, detections: List<Detection>) {
+        unsaved = if (commit(context, detections)) null else detections
+    }
+
+    private fun commit(context: Context, detections: List<Detection>): Boolean = try {
         SecurePrefs.get(context, FILE).edit().putString(KEY, encode(detections)).commit()
+    } catch (_: Exception) {
+        false
     }
 
     internal fun encode(detections: List<Detection>): String = JSONArray().apply {
