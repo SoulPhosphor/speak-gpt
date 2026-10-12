@@ -60,9 +60,6 @@ object ChatExportDialog {
         export.setOnClickListener {
             val options = ChatExportOptions(
                 format = selectedFormat,
-                includeDate = body.findViewById<MaterialSwitch>(R.id.chat_export_include_date).isChecked,
-                includeTime = body.findViewById<MaterialSwitch>(R.id.chat_export_include_time).isChecked,
-                includeModel = body.findViewById<MaterialSwitch>(R.id.chat_export_include_model).isChecked,
                 includeUserTokenCount = body.findViewById<MaterialSwitch>(R.id.chat_export_include_user_tokens).isChecked,
                 includeCompanionTokenCount =
                     body.findViewById<MaterialSwitch>(R.id.chat_export_include_companion_tokens).isChecked

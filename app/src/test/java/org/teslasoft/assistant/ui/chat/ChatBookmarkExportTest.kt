@@ -60,7 +60,8 @@ class ChatBookmarkExportTest {
         val root = JsonParser.parseString(json).asJsonObject
         assertEquals("Research", root["folder_name"].asString)
         assertTrue(root["messages"].asJsonArray[0].asJsonObject["bookmark"].asBoolean)
-        assertEquals("Chat\n\n[Bookmark]\nAssistant:\nAnswer\n", ReadableChatFormats.formatText("Chat", raw))
+        val names = ReadableChatFormats.SpeakerNames(null, "User", "Assistant")
+        assertEquals("Chat\n\n[Bookmark]\nAssistant\nAnswer\n", ReadableChatFormats.formatText("Chat", raw, names))
     }
 
     @Test fun incrementalBackupDetectsBookmarkRemovalAndFolderRename() {

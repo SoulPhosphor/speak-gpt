@@ -28,9 +28,6 @@ enum class ChatExportFormat(
 
 data class ChatExportOptions(
     val format: ChatExportFormat = ChatExportFormat.JSON,
-    val includeDate: Boolean = false,
-    val includeTime: Boolean = false,
-    val includeModel: Boolean = false,
     val includeUserTokenCount: Boolean = false,
     val includeCompanionTokenCount: Boolean = false
 )
@@ -94,9 +91,10 @@ object ChatExportFormatter {
 
     /**
      * The JSON export remains an array of message records, matching the
-     * dormant chat importer’s historical top-level shape while adding only
-     * the fields selected in the export dialog. Bookmark flags, stable message
-     * IDs, and available folder names always travel for downstream import.
+     * dormant chat importer’s historical top-level shape. Date, time, and
+     * the companion's model always travel; token counts only when selected in
+     * the export dialog. Bookmark flags, stable message IDs, and available
+     * folder names always travel for downstream import.
      */
     fun formatJson(
         messages: List<ChatExportMessage>,
@@ -142,20 +140,11 @@ object ChatExportFormatter {
         timeZone: TimeZone
     ): LinkedHashMap<String, String> {
         val result = LinkedHashMap<String, String>()
-        val timestamp = message.timestampMillis?.let { Date(it) }
-        if (options.includeDate && timestamp != null) {
-            result["date"] = DateFormat.getDateInstance(DateFormat.MEDIUM, locale).apply {
-                this.timeZone = timeZone
-            }
-                .format(timestamp)
+        message.timestampMillis?.let { millis ->
+            result["date"] = formatDate(millis, locale, timeZone)
+            result["time"] = formatTime(millis, locale, timeZone)
         }
-        if (options.includeTime && timestamp != null) {
-            result["time"] = DateFormat.getTimeInstance(DateFormat.SHORT, locale).apply {
-                this.timeZone = timeZone
-            }
-                .format(timestamp)
-        }
-        if (options.includeModel && message.isCompanion) {
+        if (message.isCompanion) {
             message.model?.trim()?.takeIf { it.isNotEmpty() }?.let { result["model"] = it }
         }
         val includeTokens = if (message.isCompanion) {
@@ -169,4 +158,13 @@ object ChatExportFormatter {
         return result
     }
 
+    fun formatDate(millis: Long, locale: Locale, timeZone: TimeZone): String =
+        DateFormat.getDateInstance(DateFormat.MEDIUM, locale)
+            .apply { this.timeZone = timeZone }
+            .format(Date(millis))
+
+    fun formatTime(millis: Long, locale: Locale, timeZone: TimeZone): String =
+        DateFormat.getTimeInstance(DateFormat.SHORT, locale)
+            .apply { this.timeZone = timeZone }
+            .format(Date(millis))
 }

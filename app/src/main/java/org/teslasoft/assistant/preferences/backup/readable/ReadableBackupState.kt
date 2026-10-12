@@ -46,6 +46,7 @@ object ReadableBackupState {
     private const val KEY_SCOPE_ALL = "readable.scope_all"
     private const val KEY_FORMAT = "readable.format"
     private const val KEY_CATEGORIES = "readable.categories"
+    private const val KEY_INCLUDE_FOLDERS = "readable.include_folders"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -138,5 +139,13 @@ object ReadableBackupState {
                 putStringSet(KEY_CATEGORIES, categories.mapTo(LinkedHashSet()) { it.name })
             }
         } catch (_: Exception) { }
+    }
+
+    /** Include Chat Folder Location; off until the user turns it on. */
+    fun getIncludeFolders(context: Context): Boolean =
+        try { prefs(context).getBoolean(KEY_INCLUDE_FOLDERS, false) } catch (_: Exception) { false }
+
+    fun setIncludeFolders(context: Context, include: Boolean) {
+        try { prefs(context).edit(commit = true) { putBoolean(KEY_INCLUDE_FOLDERS, include) } } catch (_: Exception) { }
     }
 }

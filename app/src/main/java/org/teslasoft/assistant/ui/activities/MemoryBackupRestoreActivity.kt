@@ -216,6 +216,7 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
     private var btnReadableScope: TextView? = null
     private var btnReadableFormat: TextView? = null
     private var btnReadableContent: TextView? = null
+    private var switchReadableIncludeFolders: MaterialSwitch? = null
     private var btnReadableCreate: MaterialButton? = null
     private var textReadableStatus: TextView? = null
 
@@ -453,6 +454,7 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         btnReadableScope = findViewById(R.id.btn_readable_scope)
         btnReadableFormat = findViewById(R.id.btn_readable_format)
         btnReadableContent = findViewById(R.id.btn_readable_content)
+        switchReadableIncludeFolders = findViewById(R.id.switch_readable_include_folders)
         btnReadableCreate = findViewById(R.id.btn_readable_create)
         textReadableStatus = findViewById(R.id.text_readable_status)
 
@@ -1790,6 +1792,10 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         btnReadableScope?.setOnClickListener { pickReadableScope() }
         btnReadableFormat?.setOnClickListener { pickReadableFormat() }
         btnReadableContent?.setOnClickListener { pickReadableContent() }
+        switchReadableIncludeFolders?.isChecked = ReadableBackupState.getIncludeFolders(this)
+        switchReadableIncludeFolders?.setOnCheckedChangeListener { _, include ->
+            ReadableBackupState.setIncludeFolders(this, include)
+        }
         btnReadableCreate?.setOnClickListener { onCreateReadableBackup() }
         showReadableLastSuccess()
     }
@@ -1908,9 +1914,10 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         val allChats = readableScopeAll
         val format = readableFormat
         val categories = readableCategories
+        val includeFolders = switchReadableIncludeFolders?.isChecked == true
         runOffThread {
             val staged = File(cacheDir, "readable_stage_${System.nanoTime()}.zip")
-            when (val result = ReadableDataBackup.build(this, staged, allChats, format, categories)) {
+            when (val result = ReadableDataBackup.build(this, staged, allChats, format, categories, includeFolders)) {
                 is ReadableDataBackup.Result.NothingNew -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.backup_readable_none))

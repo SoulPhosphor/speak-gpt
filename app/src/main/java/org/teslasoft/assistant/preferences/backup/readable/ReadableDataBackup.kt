@@ -52,7 +52,8 @@ object ReadableDataBackup {
         destination: File,
         allChats: Boolean,
         chatFormat: ReadableChatBackup.Format,
-        categories: Set<Category>
+        categories: Set<Category>,
+        includeFolders: Boolean
     ): Result {
         if (categories.isEmpty()) return Result.NothingToBackUp
         val staging = File(destination.parentFile, destination.name + ".parts")
@@ -65,7 +66,7 @@ object ReadableDataBackup {
         try {
             if (Category.CHATS in categories) {
                 val chatZip = File(staging, "chats.zip")
-                when (val result = ReadableChatBackup.build(context, chatZip, allChats, chatFormat)) {
+                when (val result = ReadableChatBackup.build(context, chatZip, allChats, chatFormat, includeFolders)) {
                     is ReadableChatBackup.BuildResult.Ok -> {
                         fingerprints = result.fingerprints
                         collectZip(chatZip, "chats/", sources)

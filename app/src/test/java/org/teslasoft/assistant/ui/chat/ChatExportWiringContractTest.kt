@@ -30,13 +30,18 @@ class ChatExportWiringContractTest {
     }
 
     @Test
-    fun exportOptionsAreSlideSwitchesAndStartOff() {
+    fun onlyTheTokenOptionsAreSlideSwitchesAndStartOff() {
         val layout = source("src/main/res/layout/dialog_chat_export.xml")
 
-        assertEquals(5, Regex("materialswitch.MaterialSwitch").findAll(layout).count())
-        assertEquals(5, Regex("Widget.App.Row.Toggle").findAll(layout).count())
-        assertEquals(5, Regex("Widget.App.Row.Switch").findAll(layout).count())
-        assertEquals(5, Regex("android:checked=\"false\"").findAll(layout).count())
+        assertEquals(2, Regex("materialswitch.MaterialSwitch").findAll(layout).count())
+        assertEquals(2, Regex("Widget.App.Row.Toggle").findAll(layout).count())
+        assertEquals(2, Regex("Widget.App.Row.Switch").findAll(layout).count())
+        assertEquals(2, Regex("android:checked=\"false\"").findAll(layout).count())
+        assertTrue(layout.contains("@+id/chat_export_include_user_tokens"))
+        assertTrue(layout.contains("@+id/chat_export_include_companion_tokens"))
+        assertFalse(layout.contains("chat_export_include_date"))
+        assertFalse(layout.contains("chat_export_include_time"))
+        assertFalse(layout.contains("chat_export_include_model"))
         assertFalse(layout.contains("MaterialCheckBox"))
     }
 
@@ -82,7 +87,7 @@ class ChatExportWiringContractTest {
         assertTrue(speakerNames.contains("const val USER_NAME_KEY = \"userName\""))
         assertTrue(speakerNames.contains("context.getString(R.string.chat_role_user)"))
         assertTrue(strings.contains("<string name=\"chat_menu_export\">Export Chat</string>"))
-        assertTrue(strings.contains("<string name=\"chat_export_cancel\">Cancel Export</string>"))
+        assertTrue(strings.contains("<string name=\"chat_export_cancel\">Cancel</string>"))
         assertTrue(strings.contains("<string name=\"chat_export_action\">Export</string>"))
         assertTrue(strings.contains("<string name=\"chat_delete_title\">Delete Chat</string>"))
     }

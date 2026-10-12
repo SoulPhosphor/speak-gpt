@@ -16,11 +16,15 @@
 
 package org.teslasoft.assistant.preferences.backup.readable
 
+import com.google.gson.Gson
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * The pure Human-Readable Chat Backup rules (owner directive, July 22 2026):
@@ -84,18 +88,124 @@ class ReadableChatFormatsTest {
 
     // ---- formats ----
 
+    private val fallbackNames = ReadableChatFormats.SpeakerNames(
+        currentCompanion = "Moon",
+        userFallback = "User",
+        companionFallback = "Assistant"
+    )
+
     @Test
-    fun textFormatLabelsSpeakers() {
+    fun textFormatUsesTheNamesShownWhenEachMessageWasSent() {
         val text = ReadableChatFormats.formatText(
             "My Chat",
             listOf(
-                mapOf("message" to "hello", "isBot" to false),
-                mapOf("message" to "hi there", "isBot" to true)
-            )
+                mapOf("message" to "hello", "isBot" to false, "userName" to "Robin"),
+                mapOf("message" to "hi there", "isBot" to true, "companionName" to "Sol"),
+                mapOf("message" to "renamed", "isBot" to false, "userName" to "Wren"),
+                mapOf("message" to "older reply", "isBot" to true),
+                mapOf("message" to "unnamed", "isBot" to false)
+            ),
+            fallbackNames
         )
         assertTrue(text.startsWith("My Chat\n"))
-        assertTrue(text.contains("You:\nhello"))
-        assertTrue(text.contains("Assistant:\nhi there"))
+        assertTrue(text.contains("\nRobin\nhello\n"))
+        assertTrue(text.contains("\nSol\nhi there\n"))
+        assertTrue(text.contains("\nWren\nrenamed\n"))
+        assertTrue(text.contains("\nMoon\nolder reply\n"))
+        assertTrue(text.contains("\nUser\nunnamed\n"))
+        assertFalse(text.contains("You:"))
+        assertFalse(text.contains("Assistant:"))
+    }
+
+    @Test
+    fun textFormatAlwaysCarriesDateTimeAndTheCompanionModel() {
+        val text = ReadableChatFormats.formatText(
+            "Chat",
+            listOf(
+                mapOf("message" to "q", "isBot" to false, "messageTime" to "0"),
+                mapOf("message" to "a", "isBot" to true, "messageTime" to "0", "responseModel" to "provider/model",
+                    "responseTokens" to "42")
+            ),
+            fallbackNames,
+            Locale.US,
+            TimeZone.getTimeZone("UTC")
+        )
+        val lines = text.lines()
+        assertEquals("User", lines[2])
+        assertTrue(lines[3].startsWith("Jan 1, 1970 12:00"))
+        assertFalse(lines[3].contains("provider/model"))
+        assertEquals("Moon", lines[6])
+        assertTrue(lines[7].startsWith("Jan 1, 1970 12:00"))
+        assertTrue(lines[7].endsWith(" · provider/model"))
+        assertFalse(text.contains("42"))
+        assertFalse(text.contains("Tokens"))
+    }
+
+    @Test
+    fun jsonRecordsDropEveryTokenFieldAtAnyDepth() {
+        val variant = mapOf("message" to "v1", "responseTokens" to "9", "visibleTextTokenEstimate" to "3")
+        val records = ReadableChatFormats.jsonRecords(
+            listOf(
+                mapOf(
+                    "message" to "a", "isBot" to true, "messageTime" to "0",
+                    "responseModel" to "provider/model",
+                    "responseTokens" to "42", "visibleTextTokenEstimate" to "40",
+                    "tokenUsageRecords" to "[]", "reasoningTokens" to "7",
+                    "variants" to listOf(variant)
+                )
+            ),
+            fallbackNames,
+            Locale.US,
+            TimeZone.getTimeZone("UTC")
+        )
+        val json = Gson().toJson(records)
+        for (key in listOf("responseTokens", "visibleTextTokenEstimate", "tokenUsageRecords", "reasoningTokens")) {
+            assertFalse("$key must not be exported", json.contains(key))
+        }
+        val record = records.single()
+        assertEquals("Moon", record["name"])
+        assertEquals("Jan 1, 1970", record["date"])
+        assertTrue(record.containsKey("time"))
+        assertEquals("provider/model", record["model"])
+        assertTrue(json.contains("\"v1\""))
+    }
+
+    @Test
+    fun userRecordsCarryNoModel() {
+        val record = ReadableChatFormats.jsonRecords(
+            listOf(mapOf("message" to "q", "isBot" to false, "responseModel" to "x")),
+            fallbackNames
+        ).single()
+        assertFalse(record.containsKey("model"))
+        assertEquals("User", record["name"])
+    }
+
+    // ---- folder locations ----
+
+    @Test
+    fun entryPathsStayFlatWhenFolderLocationsAreOff() {
+        val paths = ReadableChatFormats.assignEntryPaths(
+            listOf("Plan", "Plan"), listOf("Work", "Home"), includeFolders = false
+        )
+        assertEquals(listOf("Plan", "Plan-2"), paths)
+    }
+
+    @Test
+    fun entryPathsUseChatFoldersWhenIncluded() {
+        val paths = ReadableChatFormats.assignEntryPaths(
+            listOf("Plan", "Plan", "Plan", "Loose", "Notes"),
+            listOf("Work", "Home", "Work", null, "work"),
+            includeFolders = true
+        )
+        assertEquals(listOf("Work/Plan", "Home/Plan", "Work/Plan-2", "Loose", "Work/Notes"), paths)
+    }
+
+    @Test
+    fun folderDirectoriesAreSanitized() {
+        val paths = ReadableChatFormats.assignEntryPaths(
+            listOf("Plan"), listOf("A/B: C"), includeFolders = true
+        )
+        assertEquals(listOf("AB C/Plan"), paths)
     }
 
     @Test

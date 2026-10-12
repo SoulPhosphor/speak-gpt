@@ -30,57 +30,9 @@
         </LinearLayout>
 
         <LinearLayout
-            android:id="@+id/chat_export_row_include_date"
+            android:id="@+id/chat_export_row_include_user_tokens"
             style="@style/Widget.App.Row.Toggle"
             android:layout_marginTop="12dp">
-
-            <LinearLayout style="@style/Widget.App.Row.TextColumn">
-                <TextView
-                    style="@style/Widget.App.Row.Title"
-                    android:text="@string/chat_export_include_date" />
-            </LinearLayout>
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/chat_export_include_date"
-                style="@style/Widget.App.Row.Switch"
-                android:checked="false" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/chat_export_row_include_time"
-            style="@style/Widget.App.Row.Toggle">
-
-            <LinearLayout style="@style/Widget.App.Row.TextColumn">
-                <TextView
-                    style="@style/Widget.App.Row.Title"
-                    android:text="@string/chat_export_include_time" />
-            </LinearLayout>
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/chat_export_include_time"
-                style="@style/Widget.App.Row.Switch"
-                android:checked="false" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/chat_export_row_include_model"
-            style="@style/Widget.App.Row.Toggle">
-
-            <LinearLayout style="@style/Widget.App.Row.TextColumn">
-                <TextView
-                    style="@style/Widget.App.Row.Title"
-                    android:text="@string/chat_export_include_model" />
-            </LinearLayout>
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/chat_export_include_model"
-                style="@style/Widget.App.Row.Switch"
-                android:checked="false" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/chat_export_row_include_user_tokens"
-            style="@style/Widget.App.Row.Toggle">
 
             <LinearLayout style="@style/Widget.App.Row.TextColumn">
                 <TextView

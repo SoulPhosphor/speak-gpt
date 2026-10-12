@@ -32,7 +32,6 @@ class ChatExportFormatterTest {
             messages,
             ChatExportOptions(
                 format = ChatExportFormat.TEXT,
-                includeModel = true,
                 includeUserTokenCount = true,
                 includeCompanionTokenCount = true
             )
@@ -46,7 +45,7 @@ class ChatExportFormatterTest {
     }
 
     @Test
-    fun dateAndTimeShareOneMetadataSegmentWithoutASeparatorBetweenThem() {
+    fun dateAndTimeAreAlwaysIncludedInOneMetadataSegment() {
         val result = ChatExportFormatter.formatText(
             listOf(
                 ChatExportMessage(
@@ -56,11 +55,7 @@ class ChatExportFormatterTest {
                     timestampMillis = 0L
                 )
             ),
-            ChatExportOptions(
-                format = ChatExportFormat.TEXT,
-                includeDate = true,
-                includeTime = true
-            ),
+            ChatExportOptions(format = ChatExportFormat.TEXT),
             locale = Locale.US,
             timeZone = TimeZone.getTimeZone("UTC")
         )
@@ -72,7 +67,7 @@ class ChatExportFormatterTest {
     }
 
     @Test
-    fun disabledFieldsAreNotWrittenToJson() {
+    fun jsonAlwaysCarriesDateTimeAndModelButTokensOnlyWhenSelected() {
         val result = ChatExportFormatter.formatJson(
             listOf(
                 ChatExportMessage(
@@ -93,9 +88,9 @@ class ChatExportFormatterTest {
         assertEquals("reply", record.get("message").asString)
         assertEquals("Moon", record.get("name").asString)
         assertTrue(record.has("isBot"))
-        assertFalse(record.has("date"))
-        assertFalse(record.has("time"))
-        assertFalse(record.has("model"))
+        assertEquals("Jan 1, 1970", record.get("date").asString)
+        assertTrue(record.has("time"))
+        assertEquals("provider/model", record.get("model").asString)
         assertFalse(record.has("tokens"))
     }
 
