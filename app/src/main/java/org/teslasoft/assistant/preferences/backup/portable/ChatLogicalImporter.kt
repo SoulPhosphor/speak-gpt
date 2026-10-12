@@ -7,7 +7,6 @@
 
 package org.teslasoft.assistant.preferences.backup.portable
 
-import org.teslasoft.assistant.preferences.username.UsernameFillState
 import android.content.Context
 import com.google.gson.Gson
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -111,9 +110,6 @@ object ChatLogicalImporter {
                 .putString("data", gson.toJson(plan.chats.map { it.listRow }))
                 .commit()
             if (!listCommitted) return Outcome.Failed(FailureStage.CHAT_LIST, null)
-            // The imported histories may hold user messages without a stored
-            // name: keep the username fill (Apply to Previous Chats) pending.
-            runCatching { UsernameFillState.deferToNextStart(app) }
 
             return Outcome.Ok(
                 Report(

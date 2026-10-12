@@ -159,8 +159,9 @@ object DefaultUsernameFill {
         //  - a chat joined the list during the pass;
         //  - a restore began or replaced the chat set during the pass (it may
         //    have put back histories already filled). A replacement that
-        //    lands after this decision marks the fill pending itself, under
-        //    the same lock;
+        //    lands after this decision changes the chat set's counter, which
+        //    no longer matches the one recorded here, so the next start runs
+        //    the fill again;
         //  - storage-outage recovery has not fully settled (a deferred outage
         //    file can still bring chats back on a later start).
         return synchronized(ChatPreferences.CHAT_LIST_LOCK) {
@@ -174,7 +175,8 @@ object DefaultUsernameFill {
             UsernameFillState.finish(
                 context, outcome,
                 complete = !outcome.needsRetry && !unsettled && !joinedDuringPass &&
-                    !restoreStarted && !outageUnsettled
+                    !restoreStarted && !outageUnsettled,
+                filledGeneration = generation
             )
         }
     }
@@ -294,10 +296,17 @@ object DefaultUsernameFill {
     private const val SPACE_MARGIN_BYTES = 1L shl 20
 
     /** Called on app start once any restore recovery has finished
-     *  successfully: picks up a retry left by an earlier run. */
+     *  successfully: picks up a retry left by an earlier run, or reruns the
+     *  fill when a restore replaced the chat set since it last completed. */
     fun resumeIfPending(context: Context) {
-        if (!UsernameFillState.retryPending(context)) return
-        if (activeName(context) == null) {
+        val name = activeName(context)
+        // A restore that replaced the chat set since the last completed fill
+        // (or a fill never completed) means the current chats may hold
+        // unfilled messages.
+        val chatSetChanged = name != null &&
+            UsernameFillState.filledGeneration(context) != chatSetGeneration(context)
+        if (!UsernameFillState.retryPending(context) && !chatSetChanged) return
+        if (name == null) {
             UsernameFillState.finish(context, RunOutcome(), complete = true)
             return
         }

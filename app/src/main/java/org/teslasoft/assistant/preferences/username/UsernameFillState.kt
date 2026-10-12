@@ -23,6 +23,7 @@ object UsernameFillState {
 
     private const val FILE = "username_fill_state"
     private const val KEY_RETRY = "retry_pending"
+    private const val KEY_FILLED_GENERATION = "filled_chat_set_generation"
     private const val KEY_QUEUED = "queued_notices"
     private const val KEY_SHOWN = "shown_notices"
     private const val KEY_QUEUED_DAMAGED = "queued_damaged"
@@ -43,6 +44,16 @@ object UsernameFillState {
         false
     }
 
+    /** The chat set's replacement counter when the fill last completed, or
+     *  null when it never has. A restore that replaced the chat set since
+     *  then changes the counter, so the fill runs again over the new set. */
+    fun filledGeneration(context: Context): Long? = try {
+        val p = prefs(context)
+        if (p.contains(KEY_FILLED_GENERATION)) p.getLong(KEY_FILLED_GENERATION, 0L) else null
+    } catch (_: Exception) {
+        null
+    }
+
     /** Keeps the fill pending for the next app start without queuing a
      *  notice. Returns whether that was durably recorded. */
     fun deferToNextStart(context: Context): Boolean = try {
@@ -53,7 +64,12 @@ object UsernameFillState {
 
     /** Records the run's result and notices. Returns whether that was
      *  durably recorded. */
-    internal fun finish(context: Context, outcome: DefaultUsernameFill.RunOutcome, complete: Boolean): Boolean = try {
+    internal fun finish(
+        context: Context,
+        outcome: DefaultUsernameFill.RunOutcome,
+        complete: Boolean,
+        filledGeneration: Long? = null
+    ): Boolean = try {
         synchronized(lock) {
             val p = prefs(context)
             val queued = names(p.getStringSet(KEY_QUEUED, null))
@@ -64,7 +80,9 @@ object UsernameFillState {
                 p.getStringSet(KEY_SHOWN_DAMAGED, null).orEmpty(),
                 outcome
             )
-            p.edit()
+            val editor = p.edit()
+            if (complete && filledGeneration != null) editor.putLong(KEY_FILLED_GENERATION, filledGeneration)
+            editor
                 .putBoolean(KEY_RETRY, !complete)
                 .putStringSet(KEY_QUEUED, update.queued.mapTo(HashSet()) { it.name })
                 .putStringSet(KEY_SHOWN, update.shown.mapTo(HashSet()) { it.name })
