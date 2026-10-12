@@ -51,13 +51,20 @@ object ChatTitleExtractor {
         if (raw.isNullOrBlank()) return null
         val visible = raw.replace(THINK_BLOCK, "\n").replace(UNCLOSED_THINK, "\n")
 
-        // The answer comes after any thinking, so the last usable line wins.
-        return visible.lineSequence()
-            .mapNotNull { candidate(it) }
-            .lastOrNull()
+        val lines = visible.lines()
+
+        // A line the model labeled as the title ("Title: …") is the title.
+        lines.lastOrNull { LABEL_PREFIX.containsMatchIn(it.trim().replace(HEADING_MARKER, "").removeSurrounding("**")) }
+            ?.let { candidate(it, labeled = true) }
+            ?.let { return it }
+
+        // Otherwise the answer comes after any thinking, so the last usable
+        // line wins. Sentences are skipped, so closing chatter such as
+        // "Hope this helps!" is never chosen over the title before it.
+        return lines.mapNotNull { candidate(it, labeled = false) }.lastOrNull()
     }
 
-    private fun candidate(line: String): String? {
+    private fun candidate(line: String, labeled: Boolean): String? {
         val trimmed = line.trim()
         if (trimmed.isEmpty()) return null
         // An introduction to more text ("Here's a thinking process:") or a
@@ -77,6 +84,8 @@ object ChatTitleExtractor {
             .trim()
 
         if (cleaned.isEmpty()) return null
+        // Titles do not end like sentences; thinking and chatter do.
+        if (!labeled && (cleaned.endsWith(".") || cleaned.endsWith("!"))) return null
         if (cleaned.length > MAX_TITLE_CHARS) return null
         if (cleaned.split(Regex("\\s+")).size > MAX_TITLE_WORDS) return null
         return cleaned

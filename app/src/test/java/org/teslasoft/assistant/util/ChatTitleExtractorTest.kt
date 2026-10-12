@@ -72,6 +72,23 @@ class ChatTitleExtractorTest {
     }
 
     @Test
+    fun closingChatterAfterTheTitleIsNotTheTitle() {
+        assertEquals("Weekend Hiking Plans", ChatTitleExtractor.extract("Weekend Hiking Plans\nHope this helps!"))
+        assertEquals("Weekend Hiking Plans", ChatTitleExtractor.extract("Weekend Hiking Plans\n\nLet me know if you want another."))
+    }
+
+    @Test
+    fun labeledTitleWinsOverOtherLines() {
+        val reply = "Okay, a short title.\nTitle: Weekend Hiking Plans\nHope this helps!"
+        assertEquals("Weekend Hiking Plans", ChatTitleExtractor.extract(reply))
+    }
+
+    @Test
+    fun shortThinkingSentencesAreNotTitles() {
+        assertNull(ChatTitleExtractor.extract("Let me think about this."))
+    }
+
+    @Test
     fun emptyReplyYieldsNoTitle() {
         assertNull(ChatTitleExtractor.extract(null))
         assertNull(ChatTitleExtractor.extract("   \n "))
