@@ -3619,7 +3619,7 @@
          ================================================================== -->
     <string name="title_summarizer_settings">Summarizer Settings</string>
     <string name="tile_summarizer_settings_subtitle">Settings related to the summarizer feature.</string>
-    <string name="summarizer_intro">The summarizer sends the specified number of messages to the model each turn. Anything beyond that amount is summarized using the AI model selected in these settings. At any time, the summarizer can be turned off in Quick settings, which will allow all messages to be sent to the AI again.\n\nThe Summarizer also creates a summarized version of image prompts to save on tokens.</string>
+    <string name="summarizer_intro">The summarizer sends the specified number of messages to the model each turn. Anything beyond that amount is summarized using the AI model selected in these settings. At any time, the summarizer can be turned off in Quick settings, which will allow all messages to be sent to the AI again.\n\nThe summarizer is also used for image prompt summaries, backup chat titles, and compaction.</string>
 
     <string name="summarizer_section_model">Summary Model</string>
     <string name="summarizer_row_endpoint">Summarizer Endpoint</string>
@@ -3633,6 +3633,7 @@
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
+    <string name="summarizer_new_chats_toggle_hint">Summarizer model is still used as a backup for chat titling and compaction when summarizing is turned off.</string>
     <string name="summarizer_length">Summary Length</string>
     <string name="summarizer_length_hint">Maximum amount of words the summary can become.</string>
 

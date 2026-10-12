@@ -418,6 +418,87 @@ class SummarizerController(
         if (imagePrompt.isBlank()) return null
         val prefs = Preferences.getPreferences(appContext, "")
 
+        val (endpoint, model, requestFavorite, routingResolution) =
+            resolveOneShotTarget(prefs) ?: return null
+
+        val instruction = SummarizerPromptSets.activeText(
+            prefs,
+            SummarizerPromptSets.Kind.IMAGE,
+            chatIdProvider()
+        )
+        val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
+        return try {
+            withContext(Dispatchers.IO) {
+                val request = ChatCompletionRequest(
+                    model = ModelId(model),
+                    maxTokens = 200,
+                    messages = listOf(ChatMessage(role = ChatRole.User, content = body))
+                )
+                withSummarizerUsage(
+                    Preferences.getPreferences(appContext, chatIdProvider()),
+                    endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
+                    UsageFunction.IMAGE_DESCRIPTION
+                ) { attempt ->
+                    buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
+                        .chatCompletion(request)
+                }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
+            }.trim().ifBlank { null }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Backup chat title (owner ruling, Oct 12 2026): used only after the
+     * chat's own model has used up its naming attempts. Runs whether or not
+     * summarizing is on for this chat, since naming does not touch the
+     * chat's summary. Sends [messages] (the conversation's text turns and the
+     * naming instruction) to the configured Summary Model and returns its raw
+     * reply, or null when no summarizer is set up or the call fails. Silent
+     * like the image summary: a failure leaves the chat untitled and writes no
+     * Summarizer Error.
+     */
+    suspend fun generateChatTitle(messages: List<ChatMessage>): String? {
+        if (messages.isEmpty()) return null
+        val prefs = Preferences.getPreferences(appContext, "")
+        val (endpoint, model, requestFavorite, routingResolution) =
+            resolveOneShotTarget(prefs) ?: return null
+
+        return try {
+            withContext(Dispatchers.IO) {
+                val request = ChatCompletionRequest(
+                    model = ModelId(model),
+                    maxTokens = 128,
+                    messages = messages
+                )
+                withSummarizerUsage(
+                    Preferences.getPreferences(appContext, chatIdProvider()),
+                    endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
+                    UsageFunction.SUMMARIZING
+                ) { attempt ->
+                    buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
+                        .chatCompletion(request)
+                }.choices.firstOrNull()?.message?.content?.toString()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private data class OneShotTarget(
+        val endpoint: ApiEndpointObject,
+        val model: String,
+        val requestFavorite: org.teslasoft.assistant.preferences.dto.FavoriteModelObject?,
+        val routingResolution: ProviderRoutingResolver.Resolution
+    )
+
+    /** The configured Summary Model for a one-shot call, or null when it is
+     *  not set up or its routing is blocked. */
+    private fun resolveOneShotTarget(prefs: Preferences): OneShotTarget? {
         val endpointId = prefs.getSummarizerEndpointId()
         if (endpointId.isBlank()) return null
         val endpoint = try {
@@ -448,34 +529,7 @@ class SummarizerController(
             endpoint.isOpenRouterRouting(), requestFavorite
         )
         if (routingResolution.block != RoutingBlock.NONE) return null
-
-        val instruction = SummarizerPromptSets.activeText(
-            prefs,
-            SummarizerPromptSets.Kind.IMAGE,
-            chatIdProvider()
-        )
-        val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
-        return try {
-            withContext(Dispatchers.IO) {
-                val request = ChatCompletionRequest(
-                    model = ModelId(model),
-                    maxTokens = 200,
-                    messages = listOf(ChatMessage(role = ChatRole.User, content = body))
-                )
-                withSummarizerUsage(
-                    Preferences.getPreferences(appContext, chatIdProvider()),
-                    endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
-                    UsageFunction.IMAGE_DESCRIPTION
-                ) { attempt ->
-                    buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
-                        .chatCompletion(request)
-                }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
-            }.trim().ifBlank { null }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null
-        }
+        return OneShotTarget(endpoint, model, requestFavorite, routingResolution)
     }
 
     private suspend fun compactSnapshot(
