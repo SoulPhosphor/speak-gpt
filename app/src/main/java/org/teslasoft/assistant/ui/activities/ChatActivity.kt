@@ -2879,6 +2879,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         chatStartupComplete = true
+        // onResume may have run before this chat's preferences were installed;
+        // load the active user identity now so the first message is stamped
+        // with the Roleplay or Glamour name in effect.
+        refreshUserIdentity()
         if (!PortableRestoreRecoveryFlow.showIfPending(this)) {
             if (!PortableRestoreOutcomeFlow.showIfPending(this)) {
                 DatabaseRecoveryFlows.showPendingNoticeIfAny(this)
