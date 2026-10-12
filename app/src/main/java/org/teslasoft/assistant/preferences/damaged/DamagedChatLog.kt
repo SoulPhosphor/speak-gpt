@@ -225,31 +225,35 @@ object DamagedChatLog {
     internal fun decode(raw: String): List<Detection> = decodeOrNull(raw) ?: emptyList()
 
     /** Null when [raw] is not a readable log. */
-    internal fun decodeOrNull(raw: String): List<Detection>? = try {
-        val array = JSONArray(raw)
-        (0 until array.length()).mapNotNull { i ->
-            val d = array.getJSONObject(i)
-            val operation = DamagedChatOperation.entries.firstOrNull { it.name == d.optString("operation") }
-                ?: return@mapNotNull null
-            val chats = d.optJSONArray("chats") ?: JSONArray()
-            Detection(
-                operation,
-                d.optLong("detected_at"),
-                (0 until chats.length()).map { j ->
-                    val c = chats.getJSONObject(j)
-                    DamagedChat(
-                        chatId = c.getString("chat_id"),
-                        title = c.optString("title").takeIf { c.has("title") },
-                        startedAt = c.optLong("started_at").takeIf { c.has("started_at") },
-                        firstUsername = c.optString("first_username").takeIf { c.has("first_username") },
-                        firstCompanionName = c.optString("first_companion_name").takeIf { c.has("first_companion_name") },
-                        mostUsedModel = c.optString("most_used_model").takeIf { c.has("most_used_model") },
-                        irreparable = c.optBoolean("irreparable", false)
-                    )
-                }
-            )
+    internal fun decodeOrNull(raw: String): List<Detection>? {
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).map { i ->
+                val d = array.getJSONObject(i)
+                // An entry this version cannot read makes the whole log
+                // unreadable, so its contents are kept rather than rewritten.
+                val operation = DamagedChatOperation.entries.firstOrNull { it.name == d.optString("operation") }
+                    ?: return null
+                val chats = d.optJSONArray("chats") ?: JSONArray()
+                Detection(
+                    operation,
+                    d.optLong("detected_at"),
+                    (0 until chats.length()).map { j ->
+                        val c = chats.getJSONObject(j)
+                        DamagedChat(
+                            chatId = c.getString("chat_id"),
+                            title = c.optString("title").takeIf { c.has("title") },
+                            startedAt = c.optLong("started_at").takeIf { c.has("started_at") },
+                            firstUsername = c.optString("first_username").takeIf { c.has("first_username") },
+                            firstCompanionName = c.optString("first_companion_name").takeIf { c.has("first_companion_name") },
+                            mostUsedModel = c.optString("most_used_model").takeIf { c.has("most_used_model") },
+                            irreparable = c.optBoolean("irreparable", false)
+                        )
+                    }
+                )
+            }
+        } catch (_: Exception) {
+            null
         }
-    } catch (_: Exception) {
-        null
     }
 }

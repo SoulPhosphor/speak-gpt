@@ -14,6 +14,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.SnapshotRegistry
+import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.preferences.username.DefaultUsernameFill
 import java.io.File
@@ -225,6 +226,9 @@ object DamagedChatRepair {
      *  verified byte for byte. */
     private fun prepare(context: Context, chatId: String): Preserved? {
         if (PortableRestoreProcessGate.blocksCurrentProcess(context)) return null
+        // An unfinished chat restore would copy its staged chats over this
+        // one on the next start, undoing the repair.
+        if (ChatRestoreManager.hasPendingRecovery(context)) return null
         if (DefaultUsernameFill.isOpen(chatId)) return null
         val listed = ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false)
         if (!ChatStorageHealth.isAuthoritative(listed.state)) return null

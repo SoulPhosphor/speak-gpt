@@ -35,5 +35,7 @@ class DamagedChatLogFormatTest {
         assertTrue(DamagedChatLog.decode("not json").isEmpty())
         val unknownOperation = """[{"operation":"SOMETHING_ELSE","detected_at":1,"chats":[{"chat_id":"x"}]}]"""
         assertTrue(DamagedChatLog.decode(unknownOperation).isEmpty())
+        assertNull(DamagedChatLog.decodeOrNull(unknownOperation))
+        assertNull(DamagedChatLog.decodeOrNull("not json"))
     }
 }
