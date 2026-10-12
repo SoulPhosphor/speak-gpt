@@ -11,9 +11,11 @@ import android.content.Context
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
@@ -120,13 +122,26 @@ object DefaultUsernameFill {
      * the next app start. Damaged chats are skipped and never written.
      */
     fun runAll(context: Context) {
+        // A chat recovery still replacing histories at startup: filling now
+        // would write histories about to be replaced. Wait for the next start.
+        if (ChatRestoreManager.hasPendingRecovery(context)) {
+            UsernameFillState.deferToNextStart(context)
+            return
+        }
         val name = activeName(context)
         if (name == null) {
             UsernameFillState.finish(context, RunOutcome(), complete = true)
             return
         }
         val outcome = fill(context, name)
-        UsernameFillState.finish(context, outcome, complete = !outcome.needsRetry)
+        // A new chat whose first save has not reached the chat list yet is
+        // not filled here; keep the fill pending so it is filled once listed.
+        val unsettled = try {
+            NewConversationCoordinator(context).hasPendingFirstCommit()
+        } catch (_: Exception) {
+            true
+        }
+        UsernameFillState.finish(context, outcome, complete = !outcome.needsRetry && !unsettled)
     }
 
     private fun fill(context: Context, name: String): RunOutcome {

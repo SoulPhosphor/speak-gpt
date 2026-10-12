@@ -43,6 +43,13 @@ object UsernameFillState {
         false
     }
 
+    /** Keeps the fill pending for the next app start without queuing a notice. */
+    internal fun deferToNextStart(context: Context) {
+        try {
+            synchronized(lock) { prefs(context).edit(commit = true) { putBoolean(KEY_RETRY, true) } }
+        } catch (_: Exception) { }
+    }
+
     internal fun finish(context: Context, outcome: DefaultUsernameFill.RunOutcome, complete: Boolean) {
         try {
             synchronized(lock) {
