@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One entry box for unlocking a backup (recovery code or password) in the
+     Damaged Chat Files replacement flow; same field family as the other
+     single-field dialogs. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp">
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/backup_unlock_field"
+        style="@style/Widget.App.Field.Box"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+</LinearLayout>

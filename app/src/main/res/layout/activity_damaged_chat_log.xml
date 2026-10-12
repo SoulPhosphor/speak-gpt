@@ -72,6 +72,11 @@
                     style="@style/Widget.App.Section.Hint"
                     android:text="@string/damaged_repair_from_backup_hint" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_damaged_replace_from_backup"
+                    style="@style/AppButton.Primary.Inline.Centered"
+                    android:text="@string/damaged_replace_from_backup" />
+
                 <LinearLayout
                     android:id="@+id/damaged_irreparable_detections"
                     android:layout_width="match_parent"

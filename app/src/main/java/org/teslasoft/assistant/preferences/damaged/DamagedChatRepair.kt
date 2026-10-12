@@ -69,7 +69,7 @@ object DamagedChatRepair {
 
     private fun repairOne(context: Context, chatId: String): Outcome {
         return synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-            if (!safeToChange(context, chatId)) return Outcome.NOT_ATTEMPTED
+            if (prepare(context, chatId) == null) return Outcome.NOT_ATTEMPTED
             val chats = ChatPreferences.getChatPreferences()
             val operation = DamagedChatLog.operationFor(context, chatId) ?: DamagedChatOperation.OPENING_A_CHAT
             val current = chats.getChatByIdResult(context, chatId, operation)
@@ -103,7 +103,7 @@ object DamagedChatRepair {
 
     private fun replaceOne(context: Context, chatId: String, backupMessages: List<HashMap<String, Any>>): Outcome {
         return synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-            if (!safeToChange(context, chatId)) return Outcome.NOT_ATTEMPTED
+            val preserved = prepare(context, chatId) ?: return Outcome.NOT_ATTEMPTED
             val chats = ChatPreferences.getChatPreferences()
             val operation = DamagedChatLog.operationFor(context, chatId) ?: DamagedChatOperation.OPENING_A_CHAT
             val current = chats.getChatByIdResult(context, chatId, operation)
@@ -117,6 +117,8 @@ object DamagedChatRepair {
             }
             val outcome = writeVerified(context, chatId, operation, merged, rollbackTo = if (readable) current.messages else null)
             if (outcome != Outcome.REPAIRED && !readable) {
+                // Put the file back exactly as it was and block writes again.
+                restoreOriginal(context, "chat_$chatId", preserved.copy)
                 ChatStorageHealth.recordReadFailure(context, "chat_$chatId", null)
             }
             outcome
@@ -145,43 +147,54 @@ object DamagedChatRepair {
         return Outcome.NOT_ATTEMPTED
     }
 
-    /** The chat may be changed: it still exists, is not open on screen, no
-     *  restore is running, and its file was copied aside and verified. */
-    private fun safeToChange(context: Context, chatId: String): Boolean {
-        if (PortableRestoreProcessGate.blocksCurrentProcess(context)) return false
-        if (DefaultUsernameFill.isOpen(chatId)) return false
+    /** The verified copy taken before a change; [copy] is null when the
+     *  chat had no file, so there was nothing to lose. */
+    private class Preserved(val copy: File?)
+
+    /** Null unless the chat may be changed: it still exists, is not open on
+     *  screen, no restore is running, and its file was copied aside and
+     *  verified byte for byte. */
+    private fun prepare(context: Context, chatId: String): Preserved? {
+        if (PortableRestoreProcessGate.blocksCurrentProcess(context)) return null
+        if (DefaultUsernameFill.isOpen(chatId)) return null
         val listed = ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false)
-        if (!ChatStorageHealth.isAuthoritative(listed.state)) return false
-        if (listed.chats.none { ChatPreferences.storedChatId(it) == chatId }) return false
-        return preserveVerified(context, chatId)
+        if (!ChatStorageHealth.isAuthoritative(listed.state)) return null
+        if (listed.chats.none { ChatPreferences.storedChatId(it) == chatId }) return null
+        return preserveVerified(context, "chat_$chatId")
     }
 
-    /** Copies the chat's file into the preserved-copies folder and checks the
-     *  copy matches byte for byte. True only for a verified copy (or when no
-     *  file exists, so there is nothing to lose). */
-    internal fun preserveVerified(context: Context, chatId: String): Boolean = try {
-        val name = "chat_$chatId"
+    private fun preserveVerified(context: Context, name: String): Preserved? = try {
         val source = SecurePrefs.encryptedFile(context, name)
         if (!source.exists()) {
-            true
+            Preserved(null)
         } else {
             val dir = SecurePrefs.recoveryDir(context)
             if (!dir.exists() && !dir.mkdirs()) {
-                false
+                null
             } else {
                 val copy = File(dir, "${source.nameWithoutExtension}.${SnapshotRegistry.uniqueSuffix()}.xml")
                 source.copyTo(copy, overwrite = false)
-                val matches = sha256(source).contentEquals(sha256(copy))
-                if (matches) {
+                if (sha256(source).contentEquals(sha256(copy))) {
                     SnapshotRegistry.record(context, copy.name, name, SnapshotRegistry.ORIGIN_PRE_REPAIR, "before_repair")
+                    Preserved(copy)
                 } else {
                     copy.delete()
+                    null
                 }
-                matches
             }
         }
     } catch (_: Exception) {
-        false
+        null
+    }
+
+    /** Writes the verified copy back over the chat's file so a failed
+     *  replacement leaves it exactly as it was; the copy itself is kept. */
+    private fun restoreOriginal(context: Context, name: String, copy: File?) {
+        if (copy == null) return
+        try {
+            copy.copyTo(SecurePrefs.encryptedFile(context, name), overwrite = true)
+            SecurePrefs.invalidateCache(listOf(name))
+        } catch (_: Exception) { }
     }
 
     private fun sha256(file: File): ByteArray {

@@ -917,6 +917,15 @@
     <string name="damaged_repair_unsuccessful">Repair Unsuccessful</string>
     <string name="damaged_repair_from_backup_hint">You can attempt to repair remaining chat files from a backup.</string>
     <string name="damaged_irreparable_section">Irreparable Chat Files</string>
+    <string name="damaged_replace_from_backup">Attempt Chat Replacement from Backup</string>
+    <string name="damaged_replace_title">Replace Damaged Chats</string>
+    <string name="damaged_replace_found">Found in this backup:</string>
+    <string name="damaged_replace_not_found">Not in this backup:</string>
+    <string name="damaged_replace_item">• %1$s</string>
+    <string name="damaged_replace_item_older">• %1$s (this backup is older; newer messages may be missing)</string>
+    <string name="damaged_replace_explanation">Only the chats found in this backup will be replaced. Readable messages already in these chats are kept.</string>
+    <string name="damaged_replace_action">Replace</string>
+    <string name="damaged_replace_none_found">None of the damaged chats are in this backup.</string>
     <string name="damaged_during_renaming_usernames">Renaming Usernames</string>
     <string name="damaged_during_opening_a_chat">Opening a Chat</string>
     <string name="damaged_during_chat_list">Chat List</string>
