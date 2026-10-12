@@ -134,13 +134,11 @@ object DefaultUsernameFill {
             return
         }
         val outcome = fill(context, name)
-        // A new chat whose first save has not reached the chat list yet is
-        // not filled here; keep the fill pending so it is filled once listed.
-        val unsettled = try {
-            NewConversationCoordinator(context).hasPendingFirstCommit()
-        } catch (_: Exception) {
-            true
-        }
+        // A new chat whose turns have not reached the chat list yet (first
+        // save still pending, or an unlisted provisional chat that is
+        // unreadable or holds turns) is not filled here; keep the fill pending
+        // so it is filled once listed.
+        val unsettled = NewConversationCoordinator(context).hasUnsettledProvisionalTurns()
         UsernameFillState.finish(context, outcome, complete = !outcome.needsRetry && !unsettled)
     }
 

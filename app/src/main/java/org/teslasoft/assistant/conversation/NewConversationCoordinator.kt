@@ -178,6 +178,35 @@ class NewConversationCoordinator(private val context: Context) {
     }
 
     /**
+     * Whether a conversation may still join the chat list later with turns
+     * already in it: a first commit still journaled, or a provisional
+     * conversation outside the list whose history is not provably empty
+     * (unreadable, or holding turns that orphan recovery could not commit).
+     * Unreadable state counts as unsettled.
+     */
+    fun hasUnsettledProvisionalTurns(): Boolean = try {
+        if (hasPendingFirstCommit()) {
+            true
+        } else {
+            val listed = ChatPreferences.getChatPreferences()
+                .getChatListResult(app, includeFirstMessage = false)
+            if (!ChatStorageHealth.isAuthoritative(listed.state)) {
+                true
+            } else {
+                val listedIds = listed.chats.mapTo(HashSet()) { ChatPreferences.storedChatId(it) }
+                pendingConversationIds().any { chatId ->
+                    if (chatId in listedIds) return@any false
+                    val history = ChatPreferences.getChatPreferences()
+                        .getChatByIdResult(app, chatId, DamagedChatOperation.NEW_CHAT)
+                    !ChatStorageHealth.isAuthoritative(history.state) || history.messages.isNotEmpty()
+                }
+            }
+        }
+    } catch (_: Exception) {
+        true
+    }
+
+    /**
      * A provisional conversation still open (Phase 9.1 settle-or-refuse): the
      * retained startup blank session, or any indexed conversation still flagged
      * provisional. Its per-chat files live in chat storage and would be swept by
