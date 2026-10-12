@@ -37,7 +37,9 @@ object DamagedChatLog {
         val startedAt: Long?,
         val firstUsername: String?,
         val firstCompanionName: String?,
-        val mostUsedModel: String?
+        val mostUsedModel: String?,
+        /** Direct repair was tried and failed (Irreparable Chat Files). */
+        val irreparable: Boolean = false
     )
 
     data class Detection(
@@ -94,7 +96,27 @@ object DamagedChatLog {
         emptySet()
     }
 
-    /** Removes [chatId] (the chat was deleted); drops emptied detections. */
+    /** Marks [chatIds] as irreparable: direct repair was tried and failed.
+     *  Their original detection details are kept. */
+    fun markIrreparable(context: Context, chatIds: Set<String>) {
+        if (chatIds.isEmpty()) return
+        try {
+            synchronized(lock) {
+                write(context, read(context).map { d ->
+                    d.copy(chats = d.chats.map { if (it.chatId in chatIds) it.copy(irreparable = true) else it })
+                })
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** The operation that first found [chatId] damaged, when it is logged. */
+    fun operationFor(context: Context, chatId: String): DamagedChatOperation? = try {
+        synchronized(lock) { read(context).firstOrNull { d -> d.chats.any { it.chatId == chatId } }?.operation }
+    } catch (_: Exception) {
+        null
+    }
+
+    /** Removes [chatId] (deleted, or repaired and verified); drops emptied detections. */
     fun remove(context: Context, chatId: String) {
         try {
             synchronized(lock) {
@@ -155,6 +177,7 @@ object DamagedChatLog {
                             c.firstUsername?.let { put("first_username", it) }
                             c.firstCompanionName?.let { put("first_companion_name", it) }
                             c.mostUsedModel?.let { put("most_used_model", it) }
+                            if (c.irreparable) put("irreparable", true)
                         })
                     }
                 })
@@ -180,7 +203,8 @@ object DamagedChatLog {
                         startedAt = c.optLong("started_at").takeIf { c.has("started_at") },
                         firstUsername = c.optString("first_username").takeIf { c.has("first_username") },
                         firstCompanionName = c.optString("first_companion_name").takeIf { c.has("first_companion_name") },
-                        mostUsedModel = c.optString("most_used_model").takeIf { c.has("most_used_model") }
+                        mostUsedModel = c.optString("most_used_model").takeIf { c.has("most_used_model") },
+                        irreparable = c.optBoolean("irreparable", false)
                     )
                 }
             )

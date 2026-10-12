@@ -49,6 +49,10 @@ object DefaultUsernameFill {
     // in-progress fill of that chat to finish before reading it.
     private val openChats = HashMap<String, Int>()
 
+    /** Whether [chatId] is open on screen. Call while holding
+     *  ChatPreferences.CHAT_LIST_LOCK. */
+    internal fun isOpen(chatId: String): Boolean = openChats.containsKey(chatId)
+
     /** Call on a background thread BEFORE reading the chat's history. */
     fun markOpen(chatId: String) {
         synchronized(ChatPreferences.CHAT_LIST_LOCK) {

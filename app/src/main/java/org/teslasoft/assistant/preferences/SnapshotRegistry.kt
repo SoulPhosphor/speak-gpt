@@ -58,6 +58,8 @@ object SnapshotRegistry {
      *  restore replaces (Database Health Build Phase 3 items 2 and 5). */
     const val ORIGIN_DB_CORRUPTION = "db_corruption"
     const val ORIGIN_PRE_RESTORE = "pre_restore"
+    /** A damaged chat's file, copied and verified before repair or replacement. */
+    const val ORIGIN_PRE_REPAIR = "pre_repair"
 
     const val STATUS_PRESERVED = "preserved"
 
