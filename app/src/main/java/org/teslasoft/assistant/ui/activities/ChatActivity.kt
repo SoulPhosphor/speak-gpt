@@ -11037,7 +11037,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** The Roleplay Character and Glamour names for these ids, read now.
      *  A blank Glamour Display Name falls back to the Glamour's own Name. */
-    private fun identityNamesNow(rpId: String, glamourId: String): Pair<String?, String?> = try {
+    private fun identityNamesNow(rpId: String, glamourId: String): kotlin.Pair<String?, String?> = try {
         if (!MemoryStore.isProvisioned(this)) {
             null to null
         } else {
