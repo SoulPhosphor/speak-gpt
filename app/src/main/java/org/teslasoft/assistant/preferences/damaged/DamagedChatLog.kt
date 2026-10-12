@@ -53,16 +53,16 @@ object DamagedChatLog {
 
     /** Records [chatId] as damaged unless it is already in the log. Chat list
      *  details are read here; call off the main thread where possible. */
-    fun record(context: Context, chatId: String, operation: DamagedChatOperation) {
+    fun record(context: Context, chatId: String, operation: DamagedChatOperation): Boolean =
         recordAll(context, listOf(chatId), operation)
-    }
 
-    /** Records every not-yet-logged chat in [chatIds] as one detection. */
-    fun recordAll(context: Context, chatIds: Collection<String>, operation: DamagedChatOperation) {
-        if (chatIds.isEmpty()) return
-        try {
+    /** Records every not-yet-logged chat in [chatIds] as one detection.
+     *  Returns whether the log is durably saved with them in it. */
+    fun recordAll(context: Context, chatIds: Collection<String>, operation: DamagedChatOperation): Boolean {
+        if (chatIds.isEmpty()) return true
+        return try {
             val alreadyKnown = chatIds(context)
-            if (chatIds.all { it.isBlank() || it in alreadyKnown }) return
+            if (chatIds.all { it.isBlank() || it in alreadyKnown }) return unsaved == null
             // Chat list details are read BEFORE taking this log's lock, so a
             // caller holding the chat list lock can never deadlock with it.
             val rows = chatListRows(context)
@@ -70,7 +70,7 @@ object DamagedChatLog {
                 val detections = read(context).toMutableList()
                 val known = detections.flatMap { d -> d.chats.map { it.chatId } }.toSet()
                 val fresh = chatIds.filter { it.isNotBlank() && it !in known }.distinct()
-                if (fresh.isEmpty()) return
+                if (fresh.isEmpty()) return unsaved == null
                 val chats = fresh.map { id ->
                     val row = rows?.firstOrNull { ChatPreferences.storedChatId(it) == id }
                     DamagedChat(
@@ -84,9 +84,11 @@ object DamagedChatLog {
                 }
                 detections.add(Detection(operation, System.currentTimeMillis(), chats))
                 write(context, detections)
+                unsaved == null
             }
         } catch (_: Exception) {
             // Best-effort record: never turn a damaged read into a crash.
+            false
         }
     }
 

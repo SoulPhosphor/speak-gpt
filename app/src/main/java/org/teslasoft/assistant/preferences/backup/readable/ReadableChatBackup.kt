@@ -149,11 +149,16 @@ object ReadableChatBackup {
                     }
                     val messagesJson = gson.toJson(history.messages)
                     val folderName = folderNames[chatId]
+                    val companionName = currentCompanionName(context, chatId)
+                    val ownUsername = chatUsername(context, chatId)
+                    if (companionName == null || ownUsername == null) {
+                        return fail(staged, BuildResult.ChatsUnreadable)
+                    }
                     val names = ReadableChatFormats.SpeakerNames(
-                        currentCompanion = currentCompanionName(context, chatId),
+                        currentCompanion = companionName,
                         userFallback = context.getString(R.string.chat_role_user),
                         companionFallback = context.getString(R.string.chat_role_assistant),
-                        chatUsername = chatUsername(context, chatId)
+                        chatUsername = ownUsername
                     )
                     fingerprints[chatId] = ReadableChatFormats.fingerprint(
                         name, messagesJson, folderName,
@@ -246,19 +251,21 @@ object ReadableChatBackup {
     }
 
     /** The chat's selected companion name, for companion messages stored
-     *  before names were stamped. Empty when none is selected or unreadable. */
-    private fun currentCompanionName(context: Context, chatId: String): String = try {
+     *  before names were stamped. Empty when none is selected; null when it
+     *  could not be read, which makes the chat unreadable for this backup. */
+    private fun currentCompanionName(context: Context, chatId: String): String? = try {
         val personaId = Preferences.getPreferences(context, chatId).getPersonaId()
         if (personaId.isEmpty()) "" else PersonaPreferences.getPersonaPreferences(context).getPersona(personaId).label
     } catch (_: Exception) {
-        ""
+        null
     }
 
-    /** The chat's own username (Change Username), or "" when unset/unreadable. */
-    private fun chatUsername(context: Context, chatId: String): String = try {
+    /** The chat's own username (Change Username), "" when unset, or null
+     *  when it could not be read. */
+    private fun chatUsername(context: Context, chatId: String): String? = try {
         Preferences.getPreferences(context, chatId).getChatUsername()
     } catch (_: Exception) {
-        ""
+        null
     }
 
     private fun fail(staged: File, result: BuildResult): BuildResult {

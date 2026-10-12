@@ -402,8 +402,13 @@ class ChatPreferences private constructor() {
             @Suppress("UNCHECKED_CAST")
             gson.fromJson<Any>(json, type) as ArrayList<HashMap<String, Any>>
         } catch (e: Exception) {
-            preserveCorruptData(context, name, "chat", json, "chat history")
-            DamagedChatLog.record(context, chatId, detectedDuring)
+            // The detection is saved first: preserving the data resets the
+            // history, after which the damage could not be found again. If
+            // the log cannot be saved, the history is left as it is so the
+            // next read finds it again.
+            if (DamagedChatLog.record(context, chatId, detectedDuring)) {
+                preserveCorruptData(context, name, "chat", json, "chat history")
+            }
             return ChatHistoryResult(ChatStorageHealth.ReadState.CORRUPT, arrayListOf())
         }
 
