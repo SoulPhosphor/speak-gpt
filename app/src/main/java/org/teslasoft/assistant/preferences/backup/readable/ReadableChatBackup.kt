@@ -141,12 +141,15 @@ object ReadableChatBackup {
                     }
                     val messagesJson = gson.toJson(history.messages)
                     val folderName = folderNames[chatId]
-                    fingerprints[chatId] = ReadableChatFormats.fingerprint(name, messagesJson, folderName)
                     val names = ReadableChatFormats.SpeakerNames(
                         currentCompanion = currentCompanionName(context, chatId),
                         userFallback = context.getString(R.string.chat_role_user),
                         companionFallback = context.getString(R.string.chat_role_assistant),
                         chatUsername = chatUsername(context, chatId)
+                    )
+                    fingerprints[chatId] = ReadableChatFormats.fingerprint(
+                        name, messagesJson, folderName,
+                        ReadableChatFormats.namingFingerprint(history.messages, names)
                     )
                     collected.add(ChatData(name, history.messages, folderName, names))
                 }

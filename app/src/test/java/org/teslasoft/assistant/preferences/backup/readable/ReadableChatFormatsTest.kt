@@ -203,6 +203,44 @@ class ReadableChatFormatsTest {
         assertFalse(text.contains("Cindy"))
     }
 
+    @Test
+    fun storedVersionTextIsSanitizedToo() {
+        val variants = """[{"message":"v1","responseTokens":"9","reasoningText":"old thought"}]"""
+        val message = mapOf("message" to "a", "isBot" to true, "variants" to variants)
+        val on = Gson().toJson(ReadableChatFormats.jsonRecords(listOf(message), fallbackNames, includeThinking = true))
+        assertFalse(on.contains("responseTokens"))
+        assertTrue(on.contains("old thought"))
+        val off = Gson().toJson(ReadableChatFormats.jsonRecords(listOf(message), fallbackNames, includeThinking = false))
+        assertFalse(off.contains("old thought"))
+        assertTrue(off.contains("v1"))
+    }
+
+    @Test
+    fun aChatUsernameReplacesTheStoredNameInJson() {
+        val record = ReadableChatFormats.jsonRecords(
+            listOf(mapOf("message" to "q", "isBot" to false, "userName" to "Cindy")),
+            fallbackNames.copy(chatUsername = "Mary"),
+            includeThinking = true
+        ).single()
+        assertEquals("Mary", record["name"])
+        assertFalse(record.containsKey("userName"))
+    }
+
+    @Test
+    fun namingChangesTheFingerprintOnlyWhenItAffectsTheExport() {
+        val named = listOf(mapOf<String, Any?>("message" to "a", "isBot" to true, "companionName" to "Sol"))
+        assertEquals(null, ReadableChatFormats.namingFingerprint(named, fallbackNames))
+        val unnamed = listOf(mapOf<String, Any?>("message" to "a", "isBot" to true))
+        val moon = ReadableChatFormats.namingFingerprint(unnamed, fallbackNames)
+        val sol = ReadableChatFormats.namingFingerprint(unnamed, fallbackNames.copy(currentCompanion = "Sol"))
+        assertNotEquals(moon, sol)
+        assertNotEquals(
+            ReadableChatFormats.fingerprint("Chat", "[]", null, null),
+            ReadableChatFormats.fingerprint("Chat", "[]", null, ReadableChatFormats.namingFingerprint(named, fallbackNames.copy(chatUsername = "Mary")))
+        )
+        assertEquals(ReadableChatFormats.fingerprint("Chat", "[]"), ReadableChatFormats.fingerprint("Chat", "[]", null, null))
+    }
+
     // ---- thinking ----
 
     private val thinkingMessages = listOf(

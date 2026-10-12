@@ -69,7 +69,7 @@ object DamagedChatRepair {
 
     private fun repairOne(context: Context, chatId: String): Outcome {
         return synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-            if (prepare(context, chatId) == null) return Outcome.NOT_ATTEMPTED
+            val preserved = prepare(context, chatId) ?: return Outcome.NOT_ATTEMPTED
             val chats = ChatPreferences.getChatPreferences()
             val operation = DamagedChatLog.operationFor(context, chatId) ?: DamagedChatOperation.OPENING_A_CHAT
             val current = chats.getChatByIdResult(context, chatId, operation)
@@ -97,7 +97,7 @@ object DamagedChatRepair {
             }
             if (!recoveredAny) return Outcome.FAILED
             if (merged.size == current.messages.size) return Outcome.REPAIRED // already merged earlier
-            writeVerified(context, chatId, operation, ArrayList(merged), rollbackTo = current.messages)
+            writeVerified(context, chatId, operation, ArrayList(merged), rollbackTo = current.messages, preserved)
         }
     }
 
@@ -115,36 +115,48 @@ object DamagedChatRepair {
                 // this explicit replacement is what lifts the write block.
                 ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
             }
-            val outcome = writeVerified(context, chatId, operation, merged, rollbackTo = if (readable) current.messages else null)
-            if (outcome != Outcome.REPAIRED && !readable) {
-                // Put the file back exactly as it was and block writes again.
-                restoreOriginal(context, "chat_$chatId", preserved.copy)
-                ChatStorageHealth.recordReadFailure(context, "chat_$chatId", null)
-            }
-            outcome
+            writeVerified(context, chatId, operation, merged, rollbackTo = if (readable) current.messages else null, preserved)
         }
     }
 
-    /** Saves [messages] and reads them back; on any mismatch restores the
-     *  readable [rollbackTo] contents. A failed save is not proof the chat
-     *  cannot be repaired, so it is left to be tried again. */
+    /**
+     * Saves [messages] and reads them back. On a mismatch the chat is put back
+     * as it was: through a normal save of the readable [rollbackTo] contents
+     * when that save succeeds and reads back exactly; otherwise (unreadable
+     * before, or the undo itself blocked or failed) the verified copy is
+     * written back over the file and writes stay blocked. A failed attempt is
+     * not proof the chat cannot be repaired, so it is left to be tried again.
+     */
     private fun writeVerified(
         context: Context,
         chatId: String,
         operation: DamagedChatOperation,
         messages: ArrayList<HashMap<String, Any>>,
-        rollbackTo: ArrayList<HashMap<String, Any>>?
+        rollbackTo: ArrayList<HashMap<String, Any>>?,
+        preserved: Preserved
     ): Outcome {
-        val chats = ChatPreferences.getChatPreferences()
-        val saved = chats.saveChatHistory(context, chatId, messages, synchronous = true)
-        val verified = saved == ChatStorageHealth.WriteOutcome.OK && run {
-            val back = chats.getChatByIdResult(context, chatId, operation)
-            ChatStorageHealth.isAuthoritative(back.state) &&
-                Gson().toJson(back.messages) == Gson().toJson(messages)
+        if (saveAndVerify(context, chatId, operation, messages)) return Outcome.REPAIRED
+        val undone = rollbackTo != null && saveAndVerify(context, chatId, operation, rollbackTo)
+        if (!undone) {
+            restoreOriginal(context, "chat_$chatId", preserved.copy)
+            ChatStorageHealth.recordReadFailure(context, "chat_$chatId", null)
         }
-        if (verified) return Outcome.REPAIRED
-        if (rollbackTo != null) chats.saveChatHistory(context, chatId, rollbackTo, synchronous = true)
         return Outcome.NOT_ATTEMPTED
+    }
+
+    private fun saveAndVerify(
+        context: Context,
+        chatId: String,
+        operation: DamagedChatOperation,
+        messages: ArrayList<HashMap<String, Any>>
+    ): Boolean {
+        val chats = ChatPreferences.getChatPreferences()
+        if (chats.saveChatHistory(context, chatId, messages, synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
+            return false
+        }
+        val back = chats.getChatByIdResult(context, chatId, operation)
+        return ChatStorageHealth.isAuthoritative(back.state) &&
+            Gson().toJson(back.messages) == Gson().toJson(messages)
     }
 
     /** The verified copy taken before a change; [copy] is null when the
@@ -187,12 +199,16 @@ object DamagedChatRepair {
         null
     }
 
-    /** Writes the verified copy back over the chat's file so a failed
-     *  replacement leaves it exactly as it was; the copy itself is kept. */
+    /** Writes the verified copy back over the chat's file and checks it
+     *  matches byte for byte, so a failed attempt leaves the file exactly as
+     *  it was; the copy itself is kept. Writes stay blocked (the caller
+     *  records a read failure) until the app restarts and reads it afresh. */
     private fun restoreOriginal(context: Context, name: String, copy: File?) {
         if (copy == null) return
         try {
-            copy.copyTo(SecurePrefs.encryptedFile(context, name), overwrite = true)
+            val target = SecurePrefs.encryptedFile(context, name)
+            copy.copyTo(target, overwrite = true)
+            if (!sha256(target).contentEquals(sha256(copy))) copy.copyTo(target, overwrite = true)
             SecurePrefs.invalidateCache(listOf(name))
         } catch (_: Exception) { }
     }

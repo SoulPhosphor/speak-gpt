@@ -217,6 +217,11 @@ object ReadableChatFormats {
         @Suppress("UNCHECKED_CAST")
         val removed = if (includeThinking) TOKEN_KEYS else TOKEN_KEYS + THINKING_KEYS
         val record = LinkedHashMap(strip(message, removed) as Map<String, Any?>)
+        // A chat's own username replaces every user name, so the stored one
+        // does not travel alongside it.
+        if (!isCompanion(message) && !names.chatUsername.isNullOrBlank()) {
+            record.remove(ChatSpeakerNames.USER_NAME_KEY)
+        }
         record["name"] = speakerName(message, names)
         timestamp(message)?.let { millis ->
             record["date"] = ChatExportFormatter.formatDate(millis, locale, timeZone)
@@ -232,12 +237,24 @@ object ReadableChatFormats {
             val out = LinkedHashMap<String, Any?>()
             for ((k, v) in value) {
                 val key = k.toString()
-                if (key !in removed) out[key] = strip(v, removed)
+                if (key in removed) continue
+                // Regenerated versions are stored as a JSON string, not a
+                // nested list: sanitize them too, keeping the string form.
+                out[key] = if (key == ChatAdapter.KEY_VARIANTS && v is String) stripJsonText(v, removed) else strip(v, removed)
             }
             out
         }
         is List<*> -> value.map { strip(it, removed) }
         else -> value
+    }
+
+    /** [text] parsed, sanitized and written back as JSON; text that does not
+     *  parse is left out rather than exported unsanitized. */
+    private fun stripJsonText(text: String, removed: Set<String>): String? = try {
+        val gson = com.google.gson.Gson()
+        gson.toJson(strip(gson.fromJson(text, Any::class.java), removed))
+    } catch (_: Exception) {
+        null
     }
 
     /**
@@ -291,7 +308,12 @@ object ReadableChatFormats {
     /** Content fingerprint of one chat (title + full message JSON), hex
      *  SHA-256. Identical content -> identical fingerprint, so the
      *  incremental diff is exact. */
-    fun fingerprint(name: String, messagesJson: String, folderName: String? = null): String {
+    fun fingerprint(
+        name: String,
+        messagesJson: String,
+        folderName: String? = null,
+        naming: String? = null
+    ): String {
         val md = MessageDigest.getInstance("SHA-256")
         md.update(name.toByteArray(Charsets.UTF_8))
         md.update(0)
@@ -300,7 +322,28 @@ object ReadableChatFormats {
             md.update(0)
             md.update(folderName.toByteArray(Charsets.UTF_8))
         }
+        if (naming != null) {
+            md.update(1)
+            md.update(naming.toByteArray(Charsets.UTF_8))
+        }
         return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * The naming inputs an export depends on beyond the stored messages: the
+     * chat's own username, and the current companion name when some
+     * companion message has no stored name. Null when neither applies, so
+     * fingerprints of unaffected chats stay as they were.
+     */
+    fun namingFingerprint(messages: List<Map<String, Any?>>, names: SpeakerNames): String? {
+        val username = names.chatUsername?.trim()?.takeIf { it.isNotEmpty() }
+        val companion = names.currentCompanion?.trim()?.takeIf { it.isNotEmpty() }?.takeIf {
+            messages.any { m ->
+                isCompanion(m) && m[ChatSpeakerNames.COMPANION_NAME_KEY]?.toString()?.isNotBlank() != true
+            }
+        }
+        if (username == null && companion == null) return null
+        return "u:${username.orEmpty()}\u0000c:${companion.orEmpty()}"
     }
 
     /**
