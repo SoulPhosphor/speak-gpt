@@ -189,16 +189,6 @@ class MainApplication : Application() {
                 MemoryLog.log(this, "ChatRestore", "error", "Chat-restore recovery at startup failed: ${e.message}")
             }
             try {
-                // Every restore has now settled (portable recovery above, chat
-                // recovery just before): resume a username fill left pending by
-                // a restore, a lock or a full store. Not while a chat recovery
-                // is still unfinished, or it would fill histories about to be
-                // replaced.
-                if (!org.teslasoft.assistant.preferences.backup.ChatRestoreManager.hasPendingRecovery(this)) {
-                    DefaultUsernameFill.resumeIfPending(this)
-                }
-            } catch (_: Exception) { }
-            try {
                 // Durable generated-image catalog maintenance is resumable and
                 // deliberately stays on this worker: backfill authoritative
                 // histories before reconciling only journal-proven interrupted
@@ -272,6 +262,17 @@ class MainApplication : Application() {
             } catch (_: Exception) {
                 // The encrypted journal remains authoritative and retries later.
             }
+            try {
+                // Every step that can restore or add chats has now settled
+                // (portable and chat recovery, the outage merge, and new chats'
+                // first saves just above): resume a username fill left pending
+                // by a restore, a lock or a full store. Not while a chat
+                // recovery is still unfinished, or it would fill histories
+                // about to be replaced.
+                if (!org.teslasoft.assistant.preferences.backup.ChatRestoreManager.hasPendingRecovery(this)) {
+                    DefaultUsernameFill.resumeIfPending(this)
+                }
+            } catch (_: Exception) { }
             try {
                 ChatNavigationRepository.get(this).migrateSchema()
             } catch (_: Exception) {
