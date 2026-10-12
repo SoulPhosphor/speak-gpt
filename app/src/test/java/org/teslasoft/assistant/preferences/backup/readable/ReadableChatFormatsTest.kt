@@ -227,18 +227,28 @@ class ReadableChatFormatsTest {
     }
 
     @Test
-    fun namingChangesTheFingerprintOnlyWhenItAffectsTheExport() {
-        val named = listOf(mapOf<String, Any?>("message" to "a", "isBot" to true, "companionName" to "Sol"))
-        assertEquals(null, ReadableChatFormats.namingFingerprint(named, fallbackNames))
-        val unnamed = listOf(mapOf<String, Any?>("message" to "a", "isBot" to true))
-        val moon = ReadableChatFormats.namingFingerprint(unnamed, fallbackNames)
-        val sol = ReadableChatFormats.namingFingerprint(unnamed, fallbackNames.copy(currentCompanion = "Sol"))
-        assertNotEquals(moon, sol)
-        assertNotEquals(
-            ReadableChatFormats.fingerprint("Chat", "[]", null, null),
-            ReadableChatFormats.fingerprint("Chat", "[]", null, ReadableChatFormats.namingFingerprint(named, fallbackNames.copy(chatUsername = "Mary")))
+    fun everyExportRenderInputChangesTheFingerprint() {
+        fun render(
+            names: ReadableChatFormats.SpeakerNames = fallbackNames,
+            thinking: Boolean = true,
+            folders: Boolean = false,
+            locale: Locale = Locale.US,
+            zone: String = "UTC"
+        ) = ReadableChatFormats.fingerprint(
+            "Chat", "[]", null,
+            ReadableChatFormats.renderFingerprint(names, thinking, folders, locale, TimeZone.getTimeZone(zone))
         )
-        assertEquals(ReadableChatFormats.fingerprint("Chat", "[]"), ReadableChatFormats.fingerprint("Chat", "[]", null, null))
+        val base = render()
+        assertEquals(base, render())
+        for (changed in listOf(
+            render(names = fallbackNames.copy(chatUsername = "Mary")),
+            render(names = fallbackNames.copy(currentCompanion = "Sol")),
+            render(names = fallbackNames.copy(userFallback = "Utilisateur")),
+            render(thinking = false),
+            render(folders = true),
+            render(locale = Locale.FRANCE),
+            render(zone = "Asia/Tokyo")
+        )) assertNotEquals(base, changed)
     }
 
     // ---- thinking ----

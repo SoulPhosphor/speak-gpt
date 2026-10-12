@@ -163,11 +163,6 @@ class MainApplication : Application() {
                     return@Thread
                 }
                 PortableRestoreProcessGate.finishStartupRecovery(true)
-                // Any restore has now finished successfully: resume a username
-                // fill left pending by a restore, a lock or a full store.
-                try {
-                    DefaultUsernameFill.resumeIfPending(this)
-                } catch (_: Exception) { }
             } catch (_: Exception) {
                 PortableRestoreProcessGate.finishStartupRecovery(false)
                 return@Thread
@@ -193,6 +188,16 @@ class MainApplication : Application() {
             } catch (e: Exception) {
                 MemoryLog.log(this, "ChatRestore", "error", "Chat-restore recovery at startup failed: ${e.message}")
             }
+            try {
+                // Every restore has now settled (portable recovery above, chat
+                // recovery just before): resume a username fill left pending by
+                // a restore, a lock or a full store. Not while a chat recovery
+                // is still unfinished, or it would fill histories about to be
+                // replaced.
+                if (!org.teslasoft.assistant.preferences.backup.ChatRestoreManager.hasPendingRecovery(this)) {
+                    DefaultUsernameFill.resumeIfPending(this)
+                }
+            } catch (_: Exception) { }
             try {
                 // Durable generated-image catalog maintenance is resumable and
                 // deliberately stays on this worker: backfill authoritative

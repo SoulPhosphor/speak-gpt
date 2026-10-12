@@ -330,21 +330,33 @@ object ReadableChatFormats {
     }
 
     /**
-     * The naming inputs an export depends on beyond the stored messages: the
-     * chat's own username, and the current companion name when some
-     * companion message has no stored name. Null when neither applies, so
-     * fingerprints of unaffected chats stay as they were.
+     * Everything an export depends on beyond the stored messages, title and
+     * folder: the export layout version, the names used for speakers (the
+     * chat's own username, the current companion, the built-in fallbacks),
+     * the language and time zone that format dates and times, and the Include
+     * Thinking and Include Chat Folder Location settings. Any change makes
+     * "New and Updated Chats" export the chat again.
      */
-    fun namingFingerprint(messages: List<Map<String, Any?>>, names: SpeakerNames): String? {
-        val username = names.chatUsername?.trim()?.takeIf { it.isNotEmpty() }
-        val companion = names.currentCompanion?.trim()?.takeIf { it.isNotEmpty() }?.takeIf {
-            messages.any { m ->
-                isCompanion(m) && m[ChatSpeakerNames.COMPANION_NAME_KEY]?.toString()?.isNotBlank() != true
-            }
-        }
-        if (username == null && companion == null) return null
-        return "u:${username.orEmpty()}\u0000c:${companion.orEmpty()}"
-    }
+    fun renderFingerprint(
+        names: SpeakerNames,
+        includeThinking: Boolean,
+        includeFolders: Boolean,
+        locale: Locale = Locale.getDefault(),
+        timeZone: TimeZone = TimeZone.getDefault()
+    ): String = listOf(
+        RENDER_VERSION,
+        names.chatUsername?.trim().orEmpty(),
+        names.currentCompanion?.trim().orEmpty(),
+        names.userFallback,
+        names.companionFallback,
+        locale.toLanguageTag(),
+        timeZone.id,
+        includeThinking.toString(),
+        includeFolders.toString()
+    ).joinToString("\u0000")
+
+    /** Bumped whenever the rendered export layout changes. */
+    private const val RENDER_VERSION = "render-2"
 
     /**
      * The incremental selection: chat ids whose fingerprint is new or changed

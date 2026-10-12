@@ -80,8 +80,12 @@ object DamagedChatRepair {
             }
             // Reads correctly now. A chat reset after a parse failure still
             // has its saved-aside contents to recover.
+            // Saved copies an earlier successful repair already merged are
+            // kept on disk but not replayed, so a message deleted since then
+            // is never brought back.
+            val consumed = consumedCopies(context)
             val savedCopies = SnapshotRegistry.entries(context)
-                .filter { it.chatId == chatId && it.origin == SnapshotRegistry.ORIGIN_CORRUPT_JSON }
+                .filter { it.chatId == chatId && it.origin == SnapshotRegistry.ORIGIN_CORRUPT_JSON && it.id !in consumed }
                 .sortedBy { it.createdAt }
             if (savedCopies.isEmpty()) return Outcome.REPAIRED
             var merged: List<HashMap<String, Any>> = current.messages
@@ -96,8 +100,13 @@ object DamagedChatRepair {
                 merged = DamagedChatSalvage.merge(recovered, merged)
             }
             if (!recoveredAny) return Outcome.FAILED
-            if (merged.size == current.messages.size) return Outcome.REPAIRED // already merged earlier
-            writeVerified(context, chatId, operation, ArrayList(merged), rollbackTo = current.messages, preserved)
+            val outcome = if (merged.size == current.messages.size) {
+                Outcome.REPAIRED // everything recovered is already in the chat
+            } else {
+                writeVerified(context, chatId, operation, ArrayList(merged), rollbackTo = current.messages, preserved)
+            }
+            if (outcome == Outcome.REPAIRED) markConsumed(context, savedCopies.map { it.id })
+            outcome
         }
     }
 
@@ -157,6 +166,24 @@ object DamagedChatRepair {
         val back = chats.getChatByIdResult(context, chatId, operation)
         return ChatStorageHealth.isAuthoritative(back.state) &&
             Gson().toJson(back.messages) == Gson().toJson(messages)
+    }
+
+    private const val STATE_FILE = "damaged_chat_repair"
+    private const val KEY_CONSUMED = "consumed_saved_copies"
+
+    private fun consumedCopies(context: Context): Set<String> = try {
+        context.applicationContext.getSharedPreferences(STATE_FILE, Context.MODE_PRIVATE)
+            .getStringSet(KEY_CONSUMED, null).orEmpty().toSet()
+    } catch (_: Exception) {
+        emptySet()
+    }
+
+    private fun markConsumed(context: Context, ids: List<String>) {
+        if (ids.isEmpty()) return
+        try {
+            val prefs = context.applicationContext.getSharedPreferences(STATE_FILE, Context.MODE_PRIVATE)
+            prefs.edit().putStringSet(KEY_CONSUMED, HashSet(consumedCopies(context) + ids)).commit()
+        } catch (_: Exception) { }
     }
 
     /** The verified copy taken before a change; [copy] is null when the

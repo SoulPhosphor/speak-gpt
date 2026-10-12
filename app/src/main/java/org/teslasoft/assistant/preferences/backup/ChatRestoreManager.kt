@@ -73,6 +73,13 @@ object ChatRestoreManager {
             false
         }
 
+    /** True while an interrupted chat recovery restore is still unfinished. */
+    fun hasPendingRecovery(context: Context): Boolean = try {
+        prefs(context.applicationContext).getString(KEY_PHASE, null) != null
+    } catch (_: Exception) {
+        true
+    }
+
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
