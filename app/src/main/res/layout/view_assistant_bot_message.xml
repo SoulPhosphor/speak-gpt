@@ -247,15 +247,13 @@
 
             <TextView
                 android:id="@+id/status_marker"
+                style="@style/Widget.App.FailureDetail"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
                 android:layout_marginEnd="12dp"
                 android:paddingTop="2dp"
                 android:paddingBottom="2dp"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="12sp"
-                android:textStyle="italic"
                 android:visibility="gone"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/image_frame" />

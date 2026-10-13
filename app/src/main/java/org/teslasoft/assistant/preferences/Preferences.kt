@@ -3088,6 +3088,15 @@ class Preferences internal constructor(
         }
     }
 
+    /** Failed auto-name attempts for this untitled chat, kept across visits so
+     *  the summarizer backup is reached after the chat model's attempts. */
+    fun getAutoNameAttempts(): Int =
+        getString("auto_name_attempts", "0").toIntOrNull() ?: 0
+
+    fun setAutoNameAttempts(value: Int) {
+        putString("auto_name_attempts", value.toString())
+    }
+
     fun getSummarizerCatchUpPending(): Boolean =
         getString("summarizer_catch_up_pending", "false") == "true"
 

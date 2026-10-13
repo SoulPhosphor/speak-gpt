@@ -409,15 +409,164 @@ class SummarizerController(
      * One-shot image-prompt summary (owner request, Aug 16 2026). Sends the
      * single [imagePrompt] to the configured Summary Model under the Image
      * Summary Prompt and returns the model's short version, or null when the
-     * summarizer is not configured or the call fails. Deliberately silent: an
-     * image summary is a token-saving convenience, so a failure never writes a
+     * summarizer is not configured or the call fails. Silent in chat: an image
+     * summary is a token-saving convenience, so a failure never writes a
      * Summarizer Error, never interrupts chat, and simply leaves the caller to
-     * fall back to the full prompt and try again on a later turn.
+     * fall back to the full prompt and try again on a later turn. The failure
+     * is still recorded in the Provider Failure Log or Error Log.
      */
     suspend fun summarizeImagePrompt(imagePrompt: String): String? {
         if (imagePrompt.isBlank()) return null
         val prefs = Preferences.getPreferences(appContext, "")
 
+        val (endpoint, model, requestFavorite, routingResolution) =
+            resolveOneShotTarget(prefs) ?: return null
+
+        val instruction = SummarizerPromptSets.activeText(
+            prefs,
+            SummarizerPromptSets.Kind.IMAGE,
+            chatIdProvider()
+        )
+        val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
+        val evidence = SummarizerDiagnostics.RequestEvidence()
+        val privateValues = listOf(body, imagePrompt, endpoint.apiKey)
+        val text = try {
+            withContext(Dispatchers.IO) {
+                val request = ChatCompletionRequest(
+                    model = ModelId(model),
+                    maxTokens = 200,
+                    messages = listOf(ChatMessage(role = ChatRole.User, content = body))
+                )
+                withSummarizerUsage(
+                    Preferences.getPreferences(appContext, chatIdProvider()),
+                    endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
+                    UsageFunction.IMAGE_DESCRIPTION
+                ) { attempt ->
+                    val client = buildClient(endpoint, routingResolution.providerJson, evidence, attempt)
+                    evidence.dispatched = true
+                    client.chatCompletion(request)
+                }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
+            }.trim()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
+            recordImagePromptFailure(
+                prefs, SummarizerDiagnostics.owner(e, classified, evidence), e, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues
+            )
+            return null
+        }
+        if (text.isBlank()) {
+            recordImagePromptFailure(
+                prefs, SummarizerDiagnostics.Owner.EXTERNAL, null, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues
+            )
+            return null
+        }
+        return text
+    }
+
+    /**
+     * A failed image prompt summary is still silent in chat, but is recorded
+     * in exactly one log (owner ruling, Oct 12 2026): a provider failure in the
+     * Provider Failure Log as "Summarize Image Prompt", anything else in the
+     * Error Log. Cancellation and missing setup are not recorded.
+     */
+    private fun recordImagePromptFailure(
+        prefs: Preferences,
+        owner: SummarizerDiagnostics.Owner,
+        error: Throwable?,
+        evidence: SummarizerDiagnostics.RequestEvidence,
+        endpoint: ApiEndpointObject,
+        model: String,
+        requestedProvider: String?,
+        privateValues: List<String>
+    ) {
+        val function = appContext.getString(R.string.provider_function_summarize_image_prompt)
+        val allPrivate = privateValues + evidence.privateResponseValues()
+        val providerEvidence = evidence.snapshot()
+        SummarizerDiagnostics.record(
+            owner,
+            logProviders = prefs.getLogChatFailures(),
+            local = {
+                org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
+                    SummarizerDiagnostics.localDetail(
+                        function, error ?: IllegalStateException("Local $function failure"), allPrivate
+                    ))
+            },
+            external = {
+                val message = SummarizerDetailSanitizer.sanitize(
+                    providerEvidence.errorMessages.joinToString("\n").ifBlank { null }
+                        ?: error?.message, allPrivate
+                ) ?: "Provider returned no usable completion"
+                scope.launch(Dispatchers.IO) {
+                    org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                        appContext, SummarizerDetailSanitizer.sanitize(endpoint.label, allPrivate) ?: "Not Reported",
+                        SummarizerDetailSanitizer.sanitize(providerEvidence.actualServingProvider, allPrivate) ?: "Not Reported",
+                        SummarizerDetailSanitizer.sanitize(model, allPrivate) ?: "Not Reported", function, message,
+                        requestedRoutedProvider = SummarizerDetailSanitizer.sanitize(requestedProvider, allPrivate),
+                        outerHttpStatus = providerEvidence.outerHttpStatus,
+                        embeddedProviderStatus = providerEvidence.embeddedHttpStatus,
+                        providerCode = SummarizerDetailSanitizer.sanitize(providerEvidence.providerCode, allPrivate),
+                        providerType = SummarizerDetailSanitizer.sanitize(providerEvidence.providerType, allPrivate),
+                        providerErrorType = SummarizerDetailSanitizer.sanitize(providerEvidence.providerErrorType, allPrivate),
+                        contentFilterSide = providerEvidence.contentFilterSide?.wire,
+                        attemptId = providerEvidence.attemptId
+                    )
+                }
+            }
+        )
+    }
+
+    /**
+     * Backup chat title (owner ruling, Oct 12 2026): used only after the
+     * chat's own model has used up its naming attempts. Runs whether or not
+     * summarizing is on for this chat, since naming does not touch the
+     * chat's summary. Sends [messages] (the conversation's text turns and the
+     * naming instruction) to the configured Summary Model and returns its raw
+     * reply, or null when no summarizer is set up or the call fails. Silent
+     * like the image summary: a failure leaves the chat untitled and writes no
+     * Summarizer Error.
+     */
+    suspend fun generateChatTitle(messages: List<ChatMessage>): String? {
+        if (messages.isEmpty()) return null
+        val prefs = Preferences.getPreferences(appContext, "")
+        val (endpoint, model, requestFavorite, routingResolution) =
+            resolveOneShotTarget(prefs) ?: return null
+
+        return try {
+            withContext(Dispatchers.IO) {
+                val request = ChatCompletionRequest(
+                    model = ModelId(model),
+                    messages = messages
+                )
+                withSummarizerUsage(
+                    Preferences.getPreferences(appContext, chatIdProvider()),
+                    endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
+                    UsageFunction.SUMMARIZING
+                ) { attempt ->
+                    buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
+                        .chatCompletion(request)
+                }.choices.firstOrNull()?.message?.content?.toString()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private data class OneShotTarget(
+        val endpoint: ApiEndpointObject,
+        val model: String,
+        val requestFavorite: org.teslasoft.assistant.preferences.dto.FavoriteModelObject?,
+        val routingResolution: ProviderRoutingResolver.Resolution
+    )
+
+    /** The configured Summary Model for a one-shot call, or null when it is
+     *  not set up or its routing is blocked. */
+    private fun resolveOneShotTarget(prefs: Preferences): OneShotTarget? {
         val endpointId = prefs.getSummarizerEndpointId()
         if (endpointId.isBlank()) return null
         val endpoint = try {
@@ -448,34 +597,7 @@ class SummarizerController(
             endpoint.isOpenRouterRouting(), requestFavorite
         )
         if (routingResolution.block != RoutingBlock.NONE) return null
-
-        val instruction = SummarizerPromptSets.activeText(
-            prefs,
-            SummarizerPromptSets.Kind.IMAGE,
-            chatIdProvider()
-        )
-        val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
-        return try {
-            withContext(Dispatchers.IO) {
-                val request = ChatCompletionRequest(
-                    model = ModelId(model),
-                    maxTokens = 200,
-                    messages = listOf(ChatMessage(role = ChatRole.User, content = body))
-                )
-                withSummarizerUsage(
-                    Preferences.getPreferences(appContext, chatIdProvider()),
-                    endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
-                    UsageFunction.IMAGE_DESCRIPTION
-                ) { attempt ->
-                    buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
-                        .chatCompletion(request)
-                }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
-            }.trim().ifBlank { null }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null
-        }
+        return OneShotTarget(endpoint, model, requestFavorite, routingResolution)
     }
 
     private suspend fun compactSnapshot(

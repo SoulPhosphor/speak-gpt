@@ -770,13 +770,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val nativePdfs: List<NativePdfPayload>
     )
 
-    // Auto-naming attempts this screen instance. Used to be a one-shot
+    // Auto-naming attempts for this chat. Used to be a one-shot
     // "messageCounter == 0" gate: a single transient failure (network blip,
     // model briefly unavailable) left the chat named "_autoname_…" for the
     // whole session with no retry. Now each turn retries while the
     // placeholder name remains, capped so a permanently broken endpoint
     // can't fire a naming request forever.
-    private var autoNameAttempts = 0
+    // Saved with the chat so leaving and returning does not restart the
+    // chat model's attempts before the summarizer backup is reached.
+    private var autoNameAttempts: Int
+        get() = preferences?.getAutoNameAttempts() ?: 0
+        set(value) { preferences?.setAutoNameAttempts(value) }
     private val AUTO_NAME_MAX_ATTEMPTS = 3
 
     // True while an auto-name rename's off-main storage work is in flight, so a
@@ -4754,11 +4758,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val stillCurrent = latest?.form == IncludeForm.FULL &&
                     latest.fullText == sourceText
 
+            var failureDetail: String? = null
             val completionMessage = when {
                 result.isFailure -> {
                     result.exceptionOrNull()?.let { error ->
-                        val classified = GenerationErrorClassifier.classify(error)
-                        logGenerationError(classified, error, "document condense")
+                        failureDetail = logIncludeSummaryFailure(error, include, "document condense")
                     }
                     getString(R.string.include_condense_failed)
                 }
@@ -4786,9 +4790,66 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             spinner?.visibility = View.GONE
             status?.text = completionMessage
+            failureDetail?.let { detailText ->
+                view.findViewById<TextView>(R.id.include_failure_detail)?.apply {
+                    text = detailText
+                    visibility = View.VISIBLE
+                }
+            }
             okay?.visibility = View.VISIBLE
             condenseJob = null
         }
+    }
+
+    /**
+     * Where a failed document or image summary is recorded (owner ruling,
+     * Oct 12 2026). A provider failure goes to the Provider Failure Log, in
+     * the same shape as a chat failure, with the function named after what was
+     * being summarized ("Summarize JPEG"). Any other failure is an app-side
+     * problem and goes to the Error Log as before.
+     *
+     * Returns the text shown at the bottom of the result pop-up: the same
+     * explanation and provider details a failed chat reply shows, then which
+     * log holds the message.
+     */
+    private fun logIncludeSummaryFailure(error: Throwable, include: ChatInclude, trigger: String): String {
+        val classified = GenerationErrorClassifier.classify(error)
+        val notReported = getString(R.string.provider_value_not_reported)
+        val apiProviderName = apiEndpointObject?.label?.trim()?.ifBlank { null }
+            ?: apiEndpointObject?.host?.trim()?.ifBlank { null } ?: notReported
+        val modelName = model.trim().ifBlank { null }
+            ?: preferences?.getModel()?.trim()?.ifBlank { null } ?: notReported
+        // Name the type the user recognizes: the file's own extension (a JSON
+        // file read as text is still "JSON"), else the stored kind.
+        val fileType = include.fileName.substringAfterLast('.', "").trim()
+            .ifBlank { include.kind.key }
+            .uppercase(java.util.Locale.ROOT)
+        val functionLabel = getString(R.string.provider_function_summarize_file, fileType)
+        val detail = (classified.providerLimitMessage(this, forErrorLog = true)
+            ?: classified.chatMessage(this, forErrorLog = true)) + "\n" +
+            classified.providerDetailBlock(
+                this, error.message, apiProviderName, notReported, modelName, functionLabel
+            )
+
+        if (!classified.reachedServer()) {
+            logGenerationError(classified, error, trigger)
+            return detail + "\n\n" + getString(R.string.include_failure_in_error_log)
+        }
+        if (preferences?.getLogChatFailures() != true) return detail
+
+        val providerError = error.message?.trim()?.ifBlank { null }
+            ?: classified.httpStatus?.toString() ?: "(no message)"
+        val appContext = applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                    appContext, apiProviderName, notReported, modelName,
+                    functionLabel, providerError,
+                    outerHttpStatus = classified.httpStatus
+                )
+            } catch (_: Exception) { /* never let diagnostics break the dialog */ }
+        }
+        return detail + "\n\n" + getString(R.string.include_failure_in_provider_log)
     }
 
     /**
@@ -4945,11 +5006,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val stillCurrent = latest?.form == IncludeForm.FULL &&
                     latest.kind.isImage() && latest.imageFileHash == include.imageFileHash
 
+            var failureDetail: String? = null
             val completionMessage = when {
                 result.isFailure -> {
                     result.exceptionOrNull()?.let { error ->
-                        val classified = GenerationErrorClassifier.classify(error)
-                        logGenerationError(classified, error, "image reduce")
+                        failureDetail = logIncludeSummaryFailure(error, include, "image reduce")
                     }
                     getString(R.string.include_reduce_failed)
                 }
@@ -4968,6 +5029,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             spinner?.visibility = View.GONE
             status?.text = completionMessage
+            failureDetail?.let { detailText ->
+                view.findViewById<TextView>(R.id.include_failure_detail)?.apply {
+                    text = detailText
+                    visibility = View.VISIBLE
+                }
+            }
             okay?.visibility = View.VISIBLE
             reduceJob = null
         }
@@ -7947,6 +8014,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (content.contentType?.match(ContentType.Application.Json) != true) return
         val text = content.text
 
+        titleRequestModel(text)?.let { titleModel ->
+            augmentTitleRequestWithReasoningOff(request, content, titleModel)
+            return
+        }
+
         var bodyHasTools = false
         val model = try {
             val root = com.google.gson.JsonParser.parseString(text).asJsonObject
@@ -8059,6 +8131,54 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 "no reasoning fields (Auto / provider default)"
             }
         }
+    }
+
+    /** The model of an auto-naming request, or null for any other body. The
+     *  naming request is the one carrying the title instruction. */
+    private fun titleRequestModel(body: String): String? = try {
+        val root = com.google.gson.JsonParser.parseString(body).asJsonObject
+        val isTitleRequest = root.getAsJsonArray("messages")?.any { message ->
+            message.isJsonObject &&
+                message.asJsonObject.get("content")?.takeIf { it.isJsonPrimitive }?.asString ==
+                org.teslasoft.assistant.util.ChatTitleExtractor.TITLE_INSTRUCTION
+        } == true
+        if (isTitleRequest) root.get("model")?.takeIf { !it.isJsonNull }?.asString else null
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * A title needs no thinking (owner ruling, Oct 12 2026). When the model is
+     * known to let thinking be turned off, the naming request asks for it off,
+     * whatever this chat's reasoning setting is. Otherwise the request is sent
+     * unchanged. A provider that refuses the request fails that naming
+     * attempt, and the normal retries and summarizer backup take over.
+     */
+    private fun augmentTitleRequestWithReasoningOff(
+        request: HttpRequestBuilder,
+        content: TextContent,
+        model: String
+    ) {
+        val capability = reasoningCapabilityForModel(model)
+        if (!capability.isReasoningCapable || !capability.canDisableReasoning) return
+        val off = org.teslasoft.assistant.reasoning.ResolvedReasoning(
+            effort = org.teslasoft.assistant.reasoning.ReasoningEffort.OFF,
+            showReasoning = false,
+            source = org.teslasoft.assistant.reasoning.ResolvedReasoning.Source.DEFAULT_AUTO
+        )
+        val fields = org.teslasoft.assistant.reasoning.ReasoningRequestSerializer.requestFields(
+            off,
+            apiEndpointObject?.isOpenRouterRouting() == true,
+            reasoningCapable = true
+        ) ?: return
+        val newBody = try {
+            val root = com.google.gson.JsonParser.parseString(content.text).asJsonObject
+            for ((key, value) in fields.entrySet()) root.add(key, value)
+            root.toString()
+        } catch (_: Exception) {
+            return
+        }
+        request.setBody(TextContent(newBody, content.contentType ?: ContentType.Application.Json))
     }
 
     /** Existing user-facing wording for a blocked routing configuration. */
@@ -13866,10 +13986,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     conversationStart,
                     ChatMessage(
                         role = ChatRole.System,
-                        content = "Create a concise 2-6 word title for the conversation that follows. " +
-                                "Return only the title text. Describe the conversation topic, not this naming instruction. " +
-                                "Do not explain or describe what the user wants. Do not prefix the title with " +
-                                "'Title', 'Name', 'Chat', or 'Bot'."
+                        content = org.teslasoft.assistant.util.ChatTitleExtractor.TITLE_INSTRUCTION
                     )
                 )
 
@@ -13894,65 +14011,97 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // means editChat aborted with the chat intact under its old
                 // name. One catch-all used to swallow both — including a
                 // half-applied settings copy.
+                // Thinking text a model writes before the title is looked
+                // past; a reply with no usable title counts as a failed
+                // attempt, the same as a request error.
                 val newChatName: String? = try {
-                    val rawName = withAuxiliaryTextUsage(
-                        requestModel = titleModel,
-                        category = UsageCategory.SUMMARIZING,
-                        messageId = null,
-                        function = UsageFunction.SUMMARIZING
-                    ) { ai!!.chatCompletion(chatCompletionRequest2) }
-                        .choices.firstOrNull()?.message?.content
-                    rawName
-                        ?.trim()
-                        ?.lineSequence()
-                        ?.firstOrNull { it.isNotBlank() }
-                        ?.trim()
-                        ?.replace(Regex("(?i)^(title|name)\\s*:\\s*"), "")
-                        ?.trim()
-                        ?.removeSurrounding("\"")
-                        ?.removeSurrounding("'")
-                        ?.removeSurrounding("`")
-                        ?.removeSurrounding("**")
-                        ?.trim()
-                        ?.take(80)
-                        ?.trim()
-                        ?.takeIf { it.isNotBlank() }
+                    org.teslasoft.assistant.util.ChatTitleExtractor.extract(
+                        withAuxiliaryTextUsage(
+                            requestModel = titleModel,
+                            category = UsageCategory.SUMMARIZING,
+                            messageId = null,
+                            function = UsageFunction.SUMMARIZING
+                        ) { ai!!.chatCompletion(chatCompletionRequest2) }
+                            .choices.firstOrNull()?.message?.content
+                    )
                 } catch (e: Exception) {
                     logVoiceEvent("auto-name request failed (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS); a later turn retries")
                     null
                 }
 
-                if (!newChatName.isNullOrBlank() && !renameInProgress) {
-                    // Persist the title off the main thread. Keep the rename
-                    // guard across the IO suspension; the chat ID never changes.
-                    renameInProgress = true
-                    val renamed = try {
-                        withContext(Dispatchers.IO) {
-                            ChatPreferences.getChatPreferences().editChat(this@ChatActivity, newChatName, placeholderName, chatId)
-                        }
-                    } catch (e: Exception) {
-                        logVoiceEventAlways("auto-name rename threw (${e.message}); keeping the placeholder name and old chat id")
-                        false
-                    } finally {
-                        renameInProgress = false
-                    }
-
-                    // Back on the main dispatcher (regularGPTResponse resumes on
-                    // Main after the IO hop). Never touch views/intent from IO,
-                    // and never apply the result to a destroyed screen.
-                    if (renamed && !isFinishing && !isDestroyed) {
-                        // Update the display and restored title only. Existing
-                        // preferences, voice playback and jobs keep the same ID.
-                        this.chatName = newChatName
-                        intent.putExtra("name", this.chatName)
-                        activityTitle?.text = newChatName
-                        logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
-                    } else if (!renamed) {
-                        logVoiceEventAlways("auto-name rename did not apply; the chat keeps its placeholder name (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS)")
+                // Owner ruling (Oct 12 2026): once the chat's own model has
+                // used up its naming attempts, the summarizer model is the
+                // backup — even when summarizing is off for this chat. With
+                // no summarizer set up, the chat stays "Untitled chat".
+                val lastMainAttempt = autoNameAttempts >= AUTO_NAME_MAX_ATTEMPTS
+                val renamed = !newChatName.isNullOrBlank() && applyAutoName(newChatName, placeholderName)
+                if (!renamed && lastMainAttempt && !isFinishing && !isDestroyed) {
+                    val backupName = summarizerChatTitle(m)
+                    if (!backupName.isNullOrBlank() && backupName != newChatName) {
+                        applyAutoName(backupName, placeholderName)
                     }
                 }
             }
         }
+    }
+
+    /** Saves an auto-generated title. Returns true when the chat was renamed. */
+    private suspend fun applyAutoName(newChatName: String, placeholderName: String): Boolean {
+        if (renameInProgress) return false
+        // Persist the title off the main thread. Keep the rename
+        // guard across the IO suspension; the chat ID never changes.
+        renameInProgress = true
+        val renamed = try {
+            withContext(Dispatchers.IO) {
+                ChatPreferences.getChatPreferences().editChat(this@ChatActivity, newChatName, placeholderName, chatId)
+            }
+        } catch (e: Exception) {
+            logVoiceEventAlways("auto-name rename threw (${e.message}); keeping the placeholder name and old chat id")
+            false
+        } finally {
+            renameInProgress = false
+        }
+
+        // Back on the main dispatcher (regularGPTResponse resumes on
+        // Main after the IO hop). Never touch views/intent from IO,
+        // and never apply the result to a destroyed screen.
+        if (renamed && !isFinishing && !isDestroyed) {
+            // Update the display and restored title only. Existing
+            // preferences, voice playback and jobs keep the same ID.
+            this.chatName = newChatName
+            intent.putExtra("name", this.chatName)
+            activityTitle?.text = newChatName
+            autoNameAttempts = 0
+            logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
+        } else if (!renamed) {
+            logVoiceEventAlways("auto-name rename did not apply; the chat keeps its placeholder name (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS)")
+        }
+        return renamed
+    }
+
+    /**
+     * Backup title from the summarizer model, or null when no summarizer is
+     * set up or it gave no usable title. Sends only the conversation's text
+     * turns and the naming instruction — not this chat's system prompt or
+     * images.
+     */
+    private suspend fun summarizerChatTitle(namingMessages: List<ChatMessage>): String? {
+        val controller = summarizerController ?: return null
+        val textOnly = namingMessages.mapNotNull { message ->
+            // The plain-text accessor throws for messages with images.
+            val text = when (val content = message.messageContent) {
+                is com.aallam.openai.api.chat.TextContent -> content.content
+                is com.aallam.openai.api.chat.ListContent -> content.content
+                    .filterIsInstance<com.aallam.openai.api.chat.TextPart>()
+                    .joinToString("\n") { it.text }
+                null -> ""
+            }.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val isInstruction = text == org.teslasoft.assistant.util.ChatTitleExtractor.TITLE_INSTRUCTION
+            if (message.role == ChatRole.System && !isInstruction) return@mapNotNull null
+            ChatMessage(role = message.role, content = text)
+        }
+        if (textOnly.none { it.role != ChatRole.System }) return null
+        return org.teslasoft.assistant.util.ChatTitleExtractor.extract(controller.generateChatTitle(textOnly))
     }
 
     private fun pronounce(st: Boolean, message: String) {

@@ -1060,6 +1060,10 @@ Their shared runtime blur radius is `@dimen/chat_action_menu_blur_radius`; keep 
 
 `Widget.App.Chat.CompactionMarker` is the centered **Compacted** title between message units. It inherits the shared section-title typography and owns its spacing and alignment. Both user and assistant row layouts carry the same normally hidden marker slot; the adapter shows exactly one slot at the persisted manual boundary without inserting a synthetic conversation message.
 
+### Failure detail text
+
+`Widget.App.FailureDetail` is the small italic accent-colored text that shows a failure's cause and provider details: the status marker under a failed or incomplete assistant reply, and the details at the bottom of the Condense/Reduce result pop-up. It owns color, size and style only; each layout keeps its own spacing.
+
 ## Chat Thinking disclosure
 
 Use the complete `Widget.App.Chat.Thinking.*` family for the provider-supplied Thinking disclosure on assistant replies:

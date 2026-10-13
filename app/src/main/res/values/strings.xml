@@ -1077,6 +1077,9 @@
     <string name="provider_parsing_error_line">Parsing Error: %1$s</string>
     <string name="provider_raw_response_line">Raw Provider Response: %1$s</string>
     <string name="provider_function_chat">Chat</string>
+    <!-- Function line for a failed document or image summary; %1$s is the file type, e.g. JPEG. -->
+    <string name="provider_function_summarize_file">Summarize %1$s</string>
+    <string name="provider_function_summarize_image_prompt">Summarize Image Prompt</string>
     <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried.</string>
     <string name="provider_unknown_limit_log_note">Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
@@ -3482,6 +3485,9 @@
     <string name="include_condense_working">Document is being condensed.</string>
     <string name="include_condense_complete">Complete</string>
     <string name="include_condense_failed">Document could not be condensed. The full document is still included.</string>
+    <!-- Last line of the failure details in the Condense/Reduce pop-up. -->
+    <string name="include_failure_in_provider_log">This message can be found in the Provider Failure Log.</string>
+    <string name="include_failure_in_error_log">This message can be found in the Error Log.</string>
     <string name="include_condense_not_shorter">The AI did not return a shorter summary. The full document is still included.</string>
     <string name="include_edit_empty">Summary cannot be empty.</string>
 
@@ -3619,7 +3625,7 @@
          ================================================================== -->
     <string name="title_summarizer_settings">Summarizer Settings</string>
     <string name="tile_summarizer_settings_subtitle">Settings related to the summarizer feature.</string>
-    <string name="summarizer_intro">The summarizer sends the specified number of messages to the model each turn. Anything beyond that amount is summarized using the AI model selected in these settings. At any time, the summarizer can be turned off in Quick settings, which will allow all messages to be sent to the AI again.\n\nThe Summarizer also creates a summarized version of image prompts to save on tokens.</string>
+    <string name="summarizer_intro">The summarizer sends the specified number of messages to the model each turn. Anything beyond that amount is summarized using the AI model selected in these settings. At any time, the summarizer can be turned off in Quick settings, which will allow all messages to be sent to the AI again.\n\nThe summarizer is also used for image prompt summaries, backup chat titles, and compaction.</string>
 
     <string name="summarizer_section_model">Summary Model</string>
     <string name="summarizer_row_endpoint">Summarizer Endpoint</string>
@@ -3633,6 +3639,7 @@
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
+    <string name="summarizer_new_chats_toggle_hint">Summarizer model is still used as a backup for chat titling and compaction when summarizing is turned off.</string>
     <string name="summarizer_length">Summary Length</string>
     <string name="summarizer_length_hint">Maximum amount of words the summary can become.</string>
 

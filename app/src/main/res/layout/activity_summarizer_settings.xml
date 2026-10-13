@@ -82,6 +82,10 @@
                     <TextView
                         style="@style/Widget.App.Row.Title"
                         android:text="@string/summarizer_new_chats_toggle" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/summarizer_new_chats_toggle_hint" />
                 </LinearLayout>
 
                 <com.google.android.material.materialswitch.MaterialSwitch
