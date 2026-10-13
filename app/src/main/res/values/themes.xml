@@ -1622,6 +1622,15 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- Chat header action icon. Used by New Chat; the older header icons
+         still carry these values inline until the chat restyle converts them. -->
+    <style name="Widget.App.Chat.HeaderAction" parent="">
+        <item name="android:layout_width">@dimen/chat_header_action_size</item>
+        <item name="android:layout_height">@dimen/chat_header_action_size</item>
+        <item name="android:layout_marginEnd">@dimen/chat_header_action_gap</item>
+        <item name="android:background">@drawable/btn_accent_tonal_v4</item>
+    </style>
+
     <!-- Chat composer host: the space behind the floating composer stays transparent. -->
     <style name="Widget.App.Chat.ComposerHost" parent="">
         <item name="android:background">@color/transparent</item>

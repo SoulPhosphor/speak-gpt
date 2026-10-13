@@ -501,6 +501,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var chat: ChatTranscriptRecyclerView? = null
     private var activityTitle: TextView? = null
     private var btnQuickSettings: ImageButton? = null
+    private var btnNewChat: ImageButton? = null
     private var fileContents: ByteArray? = null
     private var pendingChatExportBytes: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
@@ -1666,6 +1667,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         refreshUserAvatar()
         refreshUserIdentity()
         drawerController?.refresh()
+    }
+
+    /** New Chat shows once this chat has an assistant reply with text. */
+    private fun refreshNewChatButton() {
+        val hasReply = messages.any { row ->
+            row["isBot"] == true &&
+                row[ChatAdapter.KEY_IMAGE_CONFIRMATION] != true &&
+                row[ChatAdapter.KEY_IMAGE_PROGRESS] != true &&
+                row["message"]?.toString().orEmpty().isNotBlank()
+        }
+        btnNewChat?.visibility = if (hasReply) View.VISIBLE else View.GONE
+    }
+
+    /** Opens a fresh chat, the same way the drawer's New Chat does. */
+    private fun openNewChat() {
+        lifecycleScope.launch {
+            val pending = withContext(Dispatchers.IO) {
+                NewConversationCoordinator(this@ChatActivity).createDefaultPendingConversation()
+            }
+            startActivity(rootIntent(this@ChatActivity, pending.id, pending.name, pendingConversation = true))
+        }
     }
 
     /** Force the chat's top action bar and its buttons back to fully visible. */
@@ -3218,6 +3240,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 preferences?.getManualCompactionBoundary() ?: 0
             )
             adapter?.setOnUpdateListener(this)
+            adapter?.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+                override fun onChanged() = refreshNewChatButton()
+                override fun onItemRangeChanged(positionStart: Int, itemCount: Int) = refreshNewChatButton()
+                override fun onItemRangeInserted(positionStart: Int, itemCount: Int) = refreshNewChatButton()
+                override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) = refreshNewChatButton()
+            })
+            refreshNewChatButton()
 
             initUI()
             refreshActiveProfileButton()
@@ -3257,6 +3286,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         progress = findViewById(R.id.progress)
         activityTitle = findViewById(R.id.chat_activity_title)
         btnQuickSettings = findViewById(R.id.btn_quick_settings)
+        btnNewChat = findViewById(R.id.btn_new_chat)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnConversationSummary = findViewById(R.id.btn_conversation_summary)
@@ -5283,6 +5313,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnChatMenu?.setOnClickListener { anchor ->
             showChatOptionsMenu(anchor)
         }
+
+        btnNewChat?.setOnClickListener { openNewChat() }
 
         btnQuickSettings?.setOnClickListener {
             openSummoningCircle()
