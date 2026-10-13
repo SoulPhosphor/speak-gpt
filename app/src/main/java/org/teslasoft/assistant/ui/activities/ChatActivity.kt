@@ -770,13 +770,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val nativePdfs: List<NativePdfPayload>
     )
 
-    // Auto-naming attempts this screen instance. Used to be a one-shot
+    // Auto-naming attempts for this chat. Used to be a one-shot
     // "messageCounter == 0" gate: a single transient failure (network blip,
     // model briefly unavailable) left the chat named "_autoname_…" for the
     // whole session with no retry. Now each turn retries while the
     // placeholder name remains, capped so a permanently broken endpoint
     // can't fire a naming request forever.
-    private var autoNameAttempts = 0
+    // Saved with the chat so leaving and returning does not restart the
+    // chat model's attempts before the summarizer backup is reached.
+    private var autoNameAttempts: Int
+        get() = preferences?.getAutoNameAttempts() ?: 0
+        set(value) { preferences?.setAutoNameAttempts(value) }
     private val AUTO_NAME_MAX_ATTEMPTS = 3
 
     // True while an auto-name rename's off-main storage work is in flight, so a
@@ -14067,6 +14071,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             this.chatName = newChatName
             intent.putExtra("name", this.chatName)
             activityTitle?.text = newChatName
+            autoNameAttempts = 0
             logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
         } else if (!renamed) {
             logVoiceEventAlways("auto-name rename did not apply; the chat keeps its placeholder name (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS)")
