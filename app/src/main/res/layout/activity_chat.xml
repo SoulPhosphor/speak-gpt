@@ -373,26 +373,22 @@
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/action_bar"
+            style="@style/Widget.App.Chat.HeaderBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="?attr/colorSurfaceContainerHigh"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
             <ImageButton
                 android:id="@+id/btn_chat_menu"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/btn_accent_tonal_v4"
+                style="@style/Widget.App.Chat.HeaderAction"
                 android:contentDescription="@string/chat_options"
                 android:tooltipText="@string/chat_options"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/ic_more_vert"
-                android:tint="?attr/colorPrimary" />
+                app:srcCompat="@drawable/ic_more_vert" />
 
             <!-- Summary / Compaction review (owner ruling, Oct 3 2026): visible
                  once the chat has a saved summary or a completed compaction.
@@ -400,10 +396,7 @@
                  the full conversation is sent. -->
             <ImageButton
                 android:id="@+id/btn_conversation_summary"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/btn_accent_tonal_v4"
+                style="@style/Widget.App.Chat.HeaderAction"
                 android:contentDescription="@string/compaction_icon_desc"
                 android:tooltipText="@string/compaction_icon_desc"
                 android:visibility="gone"
@@ -414,10 +407,7 @@
 
             <ImageButton
                 android:id="@+id/btn_settings"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/btn_accent_tonal_v4"
+                style="@style/Widget.App.Chat.HeaderAction"
                 android:contentDescription="@string/btn_settings"
                 android:tooltipText="@string/btn_settings"
                 android:transitionName="settings"
@@ -428,10 +418,7 @@
 
             <ImageButton
                 android:id="@+id/btn_quick_settings"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/btn_accent_tonal_v4"
+                style="@style/Widget.App.Chat.HeaderAction"
                 android:contentDescription="@string/btn_quick_settings"
                 android:tooltipText="@string/btn_quick_settings"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -457,10 +444,7 @@
                  whose information the model is actually getting. -->
             <ImageButton
                 android:id="@+id/btn_active_profile"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/btn_accent_tonal_v4"
+                style="@style/Widget.App.Chat.HeaderAction"
                 android:contentDescription="@string/chat_active_profile_desc"
                 android:tooltipText="@string/chat_active_profile_desc"
                 android:visibility="gone"
@@ -475,10 +459,7 @@
                  shows the stored-error count (1–5). -->
             <ImageButton
                 android:id="@+id/btn_summarizer_errors"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/btn_accent_tonal_v4"
+                style="@style/Widget.App.Chat.HeaderAction"
                 android:contentDescription="@string/summarizer_icon_errors_desc"
                 android:tooltipText="@string/summarizer_icon_errors_desc"
                 android:visibility="gone"
@@ -490,13 +471,8 @@
 
             <TextView
                 android:id="@+id/summarizer_error_badge"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:background="@drawable/bg_summarizer_badge"
-                android:gravity="center"
+                style="@style/Widget.App.Chat.HeaderBadge"
                 android:importantForAccessibility="no"
-                android:textColor="?attr/colorOnPrimary"
-                android:textSize="10sp"
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="@+id/btn_summarizer_errors"
                 app:layout_constraintTop_toTopOf="@+id/btn_summarizer_errors"
@@ -516,10 +492,7 @@
 
             <ImageButton
                 android:id="@+id/btn_back"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/btn_accent_tonal_v4"
+                style="@style/Widget.App.Chat.HeaderAction.Leading"
                 android:contentDescription="@string/go_back"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -528,18 +501,10 @@
 
             <TextView
                 android:id="@+id/chat_activity_title"
+                style="@style/Widget.App.Chat.HeaderTitle"
                 android:layout_width="0dp"
-                android:layout_height="64dp"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
                 android:clickable="true"
-                android:ellipsize="end"
-                android:gravity="center_vertical"
-                android:singleLine="true"
                 android:text="debug.chat.name"
-                android:textColor="@color/text_title"
-                android:textSize="16sp"
-                android:textStyle="bold"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/action_buttons_start"
                 app:layout_constraintStart_toEndOf="@+id/btn_back"

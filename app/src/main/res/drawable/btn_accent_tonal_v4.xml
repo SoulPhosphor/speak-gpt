@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Fill is the level-4 tonal surface, which ThemeManager used to paint over
+     this drawable from code at runtime. It now comes from XML. -->
 <ripple android:color="?attr/colorSecondaryContainer"
     xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape>
-            <corners android:radius="12dp" />
-            <solid android:color="?attr/colorSecondaryContainer" />
-        </shape>
-    </item>
+    <item android:drawable="@drawable/bg_surface_level4_rounded" />
 </ripple>

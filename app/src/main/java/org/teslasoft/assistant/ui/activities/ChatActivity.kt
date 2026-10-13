@@ -2028,42 +2028,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             progress?.setBackgroundResource(R.drawable.assistant_clear_x)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-                activityTitle?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-            } else {
-                actionBar?.setBackgroundColor(getColor(R.color.accent_250))
-                activityTitle?.setBackgroundColor(getColor(R.color.accent_250))
-            }
-
-            btnBack?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v4
-                )!!, this
-            )
-
-            btnQuickSettings?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v4
-                )!!, this
-            )
-
-            btnSettings?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v4
-                )!!, this
-            )
-
-
-            btnPersistentIncludes?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5
-                )!!, this
-            )
+            // The header's normal look is defined by its XML styles. These
+            // calls only put back what the layout sets, undoing the legacy
+            // AMOLED branch above if it ran earlier in this session.
+            actionBar?.setBackgroundResource(R.drawable.bg_surface_level4)
+            activityTitle?.setBackgroundResource(R.drawable.bg_surface_level4)
+            btnBack?.setBackgroundResource(R.drawable.btn_accent_tonal_v4)
+            btnQuickSettings?.setBackgroundResource(R.drawable.btn_accent_tonal_v4)
+            btnSettings?.setBackgroundResource(R.drawable.btn_accent_tonal_v4)
+            btnPersistentIncludes?.setBackgroundResource(R.drawable.btn_accent_tonal_v5)
         }
     }
 
@@ -2897,8 +2870,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
         val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
 
-        chatActivityTitle.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-
         initSettings(prepared.historyResult)
 
         // The Activity window may already be attached because startup storage
@@ -3493,34 +3464,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             shareSelectedMessages()
         }
 
-        btnQuickSettings?.background = getDarkAccentDrawable(
-            AppCompatResources.getDrawable(
-                this,
-                R.drawable.btn_accent_tonal_v4
-            )!!, this
-        )
-
-        btnBack?.background = getDarkAccentDrawable(
-            AppCompatResources.getDrawable(
-                this,
-                R.drawable.btn_accent_tonal_v4
-            )!!, this
-        )
-
-        btnSettings?.background = getDarkAccentDrawable(
-            AppCompatResources.getDrawable(
-                this,
-                R.drawable.btn_accent_tonal_v4
-            )!!, this
-        )
-
-        btnChatMenu?.background = getDarkAccentDrawable(
-            AppCompatResources.getDrawable(
-                this,
-                R.drawable.btn_accent_tonal_v4
-            )!!, this
-        )
-
         btnBack?.contentDescription = getString(R.string.drawer_open)
         btnBack?.setOnClickListener { drawerController?.open() }
 
@@ -3690,11 +3633,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return dpToPx(32)
     }
 
-    private fun getDarkAccentDrawable(drawable: Drawable, context: Context) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getSurfaceColor(context))
-        return drawable
-    }
-
     private fun getAmoledAccentDrawable(drawable: Drawable, context: Context) : Drawable {
         DrawableCompat.setTint(DrawableCompat.wrap(drawable), getAmoledSurfaceColor(context))
         return drawable
@@ -3703,14 +3641,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun getAmoledAccentDrawableV2(drawable: Drawable, context: Context) : Drawable {
         DrawableCompat.setTint(DrawableCompat.wrap(drawable), getAmoledSurfaceColorV2(context))
         return drawable
-    }
-
-    private fun getSurfaceColor(context: Context) : Int {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            SurfaceColors.SURFACE_4.getColor(context)
-        } else {
-            getColor(R.color.accent_250)
-        }
     }
 
     private fun getAmoledSurfaceColor(context: Context) : Int {

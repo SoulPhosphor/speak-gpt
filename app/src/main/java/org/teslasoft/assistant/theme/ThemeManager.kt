@@ -21,7 +21,6 @@ import android.content.Context
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
-import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 
@@ -68,12 +67,14 @@ class ThemeManager {
                 ), getAmoledSurfaceColor(context)
             )
         } else {
-            DrawableCompat.setTint(
+            // The normal look comes from the drawable's XML. Only clear a tint
+            // the legacy AMOLED branch may have left on this shared drawable.
+            DrawableCompat.setTintList(
                 DrawableCompat.wrap(
                     AppCompatResources.getDrawable(
                         context, color
                     )!!
-                ), getSurfaceColor(context)
+                ), null
             )
         }
     }
@@ -82,7 +83,4 @@ class ThemeManager {
         return ContextCompat.getColor(context, R.color.amoled_accent_50)
     }
 
-    private fun getSurfaceColor(context: Context): Int {
-        return SurfaceColors.SURFACE_4.getColor(context)
-    }
 }
