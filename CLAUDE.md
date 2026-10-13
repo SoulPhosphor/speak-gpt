@@ -506,6 +506,20 @@ cost is "Not Reported".
 Tests may use made-up prices only to check the arithmetic. Those values must
 never become data the app uses.
 
+### Finishing work and waiting on pull requests (owner ruling, October 13 2026)
+
+Waiting on a pull request wakes the session and re-reads the whole
+conversation, which spends the owner's usage. Wait only while something is
+actually arriving, such as a running check or a requested review.
+
+- When the owner has said to merge, merge once checks pass and review
+  findings are addressed. Do not hold the merge for a question that does not
+  block the work; raise it after merging as a follow-up.
+- Once a pull request is waiting only on the owner, finish or stop: stop
+  watching it and do not schedule check-ins or reminders.
+- Do not set up pull-request watching or scheduled check-ins the owner did
+  not ask for.
+
 ### Usage control
 
 Subagents are a normal, permitted tool. Choosing a high-end model (e.g. Fable) for a subagent is likewise permitted — it is not restricted.
