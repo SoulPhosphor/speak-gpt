@@ -517,6 +517,9 @@ actually arriving, such as a running check or a requested review.
   block the work; raise it after merging as a follow-up.
 - Once a pull request is waiting only on the owner, finish or stop: stop
   watching it and do not schedule check-ins or reminders.
+- A genuinely merge-blocking question is fine: ask it once in chat, leave the
+  pull request unmerged, and stop. The owner will come back to it when ready;
+  do not wait or check in for the answer.
 - Do not set up pull-request watching or scheduled check-ins the owner did
   not ask for.
 
