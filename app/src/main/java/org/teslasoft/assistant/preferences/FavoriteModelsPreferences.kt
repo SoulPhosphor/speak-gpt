@@ -124,7 +124,12 @@ class FavoriteModelsPreferences private constructor(
         setFavoriteModels(models)
         // Every Only-mode save, from any screen, records its provider for the
         // Quick Settings Provider row.
+        // The provider being replaced was the one in use, so it is recorded
+        // first; this also captures a provider chosen before this list existed.
         if (model.routingType == FavoriteModelObject.ROUTING_ONLY) {
+            if (existing?.get("routingType") == FavoriteModelObject.ROUTING_ONLY) {
+                recentOnlyProviders?.record(model.endpointId, model.modelId, existing?.get("selectedProvider").orEmpty())
+            }
             recentOnlyProviders?.record(model.endpointId, model.modelId, model.selectedProvider)
         }
     }

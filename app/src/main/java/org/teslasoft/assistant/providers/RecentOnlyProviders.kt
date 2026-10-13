@@ -10,6 +10,7 @@ package org.teslasoft.assistant.providers
 import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
+import java.net.URLEncoder
 
 /**
  * The last few providers the user chose in Only mode, per model and endpoint.
@@ -42,6 +43,7 @@ class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPre
     companion object {
         private const val FILE = "recent_only_providers"
         private const val NAME_PREFIX = "name:"
+        private const val RECENTS_PREFIX = "recents:"
 
         @Volatile private var instance: RecentOnlyProvidersStore? = null
 
@@ -77,12 +79,18 @@ class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPre
     /** The provider's display name as OpenRouter last reported it. */
     fun rememberName(slug: String, name: String?) {
         if (slug.isBlank() || name.isNullOrBlank()) return
-        prefs.edit().putString(NAME_PREFIX + slug.lowercase(), name).apply()
+        prefs.edit().putString(NAME_PREFIX + encode(slug.lowercase()), name).apply()
     }
 
     /** The remembered display name, or the slug when none was ever reported. */
     fun displayName(slug: String): String =
-        prefs.getString(NAME_PREFIX + slug.lowercase(), null) ?: slug
+        prefs.getString(NAME_PREFIX + encode(slug.lowercase()), null) ?: slug
 
-    private fun key(endpointId: String, modelId: String) = "$endpointId\u0000$modelId"
+    // Preference keys are written as XML attributes, so every part is
+    // URL-encoded: no control characters reach the file, and "/" stays an
+    // unambiguous separator.
+    private fun key(endpointId: String, modelId: String) =
+        RECENTS_PREFIX + encode(endpointId) + "/" + encode(modelId)
+
+    private fun encode(part: String): String = URLEncoder.encode(part, "UTF-8")
 }
