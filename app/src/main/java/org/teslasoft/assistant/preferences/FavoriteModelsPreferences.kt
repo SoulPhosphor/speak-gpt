@@ -126,6 +126,12 @@ class FavoriteModelsPreferences private constructor(
         // Quick Settings Provider row.
         // The provider being replaced was the one in use, so it is recorded
         // first; this also captures a provider chosen before this list existed.
+        // A new favorite starts with no recents, whatever path removed an
+        // earlier favorite for the same model (unfavorite, endpoint deletion,
+        // or a restore that replaced the favorites list).
+        if (existing == null) {
+            recentOnlyProviders?.clear(model.endpointId, model.modelId)
+        }
         if (model.routingType == FavoriteModelObject.ROUTING_ONLY) {
             if (existing?.get("routingType") == FavoriteModelObject.ROUTING_ONLY) {
                 recentOnlyProviders?.record(model.endpointId, model.modelId, existing?.get("selectedProvider").orEmpty())
