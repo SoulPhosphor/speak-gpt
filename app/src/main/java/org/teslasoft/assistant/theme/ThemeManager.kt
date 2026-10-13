@@ -55,6 +55,9 @@ class ThemeManager {
         recolor(R.drawable.btn_accent_tonal_v4, context, isAmoled)
         recolor(R.drawable.btn_accent_tonal_v5, context, isAmoled)
         recolor(R.drawable.btn_accent_icon_large_100, context, isAmoled)
+        // Chat header icons had this AMOLED tint through btn_accent_tonal_v4
+        // before they got their own drawable; keep it in AMOLED mode only.
+        recolor(R.drawable.btn_chat_header_action, context, isAmoled)
     }
 
     private fun recolor(color: Int, context: Context, isAmoled: Boolean) {

@@ -2031,11 +2031,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // The header's normal look is defined by its XML styles. These
             // calls only put back what the layout sets, undoing the legacy
             // AMOLED branch above if it ran earlier in this session.
-            actionBar?.setBackgroundResource(R.drawable.bg_surface_level4)
-            activityTitle?.setBackgroundResource(R.drawable.bg_surface_level4)
-            btnBack?.setBackgroundResource(R.drawable.btn_accent_tonal_v4)
-            btnQuickSettings?.setBackgroundResource(R.drawable.btn_accent_tonal_v4)
-            btnSettings?.setBackgroundResource(R.drawable.btn_accent_tonal_v4)
+            actionBar?.setBackgroundResource(R.drawable.bg_chat_header)
+            activityTitle?.setBackgroundResource(R.drawable.bg_chat_header)
+            btnBack?.setBackgroundResource(R.drawable.btn_chat_header_action)
+            btnQuickSettings?.setBackgroundResource(R.drawable.btn_chat_header_action)
+            btnSettings?.setBackgroundResource(R.drawable.btn_chat_header_action)
             btnPersistentIncludes?.setBackgroundResource(R.drawable.btn_accent_tonal_v5)
         }
     }
@@ -3217,9 +3217,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 override fun onItemRangeInserted(positionStart: Int, itemCount: Int) = refreshNewChatButton()
                 override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) = refreshNewChatButton()
             })
-            refreshNewChatButton()
 
             initUI()
+            // After initUI binds the header buttons.
+            refreshNewChatButton()
             refreshActiveProfileButton()
             reloadAmoled()
             initSpeechListener()

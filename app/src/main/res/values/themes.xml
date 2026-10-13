@@ -1624,16 +1624,16 @@
 
     <!-- Chat header. Every color and size of the bar, its title and its
          action icons is defined here; recolor the header from these styles
-         and bg_surface_level4*. -->
+         and bg_chat_header* (which use bg_surface_level4* on Android 12+). -->
     <style name="Widget.App.Chat.HeaderBar" parent="">
-        <item name="android:background">@drawable/bg_surface_level4</item>
+        <item name="android:background">@drawable/bg_chat_header</item>
     </style>
 
     <style name="Widget.App.Chat.HeaderTitle" parent="">
         <item name="android:layout_height">@dimen/chat_header_title_height</item>
         <item name="android:layout_marginStart">@dimen/chat_header_action_gap</item>
         <item name="android:layout_marginEnd">@dimen/chat_header_action_gap</item>
-        <item name="android:background">@drawable/bg_surface_level4</item>
+        <item name="android:background">@drawable/bg_chat_header</item>
         <item name="android:ellipsize">end</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:singleLine">true</item>
@@ -1648,7 +1648,7 @@
         <item name="android:layout_width">@dimen/chat_header_action_size</item>
         <item name="android:layout_height">@dimen/chat_header_action_size</item>
         <item name="android:layout_marginEnd">@dimen/chat_header_action_gap</item>
-        <item name="android:background">@drawable/btn_accent_tonal_v4</item>
+        <item name="android:background">@drawable/btn_chat_header_action</item>
         <item name="android:tint">?attr/colorPrimary</item>
     </style>
 
