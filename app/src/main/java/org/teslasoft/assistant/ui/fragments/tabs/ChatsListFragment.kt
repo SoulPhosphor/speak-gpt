@@ -51,7 +51,6 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.gson.Gson
@@ -743,8 +742,10 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         })
     }
 
+    /** Normal mode only: btn_accent_tonal's look comes from its XML, so this
+     *  just clears any AMOLED tint left on the shared drawable. */
     private fun getDisabledDrawable(drawable: Drawable) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getDisabledColor())
+        DrawableCompat.setTintList(DrawableCompat.wrap(drawable), null)
         return drawable
     }
 
@@ -755,14 +756,6 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
             Configuration.UI_MODE_NIGHT_UNDEFINED -> false
             else -> false
         }
-    }
-
-    private fun getDisabledColor() : Int {
-        return if (isDarkThemeEnabled() && preferences!!.getAmoledPitchBlack()) {
-            ResourcesCompat.getColor(mContext?.resources!!, R.color.amoled_accent_100,  mContext?.theme)
-        } else if (mContext != null) {
-                SurfaceColors.SURFACE_5.getColor(mContext!!)
-        } else 0
     }
 
     override fun onResume() {

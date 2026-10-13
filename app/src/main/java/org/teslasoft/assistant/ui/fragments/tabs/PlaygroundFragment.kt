@@ -51,7 +51,6 @@ import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
 import com.aallam.openai.client.OpenAIHost
 import com.aallam.openai.client.RetryStrategy
-import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.loadingindicator.LoadingIndicator
 import kotlinx.coroutines.CoroutineScope
@@ -197,7 +196,7 @@ class PlaygroundFragment : Fragment() {
         if (isDarkThemeEnabled() && preferences!!.getAmoledPitchBlack()) {
             layoutBottom?.background = ResourcesCompat.getDrawable(context.resources, R.drawable.playground_bottom_amoled, context.theme)
         } else {
-            layoutBottom?.background = getDisabledDrawableV2(ResourcesCompat.getDrawable(context.resources, R.drawable.playground_bottom, context.theme)!!)
+            layoutBottom?.background = ResourcesCompat.getDrawable(context.resources, R.drawable.playground_bottom, context.theme)
         }
 
         model = preferences?.getModel() ?: "unknown"
@@ -371,30 +370,17 @@ class PlaygroundFragment : Fragment() {
         }
     }
 
+    /** btn_accent_tonal's normal look comes from its XML. Only the paused
+     *  AMOLED mode still recolors it from code; otherwise any AMOLED tint
+     *  left on this shared drawable is cleared. */
     private fun getDisabledDrawable(drawable: Drawable) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getDisabledColor())
+        if (isDarkThemeEnabled() && preferences!!.getAmoledPitchBlack()) {
+            DrawableCompat.setTint(DrawableCompat.wrap(drawable),
+                ResourcesCompat.getColor(mContext?.resources!!, R.color.amoled_accent_50, mContext?.theme))
+        } else {
+            DrawableCompat.setTintList(DrawableCompat.wrap(drawable), null)
+        }
         return drawable
-    }
-
-    private fun getDisabledColor() : Int {
-        return if (isDarkThemeEnabled() && preferences!!.getAmoledPitchBlack()) {
-            ResourcesCompat.getColor(mContext?.resources!!, R.color.amoled_accent_50,  mContext?.theme)
-        } else if (mContext != null) {
-            SurfaceColors.SURFACE_5.getColor(mContext!!)
-        } else 0
-    }
-
-    private fun getDisabledDrawableV2(drawable: Drawable) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getDisabledColorV2())
-        return drawable
-    }
-
-    private fun getDisabledColorV2() : Int {
-        return if (isDarkThemeEnabled() && preferences!!.getAmoledPitchBlack()) {
-            ResourcesCompat.getColor(mContext?.resources!!, R.color.amoled_accent_50,  mContext?.theme)
-        } else if (mContext != null) {
-            SurfaceColors.SURFACE_1.getColor(mContext!!)
-        } else 0
     }
 
     private fun isDarkThemeEnabled(): Boolean {

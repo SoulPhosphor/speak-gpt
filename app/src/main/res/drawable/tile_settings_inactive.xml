@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inactive Settings tile (TileFragment), Android 11 and older. Android 12+
+     uses drawable-v31. TileFragment used to tint the shared tile_inactive. -->
+<ripple android:color="?attr/colorSurface"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <corners android:radius="16dp" />
+            <solid android:color="@color/accent_100" />
+        </shape>
+    </item>
+</ripple>

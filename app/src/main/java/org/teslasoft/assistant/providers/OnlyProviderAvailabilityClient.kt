@@ -51,9 +51,27 @@ object OnlyProviderAvailabilityClient {
         endpoint: ApiEndpointObject,
         modelId: String,
         providerSlug: String
-    ): OnlyProviderAvailability = withContext(Dispatchers.IO) {
-        if (!endpoint.isOpenRouterRouting() || modelId.isBlank() || providerSlug.isBlank()) {
-            return@withContext OnlyProviderAvailability.UNKNOWN
+    ): OnlyProviderAvailability {
+        if (providerSlug.isBlank()) return OnlyProviderAvailability.UNKNOWN
+        val available = availableSlugs(endpoint, modelId) ?: return OnlyProviderAvailability.UNKNOWN
+        return if (providerSlug.lowercase() in available) {
+            OnlyProviderAvailability.AVAILABLE
+        } else {
+            OnlyProviderAvailability.UNAVAILABLE
+        }
+    }
+
+    /**
+     * The lowercase slugs of every provider currently serving [modelId], or
+     * null when no complete (authoritative) list could be read. Null is never
+     * evidence that a provider is gone.
+     */
+    suspend fun availableSlugs(
+        endpoint: ApiEndpointObject,
+        modelId: String
+    ): Set<String>? = withContext(Dispatchers.IO) {
+        if (!endpoint.isOpenRouterRouting() || modelId.isBlank()) {
+            return@withContext null
         }
 
         try {
@@ -67,7 +85,7 @@ object OnlyProviderAvailabilityClient {
                 .build()
 
             val base = endpoint.host.trimEnd('/')
-            if (base.isBlank()) return@withContext OnlyProviderAvailability.UNKNOWN
+            if (base.isBlank()) return@withContext null
 
             val discoveryPath = endpoint.providerDiscoveryPath
                 .ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH }
@@ -92,16 +110,11 @@ object OnlyProviderAvailabilityClient {
                 parsed = fetchBody(client, endpoint, fallbackUrl)?.let(ProviderEndpointsParser::parse)
             }
 
-            val result = parsed ?: return@withContext OnlyProviderAvailability.UNKNOWN
-            if (!result.authoritative) return@withContext OnlyProviderAvailability.UNKNOWN
-
-            if (result.endpoints.any { it.slug.equals(providerSlug, ignoreCase = true) }) {
-                OnlyProviderAvailability.AVAILABLE
-            } else {
-                OnlyProviderAvailability.UNAVAILABLE
-            }
+            val result = parsed ?: return@withContext null
+            if (!result.authoritative) return@withContext null
+            result.endpoints.mapTo(HashSet()) { it.slug.lowercase() }
         } catch (_: Exception) {
-            OnlyProviderAvailability.UNKNOWN
+            null
         }
     }
 

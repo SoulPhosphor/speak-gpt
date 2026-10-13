@@ -501,6 +501,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var chat: ChatTranscriptRecyclerView? = null
     private var activityTitle: TextView? = null
     private var btnQuickSettings: ImageButton? = null
+    private var btnNewChat: ImageButton? = null
     private var fileContents: ByteArray? = null
     private var pendingChatExportBytes: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
@@ -1668,6 +1669,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         drawerController?.refresh()
     }
 
+    /** New Chat shows once this chat has an assistant reply with text. */
+    private fun refreshNewChatButton() {
+        val hasReply = messages.any { row ->
+            row["isBot"] == true &&
+                row[ChatAdapter.KEY_IMAGE_CONFIRMATION] != true &&
+                row[ChatAdapter.KEY_IMAGE_PROGRESS] != true &&
+                row["message"]?.toString().orEmpty().isNotBlank()
+        }
+        btnNewChat?.visibility = if (hasReply) View.VISIBLE else View.GONE
+    }
+
+    /** Opens a fresh chat, the same way the drawer's New Chat does. */
+    private fun openNewChat() {
+        lifecycleScope.launch {
+            val pending = withContext(Dispatchers.IO) {
+                NewConversationCoordinator(this@ChatActivity).createDefaultPendingConversation()
+            }
+            startActivity(rootIntent(this@ChatActivity, pending.id, pending.name, pendingConversation = true))
+        }
+    }
+
     /** Force the chat's top action bar and its buttons back to fully visible. */
     private fun restoreTopBarVisibility() {
         for (v in listOf(actionBar, btnBack, activityTitle, btnQuickSettings, btnSettings)) {
@@ -2006,42 +2028,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             progress?.setBackgroundResource(R.drawable.assistant_clear_x)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-                activityTitle?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-            } else {
-                actionBar?.setBackgroundColor(getColor(R.color.accent_250))
-                activityTitle?.setBackgroundColor(getColor(R.color.accent_250))
-            }
-
-            btnBack?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v4
-                )!!, this
-            )
-
-            btnQuickSettings?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v4
-                )!!, this
-            )
-
-            btnSettings?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v4
-                )!!, this
-            )
-
-
-            btnPersistentIncludes?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5
-                )!!, this
-            )
+            // The header's normal look is defined by its XML styles. These
+            // calls only put back what the layout sets, undoing the legacy
+            // AMOLED branch above if it ran earlier in this session.
+            actionBar?.setBackgroundResource(R.drawable.bg_chat_header)
+            activityTitle?.setBackgroundResource(R.drawable.bg_chat_header)
+            btnBack?.setBackgroundResource(R.drawable.btn_chat_header_action)
+            btnQuickSettings?.setBackgroundResource(R.drawable.btn_chat_header_action)
+            btnSettings?.setBackgroundResource(R.drawable.btn_chat_header_action)
+            btnPersistentIncludes?.setBackgroundResource(R.drawable.btn_accent_tonal_v5)
         }
     }
 
@@ -2875,8 +2870,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
         val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
 
-        chatActivityTitle.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-
         initSettings(prepared.historyResult)
 
         // The Activity window may already be attached because startup storage
@@ -3218,8 +3211,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 preferences?.getManualCompactionBoundary() ?: 0
             )
             adapter?.setOnUpdateListener(this)
+            adapter?.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+                override fun onChanged() = refreshNewChatButton()
+                override fun onItemRangeChanged(positionStart: Int, itemCount: Int) = refreshNewChatButton()
+                override fun onItemRangeInserted(positionStart: Int, itemCount: Int) = refreshNewChatButton()
+                override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) = refreshNewChatButton()
+            })
 
             initUI()
+            // After initUI binds the header buttons.
+            refreshNewChatButton()
             refreshActiveProfileButton()
             reloadAmoled()
             initSpeechListener()
@@ -3257,6 +3258,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         progress = findViewById(R.id.progress)
         activityTitle = findViewById(R.id.chat_activity_title)
         btnQuickSettings = findViewById(R.id.btn_quick_settings)
+        btnNewChat = findViewById(R.id.btn_new_chat)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnConversationSummary = findViewById(R.id.btn_conversation_summary)
@@ -3463,34 +3465,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             shareSelectedMessages()
         }
 
-        btnQuickSettings?.background = getDarkAccentDrawable(
-            AppCompatResources.getDrawable(
-                this,
-                R.drawable.btn_accent_tonal_v4
-            )!!, this
-        )
-
-        btnBack?.background = getDarkAccentDrawable(
-            AppCompatResources.getDrawable(
-                this,
-                R.drawable.btn_accent_tonal_v4
-            )!!, this
-        )
-
-        btnSettings?.background = getDarkAccentDrawable(
-            AppCompatResources.getDrawable(
-                this,
-                R.drawable.btn_accent_tonal_v4
-            )!!, this
-        )
-
-        btnChatMenu?.background = getDarkAccentDrawable(
-            AppCompatResources.getDrawable(
-                this,
-                R.drawable.btn_accent_tonal_v4
-            )!!, this
-        )
-
         btnBack?.contentDescription = getString(R.string.drawer_open)
         btnBack?.setOnClickListener { drawerController?.open() }
 
@@ -3660,11 +3634,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return dpToPx(32)
     }
 
-    private fun getDarkAccentDrawable(drawable: Drawable, context: Context) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getSurfaceColor(context))
-        return drawable
-    }
-
     private fun getAmoledAccentDrawable(drawable: Drawable, context: Context) : Drawable {
         DrawableCompat.setTint(DrawableCompat.wrap(drawable), getAmoledSurfaceColor(context))
         return drawable
@@ -3673,14 +3642,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun getAmoledAccentDrawableV2(drawable: Drawable, context: Context) : Drawable {
         DrawableCompat.setTint(DrawableCompat.wrap(drawable), getAmoledSurfaceColorV2(context))
         return drawable
-    }
-
-    private fun getSurfaceColor(context: Context) : Int {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            SurfaceColors.SURFACE_4.getColor(context)
-        } else {
-            getColor(R.color.accent_250)
-        }
     }
 
     private fun getAmoledSurfaceColor(context: Context) : Int {
@@ -5283,6 +5244,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnChatMenu?.setOnClickListener { anchor ->
             showChatOptionsMenu(anchor)
         }
+
+        btnNewChat?.setOnClickListener { openNewChat() }
 
         btnQuickSettings?.setOnClickListener {
             openSummoningCircle()

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The primary-color layer of the level-4 tonal surface: colorPrimary at the
+     opacity Material's elevation overlay gives 8dp (4.5 * ln(9) + 2 = 11.89%).
+     Laid over colorSurface by bg_surface_level4*, this reproduces
+     SurfaceColors.SURFACE_4 in XML so no code has to compute it. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:alpha="0.1189" android:color="?attr/colorPrimary" />
+</selector>

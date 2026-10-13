@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chat header icon background. Its own drawable so the header keeps its
+     Android 11 fallback color without changing btn_accent_tonal_v4 elsewhere. -->
+<ripple android:color="?attr/colorSecondaryContainer"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/bg_chat_header_rounded" />
+</ripple>

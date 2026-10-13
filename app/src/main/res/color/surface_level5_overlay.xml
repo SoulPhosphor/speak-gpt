@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- colorPrimary at Material's 12dp elevation-overlay opacity
+     (4.5 * ln(13) + 2 = 13.54%). Over colorSurface this reproduces
+     SurfaceColors.SURFACE_5 in XML. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:alpha="0.1354" android:color="?attr/colorPrimary" />
+</selector>

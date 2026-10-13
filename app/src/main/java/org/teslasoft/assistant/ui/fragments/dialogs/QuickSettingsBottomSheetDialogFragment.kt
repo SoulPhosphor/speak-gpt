@@ -74,6 +74,9 @@ import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.assistant.ui.activities.SystemPromptsListActivity
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.providers.RecentOnlyProviders
+import org.teslasoft.assistant.providers.OnlyProviderAvailabilityClient
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 import org.teslasoft.assistant.ui.activities.SummarizerPromptsActivity
 import org.teslasoft.assistant.preferences.dto.CompanionPromptVariant
@@ -99,6 +102,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var btnEditProviderRouting: ImageView? = null
     private var providerTile: ConstraintLayout? = null
     private var btnEditProviderRoutingOnly: ImageView? = null
+    /** Model whose recents were already checked against OpenRouter this time
+     *  Quick Settings was opened, so the check runs once per model. */
+    private var recentsCheckedForModel: String? = null
     private var dropdownProvider: TextView? = null
     private var btnSelectSystemPrompt: ConstraintLayout? = null
     private var textSystemPrompt: TextView? = null
@@ -908,6 +914,24 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         btnEditProviderRouting?.visibility = if (show) View.GONE else View.VISIBLE
         if (show) {
             dropdownProvider?.text = RecentOnlyProvidersStore.get(requireContext()).displayName(provider)
+            dropUnavailableRecents(model, endpointId, provider)
+        }
+    }
+
+    /** Quietly removes recent providers that OpenRouter's complete provider
+     *  list no longer shows for this model. An incomplete or failed lookup
+     *  changes nothing, and the provider in use is never removed. */
+    private fun dropUnavailableRecents(model: String, endpointId: String, provider: String) {
+        if (recentsCheckedForModel == "$endpointId/$model") return
+        recentsCheckedForModel = "$endpointId/$model"
+        val endpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId) ?: return
+        val store = RecentOnlyProvidersStore.get(requireContext())
+        lifecycleScope.launch {
+            val available = OnlyProviderAvailabilityClient.availableSlugs(endpoint, model) ?: return@launch
+            // The provider may have changed while the lookup ran; keep the one
+            // in use now, not the one from before.
+            val current = favoriteModelsPreferences?.getFavorite(model, endpointId)?.selectedProvider ?: provider
+            store.dropUnavailable(endpointId, model, current, available)
         }
     }
 

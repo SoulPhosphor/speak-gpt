@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inactive Settings tile (TileFragment) on Android 12+: level-5 tonal surface. -->
+<ripple android:color="?attr/colorSurface"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/bg_surface_level5_r16" />
+</ripple>

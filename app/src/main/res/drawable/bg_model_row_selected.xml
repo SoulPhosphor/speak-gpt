@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Selected row in the model and TTS model lists, which the list adapters
+     used to produce by tinting the shared btn_accent_tonal_selector_v4. -->
+<ripple android:color="?attr/colorPrimary"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <corners android:radius="16dp" />
+            <solid android:color="@color/accent_900" />
+        </shape>
+    </item>
+</ripple>

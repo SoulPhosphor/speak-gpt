@@ -1,6 +1,17 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <corners android:topLeftRadius="24dp" android:topRightRadius="24dp" android:bottomRightRadius="0dp" android:bottomLeftRadius="0dp"/>
-    <gradient android:type="linear" android:angle="315" android:startColor="?attr/colorSurfaceContainerHigh" android:centerColor="?attr/colorSurfaceContainerHigh" android:endColor="?attr/colorSurfaceContainerHigh" android:useLevel="true"/>
-</shape>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Level-1 tonal surface with rounded top corners, which PlaygroundFragment
+     used to paint over this drawable from code. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <corners android:topLeftRadius="24dp" android:topRightRadius="24dp" android:bottomRightRadius="0dp" android:bottomLeftRadius="0dp" />
+            <solid android:color="?attr/colorSurface" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <corners android:topLeftRadius="24dp" android:topRightRadius="24dp" android:bottomRightRadius="0dp" android:bottomLeftRadius="0dp" />
+            <solid android:color="@color/surface_level1_overlay" />
+        </shape>
+    </item>
+</layer-list>

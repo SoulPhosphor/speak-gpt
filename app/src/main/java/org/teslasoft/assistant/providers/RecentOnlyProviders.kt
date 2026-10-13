@@ -31,6 +31,12 @@ object RecentOnlyProviders {
         return (listOf(slug) + recents.filterNot { it.equals(slug, ignoreCase = true) }).take(LIMIT)
     }
 
+    /** [recents] without the providers OpenRouter's complete list no longer
+     *  shows for the model. The provider in use ([current]) is always kept:
+     *  the row must keep showing what is actually set. */
+    fun withoutUnavailable(recents: List<String>, current: String, available: Set<String>): List<String> =
+        recents.filter { it.equals(current, ignoreCase = true) || it.lowercase() in available }
+
     /** The dropdown's entries: the provider in use first, then the other recent
      *  ones. The provider in use always appears, so a model set to Only before
      *  this list existed still shows its provider. */
@@ -70,6 +76,15 @@ class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPre
         if (slug.isBlank()) return
         val updated = RecentOnlyProviders.bump(recents(endpointId, modelId), slug)
         prefs.edit().putString(key(endpointId, modelId), gson.toJson(updated)).apply()
+    }
+
+    /** Drops recents that a complete provider list shows are gone. */
+    fun dropUnavailable(endpointId: String, modelId: String, current: String, available: Set<String>) {
+        val recents = recents(endpointId, modelId)
+        val kept = RecentOnlyProviders.withoutUnavailable(recents, current, available)
+        if (kept.size != recents.size) {
+            prefs.edit().putString(key(endpointId, modelId), gson.toJson(kept)).apply()
+        }
     }
 
     fun clear(endpointId: String, modelId: String) {

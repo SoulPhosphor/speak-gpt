@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Fill is the level-5 tonal surface, which DocumentationActivity used to
+     paint over this drawable from code. -->
 <ripple android:color="?attr/colorSecondaryContainer"
     xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape>
-            <corners android:radius="15dp" />
-            <solid android:color="?attr/colorSecondaryContainer" />
-        </shape>
-    </item>
+    <item android:drawable="@drawable/bg_surface_level5_r15" />
 </ripple>

@@ -92,16 +92,10 @@ class DocumentationActivity : SettingsPageActivity() {
         }
     }
 
+    /** Normal mode only: btn_accent_icon_large's look comes from its XML, so
+     *  this just clears any AMOLED tint left on the shared drawable. */
     private fun getDisabledDrawable(drawable: Drawable) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getDisabledColor())
+        DrawableCompat.setTintList(DrawableCompat.wrap(drawable), null)
         return drawable
-    }
-
-    private fun getDisabledColor() : Int {
-        return if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {
-            ResourcesCompat.getColor(resources, R.color.accent_50, theme)
-        } else {
-            SurfaceColors.SURFACE_5.getColor(this)
-        }
     }
 }

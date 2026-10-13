@@ -21,7 +21,6 @@ import android.content.Context
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
-import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 
@@ -56,6 +55,9 @@ class ThemeManager {
         recolor(R.drawable.btn_accent_tonal_v4, context, isAmoled)
         recolor(R.drawable.btn_accent_tonal_v5, context, isAmoled)
         recolor(R.drawable.btn_accent_icon_large_100, context, isAmoled)
+        // Chat header icons had this AMOLED tint through btn_accent_tonal_v4
+        // before they got their own drawable; keep it in AMOLED mode only.
+        recolor(R.drawable.btn_chat_header_action, context, isAmoled)
     }
 
     private fun recolor(color: Int, context: Context, isAmoled: Boolean) {
@@ -68,12 +70,14 @@ class ThemeManager {
                 ), getAmoledSurfaceColor(context)
             )
         } else {
-            DrawableCompat.setTint(
+            // The normal look comes from the drawable's XML. Only clear a tint
+            // the legacy AMOLED branch may have left on this shared drawable.
+            DrawableCompat.setTintList(
                 DrawableCompat.wrap(
                     AppCompatResources.getDrawable(
                         context, color
                     )!!
-                ), getSurfaceColor(context)
+                ), null
             )
         }
     }
@@ -82,7 +86,4 @@ class ThemeManager {
         return ContextCompat.getColor(context, R.color.amoled_accent_50)
     }
 
-    private fun getSurfaceColor(context: Context): Int {
-        return SurfaceColors.SURFACE_4.getColor(context)
-    }
 }

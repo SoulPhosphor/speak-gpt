@@ -1986,11 +1986,11 @@
     <string name="model_rules_injection_header">Model rules (user-written handling rules for this model):</string>
 
     <!-- ===== AI System Settings + Model rules UI (§11 Revision 6) =====
-         "AI System Settings", "Model Specific Rules", the explanation line, the
+         "AI Settings" (renamed from AI System Settings, owner ruling Oct 13 2026), "Model Specific Rules", the explanation line, the
          two toggle labels and the mindfulness hint are owner-approved words —
          do not reword. -->
-    <string name="title_ai_system_settings">AI System Settings</string>
-    <string name="tile_ai_system_settings_title">AI System Settings</string>
+    <string name="title_ai_system_settings">AI Settings</string>
+    <string name="tile_ai_system_settings_title">AI Settings</string>
     <string name="tile_ai_system_settings_desc">System prompt and model rules</string>
     <string name="ai_system_settings_hint">Be mindful of longer rules as they take up more context space and are sent every turn, which may negatively affect smaller model performance. These count toward token usage, but caching may help with the cost.</string>
     <string name="row_model_rules_title">Model Specific Rules</string>

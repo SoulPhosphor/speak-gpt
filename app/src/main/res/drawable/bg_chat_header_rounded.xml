@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chat header icon fill, Android 11 and older: the fixed accent_250
+     fallback. Android 12+ uses drawable-v31 (the level-4 tonal surface). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners android:radius="12dp" />
+    <solid android:color="@color/accent_250" />
+</shape>
