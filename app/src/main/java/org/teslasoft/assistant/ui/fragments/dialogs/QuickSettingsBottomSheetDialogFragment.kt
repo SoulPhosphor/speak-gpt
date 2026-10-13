@@ -928,7 +928,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val store = RecentOnlyProvidersStore.get(requireContext())
         lifecycleScope.launch {
             val available = OnlyProviderAvailabilityClient.availableSlugs(endpoint, model) ?: return@launch
-            store.dropUnavailable(endpointId, model, provider, available)
+            // The provider may have changed while the lookup ran; keep the one
+            // in use now, not the one from before.
+            val current = favoriteModelsPreferences?.getFavorite(model, endpointId)?.selectedProvider ?: provider
+            store.dropUnavailable(endpointId, model, current, available)
         }
     }
 
