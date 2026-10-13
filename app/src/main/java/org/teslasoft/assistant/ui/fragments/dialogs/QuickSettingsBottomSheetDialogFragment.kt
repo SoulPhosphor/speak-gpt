@@ -98,6 +98,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var dropdownProviderMode: TextView? = null
     private var btnEditProviderRouting: ImageView? = null
     private var providerTile: ConstraintLayout? = null
+    private var btnEditProviderRoutingOnly: ImageView? = null
     private var dropdownProvider: TextView? = null
     private var btnSelectSystemPrompt: ConstraintLayout? = null
     private var textSystemPrompt: TextView? = null
@@ -902,6 +903,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val show = providerModeTile?.visibility == View.VISIBLE &&
             mode == FavoriteModelObject.ROUTING_ONLY && provider.isNotBlank()
         providerTile?.visibility = if (show) View.VISIBLE else View.GONE
+        // One gear at a time: on the Provider row in Only mode, otherwise on
+        // the Provider Mode row.
+        btnEditProviderRouting?.visibility = if (show) View.GONE else View.VISIBLE
         if (show) {
             dropdownProvider?.text = RecentOnlyProvidersStore.get(requireContext()).displayName(provider)
         }
@@ -1078,6 +1082,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         dropdownProviderMode = view.findViewById(R.id.dropdown_provider_mode)
         btnEditProviderRouting = view.findViewById(R.id.btn_edit_provider_routing)
         providerTile = view.findViewById(R.id.provider_tile)
+        btnEditProviderRoutingOnly = view.findViewById(R.id.btn_edit_provider_routing_only)
         dropdownProvider = view.findViewById(R.id.dropdown_provider)
         btnSelectSystemPrompt = view.findViewById(R.id.btn_select_system_prompt)
         textSystemPrompt = view.findViewById(R.id.text_system_prompt)
@@ -1238,12 +1243,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             dialog.show(parentFragmentManager, "AdvancedModelSelectorDialogFragment")
         }
 
-        btnEditProviderRouting?.setOnClickListener {
-            val endpointId = preferences?.getApiEndpointId() ?: return@setOnClickListener
-            val selectedModel = preferences?.getModel() ?: return@setOnClickListener
-            if (selectedModel.isBlank()) return@setOnClickListener
-            val endpointPrefs = apiEndpointPreferences ?: return@setOnClickListener
-            val favoritePrefs = favoriteModelsPreferences ?: return@setOnClickListener
+        val openProviderRouting = View.OnClickListener {
+            val endpointId = preferences?.getApiEndpointId() ?: return@OnClickListener
+            val selectedModel = preferences?.getModel() ?: return@OnClickListener
+            if (selectedModel.isBlank()) return@OnClickListener
+            val endpointPrefs = apiEndpointPreferences ?: return@OnClickListener
+            val favoritePrefs = favoriteModelsPreferences ?: return@OnClickListener
             FavoriteRoutingActions.buildRoutingIntent(
                 requireContext(),
                 endpointPrefs,
@@ -1252,6 +1257,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 endpointId
             )?.let { chooseProviderLauncher.launch(it) }
         }
+        btnEditProviderRouting?.setOnClickListener(openProviderRouting)
+        btnEditProviderRoutingOnly?.setOnClickListener(openProviderRouting)
 
         setupProviderModeDropdown()
         setupProviderDropdown()
