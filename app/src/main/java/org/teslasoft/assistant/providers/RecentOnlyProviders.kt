@@ -76,6 +76,14 @@ class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPre
         prefs.edit().remove(key(endpointId, modelId)).apply()
     }
 
+    /** Clears every model's recents under [endpointId]. */
+    fun clearEndpoint(endpointId: String) {
+        val prefix = RECENTS_PREFIX + encode(endpointId) + "/"
+        val editor = prefs.edit()
+        prefs.all.keys.filter { it.startsWith(prefix) }.forEach { editor.remove(it) }
+        editor.apply()
+    }
+
     /** The provider's display name as OpenRouter last reported it. */
     fun rememberName(slug: String, name: String?) {
         if (slug.isBlank() || name.isNullOrBlank()) return

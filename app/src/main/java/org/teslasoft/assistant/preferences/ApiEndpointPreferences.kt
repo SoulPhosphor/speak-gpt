@@ -22,6 +22,7 @@ import org.teslasoft.assistant.imagegen.ToolCapabilityStore
 import org.teslasoft.assistant.preferences.backup.portable.ModelEndpointPortableCodec
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
+import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 import org.teslasoft.assistant.reasoning.ReasoningCapabilityStore
 import org.teslasoft.assistant.reasoning.RejectedReasoningLevelStore
 import org.teslasoft.assistant.util.StableId
@@ -93,7 +94,11 @@ class ApiEndpointPreferences private constructor(
             ?: ApiEndpointObject("", "", secrets.get(id + "_api_key"), id = id)
     }
 
-    fun deleteApiEndpoint(context: Context, id: String) = deleteApiEndpoint(id)
+    fun deleteApiEndpoint(context: Context, id: String) {
+        deleteApiEndpoint(id)
+        // Its favorites go with it, so their recent Only-mode providers do too.
+        RecentOnlyProvidersStore.get(context).clearEndpoint(id)
+    }
 
     internal fun deleteApiEndpoint(id: String) = deleteApiEndpoint(id, deleteCredential = true)
 
