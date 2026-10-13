@@ -18,7 +18,6 @@ package org.teslasoft.assistant.ui.adapters
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -28,7 +27,6 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.DrawableCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
@@ -114,16 +112,14 @@ class FavoriteModelListAdapter(
 
         val rowTextColor: Int
         if (preferences.getModel() == modelId) {
-            viewHolder.voiceBg.background = getDarkAccentDrawableV2(
-                ContextCompat.getDrawable(context, R.drawable.btn_accent_tonal_selector_v4)!!, context)
+            viewHolder.voiceBg.background = ContextCompat.getDrawable(context, R.drawable.bg_model_row_selected)
 
             rowTextColor = ContextCompat.getColor(context, R.color.accent_250)
             viewHolder.textView.setTextColor(rowTextColor)
 
             viewHolder.modelAction.setImageResource(R.drawable.ic_close_item_inv)
         } else {
-            viewHolder.voiceBg.background = getDarkAccentDrawable(
-                ContextCompat.getDrawable(context, R.drawable.btn_accent_tonal_selector_v3)!!, context)
+            viewHolder.voiceBg.background = ContextCompat.getDrawable(context, R.drawable.bg_model_row)
 
             rowTextColor = ContextCompat.getColor(context, R.color.text)
             viewHolder.textView.setTextColor(rowTextColor)
@@ -257,24 +253,6 @@ class FavoriteModelListAdapter(
             viewHolder.reasoningSettings.contentDescription = context.getString(R.string.reasoning_model_indicator_desc)
             viewHolder.reasoningSettings.setOnClickListener(null)
         }
-    }
-
-    private fun getDarkAccentDrawable(drawable: Drawable, context: Context) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getSurfaceColor(context))
-        return drawable
-    }
-
-    private fun getDarkAccentDrawableV2(drawable: Drawable, context: Context) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getSurfaceColorV2(context))
-        return drawable
-    }
-
-    private fun getSurfaceColor(context: Context) : Int {
-        return context.getColor(android.R.color.transparent)
-    }
-
-    private fun getSurfaceColorV2(context: Context) : Int {
-        return context.getColor(R.color.accent_900)
     }
 
     private class ViewHolder(view: View) {

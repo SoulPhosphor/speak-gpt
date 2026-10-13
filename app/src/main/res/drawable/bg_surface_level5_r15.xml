@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Level-5 tonal surface, 15dp corners (fill of btn_accent_icon_large). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <corners android:radius="15dp" />
+            <solid android:color="?attr/colorSurface" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <corners android:radius="15dp" />
+            <solid android:color="@color/surface_level5_overlay" />
+        </shape>
+    </item>
+</layer-list>

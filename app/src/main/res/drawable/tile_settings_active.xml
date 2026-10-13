@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Active Settings tile (TileFragment). TileFragment used to tint the
+     shared tile_active from code, which also recolored prompt lists. -->
+<ripple android:color="?attr/colorSurface"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <corners android:radius="16dp" />
+            <solid android:color="@color/accent_900" />
+        </shape>
+    </item>
+</ripple>

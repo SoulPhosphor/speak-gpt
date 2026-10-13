@@ -19,7 +19,6 @@ package org.teslasoft.assistant.ui.fragments
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.drawable.Drawable
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -35,7 +34,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 
@@ -121,7 +119,7 @@ class TileFragment : Fragment() {
                     tileIcon?.imageTintList = ContextCompat.getColorStateList(requireActivity(), R.color.window_background)
                     tileTitle?.setTextColor(requireActivity().getColor(R.color.text_title_inv))
                     tileSubtitle?.setTextColor(requireActivity().getColor(R.color.text_subtitle_inv))
-                    tileBg?.background = getEnabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_active)!!)
+                    tileBg?.background = getEnabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_settings_active)!!)
                 } else {
                     if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true){
                         tileIcon?.imageTintList = ContextCompat.getColorStateList(requireActivity(), R.color.accent_600)
@@ -130,7 +128,7 @@ class TileFragment : Fragment() {
                     }
                     tileTitle?.setTextColor(requireActivity().getColor(R.color.text_title))
                     tileSubtitle?.setTextColor(requireActivity().getColor(R.color.text_subtitle))
-                    tileBg?.background = getDisabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_inactive)!!)
+                    tileBg?.background = getDisabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_settings_inactive)!!)
                 }
             } else {
                 tileBg?.isClickable = false
@@ -167,7 +165,7 @@ class TileFragment : Fragment() {
                 tileBg?.background = getEnabledDrawable(
                     ContextCompat.getDrawable(
                         requireActivity(),
-                        R.drawable.tile_active
+                        R.drawable.tile_settings_active
                     )!!
                 )
                 tileTitle?.text = requireArguments().getString("enabledText").toString()
@@ -185,7 +183,7 @@ class TileFragment : Fragment() {
                 tileBg?.background = getDisabledDrawable(
                     ContextCompat.getDrawable(
                         requireActivity(),
-                        R.drawable.tile_inactive
+                        R.drawable.tile_settings_inactive
                     )!!
                 )
                 tileTitle?.text = requireArguments().getString("disabledText")
@@ -270,7 +268,7 @@ class TileFragment : Fragment() {
             tileIcon?.imageTintList = ContextCompat.getColorStateList(requireActivity(), R.color.window_background)
             tileTitle?.setTextColor(requireActivity().getColor(R.color.text_title_inv))
             tileSubtitle?.setTextColor(requireActivity().getColor(R.color.text_subtitle_inv))
-            tileBg?.background = getEnabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_active)!!)
+            tileBg?.background = getEnabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_settings_active)!!)
         } else {
             if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true){
                 tileIcon?.imageTintList = ContextCompat.getColorStateList(requireActivity(), R.color.accent_600)
@@ -279,7 +277,7 @@ class TileFragment : Fragment() {
             }
             tileTitle?.setTextColor(requireActivity().getColor(R.color.text_title))
             tileSubtitle?.setTextColor(requireActivity().getColor(R.color.text_subtitle))
-            tileBg?.background = getDisabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_inactive)!!)
+            tileBg?.background = getDisabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_settings_inactive)!!)
         }
 
         if (!isEnabled) {
@@ -318,7 +316,7 @@ class TileFragment : Fragment() {
                         fadeOut.setAnimationListener(object : Animation.AnimationListener {
                             override fun onAnimationStart(animation: Animation?) { /* UNUSED */ }
                             override fun onAnimationEnd(animation: Animation?) {
-                                tileBg?.background = getDisabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_inactive)!!)
+                                tileBg?.background = getDisabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_settings_inactive)!!)
                                 tileBg?.animation = fadeIn
                                 fadeIn.start()
 
@@ -340,7 +338,7 @@ class TileFragment : Fragment() {
                         fadeOut.setAnimationListener(object : Animation.AnimationListener {
                             override fun onAnimationStart(animation: Animation?) {}
                             override fun onAnimationEnd(animation: Animation?) {
-                                tileBg?.background = getEnabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_active)!!)
+                                tileBg?.background = getEnabledDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.tile_settings_active)!!)
                                 tileBg?.animation = fadeIn
                                 fadeIn.start()
 
@@ -365,42 +363,26 @@ class TileFragment : Fragment() {
         }, 400)
     }
 
-    private fun getDisabledDrawable(drawable: Drawable) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getDisabledColor())
-        return drawable
-    }
+    /** The normal look comes from tile_settings_inactive's XML. Only the
+     *  paused AMOLED mode still recolors it from code. */
+    private fun getDisabledDrawable(drawable: Drawable) : Drawable =
+        legacyAmoledTint(drawable, R.color.amoled_accent_50)
 
-    private fun getDisabledColor() : Int {
-        return if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true){
-            requireActivity().getColor(R.color.amoled_accent_50)
+    /** The normal look comes from tile_settings_active's XML. */
+    private fun getEnabledDrawable(drawable: Drawable) : Drawable =
+        legacyAmoledTint(drawable, R.color.accent_600)
+
+    /** tile_disabled's XML already carries its color. */
+    private fun getDisDrawable(drawable: Drawable) : Drawable = drawable
+
+    /** Tints [drawable] for AMOLED mode (paused, left as it was), and
+     *  otherwise clears any AMOLED tint so the XML color shows. */
+    private fun legacyAmoledTint(drawable: Drawable, amoledColor: Int) : Drawable {
+        if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {
+            DrawableCompat.setTint(DrawableCompat.wrap(drawable), requireActivity().getColor(amoledColor))
         } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                SurfaceColors.SURFACE_5.getColor(requireActivity())
-            } else {
-                requireActivity().getColor(R.color.accent_100)
-            }
+            DrawableCompat.setTintList(DrawableCompat.wrap(drawable), null)
         }
-    }
-
-    private fun getEnabledDrawable(drawable: Drawable) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getEnabledColor())
         return drawable
-    }
-
-    private fun getEnabledColor() : Int {
-        return if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true){
-            requireActivity().getColor(R.color.accent_600)
-        } else {
-            requireActivity().getColor(R.color.accent_900)
-        }
-    }
-
-    private fun getDisDrawable(drawable: Drawable) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getDisColor())
-        return drawable
-    }
-
-    private fun getDisColor() : Int {
-        return requireActivity().getColor(R.color.disabled_background)
     }
 }

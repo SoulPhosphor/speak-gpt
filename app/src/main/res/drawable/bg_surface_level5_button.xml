@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Level-5 tonal surface with the shared button corner (fill of btn_accent_tonal). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <corners android:radius="@dimen/button_corner_radius" />
+            <solid android:color="?attr/colorSurface" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <corners android:radius="@dimen/button_corner_radius" />
+            <solid android:color="@color/surface_level5_overlay" />
+        </shape>
+    </item>
+</layer-list>

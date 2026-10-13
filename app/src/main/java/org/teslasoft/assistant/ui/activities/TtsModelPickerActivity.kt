@@ -7,7 +7,6 @@ import android.widget.BaseAdapter
 import android.widget.ListView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
@@ -43,9 +42,7 @@ class TtsModelPickerActivity : TtsPickerActivity() {
                 R.id.model_unavailable_warning).forEach { view.findViewById<View>(it).visibility = View.GONE }
             val selected = model.id == target.modelId
             val background = ContextCompat.getDrawable(this@TtsModelPickerActivity, if (selected)
-                R.drawable.btn_accent_tonal_selector_v4 else R.drawable.btn_accent_tonal_selector_v3)!!.mutate()
-            DrawableCompat.setTint(background, ContextCompat.getColor(this@TtsModelPickerActivity,
-                if (selected) R.color.accent_900 else android.R.color.transparent))
+                R.drawable.bg_model_row_selected else R.drawable.bg_model_row)
             view.findViewById<TextView>(R.id.voice_name).apply {
                 text = model.id
                 setTextColor(ContextCompat.getColor(context, if (selected) R.color.accent_250 else R.color.text))

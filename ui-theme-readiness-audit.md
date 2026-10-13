@@ -167,4 +167,19 @@ their own shared families.
   `ThemeManager` no longer tints them in normal mode; it only clears a tint
   the AMOLED branch may have left.
 
-Everything else in the app is unverified.
+- Every normal-mode case of code tinting a shared resource drawable was
+  removed: `btn_accent_tonal` (level-5 surface), `btn_accent_icon_large`
+  (level-5), `playground_bottom` (level-1), the model and TTS model list rows
+  (now `bg_model_row` and `bg_model_row_selected`), and the Settings tiles
+  (now `tile_settings_active` and `tile_settings_inactive`). Before this,
+  these screens repainted drawables shared with memory rows, lorebook rows,
+  prompt lists, and chat bubbles, so those looked different depending on
+  which screen had been opened last. `SharedDrawableTintContractTest` guards
+  it. Remaining `setTint` calls either use `.mutate()` first, sit in a paused
+  AMOLED branch, or are in `ChatListAdapter`, which is only reached from the
+  unused `ChatsListFragment`.
+
+Everything else in the app is unverified. Text colors, icon tints, and other
+appearance set from Kotlin (`setTextColor`, `imageTintList`,
+`backgroundTintList`, `ScreenChrome`, `SurfaceColors` window colors) were not
+part of that fix and still need the audit.
