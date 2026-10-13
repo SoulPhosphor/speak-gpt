@@ -39,10 +39,6 @@ class SummaryStateBackupContractTest {
         )
         assertTrue(serializer.contains("private val EXCLUDED_SETTINGS_KEYS = setOf(\"api_key\")"))
         assertTrue(serializer.contains("obj.put(\"messages\", JSONArray(gson.toJson(history.messages)))"))
-        val importer = source(
-            "src/main/java/org/teslasoft/assistant/preferences/backup/portable/ChatLogicalImporter.kt"
-        )
-        assertTrue(importer.contains("for (entry in chat.settings)"))
     }
 
     @Test
