@@ -29,4 +29,15 @@ class RecentOnlyProvidersTest {
         assertEquals(listOf("b", "a", "c"), RecentOnlyProviders.options("b", listOf("a", "b", "c")))
         assertEquals(listOf("z", "a", "b"), RecentOnlyProviders.options("z", listOf("a", "b", "c")))
     }
+
+    @Test
+    fun providersNoLongerServingTheModelAreDroppedButTheOneInUseStays() {
+        val available = setOf("a", "c")
+        assertEquals(listOf("b", "a", "c"),
+            RecentOnlyProviders.withoutUnavailable(listOf("b", "a", "c"), "b", available))
+        assertEquals(listOf("a"),
+            RecentOnlyProviders.withoutUnavailable(listOf("a", "b"), "a", available))
+        assertEquals(listOf("A"),
+            RecentOnlyProviders.withoutUnavailable(listOf("A", "B"), "x", available))
+    }
 }
