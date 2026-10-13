@@ -47,8 +47,33 @@
             android:layout_width="0dp"
             android:text="@string/choose_provider_routing_automatic"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_edit_provider_routing"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@+id/text_provider_label"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Provider: shown only while Provider Mode is Only. Lists the recent
+         Only-mode providers for this model; the gear opens Choose Provider. -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/provider_tile"
+        style="@style/Widget.App.QuickSettings.Segment.Middle"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/text_provider_title"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/quick_provider_title"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/dropdown_provider"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_provider_routing"
+            app:layout_constraintStart_toEndOf="@+id/text_provider_title"
             app:layout_constraintTop_toTopOf="parent" />
 
         <ImageView

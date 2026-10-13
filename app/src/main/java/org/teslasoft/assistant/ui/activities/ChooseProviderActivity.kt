@@ -54,6 +54,7 @@ import org.teslasoft.assistant.providers.ProviderEndpointInfo
 import org.teslasoft.assistant.providers.ProviderDiscoveryResolver
 import org.teslasoft.assistant.providers.ProviderEndpointsParser
 import org.teslasoft.assistant.providers.ProviderFilterState
+import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.widgets.AppDropdown
@@ -991,6 +992,12 @@ class ChooseProviderActivity : SettingsPageActivity() {
                 .setPositiveButton(R.string.okay) { _, _ -> }
                 .show()
             return
+        }
+
+        // Keep the chosen provider's display name for the Quick Settings
+        // Provider row, which lists recent Only-mode providers offline.
+        if (selectedRoutingType == FavoriteModelObject.ROUTING_ONLY) {
+            RecentOnlyProvidersStore.get(this).rememberName(selectedProvider, displayNames[selectedProvider])
         }
 
         // Saving here always makes the model a favorite — the favorite is the

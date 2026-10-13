@@ -20,17 +20,22 @@ import android.content.Context
 import android.content.SharedPreferences
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 import com.google.gson.Gson
 
 class FavoriteModelsPreferences private constructor(
-    private val state: ModelEndpointStateGenerationStore
+    private val state: ModelEndpointStateGenerationStore,
+    private val recentOnlyProviders: RecentOnlyProvidersStore? = null
 ) {
     companion object {
         private var instance: FavoriteModelsPreferences? = null
 
         fun getPreferences(context: Context): FavoriteModelsPreferences {
             if (instance == null) {
-                instance = FavoriteModelsPreferences(ModelEndpointStateGenerationStore.get(context))
+                instance = FavoriteModelsPreferences(
+                    ModelEndpointStateGenerationStore.get(context),
+                    RecentOnlyProvidersStore.get(context)
+                )
             }
             return instance!!
         }
@@ -117,6 +122,11 @@ class FavoriteModelsPreferences private constructor(
             models.add(entry)
         }
         setFavoriteModels(models)
+        // Every Only-mode save, from any screen, records its provider for the
+        // Quick Settings Provider row.
+        if (model.routingType == FavoriteModelObject.ROUTING_ONLY) {
+            recentOnlyProviders?.record(model.endpointId, model.modelId, model.selectedProvider)
+        }
     }
 
     /**
@@ -190,6 +200,9 @@ class FavoriteModelsPreferences private constructor(
         val models = getFavoriteModels()
         val kept = ArrayList(models.filterNot { it["modelId"] == modelId && it["endpointId"] == endpointId })
         if (kept.size != models.size) setFavoriteModels(kept)
+        // Removing a favorite removes its provider routing memory, recent
+        // Only-mode providers included.
+        recentOnlyProviders?.clear(endpointId, modelId)
     }
 
     /** Remove a cleanup selection in one write while preserving every other favorite. */
@@ -201,6 +214,7 @@ class FavoriteModelsPreferences private constructor(
         })
         val removed = models.size - kept.size
         if (removed > 0) setFavoriteModels(kept)
+        targets.forEach { recentOnlyProviders?.clear(it.endpointId, it.modelId) }
         return removed
     }
 }

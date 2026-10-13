@@ -73,6 +73,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.assistant.ui.activities.SystemPromptsListActivity
 import org.teslasoft.assistant.ui.widgets.AppDropdown
+import org.teslasoft.assistant.providers.RecentOnlyProviders
+import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 import org.teslasoft.assistant.ui.activities.SummarizerPromptsActivity
 import org.teslasoft.assistant.preferences.dto.CompanionPromptVariant
 import org.teslasoft.assistant.util.summarizer.SummarizerPromptSession
@@ -95,6 +97,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var providerModeTile: ConstraintLayout? = null
     private var dropdownProviderMode: TextView? = null
     private var btnEditProviderRouting: ImageView? = null
+    private var providerTile: ConstraintLayout? = null
+    private var dropdownProvider: TextView? = null
     private var btnSelectSystemPrompt: ConstraintLayout? = null
     private var textSystemPrompt: TextView? = null
     private var rowReasoning: View? = null
@@ -873,6 +877,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         providerModeTile?.visibility = if (isOpenRouter) View.VISIBLE else View.GONE
         if (isOpenRouter) {
             refreshProviderModeDisplay()
+        } else {
+            providerTile?.visibility = View.GONE
         }
     }
 
@@ -884,6 +890,50 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val mode = favoriteModelsPreferences?.getRoutingType(model, endpointId)
             ?: FavoriteModelObject.ROUTING_AUTOMATIC
         dropdownProviderMode?.text = providerModeLabel(mode)
+        refreshProviderRow(model, endpointId, mode)
+    }
+
+    /* ------------------------------ Provider (Only mode) ------------------------------ */
+
+    /** The Provider row shows only while the mode is Only, naming the provider
+     *  in use so it can be recognized at a glance. */
+    private fun refreshProviderRow(model: String, endpointId: String, mode: String) {
+        val provider = favoriteModelsPreferences?.getFavorite(model, endpointId)?.selectedProvider.orEmpty()
+        val show = providerModeTile?.visibility == View.VISIBLE &&
+            mode == FavoriteModelObject.ROUTING_ONLY && provider.isNotBlank()
+        providerTile?.visibility = if (show) View.VISIBLE else View.GONE
+        if (show) {
+            dropdownProvider?.text = RecentOnlyProvidersStore.get(requireContext()).displayName(provider)
+        }
+    }
+
+    /** Lists the provider in use and the other recent Only-mode providers for
+     *  this model (at most three). New providers are chosen through the gear. */
+    private fun setupProviderDropdown() {
+        val dropdown = dropdownProvider ?: return
+        dropdown.setOnClickListener {
+            val endpointId = preferences?.getApiEndpointId() ?: return@setOnClickListener
+            val model = preferences?.getModel() ?: return@setOnClickListener
+            val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId) ?: return@setOnClickListener
+            val recents = RecentOnlyProvidersStore.get(requireContext())
+            val options = RecentOnlyProviders.options(
+                favorite.selectedProvider,
+                recents.recents(endpointId, model)
+            )
+            if (options.isEmpty()) return@setOnClickListener
+            AppDropdown.show(dropdown, options.map { recents.displayName(it) }, 0) { position ->
+                applyOnlyProvider(favorite, options[position])
+            }
+        }
+    }
+
+    private fun applyOnlyProvider(favorite: FavoriteModelObject, slug: String) {
+        if (slug.equals(favorite.selectedProvider, ignoreCase = true)) return
+        favorite.selectedProvider = slug
+        favoriteModelsPreferences?.addFavoriteModel(favorite)
+        updateListener?.onUpdate()
+        shouldForceUpdate = true
+        refreshProviderModeDisplay()
     }
 
     private fun onProviderModePicked(mode: String) {
@@ -1027,6 +1077,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         providerModeTile = view.findViewById(R.id.provider_mode_tile)
         dropdownProviderMode = view.findViewById(R.id.dropdown_provider_mode)
         btnEditProviderRouting = view.findViewById(R.id.btn_edit_provider_routing)
+        providerTile = view.findViewById(R.id.provider_tile)
+        dropdownProvider = view.findViewById(R.id.dropdown_provider)
         btnSelectSystemPrompt = view.findViewById(R.id.btn_select_system_prompt)
         textSystemPrompt = view.findViewById(R.id.text_system_prompt)
         rowReasoning = view.findViewById(R.id.row_reasoning)
@@ -1202,6 +1254,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
 
         setupProviderModeDropdown()
+        setupProviderDropdown()
         refreshProviderModeTile()
 
         // System Prompt tile: the value is an inline dropdown of saved prompts;
