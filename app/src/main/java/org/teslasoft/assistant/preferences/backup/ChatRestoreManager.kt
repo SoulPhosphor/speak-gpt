@@ -168,8 +168,9 @@ object ChatRestoreManager {
                 // Phase 9.1 steps 9–11: source generation, cache invalidation,
                 // and the dependent-store rebase. The journal is cleared (step 12)
                 // ONLY when the rebase is durable — otherwise the verified swap
-                // stands but a dependent store (e.g. the Search index) is stale,
-                // so the SWAPPING journal and staging are kept and the resume path
+                // stands but a dependent store (the source-generation stamp or the
+                // generated-image rescan queue) did not commit, so the SWAPPING
+                // journal and staging are kept and the resume path
                 // retries the rebase idempotently at the next start rather than
                 // reporting a success that left a stale derived store behind.
                 val rebase = ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(

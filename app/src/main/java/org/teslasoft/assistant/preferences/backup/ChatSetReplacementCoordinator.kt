@@ -222,8 +222,9 @@ object ChatSetReplacementCoordinator {
         // Step 11: rebase dependent stores.
         // Search — derived: clear the stale journal and discard the index so the
         // next ensureReady rebuilds from the new source; no stale row survives.
-        // A store can raise an Error (e.g. the SQLCipher native library missing),
-        // so failure/throw both read as "not durable".
+        // A failed or throwing discard does not gate the restore: the source
+        // generation stamped in step 9 already makes any surviving index rows
+        // unservable, and Search rebuilds when it next sees the mismatch.
         runCatching {
             ChatSearchIndexManager.get(appContext).onAuthoritativeChatSetReplaced()
         }

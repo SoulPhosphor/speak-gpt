@@ -143,6 +143,7 @@ object PerChatSettingKeys {
         "compaction_stale",
         "condensed_conversation_kind",
         "summarizer_catch_up_pending",
+        "auto_name_attempts",
         "summary_regeneration_lock_boundary",
         "compaction_regeneration_lock_boundary",
         "condensed_regeneration_lock_migrated",

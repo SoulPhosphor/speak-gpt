@@ -20,11 +20,12 @@ been built.
 committed. So the app could write `chats.json` into a portable package and had
 no way to read one back.
 
-**Status: closed.** `ChatLogicalImportPlan`, `ChatLogicalImporter` and
-`LegacyChatConversion` supply the missing read side, reached from Convert
-Legacy Chats in the Beta's backup and restore screen. Neither refusal above was
-changed: the new path is separate, seeds only an installation that has never
-held a conversation, and never touches `ChatRestoreManager`.
+**Status: closed.** `ChatLogicalImportPlan` and `LegacyChatConversion` supply
+the missing read side, reached from Convert Legacy Chats in the Beta's backup
+and restore screen. Neither refusal above was changed: the converter reads the
+old package and saves a verified chat-recovery ZIP. It never reads, writes or
+clears the live chat set and never touches `ChatRestoreManager`; the normal
+Restore From Backup screen is the only place that applies the saved file.
 
 ## Two artifacts, not one
 
@@ -90,13 +91,13 @@ Phase 8.6.4 forbids this lane from creating a second unsafe restore engine, and
 requires the Phase 9 replacement boundary first if the converter would replace a
 live authoritative chat set or call `ChatRestoreManager.restoreFromArchive`.
 
-A freshly installed Beta has no chats. Seeding an empty destination is not
-replacing a live chat set, so a converter that writes `chats.json` into a Beta
-that has never held a conversation stays outside the Phase 9 boundary. That is
-the cheap path, and it is the one that was built.
+The first version avoided Phase 9 by seeding only a Beta that had never held a
+conversation. That path has been removed. The converter now avoids Phase 9 more
+simply: it never writes chats into the installation at all. It builds a
+chat-recovery ZIP in isolated storage, checks it with the real restore
+validator, and hands it to the owner to save. Applying it goes through the
+normal Restore From Backup screen.
 
-It refuses to run against a destination that already holds chats, and against
-one whose chat list cannot be read authoritatively — unreadable is not evidence
-of empty. Those refusals are what keep it outside Phase 9 rather than quietly
-inside it, and they are asserted by a source contract rather than left to
-review.
+`ConverterStaysOutsidePhase9Test` asserts this as a source contract rather
+than leaving it to review: the conversion code may not restore, seed, clear or
+delete chats, and may not touch the live chat storage.
