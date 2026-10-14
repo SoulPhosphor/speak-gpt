@@ -228,7 +228,7 @@ object CompanionBackupExporter {
      * exist: every link is already dead on this device and an empty map is
      * the truthful answer.
      */
-    private fun captureLorebookNames(
+    internal fun captureLorebookNames(
         context: Context,
         personas: List<PersonaObject>
     ): Map<String, String>? {

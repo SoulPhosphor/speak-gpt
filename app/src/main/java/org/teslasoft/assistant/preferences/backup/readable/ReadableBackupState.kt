@@ -20,18 +20,19 @@ import android.content.Context
 import androidx.core.content.edit
 
 /**
- * Persistent state of the Human-Readable Chat Backup (owner directive, July
+ * Persistent state of the Human-Readable Data Backup (owner directive, July
  * 22 2026). Lives in the raw `storage_health` prefs file (same rationale as
  * RecoveryBackupState: must work even when the encrypted stores are down),
  * under its own `readable.` key prefix.
  *
- * Contents are metadata only — chat ids (already SHA-256 hashes) mapped to
- * content fingerprints (SHA-256 of stored content), plus timestamps. Never a
- * chat title, message, or key.
+ * Baselines contain metadata only: hashed chat or archive-entry identities
+ * mapped to content fingerprints, plus timestamps. Never a chat title,
+ * folder name, message, or key.
  *
- * BASELINE CONTRACT (owner directive): the incremental baseline advances ONLY
- * after an incremental export's destination ZIP has been written AND
- * verified. A cancelled, failed, empty, or corrupt write never touches it.
+ * BASELINE CONTRACT: the file baseline advances only after a complete or
+ * incremental destination ZIP has been written and verified. The legacy
+ * chat baseline stays separate. Cancelled, failed, empty, or corrupt writes
+ * never advance either baseline.
  * This state is for the READABLE chat backup only and must never feed the
  * recovery-backup status rows — the two systems stay distinct on screen and
  * in storage.
@@ -40,6 +41,8 @@ object ReadableBackupState {
 
     private const val FILE = "storage_health"
 
+    private const val KEY_CATEGORY_HISTORY = "readable.category_history"
+    private const val KEY_FILE_BASELINE = "readable.file_baseline"
     private const val KEY_BASELINE = "readable.baseline"
     private const val KEY_LAST_SUCCESS = "readable.last_success"
     private const val KEY_LAST_SUCCESS_SIZE = "readable.last_success_size"
@@ -67,6 +70,30 @@ object ReadableBackupState {
                 putString(KEY_BASELINE, ReadableChatFormats.baselineToJson(baseline))
             }
         } catch (_: Exception) { }
+    }
+
+    /** Hashes of entry identities and saved file bytes; no names or content. */
+    fun getFileBaseline(context: Context): Map<String, String> =
+        try { ReadableChatFormats.baselineFromJson(prefs(context).getString(KEY_FILE_BASELINE, null)) }
+        catch (_: Exception) { emptyMap() }
+
+    /** Call only after the final destination was reopened and verified. */
+    fun setFileBaseline(context: Context, baseline: Map<String, String>) {
+        try {
+            prefs(context).edit(commit = true) {
+                putString(KEY_FILE_BASELINE, ReadableChatFormats.baselineToJson(baseline))
+            }
+        } catch (_: Exception) { }
+    }
+
+    fun getCategoryHistory(context: Context): Map<ReadableBackupCategory, ReadableBackupHistory.Record> =
+        try { ReadableBackupHistory.decode(prefs(context).getString(KEY_CATEGORY_HISTORY, null)) }
+        catch (_: Exception) { emptyMap() }
+
+    fun recordCategorySuccess(context: Context, categories: Set<ReadableBackupCategory>, complete: Boolean, atMillis: Long) {
+        val updated = ReadableBackupHistory.record(getCategoryHistory(context), categories, complete, atMillis)
+        try { prefs(context).edit(commit = true) { putString(KEY_CATEGORY_HISTORY, ReadableBackupHistory.encode(updated)) } }
+        catch (_: Exception) { }
     }
 
     /** Epoch millis of the last VERIFIED readable chat backup (complete or
@@ -104,8 +131,8 @@ object ReadableBackupState {
     // so re-opening this screen never resets "Backup Style" or "Format" back
     // to a default the user already moved away from.
 
-    /** The last-selected "Backup Style" - true = All Chats, false = New and
-     *  Changed Chats Only. Defaults to All Chats until the user has picked at
+    /** The last-selected Backup Style: all selected files or only new and
+     *  changed files. Defaults to all selected files until the user has picked at
      *  least once. */
     fun getScopeAll(context: Context): Boolean =
         try { prefs(context).getBoolean(KEY_SCOPE_ALL, true) } catch (_: Exception) { true }
@@ -125,16 +152,12 @@ object ReadableBackupState {
         try { prefs(context).edit(commit = true) { putString(KEY_FORMAT, format.name) } } catch (_: Exception) { }
     }
 
-    fun getCategories(context: Context): Set<ReadableDataBackup.Category> {
-        val defaults = ReadableDataBackup.Category.entries.toSet()
+    fun getCategories(context: Context): Set<ReadableBackupCategory> {
         val stored = try { prefs(context).getStringSet(KEY_CATEGORIES, null) } catch (_: Exception) { null }
-            ?: return defaults
-        return stored.mapNotNullTo(LinkedHashSet()) { name ->
-            ReadableDataBackup.Category.entries.firstOrNull { it.name == name }
-        }
+        return ReadableBackupCategory.fromStored(stored)
     }
 
-    fun setCategories(context: Context, categories: Set<ReadableDataBackup.Category>) {
+    fun setCategories(context: Context, categories: Set<ReadableBackupCategory>) {
         try {
             prefs(context).edit(commit = true) {
                 putStringSet(KEY_CATEGORIES, categories.mapTo(LinkedHashSet()) { it.name })

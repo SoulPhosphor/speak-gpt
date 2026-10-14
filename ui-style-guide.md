@@ -1425,3 +1425,29 @@ message-bookmark star uses `Widget.App.FlatChatRow.BookmarkIndicator` immediatel
 before the title, without changing the companion-image slot. Date and model
 share the existing `.Metadata` line. Search retains its separate result date
 and leaves the new message-bookmark slot hidden.
+
+## Backup status and history
+
+`Widget.App.BackupStatus.Row` owns the normal 15sp backup-status text, theme
+text color, and row gap; `.First` retains the first row's larger gap.
+`Widget.App.BackupStatus.Title` inherits toggle-title typography from
+`Widget.App.Row.Title`. `Widget.App.BackupStatus.BlankLine` separates status
+blocks. Measurements come from `backup_status_*` tokens in `dimens.xml`.
+
+`TextAppearance.App.BackupStatus.Failed` uses the theme's error color and bold
+text. `BackupStatusText.set` applies that appearance only to the word Failed
+and replaces the text on each update, so a later pass removes the emphasis.
+
+## Restore Options
+
+`Widget.App.Restore.*` centralizes the existing restore category checkbox,
+label, mode selector, explanation, credential note, database-type stack, and
+progress row. Typography inherits the canonical dropdown and section-hint
+styles; geometry comes from `restore_*` dimension tokens. The two existing
+full-width actions inherit `AppButton.Primary` through `RestoreSelection` and
+`RestoreDatabase`. This family preserves the prior restore controls' appearance.
+
+`Widget.App.Page.InsetRoot` fits a title-only settings page's entire frame
+inside the status and navigation bars. Use it at the root of BackUp Options
+and Restore Options so their headers and last controls remain unobscured
+under enforced edge-to-edge layout.

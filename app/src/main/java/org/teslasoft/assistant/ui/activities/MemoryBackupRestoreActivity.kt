@@ -43,6 +43,7 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import android.provider.DocumentsContract
+import org.teslasoft.assistant.ui.util.BackupStatusText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.StartupHealth
@@ -58,6 +59,7 @@ import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.ByteSizeFormatter
+import org.teslasoft.assistant.preferences.backup.DatabaseCheckHistory
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthChecker
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
@@ -75,6 +77,7 @@ import org.teslasoft.assistant.ui.PortableRestoreOutcomeFlow
 import org.teslasoft.assistant.ui.PortableRestoreRecoveryFlow
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
+import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupCategory
 import org.teslasoft.assistant.preferences.backup.readable.ReadableDataBackup
 import org.teslasoft.assistant.preferences.backup.portable.ChatMergePlanner
 import org.teslasoft.assistant.preferences.backup.portable.ChatRestorePreferences
@@ -121,7 +124,7 @@ import org.json.JSONArray
  * persistent inline status text or Material dialogs. Location lines show a
  * persisted friendly folder label — never a raw URI or tree document id.
  */
-class MemoryBackupRestoreActivity : SettingsPageActivity() {
+open class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
     companion object {
         /** Intent extra: a BackupType key whose A1 repair dialog should open
@@ -129,6 +132,9 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         const val EXTRA_START_REPAIR_FOR = "startRepairFor"
         private const val CHAT_PREVIEW_CHARACTER_LIMIT = 250_000
     }
+
+    protected open val isBackupOptionsPage: Boolean = false
+    protected open val isRestoreOptionsPage: Boolean = false
 
     private var preferences: Preferences? = null
     private var chatId = ""
@@ -187,14 +193,9 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
     private val inlineCompleted = HashSet<BackupType>()
 
     // Backup: Recovery Backup (manual)
-    private var btnCreateRecovery: MaterialButton? = null
     private var textManualLocation: TextView? = null
     private var btnChangeManualLocation: MaterialButton? = null
     private var btnCreateBackup: MaterialButton? = null
-    private var textRecoveryTypeProtectedSummary: TextView? = null
-    private var textRecoveryTypeUnencryptedSummary: TextView? = null
-    private var btnRecoveryType: TextView? = null
-    private var recoveryTypeProtected = true
     private var btnRestoreType: TextView? = null
     private var btnRestoreDatabase: MaterialButton? = null
     private var btnPortableRestore: MaterialButton? = null
@@ -215,11 +216,11 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
     // Backup: Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
     private var btnReadableScope: TextView? = null
     private var btnReadableFormat: TextView? = null
-    private var btnReadableContent: TextView? = null
     private var switchReadableIncludeThinking: MaterialSwitch? = null
     private var switchReadableIncludeFolders: MaterialSwitch? = null
     private var btnReadableCreate: MaterialButton? = null
     private var textReadableStatus: TextView? = null
+    private var textReadableLastSuccess: TextView? = null
 
     // Retained hidden wiring for the superseded Portable Data Copy.
     private var btnPortableExport: MaterialButton? = null
@@ -325,11 +326,12 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
     // destination has been verified.
     private var readableScopeAll = true
     private var readableFormat = ReadableChatBackup.Format.TEXT
-    private var readableCategories = ReadableDataBackup.Category.entries.toSet()
+    private var readableCategories: Set<ReadableBackupCategory> = emptySet()
     private var stagedReadable: File? = null
     private var stagedReadableSha: ByteArray? = null
     private var stagedReadableFingerprints: Map<String, String>? = null
-    private var stagedReadableIncremental = false
+    private var stagedReadableCategories: Set<ReadableBackupCategory> = emptySet()
+    private var stagedReadableAllFiles = true
     private var restoreFlowActive = false
     private var nonCancelableDatabaseOperation = false
     private var pendingPortableRestore: PendingPortableRestore? = null
@@ -349,7 +351,11 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
-        setContentView(R.layout.activity_memory_backup_restore)
+        setContentView(when {
+            isBackupOptionsPage -> R.layout.activity_backup_options
+            isRestoreOptionsPage -> R.layout.activity_restore_options
+            else -> R.layout.activity_memory_backup_restore
+        })
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
@@ -361,6 +367,7 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (isBackupOptionsPage) return
         if (UnifiedPortableRestoreCoordinator.isActive()) {
             setRestoreFlowActive(true)
             renderCoordinatorState(UnifiedPortableRestoreCoordinator.snapshot())
@@ -368,8 +375,10 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         }
         if (PortableRestoreOutcomeFlow.showIfPending(this)) return
         if (PortableRestoreRecoveryFlow.showIfPending(this)) return
+        if (isRestoreOptionsPage) return
         refreshLocations()
         refreshBackupStatus()
+        refreshStatusHistory()
         refreshAutoStatus()
         // Build Phase 3 dialog delivery: a queued startup health notice (A1 /
         // Database Repaired / A6), a repair explicitly requested from the A2
@@ -390,16 +399,33 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
     override fun onStart() {
         super.onStart()
+        if (isBackupOptionsPage) return
         val state = UnifiedPortableRestoreCoordinator.addObserver(portableCoordinatorObserver)
         if (UnifiedPortableRestoreCoordinator.isActive()) renderCoordinatorState(state)
     }
 
     override fun onStop() {
-        UnifiedPortableRestoreCoordinator.removeObserver(portableCoordinatorObserver)
+        if (!isBackupOptionsPage) UnifiedPortableRestoreCoordinator.removeObserver(portableCoordinatorObserver)
         super.onStop()
     }
 
+    private fun bindReadableViews() {
+        btnReadableScope = findViewById(R.id.btn_readable_scope)
+        btnReadableFormat = findViewById(R.id.btn_readable_format)
+        switchReadableIncludeThinking = findViewById(R.id.switch_readable_include_thinking)
+        switchReadableIncludeFolders = findViewById(R.id.switch_readable_include_folders)
+        btnReadableCreate = findViewById(R.id.btn_readable_create)
+        textReadableStatus = findViewById(R.id.text_readable_status)
+        textReadableLastSuccess = findViewById(R.id.text_readable_last_success)
+
+    }
+
     private fun bindViews() {
+        if (isBackupOptionsPage) {
+            bindReadableViews()
+            return
+        }
+
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
 
@@ -436,29 +462,17 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         healthProgressTextLorebook = findViewById(R.id.health_progress_text_lorebook)
         healthProgressTextUserImage = findViewById(R.id.health_progress_text_userimage)
 
-        btnCreateRecovery = findViewById(R.id.btn_create_recovery)
         btnPortableRestore = findViewById(R.id.btn_portable_restore)
         switchRestoreChatAlwaysNewer = findViewById(R.id.switch_restore_chat_always_newer)
         switchRestoreChatKeepBoth = findViewById(R.id.switch_restore_chat_keep_both)
         textManualLocation = findViewById(R.id.text_manual_location)
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
         btnCreateBackup = findViewById(R.id.btn_create_backup)
-        textRecoveryTypeProtectedSummary = findViewById(R.id.text_recovery_type_protected_summary)
-        textRecoveryTypeUnencryptedSummary = findViewById(R.id.text_recovery_type_unencrypted_summary)
-        btnRecoveryType = findViewById(R.id.btn_recovery_type)
         btnRestoreType = findViewById(R.id.btn_restore_type)
         btnRestoreDatabase = findViewById(R.id.btn_restore_database)
         restoreProgress = findViewById(R.id.restore_progress)
         restoreSpinner = findViewById(R.id.restore_spinner)
         restoreProgressText = findViewById(R.id.restore_progress_text)
-
-        btnReadableScope = findViewById(R.id.btn_readable_scope)
-        btnReadableFormat = findViewById(R.id.btn_readable_format)
-        btnReadableContent = findViewById(R.id.btn_readable_content)
-        switchReadableIncludeThinking = findViewById(R.id.switch_readable_include_thinking)
-        switchReadableIncludeFolders = findViewById(R.id.switch_readable_include_folders)
-        btnReadableCreate = findViewById(R.id.btn_readable_create)
-        textReadableStatus = findViewById(R.id.text_readable_status)
 
         btnPortableExport = findViewById(R.id.btn_portable_export)
         btnPortableImport = findViewById(R.id.btn_portable_import)
@@ -482,6 +496,7 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         btnReset = findViewById(R.id.btn_memory_reset)
         modelCredentialsNote = findViewById(R.id.restore_model_credentials_note)
 
+        if (!isRestoreOptionsPage) return
         bindPortableRestoreCategory(
             PortableRestoreCategory.CHATS, R.id.restore_category_chats,
             R.string.restore_category_chats, R.string.restore_category_chats_desc
@@ -584,6 +599,11 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
     @Suppress("DEPRECATION")
     private fun applyTheme() {
+        if (isBackupOptionsPage) return
+        if (isRestoreOptionsPage) {
+            org.teslasoft.assistant.ui.util.ScreenChrome.apply(this, findViewById(R.id.action_bar), null)
+            return
+        }
         ThemeManager.getThemeManager().applyTheme(this, isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true)
 
         if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {
@@ -605,7 +625,35 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         }
     }
 
+    private fun initRestoreLogic() {
+        btnPortableRestore?.setOnClickListener { beginPortableRestore() }
+        val chatRestoreOptions = ChatRestorePreferences.options(this)
+        switchRestoreChatAlwaysNewer?.isChecked = chatRestoreOptions.alwaysUseNewer
+        switchRestoreChatKeepBoth?.isChecked = chatRestoreOptions.keepBothWhenOlderHasMore
+        switchRestoreChatAlwaysNewer?.setOnCheckedChangeListener { _, enabled ->
+            ChatRestorePreferences.setAlwaysUseNewer(this, enabled)
+        }
+        switchRestoreChatKeepBoth?.setOnCheckedChangeListener { _, enabled ->
+            ChatRestorePreferences.setKeepBoth(this, enabled)
+        }
+        updateRestoreTypeLabel()
+        btnRestoreType?.setOnClickListener { pickRestoreType() }
+        btnRestoreDatabase?.setOnClickListener {
+            showRestoreChoice(generalRestoreType, null)
+        }
+
+    }
+
     private fun initLogic() {
+        if (isRestoreOptionsPage) {
+            initRestoreLogic()
+            return
+        }
+        if (isBackupOptionsPage) {
+            initReadableSection()
+            return
+        }
+
         btnBack?.setOnClickListener { finish() }
 
         /* ---- 1. Backup Status: per-database inline recovery actions ---- */
@@ -636,31 +684,14 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         // btn_create_backup) are hidden AND unwired: the old writer must not be
         // reachable from this screen (owner correction, July 22 2026). The v1
         // backend classes stay for the future automatic implementation.
-        initRecoveryTypeSection()
-        btnCreateRecovery?.setOnClickListener {
-            startActivity(
-                Intent(this, RecoveryBackupActivity::class.java)
-                    .putExtra(RecoveryBackupActivity.EXTRA_RECOVERY_PROTECTED, recoveryTypeProtected)
-            )
+        findViewById<View>(R.id.row_backup_options).setOnClickListener {
+            startActivity(Intent(this, BackupOptionsActivity::class.java))
         }
-        btnPortableRestore?.setOnClickListener { beginPortableRestore() }
-        val chatRestoreOptions = ChatRestorePreferences.options(this)
-        switchRestoreChatAlwaysNewer?.isChecked = chatRestoreOptions.alwaysUseNewer
-        switchRestoreChatKeepBoth?.isChecked = chatRestoreOptions.keepBothWhenOlderHasMore
-        switchRestoreChatAlwaysNewer?.setOnCheckedChangeListener { _, enabled ->
-            ChatRestorePreferences.setAlwaysUseNewer(this, enabled)
-        }
-        switchRestoreChatKeepBoth?.setOnCheckedChangeListener { _, enabled ->
-            ChatRestorePreferences.setKeepBoth(this, enabled)
-        }
-        updateRestoreTypeLabel()
-        btnRestoreType?.setOnClickListener { pickRestoreType() }
-        btnRestoreDatabase?.setOnClickListener {
-            showRestoreChoice(generalRestoreType, null)
+        findViewById<View>(R.id.row_restore_options).setOnClickListener {
+            startActivity(Intent(this, RestoreOptionsActivity::class.java))
         }
 
         /* ---- Backup: Human-Readable Chat Backup ---- */
-        initReadableSection()
 
         /* ---- Hidden legacy Portable Data Copy wiring ---- */
         btnPortableImport?.setOnClickListener {
@@ -688,31 +719,12 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
             companionImportLauncher.launch(arrayOf("*/*"))
         }
 
-        /* ---- Backup: Automatic Backups. Enabled flag + frequency + destination
-             drive the WorkManager job and the app-open catch-up check. A
-             valid, writable destination is REQUIRED before enabling — flipping
-             the toggle on with no folder opens the picker and completes the
-             enable only once a folder is chosen. ---- */
-        suppressAutoToggle = true
-        switchAutoBackup?.isChecked = RecoveryBackupState.isEnabled(this)
-        suppressAutoToggle = false
-        switchAutoBackup?.setOnCheckedChangeListener { _, isChecked ->
-            if (suppressAutoToggle) return@setOnCheckedChangeListener
-            onAutoToggle(isChecked)
-        }
-        initAutoFrequencySection()
-        // Changing the folder here is a plain "change location" (never a
-        // pending-enable), so make sure the flag is clear before launching.
-        btnChangeAutoLocation?.setOnClickListener {
-            pendingEnableAfterPick = false
-            autoFolderPicker.launch(null)
-        }
-
         /* ---- 8. Reset (bottom) ---- */
         btnReset?.setOnClickListener { showResetDialog() }
 
         refreshLocations()
         refreshBackupStatus()
+        refreshStatusHistory()
     }
 
     /** A persistent notice the user dismisses — never a toast (owner rule). */
@@ -1719,12 +1731,12 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
     }
 
     override fun onDestroy() {
-        PortableRestoreOutcomeFlow.onActivityDestroyed(this)
+        if (!isBackupOptionsPage) PortableRestoreOutcomeFlow.onActivityDestroyed(this)
         pendingUnlock?.discard()
         pendingUnlock = null
         pendingPrepared?.discard()
         pendingPrepared = null
-        finishPortableRestoreFlow()
+        if (!isBackupOptionsPage) finishPortableRestoreFlow()
         cleanupStagedReadable()
         super.onDestroy()
     }
@@ -1740,47 +1752,6 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
     /* ------------------------------ 3. recovery backup (manual) ------------------------------ */
 
-    private fun initRecoveryTypeSection() {
-        // Same "Title: Description" wording as the Recovery Backup screen's
-        // choice panel, reused verbatim via the shared format string so the
-        // two can never drift apart (owner ruling, July 22 2026).
-        textRecoveryTypeProtectedSummary?.text = getString(
-            R.string.recovery_type_summary_format,
-            getString(R.string.recovery_choice_protected_title),
-            getString(R.string.recovery_choice_protected_desc)
-        )
-        textRecoveryTypeUnencryptedSummary?.text = getString(
-            R.string.recovery_type_summary_format,
-            getString(R.string.recovery_choice_unencrypted_title),
-            getString(R.string.recovery_choice_unencrypted_desc)
-        )
-        // Remember the last-selected Recovery Type across visits, the same
-        // way Backup Style and Format below do.
-        recoveryTypeProtected = RecoveryBackupState.getLastRecoveryProtected(this)
-        updateRecoveryTypeLabel()
-        btnRecoveryType?.setOnClickListener { pickRecoveryType() }
-    }
-
-    private fun updateRecoveryTypeLabel() {
-        btnRecoveryType?.text = getString(
-            if (recoveryTypeProtected) R.string.recovery_choice_protected_title
-            else R.string.recovery_choice_unencrypted_title
-        )
-    }
-
-    private fun pickRecoveryType() {
-        val anchor = btnRecoveryType ?: return
-        val labels = listOf(
-            getString(R.string.recovery_choice_protected_title),
-            getString(R.string.recovery_choice_unencrypted_title)
-        )
-        showFieldDropdown(anchor, labels) { position ->
-            recoveryTypeProtected = position == 0
-            RecoveryBackupState.setLastRecoveryProtected(this, recoveryTypeProtected)
-            updateRecoveryTypeLabel()
-        }
-    }
-
     /* ------------------------------ 4. human-readable chat backup ------------------------------ */
 
     private fun initReadableSection() {
@@ -1793,7 +1764,14 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         updateReadableSelectorLabels()
         btnReadableScope?.setOnClickListener { pickReadableScope() }
         btnReadableFormat?.setOnClickListener { pickReadableFormat() }
-        btnReadableContent?.setOnClickListener { pickReadableContent() }
+        for ((category, viewId) in readableCategorySwitches) {
+            val toggle = findViewById<MaterialSwitch>(viewId)
+            toggle.isChecked = category in readableCategories
+            toggle.setOnCheckedChangeListener { _, included ->
+                readableCategories = if (included) readableCategories + category else readableCategories - category
+                ReadableBackupState.setCategories(this, readableCategories)
+            }
+        }
         switchReadableIncludeThinking?.isChecked = ReadableBackupState.getIncludeThinking(this)
         switchReadableIncludeThinking?.setOnCheckedChangeListener { _, include ->
             ReadableBackupState.setIncludeThinking(this, include)
@@ -1818,15 +1796,6 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
                 ReadableChatBackup.Format.BOTH -> R.string.backup_readable_format_both
             }
         )
-        btnReadableContent?.text = when (readableCategories.size) {
-            ReadableDataBackup.Category.entries.size -> getString(R.string.backup_readable_content_all)
-            0 -> getString(R.string.backup_readable_content_none)
-            else -> resources.getQuantityString(
-                R.plurals.backup_readable_content_count,
-                readableCategories.size,
-                readableCategories.size
-            )
-        }
     }
 
     private fun pickReadableScope() {
@@ -1860,35 +1829,21 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         }
     }
 
-    private fun pickReadableContent() {
-        val categories = ReadableDataBackup.Category.entries
-        val labels = categories.map(::readableCategoryName).toTypedArray()
-        val checked = BooleanArray(categories.size) { categories[it] in readableCategories }
-        val selected = readableCategories.toMutableSet()
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.backup_readable_content_title)
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                if (isChecked) selected.add(categories[which]) else selected.remove(categories[which])
-            }
-            .setPositiveButton(R.string.backup_readable_done) { _, _ ->
-                readableCategories = selected.toSet()
-                ReadableBackupState.setCategories(this, readableCategories)
-                updateReadableSelectorLabels()
-            }
-            .setNegativeButton(R.string.btn_cancel, null)
-            .show()
-    }
-
-    private fun readableCategoryName(category: ReadableDataBackup.Category): String = getString(when (category) {
-        ReadableDataBackup.Category.CHATS -> R.string.restore_category_chats
-        ReadableDataBackup.Category.GENERATED_IMAGES -> R.string.restore_category_generated_images
-        ReadableDataBackup.Category.IDENTITIES -> R.string.backup_readable_category_identities
-        ReadableDataBackup.Category.PROFILE_IMAGES -> R.string.restore_category_profile_images
-        ReadableDataBackup.Category.MODEL_SETTINGS -> R.string.restore_category_model_settings
-        ReadableDataBackup.Category.MEMORIES -> R.string.restore_category_memories
-        ReadableDataBackup.Category.MODEL_RULES -> R.string.restore_category_model_rules
-        ReadableDataBackup.Category.LOREBOOKS -> R.string.restore_category_lorebooks
-    })
+    private val readableCategorySwitches = mapOf(
+        ReadableBackupCategory.ACTIVATION_PROMPTS to R.id.switch_readable_activation_prompts,
+        ReadableBackupCategory.PROFILE_IMAGES to R.id.switch_readable_profile_images,
+        ReadableBackupCategory.CHATS to R.id.switch_readable_chats,
+        ReadableBackupCategory.COMPANIONS to R.id.switch_readable_companions,
+        ReadableBackupCategory.GENERATED_IMAGES to R.id.switch_readable_generated_images,
+        ReadableBackupCategory.GLAMOURS to R.id.switch_readable_glamours,
+        ReadableBackupCategory.LOREBOOKS to R.id.switch_readable_lorebooks,
+        ReadableBackupCategory.MEMORIES to R.id.switch_readable_memories,
+        ReadableBackupCategory.MODEL_SETTINGS to R.id.switch_readable_model_settings,
+        ReadableBackupCategory.MODEL_RULES to R.id.switch_readable_model_rules,
+        ReadableBackupCategory.ROLEPLAY to R.id.switch_readable_roleplay,
+        ReadableBackupCategory.SETTINGS to R.id.switch_readable_settings,
+        ReadableBackupCategory.SYSTEM_PROMPTS to R.id.switch_readable_system_prompts
+    )
 
     private fun setReadableStatus(text: String) {
         textReadableStatus?.text = text
@@ -1900,7 +1855,8 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         if (last > 0L) {
             val sizeValue = ReadableBackupState.getLastSuccessSizeBytes(this)?.let { ByteSizeFormatter.format(it) }
                 ?: getString(R.string.backup_size_unavailable)
-            setReadableStatus(
+            textReadableLastSuccess?.visibility = View.VISIBLE
+            textReadableLastSuccess?.text = (
                 getString(R.string.backup_readable_last_success, BackupStatusFormatter.formatDateTime(last)) +
                     "\n" + getString(R.string.backup_readable_file_size, sizeValue)
             )
@@ -1917,14 +1873,14 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         btnReadableCreate?.isEnabled = false
         setReadableStatus(getString(R.string.backup_readable_preparing))
         cleanupStagedReadable()
-        val allChats = readableScopeAll
+        val allFiles = readableScopeAll
         val format = readableFormat
         val categories = readableCategories
         val includeFolders = switchReadableIncludeFolders?.isChecked == true
         val includeThinking = switchReadableIncludeThinking?.isChecked != false
         runOffThread {
             val staged = File(cacheDir, "readable_stage_${System.nanoTime()}.zip")
-            when (val result = ReadableDataBackup.build(this, staged, allChats, format, categories, includeFolders, includeThinking)) {
+            when (val result = ReadableDataBackup.build(this, staged, allFiles, format, categories, includeFolders, includeThinking)) {
                 is ReadableDataBackup.Result.NothingNew -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.backup_readable_none))
@@ -1949,10 +1905,11 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
                         stagedReadable = staged
                         stagedReadableSha = sha
                         stagedReadableFingerprints = result.fingerprints
-                        stagedReadableIncremental = !allChats
+                        stagedReadableCategories = result.exportedCategories
+                        stagedReadableAllFiles = allFiles
                         readableSaveLauncher.launch(
                             RecoveryFileNaming.readableChats(
-                                BackupBrand.resolve(this), complete = allChats,
+                                BackupBrand.resolve(this), complete = allFiles,
                                 epochMillis = System.currentTimeMillis()
                             )
                         )
@@ -1980,7 +1937,8 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
             setReadableStatus(getString(R.string.backup_readable_fail_generic))
             return
         }
-        val incremental = stagedReadableIncremental
+        val exportedCategories = stagedReadableCategories
+        val complete = stagedReadableAllFiles
         setReadableStatus(getString(R.string.backup_readable_saving))
         runOffThread {
             try {
@@ -2001,13 +1959,15 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
                     return@runOffThread
                 }
 
-                // Destination verified: NOW (and only now) the incremental
+                // Destination verified: NOW (and only now) the file
                 // baseline may advance (owner directive) and the last-success
                 // stamp may move. verifiedSize is the FINAL destination file's
                 // exact size, measured during this same verification read —
                 // never the staged file's size, never an estimate.
-                if (incremental) ReadableBackupState.setBaseline(this, fingerprints)
-                ReadableBackupState.setLastSuccess(this, System.currentTimeMillis())
+                ReadableBackupState.setFileBaseline(this, fingerprints)
+                val savedAt = System.currentTimeMillis()
+                ReadableBackupState.recordCategorySuccess(this, exportedCategories, complete, savedAt)
+                ReadableBackupState.setLastSuccess(this, savedAt)
                 ReadableBackupState.setLastSuccessSizeBytes(this, verifiedSize)
 
                 val where = BackupLocationDisplay.describeSaveAs(this, uri)
@@ -2021,6 +1981,7 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
                     }
                     val detail = where.fileName?.let { "\n" + getString(R.string.recovery_saved_file, it) } ?: ""
                     setReadableStatus(main + detail)
+                    showReadableLastSuccess()
                 }
             } catch (e: Exception) {
                 discardReadableDestination(uri)
@@ -2055,7 +2016,8 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         stagedReadable = null
         stagedReadableSha = null
         stagedReadableFingerprints = null
-        stagedReadableIncremental = false
+        stagedReadableCategories = emptySet()
+        stagedReadableAllFiles = true
     }
 
     private fun sha256(file: File): ByteArray = file.inputStream().use { sha256(it) }
@@ -2092,6 +2054,7 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         textResultUserImage?.visibility = View.GONE
         runOffThread {
             val results = DatabaseHealthChecker.checkAll(this)
+            DatabaseCheckHistory.record(this, results, System.currentTimeMillis())
             // B8 escalation: a DAMAGED manual-check result IS confirmed damage
             // — set the degraded flag (off the main thread; transition-logged
             // once) before the report dialog offers the repair flow.
@@ -2124,6 +2087,7 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
                     tv?.text = line
                     tv?.visibility = View.VISIBLE
                 }
+                refreshStatusHistory()
                 showCheckReportDialog(results)
             }
         }
@@ -2318,14 +2282,75 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
                 )
             }
             runOnUiThread {
-                textStatusMemory?.text = lines[BackupType.MEMORY]
-                textStatusLorebooks?.text = lines[BackupType.LOREBOOK]
-                textStatusChats?.text = lines[BackupType.CHATS]
-                textStatusUserImage?.text = lines[BackupType.USER_IMAGE]
+                BackupStatusText.set(textStatusMemory, lines[BackupType.MEMORY].orEmpty())
+                BackupStatusText.set(textStatusLorebooks, lines[BackupType.LOREBOOK].orEmpty())
+                BackupStatusText.set(textStatusChats, lines[BackupType.CHATS].orEmpty())
+                BackupStatusText.set(textStatusUserImage, lines[BackupType.USER_IMAGE].orEmpty())
                 applyInlineState(BackupType.MEMORY)
                 applyInlineState(BackupType.LOREBOOK)
                 applyInlineState(BackupType.USER_IMAGE)
             }
+        }
+    }
+
+    private fun readableCategoryName(category: ReadableBackupCategory): String = getString(when (category) {
+        ReadableBackupCategory.ACTIVATION_PROMPTS -> R.string.restore_category_activation_prompts
+        ReadableBackupCategory.PROFILE_IMAGES -> R.string.restore_category_profile_images
+        ReadableBackupCategory.CHATS -> R.string.restore_category_chats
+        ReadableBackupCategory.COMPANIONS -> R.string.restore_category_companions
+        ReadableBackupCategory.GENERATED_IMAGES -> R.string.restore_category_generated_images
+        ReadableBackupCategory.GLAMOURS -> R.string.restore_category_glamours
+        ReadableBackupCategory.LOREBOOKS -> R.string.restore_category_lorebooks
+        ReadableBackupCategory.MEMORIES -> R.string.restore_category_memories
+        ReadableBackupCategory.MODEL_SETTINGS -> R.string.restore_category_model_settings
+        ReadableBackupCategory.MODEL_RULES -> R.string.restore_category_model_rules
+        ReadableBackupCategory.ROLEPLAY -> R.string.restore_category_roleplay
+        ReadableBackupCategory.SETTINGS -> R.string.restore_category_settings
+        ReadableBackupCategory.SYSTEM_PROMPTS -> R.string.restore_category_system_prompts
+    })
+
+    private fun refreshStatusHistory() {
+        if (isBackupOptionsPage || isRestoreOptionsPage) return
+        val container = findViewById<LinearLayout>(R.id.readable_backup_history_rows)
+        val history = ReadableBackupState.getCategoryHistory(this)
+        container.removeAllViews()
+        val collation = java.text.Collator.getInstance()
+        for (category in ReadableBackupCategory.entries.sortedWith { a, b ->
+            collation.compare(readableCategoryName(a), readableCategoryName(b))
+        }) {
+            val record = history[category]
+            val row = layoutInflater.inflate(R.layout.view_backup_status_row, container, false) as TextView
+            row.text = if (record == null) getString(R.string.backup_history_named_status,
+                readableCategoryName(category), getString(R.string.backup_readable_history_none))
+            else getString(R.string.backup_history_dated_status, readableCategoryName(category),
+                getString(if (record.complete) R.string.backup_readable_history_complete else R.string.backup_readable_history_new),
+                BackupStatusFormatter.formatDateTime(record.atMillis))
+            container.addView(row)
+        }
+        val checks = DatabaseCheckHistory.get(this)
+        val last = checks.values.maxOfOrNull { it.atMillis }
+        val lastText = last?.let { BackupStatusFormatter.formatDateTime(it) }
+            ?: getString(R.string.backup_database_history_none)
+        findViewById<TextView>(R.id.text_last_database_test).text = getString(R.string.backup_last_database_test, lastText)
+        findViewById<TextView>(R.id.text_databases_last_checked).text = getString(R.string.backup_databases_last_checked, lastText)
+        val ids = mapOf(BackupType.MEMORY to R.id.text_database_test_memory,
+            BackupType.LOREBOOK to R.id.text_database_test_lorebook,
+            BackupType.USER_IMAGE to R.id.text_database_test_userimage)
+        for ((type, id) in ids) {
+            val name = getString(when (type) {
+                BackupType.MEMORY -> R.string.backup_db_name_memory
+                BackupType.LOREBOOK -> R.string.backup_db_name_lorebook
+                else -> R.string.backup_db_name_user_image
+            })
+            val record = checks[type]
+            val line = if (record == null) getString(R.string.backup_history_named_status,
+                name, getString(R.string.backup_database_history_none))
+            else getString(R.string.backup_history_dated_status, name, getString(when (record.outcome) {
+                DatabaseCheckHistory.Outcome.PASSED -> R.string.backup_database_passed
+                DatabaseCheckHistory.Outcome.FAILED -> R.string.backup_database_failed
+                DatabaseCheckHistory.Outcome.UNAVAILABLE -> R.string.backup_database_unavailable
+            }), BackupStatusFormatter.formatDateTime(record.atMillis))
+            BackupStatusText.set(findViewById(id), line)
         }
     }
 
@@ -3019,7 +3044,7 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        adjustPaddings()
+        if (!isBackupOptionsPage && !isRestoreOptionsPage) adjustPaddings()
     }
 
     private fun adjustPaddings() {

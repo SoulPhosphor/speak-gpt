@@ -13,7 +13,10 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
-import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
+import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableBackup
+import org.teslasoft.assistant.preferences.backup.portable.AppSettingsPortableStore
 import org.teslasoft.assistant.preferences.backup.portable.GeneratedImagePortableBackup
 import org.teslasoft.assistant.preferences.backup.portable.LorebookPortableCodec
 import org.teslasoft.assistant.preferences.backup.portable.ModelEndpointPortableBackup
@@ -28,19 +31,8 @@ import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
  * contains logical JSON and original image files, never encrypted databases,
  * database keys, endpoint credentials, recovery secrets, or restore metadata. */
 object ReadableDataBackup {
-    enum class Category {
-        CHATS,
-        GENERATED_IMAGES,
-        IDENTITIES,
-        PROFILE_IMAGES,
-        MODEL_SETTINGS,
-        MEMORIES,
-        MODEL_RULES,
-        LOREBOOKS
-    }
-
     sealed class Result {
-        data class Ok(val fingerprints: Map<String, String>) : Result()
+        data class Ok(val fingerprints: Map<String, String>, val exportedCategories: Set<ReadableBackupCategory>) : Result()
         data object NothingNew : Result()
         data object NothingToBackUp : Result()
         data object ChatsUnreadable : Result()
@@ -50,9 +42,9 @@ object ReadableDataBackup {
     fun build(
         context: Context,
         destination: File,
-        allChats: Boolean,
+        allFiles: Boolean,
         chatFormat: ReadableChatBackup.Format,
-        categories: Set<Category>,
+        categories: Set<ReadableBackupCategory>,
         includeFolders: Boolean,
         includeThinking: Boolean
     ): Result {
@@ -61,35 +53,24 @@ object ReadableDataBackup {
         if (staging.exists()) staging.deleteRecursively()
         if (!staging.mkdirs()) return Result.Failed
         val sources = ArrayList<Pair<String, File>>()
-        var fingerprints = ReadableBackupState.getBaseline(context)
-        var chatNothingNew = false
         var complete = false
         try {
-            if (Category.CHATS in categories) {
+            if (ReadableBackupCategory.CHATS in categories) {
                 val chatZip = File(staging, "chats.zip")
-                when (val result = ReadableChatBackup.build(context, chatZip, allChats, chatFormat, includeFolders, includeThinking)) {
+                when (val result = ReadableChatBackup.build(context, chatZip, true, chatFormat, includeFolders, includeThinking)) {
                     is ReadableChatBackup.BuildResult.Ok -> {
-                        fingerprints = result.fingerprints
                         collectZip(chatZip, "chats/", sources)
                     }
-                    ReadableChatBackup.BuildResult.NothingNew -> chatNothingNew = true
+                    ReadableChatBackup.BuildResult.NothingNew -> Unit
                     ReadableChatBackup.BuildResult.NothingToBackUp -> Unit
                     ReadableChatBackup.BuildResult.ChatsUnreadable -> return Result.ChatsUnreadable
                     ReadableChatBackup.BuildResult.Failed -> return Result.Failed
                 }
             }
 
-            if (Category.IDENTITIES in categories) {
-                val archive = File(staging, "identities.zip")
-                when (CompanionBackupExporter.buildBackupZip(
-                    context, archive, validateAssignedImages = true
-                )) {
-                    is CompanionBackupExporter.BuildResult.Ok -> collectZip(archive, "identities/", sources)
-                    else -> return Result.Failed
-                }
-            }
+            ReadableIdentityBackup.collect(context, staging, categories, sources)
 
-            if (Category.GENERATED_IMAGES in categories) {
+            if (ReadableBackupCategory.GENERATED_IMAGES in categories) {
                 when (val generated = GeneratedImagePortableBackup.buildArtifacts(context, staging)) {
                     is GeneratedImagePortableBackup.Result.Ok -> generated.artifacts.forEach {
                         sources.add(it.entryName to it.file)
@@ -99,7 +80,8 @@ object ReadableDataBackup {
                 }
             }
 
-            if (Category.PROFILE_IMAGES in categories) {
+            if (ReadableBackupCategory.PROFILE_IMAGES in categories) {
+                if (DatabaseHealthState.isDegraded(context, BackupType.USER_IMAGE)) return Result.Failed
                 val store = ProfileImageStore.getInstance(context.applicationContext)
                 val records = store.listNewestFirst()
                 if (records.isNotEmpty()) {
@@ -110,13 +92,13 @@ object ReadableDataBackup {
                     sources.add("profile_images/catalog.json" to catalog)
                     records.forEach { record ->
                         val image = store.imageFile(record.hash) ?: return Result.Failed
-                        if (!image.isFile) return Result.Failed
+                        if (!ProfileImagePortableBackup.isValidAsset(image, record.hash)) return Result.Failed
                         sources.add("profile_images/assets/${ProfileImageFileNaming.permanentFileName(record.hash)}" to image)
                     }
                 }
             }
 
-            if (Category.MODEL_SETTINGS in categories) {
+            if (ReadableBackupCategory.MODEL_SETTINGS in categories) {
                 val model = File(staging, "model-settings.json")
                 if (ModelEndpointPortableBackup.write(context, model) is ModelEndpointPortableBackup.Result.Failed) {
                     return Result.Failed
@@ -124,9 +106,15 @@ object ReadableDataBackup {
                 sources.add("model_settings.json" to model)
             }
 
-            if (MemoryStore.isProvisioned(context)) {
+            if (ReadableBackupCategory.SETTINGS in categories) {
+                val settings = File(staging, "app-settings.json")
+                if (AppSettingsPortableStore.write(context, settings).isFailure) return Result.Failed
+                sources.add("app_settings.json" to settings)
+            }
+
+            if (categories.any { it == ReadableBackupCategory.MEMORIES || it == ReadableBackupCategory.MODEL_RULES } && MemoryStore.isProvisioned(context)) {
                 val memory = MemoryStore.getInstance(context.applicationContext)
-                if (Category.MEMORIES in categories) {
+                if (ReadableBackupCategory.MEMORIES in categories) {
                     val file = File(staging, "memories.json")
                     file.writeText(MemoryPortableRowFormat.toJson(
                         MemoryPortableGroup.MEMORIES,
@@ -134,7 +122,7 @@ object ReadableDataBackup {
                     ), Charsets.UTF_8)
                     sources.add("memories.json" to file)
                 }
-                if (Category.MODEL_RULES in categories) {
+                if (ReadableBackupCategory.MODEL_RULES in categories) {
                     val file = File(staging, "model-rules.json")
                     file.writeText(MemoryPortableRowFormat.toJson(
                         MemoryPortableGroup.MODEL_RULES,
@@ -144,7 +132,7 @@ object ReadableDataBackup {
                 }
             }
 
-            if (Category.LOREBOOKS in categories && LoreBookStore.isProvisioned(context)) {
+            if (ReadableBackupCategory.LOREBOOKS in categories && LoreBookStore.isProvisioned(context)) {
                 val file = File(staging, "lorebooks.json")
                 file.writeText(
                     LorebookPortableCodec.toJson(LoreBookStore.getInstance(context).exportPortableData()),
@@ -153,12 +141,12 @@ object ReadableDataBackup {
                 sources.add("lorebooks.json" to file)
             }
 
-            if (sources.isEmpty()) {
-                return if (chatNothingNew) Result.NothingNew else Result.NothingToBackUp
-            }
+            if (sources.isEmpty()) return Result.NothingToBackUp
+            val plan = ReadableFileBackupPlan.prepare(sources, staging, ReadableBackupState.getFileBaseline(context), allFiles)
+            if (plan.files.isEmpty()) return Result.NothingNew
             val expected = LinkedHashSet<String>()
             ZipOutputStream(destination.outputStream().buffered()).use { zip ->
-                for ((name, source) in sources) {
+                for ((name, source) in plan.files) {
                     if (!expected.add(name) || !source.isFile) return Result.Failed
                     zip.putNextEntry(ZipEntry(name))
                     source.inputStream().use { it.copyTo(zip, 64 * 1024) }
@@ -166,8 +154,11 @@ object ReadableDataBackup {
                 }
             }
             if (!verify(destination, expected)) return Result.Failed
+            val exported = plan.files.mapTo(LinkedHashSet()) { (name, _) ->
+                checkNotNull(ReadableBackupCategory.forEntry(name))
+            }
             complete = true
-            return Result.Ok(fingerprints)
+            return Result.Ok(plan.fingerprints, exported)
         } catch (_: Exception) {
             return Result.Failed
         } finally {

@@ -29,22 +29,38 @@ class BackupRestoreScreenContractTest {
     fun backupAndRestoreSectionsFollowTheApprovedVisibleOrder() {
         val layout = source("activity_memory_backup_restore.xml")
         val backupTitle = layout.indexOf("@string/backup_section_title")
-        val automatic = layout.indexOf("@layout/section_automatic_backups")
-        val recovery = layout.indexOf("@string/backup_create_section")
-        val readable = layout.indexOf("@string/backup_readable_section")
+        val options = layout.indexOf("@+id/row_backup_options")
+        val optionsLayout = source("activity_backup_options.xml")
+        val automatic = optionsLayout.indexOf("@layout/section_automatic_backups")
+        val recovery = optionsLayout.indexOf("@string/backup_create_section")
+        val readable = optionsLayout.indexOf("@string/backup_readable_section")
         val converter = layout.indexOf("@+id/btn_legacy_convert")
-        val restoreTitle = layout.indexOf("@string/restore_data_section")
-        val categories = layout.indexOf("@+id/restore_category_chats")
-        val portableRestore = layout.indexOf("@+id/btn_portable_restore")
-        val databaseType = layout.indexOf("@+id/btn_restore_type\"")
-        val databaseRestore = layout.indexOf("@+id/btn_restore_database\"")
+        val restoreLayout = source("activity_restore_options.xml")
+        val restoreTitle = restoreLayout.indexOf("@string/restore_data_section")
+        val categories = restoreLayout.indexOf("@+id/restore_category_chats")
+        val portableRestore = restoreLayout.indexOf("@+id/btn_portable_restore")
+        val databaseType = restoreLayout.indexOf("@+id/btn_restore_type\"")
+        val databaseRestore = restoreLayout.indexOf("@+id/btn_restore_database\"")
 
         assertTrue(backupTitle >= 0)
-        assertTrue(automatic > backupTitle)
-        assertTrue(recovery > automatic)
-        assertTrue(readable > recovery)
-        assertTrue(converter > readable)
-        assertTrue(restoreTitle > converter)
+        assertTrue(options > backupTitle)
+        assertTrue(automatic >= 0 && recovery > automatic)
+        assertTrue(readable > optionsLayout.indexOf("@+id/btn_create_recovery"))
+        assertTrue(!layout.contains("@layout/section_automatic_backups"))
+        assertTrue(!layout.contains("@+id/btn_create_recovery"))
+        assertTrue(optionsLayout.contains("@+id/btn_create_recovery"))
+        assertTrue(!layout.contains("@string/backup_readable_section"))
+        assertTrue(!optionsLayout.contains("ImageButton"))
+        val optionsRow = layout.substringAfter("@+id/row_backup_options")
+            .substringBefore("<ImageView")
+        assertTrue(!optionsRow.contains("Row.Subtitle"))
+        assertTrue(javaSource("MemoryBackupRestoreActivity.kt").contains("Intent(this, BackupOptionsActivity::class.java)"))
+        assertTrue(javaSource("BackupOptionsActivity.kt").contains("RecoveryBackupActivity.EXTRA_RECOVERY_PROTECTED"))
+        assertTrue(converter > options)
+        assertTrue(restoreTitle >= 0)
+        assertTrue(layout.indexOf("@+id/row_restore_options") > options)
+        assertTrue(!layout.contains("@+id/btn_restore_database"))
+        assertTrue(!restoreLayout.contains("ImageButton"))
         assertTrue(categories > restoreTitle)
         assertTrue(portableRestore > categories)
         assertTrue(databaseType > portableRestore)
@@ -52,16 +68,40 @@ class BackupRestoreScreenContractTest {
     }
 
     @Test
+    fun readableContentUsesRestoreLabelsAndSubtitlesWithChatOptionsImmediatelyAfterChats() {
+        val layout = source("activity_backup_options.xml")
+        val restore = source("activity_restore_options.xml")
+        val categories = listOf("activation_prompts", "profile_images", "chats", "companions",
+            "generated_images", "glamours", "lorebooks", "memories", "model_settings", "model_rules",
+            "roleplay", "settings", "system_prompts")
+        for (category in categories) {
+            assertTrue(layout.contains("@+id/switch_readable_$category"))
+            assertTrue(layout.contains("@string/restore_category_$category"))
+            assertTrue(layout.contains("@string/restore_category_${category}_desc"))
+            assertTrue(restore.contains("@+id/restore_category_$category"))
+        }
+        assertTrue(!layout.contains("CheckBox"))
+        assertTrue(!layout.contains("btn_readable_content"))
+        val chats = layout.indexOf("@+id/switch_readable_chats")
+        val thinking = layout.indexOf("@+id/switch_readable_include_thinking")
+        val folders = layout.indexOf("@+id/switch_readable_include_folders")
+        assertTrue(chats < thinking && thinking < folders && folders < layout.indexOf("@+id/switch_readable_companions"))
+        val desc = layout.indexOf("@string/backup_readable_desc")
+        val saved = layout.indexOf("@+id/text_readable_last_success")
+        assertTrue(saved > desc && saved < layout.indexOf("@+id/btn_readable_scope"))
+    }
+
+    @Test
     fun restoreCategoriesUseCompactCheckboxAndModeRows() {
-        val layout = source("activity_memory_backup_restore.xml")
+        val layout = source("activity_restore_options.xml")
         val row = source("view_restore_category.xml")
         assertTrue(row.contains("@+id/category_check"))
         assertTrue(row.contains("@+id/category_mode"))
         assertTrue(row.contains("@+id/category_title"))
         assertTrue(!row.contains("restore_mode_label"))
         assertTrue(row.contains("@string/restore_mode_replace_only"))
-        assertTrue(row.contains("Widget.App.Dropdown.CanonicalValue"))
-        assertTrue(row.contains("Widget.App.Dropdown.CanonicalLabel"))
+        assertTrue(row.contains("Widget.App.Restore.Category.Mode"))
+        assertTrue(row.contains("Widget.App.Restore.Category.Title"))
         assertTrue(layout.split("org.teslasoft.assistant.ui.views.RestoreCategoryView").size - 1 == 13)
         assertTrue(layout.contains("@+id/restore_model_credentials_note"))
         val view = find(
@@ -77,7 +117,7 @@ class BackupRestoreScreenContractTest {
             "src/main/res/values/strings.xml",
             "app/src/main/res/values/strings.xml"
         ).readText()
-        val layout = source("activity_memory_backup_restore.xml")
+        val layout = source("activity_restore_options.xml")
         assertTrue(strings.contains("Always replace old chats with newer ones."))
         assertTrue(strings.contains("Automatically keep both old and new chats if older one has more messages."))
         assertTrue(layout.contains("@+id/switch_restore_chat_always_newer"))
@@ -87,7 +127,7 @@ class BackupRestoreScreenContractTest {
 
     @Test
     fun restoreCategoriesAreListedAlphabetically() {
-        val layout = source("activity_memory_backup_restore.xml")
+        val layout = source("activity_restore_options.xml")
         val ids = listOf(
             "restore_category_activation_prompts",
             "restore_category_profile_images",

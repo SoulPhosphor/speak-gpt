@@ -2459,10 +2459,10 @@
     <!-- 4. Human-Readable Chat Backup (new section — owner directive, July 22
          2026: separate from Recovery Backup and from Portable Data Copy). -->
     <string name="backup_readable_section">Human-Readable Data Backup</string>
-    <string name="backup_readable_desc">Saves selected data as ordinary JSON, text, and image files you can use without the app, packed into one ZIP. Backup Style and Format apply to chats.</string>
+    <string name="backup_readable_desc">Saves selected data as ordinary JSON, text, and image files you can use without the app, packed into one ZIP. Backup Style applies to all selected content. Format applies to chats.</string>
     <string name="backup_readable_scope_label">Backup Style</string>
-    <string name="backup_readable_scope_all">All Chats</string>
-    <string name="backup_readable_scope_incremental">New and Changed Chats Only</string>
+    <string name="backup_readable_scope_all">All Selected File Types</string>
+    <string name="backup_readable_scope_incremental">Only New and Changed Files</string>
     <string name="backup_readable_format_label">Format</string>
     <string name="backup_readable_format_text">Text</string>
     <string name="backup_readable_format_json">JSON</string>
@@ -2483,7 +2483,7 @@
     <string name="backup_readable_create">Create Human-Readable Backup</string>
     <string name="backup_readable_preparing">Preparing backup. You will choose where to save it when it is ready.</string>
     <string name="backup_readable_saving">Saving backup…</string>
-    <string name="backup_readable_none">No new or updated chats.</string>
+    <string name="backup_readable_none">No new or changed files.</string>
     <string name="backup_readable_cancelled">Backup cancelled. Nothing was saved.</string>
     <string name="backup_readable_saved_to">Human-readable backup saved to %1$s</string>
     <string name="backup_readable_saved_generic">Human-readable backup saved.</string>
@@ -4140,4 +4140,20 @@
     <string name="chat_settings_section_appearance">Chat Appearance</string>
     <string name="chat_settings_section_information">Chat Information</string>
     <string name="chat_settings_section_interface">Chat Interface</string>
+    <string name="backup_options_title">BackUp Options</string>
+    <string name="backup_readable_content_include">Content to include</string>
+    <string name="backup_readable_history_title">Human Readable Back Ups</string>
+    <string name="backup_readable_history_none">No recorded backup.</string>
+    <string name="backup_readable_history_complete">Complete</string>
+    <string name="backup_readable_history_new">New/Changed Only</string>
+    <string name="backup_history_named_status">%1$s: %2$s</string>
+    <string name="backup_history_dated_status">%1$s: %2$s - %3$s</string>
+    <string name="backup_database_checks_title">Database Checks</string>
+    <string name="backup_last_database_test">Last Database Test: %1$s</string>
+    <string name="backup_databases_last_checked">Databases Last Checked: %1$s</string>
+    <string name="backup_database_history_none">No recorded test.</string>
+    <string name="backup_database_passed">Passed</string>
+    <string name="backup_database_failed">Failed</string>
+    <string name="backup_database_unavailable">Could Not Be Checked</string>
+    <string name="restore_options_title">Restore Options</string>
 </resources>

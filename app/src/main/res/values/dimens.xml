@@ -175,4 +175,17 @@
     <dimen name="bookmark_message_action_size">32dp</dimen>
     <dimen name="chat_list_bookmark_size">16dp</dimen>
     <dimen name="section_title_field_gap">8dp</dimen>
+    <dimen name="backup_status_text_size">15sp</dimen>
+    <dimen name="backup_status_row_gap">8dp</dimen>
+    <dimen name="backup_status_blank_line">20dp</dimen>
+    <dimen name="backup_status_first_row_gap">16dp</dimen>
+    <dimen name="restore_category_top_gap">6dp</dimen>
+    <dimen name="restore_category_mode_gap">12dp</dimen>
+    <dimen name="restore_category_description_indent">48dp</dimen>
+    <dimen name="restore_credentials_top_gap">4dp</dimen>
+    <dimen name="restore_primary_action_gap">16dp</dimen>
+    <dimen name="restore_inline_gap">8dp</dimen>
+    <dimen name="restore_database_type_gap">20dp</dimen>
+    <dimen name="restore_progress_size">18dp</dimen>
+    <dimen name="restore_progress_text_size">14sp</dimen>
 </resources>

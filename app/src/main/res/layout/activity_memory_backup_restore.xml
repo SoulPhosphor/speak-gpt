@@ -77,13 +77,7 @@
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_status_section" />
 
-            <TextView
-                android:id="@+id/text_status_memory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="16dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
+            <TextView android:id="@+id/text_status_memory" style="@style/Widget.App.BackupStatus.Row.First" />
 
             <!-- Per-database recovery actions (owner ruling, July 24 2026):
                  shown ONLY when this database is actually corrupted
@@ -145,13 +139,7 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/text_status_lorebooks"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
+            <TextView android:id="@+id/text_status_lorebooks" style="@style/Widget.App.BackupStatus.Row" />
 
             <LinearLayout
                 android:id="@+id/health_actions_lorebook"
@@ -204,25 +192,13 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/text_status_chats"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
+            <TextView android:id="@+id/text_status_chats" style="@style/Widget.App.BackupStatus.Row" />
 
             <!-- Chats deliberately get NO recovery buttons here: chats are not
                  a database and never enter the repair/revert flow (the Round-4
                  chat-storage lock system owns that case). -->
 
-            <TextView
-                android:id="@+id/text_status_userimage"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
+            <TextView android:id="@+id/text_status_userimage" style="@style/Widget.App.BackupStatus.Row" />
 
             <LinearLayout
                 android:id="@+id/health_actions_userimage"
@@ -275,6 +251,20 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <Space style="@style/Widget.App.BackupStatus.BlankLine" />
+            <TextView style="@style/Widget.App.BackupStatus.Title"
+                android:text="@string/backup_readable_history_title" />
+            <LinearLayout android:id="@+id/readable_backup_history_rows"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" />
+            <Space style="@style/Widget.App.BackupStatus.BlankLine" />
+            <TextView style="@style/Widget.App.BackupStatus.Title"
+                android:text="@string/backup_database_checks_title" />
+            <TextView android:id="@+id/text_last_database_test" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_database_test_memory" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_database_test_lorebook" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_database_test_userimage" style="@style/Widget.App.BackupStatus.Row" />
+
             <!-- ============ 2. Database Health ============ -->
             <!-- Section heading + hint styles: Widget.App.Section.Title/.Hint
                  (see values/themes.xml + ui-style-guide.md). The hint always
@@ -283,6 +273,7 @@
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_db_health_section" />
+            <TextView android:id="@+id/text_databases_last_checked" style="@style/Widget.App.BackupStatus.Row" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
@@ -340,71 +331,23 @@
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_section_title" />
 
-            <include layout="@layout/section_automatic_backups" />
-
-            <!-- Recovery Backup (manual) -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/backup_create_section" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:text="@string/backup_create_hint" />
-
-            <!-- Recovery Type summaries, same font as the section hint
-                 (Widget.App.Section.Hint), text set in Kotlin from
-                 recovery_type_summary_format + the SAME title/desc strings
-                 the Recovery Backup screen's choice panel uses, so these can
-                 never drift out of sync with the actual choice (owner
-                 ruling, July 22 2026). -->
-            <TextView
-                android:id="@+id/text_recovery_type_protected_summary"
-                style="@style/Widget.App.Section.Hint" />
-
-            <TextView
-                android:id="@+id/text_recovery_type_unencrypted_summary"
-                style="@style/Widget.App.Section.Hint" />
-
-            <!-- Recovery Type dropdown: Widget.App.Dropdown.* (owner ruling,
-                 July 22 2026), same pattern as the Human-Readable Chat Backup
-                 fields below. Picking a type here skips the separate choice
-                 screen the "Create Recovery Backup" button used to open —
-                 that screen now goes straight to the picked type's next step.
-                 The selection is remembered across visits
-                 (RecoveryBackupState.getLastRecoveryProtected/
-                 setLastRecoveryProtected), the same way Backup Style and
-                 Format below are. -->
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:orientation="vertical">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/recovery_type_label" />
-
-                <TextView
-                    android:id="@+id/btn_recovery_type"
-                    style="@style/Widget.App.Dropdown.CanonicalValue"
-                    android:layout_width="match_parent"
-                    android:layout_marginTop="8dp" />
+                android:id="@+id/row_backup_options"
+                style="@style/Widget.App.Row.TitleOnly">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/backup_options_title" />
+                </LinearLayout>
+                <ImageView style="@style/Widget.App.Row.Chevron" />
             </LinearLayout>
 
-            <!-- Portable recovery (format v2) entry — the owner-approved
-                 Create Recovery Backup flow, now the ONLY manual backup control.
-                 The installation-bound v1 controls (text_manual_location,
-                 btn_change_manual_location, btn_create_backup) are HIDDEN (owner
-                 ruling, July 22 2026, correction 1): kept in the tree so the
-                 activity's existing bindings/logic still resolve, but never
-                 shown. Do not un-hide without the owner's word. -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_create_recovery"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/recovery_create" />
+            <LinearLayout android:id="@+id/row_restore_options" style="@style/Widget.App.Row.TitleOnly">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_options_title" />
+                </LinearLayout>
+                <ImageView style="@style/Widget.App.Row.Chevron" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/text_manual_location"
@@ -432,124 +375,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="@string/backup_create"
-                android:visibility="gone" />
-
-            <!-- ============ 4. Human-Readable Chat Backup ============ -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/backup_readable_section" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:text="@string/backup_readable_desc" />
-
-            <!-- Multiple-choice fields: standard same-line label + dropdown,
-                 Widget.App.Dropdown.* (owner ruling, July 22 2026). -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/backup_readable_scope_label" />
-
-                <TextView
-                    android:id="@+id/btn_readable_scope"
-                    style="@style/Widget.App.Dropdown.CanonicalValue"
-                    android:layout_width="0dp"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:text="@string/backup_readable_scope_all" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/backup_readable_format_label" />
-
-                <TextView
-                    android:id="@+id/btn_readable_format"
-                    style="@style/Widget.App.Dropdown.CanonicalValue"
-                    android:layout_width="0dp"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:text="@string/backup_readable_format_text" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/backup_readable_content_label" />
-
-                <TextView
-                    android:id="@+id/btn_readable_content"
-                    style="@style/Widget.App.Dropdown.CanonicalValue"
-                    android:layout_width="0dp"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:text="@string/backup_readable_content_all" />
-            </LinearLayout>
-
-            <LinearLayout style="@style/Widget.App.Row.Toggle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/backup_readable_include_thinking" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_readable_include_thinking"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <LinearLayout style="@style/Widget.App.Row.Toggle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/backup_readable_include_folders" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_readable_include_folders"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_readable_create"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/backup_readable_create" />
-
-            <!-- Persistent inline status: preparing / saved / failed / "No new
-                 or updated chats." — stays until replaced. Never a toast. -->
-            <TextView
-                android:id="@+id/text_readable_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="12dp"
-                android:textColor="@color/text"
-                android:textSize="15sp"
                 android:visibility="gone" />
 
             <!-- ============ 5. Portable Data Copy ============ -->
@@ -683,177 +508,6 @@
                 android:textColor="@color/text"
                 android:textSize="15sp"
                 android:visibility="gone" />
-
-            <!-- ============ Restore Data ============ -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/restore_data_section" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:text="@string/restore_data_hint" />
-
-            <LinearLayout style="@style/Widget.App.Row.Toggle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/restore_chat_always_newer" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:text="@string/restore_chat_always_newer_desc" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_restore_chat_always_newer"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <LinearLayout style="@style/Widget.App.Row.Toggle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/restore_chat_keep_both" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_restore_chat_keep_both"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_activation_prompts"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_profile_images"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_chats"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_companions"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_generated_images"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_glamours"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_lorebooks"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_memories"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_model_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <TextView
-                android:id="@+id/restore_model_credentials_note"
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:paddingTop="4dp"
-                android:text="@string/restore_model_credentials_note" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_model_rules"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_roleplay"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_system_prompts"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_portable_restore"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:enabled="true"
-                android:text="@string/restore_from_backup" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:orientation="vertical">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/restore_type_label" />
-
-                <TextView
-                    android:id="@+id/btn_restore_type"
-                    style="@style/Widget.App.Dropdown.CanonicalValue"
-                    android:layout_width="match_parent"
-                    android:layout_marginTop="8dp" />
-            </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_restore_database"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/restore_database" />
-
-            <LinearLayout
-                android:id="@+id/restore_progress"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <com.google.android.material.progressindicator.CircularProgressIndicator
-                    android:id="@+id/restore_spinner"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:indeterminate="true" />
-
-                <TextView
-                    android:id="@+id/restore_progress_text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:textColor="@color/text"
-                    android:textSize="14sp" />
-            </LinearLayout>
 
             <!-- ============ 8. Reset (destructive; bottom, unchanged) ============ -->
             <TextView

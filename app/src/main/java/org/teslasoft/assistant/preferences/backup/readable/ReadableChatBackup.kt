@@ -30,6 +30,8 @@ import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.util.Hash
 import java.io.File
 import java.io.FileInputStream
+import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageAssetResolver
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -190,6 +192,25 @@ object ReadableChatBackup {
                 includeFolders
             )
 
+            // The Chats category includes the generated pictures used by those chats,
+            // while the Generated Images category independently exports the whole gallery.
+            val images = LinkedHashMap<String, File>()
+            for (index in selectedIndices) {
+                for (message in collected[index].messages) {
+                    val metadata = GeneratedImageMetadata.fromJson(message[GeneratedImageMetadata.KEY]?.toString())
+                    val text = message["message"]?.toString().orEmpty()
+                    val legacyHash = text.takeIf { it.startsWith("~file:") }?.removePrefix("~file:")
+                    if (metadata == null && legacyHash == null) continue
+                    if (metadata != null && metadata.status != GeneratedImageMetadata.STATUS_COMPLETE) continue
+                    when (val asset = GeneratedImageAssetResolver.resolve(context, metadata, legacyHash)) {
+                        is GeneratedImageAssetResolver.Result.Available -> images[asset.file.name] = asset.file
+                        is GeneratedImageAssetResolver.Result.Missing -> {
+                            if (!asset.explicitlyDeleted) return fail(staged, BuildResult.Failed)
+                        }
+                        is GeneratedImageAssetResolver.Result.CatalogUnavailable -> return fail(staged, BuildResult.Failed)
+                    }
+                }
+            }
             val expectedEntries = LinkedHashSet<String>()
             ZipOutputStream(staged.outputStream().buffered()).use { zip ->
                 for ((slot, index) in selectedIndices.withIndex()) {
@@ -211,6 +232,13 @@ object ReadableChatBackup {
                         zip.closeEntry()
                         expectedEntries.add(entryName)
                     }
+                }
+                for ((name, image) in images) {
+                    val entryName = "images/$name"
+                    zip.putNextEntry(ZipEntry(entryName))
+                    image.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                    expectedEntries.add(entryName)
                 }
             }
 
