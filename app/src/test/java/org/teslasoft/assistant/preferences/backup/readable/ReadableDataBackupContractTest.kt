@@ -11,10 +11,11 @@ class ReadableDataBackupContractTest {
     fun everySupportedReadableGroupIsSelectable() {
         assertEquals(
             setOf(
-                "CHATS", "GENERATED_IMAGES", "IDENTITIES", "PROFILE_IMAGES",
+                "CHATS", "GENERATED_IMAGES", "COMPANIONS", "GLAMOURS", "ROLEPLAY",
+                "ACTIVATION_PROMPTS", "SYSTEM_PROMPTS", "SETTINGS", "PROFILE_IMAGES",
                 "MODEL_SETTINGS", "MEMORIES", "MODEL_RULES", "LOREBOOKS"
             ),
-            ReadableDataBackup.Category.entries.mapTo(HashSet()) { it.name }
+            ReadableBackupCategory.entries.mapTo(HashSet()) { it.name }
         )
     }
 
@@ -29,9 +30,10 @@ class ReadableDataBackupContractTest {
     }
 
     @Test
-    fun backupScreenExposesTheContentSelector() {
+    fun backupScreenExposesIndependentContentToggles() {
         val activity = source("ui/activities/MemoryBackupRestoreActivity.kt")
-        assertTrue(activity.contains("pickReadableContent"))
+        assertTrue(activity.contains("readableCategorySwitches"))
+        assertFalse(activity.contains("pickReadableContent"))
         assertTrue(activity.contains("ReadableDataBackup.build"))
     }
 

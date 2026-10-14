@@ -24,12 +24,12 @@ import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
 import org.teslasoft.assistant.preferences.backup.ByteSizeFormatter
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
-import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.util.ScreenChrome
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /** Automatic backup preferences and the existing manual recovery entry. */
-class BackupOptionsActivity : SettingsPageActivity() {
+class BackupOptionsActivity : MemoryBackupRestoreActivity() {
+    override val isBackupOptionsPage: Boolean = true
     private var switchAutoBackup: MaterialSwitch? = null
     private var btnAutoFrequency: TextView? = null
     private var autoFrequency = BackupFrequency.DAILY
@@ -57,8 +57,6 @@ class BackupOptionsActivity : SettingsPageActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ThemeManager.getThemeManager().applyPalette(this)
-        setContentView(R.layout.activity_backup_options)
         ScreenChrome.apply(this, findViewById(R.id.action_bar), null)
         pendingEnableAfterPick = savedInstanceState?.getBoolean("pendingEnableAfterPick") ?: false
         switchAutoBackup = findViewById(R.id.switch_auto_backup)

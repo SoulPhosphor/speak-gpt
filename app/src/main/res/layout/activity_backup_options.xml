@@ -80,6 +80,141 @@
                 style="@style/AppButton.Primary.Inline.Centered"
                 android:text="@string/recovery_create" />
 
+            <TextView style="@style/Widget.App.Section.Title" android:text="@string/backup_readable_section" />
+            <TextView style="@style/Widget.App.Section.Hint" android:text="@string/backup_readable_desc" />
+            <TextView android:id="@+id/text_readable_last_success" style="@style/Widget.App.Section.Hint" android:visibility="gone" />
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+                <TextView style="@style/Widget.App.Dropdown.CanonicalLabel" android:text="@string/backup_readable_scope_label" />
+                <TextView android:id="@+id/btn_readable_scope" style="@style/Widget.App.Dropdown.CanonicalValue.Trailing" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+                <TextView style="@style/Widget.App.Dropdown.CanonicalLabel" android:text="@string/backup_readable_format_label" />
+                <TextView android:id="@+id/btn_readable_format" style="@style/Widget.App.Dropdown.CanonicalValue.Trailing" />
+            </LinearLayout>
+            <TextView style="@style/Widget.App.Section.Title" android:text="@string/backup_readable_content_include" />
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_activation_prompts" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_activation_prompts_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_activation_prompts" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_profile_images" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_profile_images_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_profile_images" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_chats" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_chats_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_chats" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/backup_readable_include_thinking" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_include_thinking" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/backup_readable_include_folders" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_include_folders" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_companions" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_companions_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_companions" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_generated_images" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_generated_images_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_generated_images" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_glamours" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_glamours_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_glamours" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_lorebooks" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_lorebooks_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_lorebooks" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_memories" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_memories_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_memories" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_model_settings" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_model_settings_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_model_settings" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_model_rules" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_model_rules_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_model_rules" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_roleplay" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_roleplay_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_roleplay" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_settings" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_settings_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_settings" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_category_system_prompts" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/restore_category_system_prompts_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_readable_system_prompts" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_readable_create" style="@style/AppButton.Primary.Inline.Centered"
+                android:text="@string/backup_readable_create" />
+            <TextView android:id="@+id/text_readable_status" style="@style/Widget.App.Section.Hint"
+                android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

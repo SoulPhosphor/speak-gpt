@@ -33,7 +33,7 @@ class BackupRestoreScreenContractTest {
         val optionsLayout = source("activity_backup_options.xml")
         val automatic = optionsLayout.indexOf("@layout/section_automatic_backups")
         val recovery = optionsLayout.indexOf("@string/backup_create_section")
-        val readable = layout.indexOf("@string/backup_readable_section")
+        val readable = optionsLayout.indexOf("@string/backup_readable_section")
         val converter = layout.indexOf("@+id/btn_legacy_convert")
         val restoreTitle = layout.indexOf("@string/restore_data_section")
         val categories = layout.indexOf("@+id/restore_category_chats")
@@ -44,23 +44,47 @@ class BackupRestoreScreenContractTest {
         assertTrue(backupTitle >= 0)
         assertTrue(options > backupTitle)
         assertTrue(automatic >= 0 && recovery > automatic)
-        assertTrue(readable > options)
+        assertTrue(readable > optionsLayout.indexOf("@+id/btn_create_recovery"))
         assertTrue(!layout.contains("@layout/section_automatic_backups"))
         assertTrue(!layout.contains("@+id/btn_create_recovery"))
         assertTrue(optionsLayout.contains("@+id/btn_create_recovery"))
-        assertTrue(!optionsLayout.contains("@string/backup_readable_section"))
+        assertTrue(!layout.contains("@string/backup_readable_section"))
         assertTrue(!optionsLayout.contains("ImageButton"))
         val optionsRow = layout.substringAfter("@+id/row_backup_options")
             .substringBefore("<ImageView")
         assertTrue(!optionsRow.contains("Row.Subtitle"))
         assertTrue(javaSource("MemoryBackupRestoreActivity.kt").contains("Intent(this, BackupOptionsActivity::class.java)"))
         assertTrue(javaSource("BackupOptionsActivity.kt").contains("RecoveryBackupActivity.EXTRA_RECOVERY_PROTECTED"))
-        assertTrue(converter > readable)
+        assertTrue(converter > options)
         assertTrue(restoreTitle > converter)
         assertTrue(categories > restoreTitle)
         assertTrue(portableRestore > categories)
         assertTrue(databaseType > portableRestore)
         assertTrue(databaseRestore > databaseType)
+    }
+
+    @Test
+    fun readableContentUsesRestoreLabelsAndSubtitlesWithChatOptionsImmediatelyAfterChats() {
+        val layout = source("activity_backup_options.xml")
+        val restore = source("activity_memory_backup_restore.xml")
+        val categories = listOf("activation_prompts", "profile_images", "chats", "companions",
+            "generated_images", "glamours", "lorebooks", "memories", "model_settings", "model_rules",
+            "roleplay", "settings", "system_prompts")
+        for (category in categories) {
+            assertTrue(layout.contains("@+id/switch_readable_$category"))
+            assertTrue(layout.contains("@string/restore_category_$category"))
+            assertTrue(layout.contains("@string/restore_category_${category}_desc"))
+            assertTrue(restore.contains("@+id/restore_category_$category"))
+        }
+        assertTrue(!layout.contains("CheckBox"))
+        assertTrue(!layout.contains("btn_readable_content"))
+        val chats = layout.indexOf("@+id/switch_readable_chats")
+        val thinking = layout.indexOf("@+id/switch_readable_include_thinking")
+        val folders = layout.indexOf("@+id/switch_readable_include_folders")
+        assertTrue(chats < thinking && thinking < folders && folders < layout.indexOf("@+id/switch_readable_companions"))
+        val desc = layout.indexOf("@string/backup_readable_desc")
+        val saved = layout.indexOf("@+id/text_readable_last_success")
+        assertTrue(saved > desc && saved < layout.indexOf("@+id/btn_readable_scope"))
     }
 
     @Test
