@@ -13,6 +13,9 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableBackup
 import org.teslasoft.assistant.preferences.backup.portable.AppSettingsPortableStore
 import org.teslasoft.assistant.preferences.backup.portable.GeneratedImagePortableBackup
 import org.teslasoft.assistant.preferences.backup.portable.LorebookPortableCodec
@@ -78,6 +81,7 @@ object ReadableDataBackup {
             }
 
             if (ReadableBackupCategory.PROFILE_IMAGES in categories) {
+                if (DatabaseHealthState.isDegraded(context, BackupType.USER_IMAGE)) return Result.Failed
                 val store = ProfileImageStore.getInstance(context.applicationContext)
                 val records = store.listNewestFirst()
                 if (records.isNotEmpty()) {
@@ -88,7 +92,7 @@ object ReadableDataBackup {
                     sources.add("profile_images/catalog.json" to catalog)
                     records.forEach { record ->
                         val image = store.imageFile(record.hash) ?: return Result.Failed
-                        if (!image.isFile) return Result.Failed
+                        if (!ProfileImagePortableBackup.isValidAsset(image, record.hash)) return Result.Failed
                         sources.add("profile_images/assets/${ProfileImageFileNaming.permanentFileName(record.hash)}" to image)
                     }
                 }
