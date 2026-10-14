@@ -436,6 +436,8 @@
             android:name=".ui.activities.BackupOptionsActivity"
             android:exported="false"
             android:theme="@style/UI.Material" />
+        <activity android:name=".ui.activities.RestoreOptionsActivity"
+            android:exported="false" android:theme="@style/UI.Material" />
         <activity
             android:name=".ui.activities.LegacyChatConverterActivity"
             android:exported="false"

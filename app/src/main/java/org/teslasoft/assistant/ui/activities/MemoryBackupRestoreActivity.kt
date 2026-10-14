@@ -134,6 +134,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     }
 
     protected open val isBackupOptionsPage: Boolean = false
+    protected open val isRestoreOptionsPage: Boolean = false
 
     private var preferences: Preferences? = null
     private var chatId = ""
@@ -350,7 +351,11 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
-        setContentView(if (isBackupOptionsPage) R.layout.activity_backup_options else R.layout.activity_memory_backup_restore)
+        setContentView(when {
+            isBackupOptionsPage -> R.layout.activity_backup_options
+            isRestoreOptionsPage -> R.layout.activity_restore_options
+            else -> R.layout.activity_memory_backup_restore
+        })
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
@@ -370,6 +375,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         }
         if (PortableRestoreOutcomeFlow.showIfPending(this)) return
         if (PortableRestoreRecoveryFlow.showIfPending(this)) return
+        if (isRestoreOptionsPage) return
         refreshLocations()
         refreshBackupStatus()
         refreshStatusHistory()
@@ -490,6 +496,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         btnReset = findViewById(R.id.btn_memory_reset)
         modelCredentialsNote = findViewById(R.id.restore_model_credentials_note)
 
+        if (!isRestoreOptionsPage) return
         bindPortableRestoreCategory(
             PortableRestoreCategory.CHATS, R.id.restore_category_chats,
             R.string.restore_category_chats, R.string.restore_category_chats_desc
@@ -593,6 +600,10 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     @Suppress("DEPRECATION")
     private fun applyTheme() {
         if (isBackupOptionsPage) return
+        if (isRestoreOptionsPage) {
+            org.teslasoft.assistant.ui.util.ScreenChrome.apply(this, findViewById(R.id.action_bar), null)
+            return
+        }
         ThemeManager.getThemeManager().applyTheme(this, isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true)
 
         if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {
@@ -614,7 +625,30 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         }
     }
 
+    private fun initRestoreLogic() {
+        btnPortableRestore?.setOnClickListener { beginPortableRestore() }
+        val chatRestoreOptions = ChatRestorePreferences.options(this)
+        switchRestoreChatAlwaysNewer?.isChecked = chatRestoreOptions.alwaysUseNewer
+        switchRestoreChatKeepBoth?.isChecked = chatRestoreOptions.keepBothWhenOlderHasMore
+        switchRestoreChatAlwaysNewer?.setOnCheckedChangeListener { _, enabled ->
+            ChatRestorePreferences.setAlwaysUseNewer(this, enabled)
+        }
+        switchRestoreChatKeepBoth?.setOnCheckedChangeListener { _, enabled ->
+            ChatRestorePreferences.setKeepBoth(this, enabled)
+        }
+        updateRestoreTypeLabel()
+        btnRestoreType?.setOnClickListener { pickRestoreType() }
+        btnRestoreDatabase?.setOnClickListener {
+            showRestoreChoice(generalRestoreType, null)
+        }
+
+    }
+
     private fun initLogic() {
+        if (isRestoreOptionsPage) {
+            initRestoreLogic()
+            return
+        }
         if (isBackupOptionsPage) {
             initReadableSection()
             return
@@ -653,20 +687,8 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         findViewById<View>(R.id.row_backup_options).setOnClickListener {
             startActivity(Intent(this, BackupOptionsActivity::class.java))
         }
-        btnPortableRestore?.setOnClickListener { beginPortableRestore() }
-        val chatRestoreOptions = ChatRestorePreferences.options(this)
-        switchRestoreChatAlwaysNewer?.isChecked = chatRestoreOptions.alwaysUseNewer
-        switchRestoreChatKeepBoth?.isChecked = chatRestoreOptions.keepBothWhenOlderHasMore
-        switchRestoreChatAlwaysNewer?.setOnCheckedChangeListener { _, enabled ->
-            ChatRestorePreferences.setAlwaysUseNewer(this, enabled)
-        }
-        switchRestoreChatKeepBoth?.setOnCheckedChangeListener { _, enabled ->
-            ChatRestorePreferences.setKeepBoth(this, enabled)
-        }
-        updateRestoreTypeLabel()
-        btnRestoreType?.setOnClickListener { pickRestoreType() }
-        btnRestoreDatabase?.setOnClickListener {
-            showRestoreChoice(generalRestoreType, null)
+        findViewById<View>(R.id.row_restore_options).setOnClickListener {
+            startActivity(Intent(this, RestoreOptionsActivity::class.java))
         }
 
         /* ---- Backup: Human-Readable Chat Backup ---- */
@@ -2288,7 +2310,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     })
 
     private fun refreshStatusHistory() {
-        if (isBackupOptionsPage) return
+        if (isBackupOptionsPage || isRestoreOptionsPage) return
         val container = findViewById<LinearLayout>(R.id.readable_backup_history_rows)
         val history = ReadableBackupState.getCategoryHistory(this)
         container.removeAllViews()
@@ -3022,7 +3044,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (!isBackupOptionsPage) adjustPaddings()
+        if (!isBackupOptionsPage && !isRestoreOptionsPage) adjustPaddings()
     }
 
     private fun adjustPaddings() {

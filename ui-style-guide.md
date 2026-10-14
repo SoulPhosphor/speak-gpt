@@ -1437,3 +1437,12 @@ blocks. Measurements come from `backup_status_*` tokens in `dimens.xml`.
 `TextAppearance.App.BackupStatus.Failed` uses the theme's error color and bold
 text. `BackupStatusText.set` applies that appearance only to the word Failed
 and replaces the text on each update, so a later pass removes the emphasis.
+
+## Restore Options
+
+`Widget.App.Restore.*` centralizes the existing restore category checkbox,
+label, mode selector, explanation, credential note, database-type stack, and
+progress row. Typography inherits the canonical dropdown and section-hint
+styles; geometry comes from `restore_*` dimension tokens. The two existing
+full-width actions inherit `AppButton.Primary` through `RestoreSelection` and
+`RestoreDatabase`. This family preserves the prior restore controls' appearance.

@@ -4155,4 +4155,5 @@
     <string name="backup_database_passed">Passed</string>
     <string name="backup_database_failed">Failed</string>
     <string name="backup_database_unavailable">Could Not Be Checked</string>
+    <string name="restore_options_title">Restore Options</string>
 </resources>

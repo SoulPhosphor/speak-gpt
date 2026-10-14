@@ -342,6 +342,13 @@
                 <ImageView style="@style/Widget.App.Row.Chevron" />
             </LinearLayout>
 
+            <LinearLayout android:id="@+id/row_restore_options" style="@style/Widget.App.Row.TitleOnly">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/restore_options_title" />
+                </LinearLayout>
+                <ImageView style="@style/Widget.App.Row.Chevron" />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/text_manual_location"
                 android:layout_width="match_parent"
@@ -501,177 +508,6 @@
                 android:textColor="@color/text"
                 android:textSize="15sp"
                 android:visibility="gone" />
-
-            <!-- ============ Restore Data ============ -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/restore_data_section" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:text="@string/restore_data_hint" />
-
-            <LinearLayout style="@style/Widget.App.Row.Toggle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/restore_chat_always_newer" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:text="@string/restore_chat_always_newer_desc" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_restore_chat_always_newer"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <LinearLayout style="@style/Widget.App.Row.Toggle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/restore_chat_keep_both" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_restore_chat_keep_both"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_activation_prompts"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_profile_images"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_chats"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_companions"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_generated_images"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_glamours"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_lorebooks"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_memories"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_model_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <TextView
-                android:id="@+id/restore_model_credentials_note"
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:paddingTop="4dp"
-                android:text="@string/restore_model_credentials_note" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_model_rules"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_roleplay"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_system_prompts"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_portable_restore"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:enabled="true"
-                android:text="@string/restore_from_backup" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:orientation="vertical">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/restore_type_label" />
-
-                <TextView
-                    android:id="@+id/btn_restore_type"
-                    style="@style/Widget.App.Dropdown.CanonicalValue"
-                    android:layout_width="match_parent"
-                    android:layout_marginTop="8dp" />
-            </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_restore_database"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/restore_database" />
-
-            <LinearLayout
-                android:id="@+id/restore_progress"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <com.google.android.material.progressindicator.CircularProgressIndicator
-                    android:id="@+id/restore_spinner"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:indeterminate="true" />
-
-                <TextView
-                    android:id="@+id/restore_progress_text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:textColor="@color/text"
-                    android:textSize="14sp" />
-            </LinearLayout>
 
             <!-- ============ 8. Reset (destructive; bottom, unchanged) ============ -->
             <TextView

@@ -2800,4 +2800,67 @@
         <item name="android:textColor">?attr/colorError</item>
         <item name="android:textStyle">bold</item>
     </style>
+    <style name="Widget.App.Restore.Category" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+    <style name="Widget.App.Restore.Category.Header" parent="Widget.App.Restore.Category">
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingTop">@dimen/restore_category_top_gap</item>
+    </style>
+    <style name="Widget.App.Restore.Category.CheckBox" parent="Widget.App.CheckOption.CheckBox">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+    <style name="Widget.App.Restore.Category.Title" parent="Widget.App.Dropdown.CanonicalLabel">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+    <style name="Widget.App.Restore.Category.Mode" parent="Widget.App.Dropdown.CanonicalValue">
+        <item name="android:layout_marginStart">@dimen/restore_category_mode_gap</item>
+    </style>
+    <style name="Widget.App.Restore.Category.FixedMode" parent="Widget.App.Section.Hint">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/restore_category_mode_gap</item>
+        <item name="android:paddingTop">0dp</item>
+    </style>
+    <style name="Widget.App.Restore.Category.Description" parent="Widget.App.Section.Hint">
+        <item name="android:layout_marginStart">@dimen/restore_category_description_indent</item>
+        <item name="android:paddingTop">0dp</item>
+    </style>
+    <style name="Widget.App.Restore.CredentialsNote" parent="Widget.App.Restore.Category.Description">
+        <item name="android:paddingTop">@dimen/restore_credentials_top_gap</item>
+    </style>
+    <style name="AppButton.Primary.RestoreSelection" parent="AppButton.Primary">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_marginTop">@dimen/restore_primary_action_gap</item>
+    </style>
+    <style name="AppButton.Primary.RestoreDatabase" parent="AppButton.Primary">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_marginTop">@dimen/restore_inline_gap</item>
+    </style>
+    <style name="Widget.App.Restore.DatabaseTypeGroup" parent="Widget.App.Restore.Category">
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">@dimen/restore_database_type_gap</item>
+    </style>
+    <style name="Widget.App.Restore.DatabaseType" parent="Widget.App.Dropdown.CanonicalValue">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_marginTop">@dimen/restore_inline_gap</item>
+    </style>
+    <style name="Widget.App.Restore.ProgressRow" parent="Widget.App.Restore.Category">
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:layout_marginTop">@dimen/restore_inline_gap</item>
+    </style>
+    <style name="Widget.App.Restore.ProgressSpinner" parent="Widget.Material3.CircularProgressIndicator">
+        <item name="android:layout_width">@dimen/restore_progress_size</item>
+        <item name="android:layout_height">@dimen/restore_progress_size</item>
+    </style>
+    <style name="Widget.App.Restore.ProgressText" parent="Widget.App.BackupStatus.Row">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/restore_inline_gap</item>
+        <item name="android:textSize">@dimen/restore_progress_text_size</item>
+        <item name="android:paddingTop">0dp</item>
+    </style>
 </resources>

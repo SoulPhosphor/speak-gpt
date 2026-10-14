@@ -18,52 +18,37 @@
 -->
 <merge xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingTop="6dp">
+    <LinearLayout style="@style/Widget.App.Restore.Category.Header">
 
         <!-- Checkbox and category name on the left; the name uses the
              canonical dropdown label typography. Tapping the name toggles
              the checkbox (wired in RestoreCategoryView). -->
         <com.google.android.material.checkbox.MaterialCheckBox
             android:id="@+id/category_check"
-            style="@style/Widget.App.CheckOption.CheckBox"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            style="@style/Widget.App.Restore.Category.CheckBox"
             android:checked="true" />
 
         <TextView
             android:id="@+id/category_title"
-            style="@style/Widget.App.Dropdown.CanonicalLabel"
-            android:layout_width="0dp"
-            android:layout_weight="1"
+            style="@style/Widget.App.Restore.Category.Title"
             android:importantForAccessibility="no" />
 
         <TextView
             android:id="@+id/category_mode"
-            style="@style/Widget.App.Dropdown.CanonicalValue"
-            android:layout_marginStart="12dp"
+            style="@style/Widget.App.Restore.Category.Mode"
             android:text="@string/restore_mode_merge" />
 
         <!-- Shown instead of the dropdown when the category has only one
              mode (Settings and Preferences); plain description-text style. -->
         <TextView
             android:id="@+id/category_mode_fixed"
-            style="@style/Widget.App.Section.Hint"
-            android:layout_width="wrap_content"
-            android:layout_marginStart="12dp"
-            android:paddingTop="0dp"
+            style="@style/Widget.App.Restore.Category.FixedMode"
             android:text="@string/restore_mode_replace_only"
             android:visibility="gone" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/category_description"
-        style="@style/Widget.App.Section.Hint"
-        android:layout_marginStart="48dp"
-        android:paddingTop="0dp" />
+        style="@style/Widget.App.Restore.Category.Description" />
 
 </merge>
