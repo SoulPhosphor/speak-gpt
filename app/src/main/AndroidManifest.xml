@@ -433,6 +433,10 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.BackupOptionsActivity"
+            android:exported="false"
+            android:theme="@style/UI.Material" />
+        <activity
             android:name=".ui.activities.LegacyChatConverterActivity"
             android:exported="false"
             android:label="@string/legacy_convert_title" />

@@ -187,14 +187,9 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
     private val inlineCompleted = HashSet<BackupType>()
 
     // Backup: Recovery Backup (manual)
-    private var btnCreateRecovery: MaterialButton? = null
     private var textManualLocation: TextView? = null
     private var btnChangeManualLocation: MaterialButton? = null
     private var btnCreateBackup: MaterialButton? = null
-    private var textRecoveryTypeProtectedSummary: TextView? = null
-    private var textRecoveryTypeUnencryptedSummary: TextView? = null
-    private var btnRecoveryType: TextView? = null
-    private var recoveryTypeProtected = true
     private var btnRestoreType: TextView? = null
     private var btnRestoreDatabase: MaterialButton? = null
     private var btnPortableRestore: MaterialButton? = null
@@ -436,16 +431,12 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         healthProgressTextLorebook = findViewById(R.id.health_progress_text_lorebook)
         healthProgressTextUserImage = findViewById(R.id.health_progress_text_userimage)
 
-        btnCreateRecovery = findViewById(R.id.btn_create_recovery)
         btnPortableRestore = findViewById(R.id.btn_portable_restore)
         switchRestoreChatAlwaysNewer = findViewById(R.id.switch_restore_chat_always_newer)
         switchRestoreChatKeepBoth = findViewById(R.id.switch_restore_chat_keep_both)
         textManualLocation = findViewById(R.id.text_manual_location)
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
         btnCreateBackup = findViewById(R.id.btn_create_backup)
-        textRecoveryTypeProtectedSummary = findViewById(R.id.text_recovery_type_protected_summary)
-        textRecoveryTypeUnencryptedSummary = findViewById(R.id.text_recovery_type_unencrypted_summary)
-        btnRecoveryType = findViewById(R.id.btn_recovery_type)
         btnRestoreType = findViewById(R.id.btn_restore_type)
         btnRestoreDatabase = findViewById(R.id.btn_restore_database)
         restoreProgress = findViewById(R.id.restore_progress)
@@ -636,12 +627,8 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         // btn_create_backup) are hidden AND unwired: the old writer must not be
         // reachable from this screen (owner correction, July 22 2026). The v1
         // backend classes stay for the future automatic implementation.
-        initRecoveryTypeSection()
-        btnCreateRecovery?.setOnClickListener {
-            startActivity(
-                Intent(this, RecoveryBackupActivity::class.java)
-                    .putExtra(RecoveryBackupActivity.EXTRA_RECOVERY_PROTECTED, recoveryTypeProtected)
-            )
+        findViewById<View>(R.id.row_backup_options).setOnClickListener {
+            startActivity(Intent(this, BackupOptionsActivity::class.java))
         }
         btnPortableRestore?.setOnClickListener { beginPortableRestore() }
         val chatRestoreOptions = ChatRestorePreferences.options(this)
@@ -686,26 +673,6 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
         btnCompanionDownload?.setOnClickListener { onCompanionDownload() }
         btnCompanionUpload?.setOnClickListener {
             companionImportLauncher.launch(arrayOf("*/*"))
-        }
-
-        /* ---- Backup: Automatic Backups. Enabled flag + frequency + destination
-             drive the WorkManager job and the app-open catch-up check. A
-             valid, writable destination is REQUIRED before enabling — flipping
-             the toggle on with no folder opens the picker and completes the
-             enable only once a folder is chosen. ---- */
-        suppressAutoToggle = true
-        switchAutoBackup?.isChecked = RecoveryBackupState.isEnabled(this)
-        suppressAutoToggle = false
-        switchAutoBackup?.setOnCheckedChangeListener { _, isChecked ->
-            if (suppressAutoToggle) return@setOnCheckedChangeListener
-            onAutoToggle(isChecked)
-        }
-        initAutoFrequencySection()
-        // Changing the folder here is a plain "change location" (never a
-        // pending-enable), so make sure the flag is clear before launching.
-        btnChangeAutoLocation?.setOnClickListener {
-            pendingEnableAfterPick = false
-            autoFolderPicker.launch(null)
         }
 
         /* ---- 8. Reset (bottom) ---- */
@@ -1739,47 +1706,6 @@ class MemoryBackupRestoreActivity : SettingsPageActivity() {
     }
 
     /* ------------------------------ 3. recovery backup (manual) ------------------------------ */
-
-    private fun initRecoveryTypeSection() {
-        // Same "Title: Description" wording as the Recovery Backup screen's
-        // choice panel, reused verbatim via the shared format string so the
-        // two can never drift apart (owner ruling, July 22 2026).
-        textRecoveryTypeProtectedSummary?.text = getString(
-            R.string.recovery_type_summary_format,
-            getString(R.string.recovery_choice_protected_title),
-            getString(R.string.recovery_choice_protected_desc)
-        )
-        textRecoveryTypeUnencryptedSummary?.text = getString(
-            R.string.recovery_type_summary_format,
-            getString(R.string.recovery_choice_unencrypted_title),
-            getString(R.string.recovery_choice_unencrypted_desc)
-        )
-        // Remember the last-selected Recovery Type across visits, the same
-        // way Backup Style and Format below do.
-        recoveryTypeProtected = RecoveryBackupState.getLastRecoveryProtected(this)
-        updateRecoveryTypeLabel()
-        btnRecoveryType?.setOnClickListener { pickRecoveryType() }
-    }
-
-    private fun updateRecoveryTypeLabel() {
-        btnRecoveryType?.text = getString(
-            if (recoveryTypeProtected) R.string.recovery_choice_protected_title
-            else R.string.recovery_choice_unencrypted_title
-        )
-    }
-
-    private fun pickRecoveryType() {
-        val anchor = btnRecoveryType ?: return
-        val labels = listOf(
-            getString(R.string.recovery_choice_protected_title),
-            getString(R.string.recovery_choice_unencrypted_title)
-        )
-        showFieldDropdown(anchor, labels) { position ->
-            recoveryTypeProtected = position == 0
-            RecoveryBackupState.setLastRecoveryProtected(this, recoveryTypeProtected)
-            updateRecoveryTypeLabel()
-        }
-    }
 
     /* ------------------------------ 4. human-readable chat backup ------------------------------ */
 

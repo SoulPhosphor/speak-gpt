@@ -4140,4 +4140,5 @@
     <string name="chat_settings_section_appearance">Chat Appearance</string>
     <string name="chat_settings_section_information">Chat Information</string>
     <string name="chat_settings_section_interface">Chat Interface</string>
+    <string name="backup_options_title">BackUp Options</string>
 </resources>
