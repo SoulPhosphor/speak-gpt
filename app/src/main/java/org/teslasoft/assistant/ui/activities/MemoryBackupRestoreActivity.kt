@@ -43,6 +43,7 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import android.provider.DocumentsContract
+import org.teslasoft.assistant.ui.util.BackupStatusText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.StartupHealth
@@ -58,6 +59,7 @@ import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.ByteSizeFormatter
+import org.teslasoft.assistant.preferences.backup.DatabaseCheckHistory
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthChecker
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
@@ -327,6 +329,8 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     private var stagedReadable: File? = null
     private var stagedReadableSha: ByteArray? = null
     private var stagedReadableFingerprints: Map<String, String>? = null
+    private var stagedReadableCategories: Set<ReadableBackupCategory> = emptySet()
+    private var stagedReadableAllFiles = true
     private var restoreFlowActive = false
     private var nonCancelableDatabaseOperation = false
     private var pendingPortableRestore: PendingPortableRestore? = null
@@ -368,6 +372,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         if (PortableRestoreRecoveryFlow.showIfPending(this)) return
         refreshLocations()
         refreshBackupStatus()
+        refreshStatusHistory()
         refreshAutoStatus()
         // Build Phase 3 dialog delivery: a queued startup health notice (A1 /
         // Database Repaired / A6), a repair explicitly requested from the A2
@@ -697,6 +702,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
         refreshLocations()
         refreshBackupStatus()
+        refreshStatusHistory()
     }
 
     /** A persistent notice the user dismisses — never a toast (owner rule). */
@@ -1877,6 +1883,8 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                         stagedReadable = staged
                         stagedReadableSha = sha
                         stagedReadableFingerprints = result.fingerprints
+                        stagedReadableCategories = result.exportedCategories
+                        stagedReadableAllFiles = allFiles
                         readableSaveLauncher.launch(
                             RecoveryFileNaming.readableChats(
                                 BackupBrand.resolve(this), complete = allFiles,
@@ -1907,6 +1915,8 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
             setReadableStatus(getString(R.string.backup_readable_fail_generic))
             return
         }
+        val exportedCategories = stagedReadableCategories
+        val complete = stagedReadableAllFiles
         setReadableStatus(getString(R.string.backup_readable_saving))
         runOffThread {
             try {
@@ -1933,7 +1943,9 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                 // exact size, measured during this same verification read —
                 // never the staged file's size, never an estimate.
                 ReadableBackupState.setFileBaseline(this, fingerprints)
-                ReadableBackupState.setLastSuccess(this, System.currentTimeMillis())
+                val savedAt = System.currentTimeMillis()
+                ReadableBackupState.recordCategorySuccess(this, exportedCategories, complete, savedAt)
+                ReadableBackupState.setLastSuccess(this, savedAt)
                 ReadableBackupState.setLastSuccessSizeBytes(this, verifiedSize)
 
                 val where = BackupLocationDisplay.describeSaveAs(this, uri)
@@ -1982,6 +1994,8 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         stagedReadable = null
         stagedReadableSha = null
         stagedReadableFingerprints = null
+        stagedReadableCategories = emptySet()
+        stagedReadableAllFiles = true
     }
 
     private fun sha256(file: File): ByteArray = file.inputStream().use { sha256(it) }
@@ -2018,6 +2032,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         textResultUserImage?.visibility = View.GONE
         runOffThread {
             val results = DatabaseHealthChecker.checkAll(this)
+            DatabaseCheckHistory.record(this, results, System.currentTimeMillis())
             // B8 escalation: a DAMAGED manual-check result IS confirmed damage
             // — set the degraded flag (off the main thread; transition-logged
             // once) before the report dialog offers the repair flow.
@@ -2050,6 +2065,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                     tv?.text = line
                     tv?.visibility = View.VISIBLE
                 }
+                refreshStatusHistory()
                 showCheckReportDialog(results)
             }
         }
@@ -2244,14 +2260,75 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                 )
             }
             runOnUiThread {
-                textStatusMemory?.text = lines[BackupType.MEMORY]
-                textStatusLorebooks?.text = lines[BackupType.LOREBOOK]
-                textStatusChats?.text = lines[BackupType.CHATS]
-                textStatusUserImage?.text = lines[BackupType.USER_IMAGE]
+                BackupStatusText.set(textStatusMemory, lines[BackupType.MEMORY].orEmpty())
+                BackupStatusText.set(textStatusLorebooks, lines[BackupType.LOREBOOK].orEmpty())
+                BackupStatusText.set(textStatusChats, lines[BackupType.CHATS].orEmpty())
+                BackupStatusText.set(textStatusUserImage, lines[BackupType.USER_IMAGE].orEmpty())
                 applyInlineState(BackupType.MEMORY)
                 applyInlineState(BackupType.LOREBOOK)
                 applyInlineState(BackupType.USER_IMAGE)
             }
+        }
+    }
+
+    private fun readableCategoryName(category: ReadableBackupCategory): String = getString(when (category) {
+        ReadableBackupCategory.ACTIVATION_PROMPTS -> R.string.restore_category_activation_prompts
+        ReadableBackupCategory.PROFILE_IMAGES -> R.string.restore_category_profile_images
+        ReadableBackupCategory.CHATS -> R.string.restore_category_chats
+        ReadableBackupCategory.COMPANIONS -> R.string.restore_category_companions
+        ReadableBackupCategory.GENERATED_IMAGES -> R.string.restore_category_generated_images
+        ReadableBackupCategory.GLAMOURS -> R.string.restore_category_glamours
+        ReadableBackupCategory.LOREBOOKS -> R.string.restore_category_lorebooks
+        ReadableBackupCategory.MEMORIES -> R.string.restore_category_memories
+        ReadableBackupCategory.MODEL_SETTINGS -> R.string.restore_category_model_settings
+        ReadableBackupCategory.MODEL_RULES -> R.string.restore_category_model_rules
+        ReadableBackupCategory.ROLEPLAY -> R.string.restore_category_roleplay
+        ReadableBackupCategory.SETTINGS -> R.string.restore_category_settings
+        ReadableBackupCategory.SYSTEM_PROMPTS -> R.string.restore_category_system_prompts
+    })
+
+    private fun refreshStatusHistory() {
+        if (isBackupOptionsPage) return
+        val container = findViewById<LinearLayout>(R.id.readable_backup_history_rows)
+        val history = ReadableBackupState.getCategoryHistory(this)
+        container.removeAllViews()
+        val collation = java.text.Collator.getInstance()
+        for (category in ReadableBackupCategory.entries.sortedWith { a, b ->
+            collation.compare(readableCategoryName(a), readableCategoryName(b))
+        }) {
+            val record = history[category]
+            val row = layoutInflater.inflate(R.layout.view_backup_status_row, container, false) as TextView
+            row.text = if (record == null) getString(R.string.backup_history_named_status,
+                readableCategoryName(category), getString(R.string.backup_readable_history_none))
+            else getString(R.string.backup_history_dated_status, readableCategoryName(category),
+                getString(if (record.complete) R.string.backup_readable_history_complete else R.string.backup_readable_history_new),
+                BackupStatusFormatter.formatDateTime(record.atMillis))
+            container.addView(row)
+        }
+        val checks = DatabaseCheckHistory.get(this)
+        val last = checks.values.maxOfOrNull { it.atMillis }
+        val lastText = last?.let { BackupStatusFormatter.formatDateTime(it) }
+            ?: getString(R.string.backup_database_history_none)
+        findViewById<TextView>(R.id.text_last_database_test).text = getString(R.string.backup_last_database_test, lastText)
+        findViewById<TextView>(R.id.text_databases_last_checked).text = getString(R.string.backup_databases_last_checked, lastText)
+        val ids = mapOf(BackupType.MEMORY to R.id.text_database_test_memory,
+            BackupType.LOREBOOK to R.id.text_database_test_lorebook,
+            BackupType.USER_IMAGE to R.id.text_database_test_userimage)
+        for ((type, id) in ids) {
+            val name = getString(when (type) {
+                BackupType.MEMORY -> R.string.backup_db_name_memory
+                BackupType.LOREBOOK -> R.string.backup_db_name_lorebook
+                else -> R.string.backup_db_name_user_image
+            })
+            val record = checks[type]
+            val line = if (record == null) getString(R.string.backup_history_named_status,
+                name, getString(R.string.backup_database_history_none))
+            else getString(R.string.backup_history_dated_status, name, getString(when (record.outcome) {
+                DatabaseCheckHistory.Outcome.PASSED -> R.string.backup_database_passed
+                DatabaseCheckHistory.Outcome.FAILED -> R.string.backup_database_failed
+                DatabaseCheckHistory.Outcome.UNAVAILABLE -> R.string.backup_database_unavailable
+            }), BackupStatusFormatter.formatDateTime(record.atMillis))
+            BackupStatusText.set(findViewById(id), line)
         }
     }
 

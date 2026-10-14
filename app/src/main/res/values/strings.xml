@@ -4142,4 +4142,17 @@
     <string name="chat_settings_section_interface">Chat Interface</string>
     <string name="backup_options_title">BackUp Options</string>
     <string name="backup_readable_content_include">Content to include</string>
+    <string name="backup_readable_history_title">Human Readable Back Ups</string>
+    <string name="backup_readable_history_none">No recorded backup.</string>
+    <string name="backup_readable_history_complete">Complete</string>
+    <string name="backup_readable_history_new">New/Changed Only</string>
+    <string name="backup_history_named_status">%1$s: %2$s</string>
+    <string name="backup_history_dated_status">%1$s: %2$s - %3$s</string>
+    <string name="backup_database_checks_title">Database Checks</string>
+    <string name="backup_last_database_test">Last Database Test: %1$s</string>
+    <string name="backup_databases_last_checked">Databases Last Checked: %1$s</string>
+    <string name="backup_database_history_none">No recorded test.</string>
+    <string name="backup_database_passed">Passed</string>
+    <string name="backup_database_failed">Failed</string>
+    <string name="backup_database_unavailable">Could Not Be Checked</string>
 </resources>

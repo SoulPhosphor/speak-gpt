@@ -1425,3 +1425,15 @@ message-bookmark star uses `Widget.App.FlatChatRow.BookmarkIndicator` immediatel
 before the title, without changing the companion-image slot. Date and model
 share the existing `.Metadata` line. Search retains its separate result date
 and leaves the new message-bookmark slot hidden.
+
+## Backup status and history
+
+`Widget.App.BackupStatus.Row` owns the normal 15sp backup-status text, theme
+text color, and row gap; `.First` retains the first row's larger gap.
+`Widget.App.BackupStatus.Title` inherits toggle-title typography from
+`Widget.App.Row.Title`. `Widget.App.BackupStatus.BlankLine` separates status
+blocks. Measurements come from `backup_status_*` tokens in `dimens.xml`.
+
+`TextAppearance.App.BackupStatus.Failed` uses the theme's error color and bold
+text. `BackupStatusText.set` applies that appearance only to the word Failed
+and replaces the text on each update, so a later pass removes the emphasis.

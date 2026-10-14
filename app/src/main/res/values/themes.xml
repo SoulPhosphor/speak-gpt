@@ -2780,4 +2780,24 @@
     <style name="Widget.App.Section.Title.BeforeField" parent="Widget.App.Section.Title">
         <item name="android:paddingBottom">@dimen/section_title_field_gap</item>
     </style>
+    <!-- Backup-status history: theme roles and shared measurement tokens only. -->
+    <style name="Widget.App.BackupStatus.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingTop">@dimen/backup_status_row_gap</item>
+        <item name="android:textSize">@dimen/backup_status_text_size</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+    </style>
+    <style name="Widget.App.BackupStatus.Row.First">
+        <item name="android:paddingTop">@dimen/backup_status_first_row_gap</item>
+    </style>
+    <style name="Widget.App.BackupStatus.Title" parent="Widget.App.Row.Title" />
+    <style name="Widget.App.BackupStatus.BlankLine" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/backup_status_blank_line</item>
+    </style>
+    <style name="TextAppearance.App.BackupStatus.Failed" parent="">
+        <item name="android:textColor">?attr/colorError</item>
+        <item name="android:textStyle">bold</item>
+    </style>
 </resources>

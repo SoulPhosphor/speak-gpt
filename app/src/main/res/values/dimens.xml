@@ -175,4 +175,8 @@
     <dimen name="bookmark_message_action_size">32dp</dimen>
     <dimen name="chat_list_bookmark_size">16dp</dimen>
     <dimen name="section_title_field_gap">8dp</dimen>
+    <dimen name="backup_status_text_size">15sp</dimen>
+    <dimen name="backup_status_row_gap">8dp</dimen>
+    <dimen name="backup_status_blank_line">20dp</dimen>
+    <dimen name="backup_status_first_row_gap">16dp</dimen>
 </resources>

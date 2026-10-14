@@ -77,13 +77,7 @@
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_status_section" />
 
-            <TextView
-                android:id="@+id/text_status_memory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="16dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
+            <TextView android:id="@+id/text_status_memory" style="@style/Widget.App.BackupStatus.Row.First" />
 
             <!-- Per-database recovery actions (owner ruling, July 24 2026):
                  shown ONLY when this database is actually corrupted
@@ -145,13 +139,7 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/text_status_lorebooks"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
+            <TextView android:id="@+id/text_status_lorebooks" style="@style/Widget.App.BackupStatus.Row" />
 
             <LinearLayout
                 android:id="@+id/health_actions_lorebook"
@@ -204,25 +192,13 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/text_status_chats"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
+            <TextView android:id="@+id/text_status_chats" style="@style/Widget.App.BackupStatus.Row" />
 
             <!-- Chats deliberately get NO recovery buttons here: chats are not
                  a database and never enter the repair/revert flow (the Round-4
                  chat-storage lock system owns that case). -->
 
-            <TextView
-                android:id="@+id/text_status_userimage"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:textColor="@color/text"
-                android:textSize="15sp" />
+            <TextView android:id="@+id/text_status_userimage" style="@style/Widget.App.BackupStatus.Row" />
 
             <LinearLayout
                 android:id="@+id/health_actions_userimage"
@@ -275,6 +251,20 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <Space style="@style/Widget.App.BackupStatus.BlankLine" />
+            <TextView style="@style/Widget.App.BackupStatus.Title"
+                android:text="@string/backup_readable_history_title" />
+            <LinearLayout android:id="@+id/readable_backup_history_rows"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" />
+            <Space style="@style/Widget.App.BackupStatus.BlankLine" />
+            <TextView style="@style/Widget.App.BackupStatus.Title"
+                android:text="@string/backup_database_checks_title" />
+            <TextView android:id="@+id/text_last_database_test" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_database_test_memory" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_database_test_lorebook" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_database_test_userimage" style="@style/Widget.App.BackupStatus.Row" />
+
             <!-- ============ 2. Database Health ============ -->
             <!-- Section heading + hint styles: Widget.App.Section.Title/.Hint
                  (see values/themes.xml + ui-style-guide.md). The hint always
@@ -283,6 +273,7 @@
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_db_health_section" />
+            <TextView android:id="@+id/text_databases_last_checked" style="@style/Widget.App.BackupStatus.Row" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"

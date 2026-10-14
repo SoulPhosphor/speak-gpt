@@ -29,7 +29,7 @@ import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
  * database keys, endpoint credentials, recovery secrets, or restore metadata. */
 object ReadableDataBackup {
     sealed class Result {
-        data class Ok(val fingerprints: Map<String, String>) : Result()
+        data class Ok(val fingerprints: Map<String, String>, val exportedCategories: Set<ReadableBackupCategory>) : Result()
         data object NothingNew : Result()
         data object NothingToBackUp : Result()
         data object ChatsUnreadable : Result()
@@ -150,8 +150,11 @@ object ReadableDataBackup {
                 }
             }
             if (!verify(destination, expected)) return Result.Failed
+            val exported = plan.files.mapTo(LinkedHashSet()) { (name, _) ->
+                checkNotNull(ReadableBackupCategory.forEntry(name))
+            }
             complete = true
-            return Result.Ok(plan.fingerprints)
+            return Result.Ok(plan.fingerprints, exported)
         } catch (_: Exception) {
             return Result.Failed
         } finally {

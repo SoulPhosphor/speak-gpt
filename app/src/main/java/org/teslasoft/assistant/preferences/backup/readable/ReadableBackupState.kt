@@ -41,6 +41,7 @@ object ReadableBackupState {
 
     private const val FILE = "storage_health"
 
+    private const val KEY_CATEGORY_HISTORY = "readable.category_history"
     private const val KEY_FILE_BASELINE = "readable.file_baseline"
     private const val KEY_BASELINE = "readable.baseline"
     private const val KEY_LAST_SUCCESS = "readable.last_success"
@@ -83,6 +84,16 @@ object ReadableBackupState {
                 putString(KEY_FILE_BASELINE, ReadableChatFormats.baselineToJson(baseline))
             }
         } catch (_: Exception) { }
+    }
+
+    fun getCategoryHistory(context: Context): Map<ReadableBackupCategory, ReadableBackupHistory.Record> =
+        try { ReadableBackupHistory.decode(prefs(context).getString(KEY_CATEGORY_HISTORY, null)) }
+        catch (_: Exception) { emptyMap() }
+
+    fun recordCategorySuccess(context: Context, categories: Set<ReadableBackupCategory>, complete: Boolean, atMillis: Long) {
+        val updated = ReadableBackupHistory.record(getCategoryHistory(context), categories, complete, atMillis)
+        try { prefs(context).edit(commit = true) { putString(KEY_CATEGORY_HISTORY, ReadableBackupHistory.encode(updated)) } }
+        catch (_: Exception) { }
     }
 
     /** Epoch millis of the last VERIFIED readable chat backup (complete or

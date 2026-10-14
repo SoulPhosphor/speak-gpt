@@ -7,6 +7,24 @@ enum class ReadableBackupCategory {
     SETTINGS, SYSTEM_PROMPTS;
 
     companion object {
+        /** Each emitted file belongs to exactly one independently selected category. */
+        fun forEntry(name: String): ReadableBackupCategory? = when {
+            name.startsWith("chats/") -> CHATS
+            name.startsWith("generated_images/") -> GENERATED_IMAGES
+            name.startsWith("profile_images/") -> PROFILE_IMAGES
+            name == "activation_prompts.json" -> ACTIVATION_PROMPTS
+            name == "system_prompts.json" -> SYSTEM_PROMPTS
+            name == "companions.json" || name.startsWith("companions/") -> COMPANIONS
+            name == "glamours.json" || name.startsWith("glamours/") -> GLAMOURS
+            name == "roleplay.json" || name.startsWith("roleplay/") -> ROLEPLAY
+            name == "model_settings.json" -> MODEL_SETTINGS
+            name == "model_rules.json" -> MODEL_RULES
+            name == "memories.json" -> MEMORIES
+            name == "lorebooks.json" -> LOREBOOKS
+            name == "app_settings.json" -> SETTINGS
+            else -> null
+        }
+
         /** Old combined identities selections never implicitly enable the new toggles. */
         fun fromStored(names: Set<String>?): Set<ReadableBackupCategory> = names.orEmpty()
             .mapNotNullTo(LinkedHashSet()) { name -> entries.firstOrNull { it.name == name } }
