@@ -111,4 +111,13 @@ class AtomicFileWriterTest {
         assertEquals(content, target.readText())
         assertFalse(File(dir, "backup.json.tmp").exists())
     }
+
+    @Test
+    fun refusesContentThatCannotRoundTripThroughUtf8() {
+        val dir = tempDir()
+        val target = File(dir, "backup.json")
+        assertFalse(AtomicFileWriter.writeAndVerify(target, "before \uD83D after"))
+        assertFalse(AtomicFileWriter.writeAndVerify(target, "trailing \uDE00"))
+        assertFalse(target.exists())
+    }
 }

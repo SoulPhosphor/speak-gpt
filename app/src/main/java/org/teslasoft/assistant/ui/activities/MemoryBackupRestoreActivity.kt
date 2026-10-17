@@ -2652,7 +2652,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     }
 
     private fun exportToUri(uri: Uri) {
-        runOffThread {
+        runOffThread(containOutOfMemory = true) {
             if (MemoryExporter.isChatListUnavailable(this)) {
                 runOnUiThread { showChatBackupUnavailableDialog() }
                 return@runOffThread
@@ -3022,15 +3022,17 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
      * text on screen (owner corrections, July 22 2026). The class name only
      * (no message — messages can embed paths/URIs) goes to the local Memory
      * log for diagnosis.
+     *
+     * [containOutOfMemory] is only for work with no UI state to restore on
+     * failure (the manual export): a large export can run out of memory, and
+     * the failure dialog is shown instead of letting it crash the app.
      */
-    private fun runOffThread(work: () -> Unit) {
+    private fun runOffThread(containOutOfMemory: Boolean = false, work: () -> Unit) {
         Thread {
             try {
                 work()
             } catch (e: Throwable) {
-                // A large export can run out of memory; show the failure
-                // dialog instead of letting it crash the app.
-                if (e !is Exception && e !is OutOfMemoryError) throw e
+                if (e !is Exception && !(containOutOfMemory && e is OutOfMemoryError)) throw e
                 try {
                     MemoryLog.log(this, "BackupScreen", "error",
                         "Backup screen operation failed (${e.javaClass.simpleName}).")

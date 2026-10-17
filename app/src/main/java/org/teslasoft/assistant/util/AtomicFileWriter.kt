@@ -42,6 +42,9 @@ object AtomicFileWriter {
             // Encode once and verify against these bytes. Reading the file
             // back as a String would need several times the backup's size in
             // heap at once, which ran a large memory export out of memory.
+            // Malformed UTF-16 would be encoded lossily, so the byte compare
+            // could not catch it; refuse it as the String compare did.
+            if (!isWellFormedUtf16(content)) return false
             val bytes = content.toByteArray(Charsets.UTF_8)
             FileOutputStream(tmp).use { out ->
                 out.write(bytes)
@@ -71,6 +74,22 @@ object AtomicFileWriter {
             }
             false
         }
+    }
+
+    private fun isWellFormedUtf16(text: String): Boolean {
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            if (c.isHighSurrogate()) {
+                if (i + 1 >= text.length || !text[i + 1].isLowSurrogate()) return false
+                i += 2
+            } else if (c.isLowSurrogate()) {
+                return false
+            } else {
+                i++
+            }
+        }
+        return true
     }
 
     /** Streams [file] in small chunks and compares it with [expected]. */
