@@ -6731,6 +6731,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Sample the box BEFORE inserting (already-typed text never auto-sends).
                 val boxWasEmpty = messageInput?.text.isNullOrEmpty()
                 if (shouldAutoSendTranscription(boxWasEmpty)) {
+                    if (refuseOverLimitTranscript(transcription)) return
                     putMessage(prefix + transcription + endSeparator, false)
 
                     chatMessages.add(
@@ -7425,6 +7426,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Sample the box BEFORE inserting (already-typed text never auto-sends).
         val boxWasEmpty = messageInput?.text.isNullOrEmpty()
         if (shouldAutoSendTranscription(boxWasEmpty)) {
+            if (refuseOverLimitTranscript(transcription)) return
             putMessage(prefix + transcription + endSeparator, false)
             chatMessages.add(
                 ChatMessage(
@@ -10271,14 +10273,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Checked before anything else happens, so a refused message leaves
         // the composer, keyboard and any pending regeneration untouched.
         if (MessageLengthLimit.exceeds(rawMessage)) {
-            showRequestHardBlock(
-                R.string.message_too_long_title,
-                getString(
-                    R.string.message_too_long_send_body,
-                    MessageLengthLimit.formatCount(MessageLengthLimit.characterCount(rawMessage)),
-                    MessageLengthLimit.formatCount(MessageLengthLimit.MAX_CHARACTERS)
-                )
-            )
+            showMessageTooLong(rawMessage)
             return
         }
         settlePendingRegeneration()
@@ -10518,6 +10513,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun formatTokenCount(value: Int): String =
         NumberFormat.getIntegerInstance().format(value)
+
+    private fun showMessageTooLong(text: String) {
+        showRequestHardBlock(
+            R.string.message_too_long_title,
+            getString(
+                R.string.message_too_long_send_body,
+                MessageLengthLimit.formatCount(MessageLengthLimit.characterCount(text)),
+                MessageLengthLimit.formatCount(MessageLengthLimit.MAX_CHARACTERS)
+            )
+        )
+    }
+
+    /**
+     * Whisper auto-send commits the transcript directly instead of going
+     * through [prepareTypedTurn]. An over-limit transcript is refused the
+     * same way: it is placed in the message box and nothing is sent.
+     */
+    private fun refuseOverLimitTranscript(transcription: String): Boolean {
+        if (!MessageLengthLimit.exceeds(transcription)) return false
+        transcriptionInProgress = false
+        restoreUIState()
+        insertTranscriptIntoBox(transcription)
+        showMessageTooLong(transcription)
+        return true
+    }
 
     private fun showRequestHardBlock(titleRes: Int, body: String) {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
