@@ -3027,7 +3027,10 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         Thread {
             try {
                 work()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // A large export can run out of memory; show the failure
+                // dialog instead of letting it crash the app.
+                if (e !is Exception && e !is OutOfMemoryError) throw e
                 try {
                     MemoryLog.log(this, "BackupScreen", "error",
                         "Backup screen operation failed (${e.javaClass.simpleName}).")

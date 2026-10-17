@@ -85,7 +85,10 @@ object MemoryExporter {
                     null
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // OutOfMemoryError is caught too: a null return refuses the reset
+            // and shows the backup-failed dialog instead of crashing the app.
+            if (e !is Exception && e !is OutOfMemoryError) throw e
             MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: ${e.message}")
             null
         }
