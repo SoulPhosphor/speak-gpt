@@ -1,6 +1,6 @@
 # Roadmap
 
-**Updated 2026-08-07. This is the only app-wide scheduling roadmap.**
+**Updated 2026-10-17. This is the only app-wide scheduling roadmap.**
 
 ## Structure of truth
 
@@ -28,7 +28,8 @@
 
 ## Feature order
 
-1. **Existing API Memory Assistant Repair** - ACTIVE
+0. **Chat Storage and Backup Upgrade** - ACTIVE (owner ruling, October 17 2026)
+1. **Existing API Memory Assistant Repair** - paused until Feature 0 is complete
 2. **Memory Budget Calculator**
 3. **Computer Memory Review**
 4. **Memory Auditor**
@@ -37,9 +38,22 @@ The ordering after Feature 1 is unchanged from the previous roadmap. Computer Me
 
 ---
 
-# Feature 1 - Existing API Memory Assistant Repair
+# Feature 0 - Chat Storage and Backup Upgrade
 
 **Status: Active.**
+
+Chats move into a dedicated encrypted per-message database with a verified,
+resumable migration, and the Recovery Backup, Human-Readable Backup, and memory
+export are rebuilt to stream so very large conversations and backups work
+without data loss (including removing the 64 MiB Recovery Backup chat limit).
+No visible redesign. The binding plan and handoff is
+**`chat-storage-and-backup-plan.md`**.
+
+---
+
+# Feature 1 - Existing API Memory Assistant Repair
+
+**Status: Paused until Feature 0 (Chat Storage and Backup Upgrade) is complete.**
 
 The owner reported a concrete defect after the previous roadmap was written: the current Archivist analyzes conversation chunks without first receiving a bounded set of relevant existing Associative Memories. Post-extraction duplicate/Possible Match checks exist, but the model itself cannot know during extraction whether information is already known, changed, contradictory, or a continuation.
 
