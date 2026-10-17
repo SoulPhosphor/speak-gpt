@@ -100,4 +100,15 @@ class AtomicFileWriterTest {
         assertTrue(AtomicFileWriter.writeAndVerify(target, content))
         assertEquals(content.length.toLong(), target.length())
     }
+
+    @Test
+    fun verifiesMultiByteContentAcrossChunkBoundaries() {
+        val dir = tempDir()
+        val target = File(dir, "backup.json")
+        // Multi-byte characters straddle the 64 KB read-back chunks.
+        val content = "é😀中".repeat(100_000)
+        assertTrue(AtomicFileWriter.writeAndVerify(target, content))
+        assertEquals(content, target.readText())
+        assertFalse(File(dir, "backup.json.tmp").exists())
+    }
 }

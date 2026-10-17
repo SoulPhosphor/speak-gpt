@@ -228,7 +228,11 @@ object MemoryExporter {
                 }
                 MemoryLog.log(context, "MemoryExport", "info", "Automatic memory backup written: ${file.name}")
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // OutOfMemoryError is caught too: this runs on every app start, so
+            // an uncaught one would crash the app and, with the throttle
+            // marker still unset, crash it again on each following start.
+            if (e !is Exception && e !is OutOfMemoryError) throw e
             MemoryLog.log(context, "MemoryExport", "error", "Automatic memory backup failed: ${e.message}")
         }
     }
