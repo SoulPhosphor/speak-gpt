@@ -350,6 +350,7 @@ import org.teslasoft.assistant.util.LocaleParser
 import org.teslasoft.assistant.util.ModelContextCapacity
 import org.teslasoft.assistant.util.ModelContextDecision
 import org.teslasoft.assistant.util.RequestCapacity
+import org.teslasoft.assistant.util.MessageLengthLimit
 import org.teslasoft.assistant.util.RequestMessageSnapshot
 import org.teslasoft.assistant.util.RequestHeapState
 import org.teslasoft.assistant.util.WindowInsetsUtil
@@ -10265,6 +10266,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatStorageUnavailable || rawMessage.isEmpty() ||
             requestPreparationInProgress
         ) {
+            return
+        }
+        // Checked before anything else happens, so a refused message leaves
+        // the composer, keyboard and any pending regeneration untouched.
+        if (MessageLengthLimit.exceeds(rawMessage)) {
+            showRequestHardBlock(
+                R.string.message_too_long_title,
+                getString(
+                    R.string.message_too_long_send_body,
+                    MessageLengthLimit.formatCount(MessageLengthLimit.characterCount(rawMessage)),
+                    MessageLengthLimit.formatCount(MessageLengthLimit.MAX_CHARACTERS)
+                )
+            )
             return
         }
         settlePendingRegeneration()
