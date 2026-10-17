@@ -100,4 +100,24 @@ class AtomicFileWriterTest {
         assertTrue(AtomicFileWriter.writeAndVerify(target, content))
         assertEquals(content.length.toLong(), target.length())
     }
+
+    @Test
+    fun verifiesMultiByteContentAcrossChunkBoundaries() {
+        val dir = tempDir()
+        val target = File(dir, "backup.json")
+        // Multi-byte characters straddle the 64 KB read-back chunks.
+        val content = "é😀中".repeat(100_000)
+        assertTrue(AtomicFileWriter.writeAndVerify(target, content))
+        assertEquals(content, target.readText())
+        assertFalse(File(dir, "backup.json.tmp").exists())
+    }
+
+    @Test
+    fun refusesContentThatCannotRoundTripThroughUtf8() {
+        val dir = tempDir()
+        val target = File(dir, "backup.json")
+        assertFalse(AtomicFileWriter.writeAndVerify(target, "before \uD83D after"))
+        assertFalse(AtomicFileWriter.writeAndVerify(target, "trailing \uDE00"))
+        assertFalse(target.exists())
+    }
 }
