@@ -1,9 +1,17 @@
 # Chat Storage and Backup Plan (handoff)
 
-Status: **approved direction, October 17 2026. Implementation paused for a
-fresh session.** This file is the single coordinated plan and the handoff for
-the next coding session. It replaces the earlier draft `chat-storage-plan.md`,
-which was never committed; its content is reconciled into this file.
+Status: **approved direction, October 17 2026. Sequence revised October 18
+2026 (owner ruling, see §5).** This file is the single coordinated plan and the
+handoff for the next coding session. It replaces the earlier draft
+`chat-storage-plan.md`, which was never committed; its content is reconciled
+into this file.
+
+**Owner ruling, October 18 2026:** the new Recovery Backup and restore system
+must be implemented and tested before the new chat database becomes
+authoritative for existing conversations. Migration activation stays disabled
+until the storage, backup, verification, and restore paths are all ready. The
+PR sequence is ordered so that no PR builds a temporary path that a later PR
+immediately rewrites.
 
 Read `CLAUDE.md` before starting. Its rules apply throughout: work from
 `beta/new-client` (never `main`), owner approval for user-facing wording, **no
@@ -50,7 +58,7 @@ upgrade, not a redesign.
 | Item | Where | State |
 |---|---|---|
 | Startup out-of-memory crash fix | merged into `beta/new-client` via PR #144 (merge commit `42ba0c8`) | **Done.** Beta APK rebuilt and published (`beta-latest`). Owner has not yet confirmed on device. |
-| 200,000-character message limit | PR #145, branch `ccr-2aeea9b3-5i4mu4`, head `c29fa62` | **Not merged.** First Codex review found the Whisper auto-send gap; fixed in `c29fa62`, reply posted on the thread. Android Checks on `c29fa62` were **in progress** at handoff. Next: confirm CI green, request `@codex review` again, resolve the thread, merge if clean. |
+| 200,000-character message limit | PR #145, branch `ccr-2aeea9b3-5i4mu4`, head `c29fa62` | **Not merged.** First Codex review found the Whisper auto-send gap; fixed in `c29fa62`, reply posted on the thread. Android Checks on `c29fa62` passed (both jobs green); `@codex review` re-requested October 18. Next: on a clean review resolve the thread; merge only when the owner directs. |
 | Stage 1 chat database (`ChatStore`) | **Not pushed as code.** Copies of the unreviewed source are preserved in `docs/handoff/stage1-unreviewed/` (outside the build) | Written, never compiled by CI, never reviewed. Next session may start from these files (move them into `app/src/main/java/org/teslasoft/assistant/preferences/chatstore/` and `app/src/androidTest/java/org/teslasoft/assistant/preferences/chatstore/`), or rewrite. |
 
 ### What PR #144 changed (already on beta)
@@ -264,12 +272,16 @@ streaming), `appendMessage`, `replaceMessage(seq)`, `deleteMessage(seq)`,
 columns, so migration can be verified byte-for-byte and nothing is lost. Only
 lookup fields (`message_id`, `is_bot`) are extracted.
 
-**Documents** (PR 7): include document text moves out of the message payload
-into `include_text_parts(include_id, part_index, text)` linked by include ID,
-with the payload keeping a reference; text is loaded only when viewed,
-condensed, or sent. Request building for a book-length document still
-assembles the request in memory; the existing `request_prepare_failed` check
-stays.
+**Documents:** include document text is stored outside the message payload in
+`include_text_parts(include_id, part_index, text)` linked by include ID, with
+the payload keeping a reference. This table is part of schema v1 (PR 2) and
+migration writes it directly, so `chats.db` needs **no schema upgrade after
+activation**. `DatabaseChatSource` reassembles the full payload whenever a
+caller asks for it (backup, verification, the compatibility layer), so the
+backup format does not depend on this storage detail. A later PR (§5, PR 12)
+only changes screens to load document text on demand (when viewed, condensed,
+or sent). Request building for a book-length document still assembles the
+request in memory; the existing `request_prepare_failed` check stays.
 
 ### 4.2 Shared interfaces (build once, used by every later PR)
 
@@ -290,14 +302,36 @@ Define these in the database PR so later PRs don't rewrite each other:
    per-chat JSON, which consume/produce one message at a time.
 4. **`ChatStorageAuthority`** — single flag (stored durably, read once per
    process) saying whether legacy files or `chats.db` are authoritative.
-   `ChatPreferences` routes through it.
+   `ChatPreferences` routes through it. Until the activation PR, no production
+   code path can set it to the database; instrumented tests may set it on a
+   test install so the database paths are exercised.
+5. **Staged chat database** — create a `chats.db` file in a staging location,
+   fill it, validate it, and atomically swap it into place (or discard it).
+   Migration, restore, and backup capture all use this one helper.
+6. **Chat-set commit target** — the step that makes a validated staged chat
+   set authoritative. Two implementations: *database swap* (replace `chats.db`)
+   and *legacy write* (write each chat from the staged database into
+   `enc.chat_<id>` / `enc.chat_list`, the way restore writes today). The legacy
+   target is **not temporary**: legacy storage stays authoritative on any
+   device where migration has not succeeded (requirement 4), so restore must
+   be able to land there. It is retired only with the legacy store itself.
+7. **Change token** — `ChatSource` exposes a per-chat change token for
+   incremental exports: legacy = the existing whole-history fingerprint,
+   database = `store_id` + `revision`. Callers never care which.
+
+Because backup, restore, readable export and memory export are written against
+these interfaces, they are built once, tested against both storages, and do not
+change when the database becomes authoritative.
 
 ### 4.3 Migration
 
 - Runs at app start before any chat UI loads, behind a full-screen progress
-  screen ("n of N"), non-dismissible, closes itself. Wording is drafted with
-  the build and shown to the owner in that PR (owner approved drafting it).
-  Must use shared styles (`ui-style-guide.md`).
+  screen ("n of N"), non-dismissible, closes itself. The wording is proposed
+  to the owner and approved **before** it is written into any file
+  (`CLAUDE.md` §3 approval gate). Must use shared styles (`ui-style-guide.md`).
+- **Activation is a separate step.** The migration engine, progress screen
+  and gating are built and tested with the trigger disabled; nothing runs
+  migration on a device until the activation PR (§5, PR 9).
 - Gate: `MainActivity`/`ChatActivity`/any chat entry point redirect to the
   progress screen while migration is running, so no edits happen mid-move.
   Background chat writers (image generation jobs, transcript capture,
@@ -321,7 +355,9 @@ Define these in the database PR so later PRs don't rewrite each other:
   log line → **owner approval of the exact log text first** (CLAUDE.md).
 - Switch: only when every readable chat is verified, set
   `ChatStorageAuthority` in one durable write. After the switch the legacy
-  files are never read again for chats that moved.
+  files are never read again for chats that moved. The switch code exists
+  from PR 5 but stays unreachable until the activation PR, which may land
+  only after the readiness gate in §5 is met.
 - The chat search index (`chat_search.db`) is rebuilt from `DatabaseChatSource`
   after the switch (it is disposable).
 
@@ -332,29 +368,40 @@ chat verified; a Recovery Backup created **after** the switch from `chats.db`
 completed and passed verification (finished-package reopen + semantic
 validation); the file belongs to a moved, verified chat. Locked / corrupt /
 unmoved chats' files are never removed. Removal runs on a later start, one file
-at a time, journaled so interruption resumes. Because a qualifying Recovery
-Backup requires the 64 MiB limit to be gone, removal comes after the backup
-rebuild.
+at a time, journaled so interruption resumes. The backup rebuild (PRs 3–4)
+lands before activation, so the first post-activation Recovery Backup can
+qualify.
 
 ### 4.5 Recovery Backup rebuild
 
+- Built **before activation** and read through `ChatSource`, so it backs up
+  the current legacy storage first (the owner gets a working backup of
+  existing conversations over 64 MiB before anything migrates) and backs up
+  `chats.db` after activation without changes.
 - Keep `chats.json` as one logical payload but **write it streaming** from
   `ChatSource` (one message at a time) straight into the staged file; never
   build the JSON in memory.
-- Introduce an explicit chats payload version (new `schemaVersion` for the
-  `chats-json` artifact, e.g. 3) only if the representation changes (for
-  example, document text carried as separate entries). Restore keeps reading
-  versions 1 and 2 (`LegacyChatConversion`, current v2) via the streaming
-  reader.
+- **Format decision:** the chats payload carries each message's full payload
+  verbatim, exactly as v2 does. Internal storage details (message parts,
+  document text parts) are reassembled by `ChatSource` and never appear in the
+  backup format. The streaming writer therefore produces v2-equivalent output
+  and keeps `schemaVersion` 2 (tested against `serializeV2` on small sets), so
+  no format change is needed later. Restore keeps reading versions 1 and 2
+  (`LegacyChatConversion`, current v2) via the streaming reader.
 - Semantic validation streams the file; it checks structure, counts, IDs,
   references (PDF assets via `PdfAttachmentPortableBackup.requiredHashes`
   equivalents computed while streaming), not just bytes.
 - Restore streams `chats.json` into a **staged** `chats.db`, validates it, then
-  swaps through `ChatSetReplacementCoordinator`, preserving existing merge
+  commits through `ChatSetReplacementCoordinator` using the commit target for
+  whichever storage is authoritative (§4.2 item 6), preserving existing merge
   planning (`ChatMergePlanner`, `ChatRestorePlanner`) and coordinated rollback
   across selected restore categories. Neither the restore plan nor the
   current-data rollback snapshot may be built whole in memory (store them in
-  staged DB tables).
+  staged DB tables, or copy legacy files byte-for-byte without parsing).
+  Today `ChatRestoreParticipant.stage` builds the current chat set whole via
+  `serializeV2` for rollback; that is replaced.
+- The older on-device restore (`ChatRestoreManager`, `RecoveryBackupManager`)
+  moves onto the same staged-database and commit-target path in the same PR.
 - Capture consistency: keep `PortableBackupCaptureStability` /
   `PortableBackupMutationTokens`; with `chats.db`, capture from a single read
   transaction or a `VACUUM INTO`-style snapshot so chats, settings and
@@ -385,9 +432,11 @@ rebuild.
   `index`, `role`, speaker name, `text`, `timestamp` (only when stored; never
   invented), regenerated versions, thinking (when enabled), attachment
   references. Text format stays as is.
-- Incremental selection uses `chats.revision` + `store_id` + export options +
-  format version + locale + folder/name changes instead of whole-history
-  fingerprints.
+- Incremental selection uses the `ChatSource` change token (§4.2 item 7;
+  `store_id` + `chats.revision` on the database) + export options + format
+  version + locale + folder/name changes. On legacy storage the token is the
+  existing whole-history fingerprint, so the same code works before and after
+  activation.
 - Viewer side (separate repo, later): add a `speakgpt` provider detected by
   `format`, identity `(chat_id, "speakgpt")`, message identity by
   `message_id`, transactional incremental import that preserves viewer
@@ -414,26 +463,72 @@ bounded. AI replies, regenerated variants, and document text are not bounded by
 it; `message_parts` and the document text parts handle them. Existing stored
 messages over the limit migrate unchanged.
 
-## 5. PR sequence
+## 5. PR sequence (revised October 18 2026)
 
 Each PR: branch from current `beta/new-client`, Android Checks green,
-`@codex review`, address findings, merge. No PR changes user-visible behavior
-except where stated.
+`@codex review`, address findings, merge when the owner directs. No PR changes
+user-visible behavior except where stated.
+
+### Why this order
+
+The owner ruled that the new backup and restore system must be built and
+tested before the database becomes authoritative. The earlier order (switch in
+PR 4, backup rebuild in PR 8) would also have forced PR 4 to port every backup
+and restore path onto the database through the old whole-in-memory
+serializers, and PR 8 to rewrite them again. In the revised order:
+
+1. **Foundations first** (PR 2): the database, `ChatSource`, the staged
+   database, commit targets, the change token and the streaming codec. Every
+   later PR is written once against these.
+2. **Backup and restore next** (PRs 3–4), built through `ChatSource` and the
+   commit targets. They work on today's legacy storage immediately (the owner
+   gets a working backup of conversations over 64 MiB before anything
+   migrates) and are tested against the database in instrumented tests. They
+   need no rewrite at activation.
+3. **Migration and the compatibility layer** (PRs 5–6) are built and tested
+   with activation disabled.
+4. **Readiness verification** (PR 8) proves the whole cycle end to end.
+5. **Activation** (PR 9) is a small PR that only turns migration and the switch
+   on.
+6. **Performance and cleanup** (PRs 10–13) follow activation. None of them
+   changes the database schema or the backup format.
+
+### Sequence
 
 | # | PR | Depends on | Contents | Done when |
 |---|---|---|---|---|
-| 0 | Finish PR #145 (message limit) | — | CI green on `c29fa62`, Codex re-review, merge | merged |
-| 1 | Plan in repo | — | This file + `project-plan.md` Feature 0 (branch `docs/chat-storage-handoff`) | merged |
-| 2 | Chat database + interfaces | 1 | `ChatStore`, `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource`, `ChatStorageAuthority` (off), streaming JSON codec; instrumented tests added to the CI list | tests green; app behavior unchanged |
-| 3 | Migration engine (switch kept off) | 2 | Copy + verify + durable progress + resume; damaged chats; progress screen (wording to owner); migration gating | interruption/resume, damaged, locked, large-chat tests green; switch still off |
-| 4 | Switch + compatibility layer | 3 | `ChatPreferences` and all listed callers on `DatabaseChatSource`/`ChatStore` via the authority flag; list metadata without parsing histories; search index rebuild; all backup/restore paths reading/writing via the new store (old serializers through `ChatSource`); turn the switch on | every listed caller converted; full app regression on device by owner |
-| 5 | Paged chat screen and sending | 4 | `ChatActivity`/`ChatAdapter` page by page (newest first, load older on scroll, jump-to-message for search/bookmarks/summary), positional ops mapped to `seq`, request builder reads newest-first only what it needs | memory tests on huge chat; no UI change |
-| 6 | Search index, list, summaries, transcript backfill paged | 4 | incremental search updates by revision; paged readers | tests |
-| 7 | Documents stored separately | 4 | include text parts; payload reference; migration of existing include text | tests incl. book-length documents |
-| 8 | Recovery Backup rebuild | 4 (7 if payload version changes) | streaming write/validate/restore, staged restore DB, limits replaced, distinct errors (wording to owner) | 64 MiB+ chat set backs up and restores on emulator; old v1/v2 packages restore |
-| 9 | Readable Backup + memory export streaming | 2, 4 | versioned per-chat JSON, revision-based incremental, streaming `MemoryExporter` | tests; format documented for the viewer |
-| 10 | Original-file removal | 4, 8 | automatic journaled removal after verified post-switch Recovery Backup | tests incl. interruption; damaged files never removed |
-| — | Viewer importer | 9 | in `claude-history-viewer` repo | separate project |
+| 0 | Finish PR #145 (message limit) | — | CI green on `c29fa62` (done), Codex re-review, merge | merged |
+| 1 | Plan in repo | — | This file + `project-plan.md` Feature 0 | merged |
+| 2 | Storage foundations | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, both commit targets, streaming JSON codec; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
+| 3 | Recovery Backup write + verification | 2 | Streaming `chats.json` writer from `ChatSource` (v2-equivalent, `schemaVersion` 2); streaming semantic validation; capture consistency; `CHATS_JSON_BYTES` and other memory-only ceilings replaced by free-space checks and malformed-archive guards; distinct failure reasons (wording approved by owner **before** code) | over-64 MiB chat set backs up and verifies on emulator from legacy storage and from a test database; output matches `serializeV2` on small sets; **owner confirms on device that a full backup of current data succeeds** |
+| 4 | Recovery restore | 2, 3 | Streaming reader (v1 and v2) into a staged `chats.db`; validation of the staged set; merge planning and rollback snapshot without whole-set memory; commit via `ChatSetReplacementCoordinator` to either target; `ChatRestoreManager` / `RecoveryBackupManager` on the same path | over-64 MiB round trip on legacy target and on database target; every older package version restores; rollback at each step; existing restore UI unchanged |
+| 5 | Migration engine (activation off) | 2 | Copy + verify + durable progress + resume; damaged/locked chats; gating of chat UI and background writers; progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
+| 6 | Compatibility layer (activation off) | 2 | `ChatPreferences` and every listed caller (§3) read and write through `ChatSource`/`ChatStore` by authority; list metadata without parsing histories; search index, transcript backfill, image catalog, damaged-chat flows through the same layer | caller tests pass with authority = legacy (production) and authority = database (test); app behavior unchanged |
+| 7 | Readable Backup + memory export streaming | 2 | Versioned per-chat JSON, change-token incremental selection, streaming `MemoryExporter` | tests on both storages; format documented for the viewer |
+| 8 | Activation readiness verification | 3–7 | End-to-end instrumented suite: legacy data → migrate → Recovery Backup from database → verify → restore into a clean install and into the legacy target → compare with the original legacy content; restore of a pre-migration backup after migration; heap measured on a 256 MB heap through the whole cycle | all green; readiness gate met |
+| 9 | Activation | 8 | Turn on the migration trigger and the switch; fresh installs start on the database | owner made a new Recovery Backup with PR 3's system before installing; **owner confirms on device** |
+| 10 | Paged chat screen and sending | 9 | `ChatActivity`/`ChatAdapter` page by page (newest first, load older on scroll, jump-to-message for search/bookmarks/summary), positional ops mapped to `seq`, request builder reads only what it needs | memory tests on huge chat; no UI change; **owner confirms on device** |
+| 11 | Search index, list, summaries, transcript backfill paged | 9 | Incremental search updates by revision; paged readers | tests |
+| 12 | Documents loaded on demand | 9 | Screens and request building load include text from `include_text_parts` only when needed (storage already in place from PR 2/5) | tests incl. book-length documents |
+| 13 | Original-file removal | 9 | Automatic journaled removal after the first verified post-activation Recovery Backup (§4.4) | tests incl. interruption; damaged files never removed |
+| — | Viewer importer | 7 | in `claude-history-viewer` repo | separate project |
+
+PRs 3, 5, 6 and 7 depend only on PR 2 (and PR 4 on PR 3), so they may be
+built in any order after PR 2; the readiness gate is what matters.
+
+### Readiness gate (required before PR 9)
+
+Activation may not be merged until all of these hold:
+
+- PRs 2–8 merged and Android Checks green on `beta/new-client`.
+- Recovery Backup over 64 MiB creates, verifies and restores on the emulator
+  from both storages, and every older package version restores.
+- Migration interruption/resume, damaged/locked chat, and low-storage tests
+  pass.
+- The end-to-end suite in PR 8 passes, including restore of a pre-migration
+  backup after migration.
+- The owner has confirmed on device that the new Recovery Backup succeeds on
+  current data (PR 3).
 
 ## 6. Testing requirements (all PRs, as relevant)
 
@@ -446,38 +541,44 @@ except where stated.
 - Locked key, corrupt chat, corrupt database, low storage, concurrent edits
   (blocked during migration).
 - Recovery Backup over 64 MiB: create, verify, restore; every older package
-  version restores; restore rollback.
+  version restores; restore rollback. Run against both storages.
 - Peak heap measured on a 256 MB heap during migration, opening, scrolling,
   sending, editing, backup, and restore, with headroom.
-- Owner on-device confirmation after PRs 4, 5, and 8.
+- Owner on-device confirmation after PRs 3, 9, and 10.
 
 ## 7. Unresolved technical risks
 
 - Migration of an already oversized legacy chat: one AEAD ciphertext plus its
   plaintext must fit in memory at once. Mitigated by migrating first, alone,
   with streaming parse; a chat that still cannot be read blocks the switch
-  (requirement 4) and needs a separate recovery path.
-- `ChatActivity` is ~15k lines with whole-history assumptions; PR 5 is the
-  largest and riskiest code change.
-- Restore through `ChatSetReplacementCoordinator` and the older on-device
-  `RecoveryBackupManager` (which snapshots `enc.chat_*` files) must both be
-  ported to `chats.db` in PR 4 or chats restored after the switch would be
-  ignored.
+  (requirement 4) and needs a separate recovery path. The same limit applies
+  to backing up such a chat from legacy storage in PR 3 (each legacy chat is
+  read whole); the streaming writer removes every other copy.
+- Restoring into legacy storage writes each chat as one whole value, as today;
+  a restored chat too large for that cannot land on the legacy target. It can
+  land on the database target after activation.
+- `ChatActivity` is ~15k lines with whole-history assumptions; PR 10 is the
+  largest and riskiest code change. Until then the compatibility layer gives
+  it whole histories exactly as today.
 - Model request building for huge documents remains in-memory.
 - The owner's chat set may already exceed 64 MiB, so Recovery Backup may be
-  failing now; originals cannot be removed until PR 8 lands.
+  failing now; PR 3 fixes that on current storage, before migration.
 
 ## 8. Instructions for the next session
 
 1. Read `CLAUDE.md`, then this file. Do not start from scratch.
-2. Check PR #145: if Android Checks on `c29fa62` are green, comment
-   `@codex review`; on a clean review resolve the one open thread
-   (`PRRT_kwDOSZQRks6tlexq`, Whisper auto-send, already fixed in `c29fa62`)
-   and merge into `beta/new-client`.
-3. Merge this documentation PR (after owner OK or as directed).
+2. Check PR #145: CI on `c29fa62` is green and Codex re-review was requested
+   October 18. On a clean review resolve the open thread
+   (`PRRT_kwDOSZQRks6tlexq`, Whisper auto-send, fixed in `c29fa62`). Merge only
+   when the owner directs.
+3. The plan PR merges when the owner directs.
 4. Start PR 2 from `beta/new-client`. The unreviewed stage 1 draft is in
-   `docs/handoff/stage1-unreviewed/`; move it into the source tree, add the
-   test class to the CI instrumented list, then add the interfaces from §4.2.
-5. Report to the owner briefly, with structure, only decisions that affect
+   `docs/handoff/stage1-unreviewed/`; move it into the source tree, add
+   `include_text_parts` to schema v1, add the test class to the CI instrumented
+   list, then add the interfaces from §4.2.
+5. Before PR 3 and PR 5, propose the new user-facing wording (backup failure
+   reasons; migration progress screen) and wait for approval before writing
+   it anywhere.
+6. Report to the owner briefly, with structure, only decisions that affect
    functionality, user experience, or data. Ask before adding any log line.
-6. Do not keep the session alive polling; check CI when needed.
+7. Do not keep the session alive polling; check CI when needed.
