@@ -84,5 +84,8 @@ class TypedValueCodecTest {
         assertNull(TypedValueCodec.decodeValue("""{"t":"l","v":9223372036854775808}"""))
         assertNull(TypedValueCodec.decodeMap("""{"a":{"t":"i","v":1.5}}"""))
         assertEquals(100, TypedValueCodec.decodeValue("""{"t":"i","v":1e2}"""))
+        assertNull(TypedValueCodec.decodeValue("""{"t":"f","v":1e100}"""))
+        assertNull(TypedValueCodec.decodeValue("""{"t":"f","v":1e-100}"""))
+        assertEquals(0f, TypedValueCodec.decodeValue("""{"t":"f","v":0.0}"""))
     }
 }

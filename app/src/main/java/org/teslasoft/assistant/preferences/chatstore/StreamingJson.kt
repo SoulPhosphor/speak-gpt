@@ -18,11 +18,15 @@ package org.teslasoft.assistant.preferences.chatstore
 
 import com.google.gson.JsonElement
 import com.google.gson.JsonParser
+import com.google.gson.JsonPrimitive
 import com.google.gson.Strictness
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import java.io.EOFException
 import java.io.Reader
+import java.io.Writer
+import java.nio.CharBuffer
 
 /**
  * Element-at-a-time reading of the JSON lists the app stores today (a chat's
@@ -79,6 +83,131 @@ internal object StreamingJson {
         while (reader.hasNext()) {
             if (!action(JsonParser.parseReader(reader))) return
         }
+    }
+
+    /**
+     * For each element of a list that [countObjectList] accepted, the
+     * top-level primitive values of the requested [names] (the last
+     * occurrence wins, as in the app's own read). A null element, or a name
+     * whose value is not a primitive, contributes nothing. Values of other
+     * names are skipped without being built.
+     */
+    fun collectFields(json: Reader, names: Set<String>): List<Map<String, JsonPrimitive>> {
+        val out = ArrayList<Map<String, JsonPrimitive>>()
+        val reader = lenientReader(json)
+        val first = try { reader.peek() } catch (_: EOFException) { return out }
+        if (first != JsonToken.BEGIN_ARRAY) return out
+        reader.beginArray()
+        while (reader.hasNext()) {
+            if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                reader.skipValue()
+                out.add(emptyMap())
+                continue
+            }
+            val fields = HashMap<String, JsonPrimitive>()
+            reader.beginObject()
+            while (reader.hasNext()) {
+                val name = reader.nextName()
+                if (name !in names) {
+                    reader.skipValue()
+                    continue
+                }
+                when (reader.peek()) {
+                    JsonToken.STRING -> fields[name] = JsonPrimitive(reader.nextString())
+                    JsonToken.BOOLEAN -> fields[name] = JsonPrimitive(reader.nextBoolean())
+                    else -> {
+                        fields.remove(name)
+                        reader.skipValue()
+                    }
+                }
+            }
+            reader.endObject()
+            out.add(fields)
+        }
+        return out
+    }
+
+    /**
+     * Visit each element of a list that [countObjectList] accepted without
+     * building it: [action] gets an [Element] whose JSON is copied straight
+     * from the stored text token by token when asked. An element [action]
+     * does not read is skipped. The JSON written is the same text
+     * `JsonElement.toString()` would give, so no copy of the element as a
+     * tree is ever made; only one string value at a time is held.
+     */
+    fun forEachElementStreamed(json: Reader, action: (Element) -> Boolean) {
+        val reader = lenientReader(json)
+        val first = try { reader.peek() } catch (_: EOFException) { return }
+        if (first != JsonToken.BEGIN_ARRAY) return
+        reader.beginArray()
+        while (reader.hasNext()) {
+            val element = Element(reader)
+            val keepGoing = action(element)
+            element.finish()
+            if (!keepGoing) return
+        }
+    }
+
+    /** One list element, readable once, during the visit that produced it. */
+    class Element internal constructor(private val reader: JsonReader) {
+        private var consumed = false
+        private var text: String? = null
+
+        /** The element's JSON as one string (kept, so it may be read again). */
+        fun asString(): String =
+            text ?: StringBuilder().also { copyTo(it) }.toString().also { text = it }
+
+        /** Write the element's JSON to [out]. */
+        fun copyTo(out: Appendable) {
+            text?.let {
+                out.append(it)
+                return
+            }
+            check(!consumed) { "element already read" }
+            consumed = true
+            val writer = JsonWriter(AppendableWriter(out)).apply { strictness = Strictness.LENIENT }
+            copyValue(reader, writer)
+            writer.flush()
+        }
+
+        internal fun finish() {
+            if (!consumed) {
+                consumed = true
+                reader.skipValue()
+            }
+        }
+    }
+
+    private fun copyValue(reader: JsonReader, writer: JsonWriter) {
+        var depth = 0
+        do {
+            when (reader.peek()) {
+                JsonToken.BEGIN_ARRAY -> { reader.beginArray(); writer.beginArray(); depth++ }
+                JsonToken.END_ARRAY -> { reader.endArray(); writer.endArray(); depth-- }
+                JsonToken.BEGIN_OBJECT -> { reader.beginObject(); writer.beginObject(); depth++ }
+                JsonToken.END_OBJECT -> { reader.endObject(); writer.endObject(); depth-- }
+                JsonToken.NAME -> writer.name(reader.nextName())
+                JsonToken.STRING -> writer.value(reader.nextString())
+                // The number's own text, as JsonElement.toString() keeps it.
+                JsonToken.NUMBER -> writer.jsonValue(reader.nextString())
+                JsonToken.BOOLEAN -> writer.value(reader.nextBoolean())
+                JsonToken.NULL -> { reader.nextNull(); writer.nullValue() }
+                JsonToken.END_DOCUMENT, null -> throw IllegalStateException("truncated element")
+            }
+        } while (depth > 0)
+    }
+
+    private class AppendableWriter(private val out: Appendable) : Writer() {
+        override fun write(cbuf: CharArray, off: Int, len: Int) {
+            out.append(CharBuffer.wrap(cbuf, off, len))
+        }
+
+        override fun write(str: String, off: Int, len: Int) {
+            out.append(str, off, off + len)
+        }
+
+        override fun flush() = Unit
+        override fun close() = Unit
     }
 
     private fun lenientReader(json: Reader): JsonReader =

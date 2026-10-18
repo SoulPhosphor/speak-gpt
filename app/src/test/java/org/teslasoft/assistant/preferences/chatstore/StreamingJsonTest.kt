@@ -24,6 +24,10 @@ import org.junit.Test
 
 class StreamingJsonTest {
 
+    private companion object {
+        val DUPLICATE_NAME_SAMPLES = setOf("""[{"a":null,"a":2}]""", """[{"n":{"x":1,"x":2}}]""")
+    }
+
     /** The app's own read of a stored list (ChatPreferences): null when it throws. */
     private fun gsonListSize(json: String): Int? = try {
         val type = TypeToken.getParameterized(ArrayList::class.java, HashMap::class.java).type
@@ -95,6 +99,47 @@ class StreamingJsonTest {
             listOf("""{"messageTime":1.7E12,"n":10}""", "null", """{"message":"<b>&</b>"}"""),
             seen
         )
+    }
+
+    @Test
+    fun streamedElementsMatchTheTreeTextForEverySample() {
+        for (json in samples) {
+            if (count(json) == StreamingJson.INVALID) continue
+            val tree = ArrayList<String>()
+            StreamingJson.forEachElement(StringReader(json)) { tree.add(it.toString()); true }
+            val streamed = ArrayList<String>()
+            StreamingJson.forEachElementStreamed(StringReader(json)) { streamed.add(it.asString()); true }
+            // Gson's tree keeps only the last of two same-named fields; the
+            // streamed copy keeps the stored text as it is.
+            if (json in DUPLICATE_NAME_SAMPLES) continue
+            assertEquals("sample: $json", tree, streamed)
+        }
+    }
+
+    @Test
+    fun streamedElementsCanBeSkippedOrCopiedOnce() {
+        val json = """[{"message":"one"},{"message":"two"},{"message":"three"}]"""
+        val seen = ArrayList<String>()
+        var index = 0
+        StreamingJson.forEachElementStreamed(StringReader(json)) { element ->
+            if (index++ != 1) seen.add(StringBuilder().also { element.copyTo(it) }.toString())
+            true
+        }
+        assertEquals(listOf("""{"message":"one"}""", """{"message":"three"}"""), seen)
+    }
+
+    @Test
+    fun collectFieldsTakesOnlyTopLevelPrimitives() {
+        val json = """[{"message_id":"a","isBot":true,"x":{"message_id":"inner"}},null,""" +
+            """{"isBot":"true","message_id":7,"message_id":"b"},{"message_id":{"o":1}}]"""
+        val fields = StreamingJson.collectFields(StringReader(json), setOf("message_id", "isBot"))
+        assertEquals(4, fields.size)
+        assertEquals("a", fields[0]["message_id"]?.asString)
+        assertEquals(true, fields[0]["isBot"]?.asBoolean)
+        assertEquals(emptyMap<String, Any>(), fields[1])
+        assertEquals("b", fields[2]["message_id"]?.asString)
+        assertEquals("true", fields[2]["isBot"]?.asString)
+        assertEquals(null, fields[3]["message_id"])
     }
 
     @Test

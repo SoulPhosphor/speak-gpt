@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences.chatstore
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonElement
+import com.google.gson.JsonPrimitive
 import java.io.StringReader
 import java.security.MessageDigest
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -92,7 +93,11 @@ class LegacyChatSource(context: Context) : ChatSource {
         val count = StreamingJson.countObjectList(StringReader(raw.json))
         if (count == StreamingJson.INVALID) return deferHistory(chatId, detectedDuring)
         if (count == 0) return emptyState(raw.keyPresent)
-        StreamingJson.forEachElement(StringReader(raw.json)) { action(messageOf(it)) }
+        val fields = StreamingJson.collectFields(StringReader(raw.json), LOOKUP_FIELDS)
+        var index = 0
+        StreamingJson.forEachElementStreamed(StringReader(raw.json)) { element ->
+            action(messageOf(element, fields[index++]))
+        }
         return ReadState.OK
     }
 
@@ -178,27 +183,28 @@ class LegacyChatSource(context: Context) : ChatSource {
         null
     }
 
-    private fun messageOf(element: JsonElement): ChatSource.Message {
-        if (!element.isJsonObject) return TextMessage(element.toString(), null, false)
-        val obj = element.asJsonObject
-        val id = obj.get(SearchableMessageProjection.MESSAGE_ID_KEY)
-            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
-            ?.asString
-        val bot = obj.get(IS_BOT_KEY)?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive?.let {
+    private fun messageOf(
+        element: StreamingJson.Element,
+        fields: Map<String, JsonPrimitive>
+    ): ChatSource.Message {
+        val id = fields[SearchableMessageProjection.MESSAGE_ID_KEY]?.takeIf { it.isString }?.asString
+        val bot = fields[IS_BOT_KEY]?.let {
             if (it.isBoolean) it.asBoolean else it.isString && it.asString == "true"
         } ?: false
-        return TextMessage(element.toString(), id, bot)
+        return StreamedMessage(element, id, bot)
     }
 
-    /** A legacy history is decrypted whole, so each message is already a string. */
-    private class TextMessage(
-        override val payloadJson: String,
+    /**
+     * A message copied straight from the decrypted history text when asked,
+     * never built as a tree, so the only extra copy is the payload itself.
+     */
+    private class StreamedMessage(
+        private val element: StreamingJson.Element,
         messageId: String?,
         isBot: Boolean
     ) : ChatSource.Message(messageId, isBot) {
-        override fun copyPayloadTo(out: Appendable) {
-            out.append(payloadJson)
-        }
+        override val payloadJson: String get() = element.asString()
+        override fun copyPayloadTo(out: Appendable) = element.copyTo(out)
     }
 
     companion object {
@@ -206,6 +212,7 @@ class LegacyChatSource(context: Context) : ChatSource {
         const val LIST_KEY = "data"
         const val HISTORY_KEY = "chat"
         private const val IS_BOT_KEY = "isBot"
+        private val LOOKUP_FIELDS = setOf(SearchableMessageProjection.MESSAGE_ID_KEY, IS_BOT_KEY)
         private const val TOKEN_PREFIX = "legacy:"
 
         fun historyFile(chatId: String): String = "chat_$chatId"

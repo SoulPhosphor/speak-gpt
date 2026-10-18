@@ -117,7 +117,12 @@ internal object TypedValueCodec {
             "l" -> exactNumber(v)?.let { runCatching { it.longValueExact() }.getOrNull() }
             "f" -> when {
                 !v.isJsonPrimitive -> null
-                v.asJsonPrimitive.isNumber -> v.asFloat
+                // A literal too large or too small for a float would become
+                // infinity or zero; that is invalid input, not a value.
+                v.asJsonPrimitive.isNumber -> exactNumber(v)?.let { exact ->
+                    val f = exact.toFloat()
+                    f.takeIf { it.isFinite() && (it != 0f || exact.signum() == 0) }
+                }
                 v.asJsonPrimitive.isString -> NON_FINITE_FLOATS[v.asString]
                 else -> null
             }

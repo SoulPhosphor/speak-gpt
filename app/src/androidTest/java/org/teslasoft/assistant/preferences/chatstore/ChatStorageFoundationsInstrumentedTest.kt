@@ -100,11 +100,18 @@ class ChatStorageFoundationsInstrumentedTest {
         ChatStore.open(context, key, ChatStore.CloseOnCorruption, "chat-foundations-${System.nanoTime()}.db")
             .also { stores.add(it) }
 
-    private fun messages(source: ChatSource, chatId: String): Pair<ReadState, List<ChatSource.Message>> {
-        val out = ArrayList<ChatSource.Message>()
-        val state = source.readHistory(chatId, DamagedChatOperation.RECOVERY_BACKUP) { out.add(it); true }
+    /** A message as read during the visit (payloads must be read then). */
+    private data class Read(val payloadJson: String, val messageId: String?, val isBot: Boolean)
+
+    private fun messages(source: ChatSource, chatId: String): Pair<ReadState, List<Read>> {
+        val out = ArrayList<Read>()
+        val state = source.readHistory(chatId, DamagedChatOperation.RECOVERY_BACKUP) {
+            out.add(Read(it.payloadJson, it.messageId, it.isBot))
+            true
+        }
         return state to out
     }
+
 
     /** Copy everything [legacy] holds into [store], the way migration will. */
     private fun copyInto(store: ChatStore, legacy: ChatSource) {
