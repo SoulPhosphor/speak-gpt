@@ -269,6 +269,44 @@ class ChatStoreInstrumentedTest {
     }
 
     @Test
+    fun malformedPayloads_areRefusedAndFailTheIntegrityCheck() {
+        val store = open()
+        store.putChat(chat("m"))
+        for (bad in listOf("not json", "\"text\"", "[1]", "{\"a\":1} {}", "{\"a\":1,\"a\":2}")) {
+            try {
+                store.appendMessage("m", ChatStore.MessageRow(null, false, bad))
+                fail("accepted $bad")
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        val seq = store.appendMessage("m", ChatStore.MessageRow(null, false, "null"))
+        try {
+            store.replaceMessage("m", seq, ChatStore.MessageRow(null, false, "oops"))
+            fail("replace accepted a malformed payload")
+        } catch (_: IllegalArgumentException) {
+        }
+        assertEquals(1, store.messageCount("m"))
+        assertTrue(store.integrityOk())
+
+        // A payload damaged after it was written is caught before the store is trusted.
+        store.writableDatabase.execSQL("UPDATE messages SET payload_json = 'oops' WHERE chat_id = 'm'")
+        assertFalse(store.integrityOk())
+    }
+
+    @Test
+    fun integrityCheck_requiresTheSavedListMarkerOnceChatsExist() {
+        val empty = open()
+        assertTrue(empty.integrityOk())
+        val store = open()
+        store.putChat(chat("k"))
+        assertTrue(store.integrityOk())
+        store.writableDatabase.execSQL("DELETE FROM meta WHERE key = 'list_saved'")
+        assertFalse(store.integrityOk())
+        store.writableDatabase.execSQL("INSERT INTO meta (key, value) VALUES ('list_saved', '2')")
+        assertFalse(store.integrityOk())
+    }
+
+    @Test
     fun listSaved_onlyOnceAChatExistsOrItIsMarked() {
         val a = open()
         assertFalse(a.listSaved())

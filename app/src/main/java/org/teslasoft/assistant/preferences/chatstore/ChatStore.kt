@@ -22,6 +22,7 @@ import android.database.Cursor
 import net.zetetic.database.DatabaseErrorHandler
 import net.zetetic.database.sqlcipher.SQLiteDatabase
 import net.zetetic.database.sqlcipher.SQLiteOpenHelper
+import java.io.StringReader
 import java.util.UUID
 
 /**
@@ -428,6 +429,7 @@ class ChatStore private constructor(
 
     /** Replace the content of the message with [seq]. False if it does not exist. */
     fun replaceMessage(chatId: String, seq: Long, row: MessageRow): Boolean = inTransaction { db ->
+        require(StreamingJson.isListElement(StringReader(row.payloadJson))) { "malformed message payload" }
         val rowId = rowIdOf(db, chatId, seq) ?: return@inTransaction false
         db.delete("message_parts", "message_row = ?", arrayOf(rowId.toString()))
         val stored = splitPayload(row.payloadJson)
@@ -563,10 +565,35 @@ class ChatStore private constructor(
         val highest = db.rawQuery("SELECT COALESCE(MAX(revision), 0) FROM chats", null)
             .use { it.moveToFirst(); it.getLong(0) }
         if (counter < highest) return false
+        // A stored chat proves the list was saved, so the marker must be set.
+        val listSaved = getMeta(META_LIST_SAVED)
+        if (listSaved != null && listSaved != "1") return false
+        val anyChat = db.rawQuery("SELECT 1 FROM chats LIMIT 1", null).use { it.moveToFirst() }
+        if (anyChat && listSaved == null) return false
         // Foreign keys cannot see a missing child row, so check that every
         // message is stored exactly one way and every split value is whole.
-        return SPLIT_CONSISTENCY_CHECKS.none { sql ->
-            db.rawQuery(sql, null).use { it.moveToFirst() }
+        if (SPLIT_CONSISTENCY_CHECKS.any { sql -> db.rawQuery(sql, null).use { it.moveToFirst() } }) return false
+        return allPayloadsReadable(db)
+    }
+
+    /** True when every stored message payload is one the app's read accepts. */
+    private fun allPayloadsReadable(db: SQLiteDatabase): Boolean {
+        var afterRowId = Long.MIN_VALUE
+        while (true) {
+            val page = db.rawQuery(
+                "SELECT row_id, payload_json IS NULL FROM messages WHERE row_id > ? ORDER BY row_id LIMIT ?",
+                arrayOf(afterRowId.toString(), DEFAULT_PAGE.toString())
+            ).use { c ->
+                val out = ArrayList<Pair<Long, Boolean>>(c.count)
+                while (c.moveToNext()) out.add(c.getLong(0) to (c.getInt(1) != 0))
+                out
+            }
+            if (page.isEmpty()) return true
+            for ((rowId, split) in page) {
+                val payload = if (split) readParts(db, rowId) else readInline(db, rowId)
+                if (!StreamingJson.isListElement(StringReader(payload))) return false
+            }
+            afterRowId = page.last().first
         }
     }
 
@@ -607,6 +634,8 @@ class ChatStore private constructor(
     }
 
     private fun insertMessage(db: SQLiteDatabase, chatId: String, seq: Long, row: MessageRow) {
+        // Readers trust every stored payload, so a malformed one is refused here.
+        require(StreamingJson.isListElement(StringReader(row.payloadJson))) { "malformed message payload" }
         val stored = splitPayload(row.payloadJson)
         val rowId = db.insertOrThrow("messages", null, ContentValues().apply {
             put("chat_id", chatId)

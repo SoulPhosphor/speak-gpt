@@ -71,6 +71,24 @@ internal object StreamingJson {
     }
 
     /**
+     * True when [json] is one list element the app's read accepts: an object
+     * (the same rules as each element in [countObjectList]) or `null`,
+     * followed by nothing but whitespace.
+     */
+    fun isListElement(json: Reader): Boolean = try {
+        val reader = lenientReader(json)
+        val readable = when (reader.peek()) {
+            JsonToken.NULL -> { reader.nextNull(); true }
+            JsonToken.BEGIN_OBJECT -> objectReadable(reader)
+            else -> false
+        }
+        reader.strictness = Strictness.LEGACY_STRICT
+        readable && reader.peek() == JsonToken.END_DOCUMENT
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
      * Visit each element of a list that [countObjectList] accepted, oldest
      * first, holding one element at a time. [action] returns false to stop.
      * Behavior is undefined for a list that was not checked first.

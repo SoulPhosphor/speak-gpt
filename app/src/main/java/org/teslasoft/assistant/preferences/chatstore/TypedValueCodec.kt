@@ -121,7 +121,12 @@ internal object TypedValueCodec {
                 // infinity or zero; that is invalid input, not a value.
                 v.asJsonPrimitive.isNumber -> exactNumber(v)?.let { exact ->
                     val f = exact.toFloat()
-                    f.takeIf { it.isFinite() && (it != 0f || exact.signum() == 0) }
+                    when {
+                        // BigDecimal has no negative zero; keep the sign written.
+                        exact.signum() == 0 -> if (v.asString.trimStart().startsWith("-")) -0f else 0f
+                        f.isFinite() && f != 0f -> f
+                        else -> null
+                    }
                 }
                 v.asJsonPrimitive.isString -> NON_FINITE_FLOATS[v.asString]
                 else -> null

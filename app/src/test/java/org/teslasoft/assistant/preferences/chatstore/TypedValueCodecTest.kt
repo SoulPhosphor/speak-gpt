@@ -61,6 +61,14 @@ class TypedValueCodecTest {
     }
 
     @Test
+    fun negativeZeroKeepsItsSign() {
+        val decoded = TypedValueCodec.decodeValue(TypedValueCodec.encodeValue(-0f)!!) as Float
+        assertEquals(java.lang.Float.floatToRawIntBits(-0f), java.lang.Float.floatToRawIntBits(decoded))
+        val positive = TypedValueCodec.decodeValue(TypedValueCodec.encodeValue(0f)!!) as Float
+        assertEquals(java.lang.Float.floatToRawIntBits(0f), java.lang.Float.floatToRawIntBits(positive))
+    }
+
+    @Test
     fun emptyMapRoundTrips() {
         assertEquals(emptyMap<String, Any>(), TypedValueCodec.decodeMap(TypedValueCodec.encodeMap(emptyMap())!!))
     }
