@@ -206,12 +206,36 @@ whole `shared_prefs` tree, including chat files).
   These stay on legacy files: they serve unmoved (damaged/locked) chats, and
   recovered chats are then imported (§4.3).
 
-**Chat IDs can change.** A chat-list row with no stored `"id"` takes its ID
-from its title (`Hash.hash(name)`), and `ChatPreferences.editChat` moves
-such a chat to a new ID on rename (`ChatRenameTransaction`,
-`RenameJournal`). `chats.db` supports this (`ON UPDATE CASCADE`,
-`ChatStore.renameChatId`, PR 2), and the compatibility layer keeps the same
-rename contract.
+**Chat identity (owner ruling, October 18 2026).** Stable chat identity was
+settled in August and September (Phase 8; `phase-8-regression-audit.md`,
+"Phase 8.1 repository-wide chat identity audit"; commit "Preserve chat IDs
+on rename and use stored IDs for direct lookups"). This project keeps it
+exactly and redoes none of it:
+
+- New chats have a stored random UUID `"id"`, and renaming never changes
+  it. Folders have stable UUIDs independent of their names.
+- Older chat-list rows without a stored `"id"` take their ID from the title
+  through `ChatPreferences.storedChatId` (the explicit `"id"`, else
+  `Hash.hash(name)`). This fallback is **intentional legacy compatibility**.
+  Migration never writes an `"id"` into such a row and never reassigns an
+  identity; list rows are copied verbatim.
+- Every reader gets a chat's identity only from `storedChatId` (Phase 8
+  source contracts enforce this). `LegacyChatSource` and migration use it;
+  the database keeps the invariant **`chats.chat_id` = `storedChatId` of its
+  stored list row**, checked by migration verification and the integrity
+  check.
+- Renaming an older no-ID chat moves it to the new title's ID, as today. The
+  compatibility layer keeps the existing contract and its steps: settings
+  copied and verified first; then the history move and the list-row pointer
+  flip as **one database transaction** (`ChatStore.renameChatId` plus the
+  row update, PR 2), replacing the file-level `ChatRenameTransaction` ladder
+  only for the history and list; then the existing follow-up moves
+  unchanged (`ImageGenerationJobRegistry.rename`,
+  `GeneratedImageCatalogStore.repointOriginChat`, attachment image and PDF
+  directories, `MemoryStore.repointChat`), with `RenameJournal` still
+  recording the move and retrying the memory re-point at startup.
+- A rename-journal entry still pending blocks migration (see "Startup
+  order"), so no chat is mid-move when it is copied.
 
 **Background work.** The app is one process, but chat storage is reached
 without any chat screen open: WorkManager (`AutoBackupWorker`,
