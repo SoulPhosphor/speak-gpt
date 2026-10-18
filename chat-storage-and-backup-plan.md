@@ -355,10 +355,12 @@ change when the database becomes authoritative.
   Background chat writers (image generation jobs, transcript capture,
   scheduled backups) must wait or be blocked during migration.
 - One chat at a time: read legacy `chat` string (unavoidably whole: the
-  EncryptedSharedPreferences value is one AEAD ciphertext), parse it with a
-  **streaming** Gson `JsonReader` element by element, write each element's
-  JSON (`JsonElement.toString()`, preserves number text) as a row inside one
-  transaction per chat, plus `list_row_json`, `prefs_json`.
+  EncryptedSharedPreferences value is one AEAD ciphertext), and read it
+  through `LegacyChatSource`, which copies each message token by token from
+  that text (no `JsonElement` tree; number text preserved) straight into the
+  staged row's parts via `copyPayloadTo`, inside one transaction per chat,
+  plus `list_row_json`, `prefs_json`. Verification compares the same way,
+  part by part, never building either side whole.
 - Verify per chat: stream the legacy string again and compare each element's
   JSON with the payload `DatabaseChatSource` returns for it in order (the
   **reassembled** payload, document text put back from `include_text_parts`,
@@ -368,8 +370,10 @@ change when the database becomes authoritative.
   a fingerprint of its other `chat_<id>` values, and its list row), plus
   tokens for the list and list values. On resume, a chat not marked verified **or whose legacy
   token has changed** since it was verified (an edit or restore between
-  attempts) is deleted from the staging DB and redone, and the switch
-  re-checks every token immediately before it happens.
+  attempts) is deleted from the staging DB and redone. When the list token
+  has changed, staged chats whose IDs are no longer in the current list
+  (deleted between attempts) are removed from the staging DB as well. The
+  switch re-checks every token immediately before it happens.
 - Locked / corrupt / failed chat **histories** (today's non-readable states,
   for chats the readable chat list names) are recorded `readable = 0` with no
   messages, keep their legacy file, and keep behaving as today (existing
@@ -426,13 +430,13 @@ qualify.
   `chat_list` and every `chats.db` field: v2 already carries list rows,
   messages, `settings.<id>`, referenced folders and the content-modified
   time; derived keys (search revision and fingerprints) are rebuilt, not
-  backed up. If any user-data state is not represented, including
-  `history_saved` (MISSING vs EMPTY) or other `prefs_json` / `list_state`
-  entries, PR 3 introduces `schemaVersion` 3 carrying it, before activation,
-  so a database backup restores losslessly. Otherwise output stays
-  v2-equivalent (tested against `serializeV2` on small sets). Restore keeps
-  reading versions 1 and 2 (`LegacyChatConversion`, current v2) via the
-  streaming reader.
+  backed up. v2 cannot represent `history_saved` (it writes MISSING and
+  EMPTY both as an empty `messages` array), so **PR 3 introduces
+  `schemaVersion` 3**, carrying `history_saved` and any other user-data
+  `prefs_json` / `list_state` entries the audit finds, so a database backup
+  restores losslessly. Restore keeps reading versions 1 and 2
+  (`LegacyChatConversion`, current v2) via the streaming reader, and reads
+  v3.
 - Semantic validation streams the file; it checks structure, counts, IDs,
   references (PDF assets via `PdfAttachmentPortableBackup.requiredHashes`
   equivalents computed while streaming), not just bytes.
@@ -504,8 +508,9 @@ qualify.
   references. Text format stays as is.
 - Incremental selection uses the `ChatSource` change token (§4.2 item 7;
   `store_id` + `chats.revision` on the database) + export options + format
-  version + locale + **time zone** (rendered timestamps depend on it, as in
-  today's `ReadableChatFormats.renderFingerprint`) + folder/name changes. On legacy storage the token is the
+  version + locale + **time zone** + **speaker names** (the chat username
+  and current companion; rendered timestamps and labels depend on them, as
+  in today's `ReadableChatFormats.renderFingerprint`) + folder/name changes. On legacy storage the token is the
   existing whole-history fingerprint, so the same code works before and after
   activation.
 - Viewer side (separate repo, later): add a `speakgpt` provider detected by
@@ -585,7 +590,7 @@ serializers, and PR 8 to rewrite them again. In the revised order:
 | 0 | Finish PR #145 (message limit) | — | CI green on `c29fa62` (done), Codex re-review, merge | merged |
 | 1 | Plan in repo | — | This file + `project-plan.md` Feature 0 | merged |
 | 2 | Storage foundations (#147) | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, Gson-compatible streaming list reader; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
-| 3 | Recovery Backup write + verification | 2 | Streaming `chats.json` writer and reader for the backup format, from `ChatSource` (v2-equivalent, `schemaVersion` 2); streaming semantic validation; capture consistency; `CHATS_JSON_BYTES` and other memory-only ceilings replaced by free-space checks and malformed-archive guards; distinct failure reasons (wording approved by owner **before** code); backup receipt (§4.5) | over-64 MiB chat set backs up and verifies on emulator from legacy storage and from a test database; output matches `serializeV2` on small sets; **owner confirms on device that a full backup of current data succeeds** |
+| 3 | Recovery Backup write + verification | 2 | Key audit; streaming `chats.json` writer and reader for backup format `schemaVersion` 3 (§4.5), from `ChatSource`; streaming semantic validation; capture consistency; `CHATS_JSON_BYTES` and other memory-only ceilings replaced by free-space checks and malformed-archive guards; distinct failure reasons (wording approved by owner **before** code); backup receipt (§4.5) | over-64 MiB chat set backs up and verifies on emulator from legacy storage and from a test database; v3 output carries everything `serializeV2` carries plus `history_saved` (compared on small sets); MISSING and EMPTY histories round-trip distinctly; **owner confirms on device that a full backup of current data succeeds** |
 | 4 | Recovery restore | 2, 3 | Streaming reader (v1 and v2) into a staged `chats.db`; validation of the staged set; merge planning and rollback snapshot without whole-set memory; both commit targets (§4.2 item 6); commit via `ChatSetReplacementCoordinator` to either target; `chats.db` health check and repair from a verified backup (§4.1); `ChatRestoreManager` / `RecoveryBackupManager` on the same path | over-64 MiB round trip on legacy target and on database target; every older package version restores; rollback at each step; existing restore UI unchanged |
 | 5 | Migration engine (activation off) | 2, 4 | Copy + verify + durable progress + resume; the verified staged `chats.db` is published through PR 4's database commit target (the journaled `DirectDatabaseRestoreCoordinator` path), never a separate swap; document text moved into `include_text_parts`, with `DatabaseChatSource` reassembling full payloads; damaged/locked chats; gating of chat UI and background writers; progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
 | 6 | Compatibility layer (activation off) | 2 | Repaired or unlocked unmoved chats imported into the authoritative row (§4.3); `ChatPreferences` and every listed caller (§3) read and write through `ChatSource`/`ChatStore` by authority; list metadata without parsing histories; search index, transcript backfill, image catalog, damaged-chat flows through the same layer | caller tests pass with authority = legacy (production) and authority = database (test); app behavior unchanged |
