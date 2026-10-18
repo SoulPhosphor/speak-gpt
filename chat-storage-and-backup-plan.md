@@ -249,7 +249,8 @@ Schema v1 (as written in the stage 1 draft):
 - `chats(chat_id PK, list_order, list_row_json, prefs_json, readable, revision,
   history_saved)` — `list_row_json` is the chat-list row exactly as stored;
   `prefs_json` holds every other key of `enc.chat_<id>` with its type;
-  `revision` increments on every change to that chat; `history_saved` keeps a
+  `revision` is owned by the database and increments on every change to that
+  chat, including list-row, preference and readability updates; `history_saved` keeps a
   never-saved history (MISSING) distinct from a saved empty one (EMPTY).
 - `messages(row_id PK, chat_id FK ON DELETE CASCADE, seq, message_id, is_bot,
   payload_json NULL, UNIQUE(chat_id, seq))` — `payload_json` is the message
@@ -513,7 +514,7 @@ serializers, and PR 8 to rewrite them again. In the revised order:
 | 2 | Storage foundations (#147) | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, Gson-compatible streaming list reader; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
 | 3 | Recovery Backup write + verification | 2 | Streaming `chats.json` writer and reader for the backup format, from `ChatSource` (v2-equivalent, `schemaVersion` 2); streaming semantic validation; capture consistency; `CHATS_JSON_BYTES` and other memory-only ceilings replaced by free-space checks and malformed-archive guards; distinct failure reasons (wording approved by owner **before** code); backup receipt (§4.5) | over-64 MiB chat set backs up and verifies on emulator from legacy storage and from a test database; output matches `serializeV2` on small sets; **owner confirms on device that a full backup of current data succeeds** |
 | 4 | Recovery restore | 2, 3 | Streaming reader (v1 and v2) into a staged `chats.db`; validation of the staged set; merge planning and rollback snapshot without whole-set memory; both commit targets (§4.2 item 6); commit via `ChatSetReplacementCoordinator` to either target; `ChatRestoreManager` / `RecoveryBackupManager` on the same path | over-64 MiB round trip on legacy target and on database target; every older package version restores; rollback at each step; existing restore UI unchanged |
-| 5 | Migration engine (activation off) | 2 | Copy + verify + durable progress + resume; document text moved into `include_text_parts`, with `DatabaseChatSource` reassembling full payloads; damaged/locked chats; gating of chat UI and background writers; progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
+| 5 | Migration engine (activation off) | 2, 4 | Copy + verify + durable progress + resume; the verified staged `chats.db` is published through PR 4's database commit target (the journaled `DirectDatabaseRestoreCoordinator` path), never a separate swap; document text moved into `include_text_parts`, with `DatabaseChatSource` reassembling full payloads; damaged/locked chats; gating of chat UI and background writers; progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
 | 6 | Compatibility layer (activation off) | 2 | `ChatPreferences` and every listed caller (§3) read and write through `ChatSource`/`ChatStore` by authority; list metadata without parsing histories; search index, transcript backfill, image catalog, damaged-chat flows through the same layer | caller tests pass with authority = legacy (production) and authority = database (test); app behavior unchanged |
 | 7 | Readable Backup + memory export streaming | 2 | Versioned per-chat JSON, change-token incremental selection, streaming `MemoryExporter` | tests on both storages; format documented for the viewer |
 | 8 | Activation readiness verification | 3–7 | End-to-end instrumented suite: legacy data → migrate → Recovery Backup from database → verify → restore into a clean install and into the legacy target → compare with the original legacy content; restore of a pre-migration backup after migration; backup receipts name the right source and `store_id` before and after migration; heap measured on a 256 MB heap through the whole cycle | all green; readiness gate met |
@@ -524,7 +525,8 @@ serializers, and PR 8 to rewrite them again. In the revised order:
 | 13 | Original-file removal | 9 | Automatic journaled removal after the first verified post-activation Recovery Backup, proven by its receipt (§4.4, §4.5) | tests incl. interruption; damaged files never removed |
 | — | Viewer importer | 7 | in `claude-history-viewer` repo | separate project |
 
-PRs 3, 5, 6 and 7 depend only on PR 2 (and PR 4 on PR 3), so they may be
+PRs 3, 6 and 7 depend only on PR 2; PR 4 depends on PR 3, and PR 5 on PR 4
+(it publishes through PR 4's database commit target). Otherwise they may be
 built in any order after PR 2; the readiness gate is what matters.
 
 ### Readiness gate (required before PR 9)
