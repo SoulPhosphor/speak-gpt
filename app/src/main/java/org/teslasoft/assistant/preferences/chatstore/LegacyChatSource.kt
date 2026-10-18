@@ -103,6 +103,8 @@ class LegacyChatSource(context: Context) : ChatSource {
 
     override fun changeToken(chatId: String): String? {
         val raw = readRaw(historyFile(chatId), HISTORY_KEY) as? Raw.Value ?: return null
+        // A stored history the reader would not deliver gets no token.
+        if (StreamingJson.countObjectList(StringReader(raw.json)) == StreamingJson.INVALID) return null
         val digest = MessageDigest.getInstance("SHA-256").digest(raw.json.toByteArray(Charsets.UTF_8))
         return TOKEN_PREFIX + digest.joinToString("") { "%02x".format(it) }
     }

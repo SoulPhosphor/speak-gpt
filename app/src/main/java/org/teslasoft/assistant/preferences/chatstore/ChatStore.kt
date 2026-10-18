@@ -162,10 +162,11 @@ class ChatStore private constructor(
 
     /**
      * Add [chat], or update an existing chat's list row, values and state.
-     * The revision belongs to the database: [StoredChat.revision] is used only
-     * as the starting value of a new chat, and every update advances the
-     * stored revision, so a stale or re-read [StoredChat] can never leave a
-     * change undetected or move the revision backward.
+     * The revision and history-saved flag belong to the database:
+     * [StoredChat.revision] and [StoredChat.historySaved] are used only as the
+     * starting values of a new chat. Every update advances the stored revision
+     * and keeps the stored flag, so a stale or re-read [StoredChat] can never
+     * hide a change, move the revision backward, or un-save a history.
      */
     fun putChat(chat: StoredChat) = inTransaction { db ->
         val values = ContentValues().apply {
@@ -173,7 +174,6 @@ class ChatStore private constructor(
             put("list_row_json", chat.listRowJson)
             put("prefs_json", chat.prefsJson)
             put("readable", if (chat.readable) 1 else 0)
-            put("history_saved", if (chat.historySaved) 1 else 0)
         }
         // UPDATE first: INSERT OR REPLACE would delete the row and cascade
         // away the chat's messages.
@@ -181,6 +181,7 @@ class ChatStore private constructor(
         if (updated == 0) {
             values.put("chat_id", chat.chatId)
             values.put("revision", chat.revision)
+            values.put("history_saved", if (chat.historySaved) 1 else 0)
             db.insertOrThrow("chats", null, values)
         } else {
             db.execSQL("UPDATE chats SET revision = revision + 1 WHERE chat_id = ?", arrayOf(chat.chatId))

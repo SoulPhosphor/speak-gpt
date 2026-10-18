@@ -210,6 +210,9 @@ class ChatStorageFoundationsInstrumentedTest {
         assertEquals(ReadState.OK, messages(database, "fa3").first)
         store.deleteMessage("fa3", seq)
         assertEquals(ReadState.EMPTY, messages(database, "fa3").first)
+        // Updating list metadata from the original, unsaved StoredChat keeps it saved.
+        store.putChat(ChatStore.StoredChat("fa3", 0, "{\"name\":\"x\"}", "{}", readable = true, revision = 0, historySaved = false))
+        assertEquals(ReadState.EMPTY, messages(database, "fa3").first)
     }
 
     @Test
@@ -260,6 +263,14 @@ class ChatStorageFoundationsInstrumentedTest {
             .readHistory("fa1", DamagedChatOperation.RECOVERY_BACKUP) { delivered++; true }
         assertEquals(ReadState.CORRUPT, state)
         assertEquals(0, delivered)
+    }
+
+    @Test
+    fun unreadableLegacyHistory_hasNoChangeToken() {
+        writeLegacy()
+        SecurePrefs.get(context, "chat_fa1").edit()
+            .putString(LegacyChatSource.HISTORY_KEY, """[{"message":"cut off""").commit()
+        assertNull(LegacyChatSource(context).changeToken("fa1"))
     }
 
     @Test
