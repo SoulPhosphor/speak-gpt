@@ -1560,7 +1560,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // prepareTypedTurn refuses an over-limit message, and nothing then
         // re-arms the microphone, so an engaged hands-free conversation ends
         // here the same way the Whisper refusal ends it.
-        if (MessageLengthLimit.exceeds(prefix + recognizedText + endSeparator) &&
+        val storedForm = storedFormOfTypedSend(recognizedText)
+        if (storedForm != null && MessageLengthLimit.exceeds(storedForm) &&
             preferences?.getHandsFreeMode() == true && !handsFreeStopped
         ) {
             stopHandsFreeLoop("transcript over the message limit", notify = true)
@@ -8660,6 +8661,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val prompt: String = preferences!!.getPrompt()
 
             if (prompt.toString() != "" && prompt.toString() != "null" && prompt != "") {
+                // An over-limit activation prompt is refused like any other
+                // send: nothing is stored or sent, and it waits in the
+                // message box.
+                if (MessageLengthLimit.exceeds(prompt)) {
+                    insertTranscriptIntoBox(prompt)
+                    showMessageTooLong(prompt)
+                    return
+                }
                 putMessage(prompt, false)
 
                 chatMessages.add(
@@ -10279,11 +10288,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         // Checked before anything else happens, so a refused message leaves
-        // the composer, keyboard and any pending regeneration untouched. The
-        // limit applies to the message as stored, prefix and end separator
-        // included.
-        val storedForm = prefix + rawMessage + endSeparator
-        if (MessageLengthLimit.exceeds(storedForm)) {
+        // the composer, keyboard and any pending regeneration untouched.
+        val storedForm = storedFormOfTypedSend(rawMessage)
+        if (storedForm != null && MessageLengthLimit.exceeds(storedForm)) {
             showMessageTooLong(storedForm)
             return
         }
@@ -10524,6 +10531,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun formatTokenCount(value: Int): String =
         NumberFormat.getIntegerInstance().format(value)
+
+    /**
+     * The message a typed or spoken send would store: prefix, text and end
+     * separator, with a leading compact command removed the same way
+     * [prepareTypedTurn] removes it. Null for a compact command with no
+     * message, which stores nothing. The message limit measures this.
+     */
+    private fun storedFormOfTypedSend(rawMessage: String): String? =
+        when (val parsed = org.teslasoft.assistant.util.summarizer.CompactCommand.parse(rawMessage)) {
+            org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.NotCompact ->
+                prefix + rawMessage + endSeparator
+            org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.CompactOnly -> null
+            is org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.CompactAndSend ->
+                prefix + parsed.message + endSeparator
+        }
 
     private fun showMessageTooLong(text: String) {
         showRequestHardBlock(
