@@ -320,7 +320,11 @@ Define these in the database PR so later PRs don't rewrite each other:
    crash-safe, journaled `DirectDatabaseRestoreCoordinator`, extended to
    chats, rather than a second swap mechanism) and *legacy write* (write each
    chat from the staged database into `enc.chat_<id>` / `enc.chat_list`, the
-   way restore writes today). The legacy target is **not temporary**: legacy
+   way restore writes today). Per-chat settings (`settings.<id>`) are not in
+   `chats.db` under either storage: a restore stages the backup's typed
+   settings beside the staged database, and **both** targets apply them and
+   roll them back with the chats, as `ConvertedChatRecoveryArchive` does today.
+   The legacy target is **not temporary**: legacy
    storage stays authoritative on any device where migration has not
    succeeded (requirement 4), so restore must be able to land there. It is
    retired only with the legacy store itself.
@@ -351,7 +355,9 @@ change when the database becomes authoritative.
   JSON (`JsonElement.toString()`, preserves number text) as a row inside one
   transaction per chat, plus `list_row_json`, `prefs_json`.
 - Verify per chat: stream the legacy string again and compare each element's
-  JSON with the stored payload in order, count included; compare list row and
+  JSON with the payload `DatabaseChatSource` returns for it in order (the
+  **reassembled** payload, document text put back from `include_text_parts`,
+  never the stored reference form), count included; compare list row and
   prefs. Record per-chat progress durably (`meta` keys); a chat not marked
   verified is deleted from the staging DB and redone on resume.
 - Locked / corrupt / failed chat **histories** (today's non-readable states,
