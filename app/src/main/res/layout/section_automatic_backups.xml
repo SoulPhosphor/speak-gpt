@@ -47,7 +47,7 @@
     <LinearLayout style="@style/Widget.App.Page.ControlRow">
         <com.google.android.material.progressindicator.CircularProgressIndicator
             android:id="@+id/spinner_auto_status"
-            style="@style/Widget.Material3.CircularProgressIndicator.ExtraSmall"
+            style="@style/Widget.App.Restore.ProgressSpinner"
             android:indeterminate="true"
             android:visibility="gone" />
         <LinearLayout style="@style/Widget.App.Row.TextColumn">
