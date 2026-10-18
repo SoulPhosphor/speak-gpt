@@ -375,9 +375,11 @@ change when the database becomes authoritative.
   messages, keep their legacy file, and keep behaving as today (existing
   damaged-chat flows operate on the legacy file). They don't block the switch.
   When such a file becomes readable again (the lock clears) or
-  `DamagedChatRepair` recovers it, the history is imported into the
-  authoritative row and verified in one transaction before the repair counts
-  as complete, so it reads normally and is included in backups (stage 6).
+  `DamagedChatRepair` recovers it, its **complete** state (history and every
+  other `chat_<id>` value, which a locked file could not provide at
+  migration) is imported into the authoritative row and verified in one
+  transaction before the repair counts as complete, so it reads normally and
+  is included in backups (stage 6).
 - A chat **list** that is not readable (LOCKED, CORRUPT or FAILED), or list
   values (folders and the like) that cannot be read, **blocks migration**:
   without the list the chats, their rows, folders and order cannot be
@@ -453,9 +455,12 @@ qualify.
 - The older on-device restore (`ChatRestoreManager`, `RecoveryBackupManager`)
   moves onto the same staged-database and commit-target path in the same PR.
 - Capture consistency: keep `PortableBackupCaptureStability` /
-  `PortableBackupMutationTokens`; with `chats.db`, capture from a single read
-  transaction or a `VACUUM INTO`-style snapshot so chats, settings and
-  attachments come from one moment.
+  `PortableBackupMutationTokens`, and **add the chat storage's generation to
+  the mutation tokens** (the `chats.db` store-wide revision counter and
+  `store_id`; on legacy storage the existing chat-file tokens). A change to
+  chats, `settings.<id>` or attachments between the before and after tokens
+  refuses or retries the capture, so a database snapshot never ships beside
+  newer external state.
 - **Limits:** remove `CHATS_JSON_BYTES` as a memory ceiling. Replace with:
   free-space check before writing (staged size estimate × safety factor, using
   `ImportStorageGuard`-style reserve), and bounded parsing protections against
@@ -482,6 +487,10 @@ qualify.
 
 - Keep current behavior: title-based filenames, folder options, text/JSON
   choice, speaker naming, Include Thinking, no token accounting.
+- **Both formats stream.** The text format keeps its exact output, but
+  `ReadableChatFormats.formatText` and the ZIP entry are written
+  incrementally from `ChatSource` (headers, then each message), never built
+  as one `String` or `ByteArray`.
 - JSON entries become **versioned per-chat JSON**, written streaming:
   `format` (e.g. `"phosphor-readable-chat"`), `format_version`, `app`,
   `chat_id`, `name`, `folder_name`, `exported_at`, and `messages` with
