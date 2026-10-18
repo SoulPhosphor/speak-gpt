@@ -60,8 +60,7 @@ upgrade, not a redesign.
 | Startup out-of-memory crash fix | PR #144, merged into `beta/new-client` | Done. |
 | 200,000-character message limit | PR #145, merged into `beta/new-client` | Done. |
 | Stage 1, this plan | PR #146 | Merged when its review is clean. |
-| Stage 2, storage foundations | PR #147, branch `chat-storage/pr2-foundations` | Merged when its review is clean. |
-| Stage 3, Recovery Backup write | PR #148, branch `chat-storage/pr3-recovery-backup` (based on #147; retarget to `beta/new-client` after #147 merges) | Merged when its review is clean. Then the owner confirms on device that a full backup succeeds. |
+| Stages 2 and 3, storage foundations and Recovery Backup write | PR #148, branch `chat-storage/pr3-recovery-backup`, into `beta/new-client` (replaces #147, closed) | Merged when its review is clean. Then the owner confirms on device that a full backup succeeds. |
 | Stages 4–13 | not started | See §8 for the session guide. |
 
 **Interim restore limit (until stage 4).** After stage 3, Recovery Backups of
@@ -748,7 +747,7 @@ serializers, and PR 8 to rewrite them again. In the revised order:
 |---|---|---|---|---|
 | 0 | Finish PR #145 (message limit) | — | CI green on `c29fa62` (done), Codex re-review, merge | merged |
 | 1 | Plan in repo | — | This file + `project-plan.md` Feature 0 | merged |
-| 2 | Storage foundations (#147) | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`, chat ID moves), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, Gson-compatible streaming list reader; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
+| 2 | Storage foundations (in #148 with stage 3) | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`, chat ID moves), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, Gson-compatible streaming list reader; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
 | 3 | Recovery Backup write + verification | 2 | Key audit; streaming `chats.json` writer and reader for backup format `schemaVersion` 3 (§4.5), from `ChatSource`; streaming semantic validation; capture consistency; `CHATS_JSON_BYTES` and other memory-only ceilings replaced by free-space checks and malformed-archive guards; distinct failure reasons (wording approved by owner **before** code); backup receipt (§4.5) | over-64 MiB chat set backs up and verifies on emulator from legacy storage and from a test database; v3 output carries everything `serializeV2` carries plus `history_saved` (compared on small sets); MISSING and EMPTY histories round-trip distinctly; **owner confirms on device that a full backup of current data succeeds** |
 | 4 | Recovery restore | 2, 3 | Streaming reader (v1 and v2) into a staged `chats.db`; validation of the staged set; merge planning and rollback snapshot without whole-set memory; both commit targets (§4.2 item 6); commit via `ChatSetReplacementCoordinator` to either target; `chats.db` health check and repair from a verified backup (§4.1); `ChatRestoreManager` / `RecoveryBackupManager` on the same path | over-64 MiB round trip on legacy target and on database target; every older package version restores; rollback at each step; existing restore UI unchanged |
 | 5 | Migration engine (activation off) | 2, 4 | Copy + verify + durable progress + resume; the verified staged `chats.db` is published through PR 4's database commit target (the journaled `DirectDatabaseRestoreCoordinator` path), never a separate swap; document text moved into `include_text_parts`, with `DatabaseChatSource` reassembling full payloads; damaged/locked chats; startup placement and preconditions, process-wide write gate, pending conversations settled first (§3 storage audit); progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
@@ -853,7 +852,7 @@ it (merged into `beta/new-client`), and stops.
 
 | Session | Stages | Start when | Needs owner approval before code |
 |---|---|---|---|
-| A | 4: Recovery restore (streaming, both commit targets, `chats.db` repair) | #146, #147 and #148 are merged and the owner has confirmed on device that a full Recovery Backup succeeds | Any new or changed restore message or log line |
+| A | 4: Recovery restore (streaming, both commit targets, `chats.db` repair) | #146 and #148 are merged and the owner has confirmed on device that a full Recovery Backup succeeds | Any new or changed restore message or log line |
 | B | 5: Migration engine, activation off | A merged | The migration progress screen wording and layout; any log line |
 | C | 6: Compatibility layer, activation off | B merged (may run before B if the owner prefers; it depends only on stage 2) | Any log line |
 | D | 7: Human-Readable Backup and memory export streaming | Any time after stage 2; usually after C | Any change to what the user sees; any log line |
