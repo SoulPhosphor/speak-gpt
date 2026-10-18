@@ -1557,6 +1557,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // composer if storage refuses that commit; no request starts early.
         messageInput?.setText(recognizedText)
         messageInput?.setSelection(recognizedText.length)
+        // prepareTypedTurn refuses an over-limit message, and nothing then
+        // re-arms the microphone, so an engaged hands-free conversation ends
+        // here the same way the Whisper refusal ends it.
+        if (MessageLengthLimit.exceeds(recognizedText) &&
+            preferences?.getHandsFreeMode() == true && !handsFreeStopped
+        ) {
+            stopHandsFreeLoop("transcript over the message limit", notify = true)
+        }
         prepareTypedTurn(recognizedText)
     }
 
