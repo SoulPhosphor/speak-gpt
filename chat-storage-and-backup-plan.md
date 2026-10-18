@@ -481,6 +481,20 @@ Each PR: branch from current `beta/new-client`, Android Checks green,
 `@codex review`, address findings, merge when the owner directs. No PR changes
 user-visible behavior except where stated.
 
+**Stages and PR boundaries (owner ruling, October 18 2026).** The numbers below
+are stages in dependency order, not a required PR count. The implementer may
+combine closely related stages into one PR when that reduces duplicated work
+or simplifies integration, while keeping each PR reviewable and testable.
+These boundaries stay separate regardless:
+
+- Activation (stage 9) is its own PR, merged only after the readiness gate.
+- Original-file removal (stage 13) is its own PR, after activation.
+- The Recovery Backup writer (stage 3) lands before restore (stage 4) so the
+  owner can confirm on device that current data backs up.
+
+Planned grouping: stages 11 and 12 (paged readers and on-demand document
+text) form one PR; other groupings are decided as each stage is reached.
+
 ### Why this order
 
 The owner ruled that the new backup and restore system must be built and
