@@ -183,9 +183,9 @@ class ChatsArtifactScannerTest {
     }
 
     @Test
-    fun spaceEstimateCountsStagedDataThreeTimesAndFilesTwice() {
+    fun spaceEstimateCountsEveryCopyThatCoexistsDuringVerification() {
         assertEquals(
-            3L * 100L + 2L * 50L + PortableBackupSpaceEstimate.RESERVE_BYTES,
+            5L * 100L + 4L * 50L + PortableBackupSpaceEstimate.RESERVE_BYTES,
             PortableBackupSpaceEstimate.required(100L, 50L)
         )
         assertEquals(0L, PortableBackupSpaceEstimate.Check(10L, 20L).shortfallBytes)

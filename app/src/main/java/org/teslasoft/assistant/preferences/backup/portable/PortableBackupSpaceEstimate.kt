@@ -58,8 +58,11 @@ internal object PortableBackupSpaceEstimate {
     }
 
     /** Pure arithmetic, separated for tests. */
+    // Peak during verification: staged artifacts, the first inner zip, the
+    // finished package, the decoded inner zip and the re-extracted artifacts
+    // coexist (five copies of staged data; four of files read in place).
     fun required(stagedSourceBytes: Long, readInPlaceBytes: Long): Long =
-        3L * stagedSourceBytes + 2L * readInPlaceBytes + RESERVE_BYTES
+        5L * stagedSourceBytes + 4L * readInPlaceBytes + RESERVE_BYTES
 
     private fun treeBytes(root: File?): Long {
         if (root == null || !root.exists()) return 0L
