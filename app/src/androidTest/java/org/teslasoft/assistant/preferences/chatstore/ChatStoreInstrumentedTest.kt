@@ -218,6 +218,30 @@ class ChatStoreInstrumentedTest {
     }
 
     @Test
+    fun revision_isNeverRepeatedWhenAChatIsRecreated() {
+        val store = open()
+        store.putChat(chat("again"))
+        store.appendMessage("again", row("old history"))
+        val old = store.revision("again")!!
+        store.deleteChat("again")
+        store.putChat(chat("again"))
+        store.appendMessage("again", row("new history"))
+        assertTrue(store.revision("again")!! > old)
+    }
+
+    @Test
+    fun listSaved_onlyOnceAChatExistsOrItIsMarked() {
+        val a = open()
+        assertFalse(a.listSaved())
+        a.putChat(chat("l"))
+        a.deleteChat("l")
+        assertTrue(a.listSaved())
+        val b = open()
+        b.markListSaved()
+        assertTrue(b.listSaved())
+    }
+
+    @Test
     fun listState_roundTrips() {
         val store = open()
         store.putListState("folders", """[{"id":"f1","name":"Stories"}]""")

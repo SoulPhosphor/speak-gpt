@@ -62,7 +62,11 @@ interface ChatSource {
         action: (Message) -> Boolean
     ): ReadState
 
-    /** The chat's other stored values (everything except its messages). */
+    /**
+     * The other values stored in the chat's own file `chat_<id>` (everything
+     * except its messages). Per-chat settings live in `settings.<id>`, which
+     * is not chat storage and stays where it is under both sources.
+     */
     fun readChatValues(chatId: String): ValuesRead
 
     /** The chat list file's other stored values (folders and the like). */

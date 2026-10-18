@@ -36,7 +36,12 @@ class DatabaseChatSource(
 
     override fun readList(): ChatSource.ListRead = try {
         val chats = store.listChats().map { ChatSource.ChatEntry(it.chatId, it.listRowJson) }
-        ChatSource.ListRead(if (chats.isEmpty()) ReadState.EMPTY else ReadState.OK, chats)
+        val state = when {
+            chats.isNotEmpty() -> ReadState.OK
+            store.listSaved() -> ReadState.EMPTY
+            else -> ReadState.MISSING
+        }
+        ChatSource.ListRead(state, chats)
     } catch (_: Exception) {
         ChatSource.ListRead(ReadState.FAILED, emptyList())
     }

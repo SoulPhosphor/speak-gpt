@@ -201,6 +201,16 @@ class ChatStorageFoundationsInstrumentedTest {
     }
 
     @Test
+    fun databaseSource_keepsAnUnsavedListMissing() {
+        val store = openStore()
+        val database = DatabaseChatSource(store, LegacyChatSource(context))
+        assertEquals(ReadState.MISSING, LegacyChatSource(context).readList().state)
+        assertEquals(ReadState.MISSING, database.readList().state)
+        store.markListSaved()
+        assertEquals(ReadState.EMPTY, database.readList().state)
+    }
+
+    @Test
     fun databaseSource_keepsMissingDistinctFromEmpty() {
         val store = openStore()
         val database = DatabaseChatSource(store, LegacyChatSource(context))

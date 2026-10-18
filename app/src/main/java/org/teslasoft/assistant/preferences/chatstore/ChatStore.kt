@@ -71,6 +71,7 @@ class ChatStore private constructor(
         val listRowJson: String,
         val prefsJson: String,
         val readable: Boolean,
+        /** Read from the database; ignored when writing (see [putChat]). */
         val revision: Long,
         /** False when the chat's history has never been saved (the app's
          *  MISSING state, distinct from a saved empty history). Any message
@@ -141,6 +142,9 @@ class ChatStore private constructor(
         // later revision-based change check can't confuse two stores whose
         // revision counters happen to match.
         putMeta(db, META_STORE_ID, UUID.randomUUID().toString())
+        // Revisions come from one store-wide counter, so a chat deleted and
+        // recreated under the same ID never repeats an earlier revision.
+        putMeta(db, META_REVISION_COUNTER, "0")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -162,11 +166,12 @@ class ChatStore private constructor(
 
     /**
      * Add [chat], or update an existing chat's list row, values and state.
-     * The revision and history-saved flag belong to the database:
-     * [StoredChat.revision] and [StoredChat.historySaved] are used only as the
-     * starting values of a new chat. Every update advances the stored revision
-     * and keeps the stored flag, so a stale or re-read [StoredChat] can never
-     * hide a change, move the revision backward, or un-save a history.
+     * The revision belongs to the database: every insert and update takes the
+     * next value of the store-wide counter, and [StoredChat.revision] is
+     * ignored. [StoredChat.historySaved] is used only when the chat is
+     * created; updates keep the stored flag. So a stale or re-read
+     * [StoredChat] can never hide a change, move the revision backward, or
+     * un-save a history. Adding a chat also marks the list as saved.
      */
     fun putChat(chat: StoredChat) = inTransaction { db ->
         val values = ContentValues().apply {
@@ -180,13 +185,26 @@ class ChatStore private constructor(
         val updated = db.update("chats", values, "chat_id = ?", arrayOf(chat.chatId))
         if (updated == 0) {
             values.put("chat_id", chat.chatId)
-            values.put("revision", chat.revision)
+            values.put("revision", nextRevision(db))
             values.put("history_saved", if (chat.historySaved) 1 else 0)
             db.insertOrThrow("chats", null, values)
+            putMeta(db, META_LIST_SAVED, "1")
         } else {
-            db.execSQL("UPDATE chats SET revision = revision + 1 WHERE chat_id = ?", arrayOf(chat.chatId))
+            db.execSQL(
+                "UPDATE chats SET revision = ? WHERE chat_id = ?",
+                arrayOf<Any>(nextRevision(db), chat.chatId)
+            )
         }
     }
+
+    /**
+     * Whether the chat list has ever been saved: false only for a store that
+     * has never held a chat or been marked, the app's MISSING list state.
+     */
+    fun listSaved(): Boolean = getMeta(META_LIST_SAVED) == "1"
+
+    /** Record a saved list that holds no chats (the app's EMPTY list state). */
+    fun markListSaved() = putMeta(writableDatabase, META_LIST_SAVED, "1")
 
     fun getChat(chatId: String): StoredChat? =
         readableDatabase.rawQuery(
@@ -520,9 +538,23 @@ class ChatStore private constructor(
 
     private fun bumpRevision(db: SQLiteDatabase, chatId: String) {
         db.execSQL(
-            "UPDATE chats SET revision = revision + 1, history_saved = 1 WHERE chat_id = ?",
-            arrayOf(chatId)
+            "UPDATE chats SET revision = ?, history_saved = 1 WHERE chat_id = ?",
+            arrayOf<Any>(nextRevision(db), chatId)
         )
+    }
+
+    /** Advance the store-wide revision counter. Callers hold a transaction. */
+    private fun nextRevision(db: SQLiteDatabase): Long {
+        db.execSQL(
+            "UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = ?",
+            arrayOf(META_REVISION_COUNTER)
+        )
+        return db.rawQuery(
+            "SELECT CAST(value AS INTEGER) FROM meta WHERE key = ?", arrayOf(META_REVISION_COUNTER)
+        ).use { c ->
+            check(c.moveToFirst()) { "revision counter missing" }
+            c.getLong(0)
+        }
     }
 
     private class RawRow(
@@ -588,6 +620,8 @@ class ChatStore private constructor(
         private const val DATABASE_VERSION = 1
         const val META_SCHEMA = "schema"
         const val META_STORE_ID = "store_id"
+        private const val META_REVISION_COUNTER = "revision_counter"
+        private const val META_LIST_SAVED = "list_saved"
 
         /** Largest payload kept in one column; longer ones go to message_parts. */
         const val PART_CHARS = 128 * 1024
