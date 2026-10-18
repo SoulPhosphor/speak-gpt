@@ -10529,10 +10529,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * Whisper auto-send commits the transcript directly instead of going
      * through [prepareTypedTurn]. An over-limit transcript is refused the
      * same way: it is placed in the message box and nothing is sent.
+     * Nothing re-arms the microphone after a refusal, so an engaged
+     * hands-free conversation is ended (with the stopped-listening cue)
+     * rather than left showing Stop while not listening.
      */
     private fun refuseOverLimitTranscript(transcription: String): Boolean {
         if (!MessageLengthLimit.exceeds(transcription)) return false
         transcriptionInProgress = false
+        if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) {
+            stopHandsFreeLoop("transcript over the message limit", notify = true)
+        }
         restoreUIState()
         insertTranscriptIntoBox(transcription)
         showMessageTooLong(transcription)
