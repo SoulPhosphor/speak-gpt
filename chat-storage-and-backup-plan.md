@@ -59,7 +59,7 @@ upgrade, not a redesign.
 |---|---|---|
 | Startup out-of-memory crash fix | merged into `beta/new-client` via PR #144 (merge commit `42ba0c8`) | **Done.** Beta APK rebuilt and published (`beta-latest`). Owner has not yet confirmed on device. |
 | 200,000-character message limit | PR #145, branch `ccr-2aeea9b3-5i4mu4`, head `c29fa62` | **Not merged.** First Codex review found the Whisper auto-send gap; fixed in `c29fa62`, reply posted on the thread. Android Checks on `c29fa62` passed (both jobs green); `@codex review` re-requested October 18. Next: on a clean review resolve the thread; merge only when the owner directs. |
-| Stage 1 chat database (`ChatStore`) | Moved into PR 2 (#147, `preferences/chatstore/`) | Reviewed and corrected there; CI green. |
+| Stage 1 chat database (`ChatStore`) | Moved into PR 2 (#147, `preferences/chatstore/`) | Reviewed and corrected there. |
 
 ### What PR #144 changed (already on beta)
 
