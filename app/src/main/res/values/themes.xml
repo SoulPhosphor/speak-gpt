@@ -2834,10 +2834,12 @@
     </style>
     <style name="AppButton.Primary.RestoreSelection" parent="AppButton.Primary">
         <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">@dimen/restore_primary_action_gap</item>
     </style>
     <style name="AppButton.Primary.RestoreDatabase" parent="AppButton.Primary">
         <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">@dimen/restore_inline_gap</item>
     </style>
     <style name="Widget.App.Restore.DatabaseTypeGroup" parent="Widget.App.Restore.Category">
