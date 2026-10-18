@@ -19,11 +19,13 @@ package org.teslasoft.assistant.preferences.chatstore
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
+import com.google.gson.Gson
 import net.zetetic.database.DatabaseErrorHandler
 import net.zetetic.database.sqlcipher.SQLiteDatabase
 import net.zetetic.database.sqlcipher.SQLiteOpenHelper
 import java.io.StringReader
 import java.util.UUID
+import org.teslasoft.assistant.util.Hash
 
 /**
  * Encrypted per-message chat storage (chat-storage-and-backup-plan.md §4.1).
@@ -239,15 +241,18 @@ class ChatStore private constructor(
 
     /**
      * Move a chat and everything stored with it from [oldId] to [newId] in
-     * one transaction (the app's title-derived ID moves on rename). False if
-     * [oldId] does not exist or [newId] is already taken; nothing changes.
+     * one transaction (the app's title-derived ID moves on rename), storing
+     * [listRowJson], the renamed list row whose ID is [newId], in the same
+     * transaction. False if [oldId] does not exist or [newId] is already
+     * taken; nothing changes.
      */
-    fun renameChatId(oldId: String, newId: String): Boolean = inTransaction { db ->
+    fun renameChatId(oldId: String, newId: String, listRowJson: String): Boolean = inTransaction { db ->
+        require(chatIdOf(listRowJson) == newId) { "list row does not name the new ID" }
         if (oldId == newId) return@inTransaction rowIdExists(db, oldId)
         if (!rowIdExists(db, oldId) || rowIdExists(db, newId)) return@inTransaction false
         db.execSQL(
-            "UPDATE chats SET chat_id = ?, revision = ? WHERE chat_id = ?",
-            arrayOf<Any>(newId, nextRevision(db), oldId)
+            "UPDATE chats SET chat_id = ?, list_row_json = ?, revision = ? WHERE chat_id = ?",
+            arrayOf<Any>(newId, listRowJson, nextRevision(db), oldId)
         )
         true
     }
@@ -591,7 +596,34 @@ class ChatStore private constructor(
         // Foreign keys cannot see a missing child row, so check that every
         // message is stored exactly one way and every split value is whole.
         if (SPLIT_CONSISTENCY_CHECKS.any { sql -> db.rawQuery(sql, null).use { it.moveToFirst() } }) return false
+        if (!allChatIdsMatchTheirRows(db)) return false
         return allPayloadsReadable(db)
+    }
+
+    /** True when every chat is keyed by the ID its stored list row resolves to. */
+    private fun allChatIdsMatchTheirRows(db: SQLiteDatabase): Boolean =
+        db.rawQuery("SELECT chat_id, list_row_json FROM chats", null).use { c ->
+            while (c.moveToNext()) {
+                if (chatIdOf(c.getString(1)) != c.getString(0)) return@use false
+            }
+            true
+        }
+
+    /**
+     * The ID the app gives a list row ([ChatPreferences.storedChatId]: the
+     * stored `id`, else the title's hash), read the way the app reads the
+     * list, or null when the app could not use the row.
+     */
+    private fun chatIdOf(listRowJson: String): String? = try {
+        @Suppress("UNCHECKED_CAST")
+        val row = Gson().fromJson(listRowJson, HashMap::class.java) as Map<String, Any?>?
+        when (val id = row?.get("id")) {
+            null -> row?.let { Hash.hash(it["name"].toString()) }
+            is String -> id
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
     }
 
     /** True when every stored message payload is one the app's read accepts. */

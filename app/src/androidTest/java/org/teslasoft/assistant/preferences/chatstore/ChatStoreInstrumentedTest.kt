@@ -255,9 +255,10 @@ class ChatStoreInstrumentedTest {
         store.putIncludeText("old", seq, "inc", "document")
         val before = store.revision("old")!!
 
-        assertFalse(store.renameChatId("old", "taken"))
-        assertFalse(store.renameChatId("missing", "new"))
-        assertTrue(store.renameChatId("old", "new"))
+        assertFalse(store.renameChatId("old", "taken", chat("taken").listRowJson))
+        assertFalse(store.renameChatId("missing", "new", chat("new").listRowJson))
+        assertTrue(store.renameChatId("old", "new", chat("new").listRowJson))
+        assertEquals(chat("new").listRowJson, store.getChat("new")?.listRowJson)
 
         assertNull(store.getChat("old"))
         assertEquals(0, store.messageCount("old"))
@@ -280,14 +281,14 @@ class ChatStoreInstrumentedTest {
         }
         advanced { store.markListSaved() }
         advanced { store.putChat(chat("g")) }
-        advanced { store.putChat(chat("g").copy(listRowJson = """{"name":"Renamed"}""")) }
+        advanced { store.putChat(chat("g").copy(listRowJson = """{"name":"Renamed","id":"g"}""")) }
         var seq = 0L
         advanced { seq = store.appendMessage("g", row("hi")) }
         advanced { store.replaceMessage("g", seq, row("hello")) }
         advanced { store.putIncludeText("g", seq, "inc", "text") }
         advanced { store.deleteIncludeText("g", seq, "inc") }
         advanced { store.putListState("folders", "[]") }
-        advanced { store.renameChatId("g", "h") }
+        advanced { store.renameChatId("g", "h", chat("h").listRowJson) }
         advanced { store.deleteMessage("h", seq) }
         advanced { store.deleteChat("h") }
         assertTrue(store.integrityOk())
@@ -316,6 +317,31 @@ class ChatStoreInstrumentedTest {
         // A payload damaged after it was written is caught before the store is trusted.
         store.writableDatabase.execSQL("UPDATE messages SET payload_json = 'oops' WHERE chat_id = 'm'")
         assertFalse(store.integrityOk())
+    }
+
+    @Test
+    fun integrityCheck_requiresEachChatKeyedByItsListRowId() {
+        val store = open()
+        store.putChat(chat("u"))
+        val titled = org.teslasoft.assistant.util.Hash.hash("Old title")
+        store.putChat(chat(titled).copy(listRowJson = """{"name":"Old title"}"""))
+        assertTrue(store.integrityOk())
+
+        store.putChat(chat("u").copy(listRowJson = """{"name":"Chat u","id":"other"}"""))
+        assertFalse(store.integrityOk())
+        store.putChat(chat("u"))
+        store.putChat(chat(titled).copy(listRowJson = """{"name":"New title"}"""))
+        assertFalse(store.integrityOk())
+
+        // A rename moves the ID and its row together, or not at all.
+        val renamed = org.teslasoft.assistant.util.Hash.hash("New title")
+        try {
+            store.renameChatId(titled, renamed, """{"name":"Wrong"}""")
+            fail("rename accepted a row naming another ID")
+        } catch (_: IllegalArgumentException) {
+        }
+        assertTrue(store.renameChatId(titled, renamed, """{"name":"New title"}"""))
+        assertTrue(store.integrityOk())
     }
 
     @Test

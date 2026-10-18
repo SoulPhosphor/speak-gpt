@@ -110,16 +110,23 @@ internal object StreamingJson {
      * whose value is not a primitive, contributes nothing. Values of other
      * names are skipped without being built.
      */
-    fun collectFields(json: Reader, names: Set<String>): List<Map<String, JsonPrimitive>> {
-        val out = ArrayList<Map<String, JsonPrimitive>>()
+    fun collectFields(json: Reader, names: Set<String>): List<Map<String, JsonPrimitive>> =
+        fieldsOneAtATime(json, names).asSequence().toList()
+
+    /**
+     * The same fields as [collectFields], one element at a time, so a caller
+     * walking the list alongside [forEachElementStreamed] holds only the
+     * current element's fields.
+     */
+    fun fieldsOneAtATime(json: Reader, names: Set<String>): Iterator<Map<String, JsonPrimitive>> = iterator {
         val reader = lenientReader(json)
-        val first = try { reader.peek() } catch (_: EOFException) { return out }
-        if (first != JsonToken.BEGIN_ARRAY) return out
+        val first = try { reader.peek() } catch (_: EOFException) { return@iterator }
+        if (first != JsonToken.BEGIN_ARRAY) return@iterator
         reader.beginArray()
         while (reader.hasNext()) {
             if (reader.peek() != JsonToken.BEGIN_OBJECT) {
                 reader.skipValue()
-                out.add(emptyMap())
+                yield(emptyMap())
                 continue
             }
             val fields = HashMap<String, JsonPrimitive>()
@@ -140,9 +147,8 @@ internal object StreamingJson {
                 }
             }
             reader.endObject()
-            out.add(fields)
+            yield(fields)
         }
-        return out
     }
 
     /**

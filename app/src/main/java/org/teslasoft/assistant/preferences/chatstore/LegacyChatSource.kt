@@ -93,10 +93,9 @@ class LegacyChatSource(context: Context) : ChatSource {
         val count = StreamingJson.countObjectList(StringReader(raw.json))
         if (count == StreamingJson.INVALID) return deferHistory(chatId, detectedDuring)
         if (count == 0) return emptyState(raw.keyPresent)
-        val fields = StreamingJson.collectFields(StringReader(raw.json), LOOKUP_FIELDS)
-        var index = 0
+        val fields = StreamingJson.fieldsOneAtATime(StringReader(raw.json), LOOKUP_FIELDS)
         StreamingJson.forEachElementStreamed(StringReader(raw.json)) { element ->
-            action(messageOf(element, fields[index++]))
+            action(messageOf(element, fields.next()))
         }
         return ReadState.OK
     }

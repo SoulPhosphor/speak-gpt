@@ -343,7 +343,7 @@ class ChatStorageFoundationsInstrumentedTest {
     @Test
     fun stagedDatabase_validatesAndDiscardsCompletely() {
         val stage = StagedChatDatabase.create(context, "test", key).also { stages.add(it) }
-        stage.store.putChat(ChatStore.StoredChat("s", 0, "{}", "{}", readable = true, revision = 0))
+        stage.store.putChat(ChatStore.StoredChat("s", 0, "{\"id\":\"s\"}", "{}", readable = true, revision = 0))
         stage.store.appendMessage("s", ChatStore.MessageRow(null, false, """{"message":"staged"}"""))
         assertTrue(stage.validate())
         assertTrue(stage.databaseName in StagedChatDatabase.leftovers(context))
@@ -355,7 +355,7 @@ class ChatStorageFoundationsInstrumentedTest {
     @Test
     fun stagedDatabase_leftoverFromAnInterruptionCanBeFoundAndDiscarded() {
         val stage = StagedChatDatabase.create(context, "test", key)
-        stage.store.putChat(ChatStore.StoredChat("s", 0, "{}", "{}", readable = true, revision = 0))
+        stage.store.putChat(ChatStore.StoredChat("s", 0, "{\"id\":\"s\"}", "{}", readable = true, revision = 0))
         stage.close()
         assertTrue(stage.databaseName in StagedChatDatabase.leftovers(context))
         assertTrue(StagedChatDatabase.discardLeftover(context, stage.databaseName))
