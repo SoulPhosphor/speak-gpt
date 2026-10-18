@@ -57,9 +57,20 @@ upgrade, not a redesign.
 
 | Item | Where | State |
 |---|---|---|
-| Startup out-of-memory crash fix | merged into `beta/new-client` via PR #144 (merge commit `42ba0c8`) | **Done.** Beta APK rebuilt and published (`beta-latest`). Owner has not yet confirmed on device. |
-| 200,000-character message limit | PR #145, branch `ccr-2aeea9b3-5i4mu4`, head `c29fa62` | **Not merged.** First Codex review found the Whisper auto-send gap; fixed in `c29fa62`, reply posted on the thread. Android Checks on `c29fa62` passed (both jobs green); `@codex review` re-requested October 18. Next: on a clean review resolve the thread; merge only when the owner directs. |
-| Stage 1 chat database (`ChatStore`) | Moved into PR 2 (#147, `preferences/chatstore/`) | Reviewed and corrected there. |
+| Startup out-of-memory crash fix | PR #144, merged into `beta/new-client` | Done. |
+| 200,000-character message limit | PR #145, merged into `beta/new-client` | Done. |
+| Stage 1, this plan | PR #146 | Merged when its review is clean. |
+| Stage 2, storage foundations | PR #147, branch `chat-storage/pr2-foundations` | Merged when its review is clean. |
+| Stage 3, Recovery Backup write | PR #148, branch `chat-storage/pr3-recovery-backup` (based on #147; retarget to `beta/new-client` after #147 merges) | Merged when its review is clean. Then the owner confirms on device that a full backup succeeds. |
+| Stages 4–13 | not started | See §8 for the session guide. |
+
+**Interim restore limit (until stage 4).** After stage 3, Recovery Backups of
+any size can be created and verified, but the current restore engine still
+reads the chats artifact whole. It refuses a chats artifact over 64 MiB with
+the existing "too large" message
+(`PortableRecoveryLimits.WHOLE_READ_RESTORE_CHATS_JSON_BYTES`). Stage 4 removes
+this limit. Chats in the app are not affected; smaller backups restore as
+before.
 
 ### What PR #144 changed (already on beta)
 
@@ -270,6 +281,15 @@ remains their database side), but on the beta they are not expected to
 occur. Migration verification and the PR 8 end-to-end suite include a
 chat list with UUID, frozen-hash and no-`"id"` rows to prove each keeps
 its identity and references.
+
+**Restore freezes an absent ID (existing behavior, kept).** Recovery restore
+writes each chat's declared ID into `"id"` in every backup format, v3
+included (`PortableChatRestorePlan`). A no-`"id"` row therefore comes back
+with its title hash frozen as an explicit ID: the same identity, the same
+references, but a later rename no longer moves it. This is the Phase 8
+restore behavior and is not changed; v3 does not record whether `"id"` was
+absent. The stage 8 comparison treats an absent `"id"` and an explicit
+`"id"` equal to the title hash as the same identity for restored rows.
 
 **Background work.** The app is one process, but chat storage is reached
 without any chat screen open: WorkManager (`AutoBackupWorker`,
@@ -794,19 +814,64 @@ Activation may not be merged until all of these hold:
 - The owner's chat set may already exceed 64 MiB, so Recovery Backup may be
   failing now; PR 3 fixes that on current storage, before migration.
 
-## 8. Instructions for the next session
+## 8. Session guide (one session per stage group)
 
-1. Read `CLAUDE.md`, then this file. Do not start from scratch.
-2. Check PR #145: CI on `c29fa62` is green and Codex re-review was requested
-   October 18. On a clean review resolve the open thread
-   (`PRRT_kwDOSZQRks6tlexq`, Whisper auto-send, fixed in `c29fa62`). Merge only
-   when the owner directs.
-3. The plan PR merges when the owner directs.
-4. PR 2 is #147 (branch `chat-storage/pr2-foundations`). Later PRs branch
-   from `beta/new-client` once it merges, or stack on it until then.
-5. Before PR 3 and PR 5, propose the new user-facing wording (backup failure
-   reasons; migration progress screen) and wait for approval before writing
-   it anywhere.
-6. Report to the owner briefly, with structure, only decisions that affect
-   functionality, user experience, or data. Ask before adding any log line.
-7. Do not keep the session alive polling; check CI when needed.
+The project is split across separate sessions so no session runs out of
+context partway through a stage. Each session takes the group below, finishes
+it (merged into `beta/new-client`), and stops.
+
+### Rules for every session
+
+1. Read `CLAUDE.md`, then this file. Work only on `beta/new-client`; never
+   touch `main`.
+2. Branch from current `beta/new-client`. Inspect the current code before
+   changing it; the earlier stages' code is the source of truth, not this
+   file's summaries.
+3. User-facing wording, new log lines, and any change to what the user sees
+   need owner approval **before** any code. Ask in chat, in the decision
+   format from `CLAUDE.md`, and stop until answered.
+4. Develop with self-review and Android Checks. The local environment cannot
+   compile the app; CI is the compile check. Push validated, grouped changes,
+   not one fix at a time.
+5. **Codex review limits.** Request Codex (`@codex review` comment) only once
+   the PR is complete and CI is green. Gather all of its findings and fix them
+   in one push. Request at most one re-review. If findings remain after that,
+   bring them to the owner as a short list with a recommendation instead of
+   starting another round. Never request Codex after every fix, and never
+   leave review rounds running overnight.
+6. Do not set up PR watching, polling or scheduled check-ins the owner did not
+   ask for. Check CI only while a run is in progress.
+7. Report briefly and with structure. Bring only approvals and real blockers
+   to the owner.
+8. **End of session handoff (required).** When the session's work is merged,
+   or the session must stop early, update §2 (status) and this section with
+   what was done and what remains. Then give the owner, in chat, the exact
+   message to paste into the next session and when to start it (for example,
+   "after you confirm the backup on your phone"). Do this without being asked.
+
+### Session groups
+
+| Session | Stages | Start when | Needs owner approval before code |
+|---|---|---|---|
+| A | 4: Recovery restore (streaming, both commit targets, `chats.db` repair) | #146, #147 and #148 are merged and the owner has confirmed on device that a full Recovery Backup succeeds | Any new or changed restore message or log line |
+| B | 5: Migration engine, activation off | A merged | The migration progress screen wording and layout; any log line |
+| C | 6: Compatibility layer, activation off | B merged (may run before B if the owner prefers; it depends only on stage 2) | Any log line |
+| D | 7: Human-Readable Backup and memory export streaming | Any time after stage 2; usually after C | Any change to what the user sees; any log line |
+| E | 8: Readiness verification | A–D merged | None expected (tests only) |
+| F | 9: Activation (its own PR) | E merged and the readiness gate in §5 met | Owner makes a new Recovery Backup before installing; owner confirms on device |
+| G | 10: Paged chat screen and sending | F merged and confirmed | Owner confirms on device |
+| H | 11 and 12: paged search, list, summaries; documents on demand (one PR) | F merged | Any log line |
+| I | 13: Original-file removal (its own PR) | F merged and a verified post-activation Recovery Backup exists | Any log line |
+
+The storage work may pause between any two sessions so the owner can take
+other work first. Nothing in the app is at risk while it is paused; the only
+open limit is the interim restore limit in §2 until session A is done.
+
+### Message to start the next session
+
+> Continue the chat storage plan on `beta/new-client`, session X
+> (stages N). Read `CLAUDE.md` and `chat-storage-and-backup-plan.md` first,
+> follow §8 of the plan, and at the end give me the handoff message for the
+> next session.
+
+Replace X and N with the next row of the table above.
