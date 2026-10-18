@@ -61,7 +61,7 @@ object PdfAttachmentPortableBackup {
      * against its recorded size and hash. Same rules as the whole-artifact
      * overload, without parsing the chats artifact into memory.
      */
-    fun buildArtifacts(context: Context, refs: List<ChatsArtifactScanner.PdfRef>): Result {
+    internal fun buildArtifacts(context: Context, refs: List<ChatsArtifactScanner.PdfRef>): Result {
         return try {
             val artifacts = ArrayList<PortablePackage.Artifact>()
             val seen = HashSet<String>()
