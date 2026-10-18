@@ -255,6 +255,14 @@ never moves it, because `editChat` moves only rows without `"id"`. Those IDs
 are stable even though they are not in UUID form, and changing them would
 be a reassignment, which is ruled out.
 
+The owner's chats were most likely transferred on **September 7 2026**. The
+converter's UUID assignment landed the day before (commit "Convert legacy
+chats without touching live storage", September 6), and the September 7
+code already replaced title-derived IDs with new UUIDs, so chats transferred
+that way should all hold UUIDs. Which exact build ran the transfer is not
+recorded in the repository; the on-device counts-only check (owner approval
+needed later) can confirm it.
+
 **Conclusion: no additional identity migration is needed.** Migration copies
 identities as they are. The no-`"id"` fallback and its rename move path stay
 supported in both storages as compatibility (and `ChatStore.renameChatId`
