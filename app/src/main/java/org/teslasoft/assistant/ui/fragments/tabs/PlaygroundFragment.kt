@@ -51,6 +51,7 @@ import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
 import com.aallam.openai.client.OpenAIHost
 import com.aallam.openai.client.RetryStrategy
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.loadingindicator.LoadingIndicator
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +70,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.ReportAIContentBottomSheet
+import org.teslasoft.assistant.util.MessageLengthLimit
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.connectionAbortMessage
 import org.teslasoft.assistant.playground.PlaygroundRunner
@@ -218,6 +220,22 @@ class PlaygroundFragment : Fragment() {
 
         btnRun?.setOnClickListener {
             val input = editTextIn?.text?.toString().orEmpty()
+            // Refused before anything is stored or sent; the text stays in
+            // the input box.
+            if (MessageLengthLimit.exceeds(input)) {
+                MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.message_too_long_title)
+                    .setMessage(
+                        getString(
+                            R.string.message_too_long_send_body,
+                            MessageLengthLimit.formatCount(MessageLengthLimit.characterCount(input)),
+                            MessageLengthLimit.formatCount(MessageLengthLimit.MAX_CHARACTERS)
+                        )
+                    )
+                    .setPositiveButton(R.string.okay, null)
+                    .show()
+                return@setOnClickListener
+            }
             if (pendingConversation) {
                 val committed = (activity as? PendingCommitHost)
                     ?.commitPendingPlaygroundTurn(input) == true
