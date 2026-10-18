@@ -39,8 +39,21 @@ interface ChatSource {
 
     class ListRead(val state: ReadState, val chats: List<ChatEntry>)
 
-    /** One stored message, with the two fields used for lookups pulled out. */
-    class Message(val payloadJson: String, val messageId: String?, val isBot: Boolean)
+    /**
+     * One stored message, with the two fields used for lookups pulled out.
+     * Read the payload during the [readHistory] visit that delivered it.
+     */
+    abstract class Message(val messageId: String?, val isBot: Boolean) {
+        /** The whole payload JSON as one string. */
+        abstract val payloadJson: String
+
+        /**
+         * Write the payload JSON to [out]. Bounded-memory consumers (backups,
+         * exports) use this: a source may hold only part of a very large
+         * message at a time.
+         */
+        abstract fun copyPayloadTo(out: Appendable)
+    }
 
     /** Stored preference values (types kept), or the reason they could not be read. */
     class ValuesRead(val state: ReadState, val values: Map<String, Any>)

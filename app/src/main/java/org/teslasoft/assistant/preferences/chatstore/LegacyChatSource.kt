@@ -179,7 +179,7 @@ class LegacyChatSource(context: Context) : ChatSource {
     }
 
     private fun messageOf(element: JsonElement): ChatSource.Message {
-        if (!element.isJsonObject) return ChatSource.Message(element.toString(), null, false)
+        if (!element.isJsonObject) return TextMessage(element.toString(), null, false)
         val obj = element.asJsonObject
         val id = obj.get(SearchableMessageProjection.MESSAGE_ID_KEY)
             ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
@@ -187,7 +187,18 @@ class LegacyChatSource(context: Context) : ChatSource {
         val bot = obj.get(IS_BOT_KEY)?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive?.let {
             if (it.isBoolean) it.asBoolean else it.isString && it.asString == "true"
         } ?: false
-        return ChatSource.Message(element.toString(), id, bot)
+        return TextMessage(element.toString(), id, bot)
+    }
+
+    /** A legacy history is decrypted whole, so each message is already a string. */
+    private class TextMessage(
+        override val payloadJson: String,
+        messageId: String?,
+        isBot: Boolean
+    ) : ChatSource.Message(messageId, isBot) {
+        override fun copyPayloadTo(out: Appendable) {
+            out.append(payloadJson)
+        }
     }
 
     companion object {

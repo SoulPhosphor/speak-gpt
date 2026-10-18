@@ -201,6 +201,24 @@ class ChatStorageFoundationsInstrumentedTest {
     }
 
     @Test
+    fun databaseSource_reportsAChangeDuringTheReadAsFailed() {
+        val store = openStore()
+        val database = DatabaseChatSource(store, LegacyChatSource(context))
+        store.putChat(ChatStore.StoredChat("fa1", 0, "{}", "{}", readable = true, revision = 0))
+        store.replaceAllMessages("fa1", (0 until 5).asSequence().map {
+            ChatStore.MessageRow(null, false, """{"message":"m$it"}""")
+        })
+        val state = database.readHistory("fa1", DamagedChatOperation.RECOVERY_BACKUP) { message ->
+            if (message.payloadJson.contains("m0")) {
+                store.appendMessage("fa1", ChatStore.MessageRow(null, false, """{"message":"late"}"""))
+            }
+            true
+        }
+        assertEquals(ReadState.FAILED, state)
+        assertEquals(ReadState.OK, messages(database, "fa1").first)
+    }
+
+    @Test
     fun databaseSource_keepsAnUnsavedListMissing() {
         val store = openStore()
         val database = DatabaseChatSource(store, LegacyChatSource(context))

@@ -26,8 +26,10 @@ import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
  * into the database, so only its list row was copied) is still read from its
  * original file through [unmovedChats], so it keeps behaving exactly as it did.
  *
- * A database error part-way through is reported as FAILED; per the
- * [ChatSource.readHistory] contract the caller then discards what it received.
+ * A database error part-way through, or any change to the chat while it is
+ * being read (its revision moved), is reported as FAILED; per the
+ * [ChatSource.readHistory] contract the caller then discards what it
+ * received, so a reader never accepts a mix of two versions.
  */
 class DatabaseChatSource(
     private val store: ChatStore,
@@ -59,10 +61,11 @@ class DatabaseChatSource(
         if (!chat.readable) return unmovedChats.readHistory(chatId, detectedDuring, action)
         return try {
             var any = false
-            store.forEachMessage(chatId) { stored ->
+            store.forEachMessageRef(chatId) { ref ->
                 any = true
-                action(ChatSource.Message(stored.payloadJson, stored.messageId, stored.isBot))
+                action(RefMessage(ref))
             }
+            if (store.revision(chatId) != chat.revision) return ReadState.FAILED
             when {
                 any -> ReadState.OK
                 chat.historySaved -> ReadState.EMPTY
@@ -108,6 +111,13 @@ class DatabaseChatSource(
         }
     } catch (_: Exception) {
         null
+    }
+
+    /** Payload read from the database only when asked, part by part if split. */
+    private class RefMessage(private val ref: ChatStore.MessageRef) :
+        ChatSource.Message(ref.messageId, ref.isBot) {
+        override val payloadJson: String get() = ref.payloadJson()
+        override fun copyPayloadTo(out: Appendable) = ref.copyPayloadTo(out)
     }
 
     private companion object {

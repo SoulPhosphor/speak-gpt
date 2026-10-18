@@ -131,6 +131,23 @@ class ChatStoreInstrumentedTest {
     }
 
     @Test
+    fun messageRefs_readPayloadsOnlyWhenAskedAndCopyPartByPart() {
+        val store = open()
+        store.putChat(chat("refs"))
+        val big = row("😀".repeat(ChatStore.PART_CHARS * 2 + 3)).payloadJson
+        store.appendMessage("refs", row("small"))
+        store.appendMessage("refs", ChatStore.MessageRow("big-id", true, big))
+        val seen = ArrayList<String>()
+        store.forEachMessageRef("refs", pageSize = 1) { ref ->
+            val copied = StringBuilder().also { ref.copyPayloadTo(it) }.toString()
+            assertEquals(ref.payloadJson(), copied)
+            seen.add(copied)
+            true
+        }
+        assertEquals(listOf(row("small").payloadJson, big), seen)
+    }
+
+    @Test
     fun readBefore_pagesBackwardFromNewest() {
         val store = open()
         store.putChat(chat("p"))

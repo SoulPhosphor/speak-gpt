@@ -324,6 +324,76 @@ class ChatStore private constructor(
         }
     }
 
+    /**
+     * One stored message whose payload is read only when asked for, so a
+     * caller can pass on a payload of any size a part at a time. Read it
+     * during the visit that produced it.
+     */
+    inner class MessageRef internal constructor(
+        val seq: Long,
+        val messageId: String?,
+        val isBot: Boolean,
+        private val rowId: Long,
+        private val split: Boolean
+    ) {
+        /** The whole payload as one string. */
+        fun payloadJson(): String {
+            val db = readableDatabase
+            return if (split) readParts(db, rowId) else readInline(db, rowId)
+        }
+
+        /** Write the payload to [out], holding at most one part in memory. */
+        fun copyPayloadTo(out: Appendable) {
+            val db = readableDatabase
+            if (!split) {
+                out.append(readInline(db, rowId))
+                return
+            }
+            var index = 0
+            while (true) {
+                val part = db.rawQuery(
+                    "SELECT part_text FROM message_parts WHERE message_row = ? AND part_index = ?",
+                    arrayOf(rowId.toString(), index.toString())
+                ).use { if (it.moveToFirst()) it.getString(0) else null } ?: return
+                out.append(part)
+                index++
+            }
+        }
+    }
+
+    /**
+     * Visit every message oldest first like [forEachMessage], but without
+     * reading any payload until the caller asks, so memory stays bounded by
+     * one part however large a single message is.
+     */
+    fun forEachMessageRef(chatId: String, pageSize: Int = DEFAULT_PAGE, action: (MessageRef) -> Boolean) {
+        var afterSeq = Long.MIN_VALUE
+        while (true) {
+            val page = readableDatabase.rawQuery(
+                "SELECT row_id, seq, message_id, is_bot, payload_json IS NULL FROM messages " +
+                    "WHERE chat_id = ? AND seq > ? ORDER BY seq LIMIT ?",
+                arrayOf(chatId, afterSeq.toString(), pageSize.toString())
+            ).use { c ->
+                val out = ArrayList<MessageRef>(c.count)
+                while (c.moveToNext()) {
+                    out.add(MessageRef(
+                        seq = c.getLong(1),
+                        messageId = if (c.isNull(2)) null else c.getString(2),
+                        isBot = c.getInt(3) != 0,
+                        rowId = c.getLong(0),
+                        split = c.getInt(4) != 0
+                    ))
+                }
+                out
+            }
+            if (page.isEmpty()) return
+            for (ref in page) {
+                if (!action(ref)) return
+            }
+            afterSeq = page.last().seq
+        }
+    }
+
     /* ------------------------------ messages: writes ------------------------------ */
 
     /** Append one message after the chat's current last message. Returns its seq. */
@@ -591,6 +661,13 @@ class ChatStore private constructor(
             )
         }
     }
+
+    private fun readInline(db: SQLiteDatabase, rowId: Long): String =
+        db.rawQuery("SELECT payload_json FROM messages WHERE row_id = ?", arrayOf(rowId.toString()))
+            .use { c ->
+                check(c.moveToFirst() && !c.isNull(0)) { "message payload missing" }
+                c.getString(0)
+            }
 
     private fun readParts(db: SQLiteDatabase, rowId: Long): String {
         val builder = StringBuilder()
