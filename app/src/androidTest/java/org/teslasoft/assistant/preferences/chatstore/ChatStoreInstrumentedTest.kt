@@ -211,7 +211,10 @@ class ChatStoreInstrumentedTest {
         val r2 = store.revision("r")!!
         store.deleteMessage("r", seq)
         val r3 = store.revision("r")!!
-        assertTrue(r0 < r1 && r1 < r2 && r2 < r3)
+        // A list-row update with a stale revision still advances it.
+        store.putChat(chat("r").copy(listRowJson = """{"name":"Renamed"}""", revision = 0))
+        val r4 = store.revision("r")!!
+        assertTrue(r0 < r1 && r1 < r2 && r2 < r3 && r3 < r4)
     }
 
     @Test

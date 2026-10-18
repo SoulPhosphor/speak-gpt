@@ -160,21 +160,31 @@ class ChatStore private constructor(
 
     /* ------------------------------ chats ------------------------------ */
 
-    fun putChat(chat: StoredChat) {
+    /**
+     * Add [chat], or update an existing chat's list row, values and state.
+     * The revision belongs to the database: [StoredChat.revision] is used only
+     * as the starting value of a new chat, and every update advances the
+     * stored revision, so a stale or re-read [StoredChat] can never leave a
+     * change undetected or move the revision backward.
+     */
+    fun putChat(chat: StoredChat) = inTransaction { db ->
         val values = ContentValues().apply {
-            put("chat_id", chat.chatId)
             put("list_order", chat.listOrder)
             put("list_row_json", chat.listRowJson)
             put("prefs_json", chat.prefsJson)
             put("readable", if (chat.readable) 1 else 0)
-            put("revision", chat.revision)
             put("history_saved", if (chat.historySaved) 1 else 0)
         }
-        val db = writableDatabase
         // UPDATE first: INSERT OR REPLACE would delete the row and cascade
         // away the chat's messages.
         val updated = db.update("chats", values, "chat_id = ?", arrayOf(chat.chatId))
-        if (updated == 0) db.insertOrThrow("chats", null, values)
+        if (updated == 0) {
+            values.put("chat_id", chat.chatId)
+            values.put("revision", chat.revision)
+            db.insertOrThrow("chats", null, values)
+        } else {
+            db.execSQL("UPDATE chats SET revision = revision + 1 WHERE chat_id = ?", arrayOf(chat.chatId))
+        }
     }
 
     fun getChat(chatId: String): StoredChat? =
