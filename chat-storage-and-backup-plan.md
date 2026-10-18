@@ -59,9 +59,9 @@ upgrade, not a redesign.
 |---|---|---|
 | Startup out-of-memory crash fix | PR #144, merged into `beta/new-client` | Done. |
 | 200,000-character message limit | PR #145, merged into `beta/new-client` | Done. |
-| Stage 1, this plan | PR #146 | Merged when its review is clean. |
-| Stages 2 and 3, storage foundations and Recovery Backup write | PR #148, branch `chat-storage/pr3-recovery-backup`, into `beta/new-client` (replaces #147, closed) | Merged when its review is clean. Then the owner confirms on device that a full backup succeeds. |
-| Stages 4–13 | not started | See §8 for the session guide. |
+| Stage 1, this plan | PR #146, merged | Done. |
+| Stages 2 and 3, storage foundations and Recovery Backup write | PR #148, merged into `beta/new-client` (replaced #147) | Done in code. **Owner on-device check pending:** run one full Recovery Backup on the beta. |
+| Stages 4–13 | not started | Next: session A (stage 4). See §8. |
 
 **Interim restore limit (until stage 4).** After stage 3, Recovery Backups of
 any size can be created and verified, but the current restore engine still
