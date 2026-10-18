@@ -51,6 +51,16 @@ class TypedValueCodecTest {
     }
 
     @Test
+    fun nonFiniteFloatsRoundTrip() {
+        val values = mapOf("nan" to Float.NaN, "up" to Float.POSITIVE_INFINITY, "down" to Float.NEGATIVE_INFINITY)
+        val decoded = TypedValueCodec.decodeMap(TypedValueCodec.encodeMap(values)!!)!!
+        assertTrue((decoded["nan"] as Float).isNaN())
+        assertEquals(Float.POSITIVE_INFINITY, decoded["up"])
+        assertEquals(Float.NEGATIVE_INFINITY, decoded["down"])
+        assertNull(TypedValueCodec.decodeValue("""{"t":"f","v":"nonsense"}"""))
+    }
+
+    @Test
     fun emptyMapRoundTrips() {
         assertEquals(emptyMap<String, Any>(), TypedValueCodec.decodeMap(TypedValueCodec.encodeMap(emptyMap())!!))
     }

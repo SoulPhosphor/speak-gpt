@@ -71,7 +71,11 @@ class ChatStore private constructor(
         val listRowJson: String,
         val prefsJson: String,
         val readable: Boolean,
-        val revision: Long
+        val revision: Long,
+        /** False when the chat's history has never been saved (the app's
+         *  MISSING state, distinct from a saved empty history). Any message
+         *  write sets it. */
+        val historySaved: Boolean = true
     )
 
     data class MessageRow(
@@ -101,7 +105,8 @@ class ChatStore private constructor(
                 "list_row_json TEXT NOT NULL, " +
                 "prefs_json TEXT NOT NULL DEFAULT '{}', " +
                 "readable INTEGER NOT NULL DEFAULT 1, " +
-                "revision INTEGER NOT NULL DEFAULT 0)"
+                "revision INTEGER NOT NULL DEFAULT 0, " +
+                "history_saved INTEGER NOT NULL DEFAULT 1)"
         )
         db.execSQL(
             "CREATE TABLE messages (" +
@@ -163,6 +168,7 @@ class ChatStore private constructor(
             put("prefs_json", chat.prefsJson)
             put("readable", if (chat.readable) 1 else 0)
             put("revision", chat.revision)
+            put("history_saved", if (chat.historySaved) 1 else 0)
         }
         val db = writableDatabase
         // UPDATE first: INSERT OR REPLACE would delete the row and cascade
@@ -430,7 +436,12 @@ class ChatStore private constructor(
             c.moveToFirst() && c.getString(0) == "ok" && !c.moveToNext()
         }
         if (!integrity) return false
-        return db.rawQuery("PRAGMA foreign_key_check", null).use { !it.moveToFirst() }
+        if (db.rawQuery("PRAGMA foreign_key_check", null).use { it.moveToFirst() }) return false
+        // Foreign keys cannot see a missing child row, so check that every
+        // message is stored exactly one way and every split value is whole.
+        return SPLIT_CONSISTENCY_CHECKS.none { sql ->
+            db.rawQuery(sql, null).use { it.moveToFirst() }
+        }
     }
 
     /* ------------------------------ transactions ------------------------------ */
@@ -497,7 +508,10 @@ class ChatStore private constructor(
         ).use { if (it.moveToFirst()) it.getLong(0) else null }
 
     private fun bumpRevision(db: SQLiteDatabase, chatId: String) {
-        db.execSQL("UPDATE chats SET revision = revision + 1 WHERE chat_id = ?", arrayOf(chatId))
+        db.execSQL(
+            "UPDATE chats SET revision = revision + 1, history_saved = 1 WHERE chat_id = ?",
+            arrayOf(chatId)
+        )
     }
 
     private class RawRow(
@@ -550,7 +564,8 @@ class ChatStore private constructor(
         listRowJson = getString(2),
         prefsJson = getString(3),
         readable = getInt(4) != 0,
-        revision = getLong(5)
+        revision = getLong(5),
+        historySaved = getInt(6) != 0
     )
 
     private fun putMeta(db: SQLiteDatabase, key: String, value: String) {
@@ -567,7 +582,23 @@ class ChatStore private constructor(
         const val PART_CHARS = 128 * 1024
         const val DEFAULT_PAGE = 200
 
-        private const val CHAT_COLUMNS = "chat_id, list_order, list_row_json, prefs_json, readable, revision"
+        private const val CHAT_COLUMNS =
+            "chat_id, list_order, list_row_json, prefs_json, readable, revision, history_saved"
+
+        /** Each query returns a row only when stored data is inconsistent. */
+        private val SPLIT_CONSISTENCY_CHECKS = listOf(
+            // Inline payload that also has parts.
+            "SELECT 1 FROM messages m WHERE m.payload_json IS NOT NULL AND EXISTS " +
+                "(SELECT 1 FROM message_parts p WHERE p.message_row = m.row_id) LIMIT 1",
+            // Split payload with no parts at all.
+            "SELECT 1 FROM messages m WHERE m.payload_json IS NULL AND NOT EXISTS " +
+                "(SELECT 1 FROM message_parts p WHERE p.message_row = m.row_id) LIMIT 1",
+            // Parts that do not run 0, 1, 2, ... without a gap.
+            "SELECT 1 FROM message_parts GROUP BY message_row " +
+                "HAVING MIN(part_index) != 0 OR MAX(part_index) != COUNT(*) - 1 LIMIT 1",
+            "SELECT 1 FROM include_text_parts GROUP BY message_row, include_id " +
+                "HAVING MIN(part_index) != 0 OR MAX(part_index) != COUNT(*) - 1 LIMIT 1"
+        )
         private const val MESSAGE_COLUMNS = "row_id, seq, message_id, is_bot, payload_json"
 
         @Volatile private var libraryLoaded = false

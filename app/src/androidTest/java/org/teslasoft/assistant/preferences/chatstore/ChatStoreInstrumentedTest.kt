@@ -286,6 +286,35 @@ class ChatStoreInstrumentedTest {
         assertTrue(store.integrityOk())
     }
 
+    @Test
+    fun integrityOk_rejectsIncompleteOrInconsistentSplitValues() {
+        val gap = open()
+        gap.putChat(chat("g"))
+        gap.appendMessage("g", row("y".repeat(ChatStore.PART_CHARS * 3)))
+        gap.writableDatabase.execSQL("DELETE FROM message_parts WHERE part_index = 1")
+        assertFalse(gap.integrityOk())
+
+        val none = open()
+        none.putChat(chat("n"))
+        none.appendMessage("n", row("y".repeat(ChatStore.PART_CHARS * 2)))
+        none.writableDatabase.execSQL("DELETE FROM message_parts")
+        assertFalse(none.integrityOk())
+
+        val both = open()
+        both.putChat(chat("b"))
+        both.appendMessage("b", row("y".repeat(ChatStore.PART_CHARS * 2)))
+        both.writableDatabase.execSQL("UPDATE messages SET payload_json = '{}'")
+        assertFalse(both.integrityOk())
+
+        val doc = open()
+        doc.putChat(chat("d"))
+        val docSeq = doc.appendMessage("d", row("doc"))
+        doc.putIncludeText("d", docSeq, "inc", "z".repeat(ChatStore.PART_CHARS * 3))
+        assertTrue(doc.integrityOk())
+        doc.writableDatabase.execSQL("DELETE FROM include_text_parts WHERE part_index = 0")
+        assertFalse(doc.integrityOk())
+    }
+
     private fun includePartCount(store: ChatStore): Int =
         store.readableDatabase.rawQuery("SELECT COUNT(*) FROM include_text_parts", null)
             .use { it.moveToFirst(); it.getInt(0) }

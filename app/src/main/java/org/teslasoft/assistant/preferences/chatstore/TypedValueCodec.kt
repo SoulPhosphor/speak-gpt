@@ -28,8 +28,9 @@ import com.google.gson.JsonPrimitive
  * same type it was read as. Covers every type SharedPreferences can hold.
  *
  * One value is `{"t":<type>,"v":<value>}` with type s, b, i, l, f or ss
- * (string, boolean, int, long, float, string set). A map is a JSON object
- * of name to value.
+ * (string, boolean, int, long, float, string set). A float that is not a
+ * finite number is written as the string "NaN", "Infinity" or "-Infinity",
+ * since JSON has no number for it. A map is a JSON object of name to value.
  */
 internal object TypedValueCodec {
 
@@ -70,13 +71,19 @@ internal object TypedValueCodec {
         return out
     }
 
+    private val NON_FINITE_FLOATS = mapOf(
+        "NaN" to Float.NaN,
+        "Infinity" to Float.POSITIVE_INFINITY,
+        "-Infinity" to Float.NEGATIVE_INFINITY
+    )
+
     private fun valueElement(value: Any?): JsonElement? {
         val (type, v) = when (value) {
             is String -> "s" to JsonPrimitive(value)
             is Boolean -> "b" to JsonPrimitive(value)
             is Int -> "i" to JsonPrimitive(value)
             is Long -> "l" to JsonPrimitive(value)
-            is Float -> "f" to JsonPrimitive(value)
+            is Float -> "f" to (if (value.isFinite()) JsonPrimitive(value) else JsonPrimitive(value.toString()))
             is Set<*> -> {
                 val array = JsonArray()
                 for (item in value) array.add(item as? String ?: return null)
@@ -101,7 +108,12 @@ internal object TypedValueCodec {
             "b" -> v.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean
             "i" -> v.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
             "l" -> v.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
-            "f" -> v.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asFloat
+            "f" -> when {
+                !v.isJsonPrimitive -> null
+                v.asJsonPrimitive.isNumber -> v.asFloat
+                v.asJsonPrimitive.isString -> NON_FINITE_FLOATS[v.asString]
+                else -> null
+            }
             "ss" -> if (!v.isJsonArray) null else {
                 val set = LinkedHashSet<String>()
                 for (item in v.asJsonArray) {

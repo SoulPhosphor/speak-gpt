@@ -113,15 +113,18 @@ class ChatStorageFoundationsInstrumentedTest {
         list.chats.forEachIndexed { index, entry ->
             val values = legacy.readChatValues(entry.chatId)
             assertEquals(ReadState.OK, values.state)
-            store.putChat(ChatStore.StoredChat(
-                entry.chatId, index.toLong(), entry.listRowJson,
-                TypedValueCodec.encodeMap(values.values)!!, readable = true, revision = 0
-            ))
             val (state, read) = messages(legacy, entry.chatId)
             assertTrue(state == ReadState.OK || state == ReadState.EMPTY || state == ReadState.MISSING)
-            store.replaceAllMessages(entry.chatId, read.asSequence().map {
-                ChatStore.MessageRow(it.messageId, it.isBot, it.payloadJson)
-            })
+            store.putChat(ChatStore.StoredChat(
+                entry.chatId, index.toLong(), entry.listRowJson,
+                TypedValueCodec.encodeMap(values.values)!!, readable = true, revision = 0,
+                historySaved = state != ReadState.MISSING
+            ))
+            if (state != ReadState.MISSING) {
+                store.replaceAllMessages(entry.chatId, read.asSequence().map {
+                    ChatStore.MessageRow(it.messageId, it.isBot, it.payloadJson)
+                })
+            }
         }
         val listValues = legacy.readListValues()
         assertEquals(ReadState.OK, listValues.state)
@@ -184,7 +187,7 @@ class ChatStorageFoundationsInstrumentedTest {
             legacy.readList().chats.map { it.chatId to it.listRowJson },
             database.readList().chats.map { it.chatId to it.listRowJson }
         )
-        for (id in listOf("fa1", "fa2")) {
+        for (id in chatIds) {
             val a = messages(legacy, id)
             val b = messages(database, id)
             assertEquals(a.first, b.first)
@@ -195,6 +198,18 @@ class ChatStorageFoundationsInstrumentedTest {
         }
         assertEquals(legacy.readListValues().values, database.readListValues().values)
         assertEquals(ReadState.MISSING, messages(database, "not-a-chat").first)
+    }
+
+    @Test
+    fun databaseSource_keepsMissingDistinctFromEmpty() {
+        val store = openStore()
+        val database = DatabaseChatSource(store, LegacyChatSource(context))
+        store.putChat(ChatStore.StoredChat("fa3", 0, "{}", "{}", readable = true, revision = 0, historySaved = false))
+        assertEquals(ReadState.MISSING, messages(database, "fa3").first)
+        val seq = store.appendMessage("fa3", ChatStore.MessageRow(null, false, """{"message":"first"}"""))
+        assertEquals(ReadState.OK, messages(database, "fa3").first)
+        store.deleteMessage("fa3", seq)
+        assertEquals(ReadState.EMPTY, messages(database, "fa3").first)
     }
 
     @Test

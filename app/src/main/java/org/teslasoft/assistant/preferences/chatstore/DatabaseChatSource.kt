@@ -58,7 +58,11 @@ class DatabaseChatSource(
                 any = true
                 action(ChatSource.Message(stored.payloadJson, stored.messageId, stored.isBot))
             }
-            if (any) ReadState.OK else ReadState.EMPTY
+            when {
+                any -> ReadState.OK
+                chat.historySaved -> ReadState.EMPTY
+                else -> ReadState.MISSING
+            }
         } catch (_: Exception) {
             ReadState.FAILED
         }
