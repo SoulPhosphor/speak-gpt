@@ -476,8 +476,12 @@ qualify.
 - **Backup receipt (PR 3):** every Recovery Backup that passes verification
   records a durable receipt naming the storage it was captured from (legacy
   or database), the database `store_id` when it was the database, and when it
-  was made. Original-file removal (§4.4, PR 13) trusts only a receipt from the
-  database with the current `store_id`, so a backup made between activation
+  was made, plus the database generation captured (the store-wide revision
+  counter). Recovering an unmoved chat (§4.3) records the generation of that
+  import. Original-file removal (§4.4, PR 13) trusts only a receipt from the
+  database with the current `store_id` whose captured generation is at or
+  after the last recovery import, so a recovered chat's file is never removed
+  before a verified backup contains it, so a backup made between activation
   and PR 13 still qualifies and a pre-activation backup never does, without
   changing the backup path after activation.
 - Success is published and baselines advanced only after verification.
