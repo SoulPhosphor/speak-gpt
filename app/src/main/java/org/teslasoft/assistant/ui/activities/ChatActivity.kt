@@ -1560,7 +1560,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // prepareTypedTurn refuses an over-limit message, and nothing then
         // re-arms the microphone, so an engaged hands-free conversation ends
         // here the same way the Whisper refusal ends it.
-        if (MessageLengthLimit.exceeds(recognizedText) &&
+        if (MessageLengthLimit.exceeds(prefix + recognizedText + endSeparator) &&
             preferences?.getHandsFreeMode() == true && !handsFreeStopped
         ) {
             stopHandsFreeLoop("transcript over the message limit", notify = true)
@@ -10279,9 +10279,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         // Checked before anything else happens, so a refused message leaves
-        // the composer, keyboard and any pending regeneration untouched.
-        if (MessageLengthLimit.exceeds(rawMessage)) {
-            showMessageTooLong(rawMessage)
+        // the composer, keyboard and any pending regeneration untouched. The
+        // limit applies to the message as stored, prefix and end separator
+        // included.
+        val storedForm = prefix + rawMessage + endSeparator
+        if (MessageLengthLimit.exceeds(storedForm)) {
+            showMessageTooLong(storedForm)
             return
         }
         settlePendingRegeneration()
@@ -10542,14 +10545,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * rather than left showing Stop while not listening.
      */
     private fun refuseOverLimitTranscript(transcription: String): Boolean {
-        if (!MessageLengthLimit.exceeds(transcription)) return false
+        // Measured as stored (prefix and end separator included); the raw
+        // transcript is what goes back into the message box.
+        val storedForm = prefix + transcription + endSeparator
+        if (!MessageLengthLimit.exceeds(storedForm)) return false
         transcriptionInProgress = false
         if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) {
             stopHandsFreeLoop("transcript over the message limit", notify = true)
         }
         restoreUIState()
         insertTranscriptIntoBox(transcription)
-        showMessageTooLong(transcription)
+        showMessageTooLong(storedForm)
         return true
     }
 
