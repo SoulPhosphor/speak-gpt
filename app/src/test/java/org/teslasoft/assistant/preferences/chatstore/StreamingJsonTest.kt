@@ -157,4 +157,14 @@ class StreamingJsonTest {
             assertEquals(json, 0, visits)
         }
     }
+
+    @Test
+    fun aListElementIsOneReadableObjectOrNull() {
+        for (json in listOf("{}", "{\"message\":\"hi\"}", "null", " { \"a\": null, \"a\": 1 } ")) {
+            assertEquals(json, true, StreamingJson.isListElement(StringReader(json)))
+        }
+        for (json in listOf("", "1", "\"text\"", "[]", "{\"a\":1,\"a\":2}", "{} {}", "{", "{}/*x*/")) {
+            assertEquals(json, false, StreamingJson.isListElement(StringReader(json)))
+        }
+    }
 }
