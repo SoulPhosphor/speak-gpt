@@ -26,6 +26,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PersistableBundle
 import android.provider.DocumentsContract
+import android.text.format.Formatter
 import android.view.View
 import android.view.WindowInsets
 import android.widget.EditText
@@ -46,6 +47,7 @@ import org.teslasoft.assistant.preferences.backup.BackupFailureCategory
 import org.teslasoft.assistant.preferences.backup.BackupFailureClassifier
 import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupType
+import org.teslasoft.assistant.preferences.backup.RecoveryBackupReceipt
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
 import org.teslasoft.assistant.preferences.backup.RecoveryDocumentPublication
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
@@ -158,6 +160,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
      *  recorded from this ONLY after the destination is also verified (owner
      *  rule: never claim a failed or unfinished attempt succeeded). */
     private var stagedIncludedTypes: Set<BackupType> = emptySet()
+    private var stagedReceiptSource: RecoveryBackupReceipt.Source? = null
 
     /** Final name used only after the selected incomplete SAF document has
      * passed byte verification. */
@@ -447,7 +450,9 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                     is PortableRecoveryWriter.Result.Failed -> {
                         runCatching { if (staged.exists()) staged.delete() }
                         recordFailureStatus(result.reason)
-                        runOnUiThread { showWriterFailure(result.reason, result.chatFailure) }
+                        runOnUiThread {
+                            showWriterFailure(result.reason, result.chatFailure, result.shortfallBytes)
+                        }
                     }
                     is PortableRecoveryWriter.Result.Ok -> {
                         val sha = sha256(staged)
@@ -465,6 +470,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                             stagedPackage = staged
                             stagedSha = sha
                             stagedIncludedTypes = result.includedTypes
+                            stagedReceiptSource = result.chatSource
                             val name = RecoveryFileNaming.manualRecoveryPackage(
                                 BackupBrand.resolve(this), protected, System.currentTimeMillis()
                             )
@@ -515,6 +521,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
         btnResultDone?.visibility = View.GONE
 
         val includedTypes = stagedIncludedTypes
+        val receiptSource = stagedReceiptSource
         val finalName = pendingFinalFileName
         if (finalName == null) {
             cleanupStaged()
@@ -563,6 +570,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                     if (type in includedTypes) RecoveryBackupState.recordSuccess(this, type, now)
                     else RecoveryBackupState.recordNothingToBackUp(this, type, now)
                 }
+                receiptSource?.let { RecoveryBackupReceipt.record(this, it, now) }
 
                 val where = BackupLocationDisplay.describeSaveAs(this, finalUri)
                 runOnUiThread { showSaved(where) }
@@ -627,12 +635,14 @@ class RecoveryBackupActivity : SettingsPageActivity() {
         stagedPackage = null
         stagedSha = null
         stagedIncludedTypes = emptySet()
+        stagedReceiptSource = null
         pendingFinalFileName = null
     }
 
     private fun showWriterFailure(
         reason: PortableRecoveryWriter.Reason,
-        chatFailure: ChatLogicalSerializer.FailureCategory?
+        chatFailure: ChatLogicalSerializer.FailureCategory?,
+        shortfallBytes: Long?
     ) {
         when (reason) {
             PortableRecoveryWriter.Reason.KEY_MATERIAL_UNAVAILABLE -> showKeystoreFailure()
@@ -662,6 +672,16 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                 showFailureText(getString(R.string.recovery_fail_degraded))
             PortableRecoveryWriter.Reason.PROFILE_IMAGE_UNAVAILABLE ->
                 showFailureText(getString(R.string.companion_backup_err_image_unavailable))
+            PortableRecoveryWriter.Reason.NOT_ENOUGH_STORAGE -> {
+                showFailureText(getString(R.string.recovery_fail_storage_title))
+                textResultDetail?.text = getString(
+                    R.string.recovery_fail_storage_body,
+                    Formatter.formatShortFileSize(this, shortfallBytes ?: 0L)
+                )
+                textResultDetail?.visibility = View.VISIBLE
+            }
+            PortableRecoveryWriter.Reason.OUT_OF_MEMORY ->
+                showFailureText(getString(R.string.recovery_fail_out_of_memory))
         }
     }
 

@@ -10,6 +10,7 @@ import java.io.File
 import java.security.MessageDigest
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
+import org.teslasoft.assistant.preferences.chatstore.ChatStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageDb
 import org.teslasoft.assistant.preferences.tts.ManualTtsVoicesPreferences
@@ -32,6 +33,9 @@ internal object PortableBackupMutationTokens {
             "lorebook_database" to digestDatabase(app, LoreBookStore.DATABASE_NAME),
             "profile_image_database" to digestDatabase(app, ProfileImageDb.DATABASE_NAME),
             "generated_image_database" to digestDatabase(app, GeneratedImageCatalogStore.DATABASE_NAME),
+            // Chats once they live in chats.db (legacy chat files are covered
+            // by shared_preferences above). Absent until migration.
+            "chat_database" to digestDatabase(app, ChatStore.DATABASE_NAME),
             "profile_image_assets" to digestTree(app.getExternalFilesDir("profile_images"), includeContents = true),
             "generated_image_assets" to digestTree(app.getExternalFilesDir("images"), includeContents = true),
             "saved_tts_sources" to digestTree(

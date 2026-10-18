@@ -622,7 +622,7 @@ object UnifiedPortableRestore {
         // that was read, never for an unselected one.
         if (request.declaredRecordCounts.isNotEmpty()) {
             val counts = PortableRecoverySemanticValidator.recordCounts(
-                chats, generated, identities, profileImages, memories, rules, lorebooks, endpoints, settings
+                chats?.chatCount?.toLong(), generated, identities, profileImages, memories, rules, lorebooks, endpoints, settings
             )
             modes.keys.filter { it !in failures }.forEach { category ->
                 val declared = request.declaredRecordCounts[category] ?: return@forEach

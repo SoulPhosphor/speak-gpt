@@ -20,9 +20,11 @@ import android.content.Context
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
+import org.teslasoft.assistant.preferences.backup.RecoveryBackupReceipt
 import org.teslasoft.assistant.preferences.backup.RecoveryOperationGate
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
+import org.teslasoft.assistant.preferences.chatstore.ChatSources
 import org.teslasoft.assistant.preferences.lorebook.LoreBookEncryption
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.preferences.memory.MemoryLog
@@ -81,14 +83,19 @@ object PortableRecoveryWriter {
             val generatedImageCount: Int = 0,
             val generatedImageBytes: Long = 0L,
             val profileImageCount: Int = 0,
-            val profileImageBytes: Long = 0L
+            val profileImageBytes: Long = 0L,
+            /** Which chat storage this package was captured from; the caller
+             *  records it in [RecoveryBackupReceipt] once the package is saved. */
+            val chatSource: RecoveryBackupReceipt.Source? = null
         ) : Result()
 
         /** [chatFailure] refines CHATS_UNAVAILABLE with WHICH part of chat
          *  storage failed, for the plain-words detail line. */
         data class Failed(
             val reason: Reason,
-            val chatFailure: ChatLogicalSerializer.FailureCategory? = null
+            val chatFailure: ChatLogicalSerializer.FailureCategory? = null,
+            /** For NOT_ENOUGH_STORAGE: how much more free space is needed. */
+            val shortfallBytes: Long? = null
         ) : Result()
     }
 
@@ -124,7 +131,16 @@ object PortableRecoveryWriter {
 
         /** Live authoritative state changed during both bounded capture
          * attempts. No package is published from mixed generations. */
-        SOURCE_CHANGED_DURING_CAPTURE
+        SOURCE_CHANGED_DURING_CAPTURE,
+
+        /** The device does not have the free space creating the package
+         *  needs ([Result.Failed.shortfallBytes] says how much more). Checked
+         *  before anything is written. */
+        NOT_ENOUGH_STORAGE,
+
+        /** The app ran out of memory while reading a conversation. Until
+         *  chats move to the database each one is read whole. */
+        OUT_OF_MEMORY
     }
 
     /**
@@ -176,6 +192,10 @@ object PortableRecoveryWriter {
             // corrupt copy inside a package the user trusts. Refused loudly.
             if (DatabaseHealthState.anyDegraded(context)) {
                 return Result.Failed(Reason.STORE_DEGRADED)
+            }
+            val space = PortableBackupSpaceEstimate.check(context, staging)
+            if (space.shortfallBytes > 0L) {
+                return Result.Failed(Reason.NOT_ENOUGH_STORAGE, shortfallBytes = space.shortfallBytes)
             }
             val createdAt = Instant.now().toString()
             val artifacts = ArrayList<PortablePackage.Artifact>()
@@ -330,20 +350,35 @@ object PortableRecoveryWriter {
                 )
             }
 
-            // ---- chats (logical serialization; LOCKED fails visibly) ----
-            when (val chats = ChatLogicalSerializer.serializeV2(context)) {
-                is ChatLogicalSerializer.Result.Unavailable ->
-                    return Result.Failed(Reason.CHATS_UNAVAILABLE, chatFailure = chats.category)
-                is ChatLogicalSerializer.Result.Ok -> {
-                    val staged = File(staging, "chats.json")
-                    staged.writeText(chats.json, Charsets.UTF_8)
+            // ---- chats (written one message at a time from the authoritative
+            //      storage; LOCKED or unreadable fails visibly) ----
+            val chatStorage = ChatSources.authoritative(context)
+                ?: return Result.Failed(
+                    Reason.CHATS_UNAVAILABLE, chatFailure = ChatLogicalSerializer.FailureCategory.LIST
+                )
+            val stagedChats = File(staging, "chats.json")
+            val written = try {
+                stagedChats.outputStream().buffered().writer(Charsets.UTF_8).use { out ->
+                    ChatsArtifactWriter.write(context, chatStorage.source, out)
+                }
+            } catch (_: OutOfMemoryError) {
+                runCatching { stagedChats.delete() }
+                return Result.Failed(Reason.OUT_OF_MEMORY)
+            }
+            when (written) {
+                is ChatsArtifactWriter.Result.Unavailable ->
+                    return Result.Failed(Reason.CHATS_UNAVAILABLE, chatFailure = written.category)
+                is ChatsArtifactWriter.Result.Ok -> {
                     artifacts.add(
                         PortablePackage.Artifact(
-                            entryName = "chats.json", type = "chats-json", file = staged,
-                            databaseKeyHex = null, keySemantics = null, schemaVersion = 2
+                            entryName = "chats.json", type = "chats-json", file = stagedChats,
+                            databaseKeyHex = null, keySemantics = null, schemaVersion = 3
                         )
                     )
-                    when (val pdfs = PdfAttachmentPortableBackup.buildArtifacts(context, chats.json)) {
+                    val summary = (stagedChats.bufferedReader(Charsets.UTF_8).use { ChatsArtifactScanner.scan(it) } as?
+                        ChatsArtifactScanner.Result.Ok)?.summary
+                        ?: return Result.Failed(Reason.PACKAGE_VERIFY_FAILED)
+                    when (val pdfs = PdfAttachmentPortableBackup.buildArtifacts(context, summary.pdfRefs)) {
                         is PdfAttachmentPortableBackup.Result.Ok -> artifacts.addAll(pdfs.artifacts)
                         is PdfAttachmentPortableBackup.Result.Failed ->
                             return Result.Failed(Reason.SNAPSHOT_FAILED)
@@ -413,16 +448,17 @@ object PortableRecoveryWriter {
                         return Result.Failed(Reason.PACKAGE_VERIFY_FAILED)
                     }
                     MemoryLog.log(context, "PortableRecovery", "info",
-                        "Portable recovery package created and verified (${artifacts.size} artifact(s), ${chats.chatCount} chat(s), " +
+                        "Portable recovery package created and verified (${artifacts.size} artifact(s), ${written.chatCount} chat(s), " +
                             (if (recoverySecret != null) "encrypted" else "unencrypted") + ").")
                     return Result.Ok(
-                        chatCount = chats.chatCount,
+                        chatCount = written.chatCount,
                         artifactCount = artifacts.size,
                         includedTypes = includedTypes,
                         generatedImageCount = generatedImageCount,
                         generatedImageBytes = generatedImageBytes,
                         profileImageCount = profileImageCount,
-                        profileImageBytes = profileImageBytes
+                        profileImageBytes = profileImageBytes,
+                        chatSource = chatStorage.receiptSource
                     )
                 }
             }

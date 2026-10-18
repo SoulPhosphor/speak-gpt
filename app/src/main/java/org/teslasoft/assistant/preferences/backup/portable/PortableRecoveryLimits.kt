@@ -16,14 +16,28 @@ package org.teslasoft.assistant.preferences.backup.portable
 object PortableRecoveryLimits {
     const val POLICY_VERSION = 1
 
-    const val CHATS_JSON_BYTES = 64L * 1024L * 1024L
+    /**
+     * The chats artifact is written, checked and (from stage 4) restored one
+     * message at a time, so this is only a guard against a malformed archive,
+     * not a memory ceiling (chat-storage-and-backup-plan.md §4.5).
+     */
+    const val CHATS_JSON_BYTES = 8L * 1024L * 1024L * 1024L
+
+    /**
+     * The current restore engine still reads the chats artifact whole. Until
+     * the streaming restore replaces it (plan stage 4), a larger chats
+     * artifact is refused as too large to restore instead of exhausting
+     * memory. Backups of any size can still be created and verified.
+     */
+    const val WHOLE_READ_RESTORE_CHATS_JSON_BYTES = 64L * 1024L * 1024L
     const val GENERATED_IMAGE_CATALOG_BYTES = 32L * 1024L * 1024L
     const val MODEL_ENDPOINT_SETTINGS_BYTES = 8L * 1024L * 1024L
     const val APP_SETTINGS_BYTES = 16L * 1024L * 1024L
     const val COMPANION_ROLEPLAY_ARCHIVE_BYTES = 512L * 1024L * 1024L
     const val DATABASE_BYTES = 512L * 1024L * 1024L
     const val IMAGE_ASSET_BYTES = 64L * 1024L * 1024L
-    const val COMPLETE_PACKAGE_BYTES = 1L * 1024L * 1024L * 1024L
+    /** Malformed-package guard; packages are written and read as streams. */
+    const val COMPLETE_PACKAGE_BYTES = 16L * 1024L * 1024L * 1024L
 
     fun maxDecodedBytes(entryName: String, type: String): Long? = when (type) {
         PortablePackage.TYPE_CHATS_JSON -> CHATS_JSON_BYTES
@@ -44,4 +58,9 @@ object PortableRecoveryLimits {
         val limit = maxDecodedBytes(entryName, type) ?: return false
         return decodedBytes <= limit
     }
+
+    /** [accepts] for the current restore engine (see [WHOLE_READ_RESTORE_CHATS_JSON_BYTES]). */
+    fun acceptsForRestore(entryName: String, type: String, decodedBytes: Long): Boolean =
+        accepts(entryName, type, decodedBytes) &&
+            (type != PortablePackage.TYPE_CHATS_JSON || decodedBytes <= WHOLE_READ_RESTORE_CHATS_JSON_BYTES)
 }

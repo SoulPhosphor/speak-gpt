@@ -78,6 +78,13 @@ object ChatLogicalSerializer {
     const val FORMAT_V1 = "chat-logical-v1"
     const val FORMAT_V2 = "chat-logical-v2"
 
+    /**
+     * Current portable form, written streaming by [ChatsArtifactWriter]: v2
+     * plus a per-chat `history_saved` marker, so a history that was never
+     * saved restores as never saved rather than as an empty one.
+     */
+    const val FORMAT_V3 = "chat-logical-v3"
+
     /** Kept for the temporary owner-only v1 converter. */
     const val FORMAT = FORMAT_V1
 
@@ -222,7 +229,7 @@ object ChatLogicalSerializer {
      * whole artifact. Never substitutes an empty map after a failure (the
      * Round-4 masquerade). Credentials excluded.
      */
-    private fun serializeSettings(context: Context, chatId: String): JSONArray? {
+    internal fun serializeSettings(context: Context, chatId: String): JSONArray? {
         val name = "settings.$chatId"
         val entriesOrNull = try {
             SecurePrefs.get(context, name).all
@@ -266,7 +273,7 @@ object ChatLogicalSerializer {
     /** One line to the Memory log AND the user-facing Error Log per failed
      *  attempt: category + chat id (already a hash) + read state. Never a
      *  title, message, settings value, or key. */
-    private fun logFailure(context: Context, category: FailureCategory, detail: String) {
+    internal fun logFailure(context: Context, category: FailureCategory, detail: String) {
         val msg = "Recovery backup failed (${category.name}): $detail. " +
             "No backup was created; nothing was modified."
         try {

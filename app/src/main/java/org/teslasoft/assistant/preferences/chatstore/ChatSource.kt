@@ -82,6 +82,12 @@ interface ChatSource {
      */
     fun readChatValues(chatId: String): ValuesRead
 
+    /**
+     * One value from the chat's own file, or null when it is absent or cannot
+     * be read. Unlike [readChatValues] this never reads the messages.
+     */
+    fun readChatValue(chatId: String, key: String): Any?
+
     /** The chat list file's other stored values (folders and the like). */
     fun readListValues(): ValuesRead
 

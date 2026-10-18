@@ -57,7 +57,7 @@ object PortableChatRestorePlan {
         }
         val format = root.optString("format", "")
         if (format.isEmpty()) return rejected(Reason.NOT_A_CHATS_ARTIFACT, "no format marker")
-        if (format != ChatLogicalSerializer.FORMAT_V1 && format != ChatLogicalSerializer.FORMAT_V2) {
+        if (format !in SUPPORTED_FORMATS) {
             return rejected(Reason.UNSUPPORTED_FORMAT, "format $format")
         }
         if (!root.has("complete")) return rejected(Reason.MALFORMED, "no completeness marker")
@@ -69,7 +69,6 @@ object PortableChatRestorePlan {
 
         val plans = ArrayList<ChatLogicalImportPlan.ChatPlan>(entries.length())
         val byId = LinkedHashMap<String, ChatLogicalImportPlan.ChatPlan>()
-        val allMessageIds = HashSet<String>()
         val sourceReferencedFolderIds = LinkedHashSet<String>()
         var duplicateRows = 0
         for (index in 0 until entries.length()) {
@@ -109,14 +108,9 @@ object PortableChatRestorePlan {
                 duplicateRows++
                 continue
             }
-            for (messageId in validated.messageIds) {
-                if (!allMessageIds.add(messageId)) {
-                    return rejected(
-                        Reason.DUPLICATE_MESSAGE_ID,
-                        "message id $messageId appears more than once"
-                    )
-                }
-            }
+            // Message IDs are unique within each chat. A Keep Both restore
+            // copies a chat under a new chat ID with its message IDs intact,
+            // and every reader pairs a message ID with its chat.
             byId[planned.chatId] = planned
             plans.add(planned)
         }
@@ -156,10 +150,68 @@ object PortableChatRestorePlan {
         index: Int,
         format: String
     ): ChatResult {
+        val identity = when (val result = planIdentity(entry, index, format)) {
+            is IdentityResult.Ok -> result
+            is IdentityResult.Rejected -> return chatRejected(result.reason, result.detail)
+        }
+        val declaredId = identity.declaredId
+
+        val messages = entry.optJSONArray("messages")
+            ?: return chatRejected(Reason.MALFORMED, "chat $declaredId has no messages array")
+        val messageIds = LinkedHashSet<String>()
+        for (position in 0 until messages.length()) {
+            checkMessage(messages.optJSONObject(position), declaredId, position, messageIds)
+                ?.let { return chatRejected(it.reason, it.detail) }
+        }
+
+        val settings = when (val result = planSettings(entry, declaredId)) {
+            is SettingsResult.Ok -> result.settings
+            is SettingsResult.Rejected -> return chatRejected(result.reason, result.detail)
+        }
+        return ChatResult.Ok(
+            ValidatedChat(
+                ChatLogicalImportPlan.ChatPlan(
+                    declaredId,
+                    identity.listRow,
+                    messages.toString(),
+                    messages.length(),
+                    settings,
+                    historySaved = identity.historySaved
+                ),
+                messageIds
+            )
+        )
+    }
+
+    /** A rejection the per-part checks below report; [parse] wraps it. */
+    internal class Rejection(val reason: Reason, val detail: String)
+
+    internal sealed class IdentityResult {
+        class Ok(
+            val declaredId: String,
+            val listRow: LinkedHashMap<String, String>,
+            val historySaved: Boolean
+        ) : IdentityResult()
+        class Rejected(val reason: Reason, val detail: String) : IdentityResult()
+    }
+
+    internal sealed class SettingsResult {
+        class Ok(val settings: List<ChatLogicalImportPlan.SettingEntry>) : SettingsResult()
+        class Rejected(val reason: Reason, val detail: String) : SettingsResult()
+    }
+
+    /**
+     * The chat's identity and list row from every field except `messages`
+     * and `settings`. Shared by [parse] and the streaming chats reader so both
+     * apply one set of rules.
+     */
+    internal fun planIdentity(entry: JSONObject, index: Int, format: String): IdentityResult {
         val declaredId = entry.optString("chat_id", "")
-        if (declaredId.isEmpty()) return chatRejected(Reason.MALFORMED, "entry $index has no chat id")
+        if (declaredId.isEmpty()) {
+            return IdentityResult.Rejected(Reason.MALFORMED, "entry $index has no chat id")
+        }
         if (!isStableChatId(declaredId)) {
-            return chatRejected(Reason.UNSAFE_CHAT_ID, "entry $index has an invalid stable id")
+            return IdentityResult.Rejected(Reason.UNSAFE_CHAT_ID, "entry $index has an invalid stable id")
         }
 
         val listRow = LinkedHashMap<String, String>()
@@ -171,7 +223,7 @@ object PortableChatRestorePlan {
         }
         val sourceResolvedId = listRow["id"] ?: Hash.hash(listRow["name"].toString())
         if (sourceResolvedId != declaredId) {
-            return chatRejected(
+            return IdentityResult.Rejected(
                 Reason.IDENTITY_MISMATCH,
                 "entry $index rebuilds as $sourceResolvedId but was exported as $declaredId"
             )
@@ -182,47 +234,66 @@ object PortableChatRestorePlan {
             // other fields, but never fabricate a folder from an unexplained ID.
             listRow.remove(ChatNavigationRepository.FOLDER_ID_KEY)
         }
+        // v3 records whether the history was ever saved; earlier formats
+        // could not tell, and their chats restore as saved.
+        val historySaved = if (format == ChatLogicalSerializer.FORMAT_V3) {
+            if (entry.opt(HISTORY_SAVED_KEY) !is Boolean) {
+                return IdentityResult.Rejected(
+                    Reason.MALFORMED, "chat $declaredId has no history-saved marker"
+                )
+            }
+            entry.getBoolean(HISTORY_SAVED_KEY)
+        } else true
+        return IdentityResult.Ok(declaredId, listRow, historySaved)
+    }
 
-        val messages = entry.optJSONArray("messages")
-            ?: return chatRejected(Reason.MALFORMED, "chat $declaredId has no messages array")
-        val messageIds = LinkedHashSet<String>()
-        for (position in 0 until messages.length()) {
-            val message = messages.optJSONObject(position)
-                ?: return chatRejected(
-                    Reason.MALFORMED,
-                    "chat $declaredId has a malformed message at position $position"
-                )
-            if (!message.has(SearchableMessageProjection.MESSAGE_ID_KEY) ||
-                message.isNull(SearchableMessageProjection.MESSAGE_ID_KEY)
-            ) continue
-            val messageId = message.optString(SearchableMessageProjection.MESSAGE_ID_KEY, "")
-            if (!isCanonicalUuid(messageId)) {
-                return chatRejected(
-                    Reason.MALFORMED_MESSAGE_ID,
-                    "chat $declaredId has an invalid message id at position $position"
-                )
-            }
-            if (!messageIds.add(messageId)) {
-                return chatRejected(
-                    Reason.DUPLICATE_MESSAGE_ID,
-                    "message id $messageId appears more than once"
-                )
-            }
+    /**
+     * Check one stored message: it must be an object, and a message ID, when
+     * present, must be a canonical UUID not used earlier in the same chat
+     * ([idsInChat] collects them).
+     */
+    internal fun checkMessage(
+        message: JSONObject?,
+        chatLabel: String,
+        position: Int,
+        idsInChat: MutableSet<String>
+    ): Rejection? {
+        if (message == null) {
+            return Rejection(Reason.MALFORMED, "chat $chatLabel has a malformed message at position $position")
         }
+        if (!message.has(SearchableMessageProjection.MESSAGE_ID_KEY) ||
+            message.isNull(SearchableMessageProjection.MESSAGE_ID_KEY)
+        ) return null
+        val messageId = message.optString(SearchableMessageProjection.MESSAGE_ID_KEY, "")
+        if (!isCanonicalUuid(messageId)) {
+            return Rejection(
+                Reason.MALFORMED_MESSAGE_ID,
+                "chat $chatLabel has an invalid message id at position $position"
+            )
+        }
+        if (!idsInChat.add(messageId)) {
+            return Rejection(Reason.DUPLICATE_MESSAGE_ID, "message id $messageId appears more than once")
+        }
+        return null
+    }
 
+    /** The chat's typed settings, refusing credentials and unknown types. */
+    internal fun planSettings(entry: JSONObject, declaredId: String): SettingsResult {
         val rawSettings = entry.optJSONArray("settings")
-            ?: return chatRejected(Reason.MALFORMED, "chat $declaredId has no settings array")
+            ?: return SettingsResult.Rejected(Reason.MALFORMED, "chat $declaredId has no settings array")
         val settings = ArrayList<ChatLogicalImportPlan.SettingEntry>(rawSettings.length())
         val settingKeys = HashSet<String>()
         for (position in 0 until rawSettings.length()) {
             val raw = rawSettings.optJSONObject(position)
-                ?: return chatRejected(Reason.MALFORMED, "chat $declaredId has a malformed setting")
+                ?: return SettingsResult.Rejected(Reason.MALFORMED, "chat $declaredId has a malformed setting")
             val key = raw.optString("k", "")
             if (key.isEmpty() || !settingKeys.add(key)) {
-                return chatRejected(Reason.MALFORMED, "chat $declaredId has an invalid setting key")
+                return SettingsResult.Rejected(Reason.MALFORMED, "chat $declaredId has an invalid setting key")
             }
             if (key == "api_key") {
-                return chatRejected(Reason.FORBIDDEN_CREDENTIAL, "chat $declaredId contains a credential")
+                return SettingsResult.Rejected(
+                    Reason.FORBIDDEN_CREDENTIAL, "chat $declaredId contains a credential"
+                )
             }
             val type = raw.optString("t", "")
             val value: Any = when (type) {
@@ -233,31 +304,22 @@ object PortableChatRestorePlan {
                 "f" -> raw.optDouble("v").toFloat()
                 "ss" -> {
                     val array = raw.optJSONArray("v")
-                        ?: return chatRejected(Reason.MALFORMED, "chat $declaredId has a malformed string set")
+                        ?: return SettingsResult.Rejected(
+                            Reason.MALFORMED, "chat $declaredId has a malformed string set"
+                        )
                     (0 until array.length()).mapTo(LinkedHashSet()) { array.optString(it) }
                 }
-                else -> return chatRejected(
+                else -> return SettingsResult.Rejected(
                     Reason.UNSUPPORTED_SETTING_TYPE,
                     "chat $declaredId carries setting type '$type'"
                 )
             }
             settings.add(ChatLogicalImportPlan.SettingEntry(key, type, value))
         }
-        return ChatResult.Ok(
-            ValidatedChat(
-                ChatLogicalImportPlan.ChatPlan(
-                declaredId,
-                listRow,
-                messages.toString(),
-                messages.length(),
-                settings
-                ),
-                messageIds
-            )
-        )
+        return SettingsResult.Ok(settings)
     }
 
-    private fun isStableChatId(value: String): Boolean =
+    internal fun isStableChatId(value: String): Boolean =
         isCanonicalUuid(value) || LEGACY_HASH.matches(value)
 
     private fun isCanonicalUuid(value: String): Boolean = try {
@@ -280,4 +342,13 @@ object PortableChatRestorePlan {
     )
 
     private val LEGACY_HASH = Regex("[0-9a-f]{64}")
+
+    /** Per-chat marker in v3: false when the chat's history was never saved. */
+    const val HISTORY_SAVED_KEY = "history_saved"
+
+    internal val SUPPORTED_FORMATS = setOf(
+        ChatLogicalSerializer.FORMAT_V1,
+        ChatLogicalSerializer.FORMAT_V2,
+        ChatLogicalSerializer.FORMAT_V3
+    )
 }

@@ -88,6 +88,12 @@ class DatabaseChatSource(
         return ChatSource.ValuesRead(ReadState.OK, values)
     }
 
+    override fun readChatValue(chatId: String, key: String): Any? {
+        val chat = try { store.getChat(chatId) } catch (_: Exception) { return null } ?: return null
+        if (!chat.readable) return unmovedChats.readChatValue(chatId, key)
+        return TypedValueCodec.decodeMap(chat.prefsJson)?.get(key)
+    }
+
     override fun readListValues(): ChatSource.ValuesRead {
         val failed = ChatSource.ValuesRead(ReadState.FAILED, emptyMap())
         val values = LinkedHashMap<String, Any>()

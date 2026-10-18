@@ -106,6 +106,33 @@ class LegacyChatSource(context: Context) : ChatSource {
 
     override fun readListValues(): ChatSource.ValuesRead = readValues(LIST_FILE, LIST_KEY)
 
+    override fun readChatValue(chatId: String, key: String): Any? {
+        if (key == HISTORY_KEY) return null
+        val file = historyFile(chatId)
+        val prefs = try { SecurePrefs.get(app, file) } catch (_: Exception) { return null }
+        if (SecurePrefs.isLockedName(file)) return null
+        if (try { !prefs.contains(key) } catch (_: Exception) { true }) return null
+        // Only the typed getters decrypt a single value; the stored type is
+        // not known, so try each until one matches.
+        val readers: List<() -> Any?> = listOf(
+            { prefs.getString(key, null) },
+            { prefs.getLong(key, 0L) },
+            { prefs.getInt(key, 0) },
+            { prefs.getBoolean(key, false) },
+            { prefs.getFloat(key, 0f) },
+            { prefs.getStringSet(key, null) }
+        )
+        for (read in readers) {
+            try {
+                return read()
+            } catch (_: ClassCastException) {
+            } catch (_: Exception) {
+                return null
+            }
+        }
+        return null
+    }
+
     override fun changeToken(chatId: String): String? {
         val raw = readRaw(historyFile(chatId), HISTORY_KEY) as? Raw.Value ?: return null
         // A stored history the reader would not deliver gets no token.

@@ -250,7 +250,7 @@ object ChatMergePlanner {
         current.settings == backup.settings &&
         current.messagesJson == backup.messagesJson
 
-    private fun timestamp(value: Any?): Long? = when (value) {
+    internal fun timestamp(value: Any?): Long? = when (value) {
         null, JSONObject.NULL -> null
         is Number -> value.toLong().takeIf { it >= 0L }
         else -> value.toString().toLongOrNull()?.takeIf { it >= 0L }

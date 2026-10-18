@@ -58,7 +58,7 @@ object PortablePackage {
     const val MANIFEST_VERSION = 4
     private const val PRE_SETTINGS_MANIFEST_VERSION = 3
     const val MAX_ENTRIES = 10_000
-    const val MAX_ENTRY_BYTES: Long = 1L shl 30      // 1 GiB per entry
+    const val MAX_ENTRY_BYTES: Long = 8L shl 30      // 8 GiB per entry (malformed-archive guard)
     const val MAX_TOTAL_BYTES: Long = 2L shl 30      // 2 GiB uncompressed total
     const val MAX_MANIFEST_BYTES = 1 shl 20          // 1 MiB — the manifest is tiny in practice
 
