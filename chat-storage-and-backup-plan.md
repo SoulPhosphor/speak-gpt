@@ -308,13 +308,16 @@ Define these in the database PR so later PRs don't rewrite each other:
 5. **Staged chat database** — create a `chats.db` file in a staging location,
    fill it, validate it, and atomically swap it into place (or discard it).
    Migration, restore, and backup capture all use this one helper.
-6. **Chat-set commit target** — the step that makes a validated staged chat
-   set authoritative. Two implementations: *database swap* (replace `chats.db`)
-   and *legacy write* (write each chat from the staged database into
-   `enc.chat_<id>` / `enc.chat_list`, the way restore writes today). The legacy
-   target is **not temporary**: legacy storage stays authoritative on any
-   device where migration has not succeeded (requirement 4), so restore must
-   be able to land there. It is retired only with the legacy store itself.
+6. **Chat-set commit target** (built in PR 4, with restore) — the step that
+   makes a validated staged chat set authoritative. Two implementations:
+   *database swap* (publish the staged `chats.db` through the existing
+   crash-safe, journaled `DirectDatabaseRestoreCoordinator`, extended to
+   chats, rather than a second swap mechanism) and *legacy write* (write each
+   chat from the staged database into `enc.chat_<id>` / `enc.chat_list`, the
+   way restore writes today). The legacy target is **not temporary**: legacy
+   storage stays authoritative on any device where migration has not
+   succeeded (requirement 4), so restore must be able to land there. It is
+   retired only with the legacy store itself.
 7. **Change token** — `ChatSource` exposes a per-chat change token for
    incremental exports: legacy = the existing whole-history fingerprint,
    database = `store_id` + `revision`. Callers never care which.
@@ -499,10 +502,10 @@ serializers, and PR 8 to rewrite them again. In the revised order:
 |---|---|---|---|---|
 | 0 | Finish PR #145 (message limit) | — | CI green on `c29fa62` (done), Codex re-review, merge | merged |
 | 1 | Plan in repo | — | This file + `project-plan.md` Feature 0 | merged |
-| 2 | Storage foundations | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, both commit targets, streaming JSON codec; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
-| 3 | Recovery Backup write + verification | 2 | Streaming `chats.json` writer from `ChatSource` (v2-equivalent, `schemaVersion` 2); streaming semantic validation; capture consistency; `CHATS_JSON_BYTES` and other memory-only ceilings replaced by free-space checks and malformed-archive guards; distinct failure reasons (wording approved by owner **before** code) | over-64 MiB chat set backs up and verifies on emulator from legacy storage and from a test database; output matches `serializeV2` on small sets; **owner confirms on device that a full backup of current data succeeds** |
-| 4 | Recovery restore | 2, 3 | Streaming reader (v1 and v2) into a staged `chats.db`; validation of the staged set; merge planning and rollback snapshot without whole-set memory; commit via `ChatSetReplacementCoordinator` to either target; `ChatRestoreManager` / `RecoveryBackupManager` on the same path | over-64 MiB round trip on legacy target and on database target; every older package version restores; rollback at each step; existing restore UI unchanged |
-| 5 | Migration engine (activation off) | 2 | Copy + verify + durable progress + resume; damaged/locked chats; gating of chat UI and background writers; progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
+| 2 | Storage foundations (#147) | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, Gson-compatible streaming list reader; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
+| 3 | Recovery Backup write + verification | 2 | Streaming `chats.json` writer and reader for the backup format, from `ChatSource` (v2-equivalent, `schemaVersion` 2); streaming semantic validation; capture consistency; `CHATS_JSON_BYTES` and other memory-only ceilings replaced by free-space checks and malformed-archive guards; distinct failure reasons (wording approved by owner **before** code) | over-64 MiB chat set backs up and verifies on emulator from legacy storage and from a test database; output matches `serializeV2` on small sets; **owner confirms on device that a full backup of current data succeeds** |
+| 4 | Recovery restore | 2, 3 | Streaming reader (v1 and v2) into a staged `chats.db`; validation of the staged set; merge planning and rollback snapshot without whole-set memory; both commit targets (§4.2 item 6); commit via `ChatSetReplacementCoordinator` to either target; `ChatRestoreManager` / `RecoveryBackupManager` on the same path | over-64 MiB round trip on legacy target and on database target; every older package version restores; rollback at each step; existing restore UI unchanged |
+| 5 | Migration engine (activation off) | 2 | Copy + verify + durable progress + resume; document text moved into `include_text_parts`, with `DatabaseChatSource` reassembling full payloads; damaged/locked chats; gating of chat UI and background writers; progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
 | 6 | Compatibility layer (activation off) | 2 | `ChatPreferences` and every listed caller (§3) read and write through `ChatSource`/`ChatStore` by authority; list metadata without parsing histories; search index, transcript backfill, image catalog, damaged-chat flows through the same layer | caller tests pass with authority = legacy (production) and authority = database (test); app behavior unchanged |
 | 7 | Readable Backup + memory export streaming | 2 | Versioned per-chat JSON, change-token incremental selection, streaming `MemoryExporter` | tests on both storages; format documented for the viewer |
 | 8 | Activation readiness verification | 3–7 | End-to-end instrumented suite: legacy data → migrate → Recovery Backup from database → verify → restore into a clean install and into the legacy target → compare with the original legacy content; restore of a pre-migration backup after migration; heap measured on a 256 MB heap through the whole cycle | all green; readiness gate met |
