@@ -237,6 +237,32 @@ exactly and redoes none of it:
 - A rename-journal entry still pending blocks migration (see "Startup
   order"), so no chat is mid-move when it is copied.
 
+**How chats reach `beta/new-client`, and their identities (investigated
+October 18 2026, read-only).** The beta is a separate installation
+(`com.soulphosphor.phosphorshines.beta`), so it began with no chats. Every
+way a chat-list row can be created there stores an explicit `"id"`:
+
+| Path | Identity written |
+|---|---|
+| Created in the beta (`NewConversationCoordinator.allocateUniqueId`, also used by chat-file import) | new random UUID |
+| Imported from an old export through the legacy converter (`LegacyChatConverterActivity` → `LegacyChatConversion` → `ChatLogicalImportPlan`) | a genuine UUID is kept; a title-derived ID is replaced by a new UUID |
+| Restored from a Recovery Backup (`PortableChatRestorePlan`, v1 and v2) | the declared ID is written into `"id"`: a UUID, or a title-derived hash **frozen as an explicit ID** |
+
+The title-hash creation path (`addChat`) is gone and guarded by a Phase 8
+source contract. So the beta should hold **no row without a stored `"id"`**.
+A chat restored with a frozen hash ID keeps it permanently, and renaming it
+never moves it, because `editChat` moves only rows without `"id"`. Those IDs
+are stable even though they are not in UUID form, and changing them would
+be a reassignment, which is ruled out.
+
+**Conclusion: no additional identity migration is needed.** Migration copies
+identities as they are. The no-`"id"` fallback and its rename move path stay
+supported in both storages as compatibility (and `ChatStore.renameChatId`
+remains their database side), but on the beta they are not expected to
+occur. Migration verification and the PR 8 end-to-end suite include a
+chat list with UUID, frozen-hash and no-`"id"` rows to prove each keeps
+its identity and references.
+
 **Background work.** The app is one process, but chat storage is reached
 without any chat screen open: WorkManager (`AutoBackupWorker`,
 `DefaultUsernameFill`), foreground services (generation, image generation
