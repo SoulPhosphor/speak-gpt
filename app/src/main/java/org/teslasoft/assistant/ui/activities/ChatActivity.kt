@@ -350,6 +350,7 @@ import org.teslasoft.assistant.util.LocaleParser
 import org.teslasoft.assistant.util.ModelContextCapacity
 import org.teslasoft.assistant.util.ModelContextDecision
 import org.teslasoft.assistant.util.RequestCapacity
+import org.teslasoft.assistant.util.MessageLengthLimit
 import org.teslasoft.assistant.util.RequestMessageSnapshot
 import org.teslasoft.assistant.util.RequestHeapState
 import org.teslasoft.assistant.util.WindowInsetsUtil
@@ -1556,6 +1557,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // composer if storage refuses that commit; no request starts early.
         messageInput?.setText(recognizedText)
         messageInput?.setSelection(recognizedText.length)
+        // prepareTypedTurn refuses an over-limit message, and nothing then
+        // re-arms the microphone, so an engaged hands-free conversation ends
+        // here the same way the Whisper refusal ends it.
+        val storedForm = storedFormOfTypedSend(recognizedText)
+        if (storedForm != null && MessageLengthLimit.exceeds(storedForm) &&
+            preferences?.getHandsFreeMode() == true && !handsFreeStopped
+        ) {
+            stopHandsFreeLoop("transcript over the message limit", notify = true)
+        }
         prepareTypedTurn(recognizedText)
     }
 
@@ -6730,6 +6740,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Sample the box BEFORE inserting (already-typed text never auto-sends).
                 val boxWasEmpty = messageInput?.text.isNullOrEmpty()
                 if (shouldAutoSendTranscription(boxWasEmpty)) {
+                    if (refuseOverLimitTranscript(transcription)) return
                     putMessage(prefix + transcription + endSeparator, false)
 
                     chatMessages.add(
@@ -7424,6 +7435,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Sample the box BEFORE inserting (already-typed text never auto-sends).
         val boxWasEmpty = messageInput?.text.isNullOrEmpty()
         if (shouldAutoSendTranscription(boxWasEmpty)) {
+            if (refuseOverLimitTranscript(transcription)) return
             putMessage(prefix + transcription + endSeparator, false)
             chatMessages.add(
                 ChatMessage(
@@ -8649,6 +8661,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val prompt: String = preferences!!.getPrompt()
 
             if (prompt.toString() != "" && prompt.toString() != "null" && prompt != "") {
+                // An over-limit activation prompt is refused like any other
+                // send: nothing is stored or sent, and it waits in the
+                // message box.
+                if (MessageLengthLimit.exceeds(prompt)) {
+                    insertTranscriptIntoBox(prompt)
+                    showMessageTooLong(prompt)
+                    return
+                }
                 putMessage(prompt, false)
 
                 chatMessages.add(
@@ -10267,6 +10287,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         ) {
             return
         }
+        // Checked before anything else happens, so a refused message leaves
+        // the composer, keyboard and any pending regeneration untouched.
+        val storedForm = storedFormOfTypedSend(rawMessage)
+        if (storedForm != null && MessageLengthLimit.exceeds(storedForm)) {
+            showMessageTooLong(storedForm)
+            return
+        }
         settlePendingRegeneration()
 
         // A send action always closes the software keyboard. Capacity or
@@ -10504,6 +10531,55 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun formatTokenCount(value: Int): String =
         NumberFormat.getIntegerInstance().format(value)
+
+    /**
+     * The message a typed or spoken send would store: prefix, text and end
+     * separator, with a leading compact command removed the same way
+     * [prepareTypedTurn] removes it. Null for a compact command with no
+     * message, which stores nothing. The message limit measures this.
+     */
+    private fun storedFormOfTypedSend(rawMessage: String): String? =
+        when (val parsed = org.teslasoft.assistant.util.summarizer.CompactCommand.parse(rawMessage)) {
+            org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.NotCompact ->
+                prefix + rawMessage + endSeparator
+            org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.CompactOnly -> null
+            is org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.CompactAndSend ->
+                prefix + parsed.message + endSeparator
+        }
+
+    private fun showMessageTooLong(text: String) {
+        showRequestHardBlock(
+            R.string.message_too_long_title,
+            getString(
+                R.string.message_too_long_send_body,
+                MessageLengthLimit.formatCount(MessageLengthLimit.characterCount(text)),
+                MessageLengthLimit.formatCount(MessageLengthLimit.MAX_CHARACTERS)
+            )
+        )
+    }
+
+    /**
+     * Whisper auto-send commits the transcript directly instead of going
+     * through [prepareTypedTurn]. An over-limit transcript is refused the
+     * same way: it is placed in the message box and nothing is sent.
+     * Nothing re-arms the microphone after a refusal, so an engaged
+     * hands-free conversation is ended (with the stopped-listening cue)
+     * rather than left showing Stop while not listening.
+     */
+    private fun refuseOverLimitTranscript(transcription: String): Boolean {
+        // Measured as stored (prefix and end separator included); the raw
+        // transcript is what goes back into the message box.
+        val storedForm = prefix + transcription + endSeparator
+        if (!MessageLengthLimit.exceeds(storedForm)) return false
+        transcriptionInProgress = false
+        if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) {
+            stopHandsFreeLoop("transcript over the message limit", notify = true)
+        }
+        restoreUIState()
+        insertTranscriptIntoBox(transcription)
+        showMessageTooLong(storedForm)
+        return true
+    }
 
     private fun showRequestHardBlock(titleRes: Int, body: String) {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)

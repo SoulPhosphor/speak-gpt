@@ -27,6 +27,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.util.MessageLengthLimit
 
 class EditMessageDialogFragment : DialogFragment() {
     companion object {
@@ -70,13 +71,39 @@ class EditMessageDialogFragment : DialogFragment() {
 
         builder!!.setView(view)
             .setCancelable(false)
-            .setPositiveButton(R.string.btn_save) { _, _ -> listener!!.onEdit(promptInput?.text.toString(), requireArguments().getInt("position")) }
+            .setPositiveButton(R.string.btn_save, null)
             .setNeutralButton(R.string.btn_delete) { _, _ ->
                 listener?.onDelete(requireArguments().getInt("position"))
             }
             .setNegativeButton(R.string.btn_cancel) { _, _ ->  }
 
-        return builder!!.create()
+        val dialog = builder!!.create()
+        // Save is wired after show so an over-limit edit can keep the dialog
+        // open with the user's text instead of discarding it.
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val prompt = promptInput?.text.toString()
+                if (MessageLengthLimit.exceeds(prompt)) {
+                    showTooLong(prompt)
+                } else {
+                    listener!!.onEdit(prompt, requireArguments().getInt("position"))
+                    dialog.dismiss()
+                }
+            }
+        }
+        return dialog
+    }
+
+    private fun showTooLong(prompt: String) {
+        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.message_too_long_title)
+            .setMessage(getString(
+                R.string.message_too_long_edit_body,
+                MessageLengthLimit.formatCount(MessageLengthLimit.characterCount(prompt)),
+                MessageLengthLimit.formatCount(MessageLengthLimit.MAX_CHARACTERS)
+            ))
+            .setPositiveButton(R.string.okay, null)
+            .show()
     }
 
     fun setStateChangedListener(listener: StateChangesListener) {
