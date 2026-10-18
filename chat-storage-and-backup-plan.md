@@ -406,7 +406,15 @@ that flow is approved by the owner before code.
 Schema v1 (PR 2):
 
 - `meta(key, value)` — includes `schema` and a random `store_id` (so revision
-  numbers from a replaced/restored DB are never confused with this one).
+  numbers from a replaced/restored DB are never confused with this one), the
+  saved-list marker `list_saved`, and `revision_counter`, the store's
+  **generation**. Every change to the store advances the generation in the
+  same transaction: chat create, update, rename and delete; every message,
+  part and document-text write or delete; every `list_state` (folders) write;
+  and marking the list saved. `ChatStore.generation()` reads it. Two reads
+  with the same `store_id` and generation saw the same content, which is what
+  capture tokens and backup receipts rely on. Chat revisions are drawn from
+  the same counter.
 - `chats(chat_id PK, list_order, list_row_json, prefs_json, readable, revision,
   history_saved)` — `list_row_json` is the chat-list row exactly as stored;
   `prefs_json` holds every other key of `enc.chat_<id>` with its type;
