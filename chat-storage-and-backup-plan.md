@@ -59,7 +59,7 @@ upgrade, not a redesign.
 |---|---|---|
 | Startup out-of-memory crash fix | merged into `beta/new-client` via PR #144 (merge commit `42ba0c8`) | **Done.** Beta APK rebuilt and published (`beta-latest`). Owner has not yet confirmed on device. |
 | 200,000-character message limit | PR #145, branch `ccr-2aeea9b3-5i4mu4`, head `c29fa62` | **Not merged.** First Codex review found the Whisper auto-send gap; fixed in `c29fa62`, reply posted on the thread. Android Checks on `c29fa62` passed (both jobs green); `@codex review` re-requested October 18. Next: on a clean review resolve the thread; merge only when the owner directs. |
-| Stage 1 chat database (`ChatStore`) | **Not pushed as code.** Copies of the unreviewed source are preserved in `docs/handoff/stage1-unreviewed/` (outside the build) | Written, never compiled by CI, never reviewed. Next session may start from these files (move them into `app/src/main/java/org/teslasoft/assistant/preferences/chatstore/` and `app/src/androidTest/java/org/teslasoft/assistant/preferences/chatstore/`), or rewrite. |
+| Stage 1 chat database (`ChatStore`) | Moved into PR 2 (#147, `preferences/chatstore/`) | Reviewed and corrected there; CI green. |
 
 ### What PR #144 changed (already on beta)
 
@@ -242,7 +242,7 @@ authoritative, use `CorruptionErrorHandlers.Cipher(context, BackupType.CHATS)`
 semantics: flag degraded, close, never delete; locked key → existing
 locked-storage screen.
 
-Schema v1 (as written in the stage 1 draft):
+Schema v1 (PR 2):
 
 - `meta(key, value)` — includes `schema` and a random `store_id` (so revision
   numbers from a replaced/restored DB are never confused with this one).
@@ -262,7 +262,7 @@ Schema v1 (as written in the stage 1 draft):
 - `list_state(key, value_json)` — the other `enc.chat_list` keys verbatim
   (folders and their order, etc.).
 
-API (stage 1 draft): `putChat/getChat/listChats/deleteChat/revision`,
+API (PR 2): `putChat/getChat/listChats/deleteChat/revision`,
 `putListState/getListState`, `messageCount`, `readPage(offset, limit)`,
 `readBefore(beforeSeq, limit)` (chat-screen paging), `messageAt(position)`,
 `findByMessageId`, `positionOf(seq)`, `forEachMessage` (page-at-a-time
@@ -585,10 +585,8 @@ Activation may not be merged until all of these hold:
    (`PRRT_kwDOSZQRks6tlexq`, Whisper auto-send, fixed in `c29fa62`). Merge only
    when the owner directs.
 3. The plan PR merges when the owner directs.
-4. Start PR 2 from `beta/new-client`. The unreviewed stage 1 draft is in
-   `docs/handoff/stage1-unreviewed/`; move it into the source tree, add
-   `include_text_parts` to schema v1, add the test class to the CI instrumented
-   list, then add the interfaces from §4.2.
+4. PR 2 is #147 (branch `chat-storage/pr2-foundations`). Later PRs branch
+   from `beta/new-client` once it merges, or stack on it until then.
 5. Before PR 3 and PR 5, propose the new user-facing wording (backup failure
    reasons; migration progress screen) and wait for approval before writing
    it anywhere.
