@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.preferences.backup.portable
 
 import android.content.Context
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
@@ -25,6 +26,7 @@ import org.teslasoft.assistant.preferences.backup.RecoveryOperationGate
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
 import org.teslasoft.assistant.preferences.chatstore.ChatSources
+import org.teslasoft.assistant.preferences.chatstore.ChatStorageAuthority
 import org.teslasoft.assistant.preferences.lorebook.LoreBookEncryption
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.preferences.memory.MemoryLog
@@ -163,7 +165,7 @@ object PortableRecoveryWriter {
     ): Result = RecoveryOperationGate.runExclusive {
         for (attempt in 1..PortableBackupCaptureStability.MAX_ATTEMPTS) {
             val before = PortableBackupMutationTokens.read(context)
-                ?: return@runExclusive Result.Failed(Reason.SNAPSHOT_FAILED)
+                ?: return@runExclusive failed(context, Reason.SNAPSHOT_FAILED, "reading the change markers before capture")
             runCatching { if (out.exists()) out.delete() }
             val result = createPackageLocked(
                 context, out, recoverySecret, passwordBlob, appVersion, before, attempt
@@ -173,7 +175,7 @@ object PortableRecoveryWriter {
                 attempt == PortableBackupCaptureStability.MAX_ATTEMPTS
             ) return@runExclusive result
         }
-        Result.Failed(Reason.SOURCE_CHANGED_DURING_CAPTURE)
+        failed(context, Reason.SOURCE_CHANGED_DURING_CAPTURE, "capture")
     }
 
     private fun createPackageLocked(
@@ -191,11 +193,15 @@ object PortableRecoveryWriter {
             // "unavailable to use or save" — snapshotting it here would seal a
             // corrupt copy inside a package the user trusts. Refused loudly.
             if (DatabaseHealthState.anyDegraded(context)) {
-                return Result.Failed(Reason.STORE_DEGRADED)
+                return failed(context, Reason.STORE_DEGRADED, "database health check", "a database is marked damaged")
             }
             val space = PortableBackupSpaceEstimate.check(context, staging)
             if (space.shortfallBytes > 0L) {
-                return Result.Failed(Reason.NOT_ENOUGH_STORAGE, shortfallBytes = space.shortfallBytes)
+                return failed(
+                    context, Reason.NOT_ENOUGH_STORAGE, "free space check",
+                    "needs ${space.requiredBytes} bytes, ${space.availableBytes} available",
+                    shortfallBytes = space.shortfallBytes
+                )
             }
             val createdAt = Instant.now().toString()
             val artifacts = ArrayList<PortablePackage.Artifact>()
@@ -209,9 +215,9 @@ object PortableRecoveryWriter {
             if (MemoryStore.isProvisioned(context)) {
                 val staged = File(staging, "memory.snapshot")
                 val key = DatabaseKeys.getOrCreate(context, DatabaseKeys.KEY_MEMORY, databaseExists = true)
-                    ?: return Result.Failed(Reason.KEY_MATERIAL_UNAVAILABLE)
+                    ?: return failed(context, Reason.KEY_MATERIAL_UNAVAILABLE, "memory database", "its key is unavailable")
                 if (!RecoveryBackupManager.snapshotCipher(context, MemoryStore.DATABASE_NAME, staged) { key }) {
-                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    return failed(context, Reason.SNAPSHOT_FAILED, "memory database", "the snapshot could not be taken")
                 }
                 RecoveryBackupManager.integrityCheckCipher(staged, key)
                 artifacts.add(
@@ -231,11 +237,11 @@ object PortableRecoveryWriter {
                 val staged = File(staging, "lorebook.snapshot")
                 val key = try {
                     LoreBookEncryption.obtainPassword(context, "lorebook.db")
-                } catch (_: Exception) {
-                    return Result.Failed(Reason.KEY_MATERIAL_UNAVAILABLE)
+                } catch (e: Exception) {
+                    return failed(context, Reason.KEY_MATERIAL_UNAVAILABLE, "lorebook database", "its key is unavailable (${e.javaClass.simpleName})")
                 }
                 if (!RecoveryBackupManager.snapshotCipher(context, "lorebook.db", staged, allowEmptyKey = true) { key }) {
-                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    return failed(context, Reason.SNAPSHOT_FAILED, "lorebook database", "the snapshot could not be taken")
                 }
                 if (key.isNotEmpty()) RecoveryBackupManager.integrityCheckCipher(staged, key)
                 else RecoveryBackupManager.integrityCheckPlain(staged)
@@ -259,7 +265,7 @@ object PortableRecoveryWriter {
                     RecoveryBackupManager.integrityCheckPlain(staged)
                     val profileImages = ProfileImagePortableBackup.buildArtifacts(context, staged)
                     if (profileImages is ProfileImagePortableBackup.Result.Failed) {
-                        return Result.Failed(Reason.SNAPSHOT_FAILED)
+                        return failed(context, Reason.SNAPSHOT_FAILED, "profile images", profileImages.toString())
                     }
                     profileImages as ProfileImagePortableBackup.Result.Ok
                     artifacts.add(
@@ -280,7 +286,7 @@ object PortableRecoveryWriter {
             when (val generated = GeneratedImagePortableBackup.buildArtifacts(context, staging)) {
                 is GeneratedImagePortableBackup.Result.NothingToBackUp -> Unit
                 is GeneratedImagePortableBackup.Result.Failed ->
-                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    return failed(context, Reason.SNAPSHOT_FAILED, "generated images", generated.toString())
                 is GeneratedImagePortableBackup.Result.Ok -> {
                     artifacts.addAll(generated.artifacts)
                     generatedImageCount = generated.inventory.imageCount
@@ -294,11 +300,12 @@ object PortableRecoveryWriter {
                 when (CompanionBackupExporter.buildBackupZip(
                     context, staged, validateAssignedImages = true
                 )) {
-                    CompanionBackupExporter.BuildResult.MemoryUnavailable,
+                    CompanionBackupExporter.BuildResult.MemoryUnavailable ->
+                        return failed(context, Reason.SNAPSHOT_FAILED, "companions archive", "the memory database is unavailable")
                     CompanionBackupExporter.BuildResult.LorebookUnavailable ->
-                        return Result.Failed(Reason.SNAPSHOT_FAILED)
+                        return failed(context, Reason.SNAPSHOT_FAILED, "companions archive", "the lorebook database is unavailable")
                     CompanionBackupExporter.BuildResult.ProfileImageUnavailable ->
-                        return Result.Failed(Reason.PROFILE_IMAGE_UNAVAILABLE)
+                        return failed(context, Reason.PROFILE_IMAGE_UNAVAILABLE, "companions archive", "an assigned profile image is unavailable")
                     is CompanionBackupExporter.BuildResult.Ok -> artifacts.add(
                         PortablePackage.Artifact(
                             entryName = "companion_roleplay.zip",
@@ -315,10 +322,9 @@ object PortableRecoveryWriter {
             // ---- Model & Endpoint Settings (never credentials) ----
             run {
                 val staged = File(staging, "model_endpoint_settings.json")
-                if (ModelEndpointPortableBackup.write(context, staged) is
-                    ModelEndpointPortableBackup.Result.Failed
-                ) {
-                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                val endpointResult = ModelEndpointPortableBackup.write(context, staged)
+                if (endpointResult is ModelEndpointPortableBackup.Result.Failed) {
+                    return failed(context, Reason.SNAPSHOT_FAILED, "model and endpoint settings", endpointResult.toString())
                 }
                 artifacts.add(
                     PortablePackage.Artifact(
@@ -336,7 +342,7 @@ object PortableRecoveryWriter {
             run {
                 val staged = File(staging, AppSettingsPortableCodec.ENTRY_NAME)
                 val settings = AppSettingsPortableStore.write(context, staged).getOrElse {
-                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    return failed(context, Reason.SNAPSHOT_FAILED, "app settings", it.javaClass.simpleName)
                 }
                 artifacts.add(
                     PortablePackage.Artifact(
@@ -353,8 +359,10 @@ object PortableRecoveryWriter {
             // ---- chats (written one message at a time from the authoritative
             //      storage; LOCKED or unreadable fails visibly) ----
             val chatStorage = ChatSources.authoritative(context)
-                ?: return Result.Failed(
-                    Reason.CHATS_UNAVAILABLE, chatFailure = ChatLogicalSerializer.FailureCategory.LIST
+                ?: return failed(
+                    context, Reason.CHATS_UNAVAILABLE, "chats",
+                    "chat storage authority is ${ChatStorageAuthority.current(context)}",
+                    chatFailure = ChatLogicalSerializer.FailureCategory.LIST
                 )
             val stagedChats = File(staging, "chats.json")
             val written = try {
@@ -363,11 +371,14 @@ object PortableRecoveryWriter {
                 }
             } catch (_: OutOfMemoryError) {
                 runCatching { stagedChats.delete() }
-                return Result.Failed(Reason.OUT_OF_MEMORY)
+                return failed(context, Reason.OUT_OF_MEMORY, "chats", "ran out of memory while writing the chats")
             }
             when (written) {
                 is ChatsArtifactWriter.Result.Unavailable ->
-                    return Result.Failed(Reason.CHATS_UNAVAILABLE, chatFailure = written.category)
+                    return failed(
+                        context, Reason.CHATS_UNAVAILABLE, "chats", "chat storage part ${written.category} could not be read",
+                        chatFailure = written.category
+                    )
                 is ChatsArtifactWriter.Result.Ok -> {
                     artifacts.add(
                         PortablePackage.Artifact(
@@ -375,26 +386,39 @@ object PortableRecoveryWriter {
                             databaseKeyHex = null, keySemantics = null, schemaVersion = 3
                         )
                     )
-                    val summary = (stagedChats.bufferedReader(Charsets.UTF_8).use { ChatsArtifactScanner.scan(it) } as?
-                        ChatsArtifactScanner.Result.Ok)?.summary
-                        ?: return Result.Failed(Reason.PACKAGE_VERIFY_FAILED)
+                    val summary = when (val scanned = stagedChats.bufferedReader(Charsets.UTF_8).use { ChatsArtifactScanner.scan(it) }) {
+                        is ChatsArtifactScanner.Result.Ok -> scanned.summary
+                        is ChatsArtifactScanner.Result.Rejected -> return failed(
+                            context, Reason.PACKAGE_VERIFY_FAILED, "checking the written chats (${written.chatCount} chats)",
+                            "${scanned.reason}: ${scanned.detail}"
+                        )
+                        is ChatsArtifactScanner.Result.Unreadable -> return failed(
+                            context, Reason.PACKAGE_VERIFY_FAILED, "checking the written chats (${written.chatCount} chats)",
+                            scanned.detail
+                        )
+                    }
                     when (val pdfs = PdfAttachmentPortableBackup.buildArtifacts(context, summary.pdfRefs)) {
                         is PdfAttachmentPortableBackup.Result.Ok -> artifacts.addAll(pdfs.artifacts)
                         is PdfAttachmentPortableBackup.Result.Failed ->
-                            return Result.Failed(Reason.SNAPSHOT_FAILED)
+                            return failed(context, Reason.SNAPSHOT_FAILED, "PDF attachments", pdfs.detail)
                     }
                     includedTypes.add(BackupType.CHATS)
-                    when (PortableBackupCaptureStability.decide(
-                        beforeTokens,
-                        PortableBackupMutationTokens.read(context),
-                        captureAttempt
-                    )) {
+                    val afterTokens = PortableBackupMutationTokens.read(context)
+                    when (PortableBackupCaptureStability.decide(beforeTokens, afterTokens, captureAttempt)) {
                         PortableBackupCaptureStability.Decision.STABLE -> Unit
-                        PortableBackupCaptureStability.Decision.RETRY,
-                        PortableBackupCaptureStability.Decision.REFUSE ->
+                        PortableBackupCaptureStability.Decision.RETRY ->
+                            // Retried by createPackage; only the last attempt is logged.
                             return Result.Failed(Reason.SOURCE_CHANGED_DURING_CAPTURE)
+                        PortableBackupCaptureStability.Decision.REFUSE -> {
+                            val changed = afterTokens.orEmpty().keys.union(beforeTokens.keys)
+                                .filter { beforeTokens[it] != afterTokens?.get(it) }
+                            return failed(
+                                context, Reason.SOURCE_CHANGED_DURING_CAPTURE, "capture attempt $captureAttempt",
+                                "changed while capturing: ${changed.joinToString()}"
+                            )
+                        }
                         PortableBackupCaptureStability.Decision.UNAVAILABLE ->
-                            return Result.Failed(Reason.SNAPSHOT_FAILED)
+                            return failed(context, Reason.SNAPSHOT_FAILED, "reading the change markers after capture")
                     }
                     val validatedArtifacts = artifacts.map { artifact ->
                         PortablePackage.ValidatedArtifact(
@@ -413,12 +437,12 @@ object PortableRecoveryWriter {
                         declaredCategories = PortableRestoreCategory.entries.toSet(),
                         explicitlyEmptyCategories = PortableRestoreCategory.entries.toSet() - represented
                     )
-                    if (semantic !is PortableRecoverySemanticValidator.Result.Valid) {
-                        return Result.Failed(
-                            if (semantic is PortableRecoverySemanticValidator.Result.TooLarge) {
-                                Reason.SNAPSHOT_FAILED
-                            } else Reason.PACKAGE_VERIFY_FAILED
-                        )
+                    when (semantic) {
+                        is PortableRecoverySemanticValidator.Result.Valid -> Unit
+                        PortableRecoverySemanticValidator.Result.TooLarge ->
+                            return failed(context, Reason.SNAPSHOT_FAILED, "checking the backup contents", "an artifact is over its size limit")
+                        is PortableRecoverySemanticValidator.Result.Invalid ->
+                            return failed(context, Reason.PACKAGE_VERIFY_FAILED, "checking the backup contents", semantic.detail)
                     }
                     val declarations = PortableRecoverySemanticValidator.declarations(
                         validatedArtifacts, semantic.recordCounts
@@ -443,9 +467,9 @@ object PortableRecoveryWriter {
                         } catch (_: Exception) { "" }
                     )
 
-                    if (!verifyFinishedPackage(context, out, recoverySecret)) {
+                    verifyFinishedPackage(context, out, recoverySecret)?.let { problem ->
                         runCatching { out.delete() }
-                        return Result.Failed(Reason.PACKAGE_VERIFY_FAILED)
+                        return failed(context, Reason.PACKAGE_VERIFY_FAILED, "reopening the finished backup", problem)
                     }
                     MemoryLog.log(context, "PortableRecovery", "info",
                         "Portable recovery package created and verified (${artifacts.size} artifact(s), ${written.chatCount} chat(s), " +
@@ -466,7 +490,7 @@ object PortableRecoveryWriter {
             runCatching { out.delete() }
             MemoryLog.log(context, "PortableRecovery", "error",
                 "Portable recovery package creation failed (${e.javaClass.simpleName}).")
-            return Result.Failed(Reason.SNAPSHOT_FAILED)
+            return failed(context, Reason.SNAPSHOT_FAILED, "unexpected error", e.javaClass.name)
         } finally {
             PortableStaging.delete(staging)
         }
@@ -474,8 +498,11 @@ object PortableRecoveryWriter {
 
     /** Reopen the finished file and verify it end-to-end with the SAME reader
      *  the restore path uses. A package we cannot read back is not a backup. */
-    private fun verifyFinishedPackage(context: Context, packageFile: File, recoverySecret: ByteArray?): Boolean {
-        if (!PackageCrypto.withinSizeCap(packageFile)) return false
+    /** Null when the finished file reopens and verifies; otherwise why not. */
+    private fun verifyFinishedPackage(context: Context, packageFile: File, recoverySecret: ByteArray?): String? {
+        if (!PackageCrypto.withinSizeCap(packageFile)) {
+            return "the package is ${packageFile.length()} bytes, over the size cap"
+        }
         val verifyStaging = PortableStaging.newRunDir(context)
         try {
             val decoded = if (recoverySecret != null) {
@@ -483,21 +510,53 @@ object PortableRecoveryWriter {
             } else {
                 PortablePackage.decodeWithSecret(packageFile, ByteArray(0), verifyStaging)
             }
-            val inner = (decoded as? PortablePackage.DecodeResult.Ok)?.innerZip ?: return false
-            val validated = PortablePackage.validateAndExtract(inner, verifyStaging)
-                as? PortablePackage.ValidateResult.Ok ?: return false
-            return PortableRecoverySemanticValidator.validate(
+            val inner = when (decoded) {
+                is PortablePackage.DecodeResult.Ok -> decoded.innerZip
+                is PortablePackage.DecodeResult.Failed -> return "decoding failed: ${decoded.error}"
+            }
+            val validated = when (val result = PortablePackage.validateAndExtract(inner, verifyStaging)) {
+                is PortablePackage.ValidateResult.Ok -> result
+                is PortablePackage.ValidateResult.Failed -> return "extracting failed: ${result.error}"
+            }
+            return when (val semantic = PortableRecoverySemanticValidator.validate(
                 context,
                 validated.artifacts,
                 validated.declaredCategories,
                 validated.explicitlyEmptyCategories,
                 validated.categoryRecordCounts
-            ) is PortableRecoverySemanticValidator.Result.Valid
-        } catch (_: Exception) {
-            return false
+            )) {
+                is PortableRecoverySemanticValidator.Result.Valid -> null
+                PortableRecoverySemanticValidator.Result.TooLarge -> "an artifact is over its size limit"
+                is PortableRecoverySemanticValidator.Result.Invalid -> "content check failed: ${semantic.detail}"
+            }
+        } catch (e: Exception) {
+            return "unexpected ${e.javaClass.name}"
         } finally {
             PortableStaging.delete(verifyStaging)
         }
+    }
+
+    /**
+     * Records a failed Recovery Backup in the Error Log with its step and
+     * specific cause (owner approved October 18 2026), then returns the
+     * failure. Details name steps, counts, chat IDs and positions, never
+     * message text.
+     */
+    private fun failed(
+        context: Context,
+        reason: Reason,
+        step: String,
+        detail: String? = null,
+        chatFailure: ChatLogicalSerializer.FailureCategory? = null,
+        shortfallBytes: Long? = null
+    ): Result.Failed {
+        runCatching {
+            Logger.log(
+                context, "crash", "RecoveryBackup", "error",
+                "Recovery Backup failed: $reason during $step" + (detail?.let { ". $it" } ?: ".")
+            )
+        }
+        return Result.Failed(reason, chatFailure = chatFailure, shortfallBytes = shortfallBytes)
     }
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }

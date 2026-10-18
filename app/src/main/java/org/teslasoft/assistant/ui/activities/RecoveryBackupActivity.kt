@@ -41,6 +41,7 @@ import androidx.core.graphics.drawable.toDrawable
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.backup.BackupBrand
 import org.teslasoft.assistant.preferences.backup.BackupFailureCategory
@@ -538,6 +539,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                     ?: throw IllegalStateException("could not reopen destination")
 
                 if (!MessageDigest.isEqual(expectedSha, actualSha)) {
+                    logSaveFailure(uri, "the copy in the chosen folder does not match the verified backup")
                     discardDestination(uri)
                     recordFailureStatusAll(BackupFailureCategory.VERIFY)
                     runOnUiThread { showFailureText(getString(R.string.recovery_fail_verify)) }
@@ -548,6 +550,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                     contentResolver, uri, finalName
                 )
                 if (finalUri == null) {
+                    logSaveFailure(uri, "the saved file could not be given its final name")
                     recordFailureStatusAll(BackupFailureCategory.DESTINATION_WRITE)
                     runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic)) }
                     return@runOffThread
@@ -555,6 +558,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                 val finalizedSha = contentResolver.openInputStream(finalUri)?.use { sha256(it) }
                     ?: throw IllegalStateException("could not reopen finalized destination")
                 if (!MessageDigest.isEqual(expectedSha, finalizedSha)) {
+                    logSaveFailure(uri, "the renamed file does not match the verified backup")
                     discardDestination(finalUri)
                     recordFailureStatusAll(BackupFailureCategory.VERIFY)
                     runOnUiThread { showFailureText(getString(R.string.recovery_fail_verify)) }
@@ -575,6 +579,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                 val where = BackupLocationDisplay.describeSaveAs(this, finalUri)
                 runOnUiThread { showSaved(where) }
             } catch (e: Exception) {
+                logSaveFailure(uri, "${e.javaClass.name}: ${e.message}")
                 discardDestination(uri)
                 recordFailureStatusAll(
                     if (BackupFailureClassifier.isPermissionRelated(e)) BackupFailureCategory.DESTINATION_PERMISSION
@@ -584,6 +589,16 @@ class RecoveryBackupActivity : SettingsPageActivity() {
             } finally {
                 cleanupStaged()
             }
+        }
+    }
+
+    /** Error Log line for a backup that verified but could not be saved to the chosen folder. */
+    private fun logSaveFailure(destination: Uri, cause: String) {
+        runCatching {
+            Logger.log(
+                this, "crash", "RecoveryBackup", "error",
+                "Recovery Backup failed while saving to the chosen folder (provider ${destination.authority}): $cause"
+            )
         }
     }
 

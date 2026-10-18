@@ -81,12 +81,20 @@ internal object ChatsArtifactScanner {
 
     private class Stop(val result: Result) : Exception(null, null, false, false)
 
-    fun scan(input: Reader): Result = try {
-        scanRoot(JsonReader(input).apply { strictness = Strictness.LENIENT })
-    } catch (stop: Stop) {
-        stop.result
-    } catch (_: Exception) {
-        Result.Rejected(Reason.MALFORMED, "the artifact is not readable JSON")
+    fun scan(input: Reader): Result {
+        val reader = JsonReader(input).apply { strictness = Strictness.LENIENT }
+        return try {
+            scanRoot(reader)
+        } catch (stop: Stop) {
+            stop.result
+        } catch (e: Exception) {
+            // The reader's path (for example $.chats[12].messages[40]) says
+            // where reading stopped without quoting any content.
+            Result.Rejected(
+                Reason.MALFORMED,
+                "the artifact is not readable JSON (${e.javaClass.simpleName} at ${runCatching { reader.path }.getOrDefault("?")})"
+            )
+        }
     }
 
     private fun scanRoot(reader: JsonReader): Result {
@@ -208,8 +216,17 @@ internal object ChatsArtifactScanner {
             reader.beginArray()
             while (reader.hasNext()) {
                 val element = JsonParser.parseReader(reader)
-                val message = if (element.isJsonObject) JSONObject(element.toString()) else null
                 val label = header.optString("chat_id", "").ifEmpty { "entry $index" }
+                val message = if (element.isJsonObject) {
+                    try {
+                        JSONObject(element.toString())
+                    } catch (e: Exception) {
+                        throw Stop(Result.Rejected(
+                            Reason.MALFORMED,
+                            "chat $label message at position $messageCount could not be read (${e.javaClass.simpleName})"
+                        ))
+                    }
+                } else null
                 if (messageRejection == null) {
                     messageRejection =
                         PortableChatRestorePlan.checkMessage(message, label, messageCount, messageIds)
