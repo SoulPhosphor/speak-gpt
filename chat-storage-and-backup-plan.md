@@ -240,7 +240,12 @@ reset/restore lifecycle) and `chat_search.db` (disposable). Key
 and the staging DB discarded and rebuilt (it holds no unique data). After it is
 authoritative, use `CorruptionErrorHandlers.Cipher(context, BackupType.CHATS)`
 semantics: flag degraded, close, never delete; locked key → existing
-locked-storage screen.
+locked-storage screen. Detection alone is not enough: **stage 4** extends the
+health check, `DatabaseRepairManager` (which today rejects `BackupType.CHATS`)
+and the existing repair flow to `chats.db`, so a damaged database can be
+replaced from a verified Recovery Backup through the same restore path, and
+stage 8 tests corruption → repair before activation. Any new wording for
+that flow is approved by the owner before code.
 
 Schema v1 (PR 2):
 
@@ -411,6 +416,13 @@ qualify.
 - Semantic validation streams the file; it checks structure, counts, IDs,
   references (PDF assets via `PdfAttachmentPortableBackup.requiredHashes`
   equivalents computed while streaming), not just bytes.
+- **Message-ID uniqueness is per chat.** Today `PortableChatRestorePlan`
+  rejects a message ID repeated anywhere in the set, but a Keep Both restore
+  copies a chat with its message IDs unchanged, so the next backup would fail
+  verification. PR 3 scopes the check to each chat (after confirming no
+  reader relies on store-wide uniqueness; if one does, Keep Both remaps the
+  copied IDs and their references instead), with a Keep Both → backup →
+  verify round-trip test.
 - Restore streams `chats.json` into a **staged** `chats.db`, validates it, then
   commits through `ChatSetReplacementCoordinator` using the commit target for
   whichever storage is authoritative (§4.2 item 6), preserving existing merge
@@ -542,7 +554,7 @@ serializers, and PR 8 to rewrite them again. In the revised order:
 | 1 | Plan in repo | — | This file + `project-plan.md` Feature 0 | merged |
 | 2 | Storage foundations (#147) | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, Gson-compatible streaming list reader; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
 | 3 | Recovery Backup write + verification | 2 | Streaming `chats.json` writer and reader for the backup format, from `ChatSource` (v2-equivalent, `schemaVersion` 2); streaming semantic validation; capture consistency; `CHATS_JSON_BYTES` and other memory-only ceilings replaced by free-space checks and malformed-archive guards; distinct failure reasons (wording approved by owner **before** code); backup receipt (§4.5) | over-64 MiB chat set backs up and verifies on emulator from legacy storage and from a test database; output matches `serializeV2` on small sets; **owner confirms on device that a full backup of current data succeeds** |
-| 4 | Recovery restore | 2, 3 | Streaming reader (v1 and v2) into a staged `chats.db`; validation of the staged set; merge planning and rollback snapshot without whole-set memory; both commit targets (§4.2 item 6); commit via `ChatSetReplacementCoordinator` to either target; `ChatRestoreManager` / `RecoveryBackupManager` on the same path | over-64 MiB round trip on legacy target and on database target; every older package version restores; rollback at each step; existing restore UI unchanged |
+| 4 | Recovery restore | 2, 3 | Streaming reader (v1 and v2) into a staged `chats.db`; validation of the staged set; merge planning and rollback snapshot without whole-set memory; both commit targets (§4.2 item 6); commit via `ChatSetReplacementCoordinator` to either target; `chats.db` health check and repair from a verified backup (§4.1); `ChatRestoreManager` / `RecoveryBackupManager` on the same path | over-64 MiB round trip on legacy target and on database target; every older package version restores; rollback at each step; existing restore UI unchanged |
 | 5 | Migration engine (activation off) | 2, 4 | Copy + verify + durable progress + resume; the verified staged `chats.db` is published through PR 4's database commit target (the journaled `DirectDatabaseRestoreCoordinator` path), never a separate swap; document text moved into `include_text_parts`, with `DatabaseChatSource` reassembling full payloads; damaged/locked chats; gating of chat UI and background writers; progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
 | 6 | Compatibility layer (activation off) | 2 | `ChatPreferences` and every listed caller (§3) read and write through `ChatSource`/`ChatStore` by authority; list metadata without parsing histories; search index, transcript backfill, image catalog, damaged-chat flows through the same layer | caller tests pass with authority = legacy (production) and authority = database (test); app behavior unchanged |
 | 7 | Readable Backup + memory export streaming | 2 | Versioned per-chat JSON, change-token incremental selection, streaming `MemoryExporter` | tests on both storages; format documented for the viewer |
