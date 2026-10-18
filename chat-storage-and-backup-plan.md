@@ -860,7 +860,7 @@ it (merged into `beta/new-client`), and stops.
 
 | Session | Stages | Start when | Needs owner approval before code |
 |---|---|---|---|
-| A | 4: Recovery restore (streaming, both commit targets, `chats.db` repair) | #146 and #148 are merged and the owner has confirmed on device that a full Recovery Backup succeeds | Any new or changed restore message or log line |
+| A | First, its own small PR: an instrumented test that opens every screen in the app once on the CI emulator and fails if any screen crashes (owner approved October 18 2026; **no Codex review for this PR**). Then 4: Recovery restore (streaming, both commit targets, `chats.db` repair) | #146 and #148 are merged and the owner has confirmed on device that a full Recovery Backup succeeds | Any new or changed restore message or log line |
 | B | 5: Migration engine, activation off | A merged | The migration progress screen wording and layout; any log line |
 | C | 6: Compatibility layer, activation off | B merged (may run before B if the owner prefers; it depends only on stage 2) | Any log line |
 | D | 7: Human-Readable Backup and memory export streaming | Any time after stage 2; usually after C | Any change to what the user sees; any log line |
