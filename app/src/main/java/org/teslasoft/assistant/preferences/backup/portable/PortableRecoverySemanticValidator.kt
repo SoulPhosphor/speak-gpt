@@ -25,7 +25,8 @@ object PortableRecoverySemanticValidator {
             val inventory: PortableRestoreInventory.Inventory,
             val recordCounts: Map<PortableRestoreCategory, Long>
         ) : Result
-        data object Invalid : Result
+        /** [detail] names the failed check without quoting content, for the Error Log. */
+        data class Invalid(val detail: String) : Result
         data object TooLarge : Result
     }
 
@@ -43,8 +44,8 @@ object PortableRecoverySemanticValidator {
             explicitlyEmptyCategories,
             declaredRecordCounts
         )
-    } catch (_: Exception) {
-        Result.Invalid
+    } catch (e: Exception) {
+        Result.Invalid(PortableRestoreDiagnostics.unexpected(e))
     }
 
     /**
@@ -62,13 +63,14 @@ object PortableRecoverySemanticValidator {
                 val inventory = PortableRestoreInventory.from(
                     artifacts, declaredCategories, explicitlyEmptyCategories
                 )
-                if (inventory.explicitlyEmpty.any { it !in inventory.available }) Result.Invalid
-                else Result.Valid(inventory, emptyMap())
+                if (inventory.explicitlyEmpty.any { it !in inventory.available }) {
+                    Result.Invalid("a category is declared empty but not available")
+                } else Result.Valid(inventory, emptyMap())
             }
             else -> checked
         }
-    } catch (_: Exception) {
-        Result.Invalid
+    } catch (e: Exception) {
+        Result.Invalid(PortableRestoreDiagnostics.unexpected(e))
     }
 
     /**
@@ -106,9 +108,11 @@ object PortableRecoverySemanticValidator {
         forRestore: Boolean = false
     ): Result? {
         artifacts.forEach { artifact ->
-            if (!artifact.stagedFile.isFile) return Result.Invalid
+            if (!artifact.stagedFile.isFile) {
+                return Result.Invalid("a staged artifact of type ${artifact.type} is missing")
+            }
             if (PortableRecoveryLimits.maxDecodedBytes(artifact.entryName, artifact.type) == null) {
-                return Result.Invalid
+                return Result.Invalid("an artifact of type ${artifact.type} is not a known backup artifact")
             }
             val size = artifact.stagedFile.length()
             val fits = if (forRestore) {
@@ -134,24 +138,39 @@ object PortableRecoverySemanticValidator {
             artifacts, declaredCategories, explicitlyEmptyCategories
         )
         val available = inventory.available
-        if (inventory.explicitlyEmpty.any { it !in available }) return Result.Invalid
+        inventory.explicitlyEmpty.firstOrNull { it !in available }?.let {
+            return Result.Invalid("category ${it.key} is declared empty but not available")
+        }
 
         // Read one message at a time: the chats artifact has no size ceiling
         // of its own beyond the malformed-archive guard in checkArtifacts.
         val chats = artifact(artifacts, PortablePackage.TYPE_CHATS_JSON)?.let { source ->
-            (source.stagedFile.bufferedReader(Charsets.UTF_8).use { ChatsArtifactScanner.scan(it) } as?
-                ChatsArtifactScanner.Result.Ok)?.summary ?: return Result.Invalid
+            when (val scanned = source.stagedFile.bufferedReader(Charsets.UTF_8).use { ChatsArtifactScanner.scan(it) }) {
+                is ChatsArtifactScanner.Result.Ok -> scanned.summary
+                is ChatsArtifactScanner.Result.Rejected ->
+                    return Result.Invalid("chats: ${scanned.reason}: ${scanned.detail}")
+                is ChatsArtifactScanner.Result.Unreadable ->
+                    return Result.Invalid("chats: ${scanned.detail}")
+            }
         }
-        val pdfAssets = PdfAttachmentPortableBackup.prepareRestore(artifacts) ?: return Result.Invalid
-        if (pdfAssets.isNotEmpty() && chats == null) return Result.Invalid
+        val pdfAssets = PdfAttachmentPortableBackup.prepareRestore(artifacts)
+            ?: return Result.Invalid("the PDF attachments could not be read")
+        if (pdfAssets.isNotEmpty() && chats == null) {
+            return Result.Invalid("PDF attachments are present without chats")
+        }
         if (chats != null && chats.requiredPdfHashes != pdfAssets.keys) {
-            return Result.Invalid
+            return Result.Invalid(
+                "the chats need ${chats.requiredPdfHashes.size} PDF(s) and the backup carries ${pdfAssets.size}; " +
+                    "${(chats.requiredPdfHashes - pdfAssets.keys).size} needed but missing, " +
+                    "${(pdfAssets.keys - chats.requiredPdfHashes).size} carried but not needed"
+            )
         }
 
         val generated = when (val prepared = GeneratedImagePortableRestoreManager.prepare(artifacts)) {
             is GeneratedImagePortableRestoreManager.PrepareResult.Ready -> prepared.prepared
             GeneratedImagePortableRestoreManager.PrepareResult.Absent -> null
-            is GeneratedImagePortableRestoreManager.PrepareResult.Invalid -> return Result.Invalid
+            is GeneratedImagePortableRestoreManager.PrepareResult.Invalid ->
+                return Result.Invalid("the generated images could not be read")
         }
 
         val identityArtifact = artifact(
@@ -159,7 +178,8 @@ object PortableRecoverySemanticValidator {
         )
         val identities = identityArtifact?.let {
             (CompanionBackupValidator.validate(it.stagedFile) as?
-                CompanionBackupValidator.Verdict.Valid)?.manifest ?: return Result.Invalid
+                CompanionBackupValidator.Verdict.Valid)?.manifest
+                ?: return Result.Invalid("the companions archive failed validation")
         }
 
         val profile = if (artifacts.any {
@@ -167,10 +187,11 @@ object PortableRecoverySemanticValidator {
             }
         ) {
             (ProfileImagePortableRestoreManager.prepare(artifacts) as?
-                ProfileImagePortableRestoreManager.Result.Ready)?.prepared ?: return Result.Invalid
+                ProfileImagePortableRestoreManager.Result.Ready)?.prepared
+                ?: return Result.Invalid("the profile images could not be read")
         } else {
             if (artifacts.any { it.type == PortablePackage.TYPE_PROFILE_IMAGE_ASSET }) {
-                return Result.Invalid
+                return Result.Invalid("profile images are present without their catalog")
             }
             null
         }
@@ -181,12 +202,12 @@ object PortableRecoverySemanticValidator {
         val memories = if (memoryArtifactPresent) {
             UnifiedPortableRestore.readIncomingMemory(
                 artifacts, MemoryPortableGroup.MEMORIES, incomingIsEmpty = false
-            ) ?: return Result.Invalid
+            ) ?: return Result.Invalid("the memories could not be read")
         } else null
         val modelRules = if (memoryArtifactPresent) {
             UnifiedPortableRestore.readIncomingMemory(
                 artifacts, MemoryPortableGroup.MODEL_RULES, incomingIsEmpty = false
-            ) ?: return Result.Invalid
+            ) ?: return Result.Invalid("the model rules could not be read")
         } else null
 
         val lorebookArtifactPresent = artifacts.any {
@@ -195,7 +216,7 @@ object PortableRecoverySemanticValidator {
         val lorebooks = if (lorebookArtifactPresent) {
             UnifiedPortableRestore.readIncomingLorebooks(
                 context.applicationContext, artifacts, incomingIsEmpty = false
-            ) ?: return Result.Invalid
+            ) ?: return Result.Invalid("the lorebooks could not be read")
         } else null
 
         val endpointArtifact = artifact(artifacts, PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS)
@@ -204,7 +225,8 @@ object PortableRecoverySemanticValidator {
                 return Result.TooLarge
             }
             (ModelEndpointPortableCodec.parse(source.stagedFile.readText(Charsets.UTF_8)) as?
-                ModelEndpointPortableCodec.Result.Ok)?.data ?: return Result.Invalid
+                ModelEndpointPortableCodec.Result.Ok)?.data
+                ?: return Result.Invalid("the model and endpoint settings could not be read")
         }
 
         val settingsArtifact = artifact(artifacts, PortablePackage.TYPE_APP_SETTINGS)
@@ -213,30 +235,41 @@ object PortableRecoverySemanticValidator {
                 return Result.TooLarge
             }
             (AppSettingsPortableCodec.parse(source.stagedFile.readText(Charsets.UTF_8)) as?
-                AppSettingsPortableCodec.Result.Ok)?.data ?: return Result.Invalid
+                AppSettingsPortableCodec.Result.Ok)?.data
+                ?: return Result.Invalid("the app settings could not be read")
         }
 
         if (!requiredArtifactsAgreeWithInventory(
                 available, inventory.explicitlyEmpty, chats != null, generated, identities, profile,
                 memoryArtifactPresent, lorebookArtifactPresent, endpoints, settings
             )
-        ) return Result.Invalid
+        ) return Result.Invalid("the artifacts present do not match the categories declared")
 
         val chatReferences = chats?.imageIdsRequired.orEmpty()
         val generatedIds = generated?.snapshot?.active.orEmpty().mapTo(HashSet()) { it.imageId }
-        if (!generatedIds.containsAll(chatReferences)) return Result.Invalid
+        if (!generatedIds.containsAll(chatReferences)) {
+            return Result.Invalid(
+                "${(chatReferences - generatedIds).size} generated image(s) referenced by chats are not in the image catalog"
+            )
+        }
 
         val identityImageHashes = identityImageHashes(identities)
         val carriedIdentityImages = identities?.images.orEmpty().mapTo(HashSet()) { it.hash }
-        if (!carriedIdentityImages.containsAll(identityImageHashes)) return Result.Invalid
+        if (!carriedIdentityImages.containsAll(identityImageHashes)) {
+            return Result.Invalid("companion images are referenced but not carried")
+        }
         if (declaredCategories != null && PortableRestoreCategory.PROFILE_IMAGES in available) {
             val profileHashes = profile?.records.orEmpty().mapTo(HashSet()) { it.hash }
-            if (!profileHashes.containsAll(identityImageHashes)) return Result.Invalid
+            if (!profileHashes.containsAll(identityImageHashes)) {
+                return Result.Invalid("companion images are missing from the profile images")
+            }
         }
 
         if (declaredCategories != null && PortableRestoreCategory.LOREBOOKS in available) {
             val bookIds = lorebooks?.books.orEmpty().mapTo(HashSet()) { it.id }
-            if (!bookIds.containsAll(identityLorebookIds(identities))) return Result.Invalid
+            if (!bookIds.containsAll(identityLorebookIds(identities))) {
+                return Result.Invalid("companions reference lorebooks that are not in the backup")
+            }
         }
 
         val counts = recordCounts(
@@ -245,7 +278,9 @@ object PortableRecoverySemanticValidator {
         if (declaredRecordCounts.isNotEmpty() &&
             declaredRecordCounts != counts.filterKeys(declaredRecordCounts.keys::contains)
         ) {
-            return Result.Invalid
+            val differing = declaredRecordCounts.filter { (category, count) -> counts[category] != count }
+                .map { (category, count) -> "${category.key} declared $count, found ${counts[category]}" }
+            return Result.Invalid("record counts disagree: ${differing.joinToString("; ")}")
         }
         return Result.Valid(inventory, counts)
     }
