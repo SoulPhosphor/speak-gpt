@@ -275,8 +275,11 @@ columns, so migration can be verified byte-for-byte and nothing is lost. Only
 lookup fields (`message_id`, `is_bot`) are extracted.
 
 **Documents:** include document text is stored outside the message payload in
-`include_text_parts(include_id, part_index, text)` linked by include ID, with
-the payload keeping a reference. This table is part of schema v1 (PR 2) and
+`include_text_parts(message_row, include_id, part_index, part_text)`, owned by
+its message row (removed with the message) and addressed by message plus
+include ID, with the payload keeping a reference. Because parts belong to one
+message, copies of a message in different chats (for example a restore's Keep
+Both) never share document text. This table is part of schema v1 (PR 2) and
 migration writes it directly, so `chats.db` needs **no schema upgrade after
 activation**. `DatabaseChatSource` reassembles the full payload whenever a
 caller asks for it (backup, verification, the compatibility layer), so the
@@ -351,10 +354,15 @@ change when the database becomes authoritative.
   JSON with the stored payload in order, count included; compare list row and
   prefs. Record per-chat progress durably (`meta` keys); a chat not marked
   verified is deleted from the staging DB and redone on resume.
-- Locked / corrupt / failed chats (today's non-readable states) are recorded
-  `readable = 0` with no messages, keep their legacy file, and keep behaving as
-  today (existing damaged-chat flows operate on the legacy file). They don't
-  block the switch.
+- Locked / corrupt / failed chat **histories** (today's non-readable states,
+  for chats the readable chat list names) are recorded `readable = 0` with no
+  messages, keep their legacy file, and keep behaving as today (existing
+  damaged-chat flows operate on the legacy file). They don't block the switch.
+- A chat **list** that is not readable (LOCKED, CORRUPT or FAILED), or list
+  values (folders and the like) that cannot be read, **blocks migration**:
+  without the list the chats, their rows, folders and order cannot be
+  enumerated, and an apparently empty database must never become
+  authoritative.
 - A readable chat that fails to copy or verify (including one too large to read
   even this way) **blocks the switch**: the app keeps using legacy storage
   unchanged, and migration retries next start. Reporting the failure needs a
