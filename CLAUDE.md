@@ -439,6 +439,13 @@ Before writing any code, confirm the work branch starts from
 ask — the likelier explanation is that the owner forgot to say, not that the
 work belongs on `main`. Work on `main` only when the owner says so.
 
+**`main` is off limits (owner ruling, October 18 2026).** Never merge, push,
+or commit anything into `main`, including documentation and `CLAUDE.md`
+changes, and do no work on `main`, unless the owner has explicitly said to for
+that specific change. Every merge into `main` also rebuilds and republishes
+the old client, so even a documentation change reaches the owner's phone.
+Instruction-file updates go to `beta/new-client` only.
+
 - Inspect the relevant current code before proposing a change.
 - Read the relevant feature specification before changing that feature.
 - Make the smallest coherent change that satisfies the approved requirement.
