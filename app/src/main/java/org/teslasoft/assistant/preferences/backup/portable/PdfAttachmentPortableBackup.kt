@@ -55,6 +55,38 @@ object PdfAttachmentPortableBackup {
         }
     }
 
+    /**
+     * The PDF artifacts for the live attachments [refs] names (from
+     * [ChatsArtifactScanner], one per chat and content hash), each checked
+     * against its recorded size and hash. Same rules as the whole-artifact
+     * overload, without parsing the chats artifact into memory.
+     */
+    internal fun buildArtifacts(context: Context, refs: List<ChatsArtifactScanner.PdfRef>): Result {
+        return try {
+            val artifacts = ArrayList<PortablePackage.Artifact>()
+            val seen = HashSet<String>()
+            for (ref in refs) {
+                if (!seen.add("${ref.chatId}/${ref.hash}")) continue
+                val file = PdfAttachmentStore.pdfFile(context, ref.chatId, ref.hash)
+                    ?.takeIf { it.isFile } ?: return Result.Failed("live PDF bytes are missing")
+                if (file.length() != ref.byteSize || sha256(file) != ref.hash) {
+                    return Result.Failed("live PDF bytes failed validation")
+                }
+                artifacts += PortablePackage.Artifact(
+                    entryName = "chat_pdfs/${safeChatId(ref.chatId)}/${ref.hash}.pdf",
+                    type = PortablePackage.TYPE_CHAT_PDF_ASSET,
+                    file = file,
+                    databaseKeyHex = null,
+                    keySemantics = null,
+                    schemaVersion = 1
+                )
+            }
+            Result.Ok(artifacts)
+        } catch (e: Exception) {
+            Result.Failed(e.javaClass.simpleName)
+        }
+    }
+
     fun prepareRestore(
         artifacts: List<PortablePackage.ValidatedArtifact>
     ): Map<String, File>? {

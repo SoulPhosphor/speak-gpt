@@ -57,7 +57,9 @@ object ChatLogicalImportPlan {
         val listRow: Map<String, String>,
         val messagesJson: String,
         val messageCount: Int,
-        val settings: List<SettingEntry>
+        val settings: List<SettingEntry>,
+        /** False only for a v3 chat whose history was never saved. */
+        val historySaved: Boolean = true
     )
 
     data class Plan(

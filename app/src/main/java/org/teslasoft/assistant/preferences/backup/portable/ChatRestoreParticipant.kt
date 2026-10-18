@@ -77,7 +77,7 @@ class ChatRestoreParticipant internal constructor(
             return true
         }
         val source = incoming ?: return note.fail("no_backup_data")
-        if (!source.isFile || source.length() > PortableRecoveryLimits.CHATS_JSON_BYTES) {
+        if (!source.isFile || source.length() > PortableRecoveryLimits.WHOLE_READ_RESTORE_CHATS_JSON_BYTES) {
             return note.fail("backup_data_missing_or_too_large")
         }
         val json = try { source.readText(Charsets.UTF_8) } catch (e: Exception) { return note.unexpected(e) }

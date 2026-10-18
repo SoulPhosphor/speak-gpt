@@ -2401,6 +2401,9 @@
     <string name="recovery_fail_snapshot">One or more databases could not be backed up. No backup was created.</string>
     <string name="recovery_fail_verify">The backup could not be verified. No backup was saved.</string>
     <string name="recovery_fail_nothing">There is nothing to back up.</string>
+    <string name="recovery_fail_storage_title">Not enough storage</string>
+    <string name="recovery_fail_storage_body">There is not enough free storage to create the backup. The backup needs approximately %1$s more space.\n\nYour chats and existing backups were not changed. Free up storage space and try again.</string>
+    <string name="recovery_fail_out_of_memory">The backup could not be completed because the app ran out of memory while reading a conversation. Your chats and existing backups were not changed. Very large conversations may require the upcoming backup improvements before they can be backed up.</string>
     <!-- Supporting UI chrome for the recovery flow (NOT part of the owner's
          verbatim set — plain functional labels; flagged for owner review). -->
     <string name="recovery_title">Recovery Backup</string>

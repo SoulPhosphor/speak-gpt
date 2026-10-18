@@ -13,6 +13,7 @@ import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.backup.portable.PortableChatRestorePlan
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
+import org.teslasoft.assistant.preferences.backup.portable.PortableRecoveryLimits
 import java.io.File
 
 /**
@@ -62,6 +63,10 @@ object DamagedChatBackupReader {
         }
         val artifact = validated.artifacts.firstOrNull { it.type == PortablePackage.TYPE_CHATS_JSON }
             ?: return Read.Ok(emptyMap())
+        // This reader holds the chats artifact whole (until plan stage 4).
+        if (artifact.stagedFile.length() > PortableRecoveryLimits.WHOLE_READ_RESTORE_CHATS_JSON_BYTES) {
+            return Read.Failed(PortablePackageFormat.RestoreError.TOO_LARGE)
+        }
         val plan = try {
             PortableChatRestorePlan.parse(artifact.stagedFile.readText())
         } catch (_: Exception) {

@@ -76,6 +76,9 @@ object AutomaticPortableBackupWriter {
             if (built is PortableRecoveryWriter.Result.Failed) {
                 return if (built.reason == PortableRecoveryWriter.Reason.NOTHING_TO_BACK_UP) {
                     Result.NothingToBackUp
+                } else if (built.reason == PortableRecoveryWriter.Reason.NOT_ENOUGH_STORAGE) {
+                    // The existing "not enough storage space" notification.
+                    Result.Failed(BackupFailureCategory.SOURCE, insufficientStorage = true)
                 } else {
                     Result.Failed(
                         if (built.reason == PortableRecoveryWriter.Reason.PACKAGE_VERIFY_FAILED) {
@@ -119,6 +122,9 @@ object AutomaticPortableBackupWriter {
                 ?: throw IllegalStateException("final destination unavailable")
             if (!MessageDigest.isEqual(expectedHash, finalVerified.first)) {
                 throw IllegalStateException("final destination verification failed")
+            }
+            built.chatSource?.let {
+                RecoveryBackupReceipt.record(app, it, System.currentTimeMillis())
             }
             return Result.Success(finalVerified.second, built.includedTypes)
         } catch (error: Exception) {

@@ -123,17 +123,21 @@ object ConvertedChatRecoveryArchive {
             retain(listName)
 
             for (chat in chats) {
-                val historyName = "enc.chat_${chat.chatId}"
-                val historyPreferences = encrypted(historyName)
-                check(
-                    historyPreferences.edit()
-                        .putString("chat", chat.messagesJson)
-                        .commit()
-                ) { "chat history write failed" }
-                check(historyPreferences.getString("chat", null) == chat.messagesJson) {
-                    "chat history verification failed"
+                // A chat whose history was never saved gets no history file,
+                // so it stays never-saved rather than becoming empty.
+                if (chat.historySaved) {
+                    val historyName = "enc.chat_${chat.chatId}"
+                    val historyPreferences = encrypted(historyName)
+                    check(
+                        historyPreferences.edit()
+                            .putString("chat", chat.messagesJson)
+                            .commit()
+                    ) { "chat history write failed" }
+                    check(historyPreferences.getString("chat", null) == chat.messagesJson) {
+                        "chat history verification failed"
+                    }
+                    retain(historyName)
                 }
-                retain(historyName)
 
                 val settingsName = "enc.settings.${chat.chatId}"
                 val settingsPreferences = encrypted(settingsName)

@@ -10,7 +10,7 @@ import java.io.File
 
 /** App-owned, content-addressed PDF bytes and completed fallback caches. */
 object PdfAttachmentStore {
-    private const val ROOT = "chat_pdf_includes"
+    internal const val ROOT = "chat_pdf_includes"
     private const val CACHE_ROOT = "pdf_fallback_cache"
 
     fun chatPdfsDir(context: Context, chatId: String): File {

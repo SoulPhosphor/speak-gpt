@@ -39,6 +39,13 @@ class SummaryStateBackupContractTest {
         )
         assertTrue(serializer.contains("private val EXCLUDED_SETTINGS_KEYS = setOf(\"api_key\")"))
         assertTrue(serializer.contains("obj.put(\"messages\", JSONArray(gson.toJson(history.messages)))"))
+        // Recovery Backups are written by ChatsArtifactWriter: every message
+        // copied whole, and settings through the same credential-free reader.
+        val writer = source(
+            "src/main/java/org/teslasoft/assistant/preferences/backup/portable/ChatsArtifactWriter.kt"
+        )
+        assertTrue(writer.contains("message.copyPayloadTo(out)"))
+        assertTrue(writer.contains("ChatLogicalSerializer.serializeSettings(context, chatId)"))
     }
 
     @Test

@@ -57,7 +57,7 @@ object PortableRecoverySemanticValidator {
         declaredCategories: Set<PortableRestoreCategory>? = null,
         explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet()
     ): Result = try {
-        when (val checked = checkArtifacts(artifacts)) {
+        when (val checked = checkArtifacts(artifacts, forRestore = true)) {
             null -> {
                 val inventory = PortableRestoreInventory.from(
                     artifacts, declaredCategories, explicitlyEmptyCategories
@@ -88,7 +88,7 @@ object PortableRecoverySemanticValidator {
             return "an artifact of type ${it.type} is not a known restore artifact"
         }
         artifacts.firstOrNull {
-            !PortableRecoveryLimits.accepts(it.entryName, it.type, it.stagedFile.length())
+            !PortableRecoveryLimits.acceptsForRestore(it.entryName, it.type, it.stagedFile.length())
         }?.let {
             return "an artifact of type ${it.type} is larger than the size limit"
         }
@@ -101,16 +101,22 @@ object PortableRecoverySemanticValidator {
         PortableRestoreDiagnostics.unexpected(e)
     }
 
-    private fun checkArtifacts(artifacts: List<PortablePackage.ValidatedArtifact>): Result? {
+    private fun checkArtifacts(
+        artifacts: List<PortablePackage.ValidatedArtifact>,
+        forRestore: Boolean = false
+    ): Result? {
         artifacts.forEach { artifact ->
             if (!artifact.stagedFile.isFile) return Result.Invalid
             if (PortableRecoveryLimits.maxDecodedBytes(artifact.entryName, artifact.type) == null) {
                 return Result.Invalid
             }
-            if (!PortableRecoveryLimits.accepts(
-                    artifact.entryName, artifact.type, artifact.stagedFile.length()
-                )
-            ) return Result.TooLarge
+            val size = artifact.stagedFile.length()
+            val fits = if (forRestore) {
+                PortableRecoveryLimits.acceptsForRestore(artifact.entryName, artifact.type, size)
+            } else {
+                PortableRecoveryLimits.accepts(artifact.entryName, artifact.type, size)
+            }
+            if (!fits) return Result.TooLarge
         }
         return null
     }
@@ -130,16 +136,15 @@ object PortableRecoverySemanticValidator {
         val available = inventory.available
         if (inventory.explicitlyEmpty.any { it !in available }) return Result.Invalid
 
+        // Read one message at a time: the chats artifact has no size ceiling
+        // of its own beyond the malformed-archive guard in checkArtifacts.
         val chats = artifact(artifacts, PortablePackage.TYPE_CHATS_JSON)?.let { source ->
-            if (source.stagedFile.length() > PortableRecoveryLimits.CHATS_JSON_BYTES) {
-                return Result.TooLarge
-            }
-            (PortableChatRestorePlan.parse(source.stagedFile.readText(Charsets.UTF_8)) as?
-                PortableChatRestorePlan.Result.Ok)?.plan ?: return Result.Invalid
+            (source.stagedFile.bufferedReader(Charsets.UTF_8).use { ChatsArtifactScanner.scan(it) } as?
+                ChatsArtifactScanner.Result.Ok)?.summary ?: return Result.Invalid
         }
         val pdfAssets = PdfAttachmentPortableBackup.prepareRestore(artifacts) ?: return Result.Invalid
         if (pdfAssets.isNotEmpty() && chats == null) return Result.Invalid
-        if (chats != null && PdfAttachmentPortableBackup.requiredHashes(chats) != pdfAssets.keys) {
+        if (chats != null && chats.requiredPdfHashes != pdfAssets.keys) {
             return Result.Invalid
         }
 
@@ -212,15 +217,12 @@ object PortableRecoverySemanticValidator {
         }
 
         if (!requiredArtifactsAgreeWithInventory(
-                available, inventory.explicitlyEmpty, chats, generated, identities, profile,
+                available, inventory.explicitlyEmpty, chats != null, generated, identities, profile,
                 memoryArtifactPresent, lorebookArtifactPresent, endpoints, settings
             )
         ) return Result.Invalid
 
-        val chatReferences = when (val scanned = PortableRestoreFinalState.scanChatImageReferences(chats)) {
-            is PortableRestoreDependencyRead.Available -> scanned.snapshot.requiredAssetIds
-            is PortableRestoreDependencyRead.Unavailable -> return Result.Invalid
-        }
+        val chatReferences = chats?.imageIdsRequired.orEmpty()
         val generatedIds = generated?.snapshot?.active.orEmpty().mapTo(HashSet()) { it.imageId }
         if (!generatedIds.containsAll(chatReferences)) return Result.Invalid
 
@@ -238,7 +240,7 @@ object PortableRecoverySemanticValidator {
         }
 
         val counts = recordCounts(
-            chats, generated, identities, profile, memories, modelRules, lorebooks, endpoints, settings
+            chats?.chatCount?.toLong(), generated, identities, profile, memories, modelRules, lorebooks, endpoints, settings
         )
         if (declaredRecordCounts.isNotEmpty() &&
             declaredRecordCounts != counts.filterKeys(declaredRecordCounts.keys::contains)
@@ -251,7 +253,7 @@ object PortableRecoverySemanticValidator {
     /** The declared-count projection for each category, shared by the full
      * gate and by selected-category restore planning. */
     internal fun recordCounts(
-        chats: PortableChatRestorePlan.Plan?,
+        chatCount: Long?,
         generated: GeneratedImagePortableRestoreManager.Prepared?,
         identities: CompanionBackupManifest?,
         profile: ProfileImagePortableRestoreManager.Prepared?,
@@ -261,7 +263,7 @@ object PortableRecoverySemanticValidator {
         endpoints: ModelEndpointPortableCodec.Data?,
         settings: AppSettingsPortableData?
     ): Map<PortableRestoreCategory, Long> = linkedMapOf(
-            PortableRestoreCategory.CHATS to (chats?.chatCount?.toLong() ?: 0L),
+            PortableRestoreCategory.CHATS to (chatCount ?: 0L),
             PortableRestoreCategory.GENERATED_IMAGES to
                 (generated?.snapshot?.let { it.active.size + it.tombstones.size }?.toLong() ?: 0L),
             PortableRestoreCategory.COMPANIONS to (identities?.companionProfiles?.size?.toLong() ?: 0L),
@@ -298,7 +300,7 @@ object PortableRecoverySemanticValidator {
     private fun requiredArtifactsAgreeWithInventory(
         available: Set<PortableRestoreCategory>,
         empty: Set<PortableRestoreCategory>,
-        chats: PortableChatRestorePlan.Plan?,
+        chatsPresent: Boolean,
         generated: GeneratedImagePortableRestoreManager.Prepared?,
         identities: CompanionBackupManifest?,
         profile: ProfileImagePortableRestoreManager.Prepared?,
@@ -309,7 +311,7 @@ object PortableRecoverySemanticValidator {
     ): Boolean {
         fun present(category: PortableRestoreCategory, value: Boolean): Boolean =
             if (category in empty) !value else category !in available || value
-        return present(PortableRestoreCategory.CHATS, chats != null) &&
+        return present(PortableRestoreCategory.CHATS, chatsPresent) &&
             present(PortableRestoreCategory.GENERATED_IMAGES, generated != null) &&
             IDENTITY_CATEGORIES.all { present(it, identities != null) } &&
             present(PortableRestoreCategory.PROFILE_IMAGES, profile != null) &&

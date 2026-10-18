@@ -30,16 +30,27 @@ class PortableRecoveryLimitsTest {
     }
 
     @Test
+    fun restoreStillRefusesAChatsArtifactTheWholeReadEngineCannotHold() {
+        val limit = PortableRecoveryLimits.WHOLE_READ_RESTORE_CHATS_JSON_BYTES
+        assertTrue(PortableRecoveryLimits.acceptsForRestore("chats.json", PortablePackage.TYPE_CHATS_JSON, limit))
+        assertFalse(PortableRecoveryLimits.acceptsForRestore("chats.json", PortablePackage.TYPE_CHATS_JSON, limit + 1L))
+        assertTrue(PortableRecoveryLimits.accepts("chats.json", PortablePackage.TYPE_CHATS_JSON, limit + 1L))
+    }
+
+    @Test
     fun provisionalPolicyIsVersionedAndMatchesApprovedCeilings() {
         assertTrue(PortableRecoveryLimits.POLICY_VERSION > 0)
-        assertTrue(PortableRecoveryLimits.CHATS_JSON_BYTES == 64L * 1024L * 1024L)
+        // Chats are written and checked one message at a time; the chats and
+        // package ceilings are malformed-archive guards, not memory limits.
+        assertTrue(PortableRecoveryLimits.CHATS_JSON_BYTES == 8L * 1024L * 1024L * 1024L)
+        assertTrue(PortableRecoveryLimits.WHOLE_READ_RESTORE_CHATS_JSON_BYTES == 64L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.GENERATED_IMAGE_CATALOG_BYTES == 32L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.MODEL_ENDPOINT_SETTINGS_BYTES == 8L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.APP_SETTINGS_BYTES == 16L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.COMPANION_ROLEPLAY_ARCHIVE_BYTES == 512L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.DATABASE_BYTES == 512L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.IMAGE_ASSET_BYTES == 64L * 1024L * 1024L)
-        assertTrue(PortableRecoveryLimits.COMPLETE_PACKAGE_BYTES == 1L * 1024L * 1024L * 1024L)
+        assertTrue(PortableRecoveryLimits.COMPLETE_PACKAGE_BYTES == 16L * 1024L * 1024L * 1024L)
         assertTrue(PackageCrypto.MAX_PACKAGE_BYTES == PortableRecoveryLimits.COMPLETE_PACKAGE_BYTES)
     }
 }
