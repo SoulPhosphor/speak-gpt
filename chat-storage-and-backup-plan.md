@@ -363,8 +363,12 @@ change when the database becomes authoritative.
   JSON with the payload `DatabaseChatSource` returns for it in order (the
   **reassembled** payload, document text put back from `include_text_parts`,
   never the stored reference form), count included; compare list row and
-  prefs. Record per-chat progress durably (`meta` keys); a chat not marked
-  verified is deleted from the staging DB and redone on resume.
+  prefs. Record per-chat progress durably (`meta` keys), each verified marker
+  storing the legacy source's change token for that chat (and for the list
+  and list values). On resume, a chat not marked verified **or whose legacy
+  token has changed** since it was verified (an edit or restore between
+  attempts) is deleted from the staging DB and redone, and the switch
+  re-checks every token immediately before it happens.
 - Locked / corrupt / failed chat **histories** (today's non-readable states,
   for chats the readable chat list names) are recorded `readable = 0` with no
   messages, keep their legacy file, and keep behaving as today (existing
@@ -473,7 +477,8 @@ qualify.
   references. Text format stays as is.
 - Incremental selection uses the `ChatSource` change token (§4.2 item 7;
   `store_id` + `chats.revision` on the database) + export options + format
-  version + locale + folder/name changes. On legacy storage the token is the
+  version + locale + **time zone** (rendered timestamps depend on it, as in
+  today's `ReadableChatFormats.renderFingerprint`) + folder/name changes. On legacy storage the token is the
   existing whole-history fingerprint, so the same code works before and after
   activation.
 - Viewer side (separate repo, later): add a `speakgpt` provider detected by
