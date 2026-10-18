@@ -308,8 +308,9 @@ Define these in the database PR so later PRs don't rewrite each other:
    code path can set it to the database; instrumented tests may set it on a
    test install so the database paths are exercised.
 5. **Staged chat database** — create a `chats.db` file in a staging location,
-   fill it, validate it, and atomically swap it into place (or discard it).
-   Migration, restore, and backup capture all use this one helper.
+   fill it, validate it, or discard it. Migration, restore, and backup capture
+   all use this one helper. It never publishes a stage; publication belongs
+   only to the database commit target (item 6, PR 4).
 6. **Chat-set commit target** (built in PR 4, with restore) — the step that
    makes a validated staged chat set authoritative. Two implementations:
    *database swap* (publish the staged `chats.db` through the existing
@@ -504,9 +505,9 @@ and restore path onto the database through the old whole-in-memory
 serializers, and PR 8 to rewrite them again. In the revised order:
 
 1. **Foundations first** (PR 2): the database, `ChatSource`, the staged
-   database, commit targets, the change token and the streaming codec. Every
-   later PR is written once against these.
-2. **Backup and restore next** (PRs 3–4), built through `ChatSource` and the
+   database (create, validate, discard), the change token and the streaming
+   list reader. Every later PR is written once against these.
+2. **Backup and restore next** (PRs 3–4, restore adding the commit targets), built through `ChatSource` and the
    commit targets. They work on today's legacy storage immediately (the owner
    gets a working backup of conversations over 64 MiB before anything
    migrates) and are tested against the database in instrumented tests. They
