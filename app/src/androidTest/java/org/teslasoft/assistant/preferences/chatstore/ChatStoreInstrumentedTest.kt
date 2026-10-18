@@ -269,6 +269,31 @@ class ChatStoreInstrumentedTest {
     }
 
     @Test
+    fun generation_advancesOnEveryChange() {
+        val store = open()
+        var last = store.generation()
+        fun advanced(change: () -> Unit) {
+            change()
+            val now = store.generation()
+            assertTrue("generation $now after $last", now > last)
+            last = now
+        }
+        advanced { store.markListSaved() }
+        advanced { store.putChat(chat("g")) }
+        advanced { store.putChat(chat("g").copy(listRowJson = """{"name":"Renamed"}""")) }
+        var seq = 0L
+        advanced { seq = store.appendMessage("g", row("hi")) }
+        advanced { store.replaceMessage("g", seq, row("hello")) }
+        advanced { store.putIncludeText("g", seq, "inc", "text") }
+        advanced { store.deleteIncludeText("g", seq, "inc") }
+        advanced { store.putListState("folders", "[]") }
+        advanced { store.renameChatId("g", "h") }
+        advanced { store.deleteMessage("h", seq) }
+        advanced { store.deleteChat("h") }
+        assertTrue(store.integrityOk())
+    }
+
+    @Test
     fun malformedPayloads_areRefusedAndFailTheIntegrityCheck() {
         val store = open()
         store.putChat(chat("m"))

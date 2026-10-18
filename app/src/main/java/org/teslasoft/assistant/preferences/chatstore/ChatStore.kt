@@ -207,7 +207,20 @@ class ChatStore private constructor(
     fun listSaved(): Boolean = getMeta(META_LIST_SAVED) == "1"
 
     /** Record a saved list that holds no chats (the app's EMPTY list state). */
-    fun markListSaved() = putMeta(writableDatabase, META_LIST_SAVED, "1")
+    fun markListSaved() = inTransaction { db ->
+        putMeta(db, META_LIST_SAVED, "1")
+        nextRevision(db)
+        Unit
+    }
+
+    /**
+     * The store's generation: the store-wide revision counter, advanced by
+     * every change to chats, messages, document text, list state and the
+     * saved-list marker. Two reads with the same [storeId] and generation
+     * saw the same content.
+     */
+    fun generation(): Long =
+        getMeta(META_REVISION_COUNTER)?.toLongOrNull() ?: error("revision counter missing")
 
     fun getChat(chatId: String): StoredChat? =
         readableDatabase.rawQuery(
@@ -242,8 +255,11 @@ class ChatStore private constructor(
     private fun rowIdExists(db: SQLiteDatabase, chatId: String): Boolean =
         db.rawQuery("SELECT 1 FROM chats WHERE chat_id = ?", arrayOf(chatId)).use { it.moveToFirst() }
 
-    fun deleteChat(chatId: String): Boolean =
-        writableDatabase.delete("chats", "chat_id = ?", arrayOf(chatId)) > 0
+    fun deleteChat(chatId: String): Boolean = inTransaction { db ->
+        val deleted = db.delete("chats", "chat_id = ?", arrayOf(chatId)) > 0
+        if (deleted) nextRevision(db)
+        deleted
+    }
 
     fun revision(chatId: String): Long? =
         readableDatabase.rawQuery("SELECT revision FROM chats WHERE chat_id = ?", arrayOf(chatId))
@@ -251,11 +267,13 @@ class ChatStore private constructor(
 
     /* ------------------------------ list state ------------------------------ */
 
-    fun putListState(key: String, valueJson: String) {
-        writableDatabase.execSQL(
+    fun putListState(key: String, valueJson: String) = inTransaction { db ->
+        db.execSQL(
             "INSERT OR REPLACE INTO list_state (key, value_json) VALUES (?, ?)",
             arrayOf(key, valueJson)
         )
+        nextRevision(db)
+        Unit
     }
 
     fun getListState(key: String): String? =
