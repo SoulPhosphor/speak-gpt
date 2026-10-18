@@ -247,6 +247,28 @@ class ChatStoreInstrumentedTest {
     }
 
     @Test
+    fun renameChatId_movesTheChatWithItsMessagesPartsAndDocuments() {
+        val store = open()
+        store.putChat(chat("old"))
+        store.putChat(chat("taken"))
+        val seq = store.appendMessage("old", row("x".repeat(ChatStore.PART_CHARS + 5)))
+        store.putIncludeText("old", seq, "inc", "document")
+        val before = store.revision("old")!!
+
+        assertFalse(store.renameChatId("old", "taken"))
+        assertFalse(store.renameChatId("missing", "new"))
+        assertTrue(store.renameChatId("old", "new"))
+
+        assertNull(store.getChat("old"))
+        assertEquals(0, store.messageCount("old"))
+        assertEquals(1, store.messageCount("new"))
+        assertEquals(row("x".repeat(ChatStore.PART_CHARS + 5)).payloadJson, store.messageAt("new", 0)?.payloadJson)
+        assertEquals("document", store.readIncludeText("new", seq, "inc"))
+        assertTrue(store.revision("new")!! > before)
+        assertTrue(store.integrityOk())
+    }
+
+    @Test
     fun listSaved_onlyOnceAChatExistsOrItIsMarked() {
         val a = open()
         assertFalse(a.listSaved())

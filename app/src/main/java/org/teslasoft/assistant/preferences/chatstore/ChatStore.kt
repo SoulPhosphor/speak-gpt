@@ -112,7 +112,9 @@ class ChatStore private constructor(
         db.execSQL(
             "CREATE TABLE messages (" +
                 "row_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "chat_id TEXT NOT NULL REFERENCES chats(chat_id) ON DELETE CASCADE, " +
+                // ON UPDATE CASCADE: an older chat with no stored ID takes its
+                // ID from its title, so renaming it moves it to a new ID.
+                "chat_id TEXT NOT NULL REFERENCES chats(chat_id) ON DELETE CASCADE ON UPDATE CASCADE, " +
                 "seq INTEGER NOT NULL, " +
                 "message_id TEXT, " +
                 "is_bot INTEGER NOT NULL DEFAULT 0, " +
@@ -220,6 +222,24 @@ class ChatStore private constructor(
             while (c.moveToNext()) out.add(c.toChat())
             out
         }
+
+    /**
+     * Move a chat and everything stored with it from [oldId] to [newId] in
+     * one transaction (the app's title-derived ID moves on rename). False if
+     * [oldId] does not exist or [newId] is already taken; nothing changes.
+     */
+    fun renameChatId(oldId: String, newId: String): Boolean = inTransaction { db ->
+        if (oldId == newId) return@inTransaction rowIdExists(db, oldId)
+        if (!rowIdExists(db, oldId) || rowIdExists(db, newId)) return@inTransaction false
+        db.execSQL(
+            "UPDATE chats SET chat_id = ?, revision = ? WHERE chat_id = ?",
+            arrayOf<Any>(newId, nextRevision(db), oldId)
+        )
+        true
+    }
+
+    private fun rowIdExists(db: SQLiteDatabase, chatId: String): Boolean =
+        db.rawQuery("SELECT 1 FROM chats WHERE chat_id = ?", arrayOf(chatId)).use { it.moveToFirst() }
 
     fun deleteChat(chatId: String): Boolean =
         writableDatabase.delete("chats", "chat_id = ?", arrayOf(chatId)) > 0
