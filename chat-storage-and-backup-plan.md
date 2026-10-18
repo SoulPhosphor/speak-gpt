@@ -169,6 +169,85 @@ Direct callers of `getChatByIdResult` / `getChatById` / `saveChatHistory` /
   `LegacyChatConversion`, `ConvertedChatRecoveryArchive`),
   `preferences/backup/readable/ReadableChatBackup.kt` + `ReadableChatFormats.kt`
 
+### Storage audit (October 18 2026)
+
+A complete search of `beta/new-client` for every chat read and write
+(including background work) was done before stage 3. Results:
+
+**Additional callers** (not in the list above; all list-level reads or
+journal work through `ChatPreferences`, so they move with the compatibility
+layer): `imagegen/ImageUsageRecorder.kt`, `preferences/RenameJournal.kt`,
+`preferences/chatdeletion/ChatDeletionCoordinator.kt`,
+`preferences/damaged/DamagedChatBackupReader.kt`,
+`preferences/damaged/DamagedChatLog.kt`, `tts/api/TtsUsage.kt`,
+`ui/adapters/SearchResultAdapter.kt`,
+`ui/fragments/dialogs/AddChatDialogFragment.kt`,
+`preferences/memory/archivist/Archivist.kt` (calls `getChatList` **with**
+previews, which today parses every history),
+`preferences/backup/ChatRestorePlanner.kt`,
+`preferences/backup/portable/PortableBackupMutationTokens.kt` (digests the
+whole `shared_prefs` tree, including chat files).
+
+**Code that bypasses `ChatPreferences`** and touches chat files directly
+(each must move to the compatibility layer in stage 6):
+
+- `NewConversationCoordinator` writes `chat_<id>` (`"chat" = "[]"`) when a
+  conversation is created, and clears it when one is abandoned.
+- `ChatNavigationRepository` writes the list rows (`"data"`) and `folders`
+  **in one commit** (moves, folder deletion). The database layer must
+  offer the same all-or-nothing update of list rows and list state.
+- `MainActivity` writes an empty `"data"` for a new user.
+- `ChatSearchIndexManager` reads `SEARCH_REVISION_KEY` straight from
+  `chat_<id>`.
+- `ChatLogicalSerializer` reads `CHAT_CONTENT_MODIFIED_AT_KEY` straight from
+  `chat_<id>` (replaced in stage 3).
+- `DamagedChatRepair`, `SnapshotRegistry`, `OutageReconciler` and
+  `SecurePrefs` copy, scan and restore the encrypted files themselves.
+  These stay on legacy files: they serve unmoved (damaged/locked) chats, and
+  recovered chats are then imported (§4.3).
+
+**Chat IDs can change.** A chat-list row with no stored `"id"` takes its ID
+from its title (`Hash.hash(name)`), and `ChatPreferences.editChat` moves
+such a chat to a new ID on rename (`ChatRenameTransaction`,
+`RenameJournal`). `chats.db` supports this (`ON UPDATE CASCADE`,
+`ChatStore.renameChatId`, PR 2), and the compatibility layer keeps the same
+rename contract.
+
+**Background work.** The app is one process, but chat storage is reached
+without any chat screen open: WorkManager (`AutoBackupWorker`,
+`DefaultUsernameFill`), foreground services (generation, image generation
+and its job registry, summarizer, memory analysis, restore) and the
+startup maintenance pipeline (`MainApplication`). Pausing writers during
+migration is therefore a **process-wide gate** in the compatibility layer,
+not a screen redirect: while migration runs, chat writes wait (or a worker
+defers and retries), and nothing writes chat storage from outside the gate.
+
+**Pending conversations.** A new conversation has a `chat_<id>` file and a
+`pending_conversation_journal` entry **before** it is in the chat list, so a
+list-driven migration would miss it. Migration runs only after
+`NewConversationCoordinator.recoverPendingCommits` has committed or
+abandoned every pending conversation, and refuses to start while one
+remains.
+
+**Startup order.** `MainApplication` already runs ordered recovery steps:
+chat-restore resume, generated-image and companion restore recovery,
+outage reconciliation, chat-deletion recovery, `RenameJournal.reconcile`,
+pending-conversation recovery, `DefaultUsernameFill`, folder schema
+migration, then search, transcript backfill and memory export. Migration
+runs **after the folder schema migration and before search**, and only when
+every earlier step has settled (no chat-restore recovery pending, no outage
+file, no deletion or rename journal entry, no pending conversation);
+otherwise it is skipped this start and retried next start.
+
+**Orphan files.** `chat_<id>` files that no list row or pending entry names
+(left by old failures) are not migrated and are never removed by stage 13.
+
+**Older backups.** The raw-file chat backup (`RecoveryBackupManager`,
+`BackupType.CHATS`) is no longer created anywhere. Restore runs only through
+the portable path, which writes converted archives into
+`ChatRestoreManager`; older packages reach it through `LegacyChatConversion`.
+Stage 4 replaces that engine with the commit targets.
+
 ### Backups today
 
 - **Recovery Backup** (portable encrypted package, magic `PHOSBKP2`,
@@ -343,6 +422,8 @@ change when the database becomes authoritative.
 
 ### 4.3 Migration
 
+- Preconditions, placement, the process-wide write gate and pending
+  conversations: see "Storage audit" in §3.
 - Runs at app start before any chat UI loads, behind a full-screen progress
   screen ("n of N"), non-dismissible, closes itself. The wording is proposed
   to the owner and approved **before** it is written into any file
@@ -589,11 +670,11 @@ serializers, and PR 8 to rewrite them again. In the revised order:
 |---|---|---|---|---|
 | 0 | Finish PR #145 (message limit) | — | CI green on `c29fa62` (done), Codex re-review, merge | merged |
 | 1 | Plan in repo | — | This file + `project-plan.md` Feature 0 | merged |
-| 2 | Storage foundations (#147) | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, Gson-compatible streaming list reader; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
+| 2 | Storage foundations (#147) | 1 | `ChatStore` with final schema v1 (incl. `message_parts`, `include_text_parts`, chat ID moves), `DatabaseKeys.KEY_CHATS`, `ChatSource` + `LegacyChatSource` + `DatabaseChatSource`, change token, `ChatStorageAuthority` (no production path can turn it on), staged-database helper, Gson-compatible streaming list reader; instrumented tests added to the CI list | tests green on both storages; app behavior unchanged |
 | 3 | Recovery Backup write + verification | 2 | Key audit; streaming `chats.json` writer and reader for backup format `schemaVersion` 3 (§4.5), from `ChatSource`; streaming semantic validation; capture consistency; `CHATS_JSON_BYTES` and other memory-only ceilings replaced by free-space checks and malformed-archive guards; distinct failure reasons (wording approved by owner **before** code); backup receipt (§4.5) | over-64 MiB chat set backs up and verifies on emulator from legacy storage and from a test database; v3 output carries everything `serializeV2` carries plus `history_saved` (compared on small sets); MISSING and EMPTY histories round-trip distinctly; **owner confirms on device that a full backup of current data succeeds** |
 | 4 | Recovery restore | 2, 3 | Streaming reader (v1 and v2) into a staged `chats.db`; validation of the staged set; merge planning and rollback snapshot without whole-set memory; both commit targets (§4.2 item 6); commit via `ChatSetReplacementCoordinator` to either target; `chats.db` health check and repair from a verified backup (§4.1); `ChatRestoreManager` / `RecoveryBackupManager` on the same path | over-64 MiB round trip on legacy target and on database target; every older package version restores; rollback at each step; existing restore UI unchanged |
-| 5 | Migration engine (activation off) | 2, 4 | Copy + verify + durable progress + resume; the verified staged `chats.db` is published through PR 4's database commit target (the journaled `DirectDatabaseRestoreCoordinator` path), never a separate swap; document text moved into `include_text_parts`, with `DatabaseChatSource` reassembling full payloads; damaged/locked chats; gating of chat UI and background writers; progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
-| 6 | Compatibility layer (activation off) | 2 | Repaired or unlocked unmoved chats imported into the authoritative row (§4.3); `ChatPreferences` and every listed caller (§3) read and write through `ChatSource`/`ChatStore` by authority; list metadata without parsing histories; search index, transcript backfill, image catalog, damaged-chat flows through the same layer | caller tests pass with authority = legacy (production) and authority = database (test); app behavior unchanged |
+| 5 | Migration engine (activation off) | 2, 4 | Copy + verify + durable progress + resume; the verified staged `chats.db` is published through PR 4's database commit target (the journaled `DirectDatabaseRestoreCoordinator` path), never a separate swap; document text moved into `include_text_parts`, with `DatabaseChatSource` reassembling full payloads; damaged/locked chats; startup placement and preconditions, process-wide write gate, pending conversations settled first (§3 storage audit); progress screen (wording approved by owner **before** code); switch code present but unreachable | interruption/resume, damaged, locked, large-chat, low-storage tests green; nothing runs on device |
+| 6 | Compatibility layer (activation off) | 2 | Every caller in the §3 storage audit, including the direct-file ones (`NewConversationCoordinator`, `ChatNavigationRepository` with one-transaction list and folder writes, `MainActivity`, `ChatSearchIndexManager`); rename ID moves; list previews from the first message only; repaired or unlocked unmoved chats imported into the authoritative row (§4.3); `ChatPreferences` and every listed caller (§3) read and write through `ChatSource`/`ChatStore` by authority; list metadata without parsing histories; search index, transcript backfill, image catalog, damaged-chat flows through the same layer | caller tests pass with authority = legacy (production) and authority = database (test); app behavior unchanged |
 | 7 | Readable Backup + memory export streaming | 2 | Versioned per-chat JSON, change-token incremental selection, streaming `MemoryExporter` | tests on both storages; format documented for the viewer |
 | 8 | Activation readiness verification | 3–7 | End-to-end instrumented suite: legacy data → migrate → Recovery Backup from database → verify → restore into a clean install and into the legacy target → compare with the original legacy content; restore of a pre-migration backup after migration; backup receipts name the right source and `store_id` before and after migration; heap measured on a 256 MB heap through the whole cycle | all green; readiness gate met |
 | 9 | Activation | 8 | Turn on the migration trigger and the switch; fresh installs start on the database | owner made a new Recovery Backup with PR 3's system before installing; **owner confirms on device** |
