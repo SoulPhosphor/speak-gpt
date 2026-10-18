@@ -246,10 +246,11 @@ Schema v1 (as written in the stage 1 draft):
 
 - `meta(key, value)` — includes `schema` and a random `store_id` (so revision
   numbers from a replaced/restored DB are never confused with this one).
-- `chats(chat_id PK, list_order, list_row_json, prefs_json, readable, revision)`
-  — `list_row_json` is the chat-list row exactly as stored; `prefs_json` holds
-  every other key of `enc.chat_<id>` with its type; `revision` increments on
-  every change to that chat.
+- `chats(chat_id PK, list_order, list_row_json, prefs_json, readable, revision,
+  history_saved)` — `list_row_json` is the chat-list row exactly as stored;
+  `prefs_json` holds every other key of `enc.chat_<id>` with its type;
+  `revision` increments on every change to that chat; `history_saved` keeps a
+  never-saved history (MISSING) distinct from a saved empty one (EMPTY).
 - `messages(row_id PK, chat_id FK ON DELETE CASCADE, seq, message_id, is_bot,
   payload_json NULL, UNIQUE(chat_id, seq))` — `payload_json` is the message
   map exactly as Gson stores it today (all fields, including variants,
