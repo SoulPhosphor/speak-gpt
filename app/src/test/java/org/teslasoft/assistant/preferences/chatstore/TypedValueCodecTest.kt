@@ -79,5 +79,10 @@ class TypedValueCodecTest {
         assertNull(TypedValueCodec.decodeMap("""{"a":{"t":"b","v":"true"}}"""))
         assertNull(TypedValueCodec.decodeMap("""{"a":{"t":"zz","v":1}}"""))
         assertNull(TypedValueCodec.decodeValue("not json {"))
+        assertNull(TypedValueCodec.decodeValue("""{"t":"i","v":1.5}"""))
+        assertNull(TypedValueCodec.decodeValue("""{"t":"i","v":2147483648}"""))
+        assertNull(TypedValueCodec.decodeValue("""{"t":"l","v":9223372036854775808}"""))
+        assertNull(TypedValueCodec.decodeMap("""{"a":{"t":"i","v":1.5}}"""))
+        assertEquals(100, TypedValueCodec.decodeValue("""{"t":"i","v":1e2}"""))
     }
 }

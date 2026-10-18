@@ -97,6 +97,11 @@ internal object TypedValueCodec {
         }
     }
 
+    private fun exactNumber(v: JsonElement): java.math.BigDecimal? =
+        if (v.isJsonPrimitive && v.asJsonPrimitive.isNumber) {
+            runCatching { v.asJsonPrimitive.asBigDecimal }.getOrNull()
+        } else null
+
     private fun decodeElement(element: JsonElement): Any? {
         if (!element.isJsonObject) return null
         val obj = element.asJsonObject
@@ -106,8 +111,10 @@ internal object TypedValueCodec {
         return when (type) {
             "s" -> v.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
             "b" -> v.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean
-            "i" -> v.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
-            "l" -> v.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
+            // Exact conversions: a fraction or an out-of-range value is
+            // invalid input, never truncated or wrapped.
+            "i" -> exactNumber(v)?.let { runCatching { it.intValueExact() }.getOrNull() }
+            "l" -> exactNumber(v)?.let { runCatching { it.longValueExact() }.getOrNull() }
             "f" -> when {
                 !v.isJsonPrimitive -> null
                 v.asJsonPrimitive.isNumber -> v.asFloat

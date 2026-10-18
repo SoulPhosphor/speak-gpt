@@ -536,6 +536,13 @@ class ChatStore private constructor(
         }
         if (!integrity) return false
         if (db.rawQuery("PRAGMA foreign_key_check", null).use { it.moveToFirst() }) return false
+        // The metadata every write and change token depends on.
+        if (getMeta(META_SCHEMA) != DATABASE_VERSION.toString()) return false
+        if (getMeta(META_STORE_ID).isNullOrBlank()) return false
+        val counter = getMeta(META_REVISION_COUNTER)?.toLongOrNull() ?: return false
+        val highest = db.rawQuery("SELECT COALESCE(MAX(revision), 0) FROM chats", null)
+            .use { it.moveToFirst(); it.getLong(0) }
+        if (counter < highest) return false
         // Foreign keys cannot see a missing child row, so check that every
         // message is stored exactly one way and every split value is whole.
         return SPLIT_CONSISTENCY_CHECKS.none { sql ->

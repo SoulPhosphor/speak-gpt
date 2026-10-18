@@ -359,6 +359,23 @@ class ChatStoreInstrumentedTest {
         assertFalse(doc.integrityOk())
     }
 
+    @Test
+    fun integrityOk_requiresTheStoreMetadata() {
+        for (broken in listOf(
+            "DELETE FROM meta WHERE key = 'store_id'",
+            "DELETE FROM meta WHERE key = 'revision_counter'",
+            "UPDATE meta SET value = '0' WHERE key = 'revision_counter'",
+            "UPDATE meta SET value = '99' WHERE key = 'schema'"
+        )) {
+            val store = open()
+            store.putChat(chat("meta"))
+            store.appendMessage("meta", row("x"))
+            assertTrue(store.integrityOk())
+            store.writableDatabase.execSQL(broken)
+            assertFalse(broken, store.integrityOk())
+        }
+    }
+
     private fun includePartCount(store: ChatStore): Int =
         store.readableDatabase.rawQuery("SELECT COUNT(*) FROM include_text_parts", null)
             .use { it.moveToFirst(); it.getInt(0) }
