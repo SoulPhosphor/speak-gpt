@@ -530,6 +530,23 @@ actually arriving, such as a running check or a requested review.
 - Do not set up pull-request watching or scheduled check-ins the owner did
   not ask for.
 
+### Codex review (owner ruling, October 29 2026)
+
+Codex reviews a pull request automatically when it is opened (or when a draft
+is marked ready). Do not comment `@codex review` to start the first round;
+that triggers a second, duplicate review.
+
+- Open the pull request once Android Checks is green, then wait for the Codex
+  review.
+- Check each finding against this repository's rules and the owner's
+  instructions; Codex does not know them. Fix the valid findings in one push
+  and reply on any finding that is not being fixed, saying why.
+- Comment `@codex review` only for one re-review, and only after pushing
+  fixes. If findings remain after that, bring them to the owner as a short
+  list with a recommendation instead of starting another round.
+- Merge into `beta/new-client` when the owner has said to merge, checks are
+  green, and the findings are handled.
+
 ### Usage control
 
 Subagents are a normal, permitted tool. Choosing a high-end model (e.g. Fable) for a subagent is likewise permitted — it is not restricted.
