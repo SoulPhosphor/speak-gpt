@@ -437,6 +437,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_settings"
                 app:layout_constraintTop_toTopOf="parent"
+                android:src="@drawable/ic_edit_square"
                 app:srcCompat="@drawable/ic_edit_square" />
 
             <!-- Active Profile: shown while this chat has its own username AND
@@ -451,6 +452,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
                 app:layout_constraintTop_toTopOf="parent"
+                android:src="@drawable/ic_theater_comedy"
                 app:srcCompat="@drawable/ic_theater_comedy"
                 tools:visibility="visible" />
 
@@ -466,6 +468,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_active_profile"
                 app:layout_constraintTop_toTopOf="parent"
+                android:src="@drawable/ic_report"
                 app:srcCompat="@drawable/ic_report"
                 tools:visibility="visible" />
 
