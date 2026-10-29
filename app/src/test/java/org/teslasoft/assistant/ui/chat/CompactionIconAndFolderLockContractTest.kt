@@ -57,6 +57,9 @@ class CompactionIconAndFolderLockContractTest {
     fun drawerHoldsOnlyTheFoldersRowAtTheTop() {
         val drawer = source("src/main/res/layout/activity_chat_drawer.xml")
         assertTrue(drawer.indexOf("@+id/drawer_folders_pinned") > drawer.indexOf("@+id/drawer_hierarchy"))
+        // Both the panel and the locked row take their surface from the shared style.
+        assertTrue(!drawer.contains("android:background="))
+        assertTrue(drawer.split("style=\"@style/Widget.App.DrawerSurface\"").size == 3)
         val controller = source("src/main/java/org/teslasoft/assistant/ui/drawer/ChatDrawerController.kt")
         assertTrue(controller.contains("rows.indexOfFirst { it is DrawerRow.FoldersHeader }"))
         assertTrue(controller.contains("getLockFolderLocationInChatList()"))
