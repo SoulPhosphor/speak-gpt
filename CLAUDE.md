@@ -536,8 +536,13 @@ Codex reviews a pull request automatically when it is opened (or when a draft
 is marked ready). Do not comment `@codex review` to start the first round;
 that triggers a second, duplicate review.
 
-- Open the pull request once Android Checks is green, then wait for the Codex
-  review.
+- Every Codex review costs the owner usage. Open the pull request only when
+  the work is completely finished: every requested change is built, no owner
+  decision is still pending, nothing else is planned for the branch, and
+  Android Checks is green on the final commit. If anything is still open,
+  ask or finish it first. Being told to create a pull request means "when
+  the work is finished," not "now."
+- Then wait for the Codex review.
 - Check each finding against this repository's rules and the owner's
   instructions; Codex does not know them. Fix the valid findings in one push
   and reply on any finding that is not being fixed, saying why.
