@@ -5526,8 +5526,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         summarizerOperationCancel?.setOnClickListener {
             org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
         }
-        btnConversationSummary?.setOnClickListener { openConversationSummary() }
+        btnConversationSummary?.setOnClickListener { openCompactionIcon() }
         btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
+        summarizerErrorBadge?.setOnClickListener { showSummarizerErrorsDialog() }
         refreshSummarizerIcons()
         // The next eligible cycle (errors doc §3): opening the chat retries
         // pending fold-ins and runs catch-up after a re-enable.
@@ -5764,25 +5765,41 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Summary / Compaction review: only once a summary or compaction has
         // been saved. The icon shows whether that condensed form is in use.
         val summaryMode = conversationSummaryMode()
-        btnConversationSummary?.visibility = if (summaryMode != null) View.VISIBLE else View.GONE
+        val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
+            .fromJson(preferences?.getSummarizerErrors())
+        // A compaction that failed before saving anything still shows the
+        // compaction icon; it opens the errors instead (owner ruling, Oct 29
+        // 2026).
+        val compactionErrorsOnly = compactionErrorsOnly(summaryMode, errors.isNotEmpty())
+        btnConversationSummary?.visibility =
+            if (summaryMode != null || compactionErrorsOnly) View.VISIBLE else View.GONE
         btnConversationSummary?.setImageResource(
             if (preferences?.getUseSummarizedConversationProjection() != false) R.drawable.ic_topic
             else R.drawable.ic_docs_add_on
         )
-        if (summaryMode != null) {
-            val desc = getString(summaryMode.titleRes)
+        if (summaryMode != null || compactionErrorsOnly) {
+            val desc = getString(
+                summaryMode?.titleRes ?: R.string.summarizer_icon_errors_desc
+            )
             btnConversationSummary?.contentDescription = desc
             btnConversationSummary?.tooltipText = desc
         }
         refreshSummarySectionAnchors(summaryMode)
 
-        val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
-            .fromJson(preferences?.getSummarizerErrors())
+        // In a chat that compacts, the error count sits on the compaction
+        // icon and tapping the count opens the errors; the separate errors
+        // icon is only for chats that use the Summarizer (owner ruling, Oct
+        // 29 2026).
+        val countOnCompactionIcon = preferences?.getChatUseSummarizer() != true &&
+            btnConversationSummary?.visibility == View.VISIBLE
+        anchorSummarizerErrorBadge(
+            if (countOnCompactionIcon) R.id.btn_conversation_summary else R.id.btn_summarizer_errors
+        )
         if (errors.isEmpty()) {
             btnSummarizerErrors?.visibility = View.GONE
             summarizerErrorBadge?.visibility = View.GONE
         } else {
-            btnSummarizerErrors?.visibility = View.VISIBLE
+            btnSummarizerErrors?.visibility = if (countOnCompactionIcon) View.GONE else View.VISIBLE
             summarizerErrorBadge?.visibility = View.VISIBLE
             summarizerErrorBadge?.text = errors.size.toString()
             // Alert (red on white, theme-independent) while a failure is still
@@ -5802,6 +5819,36 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
                 }
             }
+        }
+    }
+
+    /** Pins the error count to the top-end corner of [anchorId]. */
+    private fun anchorSummarizerErrorBadge(anchorId: Int) {
+        val badge = summarizerErrorBadge ?: return
+        val params = badge.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+            ?: return
+        if (params.endToEnd == anchorId && params.topToTop == anchorId) return
+        params.endToEnd = anchorId
+        params.topToTop = anchorId
+        badge.layoutParams = params
+    }
+
+    /** True when this chat compacts (Summarizer off), has no compacted text
+     *  yet, and its error log holds the failed attempts. */
+    private fun compactionErrorsOnly(
+        summaryMode: ConversationSummaryActivity.Mode?,
+        hasErrors: Boolean
+    ): Boolean = summaryMode == null && hasErrors && preferences?.getChatUseSummarizer() != true
+
+    /** The compaction icon opens the compacted text, or the errors when a
+     *  compaction failed before any compacted text existed. */
+    private fun openCompactionIcon() {
+        val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
+            .fromJson(preferences?.getSummarizerErrors())
+        if (compactionErrorsOnly(conversationSummaryMode(), errors.isNotEmpty())) {
+            showSummarizerErrorsDialog()
+        } else {
+            openConversationSummary()
         }
     }
 
@@ -5834,6 +5881,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     override fun onOpenSummarySection(sectionId: String) {
         openConversationSummary(sectionId)
+    }
+
+    override fun isCompactToHereAvailable(): Boolean =
+        org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this) &&
+            preferences?.getChatUseSummarizer() != true
+
+    override fun onCompactToHere(position: Int) {
+        compactThroughMessage(position)
     }
 
     /** The preview's "go to this message" comes back here. */
@@ -6082,6 +6137,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (lastAssistant < 0) return
         startManualCompaction(
             snapshot.copy(entries = snapshot.entries.take(lastAssistant + 1))
+        )
+    }
+
+    /** Compact to Here: compacts every stored message through the AI
+     * response at [position]. A point at or before the current compacted
+     * range rewrites the compacted text from the first message. */
+    private fun compactThroughMessage(position: Int) {
+        val target = messages.getOrNull(position) ?: return
+        if (target["isBot"] != true) return
+        val storedIndex = messages
+            .filterNot {
+                it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
+                    it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
+            }
+            .indexOfFirst { it === target }
+        if (storedIndex < 0) return
+        val snapshot = summarizerSnapshot() ?: return
+        val count = storedIndex + 1
+        if (count > snapshot.entries.size) return
+        val prefs = preferences ?: return
+        val fromScratch = count <= prefs.getSummarizerFoldedCount() ||
+            count <= prefs.getManualCompactionBoundary()
+        startManualCompaction(
+            snapshot.copy(entries = snapshot.entries.take(count)),
+            fromScratch = fromScratch
         )
     }
 

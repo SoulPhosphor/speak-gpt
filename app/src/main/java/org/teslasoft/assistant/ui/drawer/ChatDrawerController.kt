@@ -39,6 +39,9 @@ class ChatDrawerController private constructor(
 ) {
     private val repository = ChatNavigationRepository.get(activity)
     private val list: RecyclerView = panel.findViewById(R.id.drawer_hierarchy)
+    private val pinnedFolders: android.widget.FrameLayout = panel.findViewById(R.id.drawer_folders_pinned)
+    private val displayPreferences = org.teslasoft.assistant.preferences.Preferences.getPreferences(activity, "")
+    private var pinnedHolder: DrawerHierarchyAdapter.Holder? = null
     private val adapter = DrawerHierarchyAdapter(activity, currentChatId, object : DrawerHierarchyAdapter.Callbacks {
         override fun onClick(row: DrawerRow) = handleClick(row)
         override fun onLongClick(anchor: View, row: DrawerRow) = handleLongClick(anchor, row)
@@ -47,6 +50,9 @@ class ChatDrawerController private constructor(
     init {
         list.layoutManager = LinearLayoutManager(activity)
         list.adapter = adapter
+        list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) = updatePinnedFolders()
+        })
         panel.findViewById<ImageButton>(R.id.drawer_close).setOnClickListener { close() }
         panel.findViewById<View>(R.id.drawer_search).setOnClickListener {
             activity.startActivity(Intent(activity, SearchActivity::class.java))
@@ -115,8 +121,38 @@ class ChatDrawerController private constructor(
             if (projection == null) {
                 Toast.makeText(activity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
                 onShown()
-            } else adapter.submitList(projection) { onShown() }
+            } else adapter.submitList(projection) {
+                list.post { updatePinnedFolders() }
+                onShown()
+            }
         }
+    }
+
+    /**
+     * Lock Folder Location: once the Folders row reaches the top of the list
+     * it is held there, working as usual, while the chats scroll beneath it.
+     */
+    private fun updatePinnedFolders() {
+        val rows = adapter.currentList
+        val index = rows.indexOfFirst { it is DrawerRow.FoldersHeader }
+        val manager = list.layoutManager as? LinearLayoutManager
+        if (!displayPreferences.getLockFolderLocationInChatList() || index < 0 || manager == null) {
+            pinnedFolders.visibility = View.GONE
+            return
+        }
+        val first = manager.findFirstVisibleItemPosition()
+        val reachedTop = first > index ||
+            (first == index && (manager.findViewByPosition(index)?.top ?: 1) <= 0)
+        if (!reachedTop) {
+            pinnedFolders.visibility = View.GONE
+            return
+        }
+        val holder = pinnedHolder ?: adapter.onCreateViewHolder(pinnedFolders, 0).also {
+            pinnedFolders.addView(it.itemView)
+            pinnedHolder = it
+        }
+        holder.bind(rows[index])
+        pinnedFolders.visibility = View.VISIBLE
     }
 
     private fun handleClick(row: DrawerRow) {

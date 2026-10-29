@@ -37,4 +37,19 @@ class DrawerDisplayRefreshContractTest {
         val refresh = controller.substring(controller.indexOf("fun refresh("))
         assertTrue(refresh.indexOf("adapter.refreshDisplayIfChanged()") in 0 until refresh.indexOf("submitList"))
     }
+
+    /** Opening or closing a folder refreshes the list; each row keeps its
+     *  last-read bookmark indicator until the fresh read lands. */
+    @Test
+    fun aRefreshKeepsLoadedDetailsUntilTheyAreReread() {
+        val adapter = source("src/main/java/org/teslasoft/assistant/ui/drawer/DrawerHierarchyAdapter.kt")
+        val refresh = adapter.substring(
+            adapter.indexOf("fun refreshDisplayIfChanged()"),
+            adapter.indexOf("private fun needsDetails()")
+        )
+        val unchanged = refresh.substring(0, refresh.indexOf("if (current == renderedDisplayOptions)"))
+        assertTrue(!unchanged.contains("details.clear()"))
+        assertTrue(adapter.contains("detailsReadIn[chatId] == generation"))
+        assertTrue(adapter.contains("detailsReadIn[chatId] = generation"))
+    }
 }

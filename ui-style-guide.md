@@ -1365,6 +1365,14 @@ Oct 9 2026).
 preparing, incomplete, unavailable, and empty Search states. It resolves through
 the shared subtle-text theme role and must not carry query text or snippets.
 
+## Drawer surface
+
+`Widget.App.DrawerSurface` gives the drawer its opaque surface
+(`?attr/colorSurface`). The drawer panel uses it, and so does the locked
+Folders row that Lock Folder Location holds at the top of the list, so the
+chats scrolling beneath that row never show through. Anything else drawn over
+the drawer's scrolling list uses this style rather than its own background.
+
 ## Drawer bottom actions
 
 `Widget.App.DrawerBottomAction` is the drawer's fixed-bottom action. Three of

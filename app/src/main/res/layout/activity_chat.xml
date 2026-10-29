@@ -437,6 +437,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_settings"
                 app:layout_constraintTop_toTopOf="parent"
+                android:src="@drawable/ic_edit_square"
                 app:srcCompat="@drawable/ic_edit_square" />
 
             <!-- Active Profile: shown while this chat has its own username AND
@@ -451,6 +452,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
                 app:layout_constraintTop_toTopOf="parent"
+                android:src="@drawable/ic_theater_comedy"
                 app:srcCompat="@drawable/ic_theater_comedy"
                 tools:visibility="visible" />
 
@@ -466,13 +468,17 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_active_profile"
                 app:layout_constraintTop_toTopOf="parent"
+                android:src="@drawable/ic_report"
                 app:srcCompat="@drawable/ic_report"
                 tools:visibility="visible" />
 
+            <!-- The error count. Sits on the compaction icon in a chat that
+                 compacts and on the errors icon in a Summarizer chat; tapping
+                 it opens the errors. -->
             <TextView
                 android:id="@+id/summarizer_error_badge"
                 style="@style/Widget.App.Chat.HeaderBadge"
-                android:importantForAccessibility="no"
+                android:contentDescription="@string/summarizer_icon_errors_desc"
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="@+id/btn_summarizer_errors"
                 app:layout_constraintTop_toTopOf="@+id/btn_summarizer_errors"

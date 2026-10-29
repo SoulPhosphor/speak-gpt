@@ -578,6 +578,13 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_list_start_date", state, false)
     }
 
+    fun getLockFolderLocationInChatList(): Boolean =
+        getGlobalBoolean("chat_list_lock_folders", false)
+
+    fun setLockFolderLocationInChatList(state: Boolean) {
+        putGlobalBoolean("chat_list_lock_folders", state, false)
+    }
+
     fun getShowCompanionImagesInChatList(): Boolean =
         getGlobalBoolean("chat_list_companion_images", false)
 

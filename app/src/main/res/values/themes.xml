@@ -2291,6 +2291,12 @@
         <item name="android:paddingEnd">4dp</item>
     </style>
 
+    <!-- The drawer's surface: the panel and the locked Folders row (Lock
+         Folder Location), which must be opaque so chats scroll beneath it. -->
+    <style name="Widget.App.DrawerSurface" parent="">
+        <item name="android:background">?attr/colorSurface</item>
+    </style>
+
     <style name="Widget.App.FlatChatRow.Metadata" parent="">
         <item name="android:layout_marginTop">2dp</item>
         <item name="android:textColor">?attr/appSubtleTextColor</item>

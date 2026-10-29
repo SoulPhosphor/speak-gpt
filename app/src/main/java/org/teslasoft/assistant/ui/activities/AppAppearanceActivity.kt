@@ -59,6 +59,9 @@ class AppAppearanceActivity : SettingsPageActivity() {
         bindSwitch(R.id.switch_chat_list_start_date, preferences.getShowChatStartDateInChatList()) {
             preferences.setShowChatStartDateInChatList(it)
         }
+        bindSwitch(R.id.switch_chat_list_lock_folders, preferences.getLockFolderLocationInChatList()) {
+            preferences.setLockFolderLocationInChatList(it)
+        }
     }
 
     private fun bindSwitch(id: Int, checked: Boolean, save: (Boolean) -> Unit) {

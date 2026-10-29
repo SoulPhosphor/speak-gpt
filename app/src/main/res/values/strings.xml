@@ -548,6 +548,7 @@
     <string name="btn_msg_edit">Edit</string>
     <string name="message_more_actions">More options</string>
     <string name="message_share_action">Share</string>
+    <string name="message_compact_to_here">Compact to Here</string>
     <string name="btn_edit_logit_biases">Edit logit biases</string>
     <string name="btn_delete_logit_bias">Delete logit bias</string>
     <string name="title_thank_you_for_your_support">Thank you for your support!</string>
@@ -4143,6 +4144,8 @@
     <string name="chat_list_bookmark_indicator_hint">Puts an icon next to the chat name if it contains at least one bookmark.</string>
     <string name="chat_list_model_names">Show Model Names</string>
     <string name="chat_list_start_date">Show Chat Start Date</string>
+    <string name="chat_list_lock_folders">Lock Folder Location</string>
+    <string name="chat_list_lock_folders_hint">Prevents the folder menus from scrolling off screen when navigating through chats.</string>
     <string name="chat_settings_section_appearance">Chat Appearance</string>
     <string name="chat_settings_section_information">Chat Information</string>
     <string name="chat_settings_section_interface">Chat Interface</string>
