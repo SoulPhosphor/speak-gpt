@@ -280,6 +280,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val MENU_MESSAGE_SHARE = 105
         private const val MENU_MESSAGE_DELETE = 106
         private const val MENU_SUMMARY_SECTION = 107
+        private const val MENU_COMPACT_TO_HERE = 109
+
+        /** Compact to Here starts at the 15th AI response (owner ruling,
+         *  Oct 29 2026). */
+        private const val COMPACT_TO_HERE_FIRST_RESPONSE = 15
 
         // Transient inline image-confirmation card row
         // (image-generation-rebuild-plan.md §5). These rows live only in
@@ -495,6 +500,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         summarySectionStarts = starts
         summarySectionOwners = owners
         notifyDataSetChanged()
+    }
+
+    /** 1-based count of AI responses through [message], skipping the
+     *  transient image cards that are never stored. */
+    private fun aiResponseNumber(message: HashMap<String, Any>): Int {
+        var count = 0
+        for (row in dataArray) {
+            if (row["isBot"] == true &&
+                row[KEY_IMAGE_CONFIRMATION] != true &&
+                row[KEY_IMAGE_PROGRESS] != true
+            ) count++
+            if (row === message) return count
+        }
+        return 0
     }
 
     private fun regenerationLockKind(position: Int): CondensedRegenerationLock.Kind? =
@@ -2596,6 +2615,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (owningSection != null) {
                 popup.menu.add(0, MENU_SUMMARY_SECTION, 0, R.string.summary_section_menu)
             }
+            // Compact to Here sits above Share on AI responses 15 and later.
+            if (chatMessage["isBot"] == true &&
+                aiResponseNumber(chatMessage) >= COMPACT_TO_HERE_FIRST_RESPONSE &&
+                listener?.isCompactToHereAvailable() == true
+            ) {
+                popup.menu.add(0, MENU_COMPACT_TO_HERE, 0, R.string.message_compact_to_here)
+            }
             popup.menu.add(0, MENU_MESSAGE_SHARE, 1, R.string.message_share_action)
             popup.menu.add(0, MENU_MESSAGE_DELETE, 2, R.string.btn_delete)
             popup.setOnMenuItemClickListener { item ->
@@ -2615,6 +2641,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     }
                     MENU_SUMMARY_SECTION -> {
                         owningSection?.let { listener?.onOpenSummarySection(it) }
+                        true
+                    }
+                    MENU_COMPACT_TO_HERE -> {
+                        val currentPosition = dataArray.indexOfFirst { it === chatMessage }
+                        if (currentPosition >= 0) listener?.onCompactToHere(currentPosition)
                         true
                     }
                     MENU_MESSAGE_DELETE -> {
@@ -3544,6 +3575,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         /** Open the Summary screen at this summary section. */
         fun onOpenSummarySection(sectionId: String) {}
+
+        /** Whether this chat currently offers Compact to Here. */
+        fun isCompactToHereAvailable(): Boolean = false
+
+        /** Compact everything through the AI response at [position]. */
+        fun onCompactToHere(position: Int) {}
 
         fun onMessageDeleteRequested(position: Int)
         fun onIncludeEdit(includeId: String)

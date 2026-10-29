@@ -5836,6 +5836,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         openConversationSummary(sectionId)
     }
 
+    override fun isCompactToHereAvailable(): Boolean =
+        org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this) &&
+            preferences?.getChatUseSummarizer() != true
+
+    override fun onCompactToHere(position: Int) {
+        compactThroughMessage(position)
+    }
+
     /** The preview's "go to this message" comes back here. */
     private val conversationSummaryLauncher =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
@@ -6082,6 +6090,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (lastAssistant < 0) return
         startManualCompaction(
             snapshot.copy(entries = snapshot.entries.take(lastAssistant + 1))
+        )
+    }
+
+    /** Compact to Here: compacts every stored message through the AI
+     * response at [position]. A point at or before the current compacted
+     * range rewrites the compacted text from the first message. */
+    private fun compactThroughMessage(position: Int) {
+        val target = messages.getOrNull(position) ?: return
+        if (target["isBot"] != true) return
+        val storedIndex = messages
+            .filterNot {
+                it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
+                    it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
+            }
+            .indexOfFirst { it === target }
+        if (storedIndex < 0) return
+        val snapshot = summarizerSnapshot() ?: return
+        val count = storedIndex + 1
+        if (count > snapshot.entries.size) return
+        val prefs = preferences ?: return
+        val fromScratch = count <= prefs.getSummarizerFoldedCount() ||
+            count <= prefs.getManualCompactionBoundary()
+        startManualCompaction(
+            snapshot.copy(entries = snapshot.entries.take(count)),
+            fromScratch = fromScratch
         )
     }
 
