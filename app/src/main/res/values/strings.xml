@@ -4144,6 +4144,8 @@
     <string name="chat_list_bookmark_indicator_hint">Puts an icon next to the chat name if it contains at least one bookmark.</string>
     <string name="chat_list_model_names">Show Model Names</string>
     <string name="chat_list_start_date">Show Chat Start Date</string>
+    <string name="chat_list_lock_folders">Lock Folder Location</string>
+    <string name="chat_list_lock_folders_hint">Prevents the folder menus from scrolling off screen when navigating through chats.</string>
     <string name="chat_settings_section_appearance">Chat Appearance</string>
     <string name="chat_settings_section_information">Chat Information</string>
     <string name="chat_settings_section_interface">Chat Interface</string>

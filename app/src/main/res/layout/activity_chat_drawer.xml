@@ -43,14 +43,29 @@
             app:srcCompat="@drawable/ic_drawer_close" />
     </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/drawer_hierarchy"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/drawer_hierarchy"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp" />
+
+        <!-- Lock Folder Location: the Folders row held at the top of the
+             list while the chats scroll beneath it. Same surface as the
+             panel so nothing shows through. -->
+        <FrameLayout
+            android:id="@+id/drawer_folders_pinned"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <!-- Fixed bottom: Settings, New Folder, New Chat, in that order. -->
     <LinearLayout
