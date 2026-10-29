@@ -5528,6 +5528,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         btnConversationSummary?.setOnClickListener { openCompactionIcon() }
         btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
+        summarizerErrorBadge?.setOnClickListener { showSummarizerErrorsDialog() }
         refreshSummarizerIcons()
         // The next eligible cycle (errors doc §3): opening the chat retries
         // pending fold-ins and runs catch-up after a re-enable.
@@ -5785,11 +5786,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         refreshSummarySectionAnchors(summaryMode)
 
+        // In a chat that compacts, the error count sits on the compaction
+        // icon and tapping the count opens the errors; the separate errors
+        // icon is only for chats that use the Summarizer (owner ruling, Oct
+        // 29 2026).
+        val countOnCompactionIcon = preferences?.getChatUseSummarizer() != true &&
+            btnConversationSummary?.visibility == View.VISIBLE
+        anchorSummarizerErrorBadge(
+            if (countOnCompactionIcon) R.id.btn_conversation_summary else R.id.btn_summarizer_errors
+        )
         if (errors.isEmpty()) {
             btnSummarizerErrors?.visibility = View.GONE
             summarizerErrorBadge?.visibility = View.GONE
         } else {
-            btnSummarizerErrors?.visibility = View.VISIBLE
+            btnSummarizerErrors?.visibility = if (countOnCompactionIcon) View.GONE else View.VISIBLE
             summarizerErrorBadge?.visibility = View.VISIBLE
             summarizerErrorBadge?.text = errors.size.toString()
             // Alert (red on white, theme-independent) while a failure is still
@@ -5810,6 +5820,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         }
+    }
+
+    /** Pins the error count to the top-end corner of [anchorId]. */
+    private fun anchorSummarizerErrorBadge(anchorId: Int) {
+        val badge = summarizerErrorBadge ?: return
+        val params = badge.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+            ?: return
+        if (params.endToEnd == anchorId && params.topToTop == anchorId) return
+        params.endToEnd = anchorId
+        params.topToTop = anchorId
+        badge.layoutParams = params
     }
 
     /** True when this chat compacts (Summarizer off), has no compacted text

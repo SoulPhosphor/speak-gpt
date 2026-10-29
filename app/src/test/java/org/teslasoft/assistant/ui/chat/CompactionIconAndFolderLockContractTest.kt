@@ -35,6 +35,16 @@ class CompactionIconAndFolderLockContractTest {
     }
 
     @Test
+    fun errorCountSitsOnTheCompactionIconAndOpensTheErrors() {
+        assertTrue(activity.contains("if (countOnCompactionIcon) R.id.btn_conversation_summary else R.id.btn_summarizer_errors"))
+        assertTrue(activity.contains("btnSummarizerErrors?.visibility = if (countOnCompactionIcon) View.GONE else View.VISIBLE"))
+        assertTrue(activity.contains("summarizerErrorBadge?.setOnClickListener { showSummarizerErrorsDialog() }"))
+        val layout = source("src/main/res/layout/activity_chat.xml")
+        // Drawn after the compaction icon so the count sits on top of it.
+        assertTrue(layout.indexOf("@+id/summarizer_error_badge") > layout.indexOf("@+id/btn_conversation_summary"))
+    }
+
+    @Test
     fun lockFolderLocationIsAnAppAppearanceToggleOffByDefault() {
         val layout = source("src/main/res/layout/activity_app_appearance.xml")
         assertTrue(layout.contains("@+id/switch_chat_list_lock_folders"))
