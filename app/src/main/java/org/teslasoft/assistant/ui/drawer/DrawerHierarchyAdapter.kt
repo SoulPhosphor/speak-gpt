@@ -27,6 +27,10 @@ class DrawerHierarchyAdapter(
 ) : ListAdapter<DrawerRow, DrawerHierarchyAdapter.Holder>(DIFF) {
     private val displayPreferences = Preferences.getPreferences(activity, "")
     private val details = HashMap<String, ChatListDetails>()
+    // The generation each chat's details were last read in. Older details
+    // keep showing until the fresh read lands, so a refresh (opening or
+    // closing a folder) never blanks a row's bookmark indicator.
+    private val detailsReadIn = HashMap<String, Int>()
     private val detailRequests = HashSet<String>()
     private val detailsGeneration = AtomicInteger(0)
     private var disposed = false
@@ -66,7 +70,6 @@ class DrawerHierarchyAdapter(
         val current = displayOptions()
         // A conversation can change without changing its drawer title or ordering.
         detailsGeneration.incrementAndGet()
-        details.clear()
         detailRequests.clear()
         if (current == renderedDisplayOptions) {
             if (needsDetails()) notifyDataSetChanged()
@@ -75,6 +78,8 @@ class DrawerHierarchyAdapter(
         val memoryStatusTurnedOn = displayPreferences.getShowMemoryStatusOnChatList() &&
             renderedDisplayOptions[2] == false
         renderedDisplayOptions = current
+        details.clear()
+        detailsReadIn.clear()
         notifyDataSetChanged()
         if (memoryStatusTurnedOn) loadMemoryStates()
     }
@@ -82,8 +87,8 @@ class DrawerHierarchyAdapter(
         displayPreferences.getShowChatStartDateInChatList() || displayPreferences.getShowModelNamesInChatList()
 
     private fun requestDetails(chatId: String, startedAt: Long?) {
-        if (disposed || !needsDetails() || details.containsKey(chatId) || !detailRequests.add(chatId)) return
         val generation = detailsGeneration.get()
+        if (disposed || !needsDetails() || detailsReadIn[chatId] == generation || !detailRequests.add(chatId)) return
         val includeModel = displayPreferences.getShowModelNamesInChatList()
         metadataExecutor.execute {
             if (generation != detailsGeneration.get()) return@execute
@@ -93,6 +98,7 @@ class DrawerHierarchyAdapter(
             activity.runOnUiThread {
                 if (disposed || generation != detailsGeneration.get()) return@runOnUiThread
                 details[chatId] = loaded
+                detailsReadIn[chatId] = generation
                 currentList.forEachIndexed { position, row ->
                     if (row is DrawerRow.Chat && row.value.id == chatId) notifyItemChanged(position)
                 }
