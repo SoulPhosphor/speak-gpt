@@ -161,17 +161,11 @@
         <item name="android:layout_gravity">center_horizontal</item>
     </style>
 
-    <!-- Text-sized primary button on the end (right) side of its line, for
+    <!-- Label-sized primary button on the end (right) side of its line, for
          vertical (LinearLayout) hosts, such as the per-entry Copy under each
-         log entry (owner ruling, Oct 30 2026: only as wide as its text plus a
-         small inner margin). No minimum width and narrow side padding,
-         unlike the plain Inline button. ConstraintLayout hosts anchor it with
-         an end constraint. -->
+         log entry. ConstraintLayout hosts anchor it with an end constraint. -->
     <style name="AppButton.Primary.Inline.End" parent="AppButton.Primary.Inline">
         <item name="android:layout_gravity">end</item>
-        <item name="android:minWidth">0dp</item>
-        <item name="android:paddingStart">12dp</item>
-        <item name="android:paddingEnd">12dp</item>
     </style>
 
     <!-- The outlined counterpart of AppButton.Primary.Inline, for a
