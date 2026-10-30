@@ -6425,11 +6425,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /** Summarizer Errors dialog (decision 16 + errors doc §1, owner ruling
-     *  Aug 31 2026): one status paragraph, the stored entries newest first —
-     *  each with its own Copy and Hide — then the whole-list Hide All / Copy
-     *  All / Okay. Opening the list acknowledges the failure, relaxing the
-     *  top-bar badge from its alert look to the neutral reminder. */
+    /** Summarizer Errors dialog (decision 16 + errors doc §1): one status
+     *  paragraph, the stored entries newest first, then one row of Copy /
+     *  Hide / Okay that each act on every listed entry. Hide clears only this
+     *  list; the Error Log keeps its records. Opening the list acknowledges
+     *  the failure, relaxing the top-bar badge from its alert look to the
+     *  neutral reminder. */
     private fun showSummarizerErrorsDialog() {
         if (org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
                 .fromJson(preferences?.getSummarizerErrors()).isEmpty()
@@ -6444,12 +6445,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val view = layoutInflater.inflate(R.layout.dialog_summarizer_errors, null)
         val status = view.findViewById<TextView>(R.id.summarizer_errors_status)
         val container = view.findViewById<LinearLayout>(R.id.summarizer_errors_container)
-        val hideAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_cancel_action)
-        val copyAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_middle_action)
-        val okay = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_final_action)
-        hideAll?.setText(R.string.summarizer_errors_hide_all)
-        copyAll?.setText(R.string.summarizer_errors_copy_all)
-        okay?.setText(R.string.summarizer_errors_okay)
+        val copyAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_errors_copy)
+        val hideAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_errors_hide)
+        val okay = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_errors_okay)
 
         val statusText = when {
             preferences?.getChatUseSummarizer() != true ->
@@ -6474,33 +6472,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             clipboard.setPrimaryClip(ClipData.newPlainText("Summarizer Errors", text))
         }
 
-        fun populate() {
-            container?.removeAllViews()
-            currentEntries().forEachIndexed { index, entry ->
-                val row = layoutInflater.inflate(R.layout.view_summarizer_error_entry, container, false)
-                row.findViewById<TextView>(R.id.summarizer_error_entry_text).text =
-                    org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
-                row.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_error_copy)
-                    .setOnClickListener {
-                        copyToClipboard(
-                            org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
-                        )
-                    }
-                row.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_error_hide)
-                    .setOnClickListener {
-                        val remaining = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
-                            .removeAt(currentEntries(), index)
-                        preferences?.setSummarizerErrors(
-                            org.teslasoft.assistant.util.summarizer.SummarizerErrorLog.toJson(remaining)
-                        )
-                        if (remaining.isEmpty()) preferences?.setSummarizerEpisode("")
-                        refreshSummarizerIcons()
-                        if (remaining.isEmpty()) dialog.dismiss() else populate()
-                    }
-                container?.addView(row)
-            }
+        container?.removeAllViews()
+        currentEntries().forEach { entry ->
+            val row = layoutInflater.inflate(R.layout.view_summarizer_error_entry, container, false)
+            row.findViewById<TextView>(R.id.summarizer_error_entry_text).text =
+                org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
+            container?.addView(row)
         }
-        populate()
 
         hideAll?.setOnClickListener {
             preferences?.setSummarizerErrors("")

@@ -54,10 +54,11 @@ Never display or copy an API key, authorization header, complete request body,
 conversation text, or summary text. A provider's error message may be included
 only after those values are removed.
 
-Each stored error carries its own **Copy** and **Hide** (Hide removes that one
-entry). Beneath the list are the whole-list actions **Hide All**, **Copy All**,
-and **Okay** (Okay only closes), top to bottom, in Title Caps (owner ruling,
-Aug 31 2026).
+Beneath the list is one row of **Copy**, **Hide**, and **Okay**, in Title Caps
+(owner ruling, Oct 30 2026; replaces the per-entry buttons and the stacked
+Hide All / Copy All / Okay). Copy copies every listed error. Hide hides every
+listed error; it does not remove anything from the Error Log. Okay only closes,
+and drops to the next line only when the row does not fit.
 
 ---
 
@@ -243,8 +244,7 @@ for a working one. It shows whenever the log has entries, and carries a state:
   errors list. It stays as a quiet reminder while entries remain and later
   fold-ins succeed; a new failure returns it to Alert.
 
-**Hide All** clears the log and drops the badge until the next failure; a single
-**Hide** drops the badge only when it removes the last entry.
+**Hide** clears the list and drops the badge until the next failure.
 
 Automatic retry occurs on the next eligible summarizer cycle. Do not run a
 rapid retry loop in the background.
