@@ -91,12 +91,22 @@ object ChatListIndex {
         fun read(chatId: String, parts: Set<Part>): Update?
     }
 
+    /** Changes saved to a chat whose entry has not been updated yet. Kept on
+     *  disk, so a change is never lost to a crash or a failed update. */
+    interface Pending {
+        /** Records that [parts] of [chatId] changed; returns this record's mark. */
+        fun mark(chatId: String, parts: Set<Part>): Long
+        fun all(): Map<String, Pair<Set<Part>, Long>>
+        /** Removes the record only if it is still the one marked [mark]. */
+        fun clear(chatId: String, mark: Long)
+    }
+
     /**
      * The entries and the rules for keeping them complete and current. One lock
      * covers every read-then-write, so a value read before a change can never
      * overwrite the value written after it.
      */
-    class Core(private val table: Table, private val source: Source) {
+    class Core(private val table: Table, private val source: Source, private val pending: Pending) {
         private val entries = ConcurrentHashMap<String, Entry>()
         private val lock = Any()
         // Loading has its own lock so a lookup never waits behind a long preparation.
@@ -124,13 +134,18 @@ object ChatListIndex {
          *  no longer exist. Returns true when anything changed. */
         fun prepareAll(): Boolean = synchronized(lock) {
             ensureLoaded()
+            prepareAllLocked()
+        }.let { prepared -> applyPending() || prepared }
+
+        private fun prepareAllLocked(): Boolean {
+            ensureLoaded()
             val ids = source.chatIds() ?: return false
             val gone = entries.keys - ids.toSet()
             if (gone.isNotEmpty()) {
                 table.delete(gone)
                 gone.forEach { entries.remove(it) }
             }
-            prepareLocked(ids.filter { !entries.containsKey(it) }, retryUnreadable = true) || gone.isNotEmpty()
+            return prepareLocked(ids.filter { !entries.containsKey(it) }, retryUnreadable = true) || gone.isNotEmpty()
         }
 
         /** Prepares any of [chatIds] that have no entry yet. Returns true when any were prepared. */
@@ -158,21 +173,52 @@ object ChatListIndex {
             prepareLocked(chatIds.toList(), retryUnreadable = true) || known.isNotEmpty()
         }
 
+        /** Records a change to one chat; [applyPending] applies it. */
+        fun markChanged(chatId: String, parts: Set<Part>) { pending.mark(chatId, parts) }
+
+        /**
+         * Applies every recorded change. A record is removed only once its entry
+         * is up to date, so a change that fails or is interrupted is applied on
+         * a later call or at the next start. Returns true when an entry changed.
+         */
+        fun applyPending(): Boolean {
+            var changed = false
+            for ((chatId, record) in pending.all()) {
+                val (parts, mark) = record
+                val outcome = synchronized(lock) { refreshLocked(chatId, parts) }
+                if (outcome != null) {
+                    pending.clear(chatId, mark)
+                    changed = changed || outcome
+                }
+            }
+            return changed
+        }
+
         /** Applies a change to one chat. Returns true when its entry changed. */
-        fun refresh(chatId: String, parts: Set<Part>): Boolean = synchronized(lock) {
+        fun refresh(chatId: String, parts: Set<Part>): Boolean = synchronized(lock) { refreshLocked(chatId, parts) == true }
+
+        /** null when the chat cannot be read right now. */
+        private fun refreshLocked(chatId: String, parts: Set<Part>): Boolean? {
             ensureLoaded()
-            val existing = entries[chatId] ?: return prepareLocked(listOf(chatId), retryUnreadable = true)
-            val update = source.read(chatId, parts) ?: return false
-            val next = merge(existing, update) ?: return false
+            val existing = entries[chatId]
+            if (existing == null) {
+                if (prepareLocked(listOf(chatId), retryUnreadable = true)) return true
+                // A chat that no longer exists needs nothing; one that exists but
+                // cannot be read keeps its record for a later try.
+                return if (source.chatIds()?.contains(chatId) == false) false else null
+            }
+            val update = source.read(chatId, parts) ?: return null
+            val next = merge(existing, update) ?: return null
             if (next == existing) return false
             table.write(mapOf(chatId to next))
             entries[chatId] = next
-            true
+            return true
         }
 
         fun forget(chatId: String) = synchronized(lock) {
             ensureLoaded()
             unreadable.remove(chatId)
+            pending.all()[chatId]?.let { pending.clear(chatId, it.second) }
             if (entries.remove(chatId) != null) table.delete(listOf(chatId))
         }
 
@@ -211,15 +257,17 @@ object ChatListIndex {
     private val worker = Executors.newSingleThreadExecutor {
         Thread(it, "chat-list-details").apply { priority = Thread.MIN_PRIORITY }
     }
-    private val pending = LinkedHashMap<String, MutableSet<Part>>()
+    private val drainLock = Any()
     private var draining = false
+    private var changedAgain = false
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
     private val main by lazy { Handler(Looper.getMainLooper()) }
 
     private fun core(context: Context): Core = core ?: synchronized(this) {
         core ?: run {
             val created = DatabaseTable(context.applicationContext).also { table = it }
-            Core(created, ChatSource(context.applicationContext)).also { core = it }
+            Core(created, ChatSource(context.applicationContext), PendingStore(context.applicationContext))
+                .also { core = it }
         }
     }
 
@@ -302,8 +350,10 @@ object ChatListIndex {
     private fun request(context: Context, chatId: String, parts: Set<Part>) {
         if (chatId.isBlank()) return
         val app = context.applicationContext
-        synchronized(pending) {
-            pending.getOrPut(chatId) { mutableSetOf() }.addAll(parts)
+        // Recorded on disk before anything else, so the change survives a crash.
+        if (runCatching { core(app).markChanged(chatId, parts) }.isFailure) return
+        synchronized(drainLock) {
+            changedAgain = true
             if (draining) return
             draining = true
         }
@@ -312,13 +362,45 @@ object ChatListIndex {
 
     private fun drain(context: Context) {
         while (true) {
-            val next = synchronized(pending) {
-                val first = pending.entries.firstOrNull()
-                if (first == null) draining = false else pending.remove(first.key)
-                first
-            } ?: return
-            val changed = runCatching { core(context).refresh(next.key, next.value) }.getOrDefault(false)
+            synchronized(drainLock) {
+                if (!changedAgain) {
+                    draining = false
+                    return
+                }
+                changedAgain = false
+            }
+            val changed = runCatching { core(context).applyPending() }.getOrDefault(false)
             if (changed) notifyChanged()
+        }
+    }
+
+    /** The records of changes not yet applied, kept in the app's private storage.
+     *  Holds only chat IDs and which kind of detail changed. */
+    private class PendingStore(context: Context) : Pending {
+        private val preferences = context.getSharedPreferences("chat_list_details_pending", Context.MODE_PRIVATE)
+        private var lastMark = 0L
+
+        @Synchronized
+        override fun mark(chatId: String, parts: Set<Part>): Long {
+            val merged = parts + (decode(preferences.getString(chatId, null))?.first ?: emptySet())
+            val mark = maxOf(System.nanoTime(), lastMark + 1).also { lastMark = it }
+            preferences.edit().putString(chatId, merged.joinToString(",") { it.name } + ";" + mark).apply()
+            return mark
+        }
+
+        @Synchronized
+        override fun all(): Map<String, Pair<Set<Part>, Long>> =
+            preferences.all.mapNotNull { (chatId, value) -> decode(value as? String)?.let { chatId to it } }.toMap()
+
+        @Synchronized
+        override fun clear(chatId: String, mark: Long) {
+            if (decode(preferences.getString(chatId, null))?.second == mark) preferences.edit().remove(chatId).apply()
+        }
+
+        private fun decode(value: String?): Pair<Set<Part>, Long>? {
+            val (parts, mark) = value?.split(";")?.takeIf { it.size == 2 } ?: return null
+            return parts.split(",").mapNotNull { name -> Part.entries.firstOrNull { it.name == name } }.toSet() to
+                (mark.toLongOrNull() ?: return null)
         }
     }
 

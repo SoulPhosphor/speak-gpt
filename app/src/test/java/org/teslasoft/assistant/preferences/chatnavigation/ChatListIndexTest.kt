@@ -52,9 +52,23 @@ class ChatListIndexTest {
         }
     }
 
+    /** Survives an app restart, like the on-disk records. */
+    private class FakePending : ChatListIndex.Pending {
+        val records = LinkedHashMap<String, Pair<Set<Part>, Long>>()
+        private var next = 0L
+        override fun mark(chatId: String, parts: Set<Part>): Long {
+            val mark = ++next
+            records[chatId] = (parts + (records[chatId]?.first ?: emptySet())) to mark
+            return mark
+        }
+        override fun all() = LinkedHashMap(records)
+        override fun clear(chatId: String, mark: Long) { if (records[chatId]?.second == mark) records.remove(chatId) }
+    }
+
     private val table = FakeTable()
     private val source = FakeSource()
-    private fun core() = ChatListIndex.Core(table, source)
+    private val pending = FakePending()
+    private fun core() = ChatListIndex.Core(table, source, pending)
     private fun chats(count: Int) = (1..count).forEach { source.chats["chat-$it"] = Chat() }
 
     @Test fun `preparation gives every chat its details`() {
@@ -80,7 +94,7 @@ class ChatListIndexTest {
         // The first run stops after four chats (the app was closed).
         ChatListIndex.Core(table, object : ChatListIndex.Source by source {
             override fun chatIds() = source.chats.keys.take(4)
-        }).prepareAll()
+        }, pending).prepareAll()
         source.reads.clear()
         core().prepareAll()
         assertEquals((5..10).map { "chat-$it" }, source.reads)
@@ -130,7 +144,7 @@ class ChatListIndexTest {
                 if (failWrites) throw IllegalStateException("disk busy") else table.write(entries)
             }
         }
-        val interrupted = ChatListIndex.Core(failing, source)
+        val interrupted = ChatListIndex.Core(failing, source, pending)
         try { interrupted.replace(listOf("chat-2")) } catch (_: IllegalStateException) { }
         // The old details are gone rather than outdated, in memory and on disk.
         assertNull(interrupted.entryFor("chat-2"))
@@ -140,6 +154,42 @@ class ChatListIndexTest {
         val restarted = core()
         assertTrue(restarted.ensureReady(source.chats.keys))
         assertTrue(restarted.entryFor("chat-2")!!.hasBookmarks)
+    }
+
+    @Test fun `a change recorded just before a crash is applied at the next start`() {
+        chats(1)
+        core().prepareAll()
+        // A bookmark is saved and recorded; the app is killed before the update runs.
+        source.chats["chat-1"]!!.bookmarked = true
+        core().markChanged("chat-1", setOf(Part.CONTENT))
+        val restarted = core()
+        restarted.prepareAll()
+        assertTrue(restarted.entryFor("chat-1")!!.hasBookmarks)
+        assertTrue(pending.records.isEmpty())
+    }
+
+    @Test fun `a change whose update fails stays recorded and is retried`() {
+        chats(1)
+        val index = core()
+        index.prepareAll()
+        source.chats["chat-1"]!!.companion = "companion-2"
+        source.chats["chat-1"]!!.readable = false
+        index.markChanged("chat-1", setOf(Part.SETTINGS))
+        assertFalse(index.applyPending())
+        assertTrue(pending.records.containsKey("chat-1"))
+        source.chats["chat-1"]!!.readable = true
+        assertTrue(index.applyPending())
+        assertEquals("companion-2", index.entryFor("chat-1")!!.companionId)
+        assertTrue(pending.records.isEmpty())
+    }
+
+    @Test fun `a deleted chat leaves no recorded change behind`() {
+        chats(1)
+        val index = core()
+        index.prepareAll()
+        index.markChanged("chat-1", setOf(Part.SETTINGS))
+        index.forget("chat-1")
+        assertTrue(pending.records.isEmpty())
     }
 
     @Test fun `bookmarks turn the indicator on and off`() {
