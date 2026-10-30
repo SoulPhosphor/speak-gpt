@@ -139,13 +139,16 @@ class ChatTranscriptResizeAnchorTest {
     @Test
     fun aFingerOnTheChatKeepsTheKeyboardFromMovingIt() = withTranscript { t ->
         t.showEnd(TALL)
-        val rowTop = t.manager.findViewByPosition(LAST - 1)!!.top
+        // A row near the top stays on screen when nothing moves; rows near
+        // the bottom are correctly left under the composer and recycled.
+        val watched = t.manager.findFirstCompletelyVisibleItemPosition()
+        val rowTop = t.manager.findViewByPosition(watched)!!.top
 
         t.touch(MotionEvent.ACTION_DOWN)
         t.resize(SHORT)
 
         // Rule 1: nothing automatic moves the conversation under a finger.
-        assertEquals(rowTop, t.manager.findViewByPosition(LAST - 1)!!.top)
+        assertEquals(rowTop, t.manager.findViewByPosition(watched)!!.top)
 
         t.touch(MotionEvent.ACTION_UP)
         t.showEnd(TALL)
