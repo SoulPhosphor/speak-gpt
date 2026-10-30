@@ -569,6 +569,13 @@ cost is "Not Reported".
 Tests may use made-up prices only to check the arithmetic. Those values must
 never become data the app uses.
 
+### Never create Markdown files without permission (owner ruling, October 30 2026)
+
+Do not create a new `.md` file anywhere in the repository without the owner's
+permission for that specific file. This includes plans, reports, notes, and
+documentation. Ask first, saying what the file would hold and why it is
+needed. Write nothing into a new file until the owner says yes.
+
 ### Finishing work and waiting on pull requests (owner ruling, October 13 2026)
 
 Waiting on a pull request wakes the session and re-reads the whole
