@@ -15,8 +15,8 @@ import com.google.android.material.color.MaterialColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.Executors
 import java.util.concurrent.ConcurrentHashMap
 
@@ -27,13 +27,7 @@ class DrawerHierarchyAdapter(
     private val dispatchUpdate: (() -> Unit) -> Unit = { it() }
 ) : ListAdapter<DrawerRow, DrawerHierarchyAdapter.Holder>(DIFF) {
     private val displayPreferences = Preferences.getPreferences(activity, "")
-    private val details = HashMap<String, ChatListDetails>()
-    // The generation each chat's details were last read in. Older details
-    // keep showing until the fresh read lands, so a refresh (opening or
-    // closing a folder) never blanks a row's bookmark indicator.
-    private val detailsReadIn = HashMap<String, Int>()
-    private val detailRequests = HashSet<String>()
-    private val detailsGeneration = AtomicInteger(0)
+    private val companionImages = CompanionImageLookup(activity)
     private var disposed = false
     private var folderPlaceholderHeight: Int? = null
     private val memoryStates = ConcurrentHashMap<String, String>()
@@ -68,53 +62,29 @@ class DrawerHierarchyAdapter(
     )
     private var renderedDisplayOptions = displayOptions()
 
-    fun refreshDisplayIfChanged(refreshDetails: Boolean = true) {
-        val current = displayOptions()
-        // A conversation can change without changing its drawer title or ordering.
-        // Expanding folders only changes the projection, not the conversations.
-        if (refreshDetails || current != renderedDisplayOptions) {
-            detailsGeneration.incrementAndGet()
-            detailRequests.clear()
-        }
-        if (current == renderedDisplayOptions) {
-            if (refreshDetails && needsDetails()) notifyDataSetChanged()
-            return
-        }
-        val memoryStatusTurnedOn = displayPreferences.getShowMemoryStatusOnChatList() &&
-            renderedDisplayOptions[2] == false
-        renderedDisplayOptions = current
-        details.clear()
-        detailsReadIn.clear()
-        notifyDataSetChanged()
-        if (memoryStatusTurnedOn) loadMemoryStates()
-    }
-    private fun needsDetails() = displayPreferences.getShowBookmarkIndicatorInChatList() ||
-        displayPreferences.getShowChatStartDateInChatList() || displayPreferences.getShowModelNamesInChatList()
-
-    private fun requestDetails(chatId: String, startedAt: Long?) {
-        val generation = detailsGeneration.get()
-        if (disposed || !needsDetails() || detailsReadIn[chatId] == generation || !detailRequests.add(chatId)) return
-        val includeModel = displayPreferences.getShowModelNamesInChatList()
-        metadataExecutor.execute {
-            if (generation != detailsGeneration.get()) return@execute
-            val loaded = try {
-                ChatListDetailsReader.read(activity.applicationContext, chatId, startedAt, includeModel)
-            } catch (_: Exception) { ChatListDetails(false, null) }
-            activity.runOnUiThread {
-                dispatchUpdate {
-                    if (!disposed && generation == detailsGeneration.get()) {
-                        val previous = details.put(chatId, loaded)
-                        detailsReadIn[chatId] = generation
-                        currentList.forEachIndexed { position, row ->
-                            if (row is DrawerRow.Chat && row.value.id == chatId &&
-                                loaded != (previous ?: ChatListDetails(false, row.value.startedAt))) {
-                                notifyItemChanged(position)
-                            }
-                        }
-                    }
+    /** Worker thread. Looks up the companion pictures [chats] will show and
+     *  redraws rows whose companion's picture changed. */
+    fun prepareCompanionImages(chats: Collection<org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationItem>) {
+        if (!displayPreferences.getShowCompanionImagesInChatList()) return
+        val changed = companionImages.prepare(chats.mapNotNull { it.listIndex?.companionId })
+        if (changed.isEmpty()) return
+        activity.runOnUiThread {
+            dispatchUpdate {
+                if (!disposed) currentList.forEachIndexed { position, row ->
+                    if (row is DrawerRow.Chat && row.value.listIndex?.companionId in changed) notifyItemChanged(position)
                 }
             }
         }
+    }
+
+    fun refreshDisplayIfChanged() {
+        val current = displayOptions()
+        if (current == renderedDisplayOptions) return
+        val memoryStatusTurnedOn = displayPreferences.getShowMemoryStatusOnChatList() &&
+            renderedDisplayOptions[2] == false
+        renderedDisplayOptions = current
+        notifyDataSetChanged()
+        if (memoryStatusTurnedOn) loadMemoryStates()
     }
 
     interface Callbacks {
@@ -155,7 +125,7 @@ class DrawerHierarchyAdapter(
         private val chevron: ImageView = itemView.findViewById(R.id.flat_chat_chevron)
         private val snippet: TextView = itemView.findViewById(R.id.flat_chat_snippet)
         private val date: TextView = itemView.findViewById(R.id.flat_chat_date)
-        private val identity = FlatChatIdentityBinder(activity, itemView, displayPreferences, memoryStates)
+        private val identity = FlatChatIdentityBinder(activity, itemView, displayPreferences, memoryStates, companionImages)
         private val baseStart = itemView.resources.getDimensionPixelSize(R.dimen.drawer_row_padding_start)
         private val nestedExtra = itemView.resources.getDimensionPixelSize(R.dimen.drawer_nested_indent)
 
@@ -199,9 +169,9 @@ class DrawerHierarchyAdapter(
                         displayTitle,
                         pinned = row.value.pinned,
                         current = row.value.id == currentChatId(),
-                        details = details[row.value.id] ?: ChatListDetails(false, row.value.startedAt)
+                        index = row.value.listIndex,
+                        startedAt = row.value.startedAt ?: row.value.listIndex?.startedAt
                     )
-                    requestDetails(row.value.id, row.value.startedAt)
                     if (row.nested) root.updatePadding(left = baseStart + nestedExtra, right = baseStart)
                 }
             }
@@ -239,7 +209,6 @@ class DrawerHierarchyAdapter(
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         disposed = true
-        detailsGeneration.incrementAndGet()
         metadataExecutor.shutdownNow()
         super.onDetachedFromRecyclerView(recyclerView)
     }

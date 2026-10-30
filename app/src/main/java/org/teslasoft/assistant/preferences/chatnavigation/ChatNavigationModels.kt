@@ -22,7 +22,9 @@ data class ChatNavigationItem(
     val pinned: Boolean,
     val folderId: String?,
     val titleRevision: String? = null,
-    val startedAt: Long? = null
+    val startedAt: Long? = null,
+    /** What the row shows beyond its title; null until filled. */
+    val listIndex: ChatListIndex.Entry? = null
 )
 
 data class FolderNavigationGroup(

@@ -32,24 +32,18 @@ class DrawerDisplayRefreshContractTest {
         assertTrue(body.contains("getShowChatStartDateInChatList()"))
         assertTrue(!body.contains("getHideModelNames()"))
         assertTrue(body.contains("getShowMemoryStatusOnChatList()"))
-        assertTrue(adapter.contains("fun refreshDisplayIfChanged(refreshDetails: Boolean = true)"))
+        assertTrue(adapter.contains("fun refreshDisplayIfChanged()"))
         val controller = source("src/main/java/org/teslasoft/assistant/ui/drawer/ChatDrawerController.kt")
         val refresh = controller.substring(controller.indexOf("fun refresh("))
-        assertTrue(refresh.indexOf("adapter.refreshDisplayIfChanged(refreshDetails)") in 0 until refresh.indexOf("submitList"))
+        assertTrue(refresh.indexOf("adapter.refreshDisplayIfChanged()") in 0 until refresh.indexOf("submitList"))
     }
 
-    /** Opening or closing a folder refreshes the list; each row keeps its
-     *  last-read bookmark indicator until the fresh read lands. */
+    /** Opening or closing a folder rebuilds the list from the stored chat-list
+     *  rows, so a row's bookmark indicator is never blanked by a reread. */
     @Test
-    fun aRefreshKeepsLoadedDetailsUntilTheyAreReread() {
+    fun aRefreshKeepsStoredRowDetails() {
         val adapter = source("src/main/java/org/teslasoft/assistant/ui/drawer/DrawerHierarchyAdapter.kt")
-        val refresh = adapter.substring(
-            adapter.indexOf("fun refreshDisplayIfChanged("),
-            adapter.indexOf("private fun needsDetails()")
-        )
-        val unchanged = refresh.substring(0, refresh.indexOf("if (current == renderedDisplayOptions)"))
-        assertTrue(!unchanged.contains("details.clear()"))
-        assertTrue(adapter.contains("detailsReadIn[chatId] == generation"))
-        assertTrue(adapter.contains("detailsReadIn[chatId] = generation"))
+        assertTrue(adapter.contains("index = row.value.listIndex"))
+        assertTrue(!adapter.contains("details.clear()"))
     }
 }

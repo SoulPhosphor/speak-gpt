@@ -394,15 +394,21 @@ object UsageLogStore {
         entries: List<UsageLogEntry>
     ): Boolean {
         if (entries.isEmpty()) return true
-        return synchronized(lock) {
+        val committed = synchronized(lock) {
             prefs.commitUsageLog(UsageLog.encode(read(prefs).append(entries)))
         }
+        if (committed && entries.any { it.category == UsageCategory.CHAT }) prefs.chatUsageRecorded()
+        return committed
     }
 
     /** Enriches the same image request with its delayed billing receipt, never adds a second charge. */
-    fun putRequest(prefs: org.teslasoft.assistant.preferences.Preferences, entry: UsageLogEntry, existingOnly: Boolean = false): Boolean = synchronized(lock) {
-        val updated = UsageLog.requestUpdate(prefs.getUsageLog(), entry, existingOnly)
-            ?: return@synchronized false
-        prefs.commitUsageLog(UsageLog.encode(updated))
+    fun putRequest(prefs: org.teslasoft.assistant.preferences.Preferences, entry: UsageLogEntry, existingOnly: Boolean = false): Boolean {
+        val committed = synchronized(lock) {
+            val updated = UsageLog.requestUpdate(prefs.getUsageLog(), entry, existingOnly)
+                ?: return@synchronized false
+            prefs.commitUsageLog(UsageLog.encode(updated))
+        }
+        if (committed && entry.category == UsageCategory.CHAT) prefs.chatUsageRecorded()
+        return committed
     }
 }

@@ -28,6 +28,7 @@ import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexJournal
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection
@@ -173,6 +174,7 @@ class ChatPreferences private constructor() {
      */
     internal fun cleanupDeletedChatData(context: Context, chatId: String): Boolean {
         if (chatId.isBlank()) return false
+        ChatListIndex.chatDeleted(context, chatId)
         val historyName = "chat_$chatId"
         val settingsName = "settings.$chatId"
         return try {
@@ -559,6 +561,7 @@ class ChatPreferences private constructor() {
                         runCatching { ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision) }
                     } else ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision)
                 }
+                ChatListIndex.contentChanged(context, chatId)
                 ChatStorageHealth.WriteOutcome.OK
             }
         } catch (_: Exception) {
@@ -842,6 +845,7 @@ class ChatPreferences private constructor() {
 
             journal.edit().remove(chatId).commit()
             ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, searchRevision)
+            ChatListIndex.chatCreated(context, chatId)
             return PendingConversationCommitResult.Ok
         }
     }

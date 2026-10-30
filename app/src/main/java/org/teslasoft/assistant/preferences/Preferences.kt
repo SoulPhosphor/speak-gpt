@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.includes.SummarizerProjectionContract
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.util.Hash
@@ -313,6 +314,7 @@ class Preferences internal constructor(
         } else {
             putString("model", model)
         }
+        chatListSettingChanged()
     }
 
     /**
@@ -1648,6 +1650,7 @@ class Preferences internal constructor(
      * */
     fun setPersonaId(id: String) {
         putString("persona_id", id)
+        chatListSettingChanged()
     }
 
     /**
@@ -1793,6 +1796,7 @@ class Preferences internal constructor(
             .putBoolean("apply_model_rules", applyModelRules)
             .putBoolean("memory_excluded", !archiveEnabled)
             .apply()
+        chatListSettingChanged()
     }
 
     /**
@@ -2216,6 +2220,20 @@ class Preferences internal constructor(
 
     fun setChatExcludedFromMemory(excluded: Boolean) {
         putBoolean("memory_excluded", excluded)
+        chatListSettingChanged()
+    }
+
+    /** Keeps this chat's chat-list row in step with a setting the list shows. */
+    private fun chatListSettingChanged() {
+        val context = diagnosticContext ?: return
+        if (chatId.isNotBlank()) ChatListIndex.settingsChanged(context, chatId)
+    }
+
+    /** A conversation request was added to this chat's usage log, which can
+     *  change the model shown for it in the chat list. */
+    fun chatUsageRecorded() {
+        val context = diagnosticContext ?: return
+        if (chatId.isNotBlank()) ChatListIndex.contentChanged(context, chatId)
     }
 
     /** User-facing Archive choice. It remains per-chat and also seeds only the
@@ -2223,6 +2241,7 @@ class Preferences internal constructor(
     fun setChatArchiveEnabled(enabled: Boolean) {
         preferences.edit().putBoolean("memory_excluded", !enabled).apply()
         putGlobalBoolean(LAST_CHAT_ARCHIVE_ENABLED, enabled, true)
+        chatListSettingChanged()
     }
 
     private fun getLastChatArchiveEnabled(): Boolean =

@@ -33,7 +33,9 @@ class ChatNavigationRepository internal constructor(
     private val presentationPreferences: SharedPreferences,
     private val readChatList: () -> ChatPreferences.ChatListResult,
     private val preserveCorruptFolders: (String) -> Unit,
-    private val idFactory: () -> String = { UUID.randomUUID().toString() }
+    private val idFactory: () -> String = { UUID.randomUUID().toString() },
+    /** What each chat row shows beyond its title, from the chat-list details database. */
+    private val listDetails: (String) -> ChatListIndex.Entry? = { null }
 ) {
     companion object {
         const val SCHEMA_VERSION = 1
@@ -53,7 +55,8 @@ class ChatNavigationRepository internal constructor(
                 readChatList = {
                     chatPreferences.getChatListResult(app, includeFirstMessage = false)
                 },
-                preserveCorruptFolders = { raw -> preserveCorruptFolderJson(app, raw) }
+                preserveCorruptFolders = { raw -> preserveCorruptFolderJson(app, raw) },
+                listDetails = { chatId -> ChatListIndex.entryFor(app, chatId) }
             )
         }
 
@@ -489,7 +492,8 @@ class ChatNavigationRepository internal constructor(
         pinned = row["pinned"] == "true",
         folderId = row[FOLDER_ID_KEY]?.takeIf { it.isNotBlank() },
         titleRevision = row["search_title_revision"]?.takeIf { it.isNotBlank() },
-        startedAt = row["created_at"]?.toLongOrNull()?.takeIf { it > 0 }
+        startedAt = row["created_at"]?.toLongOrNull()?.takeIf { it > 0 },
+        listIndex = listDetails(ChatPreferences.storedChatId(row))
     )
 
     private fun isUuid(value: String): Boolean = try {

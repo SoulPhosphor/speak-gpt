@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.NewConversationCoordinator
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 import org.teslasoft.assistant.ui.activities.ChatActivity
@@ -60,6 +61,9 @@ class ChatDrawerController private constructor(
     private val folderAdapter by lazy {
         DrawerHierarchyAdapter(activity, currentChatId, rowCallbacks, updates::dispatch)
     }
+    // Stored row details were filled in or changed in the background. A
+    // closed drawer rereads the list when it opens.
+    private val indexListener: () -> Unit = { if (isOpen()) refresh() }
     private val foldersLauncher = activity.activityResultRegistry.register(
         "chat-drawer-folders", ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -77,6 +81,7 @@ class ChatDrawerController private constructor(
         activity.lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onDestroy(owner: LifecycleOwner) {
                 foldersLauncher.unregister()
+                ChatListIndex.removeListener(indexListener)
             }
         })
         list.layoutManager = LinearLayoutManager(activity)
@@ -121,6 +126,8 @@ class ChatDrawerController private constructor(
                 drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, GravityCompat.START)
             }
         })
+        ChatListIndex.addListener(indexListener)
+        ChatListIndex.prepareAllInBackground(activity)
         refresh()
     }
 
@@ -148,21 +155,19 @@ class ChatDrawerController private constructor(
     }
 
     fun refresh(onShown: () -> Unit = {}) {
-        refresh(refreshDetails = true, onShown = onShown)
-    }
-
-    private fun refresh(refreshDetails: Boolean, onShown: () -> Unit = {}) {
         // Chat-list display options may have changed in Settings.
         lockFolders = displayPreferences.getLockFolderLocationInChatList()
         separateFolders = displayPreferences.getOpenFoldersInSeparateArea()
         updates.dispatch {
-            adapter.refreshDisplayIfChanged(refreshDetails)
-            if (lockFolders) folderAdapter.refreshDisplayIfChanged(refreshDetails)
+            adapter.refreshDisplayIfChanged()
+            if (lockFolders) folderAdapter.refreshDisplayIfChanged()
         }
         activity.lifecycleScope.launch {
             val projection = withContext(Dispatchers.IO) {
-                when (val result = repository.snapshot()) {
+                when (val result = readyNavigation(activity, repository)) {
                     is ChatNavigationResult.Success -> {
+                        adapter.prepareCompanionImages(result.value.allChats)
+                        if (lockFolders) folderAdapter.prepareCompanionImages(result.value.allChats)
                         val foldersExpanded = repository.areFoldersExpanded()
                         val expanded = result.value.folders.mapNotNullTo(LinkedHashSet()) {
                             it.folder.id.takeIf(repository::isFolderExpanded)
@@ -234,10 +239,10 @@ class ChatDrawerController private constructor(
                         .putExtra(FoldersActivity.EXTRA_CHAT_ID, currentChatId())
                 ) else {
                     repository.setFoldersExpanded(!row.expanded)
-                    refresh(refreshDetails = false)
+                    refresh()
                 }
             }
-            is DrawerRow.Folder -> { repository.setFolderExpanded(row.value.id, !row.expanded); refresh(refreshDetails = false) }
+            is DrawerRow.Folder -> { repository.setFolderExpanded(row.value.id, !row.expanded); refresh() }
             is DrawerRow.Chat -> {
                 if (row.value.id == currentChatId()) close()
                 else openConversationFromDrawer(
@@ -271,6 +276,16 @@ class ChatDrawerController private constructor(
 
     companion object {
         const val EXTRA_REVEAL_FROM_DRAWER = "revealFromDrawer"
+
+        /** Worker thread only. The chat list, with every chat's details
+         *  prepared before it is shown; never a row without them. */
+        fun readyNavigation(context: android.content.Context, repository: ChatNavigationRepository) =
+            repository.snapshot().let { result ->
+                val chats = (result as? ChatNavigationResult.Success)?.value?.allChats
+                    ?.filter { it.listIndex == null }?.map { it.id }.orEmpty()
+                if (chats.isNotEmpty() && ChatListIndex.ensureReady(context, chats)) repository.snapshot()
+                else result
+            }
 
         fun install(activity: FragmentActivity, chatRoot: View, currentChatId: () -> String): ChatDrawerController {
             val content = activity.findViewById<ViewGroup>(android.R.id.content)

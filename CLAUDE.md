@@ -113,6 +113,38 @@ Before proposing or writing user-facing wording, first identify every product be
 
 A request for wording approval does not authorize choosing the underlying behavior. Strings must describe approved behavior, not define it.
 
+### Preserve the user experience (owner ruling, October 30 2026)
+
+The user experience is a requirement, not a side effect.
+
+A technical fix must preserve all existing functionality, appearance, and
+behavior except for the specific changes the owner requested and approved.
+
+Any additional user-visible difference, including temporary ones, is a product
+decision, not an implementation detail. This includes information appearing
+late, missing labels, loading states, extra taps, delays, changed ordering, or
+altered interactions.
+
+Before implementation, identify any user-visible differences beyond the
+requested result. Prefer solutions that introduce none.
+
+If an additional visible difference is genuinely unavoidable, explain it
+clearly and obtain the owner's approval before implementation. Never silently
+introduce a compromise because it is technically convenient.
+
+Do not burden the owner with routine engineering decisions. Make those
+decisions independently while preserving the approved user experience.
+
+A fix is not complete merely because the code works or tests pass. It must
+also preserve the expected user experience.
+
+### The user experience outranks ease of implementation (owner ruling, October 30 2026)
+
+When choosing between approaches, pick the one that gives the best experience
+for the user, even when another is quicker or simpler to code. Never recommend
+an approach because it is easier to build when a better one exists. When
+presenting options, say plainly which one gives the better experience.
+
 ### Discussion is not approval
 
 Exploring an idea, asking a question, expressing a preference, or saying "maybe" does not automatically authorize implementation.
@@ -479,6 +511,30 @@ Instruction-file updates go to `beta/new-client` only.
 - Do not claim a reported runtime bug is fixed until the owner confirms the symptom is resolved on the test device.
 - When the owner says "put it on Main," merge the approved green branch to `main` with a normal merge or other explicitly approved method.
 
+### Fix root causes, and say so (owner ruling, October 30 2026)
+
+Every proposed fix states the root cause and explains why the fix removes it
+rather than hiding it. A workaround that leaves the cause in place (moving
+work to a background thread, adding a retry, patching one entry point) is not
+offered as the fix. If a workaround is ever the only option, it is labeled as
+a workaround, with the root cause and the reason it cannot be fixed now.
+
+### New features must not slow down or break existing ones (owner ruling, October 30 2026)
+
+Before adding a feature, check what it costs the screens it touches, such as
+reading data while scrolling or opening files per row, and build it so
+existing behavior stays as fast and correct as before.
+
+### Never rewrite a test just to make it pass (owner ruling, October 30 2026)
+
+A failing test means the code may be wrong. Fix the code, not the test.
+
+A test may be changed only when the behavior it checks was deliberately
+changed with the owner's approval, or when the test itself is provably
+mistaken. Every changed or removed test must be listed in the report to the
+owner with the reason, in plain language. Never weaken, delete, or skip a test
+to get a green result.
+
 ### Never hard-code what a service can change (owner ruling, October 7 2026)
 
 If it cannot be learned from outside the app while the app runs, it does not
@@ -667,12 +723,31 @@ Do not add:
 
 Put feature details in the relevant feature documentation. Put active work in the relevant issue, work order, or branch notes. Git already preserves history.
 
-## 16. Work-mode build limits
+## 16. Local Android builds
 
-Do not spend task time bootstrapping a full Android SDK or reproducing the
-GitHub Actions Android build inside the limited Work Mode environment. Use
-available focused checks locally and leave the authoritative full compile to
-the repository's GitHub Actions workflow.
+The owner works entirely in cloud environments and wants agents to have the
+tools that make the work easier. An earlier version of this rule existed only
+because an environment could not support a full Android build, not because
+Android build tools are unwanted.
+
+**Claude Code cloud sessions: confirmed working (October 30 2026).** Claude,
+running in a Claude Code cloud session, can build this app and run its full
+unit-test suite (about 3,200 tests in a few minutes). Each session starts on a
+fresh machine, so run `./claude-cloud-android-setup.sh` from the repository
+root once per session; it installs the Android SDK and works around the
+public library server's rate limit. Then run the tests with the commands at
+the top of that script.
+
+**This confirmation applies only to Claude in Claude Code cloud sessions.**
+Other AI tools (for example ChatGPT, Codex, or other assistants) run in
+different environments. They must not assume they can build or test locally
+because of this section; each must check its own environment first.
+
+- In any environment, check whether the tools are available and whether
+  installing them is practical before relying on them. Do not spend excessive
+  time forcing an unsupported environment to work; if it cannot be done, say
+  so plainly and rely on GitHub Actions.
+- GitHub Android Checks must still pass before work is considered complete.
 
 ## 17. Work-mode GitHub publishing limits
 

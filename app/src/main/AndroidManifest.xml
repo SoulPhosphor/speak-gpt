@@ -721,5 +721,13 @@
             android:name=".service.RestoreForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- Prepares the chat list's details for existing chats right after an update. -->
+        <receiver
+            android:name=".preferences.chatnavigation.AppUpdatedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
