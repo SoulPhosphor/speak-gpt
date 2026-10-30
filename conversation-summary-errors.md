@@ -58,7 +58,7 @@ Beneath the list is one row of **Copy**, **Hide**, and **Okay**, in Title Caps
 (owner ruling, Oct 30 2026; replaces the per-entry buttons and the stacked
 Hide All / Copy All / Okay). Copy copies every listed error. Hide hides every
 listed error; it does not remove anything from the Error Log. Okay only closes,
-and drops to the next line only when the row does not fit.
+and drops to the next line, right-aligned, only when the row does not fit.
 
 ---
 
