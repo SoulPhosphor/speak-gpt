@@ -161,6 +161,7 @@ carefully or composing a message.
 | --- | --- |
 | Notes the position before a resize | `ChatActivity.captureTranscriptAnchor()` / `ChatTranscriptRecyclerView.captureResizeAnchor()` |
 | Puts it back during the new-size layout | `ChatTranscriptRecyclerView.onSizeChanged()` |
+| At the end of a chat, keeps the last message's bottom on the composer | `ChatTranscriptRecyclerView.pinEndAfterLayout()` |
 | Keyboard reports before it takes or gives back space | `ChatImeInsetLayout.onBottomInsetChanging` (in `ChatComposerLayout.kt`) |
 | Whether the keyboard is currently up | `ChatImeInsetLayout.isKeyboardOpen` |
 | The lock, and the Send exception | `ChatActivity.scroll()` and `imeClosingForSend` |

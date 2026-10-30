@@ -32,6 +32,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
     private var resizeAnchorPosition = NO_POSITION
     private var resizeAnchorTopFromBottom = 0
     private var resizeAnchorPending = false
+    private var resizeAnchorAtEnd = false
 
     /** Capture the bottommost visible row while this view still has its old height. */
     fun captureResizeAnchor() {
@@ -43,6 +44,10 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
 
         resizeAnchorPosition = position
         resizeAnchorTopFromBottom = anchor.top - height
+        // A transcript sitting at its real end is held by that end: the last
+        // row's bottom stays on the composer's top edge, not just the row's top.
+        resizeAnchorAtEnd = position == (adapter?.itemCount ?: 0) - 1 &&
+            anchor.bottom <= height - paddingBottom + END_TOLERANCE_PX
         resizeAnchorPending = true
     }
 
@@ -102,5 +107,39 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
             position,
             h + resizeAnchorTopFromBottom
         )
+        if (resizeAnchorAtEnd) pinEndAfterLayout(manager, position)
+    }
+
+    /**
+     * Completes the end hold inside the same layout pass that consumes the
+     * offset above, aligning the last row's bottom with the new viewport end.
+     * The correction runs from this view's own layout callback, not a posted
+     * runnable, so no IME frame or composer change can land in between.
+     */
+    private fun pinEndAfterLayout(manager: LinearLayoutManager, last: Int) {
+        addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+            override fun onLayoutChange(
+                view: View,
+                left: Int,
+                top: Int,
+                right: Int,
+                bottom: Int,
+                oldLeft: Int,
+                oldTop: Int,
+                oldRight: Int,
+                oldBottom: Int
+            ) {
+                removeOnLayoutChangeListener(this)
+                val lastView = manager.findViewByPosition(last) ?: return
+                // Positive pulls a covered bottom back into view; negative is
+                // clamped at the top for a transcript shorter than the viewport.
+                val overflow = lastView.bottom - (height - paddingBottom)
+                if (overflow != 0) scrollBy(0, overflow)
+            }
+        })
+    }
+
+    private companion object {
+        const val END_TOLERANCE_PX = 1
     }
 }
