@@ -518,6 +518,16 @@ Before adding a feature, check what it costs the screens it touches, such as
 reading data while scrolling or opening files per row, and build it so
 existing behavior stays as fast and correct as before.
 
+### Never rewrite a test just to make it pass (owner ruling, October 30 2026)
+
+A failing test means the code may be wrong. Fix the code, not the test.
+
+A test may be changed only when the behavior it checks was deliberately
+changed with the owner's approval, or when the test itself is provably
+mistaken. Every changed or removed test must be listed in the report to the
+owner with the reason, in plain language. Never weaken, delete, or skip a test
+to get a green result.
+
 ### Never hard-code what a service can change (owner ruling, October 7 2026)
 
 If it cannot be learned from outside the app while the app runs, it does not
