@@ -41,7 +41,9 @@ object DamagedChatLog {
         val firstCompanionName: String?,
         val mostUsedModel: String?,
         /** Direct repair was tried and failed (Irreparable Chat Files). */
-        val irreparable: Boolean = false
+        val irreparable: Boolean = false,
+        /** Why the chat was recorded; null for records saved before causes were. */
+        val cause: DamagedChatCause? = null
     )
 
     data class Detection(
@@ -54,12 +56,17 @@ object DamagedChatLog {
 
     /** Records [chatId] as damaged unless it is already in the log. Chat list
      *  details are read here; call off the main thread where possible. */
-    fun record(context: Context, chatId: String, operation: DamagedChatOperation): Boolean =
-        recordAll(context, listOf(chatId), operation)
+    fun record(context: Context, chatId: String, operation: DamagedChatOperation, cause: DamagedChatCause): Boolean =
+        recordAll(context, listOf(chatId), operation, cause)
 
     /** Records every not-yet-logged chat in [chatIds] as one detection.
      *  Returns whether the log is durably saved with them in it. */
-    fun recordAll(context: Context, chatIds: Collection<String>, operation: DamagedChatOperation): Boolean {
+    fun recordAll(
+        context: Context,
+        chatIds: Collection<String>,
+        operation: DamagedChatOperation,
+        cause: DamagedChatCause
+    ): Boolean {
         if (chatIds.isEmpty()) return true
         return try {
             val alreadyKnown = chatIds(context)
@@ -80,7 +87,8 @@ object DamagedChatLog {
                         startedAt = row?.get("created_at")?.toLongOrNull()?.takeIf { it > 0 },
                         firstUsername = null,
                         firstCompanionName = null,
-                        mostUsedModel = null
+                        mostUsedModel = null,
+                        cause = cause
                     )
                 }
                 detections.add(Detection(operation, System.currentTimeMillis(), chats))
@@ -215,6 +223,7 @@ object DamagedChatLog {
                             c.firstCompanionName?.let { put("first_companion_name", it) }
                             c.mostUsedModel?.let { put("most_used_model", it) }
                             if (c.irreparable) put("irreparable", true)
+                            c.cause?.let { put("cause", it.name) }
                         })
                     }
                 })
@@ -247,7 +256,10 @@ object DamagedChatLog {
                             firstUsername = c.optString("first_username").takeIf { c.has("first_username") },
                             firstCompanionName = c.optString("first_companion_name").takeIf { c.has("first_companion_name") },
                             mostUsedModel = c.optString("most_used_model").takeIf { c.has("most_used_model") },
-                            irreparable = c.optBoolean("irreparable", false)
+                            irreparable = c.optBoolean("irreparable", false),
+                            // An unknown cause shows as not recorded rather
+                            // than making the whole log unreadable.
+                            cause = DamagedChatCause.entries.firstOrNull { it.name == c.optString("cause") }
                         )
                     }
                 )

@@ -909,6 +909,11 @@
     <string name="damaged_first_companion_name">First Companion Name: %1$s</string>
     <string name="damaged_most_used_model">Most-Used Model: %1$s</string>
     <string name="damaged_value_unavailable">Unavailable</string>
+    <!-- Why each damaged chat was recorded (owner-approved, Oct 30 2026). -->
+    <string name="damaged_reason_cannot_unlock">Reason: The app can\'t unlock this chat\'s file. The file may be from an earlier install of the app, or it may be damaged.</string>
+    <string name="damaged_reason_contents_damaged">Reason: The file opens, but the chat inside it is damaged or missing parts.</string>
+    <string name="damaged_reason_not_recorded">Reason: Not recorded. This chat was found before the app saved reasons.</string>
+    <string name="damaged_reason_already_marked">Reason: Unknown. The chat was already marked as damaged, so the app couldn\'t make changes to it.</string>
     <string name="damaged_try_repair">Try Repair</string>
     <string name="damaged_repair_fully_successful">Repair Fully Successful!</string>
     <string name="damaged_retry_renaming_question">Try previous renaming again?</string>

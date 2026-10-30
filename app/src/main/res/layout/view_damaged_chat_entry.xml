@@ -11,6 +11,10 @@
         style="@style/Widget.App.Row.Subtitle" />
 
     <TextView
+        android:id="@+id/damaged_chat_reason"
+        style="@style/Widget.App.Row.Subtitle" />
+
+    <TextView
         android:id="@+id/damaged_chat_started"
         style="@style/Widget.App.Row.Subtitle" />
 

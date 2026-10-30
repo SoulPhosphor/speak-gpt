@@ -38,4 +38,23 @@ class DamagedChatLogFormatTest {
         assertNull(DamagedChatLog.decodeOrNull(unknownOperation))
         assertNull(DamagedChatLog.decodeOrNull("not json"))
     }
+
+    @Test
+    fun causesRoundTripAndOlderOrUnknownCausesReadAsNotRecorded() {
+        val withCauses = listOf(
+            DamagedChatLog.Detection(
+                DamagedChatOperation.OPENING_A_CHAT,
+                1L,
+                DamagedChatCause.entries.mapIndexed { i, cause ->
+                    DamagedChatLog.DamagedChat("c$i", null, null, null, null, null, cause = cause)
+                }
+            )
+        )
+        assertEquals(withCauses, DamagedChatLog.decode(DamagedChatLog.encode(withCauses)))
+
+        val older = """[{"operation":"CHAT_LIST","detected_at":1,"chats":[{"chat_id":"x"}]}]"""
+        assertNull(DamagedChatLog.decode(older).single().chats.single().cause)
+        val unknown = """[{"operation":"CHAT_LIST","detected_at":1,"chats":[{"chat_id":"x","cause":"NEW_KIND"}]}]"""
+        assertNull(DamagedChatLog.decode(unknown).single().chats.single().cause)
+    }
 }

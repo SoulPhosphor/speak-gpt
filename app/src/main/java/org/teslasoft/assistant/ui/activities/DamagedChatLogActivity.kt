@@ -126,6 +126,8 @@ class DamagedChatLogActivity : SettingsPageActivity() {
                 val entry = inflater.inflate(R.layout.view_damaged_chat_entry, chats, false)
                 entry.findViewById<TextView>(R.id.damaged_chat_title).text =
                     getString(R.string.damaged_original_chat_title, chat.title ?: unavailable)
+                entry.findViewById<TextView>(R.id.damaged_chat_reason).text =
+                    getString(chat.cause?.label ?: R.string.damaged_reason_not_recorded)
                 entry.findViewById<TextView>(R.id.damaged_chat_started).text =
                     getString(R.string.damaged_original_start_date, chat.startedAt?.let { date.format(Date(it)) } ?: unavailable)
                 entry.findViewById<TextView>(R.id.damaged_chat_first_username).text =
