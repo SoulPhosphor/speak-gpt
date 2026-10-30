@@ -479,6 +479,20 @@ Instruction-file updates go to `beta/new-client` only.
 - Do not claim a reported runtime bug is fixed until the owner confirms the symptom is resolved on the test device.
 - When the owner says "put it on Main," merge the approved green branch to `main` with a normal merge or other explicitly approved method.
 
+### Fix root causes, and say so (owner ruling, October 30 2026)
+
+Every proposed fix states the root cause and explains why the fix removes it
+rather than hiding it. A workaround that leaves the cause in place (moving
+work to a background thread, adding a retry, patching one entry point) is not
+offered as the fix. If a workaround is ever the only option, it is labeled as
+a workaround, with the root cause and the reason it cannot be fixed now.
+
+### New features must not slow down or break existing ones (owner ruling, October 30 2026)
+
+Before adding a feature, check what it costs the screens it touches, such as
+reading data while scrolling or opening files per row, and build it so
+existing behavior stays as fast and correct as before.
+
 ### Never hard-code what a service can change (owner ruling, October 7 2026)
 
 If it cannot be learned from outside the app while the app runs, it does not
