@@ -674,12 +674,23 @@ tools that make the work easier. An earlier version of this rule existed only
 because an environment could not support a full Android build, not because
 Android build tools are unwanted.
 
-- If the current environment can install and run the Android SDK, Gradle, and
-  the relevant tests, use them. Local compiling and testing are encouraged.
-- First check whether the tools are already available and whether installing
-  them is practical. Do not spend excessive time or resources forcing an
-  unsupported environment to work; if it cannot be done, say so plainly and
-  rely on GitHub Actions.
+**Claude Code cloud sessions: confirmed working (October 30 2026).** Claude,
+running in a Claude Code cloud session, can build this app and run its full
+unit-test suite (about 3,200 tests in a few minutes). Each session starts on a
+fresh machine, so run `./claude-cloud-android-setup.sh` from the repository
+root once per session; it installs the Android SDK and works around the
+public library server's rate limit. Then run the tests with the commands at
+the top of that script.
+
+**This confirmation applies only to Claude in Claude Code cloud sessions.**
+Other AI tools (for example ChatGPT, Codex, or other assistants) run in
+different environments. They must not assume they can build or test locally
+because of this section; each must check its own environment first.
+
+- In any environment, check whether the tools are available and whether
+  installing them is practical before relying on them. Do not spend excessive
+  time forcing an unsupported environment to work; if it cannot be done, say
+  so plainly and rely on GitHub Actions.
 - GitHub Android Checks must still pass before work is considered complete.
 
 ## 17. Work-mode GitHub publishing limits
