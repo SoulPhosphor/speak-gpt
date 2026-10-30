@@ -41,7 +41,7 @@ class LaunchHandoffContractTest {
         val worker = onCreate.indexOf("Thread {")
         assertTrue(surface in 0 until worker)
         assertTrue(chat.contains(
-            "threadLoader?.visibility = if (openedAtLaunch()) View.GONE else View.VISIBLE"
+            "threadLoader?.visibility = if (openedAtLaunch() || revealedFromDrawer) View.GONE else View.VISIBLE"
         ))
         assertTrue(chat.contains("if (threadLoader?.visibility == View.VISIBLE) Handler("))
         val content = chat.indexOf("setContentView(R.layout.activity_chat)")
