@@ -113,6 +113,31 @@ Before proposing or writing user-facing wording, first identify every product be
 
 A request for wording approval does not authorize choosing the underlying behavior. Strings must describe approved behavior, not define it.
 
+### Preserve the user experience (owner ruling, October 30 2026)
+
+The user experience is a requirement, not a side effect.
+
+A technical fix must preserve all existing functionality, appearance, and
+behavior except for the specific changes the owner requested and approved.
+
+Any additional user-visible difference, including temporary ones, is a product
+decision, not an implementation detail. This includes information appearing
+late, missing labels, loading states, extra taps, delays, changed ordering, or
+altered interactions.
+
+Before implementation, identify any user-visible differences beyond the
+requested result. Prefer solutions that introduce none.
+
+If an additional visible difference is genuinely unavoidable, explain it
+clearly and obtain the owner's approval before implementation. Never silently
+introduce a compromise because it is technically convenient.
+
+Do not burden the owner with routine engineering decisions. Make those
+decisions independently while preserving the approved user experience.
+
+A fix is not complete merely because the code works or tests pass. It must
+also preserve the expected user experience.
+
 ### Discussion is not approval
 
 Exploring an idea, asking a question, expressing a preference, or saying "maybe" does not automatically authorize implementation.
