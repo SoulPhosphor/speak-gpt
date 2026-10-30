@@ -51,24 +51,27 @@ class FlatChatIdentityBinder(
     }
 
     /**
-     * Draws a chat row from the chat list alone; no chat file is opened here.
-     * [index] is null until the row's details have been filled in, and only the
-     * information already known is shown until then.
+     * Draws a chat row. Once its details are stored in the chat list, no chat
+     * file is opened here. [stored] is null until the row's details have been filled in. Until then
+     * the row reads the chat's settings as it always did, so it looks the same
+     * as before; its bookmark indicator and most-used model follow when the row
+     * is filled, as they did when they were read in the background.
      */
     fun bind(chatId: String, displayTitle: String, pinned: Boolean, current: Boolean,
-        index: ChatListIndex.Entry?, startedAt: Long?, showBookmarkIndicator: Boolean = true) {
+        stored: ChatListIndex.Entry?, startedAt: Long?, showBookmarkIndicator: Boolean = true,
+        showSelectedModelUntilFilled: Boolean = true) {
         reset()
+        val index = stored ?: settingsOnly(chatId)
+        val modelLabel = if (stored != null || showSelectedModelUntilFilled) index.displayModel else null
         title.text = displayTitle
         if (displayPreferences.getShowCompanionImagesInChatList()) {
             imageFrame.visibility = View.VISIBLE
-            if (index != null) {
-                ProfileImageBinder.bind(
-                    activity,
-                    image,
-                    companionImages.imageFor(index.companionId),
-                    GlobalPreferences.getPreferences(activity).getProfileImageShape()
-                ) { it.setImageResource(R.drawable.ic_assistant_navigation) }
-            }
+            ProfileImageBinder.bind(
+                activity,
+                image,
+                companionImages.imageFor(index.companionId),
+                GlobalPreferences.getPreferences(activity).getProfileImageShape()
+            ) { it.setImageResource(R.drawable.ic_assistant_navigation) }
             bookmarkOverlay.visibility = if (pinned) View.VISIBLE else View.GONE
         } else if (pinned) {
             leading.visibility = View.VISIBLE
@@ -78,14 +81,14 @@ class FlatChatIdentityBinder(
             )
         }
         bookmarkIndicator.visibility = if (showBookmarkIndicator && displayPreferences.getShowBookmarkIndicatorInChatList() &&
-            index?.hasBookmarks == true) View.VISIBLE else View.GONE
+            index.hasBookmarks) View.VISIBLE else View.GONE
         val metadata = ChatListDetails.metadata(
             if (displayPreferences.getShowChatStartDateInChatList()) startedAt else null,
-            if (displayPreferences.getShowModelNamesInChatList()) index?.displayModel else null
+            if (displayPreferences.getShowModelNamesInChatList()) modelLabel else null
         )
         model.text = metadata
         model.visibility = if (metadata.isEmpty()) View.GONE else View.VISIBLE
-        if (displayPreferences.getShowMemoryStatusOnChatList() && index != null) {
+        if (displayPreferences.getShowMemoryStatusOnChatList()) {
             val state = if (index.memoryExcluded) "excluded" else memoryStates[chatId]
             if (state != null) {
                 memory.visibility = View.VISIBLE
@@ -101,6 +104,18 @@ class FlatChatIdentityBinder(
             title.setTextColor(MaterialColors.getColor(title, androidx.appcompat.R.attr.colorPrimary))
             title.setTypeface(null, android.graphics.Typeface.BOLD)
         }
+    }
+
+    /** The settings-based details of a row that has not been filled yet. */
+    private fun settingsOnly(chatId: String): ChatListIndex.Entry {
+        val chatPreferences = Preferences.getPreferences(activity, chatId)
+        return ChatListIndex.Entry(
+            hasBookmarks = false,
+            mostUsedModel = null,
+            model = chatPreferences.getModel(),
+            companionId = chatPreferences.getPersonaId(),
+            memoryExcluded = chatPreferences.isChatExcludedFromMemory()
+        )
     }
 }
 

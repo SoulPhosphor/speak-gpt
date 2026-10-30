@@ -94,7 +94,9 @@ class SearchResultAdapter(
         fun bind(result: SearchResult) {
             val row = rows[result.chatId]
             identity.bind(result.chatId, result.chatTitle, pinned = result.chatPinned, current = false,
-                index = row?.index, startedAt = row?.startedAt, showBookmarkIndicator = false)
+                stored = row?.index, startedAt = row?.startedAt, showBookmarkIndicator = false,
+                // Search showed a model label only once the chat had been read.
+                showSelectedModelUntilFilled = false)
             if (row != null && row.index == null) ChatListIndex.fillNow(activity, result.chatId)
             chevron.visibility = View.GONE
             if (result.kind == SearchDocumentKind.TITLE) {

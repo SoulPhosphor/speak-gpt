@@ -156,7 +156,7 @@ class DrawerHierarchyAdapter(
                         displayTitle,
                         pinned = row.value.pinned,
                         current = row.value.id == currentChatId(),
-                        index = row.value.listIndex,
+                        stored = row.value.listIndex,
                         startedAt = row.value.startedAt
                     )
                     if (row.value.listIndex == null) ChatListIndex.fillNow(activity, row.value.id)

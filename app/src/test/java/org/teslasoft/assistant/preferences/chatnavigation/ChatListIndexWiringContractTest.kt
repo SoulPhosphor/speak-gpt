@@ -75,6 +75,16 @@ class ChatListIndexWiringContractTest {
         }
     }
 
+    /** A row not filled yet looks exactly as it did before stored details existed. */
+    @Test fun unfilledRowsLookTheSameAsBefore() {
+        val binder = source("ui/drawer/FlatChatIdentityBinder.kt")
+        assertTrue(body(binder, "fun bind(chatId: String").contains("val index = stored ?: settingsOnly(chatId)"))
+        val settingsOnly = body(binder, "private fun settingsOnly(")
+        listOf("getModel()", "getPersonaId()", "isChatExcludedFromMemory()").forEach { assertTrue(settingsOnly.contains(it)) }
+        // Search showed a model label only after the chat was read; the drawer showed the selected model at once.
+        assertTrue(source("ui/adapters/SearchResultAdapter.kt").contains("showSelectedModelUntilFilled = false"))
+    }
+
     @Test fun memoryStatusIsStillReadInOneBulkPass() {
         val drawer = source("ui/drawer/DrawerHierarchyAdapter.kt")
         assertTrue(drawer.contains("MemoryStore.getInstance(activity).chatReviewStates()"))
