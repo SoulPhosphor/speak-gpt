@@ -267,7 +267,21 @@ A future inline secondary button should inherit `AppButton.Secondary` and change
 
 Use for every `MaterialAlertDialogBuilder` unless an approved feature-specific dialog requires a different theme.
 
-This theme supplies the standard dialog appearance and centers dialog titles.
+This theme supplies the standard dialog appearance and centers dialog titles
+(the title panel is centered too, `App.MaterialAlertDialog.TitlePanel`, since
+the title text is only as wide as its words).
+
+Pop-up alignment (owner ruling, Oct 30 2026): titles are always centered;
+explanatory text beneath them is always left-aligned; action buttons are
+right-aligned unless an approved design says otherwise. Every action is a real
+button (an `AppButton.*` style), never a bare text link.
+
+A row of label-sized actions that may not fit on one line uses a
+`ConstraintLayout` `Flow` (`flow_wrapMode="chain"`, all horizontal biases `1`)
+of `AppButton.*.Inline` buttons, so the last action drops to the next line,
+still on the right. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`)
+and the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
+Summarizer Settings centered beneath as an approved exception).
 
 Parameter information boxes use `ParameterInfoDialog` and the shared
 `view_parameter_info_title.xml` heading, styled by `Widget.App.ParameterInfo.*`.

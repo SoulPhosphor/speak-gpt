@@ -25,7 +25,7 @@ class SummarizerErrorsDialogContractTest {
         assertFalse(dialog.contains("dialog_three_actions_cancel_first"))
         assertTrue(dialog.contains("androidx.constraintlayout.helper.widget.Flow"))
         assertTrue(dialog.contains("app:flow_wrapMode=\"chain\""))
-        assertTrue(dialog.contains("app:flow_firstHorizontalBias=\"0\""))
+        assertTrue(dialog.contains("app:flow_firstHorizontalBias=\"1\""))
         assertTrue(dialog.contains("app:flow_lastHorizontalBias=\"1\""))
         assertTrue(
             dialog.contains(

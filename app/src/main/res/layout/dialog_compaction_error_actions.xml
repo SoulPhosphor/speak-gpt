@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Compaction error pop-up actions (owner ruling, Oct 30 2026), beneath the
-  dialog's message: one row of Retry, Copy and Okay, with Okay dropping to
-  the next line, right-aligned, only when the row does not fit (the same
-  wrapping row as the Summarizer Errors pop-up); then Summarizer Settings
-  centered beneath it.
+  dialog's message: one right-aligned row of Retry, Copy and Okay, with Okay
+  dropping to the next line, still on the right, only when the row does not
+  fit (the same wrapping row as the Summarizer Errors pop-up); then
+  Summarizer Settings centered beneath it.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -23,8 +23,8 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             app:constraint_referenced_ids="btn_compaction_error_retry,btn_compaction_error_copy,btn_compaction_error_okay"
-            app:flow_firstHorizontalBias="0"
-            app:flow_horizontalBias="0"
+            app:flow_firstHorizontalBias="1"
+            app:flow_horizontalBias="1"
             app:flow_horizontalGap="12dp"
             app:flow_horizontalStyle="packed"
             app:flow_lastHorizontalBias="1"

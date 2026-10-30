@@ -4,8 +4,8 @@
   conversation-summary-errors.md §1): one status paragraph, then the chat's
   stored errors (newest first, at most five), then one action row: Copy
   (every listed error), Hide (every listed error) and Okay, side by side.
-  Okay drops to the next line, right-aligned, only when the row does not
-  fit (the first line's bias wins while everything fits). The entries
+  The row is right-aligned; Okay drops to the next line, still on the
+  right, only when the row does not fit. The entries
   are built by ChatActivity from the stored log.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -49,8 +49,8 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             app:constraint_referenced_ids="btn_summarizer_errors_copy,btn_summarizer_errors_hide,btn_summarizer_errors_okay"
-            app:flow_firstHorizontalBias="0"
-            app:flow_horizontalBias="0"
+            app:flow_firstHorizontalBias="1"
+            app:flow_horizontalBias="1"
             app:flow_lastHorizontalBias="1"
             app:flow_horizontalGap="12dp"
             app:flow_horizontalStyle="packed"
