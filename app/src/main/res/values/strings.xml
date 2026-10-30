@@ -4145,6 +4145,7 @@
     <string name="chat_list_model_names">Show Model Names</string>
     <string name="chat_list_start_date">Show Chat Start Date</string>
     <string name="chat_list_lock_folders">Lock Folder Location</string>
+    <string name="chat_list_separate_folders">Open Folders in Separate Area</string>
     <string name="chat_list_lock_folders_hint">Prevents the folder menus from scrolling off screen when navigating through chats.</string>
     <string name="chat_settings_section_appearance">Chat Appearance</string>
     <string name="chat_settings_section_information">Chat Information</string>

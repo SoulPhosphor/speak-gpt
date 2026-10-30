@@ -1369,9 +1369,16 @@ the shared subtle-text theme role and must not carry query text or snippets.
 
 `Widget.App.DrawerSurface` gives the drawer its opaque surface
 (`?attr/colorSurface`). The drawer panel uses it, and so does the locked
-Folders row that Lock Folder Location holds at the top of the list, so the
-chats scrolling beneath that row never show through. Anything else drawn over
+Folders container that Lock Folder Location holds at the top of the list, so the
+chats scrolling beneath that container never show through. Anything else drawn over
 the drawer's scrolling list uses this style rather than its own background.
+
+The locked container uses the same flat rows as the unlocked hierarchy. Its
+heading stays visible, and its expanded folders and chats scroll in their own
+RecyclerView. It grows only as needed, up to half of the middle list area's
+height. A matching space in the main list keeps the first main chat reachable
+below it. This is a layout relationship, not a new visual style. With locking
+off the original single scrolling hierarchy is used unchanged.
 
 ## Drawer bottom actions
 

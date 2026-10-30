@@ -585,6 +585,13 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_list_lock_folders", state, false)
     }
 
+    fun getOpenFoldersInSeparateArea(): Boolean =
+        getGlobalBoolean("chat_list_separate_folders", false)
+
+    fun setOpenFoldersInSeparateArea(state: Boolean) {
+        putGlobalBoolean("chat_list_separate_folders", state, false)
+    }
+
     fun getShowCompanionImagesInChatList(): Boolean =
         getGlobalBoolean("chat_list_companion_images", false)
 

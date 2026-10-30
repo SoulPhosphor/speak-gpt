@@ -85,6 +85,30 @@ Top-level order:
 
 Folder contents expand inline inside the Folders accordion as described in Section 4.
 
+With **Lock Folder Location** enabled, the entire visible Folders container
+(heading, expanded folder rows, and their expanded chat rows) stays together.
+It follows its position below Image Gallery until its top reaches the top of
+the middle list area, then stays there while the main chat list scrolls beneath
+it. Image Gallery can scroll away above it.
+
+The locked container grows only as needed, up to half the middle list area's
+height. Beyond that limit its contents scroll independently, with its Folders
+heading always visible for collapse. The main list reserves the container's
+visible height so every main chat remains reachable below it, including the
+first and last chat. With locking disabled, the original single scrolling
+hierarchy and folder expansion behavior remain unchanged.
+
+**Open Folders in Separate Area** is an independent App Appearance toggle,
+directly below Lock Folder Location, default off. When on, tapping the drawer's
+Folders row opens a dedicated Folders screen instead of expanding inline.
+The screen has the shared title-only header with a back chevron, no other
+header actions, and the same folder/chat rows, indentation, expansion choices,
+and management menus as the drawer. All folders are listed with unrestricted
+vertical scrolling. Back returns to the open drawer. Selecting a chat uses the
+existing drawer navigation, including closing the drawer for the current chat.
+Lock Folder Location can still pin the drawer's Folders entry. Switching this
+toggle does not overwrite the saved inline expansion state.
+
 The scrollable middle must remain virtualized/efficient with hundreds of chats. It must not push the fixed top or fixed bottom off-screen.
 
 ### 2.4 Image Gallery Row

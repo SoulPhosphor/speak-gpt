@@ -13,14 +13,37 @@ sealed class DrawerRow(open val stableKey: String) {
 }
 
 object DrawerHierarchyProjection {
+    data class LockedLayers(
+        val mainRows: List<DrawerRow>,
+        val header: DrawerRow.FoldersHeader,
+        val folderRows: List<DrawerRow>
+    )
+
+    /** Keep the header's place in the main list, but move its complete visible
+     * subtree into the independently scrolling layer. Unlocked lists never use this. */
+    fun lockedLayers(rows: List<DrawerRow>): LockedLayers {
+        val headerIndex = rows.indexOfFirst { it is DrawerRow.FoldersHeader }
+        require(headerIndex >= 0)
+        val folderRows = rows.drop(headerIndex + 1).takeWhile {
+            it is DrawerRow.Folder || (it is DrawerRow.Chat && it.nested)
+        }
+        return LockedLayers(
+            rows.take(headerIndex + 1) + rows.drop(headerIndex + 1 + folderRows.size),
+            rows[headerIndex] as DrawerRow.FoldersHeader,
+            folderRows
+        )
+    }
+
     fun build(
         snapshot: ChatNavigationSnapshot,
         foldersExpanded: Boolean,
-        expandedFolderIds: Set<String>
+        expandedFolderIds: Set<String>,
+        separateFolders: Boolean = false
     ): List<DrawerRow> = buildList {
+        val showFolders = foldersExpanded && !separateFolders
         add(DrawerRow.Gallery)
-        add(DrawerRow.FoldersHeader(foldersExpanded))
-        if (foldersExpanded) {
+        add(DrawerRow.FoldersHeader(showFolders))
+        if (showFolders) {
             snapshot.folders.forEach { group ->
                 val expanded = group.folder.id in expandedFolderIds
                 add(DrawerRow.Folder(group.folder, expanded))
