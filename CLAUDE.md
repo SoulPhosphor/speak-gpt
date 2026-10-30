@@ -667,12 +667,20 @@ Do not add:
 
 Put feature details in the relevant feature documentation. Put active work in the relevant issue, work order, or branch notes. Git already preserves history.
 
-## 16. Work-mode build limits
+## 16. Local Android builds
 
-Do not spend task time bootstrapping a full Android SDK or reproducing the
-GitHub Actions Android build inside the limited Work Mode environment. Use
-available focused checks locally and leave the authoritative full compile to
-the repository's GitHub Actions workflow.
+The owner works entirely in cloud environments and wants agents to have the
+tools that make the work easier. An earlier version of this rule existed only
+because an environment could not support a full Android build, not because
+Android build tools are unwanted.
+
+- If the current environment can install and run the Android SDK, Gradle, and
+  the relevant tests, use them. Local compiling and testing are encouraged.
+- First check whether the tools are already available and whether installing
+  them is practical. Do not spend excessive time or resources forcing an
+  unsupported environment to work; if it cannot be done, say so plainly and
+  rely on GitHub Actions.
+- GitHub Android Checks must still pass before work is considered complete.
 
 ## 17. Work-mode GitHub publishing limits
 
