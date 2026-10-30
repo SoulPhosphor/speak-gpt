@@ -1,6 +1,7 @@
 package org.teslasoft.assistant.ui.drawer
 
 import android.content.Intent
+import android.app.Activity
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -11,12 +12,14 @@ import android.widget.Toast
 import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -25,11 +28,10 @@ import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 import org.teslasoft.assistant.ui.activities.ChatActivity
+import org.teslasoft.assistant.ui.activities.FoldersActivity
 import org.teslasoft.assistant.ui.activities.ImageGalleryActivity
 import org.teslasoft.assistant.ui.activities.SearchActivity
 import org.teslasoft.assistant.ui.activities.SettingsActivity
-import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
-import org.teslasoft.assistant.ui.util.CompactActionPopup
 
 class ChatDrawerController private constructor(
     private val activity: FragmentActivity,
@@ -39,17 +41,56 @@ class ChatDrawerController private constructor(
 ) {
     private val repository = ChatNavigationRepository.get(activity)
     private val list: RecyclerView = panel.findViewById(R.id.drawer_hierarchy)
-    private val pinnedFolders: android.widget.FrameLayout = panel.findViewById(R.id.drawer_folders_pinned)
+    private val pinnedFolders: LockedFoldersLayout = panel.findViewById(R.id.drawer_folders_pinned)
+    private val pinnedHeading: android.widget.FrameLayout = panel.findViewById(R.id.drawer_folders_heading)
+    private val folderContents: RecyclerView = panel.findViewById(R.id.drawer_folder_contents)
     private val displayPreferences = org.teslasoft.assistant.preferences.Preferences.getPreferences(activity, "")
     private var pinnedHolder: DrawerHierarchyAdapter.Holder? = null
-    private val adapter = DrawerHierarchyAdapter(activity, currentChatId, object : DrawerHierarchyAdapter.Callbacks {
+    private var pinnedRow: DrawerRow.FoldersHeader? = null
+    private var foldersHeaderIndex = -1
+    private var lockFolders = false
+    private var separateFolders = false
+    private val updates = DrawerUpdateDispatcher()
+    private val rowActions = DrawerRowActions(activity) { refresh() }
+    private val rowCallbacks = object : DrawerHierarchyAdapter.Callbacks {
         override fun onClick(row: DrawerRow) = handleClick(row)
-        override fun onLongClick(anchor: View, row: DrawerRow) = handleLongClick(anchor, row)
-    })
+        override fun onLongClick(anchor: View, row: DrawerRow) = rowActions.onLongClick(anchor, row)
+    }
+    private val adapter = DrawerHierarchyAdapter(activity, currentChatId, rowCallbacks, updates::dispatch)
+    private val folderAdapter by lazy {
+        DrawerHierarchyAdapter(activity, currentChatId, rowCallbacks, updates::dispatch)
+    }
+    private val foldersLauncher = activity.activityResultRegistry.register(
+        "chat-drawer-folders", ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val chatId = result.data?.getStringExtra(FoldersActivity.EXTRA_CHAT_ID)
+            val name = result.data?.getStringExtra(FoldersActivity.EXTRA_CHAT_NAME)
+            if (chatId != null && name != null) {
+                if (chatId == currentChatId()) close()
+                else openConversationFromDrawer(ChatActivity.rootIntent(activity, chatId, name))
+            }
+        }
+    }
 
     init {
+        activity.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                foldersLauncher.unregister()
+            }
+        })
         list.layoutManager = LinearLayoutManager(activity)
         list.adapter = adapter
+        folderContents.layoutManager = LinearLayoutManager(activity)
+        pinnedFolders.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) {
+                list.post {
+                    if (lockFolders) adapter.setFolderPlaceholderHeight(pinnedFolders.height)
+                    updatePinnedFolders()
+                }
+            }
+        }
+        list.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updatePinnedFolders() }
         list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) = updatePinnedFolders()
         })
@@ -58,7 +99,7 @@ class ChatDrawerController private constructor(
             activity.startActivity(Intent(activity, SearchActivity::class.java))
         }
         panel.findViewById<View>(R.id.drawer_new_chat).setOnClickListener { openNewChat() }
-        panel.findViewById<View>(R.id.drawer_new_folder).setOnClickListener { showAddFolder() }
+        panel.findViewById<View>(R.id.drawer_new_folder).setOnClickListener { rowActions.showAddFolder() }
         panel.findViewById<TextView>(R.id.drawer_settings).setOnClickListener {
             activity.startActivity(Intent(activity, SettingsActivity::class.java).setAction(Intent.ACTION_VIEW))
         }
@@ -68,6 +109,10 @@ class ChatDrawerController private constructor(
             insets
         }
         drawer.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerStateChanged(newState: Int) {
+                updates.setMoving(newState != DrawerLayout.STATE_IDLE)
+            }
+
             override fun onDrawerOpened(drawerView: View) {
                 // Allow swipe-to-close; the closed callback still disables edge-swipe opening.
                 drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START)
@@ -80,9 +125,9 @@ class ChatDrawerController private constructor(
     }
 
     fun open() {
-        refresh()
         drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START)
         drawer.openDrawer(GravityCompat.START, true)
+        refresh()
     }
 
     fun close() {
@@ -103,8 +148,17 @@ class ChatDrawerController private constructor(
     }
 
     fun refresh(onShown: () -> Unit = {}) {
+        refresh(refreshDetails = true, onShown = onShown)
+    }
+
+    private fun refresh(refreshDetails: Boolean, onShown: () -> Unit = {}) {
         // Chat-list display options may have changed in Settings.
-        adapter.refreshDisplayIfChanged()
+        lockFolders = displayPreferences.getLockFolderLocationInChatList()
+        separateFolders = displayPreferences.getOpenFoldersInSeparateArea()
+        updates.dispatch {
+            adapter.refreshDisplayIfChanged(refreshDetails)
+            if (lockFolders) folderAdapter.refreshDisplayIfChanged(refreshDetails)
+        }
         activity.lifecycleScope.launch {
             val projection = withContext(Dispatchers.IO) {
                 when (val result = repository.snapshot()) {
@@ -113,7 +167,7 @@ class ChatDrawerController private constructor(
                         val expanded = result.value.folders.mapNotNullTo(LinkedHashSet()) {
                             it.folder.id.takeIf(repository::isFolderExpanded)
                         }
-                        DrawerHierarchyProjection.build(result.value, foldersExpanded, expanded)
+                        DrawerHierarchyProjection.build(result.value, foldersExpanded, expanded, separateFolders)
                     }
                     is ChatNavigationResult.Failure -> null
                 }
@@ -121,45 +175,69 @@ class ChatDrawerController private constructor(
             if (projection == null) {
                 Toast.makeText(activity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
                 onShown()
-            } else adapter.submitList(projection) {
-                list.post { updatePinnedFolders() }
-                onShown()
+            } else updates.dispatch {
+                showProjection(projection, onShown)
             }
         }
     }
 
-    /**
-     * Lock Folder Location: once the Folders row reaches the top of the list
-     * it is held there, working as usual, while the chats scroll beneath it.
-     */
+    private fun showProjection(projection: List<DrawerRow>, onShown: () -> Unit) {
+        val mainRows = if (lockFolders) {
+            val layers = DrawerHierarchyProjection.lockedLayers(projection)
+            val holder = pinnedHolder ?: adapter.onCreateViewHolder(pinnedHeading, 0).also {
+                pinnedHeading.addView(it.itemView)
+                pinnedHolder = it
+            }
+            if (pinnedRow != layers.header) {
+                holder.bind(layers.header)
+                pinnedRow = layers.header
+            }
+            pinnedFolders.visibility = View.VISIBLE
+            adapter.setFolderPlaceholderHeight(pinnedFolders.height)
+            if (folderContents.adapter == null) folderContents.adapter = folderAdapter
+            folderAdapter.submitList(layers.folderRows)
+            layers.mainRows
+        } else {
+            pinnedFolders.visibility = View.GONE
+            adapter.setFolderPlaceholderHeight(null)
+            (folderContents.adapter as? DrawerHierarchyAdapter)?.submitList(emptyList())
+            projection
+        }
+        adapter.submitList(mainRows) {
+            foldersHeaderIndex = mainRows.indexOfFirst { it is DrawerRow.FoldersHeader }
+            list.post { updatePinnedFolders() }
+            onShown()
+        }
+    }
+
+    /** Follow the container's reserved space until it reaches the very top.
+     * Its height is capped independently, and its heading never scrolls away. */
     private fun updatePinnedFolders() {
-        val rows = adapter.currentList
-        val index = rows.indexOfFirst { it is DrawerRow.FoldersHeader }
+        val index = foldersHeaderIndex
         val manager = list.layoutManager as? LinearLayoutManager
-        if (!displayPreferences.getLockFolderLocationInChatList() || index < 0 || manager == null) {
+        if (!lockFolders || index < 0 || manager == null) {
             pinnedFolders.visibility = View.GONE
             return
         }
         val first = manager.findFirstVisibleItemPosition()
-        val reachedTop = first > index ||
-            (first == index && (manager.findViewByPosition(index)?.top ?: 1) <= 0)
-        if (!reachedTop) {
-            pinnedFolders.visibility = View.GONE
-            return
-        }
-        val holder = pinnedHolder ?: adapter.onCreateViewHolder(pinnedFolders, 0).also {
-            pinnedFolders.addView(it.itemView)
-            pinnedHolder = it
-        }
-        holder.bind(rows[index])
+        val top = if (first > index) 0 else manager.findViewByPosition(index)?.top ?: return
+        pinnedFolders.translationY = top.coerceAtLeast(0).toFloat()
         pinnedFolders.visibility = View.VISIBLE
     }
 
     private fun handleClick(row: DrawerRow) {
         when (row) {
             DrawerRow.Gallery -> activity.startActivity(Intent(activity, ImageGalleryActivity::class.java))
-            is DrawerRow.FoldersHeader -> { repository.setFoldersExpanded(!row.expanded); refresh() }
-            is DrawerRow.Folder -> { repository.setFolderExpanded(row.value.id, !row.expanded); refresh() }
+            is DrawerRow.FoldersHeader -> {
+                if (separateFolders) foldersLauncher.launch(
+                    Intent(activity, FoldersActivity::class.java)
+                        .putExtra(FoldersActivity.EXTRA_CHAT_ID, currentChatId())
+                ) else {
+                    repository.setFoldersExpanded(!row.expanded)
+                    refresh(refreshDetails = false)
+                }
+            }
+            is DrawerRow.Folder -> { repository.setFolderExpanded(row.value.id, !row.expanded); refresh(refreshDetails = false) }
             is DrawerRow.Chat -> {
                 if (row.value.id == currentChatId()) close()
                 else openConversationFromDrawer(
@@ -167,80 +245,6 @@ class ChatDrawerController private constructor(
                 )
             }
             is DrawerRow.Section -> Unit
-        }
-    }
-
-    private fun handleLongClick(anchor: View, row: DrawerRow) {
-        when (row) {
-            is DrawerRow.FoldersHeader -> CompactActionPopup(activity, anchor)
-                .add(MENU_ADD_FOLDER, 0, activity.getString(R.string.folder_add))
-                .onAction { if (it == MENU_ADD_FOLDER) { showAddFolder(); true } else false }.show()
-            is DrawerRow.Folder -> CompactActionPopup(activity, anchor)
-                .add(MENU_FOLDER_PIN, 0, activity.getString(if (row.value.pinned) R.string.folder_unpin else R.string.folder_pin))
-                .add(MENU_FOLDER_RENAME, 1, activity.getString(R.string.folder_rename))
-                .add(MENU_FOLDER_DELETE, 2, activity.getString(R.string.folder_delete))
-                .onAction {
-                    when (it) {
-                        MENU_FOLDER_PIN -> {
-                            activity.lifecycleScope.launch(Dispatchers.IO) {
-                                repository.setFolderPinned(row.value.id, !row.value.pinned)
-                                withContext(Dispatchers.Main) { refresh() }
-                            }; true
-                        }
-                        MENU_FOLDER_RENAME -> { showRenameFolder(row); true }
-                        MENU_FOLDER_DELETE -> {
-                            ChatDeletionRequestCoordinator.requestFolder(activity, row.value.id, ::refresh); true
-                        }
-                        else -> false
-                    }
-                }.show()
-            is DrawerRow.Chat -> CompactActionPopup(activity, anchor)
-                .add(MENU_CHAT_PIN, 0, activity.getString(if (row.value.pinned) R.string.chat_menu_unpin else R.string.chat_menu_pin))
-                .add(MENU_CHAT_MOVE, 1, activity.getString(R.string.chat_move_to_folder))
-                .add(MENU_CHAT_DELETE, 2, activity.getString(R.string.btn_delete))
-                .onAction {
-                    when (it) {
-                        MENU_CHAT_PIN -> {
-                            activity.lifecycleScope.launch(Dispatchers.IO) {
-                                repository.setChatPinned(row.value.id, !row.value.pinned)
-                                withContext(Dispatchers.Main) { refresh() }
-                            }; true
-                        }
-                        MENU_CHAT_MOVE -> { showMoveChooser(row); true }
-                        MENU_CHAT_DELETE -> {
-                            ChatDeletionRequestCoordinator.requestChats(activity, setOf(row.value.id), onCommitted = ::refresh); true
-                        }
-                        else -> false
-                    }
-                }.show()
-            else -> Unit
-        }
-    }
-
-    private fun showAddFolder() = NameEntryDialog.show(
-        activity, R.string.folder_add_title, save = repository::createFolder, onSaved = ::refresh
-    )
-
-    private fun showRenameFolder(row: DrawerRow.Folder) = NameEntryDialog.show(
-        activity, R.string.folder_rename_title, row.value.name,
-        save = { repository.renameFolder(row.value.id, it) }, onSaved = ::refresh
-    )
-
-    private fun showMoveChooser(row: DrawerRow.Chat) {
-        activity.lifecycleScope.launch {
-            val snapshot = withContext(Dispatchers.IO) { repository.snapshot() }
-            if (snapshot !is ChatNavigationResult.Success) return@launch
-            val folders = snapshot.value.folders.map { it.folder }
-            val labels = listOf(activity.getString(R.string.folder_none)) + folders.map { it.name }
-            val selected = folders.indexOfFirst { it.id == row.value.folderId } + 1
-            MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.chat_move_to_folder)
-                .setSingleChoiceItems(labels.toTypedArray(), selected) { dialog, which ->
-                    activity.lifecycleScope.launch(Dispatchers.IO) {
-                        repository.moveChat(row.value.id, folders.getOrNull(which - 1)?.id)
-                        withContext(Dispatchers.Main) { dialog.dismiss(); refresh() }
-                    }
-                }.setNegativeButton(R.string.btn_cancel, null).show()
         }
     }
 
@@ -267,13 +271,6 @@ class ChatDrawerController private constructor(
 
     companion object {
         const val EXTRA_REVEAL_FROM_DRAWER = "revealFromDrawer"
-        private const val MENU_ADD_FOLDER = 1
-        private const val MENU_FOLDER_PIN = 2
-        private const val MENU_FOLDER_RENAME = 3
-        private const val MENU_FOLDER_DELETE = 4
-        private const val MENU_CHAT_PIN = 5
-        private const val MENU_CHAT_MOVE = 6
-        private const val MENU_CHAT_DELETE = 7
 
         fun install(activity: FragmentActivity, chatRoot: View, currentChatId: () -> String): ChatDrawerController {
             val content = activity.findViewById<ViewGroup>(android.R.id.content)

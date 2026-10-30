@@ -381,7 +381,14 @@
     <string name="field_logit_bias_with_desc">Logit bias (value from -100 to 100)</string>
     <string name="title_logs">Logs</string>
     <string name="btn_clear_log">Clear log</string>
-    <string name="btn_copy_log">Copy / Export</string>
+    <string name="btn_copy_log">Copy All</string>
+    <!-- Export Log pop-up, shown when Copy All is too large for the
+         clipboard (owner-approved, Oct 30 2026). -->
+    <string name="log_export_title">Export Log</string>
+    <string name="log_export_message">The amount of error text exceeds how much the clipboard can hold. Please choose an export method below.</string>
+    <string name="log_export_txt">TXT</string>
+    <string name="log_export_json">JSON</string>
+    <string name="log_export_save_failed">Save Failed</string>
     <string name="logs_newest_first">Newest First</string>
     <string name="label_log_copied">Log copied to clipboard</string>
     <string name="label_error_copied">Error copied to clipboard</string>
@@ -909,6 +916,11 @@
     <string name="damaged_first_companion_name">First Companion Name: %1$s</string>
     <string name="damaged_most_used_model">Most-Used Model: %1$s</string>
     <string name="damaged_value_unavailable">Unavailable</string>
+    <!-- Why each damaged chat was recorded (owner-approved, Oct 30 2026). -->
+    <string name="damaged_reason_cannot_unlock">Reason: The app can\'t unlock this chat\'s file. The file may be from an earlier install of the app, or it may be damaged.</string>
+    <string name="damaged_reason_contents_damaged">Reason: The file opens, but the chat inside it is damaged or missing parts.</string>
+    <string name="damaged_reason_not_recorded">Reason: Not recorded. This chat was found before the app saved reasons.</string>
+    <string name="damaged_reason_already_marked">Reason: Unknown. The chat was already marked as damaged, so the app couldn\'t make changes to it.</string>
     <string name="damaged_try_repair">Try Repair</string>
     <string name="damaged_repair_fully_successful">Repair Fully Successful!</string>
     <string name="damaged_retry_renaming_question">Try previous renaming again?</string>
@@ -3792,13 +3804,11 @@
     <string name="summarizer_errors_status_off">The summarizer is off for this chat. No messages were lost. All messages are being sent to the AI in full. The errors below are kept for review until you hide them.</string>
     <string name="summarizer_errors_copy">Copy</string>
     <string name="summarizer_errors_delete">Delete</string>
-    <!-- Per-entry and whole-list actions in the Summarizer Errors dialog
-         (owner ruling, Aug 31 2026). Hide removes that one entry; Hide All
-         clears the list and drops the top-bar badge until the next failure;
-         Okay just closes. Title Caps by owner standing rule. -->
+    <!-- Summarizer Errors dialog actions, one row. Copy copies every listed
+         error; Hide clears the list (not the Error Log) and drops the
+         top-bar badge until the next failure; Okay just closes. Title Caps
+         by owner standing rule. -->
     <string name="summarizer_errors_hide">Hide</string>
-    <string name="summarizer_errors_hide_all">Hide All</string>
-    <string name="summarizer_errors_copy_all">Copy All</string>
     <string name="summarizer_errors_okay">Okay</string>
     <string name="summarizer_errors_repeated">Repeated %1$d times.</string>
     <string name="summarizer_errors_profile_line">Profile: %1$s</string>
@@ -4145,6 +4155,11 @@
     <string name="chat_list_model_names">Show Model Names</string>
     <string name="chat_list_start_date">Show Chat Start Date</string>
     <string name="chat_list_lock_folders">Lock Folder Location</string>
+    <string name="chat_list_separate_folders">Open Folders in Separate Area</string>
+    <string name="folder_options_title">Folder Options</string>
+    <string name="other_appearance_options_title">Other Appearance Options</string>
+    <string name="logs_show_copy_buttons">Show Copy Button on Logs</string>
+    <string name="open_last_used_chat_at_launch">Client Opens With Last Used Chat Open</string>
     <string name="chat_list_lock_folders_hint">Prevents the folder menus from scrolling off screen when navigating through chats.</string>
     <string name="chat_settings_section_appearance">Chat Appearance</string>
     <string name="chat_settings_section_information">Chat Information</string>

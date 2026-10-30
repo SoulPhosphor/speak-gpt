@@ -2,10 +2,8 @@
 <!--
   One entry in the Summarizer Errors dialog (conversation-summary-errors.md
   §1). The stored error detail uses the same shared body style as any other
-  explanatory paragraph after a heading; beneath it sit a Copy and a Hide
-  action for this single entry (owner ruling, Aug 31 2026), each the shared
-  wrap_content inline button so the pair sits side by side, only as wide as
-  its label.
+  explanatory paragraph after a heading. Entries carry no buttons of their
+  own; the dialog's single action row covers every entry.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -19,22 +17,4 @@
         android:layout_height="wrap_content"
         android:paddingTop="16dp"
         android:textIsSelectable="true" />
-
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:orientation="horizontal">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_summarizer_error_copy"
-            style="@style/AppButton.Primary.Inline"
-            android:layout_marginEnd="12dp"
-            android:text="@string/summarizer_errors_copy" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_summarizer_error_hide"
-            style="@style/AppButton.Destructive.Inline"
-            android:text="@string/summarizer_errors_hide" />
-    </LinearLayout>
 </LinearLayout>

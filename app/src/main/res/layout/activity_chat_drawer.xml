@@ -56,15 +56,26 @@
             android:paddingTop="4dp"
             android:paddingBottom="4dp" />
 
-        <!-- Lock Folder Location: the Folders row held at the top of the
-             list while the chats scroll beneath it. Same surface as the
-             panel so nothing shows through. -->
-        <FrameLayout
+        <!-- Only used with Lock Folder Location. The heading stays visible;
+             expanded contents scroll independently within the half-height cap. -->
+        <org.teslasoft.assistant.ui.drawer.LockedFoldersLayout
             android:id="@+id/drawer_folders_pinned"
             style="@style/Widget.App.DrawerSurface"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:visibility="gone" />
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/drawer_folders_heading"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/drawer_folder_contents"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </org.teslasoft.assistant.ui.drawer.LockedFoldersLayout>
     </FrameLayout>
 
     <!-- Fixed bottom: Settings, New Folder, New Chat, in that order. -->

@@ -2,12 +2,14 @@
 <!--
   Summarizer Errors dialog (conversation-summary-plan.md decision 16 +
   conversation-summary-errors.md §1): one status paragraph, then the chat's
-  stored errors (newest first, at most five, each with its own Copy and Hide),
-  then the whole-list actions Hide All / Copy All / Okay, top to bottom, via
-  the shared stacked three-action row (owner ruling, Aug 31 2026). The entries
+  stored errors (newest first, at most five), then one action row: Copy
+  (every listed error), Hide (every listed error) and Okay, side by side.
+  The row is right-aligned; Okay drops to the next line, still on the
+  right, only when the row does not fit. The entries
   are built by ChatActivity from the stored log.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical">
@@ -36,5 +38,41 @@
         </LinearLayout>
     </ScrollView>
 
-    <include layout="@layout/dialog_three_actions_cancel_first" />
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="16dp">
+
+        <androidx.constraintlayout.helper.widget.Flow
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:constraint_referenced_ids="btn_summarizer_errors_copy,btn_summarizer_errors_hide,btn_summarizer_errors_okay"
+            app:flow_firstHorizontalBias="1"
+            app:flow_horizontalBias="1"
+            app:flow_lastHorizontalBias="1"
+            app:flow_horizontalGap="12dp"
+            app:flow_horizontalStyle="packed"
+            app:flow_verticalGap="8dp"
+            app:flow_wrapMode="chain"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_summarizer_errors_copy"
+            style="@style/AppButton.Primary.Inline"
+            android:text="@string/summarizer_errors_copy" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_summarizer_errors_hide"
+            style="@style/AppButton.Destructive.Inline"
+            android:text="@string/summarizer_errors_hide" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_summarizer_errors_okay"
+            style="@style/AppButton.Destructive.Inline"
+            android:text="@string/summarizer_errors_okay" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 </LinearLayout>

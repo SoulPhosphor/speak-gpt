@@ -624,10 +624,19 @@ class Logger {
          */
         fun formatForDisplay(log: String, newestFirst: Boolean): String {
             if (log.isEmpty()) return log
-            val headers = ENTRY_HEADER.findAll(log).toList()
             // No recognizable entry headers: show the content unchanged rather
             // than risk mangling it.
-            if (headers.isEmpty()) return log
+            if (ENTRY_HEADER.find(log) == null) return log
+            return entriesForDisplay(log, newestFirst).joinToString("\n\n")
+        }
+
+        /** The same entries [formatForDisplay] joins, one string per entry, so
+         *  the log viewer can give each its own Copy button. Content without
+         *  recognizable entry headers is one entry, unchanged. */
+        fun entriesForDisplay(log: String, newestFirst: Boolean): List<String> {
+            if (log.isEmpty()) return emptyList()
+            val headers = ENTRY_HEADER.findAll(log).toList()
+            if (headers.isEmpty()) return listOf(log)
             val entries = ArrayList<String>(headers.size)
             for (i in headers.indices) {
                 val start = headers[i].range.first
@@ -636,8 +645,7 @@ class Logger {
                 // the spacing between entries exactly (one blank line, no more).
                 entries.add(log.substring(start, end).trimEnd())
             }
-            val ordered = if (newestFirst) entries.asReversed() else entries
-            return ordered.joinToString("\n\n")
+            return if (newestFirst) entries.asReversed() else entries
         }
 
         /**

@@ -585,6 +585,37 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_list_lock_folders", state, false)
     }
 
+    fun getOpenFoldersInSeparateArea(): Boolean =
+        getGlobalBoolean("chat_list_separate_folders", false)
+
+    fun setOpenFoldersInSeparateArea(state: Boolean) {
+        putGlobalBoolean("chat_list_separate_folders", state, false)
+    }
+
+    /** Per-entry Copy buttons in the log viewer; on by default. */
+    fun getShowLogCopyButtons(): Boolean =
+        getGlobalBoolean("logs_show_copy_buttons", true)
+
+    fun setShowLogCopyButtons(state: Boolean) {
+        putGlobalBoolean("logs_show_copy_buttons", state, true)
+    }
+
+    /** Client Opens With Last Used Chat Open; off by default. */
+    fun getOpenLastUsedChatAtLaunch(): Boolean =
+        getGlobalBoolean("open_last_used_chat_at_launch", false)
+
+    fun setOpenLastUsedChatAtLaunch(state: Boolean) {
+        putGlobalBoolean("open_last_used_chat_at_launch", state, false)
+    }
+
+    /** The saved chat last open on the chat screen; blank when the last one
+     *  was a new chat not yet sent. */
+    fun getLastUsedChatId(): String = getGlobalString("last_used_chat_id", "")
+
+    fun setLastUsedChatId(chatId: String) {
+        putGlobalString("last_used_chat_id", chatId, "")
+    }
+
     fun getShowCompanionImagesInChatList(): Boolean =
         getGlobalBoolean("chat_list_companion_images", false)
 

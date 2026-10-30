@@ -2470,11 +2470,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val contentPadding = dimensionPixelSize(R.dimen.chat_message_content_padding)
 
             val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
-            bubbleParams.width = if (isImage) {
-                ViewGroup.LayoutParams.MATCH_PARENT
-            } else {
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            }
+            // Fixed row width for every bubble, so it does not resize as the
+            // reply arrives.
+            bubbleParams.width = ViewGroup.LayoutParams.MATCH_PARENT
             bubbleParams.topMargin = when {
                 isImage && showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_size) +
                     dimensionPixelSize(R.dimen.chat_portrait_top_offset)

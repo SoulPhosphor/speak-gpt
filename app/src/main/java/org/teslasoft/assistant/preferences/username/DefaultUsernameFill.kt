@@ -19,6 +19,7 @@ import org.teslasoft.assistant.preferences.StartupHealth
 import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
 import org.teslasoft.assistant.preferences.backup.ChatSetReplacementCoordinator
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
+import org.teslasoft.assistant.preferences.damaged.DamagedChatCause
 import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
@@ -274,7 +275,9 @@ object DefaultUsernameFill {
         // A chat whose write was refused as damaged is recorded too (its read
         // may have succeeded in this run while an earlier failure stands).
         if (damaged.isNotEmpty()) {
-            DamagedChatLog.recordAll(context, damaged, DamagedChatOperation.RENAMING_USERNAMES)
+            DamagedChatLog.recordAll(
+                context, damaged, DamagedChatOperation.RENAMING_USERNAMES, DamagedChatCause.ALREADY_MARKED
+            )
         }
         return RunOutcome(
             locked = locked,

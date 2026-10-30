@@ -23,6 +23,7 @@ import android.os.Looper
 import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import org.teslasoft.assistant.preferences.damaged.DamagedChatCause
 import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
@@ -391,7 +392,7 @@ class ChatPreferences private constructor() {
             // the chat stays write-blocked until an explicit user action
             // (see chatWriteBlocked) resolves it.
             onUndecryptableValue(context, name, "chat history", e)
-            DamagedChatLog.record(context, chatId, detectedDuring)
+            DamagedChatLog.record(context, chatId, detectedDuring, DamagedChatCause.CANNOT_UNLOCK)
             return ChatHistoryResult(ChatStorageHealth.ReadState.CORRUPT, arrayListOf())
         }
         ChatStorageHealth.clearReadFailure(context, name)
@@ -406,7 +407,7 @@ class ChatPreferences private constructor() {
             // history, after which the damage could not be found again. If
             // the log cannot be saved, the history is left as it is so the
             // next read finds it again.
-            if (DamagedChatLog.record(context, chatId, detectedDuring)) {
+            if (DamagedChatLog.record(context, chatId, detectedDuring, DamagedChatCause.CONTENTS_DAMAGED)) {
                 preserveCorruptData(context, name, "chat", json, "chat history")
             }
             return ChatHistoryResult(ChatStorageHealth.ReadState.CORRUPT, arrayListOf())

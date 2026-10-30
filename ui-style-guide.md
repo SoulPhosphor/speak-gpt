@@ -105,7 +105,7 @@ The zone attributes implemented so far, which every `ThemeOverlay.Phosphor.*` pa
 
 Every theme that defines one of these must define all of them, including the night themes and every palette overlay — a style resolving an attribute that no theme layer carries crashes at inflation. They are the pattern the remaining zones follow when theme work resumes.
 
-Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton, ...headerButtons)` (`org.teslasoft.assistant.ui.util`); trailing header icons such as Save are passed after the back button. It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, Chat Settings, and Summarizer Prompts; the other settings screens still carry their own copy until they are moved over.
+Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton, ...headerButtons)` (`org.teslasoft.assistant.ui.util`); trailing header icons such as Save are passed after the back button. It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, Chat Settings, Summarizer Prompts, and the Logs viewer; the other settings screens still carry their own copy until they are moved over.
 
 ### Icons have no background of their own (owner ruling, Oct 9 2026)
 
@@ -248,6 +248,10 @@ Use when actions should size to their labels rather than fill the available widt
 its line, for vertical (LinearLayout) hosts. In a ConstraintLayout, center
 `AppButton.Primary.Inline` with start and end constraints instead.
 
+`AppButton.Primary.Inline.End` is the same label-sized button on the end
+(right) side of its line, for vertical (LinearLayout) hosts. Current user: the
+per-entry Copy under each log entry (`view_log_entry.xml`).
+
 Two-button dialogs use a centered shared layout by default. The existing
 right-aligned Cancel-then-Save row uses `layout/dialog_two_actions_end.xml`
 only where that arrangement is explicitly approved by the feature spec; it is
@@ -263,7 +267,21 @@ A future inline secondary button should inherit `AppButton.Secondary` and change
 
 Use for every `MaterialAlertDialogBuilder` unless an approved feature-specific dialog requires a different theme.
 
-This theme supplies the standard dialog appearance and centers dialog titles.
+This theme supplies the standard dialog appearance and centers dialog titles
+(the title panel is centered too, `App.MaterialAlertDialog.TitlePanel`, since
+the title text is only as wide as its words).
+
+Pop-up alignment (owner ruling, Oct 30 2026): titles are always centered;
+explanatory text beneath them is always left-aligned; action buttons are
+right-aligned unless an approved design says otherwise. Every action is a real
+button (an `AppButton.*` style), never a bare text link.
+
+A row of label-sized actions that may not fit on one line uses a
+`ConstraintLayout` `Flow` (`flow_wrapMode="chain"`, all horizontal biases `1`)
+of `AppButton.*.Inline` buttons, so the last action drops to the next line,
+still on the right. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`)
+and the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
+Summarizer Settings centered beneath as an approved exception).
 
 Parameter information boxes use `ParameterInfoDialog` and the shared
 `view_parameter_info_title.xml` heading, styled by `Widget.App.ParameterInfo.*`.
@@ -1369,9 +1387,16 @@ the shared subtle-text theme role and must not carry query text or snippets.
 
 `Widget.App.DrawerSurface` gives the drawer its opaque surface
 (`?attr/colorSurface`). The drawer panel uses it, and so does the locked
-Folders row that Lock Folder Location holds at the top of the list, so the
-chats scrolling beneath that row never show through. Anything else drawn over
+Folders container that Lock Folder Location holds at the top of the list, so the
+chats scrolling beneath that container never show through. Anything else drawn over
 the drawer's scrolling list uses this style rather than its own background.
+
+The locked container uses the same flat rows as the unlocked hierarchy. Its
+heading stays visible, and its expanded folders and chats scroll in their own
+RecyclerView. It grows only as needed, up to half of the middle list area's
+height. A matching space in the main list keeps the first main chat reachable
+below it. This is a layout relationship, not a new visual style. With locking
+off the original single scrolling hierarchy is used unchanged.
 
 ## Drawer bottom actions
 

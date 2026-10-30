@@ -21,7 +21,9 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -35,6 +37,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.ScreenChrome
 
 class LogsActivity : SettingsPageActivity() {
 
@@ -53,6 +56,10 @@ class LogsActivity : SettingsPageActivity() {
          *  or empty reply is easy to spot. Stopped, Cancelled and Complete stay
          *  the default color, which keeps them visually distinct from a failure. */
         private val LIFECYCLE_RED_OUTCOME = Regex("(?m)^Outcome: (?:Incomplete|Empty)$")
+
+        private const val STATE_EXPORT_JSON = "export_json"
+        private const val STATE_EXPORT_NEWEST_FIRST = "export_newest_first"
+        private const val STATE_EXPORT_TITLE = "export_title"
     }
 
     /**
@@ -142,20 +149,127 @@ class LogsActivity : SettingsPageActivity() {
     }
 
     /**
-     * Render the current log into the view: order it (newest or oldest first)
-     * and space its entries through [Logger.formatForDisplay], then apply the
-     * per-log color pass (Error Log health headers, Response Lifecycle failed
-     * outcomes). One path used by the initial load, the ordering toggle, and
-     * clearing, so all three stay consistent.
+     * Render the current log into the view: split and order its entries
+     * (newest or oldest first) through [Logger.entriesForDisplay], then give
+     * each entry its own view with the per-log color pass (Error Log health
+     * headers, Response Lifecycle failed outcomes) and, while Show Copy Button
+     * on Logs is on, a Copy for that entry. One path used by the initial load,
+     * the ordering toggle, and clearing, so all three stay consistent.
      */
     private fun renderLog() {
-        val ordered = Logger.formatForDisplay(rawForType(), newestFirst)
-        textLog?.text = when (logType) {
-            "crash" -> renderErrorLog(ordered)
-            "response_lifecycle" -> renderLifecycleLog(ordered)
-            else -> ordered
+        val entries = Logger.entriesForDisplay(rawForType(), newestFirst)
+        displayedLog = entries.joinToString("\n\n")
+        val showCopy = preferences?.getShowLogCopyButtons() ?: true
+        logEntries?.removeAllViews()
+        for (entry in entries) {
+            val row = layoutInflater.inflate(R.layout.view_log_entry, logEntries, false)
+            row.findViewById<TextView>(R.id.log_entry_text).text = when (logType) {
+                "crash" -> renderErrorLog(entry)
+                "response_lifecycle" -> renderLifecycleLog(entry)
+                else -> entry
+            }
+            row.findViewById<MaterialButton>(R.id.btn_log_entry_copy).apply {
+                visibility = if (showCopy) android.view.View.VISIBLE else android.view.View.GONE
+                setOnClickListener { copyToClipboard(entry) }
+            }
+            logEntries?.addView(row)
         }
     }
+
+    /** Copies [content]; false when the phone refused it (too large for the
+     *  clipboard), with nothing shown. */
+    private fun copyToClipboard(content: String): Boolean {
+        // Copy to the clipboard so the user can paste the log to a developer
+        // or coding bot before clearing it. Local-only — the stored log
+        // already excludes secrets (see ERROR_CODES.md).
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        try {
+            clipboard.setPrimaryClip(ClipData.newPlainText(this.title ?: "log", content))
+        } catch (_: RuntimeException) {
+            return false
+        }
+        Toast.makeText(this, R.string.label_log_copied, Toast.LENGTH_SHORT).show()
+        return true
+    }
+
+    /** Export Log pop-up: Copy All did not fit on the clipboard. */
+    private fun showExportDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_log_export, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.log_export_title)
+            .setView(view)
+            .create()
+        view.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        view.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.okay)
+            setOnClickListener {
+                val json = view.findViewById<android.widget.RadioGroup>(R.id.log_export_format)
+                    .checkedRadioButtonId == R.id.radio_log_export_json
+                dialog.dismiss()
+                pendingExport = PendingExport(json, newestFirst, title?.toString().orEmpty())
+                exportLauncher.launch(
+                    Intent(Intent.ACTION_CREATE_DOCUMENT)
+                        .addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType(if (json) "application/json" else "text/plain")
+                        .putExtra(Intent.EXTRA_TITLE, "${this@LogsActivity.title}.${if (json) "json" else "txt"}")
+                )
+            }
+        }
+        dialog.show()
+    }
+
+    /** What Okay chose in the Export Log pop-up. Only the choice is kept —
+     *  not the log text, which may be too large to save with the screen's
+     *  state — so it survives the screen being recreated while the system
+     *  save screen is open; the log is read again from storage when the
+     *  file is written. */
+    private data class PendingExport(val json: Boolean, val newestFirst: Boolean, val title: String)
+
+    private var pendingExport: PendingExport? = null
+
+    private fun exportContent(export: PendingExport): String {
+        val entries = Logger.entriesForDisplay(rawForType(), export.newestFirst)
+        return if (!export.json) entries.joinToString("\n\n") else org.json.JSONObject()
+            .put("log", export.title)
+            .put("exported_at", java.time.OffsetDateTime.now().toString())
+            .put("entries", org.json.JSONArray(entries))
+            .toString(2)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingExport?.let {
+            outState.putBoolean(STATE_EXPORT_JSON, it.json)
+            outState.putBoolean(STATE_EXPORT_NEWEST_FIRST, it.newestFirst)
+            outState.putString(STATE_EXPORT_TITLE, it.title)
+        }
+    }
+
+    private val exportLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            val export = pendingExport
+            pendingExport = null
+            val uri = result.data?.data
+            if (result.resultCode != RESULT_OK || uri == null || export == null) return@registerForActivityResult
+            Thread {
+                val saved = try {
+                    val content = exportContent(export)
+                    contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) } != null
+                } catch (_: Exception) {
+                    false
+                }
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        if (saved) R.string.message_saved else R.string.log_export_save_failed,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }.start()
+        }
 
     private var btnClearLog: MaterialButton? = null
     private var btnCopyLog: MaterialButton? = null
@@ -165,7 +279,8 @@ class LogsActivity : SettingsPageActivity() {
     private var activityLogsTitle: TextView? = null
     private var activityLogsTitleCentered: TextView? = null
     private var switchNewestFirst: MaterialSwitch? = null
-    private var textLog: TextView? = null
+    private var logEntries: android.widget.LinearLayout? = null
+    private var displayedLog = ""
     private var logType = ""
     private var newestFirst = true
     private var root: ConstraintLayout? = null
@@ -177,6 +292,17 @@ class LogsActivity : SettingsPageActivity() {
 
         setContentView(R.layout.activity_logs)
 
+        // Read before any result is delivered, so an export finished after
+        // the screen was recreated writes the right log.
+        logType = intent.extras?.getString("type").toString()
+        if (savedInstanceState?.containsKey(STATE_EXPORT_JSON) == true) {
+            pendingExport = PendingExport(
+                savedInstanceState.getBoolean(STATE_EXPORT_JSON),
+                savedInstanceState.getBoolean(STATE_EXPORT_NEWEST_FIRST, true),
+                savedInstanceState.getString(STATE_EXPORT_TITLE).orEmpty()
+            )
+        }
+
         btnClearLog = findViewById(R.id.btn_clear_log)
         btnCopyLog = findViewById(R.id.btn_copy_log)
         btnBack = findViewById(R.id.btn_back)
@@ -185,7 +311,7 @@ class LogsActivity : SettingsPageActivity() {
         activityLogsTitle = findViewById(R.id.activity_logs_title)
         activityLogsTitleCentered = findViewById(R.id.activity_logs_title_centered)
         switchNewestFirst = findViewById(R.id.switch_newest_first)
-        textLog = findViewById(R.id.text_log)
+        logEntries = findViewById(R.id.log_entries)
         root = findViewById(R.id.root)
 
         Thread {
@@ -273,16 +399,10 @@ class LogsActivity : SettingsPageActivity() {
                 }
 
                 btnCopyLog?.setOnClickListener {
-                    val content = textLog?.text?.toString().orEmpty()
-                    if (content.isBlank()) {
+                    if (displayedLog.isBlank()) {
                         Toast.makeText(this, R.string.label_log_empty, Toast.LENGTH_SHORT).show()
-                    } else {
-                        // Copy to the clipboard so the user can paste the log to a
-                        // developer or coding bot before clearing it. Local-only —
-                        // the stored log already excludes secrets (see ERROR_CODES.md).
-                        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText(this.title ?: "log", content))
-                        Toast.makeText(this, R.string.label_log_copied, Toast.LENGTH_SHORT).show()
+                    } else if (!copyToClipboard(displayedLog)) {
+                        showExportDialog()
                     }
                 }
 
@@ -310,19 +430,29 @@ class LogsActivity : SettingsPageActivity() {
                 btnBack?.backgroundTintList = tint
                 btnVoiceAdvanced?.backgroundTintList = tint
             } else {
-                window.setBackgroundDrawableResource(R.color.window_background)
                 root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
-                actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-                val tint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
-                btnBack?.backgroundTintList = tint
-                btnVoiceAdvanced?.backgroundTintList = tint
+                ScreenChrome.apply(this, actionBar, btnBack, btnVoiceAdvanced)
             }
         } catch (_: Exception) {
-            window.setBackgroundDrawableResource(R.color.window_background)
             root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
-            val tint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
-            btnBack?.backgroundTintList = tint
+            ScreenChrome.apply(this, actionBar, btnBack, btnVoiceAdvanced)
         }
+    }
+
+    /** Edge-to-edge (API 35+): the header extends under the status bar and
+     *  the bottom actions clear the navigation bar, as on the other settings
+     *  screens. */
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (Build.VERSION.SDK_INT < 35) return
+        try {
+            val insets = window.decorView.rootWindowInsets
+            actionBar?.setPadding(0, insets.getInsets(WindowInsets.Type.statusBars()).top, 0, 0)
+            val params = btnClearLog?.layoutParams as? ConstraintLayout.LayoutParams ?: return
+            params.bottomMargin = (24 * resources.displayMetrics.density).toInt() +
+                insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+            btnClearLog?.layoutParams = params
+        } catch (_: Exception) { /* Window insets are not available yet. */ }
     }
 
     private fun isDarkThemeEnabled(): Boolean {

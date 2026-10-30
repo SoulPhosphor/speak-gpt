@@ -91,4 +91,13 @@ class LogFormatForDisplayTest {
         val noHeaders = "just some text\nwith no entry header"
         assertEquals(noHeaders, Logger.formatForDisplay(noHeaders, newestFirst = true))
     }
+
+    @Test fun entriesForDisplaySplitsWholeEntriesForPerEntryCopy() {
+        assertEquals(
+            listOf("[2026-08-07 4:16 PM] [Tag] [INFO] second", "[2026-08-07 4:15 PM] [Tag] [INFO] first"),
+            Logger.entriesForDisplay(twoSingleLine, newestFirst = true)
+        )
+        assertEquals(emptyList<String>(), Logger.entriesForDisplay("", newestFirst = true))
+        assertEquals(listOf("no header"), Logger.entriesForDisplay("no header", newestFirst = false))
+    }
 }

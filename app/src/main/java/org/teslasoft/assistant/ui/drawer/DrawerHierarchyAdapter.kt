@@ -23,7 +23,8 @@ import java.util.concurrent.ConcurrentHashMap
 class DrawerHierarchyAdapter(
     private val activity: FragmentActivity,
     private val currentChatId: () -> String,
-    private val callbacks: Callbacks
+    private val callbacks: Callbacks,
+    private val dispatchUpdate: (() -> Unit) -> Unit = { it() }
 ) : ListAdapter<DrawerRow, DrawerHierarchyAdapter.Holder>(DIFF) {
     private val displayPreferences = Preferences.getPreferences(activity, "")
     private val details = HashMap<String, ChatListDetails>()
@@ -34,6 +35,7 @@ class DrawerHierarchyAdapter(
     private val detailRequests = HashSet<String>()
     private val detailsGeneration = AtomicInteger(0)
     private var disposed = false
+    private var folderPlaceholderHeight: Int? = null
     private val memoryStates = ConcurrentHashMap<String, String>()
     private val metadataExecutor = Executors.newSingleThreadExecutor { Thread(it, "drawer-metadata") }
 
@@ -47,7 +49,7 @@ class DrawerHierarchyAdapter(
             try {
                 if (MemoryStore.isProvisioned(activity)) {
                     memoryStates.putAll(MemoryStore.getInstance(activity).chatReviewStates())
-                    activity.runOnUiThread { notifyDataSetChanged() }
+                    activity.runOnUiThread { dispatchUpdate { if (!disposed) notifyDataSetChanged() } }
                 }
             } catch (_: Exception) { }
         }
@@ -66,13 +68,16 @@ class DrawerHierarchyAdapter(
     )
     private var renderedDisplayOptions = displayOptions()
 
-    fun refreshDisplayIfChanged() {
+    fun refreshDisplayIfChanged(refreshDetails: Boolean = true) {
         val current = displayOptions()
         // A conversation can change without changing its drawer title or ordering.
-        detailsGeneration.incrementAndGet()
-        detailRequests.clear()
+        // Expanding folders only changes the projection, not the conversations.
+        if (refreshDetails || current != renderedDisplayOptions) {
+            detailsGeneration.incrementAndGet()
+            detailRequests.clear()
+        }
         if (current == renderedDisplayOptions) {
-            if (needsDetails()) notifyDataSetChanged()
+            if (refreshDetails && needsDetails()) notifyDataSetChanged()
             return
         }
         val memoryStatusTurnedOn = displayPreferences.getShowMemoryStatusOnChatList() &&
@@ -96,11 +101,17 @@ class DrawerHierarchyAdapter(
                 ChatListDetailsReader.read(activity.applicationContext, chatId, startedAt, includeModel)
             } catch (_: Exception) { ChatListDetails(false, null) }
             activity.runOnUiThread {
-                if (disposed || generation != detailsGeneration.get()) return@runOnUiThread
-                details[chatId] = loaded
-                detailsReadIn[chatId] = generation
-                currentList.forEachIndexed { position, row ->
-                    if (row is DrawerRow.Chat && row.value.id == chatId) notifyItemChanged(position)
+                dispatchUpdate {
+                    if (!disposed && generation == detailsGeneration.get()) {
+                        val previous = details.put(chatId, loaded)
+                        detailsReadIn[chatId] = generation
+                        currentList.forEachIndexed { position, row ->
+                            if (row is DrawerRow.Chat && row.value.id == chatId &&
+                                loaded != (previous ?: ChatListDetails(false, row.value.startedAt))) {
+                                notifyItemChanged(position)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -117,7 +128,25 @@ class DrawerHierarchyAdapter(
         LayoutInflater.from(parent.context).inflate(R.layout.view_flat_chat_row, parent, false)
     )
 
-    override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(getItem(position))
+    /** Reserve the locked container's actual height in the main list. This
+     * lets the first main chat scroll fully below it, even in a short list. */
+    fun setFolderPlaceholderHeight(height: Int?) {
+        if (folderPlaceholderHeight == height) return
+        folderPlaceholderHeight = height
+        val index = currentList.indexOfFirst { it is DrawerRow.FoldersHeader }
+        if (index >= 0) notifyItemChanged(index)
+    }
+
+    override fun onBindViewHolder(holder: Holder, position: Int) {
+        val row = getItem(position)
+        val placeholder = row is DrawerRow.FoldersHeader && folderPlaceholderHeight != null
+        holder.itemView.visibility = if (placeholder) View.INVISIBLE else View.VISIBLE
+        val height = if (placeholder) folderPlaceholderHeight!! else ViewGroup.LayoutParams.WRAP_CONTENT
+        if (holder.itemView.layoutParams.height != height) {
+            holder.itemView.layoutParams = holder.itemView.layoutParams.apply { this.height = height }
+        }
+        if (!placeholder) holder.bind(row)
+    }
 
     inner class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val root: View = itemView.findViewById(R.id.flat_chat_root)

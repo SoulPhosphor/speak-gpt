@@ -181,6 +181,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".ui.activities.FoldersActivity"
+            android:exported="false"
+            android:label="@string/drawer_folders" />
+
+        <activity
             android:name=".ui.activities.ProfileImagePropertiesActivity"
             android:exported="false"
             android:label="@string/tile_profile_image_properties_title" />

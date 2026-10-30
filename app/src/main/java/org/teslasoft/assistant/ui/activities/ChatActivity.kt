@@ -2799,6 +2799,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pendingConversation = prepared.pendingConversation
         conversationMode = prepared.conversationMode
         title = chatName
+        // Remembered for Client Opens With Last Used Chat Open; a new chat
+        // not yet sent clears it, so launch opens a new chat as usual.
+        preferences?.setLastUsedChatId(if (pendingConversation) "" else chatId)
 
         // Hands-free is a live, per-session control started from the conversation
         // button — never a persisted setting (there is no settings toggle any
@@ -5729,18 +5732,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 append(getString(R.string.compaction_err_provider, it))
             }
         }
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+        // Retry / Copy / Okay on one row, Summarizer Settings centered beneath
+        // (owner ruling, Oct 30 2026). Copy takes the whole pop-up's text.
+        val actions = layoutInflater.inflate(R.layout.dialog_compaction_error_actions, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(title)
             .setMessage(message)
+            .setView(actions)
             .setCancelable(false)
-            .setNeutralButton(R.string.title_summarizer_settings) { _, _ ->
-                startActivity(Intent(this, SummarizerSettingsActivity::class.java))
-            }
-            .setNegativeButton(R.string.btn_msg_retry) { _, _ ->
-                lastCompactionRequest?.let { startManualCompactionConfirmed(it, lastCompactionFromScratch) }
-            }
-            .setPositiveButton(R.string.okay, null)
-            .show()
+            .create()
+        actions.findViewById<View>(R.id.btn_compaction_error_retry).setOnClickListener {
+            dialog.dismiss()
+            lastCompactionRequest?.let { startManualCompactionConfirmed(it, lastCompactionFromScratch) }
+        }
+        actions.findViewById<View>(R.id.btn_compaction_error_copy).setOnClickListener {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText(getString(title), getString(title) + "\n\n" + message))
+        }
+        actions.findViewById<View>(R.id.btn_compaction_error_okay).setOnClickListener { dialog.dismiss() }
+        actions.findViewById<View>(R.id.btn_compaction_error_settings).setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, SummarizerSettingsActivity::class.java))
+        }
+        dialog.show()
     }
 
     /**
@@ -6425,11 +6439,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /** Summarizer Errors dialog (decision 16 + errors doc §1, owner ruling
-     *  Aug 31 2026): one status paragraph, the stored entries newest first —
-     *  each with its own Copy and Hide — then the whole-list Hide All / Copy
-     *  All / Okay. Opening the list acknowledges the failure, relaxing the
-     *  top-bar badge from its alert look to the neutral reminder. */
+    /** Summarizer Errors dialog (decision 16 + errors doc §1): one status
+     *  paragraph, the stored entries newest first, then one row of Copy /
+     *  Hide / Okay that each act on every listed entry. Hide clears only this
+     *  list; the Error Log keeps its records. Opening the list acknowledges
+     *  the failure, relaxing the top-bar badge from its alert look to the
+     *  neutral reminder. */
     private fun showSummarizerErrorsDialog() {
         if (org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
                 .fromJson(preferences?.getSummarizerErrors()).isEmpty()
@@ -6444,12 +6459,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val view = layoutInflater.inflate(R.layout.dialog_summarizer_errors, null)
         val status = view.findViewById<TextView>(R.id.summarizer_errors_status)
         val container = view.findViewById<LinearLayout>(R.id.summarizer_errors_container)
-        val hideAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_cancel_action)
-        val copyAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_middle_action)
-        val okay = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_final_action)
-        hideAll?.setText(R.string.summarizer_errors_hide_all)
-        copyAll?.setText(R.string.summarizer_errors_copy_all)
-        okay?.setText(R.string.summarizer_errors_okay)
+        val copyAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_errors_copy)
+        val hideAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_errors_hide)
+        val okay = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_errors_okay)
 
         val statusText = when {
             preferences?.getChatUseSummarizer() != true ->
@@ -6474,33 +6486,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             clipboard.setPrimaryClip(ClipData.newPlainText("Summarizer Errors", text))
         }
 
-        fun populate() {
-            container?.removeAllViews()
-            currentEntries().forEachIndexed { index, entry ->
-                val row = layoutInflater.inflate(R.layout.view_summarizer_error_entry, container, false)
-                row.findViewById<TextView>(R.id.summarizer_error_entry_text).text =
-                    org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
-                row.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_error_copy)
-                    .setOnClickListener {
-                        copyToClipboard(
-                            org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
-                        )
-                    }
-                row.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_error_hide)
-                    .setOnClickListener {
-                        val remaining = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
-                            .removeAt(currentEntries(), index)
-                        preferences?.setSummarizerErrors(
-                            org.teslasoft.assistant.util.summarizer.SummarizerErrorLog.toJson(remaining)
-                        )
-                        if (remaining.isEmpty()) preferences?.setSummarizerEpisode("")
-                        refreshSummarizerIcons()
-                        if (remaining.isEmpty()) dialog.dismiss() else populate()
-                    }
-                container?.addView(row)
-            }
+        container?.removeAllViews()
+        currentEntries().forEach { entry ->
+            val row = layoutInflater.inflate(R.layout.view_summarizer_error_entry, container, false)
+            row.findViewById<TextView>(R.id.summarizer_error_entry_text).text =
+                org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
+            container?.addView(row)
         }
-        populate()
 
         hideAll?.setOnClickListener {
             preferences?.setSummarizerErrors("")
@@ -8838,6 +8830,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun finishPendingCommit() {
         pendingConversation = false
+        preferences?.setLastUsedChatId(chatId)
         conversationModeSelector?.visibility = View.GONE
         intent.putExtra("pendingConversation", false)
     }
