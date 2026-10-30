@@ -43,7 +43,7 @@ class DrawerDisplayRefreshContractTest {
     @Test
     fun aRefreshKeepsStoredRowDetails() {
         val adapter = source("src/main/java/org/teslasoft/assistant/ui/drawer/DrawerHierarchyAdapter.kt")
-        assertTrue(adapter.contains("stored = row.value.listIndex"))
+        assertTrue(adapter.contains("index = row.value.listIndex"))
         assertTrue(!adapter.contains("details.clear()"))
     }
 }

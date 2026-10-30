@@ -22,6 +22,7 @@ import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.drawer.ChatDrawerController
 import org.teslasoft.assistant.ui.drawer.DrawerHierarchyAdapter
 import org.teslasoft.assistant.ui.drawer.DrawerHierarchyProjection
 import org.teslasoft.assistant.ui.drawer.DrawerRow
@@ -93,8 +94,9 @@ class FoldersActivity : FragmentActivity() {
         adapter.refreshDisplayIfChanged()
         refreshJob = lifecycleScope.launch {
             val rows = withContext(Dispatchers.IO) {
-                when (val result = repository.snapshot()) {
+                when (val result = ChatDrawerController.readyNavigation(this@FoldersActivity, repository)) {
                     is ChatNavigationResult.Success -> {
+                        adapter.prepareCompanionImages(result.value.allChats)
                         val expanded = result.value.folders.mapNotNullTo(LinkedHashSet()) {
                             it.folder.id.takeIf(repository::isFolderExpanded)
                         }

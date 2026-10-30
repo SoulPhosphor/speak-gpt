@@ -127,6 +127,7 @@ class ChatDrawerController private constructor(
             }
         })
         ChatListIndex.addListener(indexListener)
+        ChatListIndex.prepareAllInBackground(activity)
         refresh()
     }
 
@@ -163,12 +164,10 @@ class ChatDrawerController private constructor(
         }
         activity.lifecycleScope.launch {
             val projection = withContext(Dispatchers.IO) {
-                when (val result = repository.snapshot()) {
+                when (val result = readyNavigation(activity, repository)) {
                     is ChatNavigationResult.Success -> {
-                        // Rows on screen are filled first; the rest follow behind them.
-                        ChatListIndex.fillMissing(
-                            activity, result.value.allChats.filter { it.listIndex == null }.map { it.id }
-                        )
+                        adapter.prepareCompanionImages(result.value.allChats)
+                        if (lockFolders) folderAdapter.prepareCompanionImages(result.value.allChats)
                         val foldersExpanded = repository.areFoldersExpanded()
                         val expanded = result.value.folders.mapNotNullTo(LinkedHashSet()) {
                             it.folder.id.takeIf(repository::isFolderExpanded)
@@ -277,6 +276,16 @@ class ChatDrawerController private constructor(
 
     companion object {
         const val EXTRA_REVEAL_FROM_DRAWER = "revealFromDrawer"
+
+        /** Worker thread only. The chat list, with every chat's details
+         *  prepared before it is shown; never a row without them. */
+        fun readyNavigation(context: android.content.Context, repository: ChatNavigationRepository) =
+            repository.snapshot().let { result ->
+                val chats = (result as? ChatNavigationResult.Success)?.value?.allChats
+                    ?.filter { it.listIndex == null }?.map { it.id }.orEmpty()
+                if (chats.isNotEmpty() && ChatListIndex.ensureReady(context, chats)) repository.snapshot()
+                else result
+            }
 
         fun install(activity: FragmentActivity, chatRoot: View, currentChatId: () -> String): ChatDrawerController {
             val content = activity.findViewById<ViewGroup>(android.R.id.content)

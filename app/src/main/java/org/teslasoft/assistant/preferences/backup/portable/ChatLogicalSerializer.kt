@@ -16,7 +16,6 @@
 
 package org.teslasoft.assistant.preferences.backup.portable
 
-import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import com.google.gson.Gson
@@ -159,8 +158,7 @@ object ChatLogicalSerializer {
                 obj.put("name", storedName ?: JSONObject.NULL)
                 obj.put("chat_id", chatId)
                 for ((key, value) in chat) {
-                    // Derived chat-list display values are rebuilt after a restore.
-                    if (key != "name" && key != "first_message" && key !in ChatListIndex.KEYS) obj.put("list_$key", value)
+                    if (key != "name" && key != "first_message") obj.put("list_$key", value)
                 }
                 val storedModifiedAt = try {
                     SecurePrefs.get(context, "chat_$chatId").getLong(

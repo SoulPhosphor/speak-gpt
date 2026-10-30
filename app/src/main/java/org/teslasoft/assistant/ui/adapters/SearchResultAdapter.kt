@@ -63,13 +63,19 @@ class SearchResultAdapter(
 
     private fun readRows() {
         val loaded = try {
-            ChatPreferences.getChatPreferences()
-                .getChatListResult(activity.applicationContext, includeFirstMessage = false).chats.associate {
-                    ChatPreferences.storedChatId(it) to ListRow(
-                        ChatListIndex.entryOf(it),
-                        it["created_at"]?.toLongOrNull()?.takeIf { date -> date > 0 }
-                    )
+            val app = activity.applicationContext
+            val chats = ChatPreferences.getChatPreferences().getChatListResult(app, includeFirstMessage = false).chats
+            // Every chat's details are prepared before results show them.
+            ChatListIndex.ensureReady(app, chats.map { ChatPreferences.storedChatId(it) })
+            chats.associate {
+                val chatId = ChatPreferences.storedChatId(it)
+                val index = ChatListIndex.entryFor(app, chatId)
+                chatId to ListRow(index, it["created_at"]?.toLongOrNull()?.takeIf { date -> date > 0 } ?: index?.startedAt)
+            }.also { rows ->
+                if (preferences.getShowCompanionImagesInChatList()) {
+                    companionImages.prepare(rows.values.mapNotNull { it.index?.companionId })
                 }
+            }
         } catch (_: Exception) { return }
         activity.runOnUiThread {
             if (disposed) return@runOnUiThread
@@ -94,10 +100,7 @@ class SearchResultAdapter(
         fun bind(result: SearchResult) {
             val row = rows[result.chatId]
             identity.bind(result.chatId, result.chatTitle, pinned = result.chatPinned, current = false,
-                stored = row?.index, startedAt = row?.startedAt, showBookmarkIndicator = false,
-                // Search showed a model label only once the chat had been read.
-                showSelectedModelUntilFilled = false)
-            if (row != null && row.index == null) ChatListIndex.fillNow(activity, result.chatId)
+                index = row?.index, startedAt = row?.startedAt, showBookmarkIndicator = false)
             chevron.visibility = View.GONE
             if (result.kind == SearchDocumentKind.TITLE) {
                 title.text = highlighted(result.matchedText, result.highlightRanges)

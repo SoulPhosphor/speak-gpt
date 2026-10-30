@@ -62,9 +62,14 @@ class DrawerHierarchyAdapter(
     )
     private var renderedDisplayOptions = displayOptions()
 
+    /** Worker thread. Looks up the companion pictures [chats] will show. */
+    fun prepareCompanionImages(chats: Collection<org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationItem>) {
+        if (displayPreferences.getShowCompanionImagesInChatList()) {
+            companionImages.prepare(chats.mapNotNull { it.listIndex?.companionId })
+        }
+    }
+
     fun refreshDisplayIfChanged() {
-        // Companion pictures may have changed while the list was away.
-        companionImages.clear()
         val current = displayOptions()
         if (current == renderedDisplayOptions) return
         val memoryStatusTurnedOn = displayPreferences.getShowMemoryStatusOnChatList() &&
@@ -156,10 +161,9 @@ class DrawerHierarchyAdapter(
                         displayTitle,
                         pinned = row.value.pinned,
                         current = row.value.id == currentChatId(),
-                        stored = row.value.listIndex,
-                        startedAt = row.value.startedAt
+                        index = row.value.listIndex,
+                        startedAt = row.value.startedAt ?: row.value.listIndex?.startedAt
                     )
-                    if (row.value.listIndex == null) ChatListIndex.fillNow(activity, row.value.id)
                     if (row.nested) root.updatePadding(left = baseStart + nestedExtra, right = baseStart)
                 }
             }

@@ -12,16 +12,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Every way a value shown on a chat row can change keeps that row's stored
- * details up to date, drawing a row opens no chat file, and the stored
- * details are derived display copies that never enter an export.
+ * Every way a chat-list detail can change updates the database; a restore
+ * prepares the chats it restored before it finishes; drawing a row opens no
+ * chat file; backups and the memory export are untouched.
  */
 class ChatListIndexWiringContractTest {
 
-    private fun source(relative: String): String {
-        val roots = listOf(File("src/main/java"), File("app/src/main/java"), File("../app/src/main/java"))
-        return File(roots.first { it.isDirectory }, "org/teslasoft/assistant/$relative").readText()
+    private fun file(relative: String): String {
+        val roots = listOf(File("src/main"), File("app/src/main"), File("../app/src/main"))
+        return File(roots.first { it.isDirectory }, relative).readText()
     }
+
+    private fun source(relative: String) = file("java/org/teslasoft/assistant/$relative")
 
     /** The text of the function starting at [signature], through its closing brace. */
     private fun body(text: String, signature: String): String {
@@ -39,7 +41,7 @@ class ChatListIndexWiringContractTest {
         throw AssertionError("unterminated $signature")
     }
 
-    @Test fun everyWriterOfAShownSettingUpdatesTheRow() {
+    @Test fun everyWriterOfAShownSettingUpdatesTheDetails() {
         val preferences = source("preferences/Preferences.kt")
         listOf(
             "fun setModel(", "fun setPersonaId(", "fun setChatExcludedFromMemory(",
@@ -48,14 +50,14 @@ class ChatListIndexWiringContractTest {
         ).forEach { assertTrue("$it must update the chat list", body(preferences, it).contains("chatListSettingChanged()")) }
         assertTrue(body(preferences, "private fun chatListSettingChanged(").contains("ChatListIndex.settingsChanged("))
         // Every direct write of the exclusion is one of the hooked functions above.
-        val directWrites = Regex("\"memory_excluded\"").findAll(preferences).count()
-        assertTrue(directWrites == 4)
+        assertTrue(Regex("\"memory_excluded\"").findAll(preferences).count() == 4)
     }
 
-    @Test fun conversationSavesAndChatUsageUpdateTheRow() {
+    @Test fun conversationChangesCreationAndDeletionUpdateTheDetails() {
         val chats = source("preferences/ChatPreferences.kt")
         assertTrue(body(chats, "fun saveChatHistory(").contains("ChatListIndex.contentChanged(context, chatId)"))
-        assertTrue(body(chats, "fun commitPendingConversation(").contains("ChatListIndex.fillNow(context, chatId)"))
+        assertTrue(body(chats, "fun commitPendingConversation(").contains("ChatListIndex.chatCreated(context, chatId)"))
+        assertTrue(body(chats, "internal fun cleanupDeletedChatData(").contains("ChatListIndex.chatDeleted(context, chatId)"))
         val usage = source("usage/UsageLog.kt")
         val store = usage.substring(usage.indexOf("object UsageLogStore"))
         listOf("fun append(", "fun putRequest(").forEach {
@@ -65,49 +67,55 @@ class ChatListIndexWiringContractTest {
         }
     }
 
+    @Test fun aRestorePreparesItsChatsBeforeItFinishes() {
+        val rebase = body(
+            source("preferences/backup/ChatSetReplacementCoordinator.kt"), "fun onAuthoritativeChatSetReplaced("
+        )
+        val prepared = rebase.indexOf("ChatListIndex.prepareRestored(appContext, restoredChatIds)")
+        assertTrue(prepared >= 0)
+        assertTrue(prepared < rebase.indexOf("return RebaseResult(searchOk, catalogOk)"))
+    }
+
+    @Test fun existingChatsArePreparedAfterAnUpdateAndAtStart() {
+        val manifest = file("AndroidManifest.xml")
+        assertTrue(manifest.contains(".preferences.chatnavigation.AppUpdatedReceiver"))
+        assertTrue(manifest.contains("android.intent.action.MY_PACKAGE_REPLACED"))
+        assertTrue(source("ui/drawer/ChatDrawerController.kt").contains("ChatListIndex.prepareAllInBackground(activity)"))
+    }
+
+    @Test fun listsAreShownOnlyWithEveryChatReady() {
+        val controller = source("ui/drawer/ChatDrawerController.kt")
+        assertTrue(body(controller, "fun readyNavigation(").contains("ChatListIndex.ensureReady(context, chats)"))
+        assertTrue(controller.contains("readyNavigation(activity, repository)"))
+        assertTrue(source("ui/activities/FoldersActivity.kt").contains("ChatDrawerController.readyNavigation("))
+        assertTrue(body(source("ui/adapters/SearchResultAdapter.kt"), "private fun readRows(").contains("ChatListIndex.ensureReady("))
+    }
+
     @Test fun drawingARowOpensNoChatFile() {
-        val binder = body(source("ui/drawer/FlatChatIdentityBinder.kt"), "fun bind(chatId: String")
-        assertFalse(binder.contains("Preferences.getPreferences(activity, chatId)"))
-        assertFalse(binder.contains("getChatById"))
-        assertFalse(binder.contains("PersonaPreferences"))
+        val binder = source("ui/drawer/FlatChatIdentityBinder.kt")
+        val bind = body(binder, "fun bind(chatId: String")
+        assertFalse(bind.contains("Preferences.getPreferences(activity, chatId)"))
+        assertFalse(bind.contains("getChatById"))
+        assertFalse(bind.contains("PersonaPreferences"))
+        assertFalse(binder.contains("settingsOnly"))
         listOf("ui/drawer/DrawerHierarchyAdapter.kt", "ui/adapters/SearchResultAdapter.kt").forEach {
             assertFalse("$it still reads conversations per row", source(it).contains("ChatListDetailsReader"))
         }
     }
 
-    /** A row not filled yet looks exactly as it did before stored details existed. */
-    @Test fun unfilledRowsLookTheSameAsBefore() {
-        val binder = source("ui/drawer/FlatChatIdentityBinder.kt")
-        assertTrue(body(binder, "fun bind(chatId: String").contains("val index = stored ?: settingsOnly(chatId)"))
-        val settingsOnly = body(binder, "private fun settingsOnly(")
-        listOf("getModel()", "getPersonaId()", "isChatExcludedFromMemory()").forEach { assertTrue(settingsOnly.contains(it)) }
-        // Search showed a model label only after the chat was read; the drawer showed the selected model at once.
-        assertTrue(source("ui/adapters/SearchResultAdapter.kt").contains("showSelectedModelUntilFilled = false"))
-    }
-
     @Test fun memoryStatusIsStillReadInOneBulkPass() {
         val drawer = source("ui/drawer/DrawerHierarchyAdapter.kt")
         assertTrue(drawer.contains("MemoryStore.getInstance(activity).chatReviewStates()"))
-        val binder = body(source("ui/drawer/FlatChatIdentityBinder.kt"), "fun bind(chatId: String")
-        assertTrue(binder.contains("if (index.memoryExcluded) \"excluded\" else memoryStates[chatId]"))
+        val bind = body(source("ui/drawer/FlatChatIdentityBinder.kt"), "fun bind(chatId: String")
+        assertTrue(bind.contains("if (index.memoryExcluded) \"excluded\" else memoryStates[chatId]"))
     }
 
-    @Test fun unfilledRowsAreQueuedAndRowsOnScreenGoFirst() {
-        val controller = source("ui/drawer/ChatDrawerController.kt")
-        assertTrue(controller.contains("ChatListIndex.fillMissing("))
-        assertTrue(controller.contains("it.listIndex == null"))
-        assertTrue(source("ui/drawer/DrawerHierarchyAdapter.kt")
-            .contains("if (row.value.listIndex == null) ChatListIndex.fillNow(activity, row.value.id)"))
-    }
-
-    @Test fun displayCopiesStayOutOfEveryExport() {
-        val skip = "key !in ChatListIndex.KEYS"
+    @Test fun backupsAndTheMemoryExportAreUntouched() {
         listOf(
             "preferences/backup/portable/ChatLogicalSerializer.kt",
             "preferences/backup/portable/ChatsArtifactWriter.kt",
             "preferences/memory/MemoryExporter.kt"
-        ).forEach { assertTrue("$it must leave out the display copies", source(it).contains(skip)) }
-        // Real per-chat settings are still exported apart from the API key.
+        ).forEach { assertFalse("$it must not change for the chat-list details", source(it).contains("ChatListIndex")) }
         assertTrue(source("preferences/backup/portable/ChatLogicalSerializer.kt")
             .contains("private val EXCLUDED_SETTINGS_KEYS = setOf(\"api_key\")"))
     }

@@ -57,6 +57,10 @@ object DatabaseKeys {
      * (different reset/restore lifecycle) and from the disposable search index. */
     const val KEY_CHATS = "chats_db_key_hex"
 
+    /** chat_list_details.db — what each chat row shows, derived from the chats
+     * and rebuilt from them (including during a restore); never backed up. */
+    const val KEY_CHAT_LIST_DETAILS = "chat_list_details_db_key_hex"
+
     sealed class StoredKeyState {
         data object Absent : StoredKeyState()
         data object Unavailable : StoredKeyState()

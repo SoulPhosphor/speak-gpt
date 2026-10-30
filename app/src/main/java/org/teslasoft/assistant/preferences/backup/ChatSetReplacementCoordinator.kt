@@ -24,6 +24,7 @@ import org.teslasoft.assistant.preferences.ChatSetSourceGeneration
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionCoordinator
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionJournalRead
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionJournalStore
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRebaseQueue
 
@@ -229,6 +230,10 @@ object ChatSetReplacementCoordinator {
             ChatSearchIndexManager.get(appContext).onAuthoritativeChatSetReplaced()
         }
         val searchOk = true
+        // Chat-list details are what the chat list shows, so unlike Search they
+        // are rebuilt here, from the restored chats, before the restore reports
+        // that it is complete.
+        ChatListIndex.prepareRestored(appContext, restoredChatIds)
         // Generated-image rows, tombstones and locks are preserved. Persist the
         // rescan request before attempting it so startup maintenance can retry a
         // temporarily unavailable catalog without holding the chat restore open.

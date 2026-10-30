@@ -6,70 +6,47 @@
 
 package org.teslasoft.assistant.preferences.chatnavigation
 
+import android.content.ContentValues as SqlValues
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
+import net.zetetic.database.DatabaseErrorHandler
+import net.zetetic.database.sqlcipher.SQLiteDatabase
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
+import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.ui.drawer.ChatListDetails
 import org.teslasoft.assistant.ui.drawer.MostUsedChatModel
 import org.teslasoft.assistant.usage.UsageLogStore
 
 /**
- * What a chat row shows beyond its title, kept in that chat's encrypted
- * chat-list row so the drawer and Search draw rows without opening any chat's
- * own files. Values are derived only from the chat's stored history and
- * settings by one background worker, are refreshed when those change, and are
- * never carried in backups: a restored row is refilled from restored data.
+ * What each chat row shows beyond its title, kept in its own small encrypted
+ * database and in memory, so the chat list, Folders and Search draw rows
+ * without opening any chat file. Every value is derived from the chat itself:
+ * existing chats are prepared once, a restore prepares the chats it restored
+ * before it finishes, and every change to a chat updates its entry.
  */
 object ChatListIndex {
-    const val VERSION_KEY = "index_version"
-    const val HAS_BOOKMARKS_KEY = "index_has_bookmarks"
-    const val MOST_USED_MODEL_KEY = "index_most_used_model"
-    const val MODEL_KEY = "index_model"
-    const val COMPANION_KEY = "index_companion"
-    const val MEMORY_EXCLUDED_KEY = "index_memory_excluded"
-
-    /** Raising this refills every row once. */
-    const val VERSION = "1"
-
-    private const val START_DATE_KEY = "created_at"
-
-    /** Derived values: left out of backups and of chat comparisons. */
-    val KEYS: Set<String> = setOf(
-        VERSION_KEY, HAS_BOOKMARKS_KEY, MOST_USED_MODEL_KEY, MODEL_KEY, COMPANION_KEY, MEMORY_EXCLUDED_KEY
-    )
 
     data class Entry(
         val hasBookmarks: Boolean,
         val mostUsedModel: String?,
         val model: String,
         val companionId: String,
-        val memoryExcluded: Boolean
+        val memoryExcluded: Boolean,
+        /** Earliest message time; the chat list's own start date comes first. */
+        val startedAt: Long?
     ) {
         /** The model label: what the chat used most, else its selected model. */
         val displayModel: String get() = mostUsedModel ?: model
-    }
-
-    /** null until the row has been filled for the current [VERSION]. */
-    fun entryOf(row: Map<String, String>): Entry? {
-        if (row[VERSION_KEY] != VERSION) return null
-        return Entry(
-            hasBookmarks = row[HAS_BOOKMARKS_KEY] == "true",
-            mostUsedModel = row[MOST_USED_MODEL_KEY]?.takeIf { it.isNotBlank() },
-            model = row[MODEL_KEY].orEmpty(),
-            companionId = row[COMPANION_KEY].orEmpty(),
-            memoryExcluded = row[MEMORY_EXCLUDED_KEY] == "true"
-        )
     }
 
     enum class Part { CONTENT, SETTINGS }
@@ -78,214 +55,402 @@ object ChatListIndex {
     data class SettingsValues(val model: String, val companionId: String, val memoryExcluded: Boolean)
     data class Update(val content: ContentValues? = null, val settings: SettingsValues? = null)
 
+    /** The entry after [update]; null when a chat with no entry gets only part of its details. */
+    fun merge(existing: Entry?, update: Update): Entry? {
+        val content = update.content
+        val settings = update.settings
+        var entry = existing ?: run {
+            if (content == null || settings == null) return null
+            Entry(false, null, settings.model, settings.companionId, settings.memoryExcluded, null)
+        }
+        if (content != null) entry = entry.copy(
+            hasBookmarks = content.hasBookmarks,
+            mostUsedModel = content.mostUsedModel?.takeIf { it.isNotBlank() },
+            startedAt = content.startedAt?.takeIf { it > 0 }
+        )
+        if (settings != null) entry = entry.copy(
+            model = settings.model,
+            companionId = settings.companionId,
+            memoryExcluded = settings.memoryExcluded
+        )
+        return entry
+    }
+
+    /** Where entries are stored. */
+    interface Table {
+        fun readAll(): Map<String, Entry>
+        fun write(entries: Map<String, Entry>)
+        fun delete(chatIds: Collection<String>)
+    }
+
+    /** Where entries are derived from. */
+    interface Source {
+        /** Every chat in the chat list, or null when the list cannot be read right now. */
+        fun chatIds(): List<String>?
+        /** null when the chat cannot be read right now (locked or damaged). */
+        fun read(chatId: String, parts: Set<Part>): Update?
+    }
+
     /**
-     * Applies [update] to [row] and reports whether anything changed. A row is
-     * marked filled only when both parts are written together, and a known
-     * creation date is never replaced.
+     * The entries and the rules for keeping them complete and current. One lock
+     * covers every read-then-write, so a value read before a change can never
+     * overwrite the value written after it.
      */
-    fun apply(row: MutableMap<String, String>, update: Update): Boolean {
-        val before = HashMap(row)
-        update.content?.let { content ->
-            row[HAS_BOOKMARKS_KEY] = content.hasBookmarks.toString()
-            val mostUsed = content.mostUsedModel?.takeIf { it.isNotBlank() }
-            if (mostUsed == null) row.remove(MOST_USED_MODEL_KEY) else row[MOST_USED_MODEL_KEY] = mostUsed
-            val knownStart = row[START_DATE_KEY]?.toLongOrNull()?.let { it > 0 } == true
-            val startedAt = content.startedAt
-            if (!knownStart && startedAt != null && startedAt > 0) row[START_DATE_KEY] = startedAt.toString()
+    class Core(private val table: Table, private val source: Source) {
+        private val entries = ConcurrentHashMap<String, Entry>()
+        private val lock = Any()
+        // Loading has its own lock so a lookup never waits behind a long preparation.
+        private val loadLock = Any()
+        @Volatile private var loaded = false
+        // Chats that could not be read are not retried on every list refresh;
+        // a change to the chat, a restore or the next app start retries them.
+        private val unreadable = ConcurrentHashMap.newKeySet<String>()
+
+        fun entryFor(chatId: String): Entry? {
+            ensureLoaded()
+            return entries[chatId]
         }
-        update.settings?.let { settings ->
-            row[MODEL_KEY] = settings.model
-            row[COMPANION_KEY] = settings.companionId
-            row[MEMORY_EXCLUDED_KEY] = settings.memoryExcluded.toString()
+
+        private fun ensureLoaded() {
+            if (loaded) return
+            synchronized(loadLock) {
+                if (loaded) return
+                entries.putAll(table.readAll())
+                loaded = true
+            }
         }
-        if (update.content != null && update.settings != null) row[VERSION_KEY] = VERSION
-        return row != before
+
+        /** Prepares every chat that has no entry and drops entries of chats that
+         *  no longer exist. Returns true when anything changed. */
+        fun prepareAll(): Boolean = synchronized(lock) {
+            ensureLoaded()
+            val ids = source.chatIds() ?: return false
+            val gone = entries.keys - ids.toSet()
+            if (gone.isNotEmpty()) {
+                table.delete(gone)
+                gone.forEach { entries.remove(it) }
+            }
+            prepareLocked(ids.filter { !entries.containsKey(it) }, retryUnreadable = true) || gone.isNotEmpty()
+        }
+
+        /** Prepares any of [chatIds] that have no entry yet. Returns true when any were prepared. */
+        fun ensureReady(chatIds: Collection<String>): Boolean {
+            ensureLoaded()
+            if (chatIds.none { !entries.containsKey(it) && it !in unreadable }) return false
+            return synchronized(lock) {
+                prepareLocked(chatIds.filter { !entries.containsKey(it) && it !in unreadable }, retryUnreadable = false)
+            }
+        }
+
+        /** Rebuilds the entries of [chatIds] from their current data (a restore). */
+        fun replace(chatIds: Collection<String>): Boolean = synchronized(lock) {
+            ensureLoaded()
+            chatIds.forEach { unreadable.remove(it) }
+            val prepared = prepareLocked(chatIds.toList(), retryUnreadable = true)
+            val failed = chatIds.filter { it in unreadable && entries.containsKey(it) }
+            if (failed.isNotEmpty()) {
+                table.delete(failed)
+                failed.forEach { entries.remove(it) }
+            }
+            prepared || failed.isNotEmpty()
+        }
+
+        /** Applies a change to one chat. Returns true when its entry changed. */
+        fun refresh(chatId: String, parts: Set<Part>): Boolean = synchronized(lock) {
+            ensureLoaded()
+            val existing = entries[chatId] ?: return prepareLocked(listOf(chatId), retryUnreadable = true)
+            val update = source.read(chatId, parts) ?: return false
+            val next = merge(existing, update) ?: return false
+            if (next == existing) return false
+            table.write(mapOf(chatId to next))
+            entries[chatId] = next
+            true
+        }
+
+        fun forget(chatId: String) = synchronized(lock) {
+            ensureLoaded()
+            unreadable.remove(chatId)
+            if (entries.remove(chatId) != null) table.delete(listOf(chatId))
+        }
+
+        private fun prepareLocked(chatIds: List<String>, retryUnreadable: Boolean): Boolean {
+            var prepared = false
+            val batch = LinkedHashMap<String, Entry>()
+            for (chatId in chatIds) {
+                if (!retryUnreadable && chatId in unreadable) continue
+                val entry = source.read(chatId, Part.entries.toSet())?.let { merge(null, it) }
+                if (entry == null) {
+                    unreadable.add(chatId)
+                    continue
+                }
+                unreadable.remove(chatId)
+                batch[chatId] = entry
+                if (batch.size >= WRITE_BATCH) prepared = flush(batch) || prepared
+            }
+            return flush(batch) || prepared
+        }
+
+        private fun flush(batch: LinkedHashMap<String, Entry>): Boolean {
+            if (batch.isEmpty()) return false
+            table.write(batch)
+            entries.putAll(batch)
+            batch.clear()
+            return true
+        }
     }
 
-    /** The parts to read for a chat: everything while its row is unfilled. */
-    fun partsToRead(row: Map<String, String>?, requested: Set<Part>): Set<Part> =
-        if (row != null && row[VERSION_KEY] != VERSION) Part.entries.toSet() else requested
+    private const val WRITE_BATCH = 50
 
-    /* ----------------------------- worker ----------------------------- */
+    /* ------------------------- the app's instance ------------------------- */
 
-    private const val URGENT_BATCH = 4
-    private const val BACKGROUND_BATCH = 25
-    private const val NOTIFY_INTERVAL_MS = 500L
-    // A streaming reply saves every two seconds; reread once it has settled.
-    private const val CONTENT_SETTLE_MS = 3000L
-
-    private val lock = Any()
-    // Rows on screen and changes the user just made go first; the one-time
-    // fill-in of everything else waits behind them.
-    private val urgent = LinkedHashMap<String, MutableSet<Part>>()
-    private val background = LinkedHashMap<String, MutableSet<Part>>()
-    // Chats that could not be read (damaged or locked) are not retried by the
-    // fill-in until the next app start; a change to the chat still retries.
-    private val unreadable = HashSet<String>()
-    private var running = false
-    // Android keeps every chat file it has opened in memory until the app
-    // closes. The fill-in of rows nobody is looking at stops for this run once
-    // half the app's memory is in use, and continues at the next start.
-    private var fillInPaused = false
-    private var appContext: Context? = null
-    private val executor = Executors.newSingleThreadExecutor {
-        Thread(it, "chat-list-index").apply { priority = Thread.MIN_PRIORITY }
+    @Volatile private var core: Core? = null
+    private val worker = Executors.newSingleThreadExecutor {
+        Thread(it, "chat-list-details").apply { priority = Thread.MIN_PRIORITY }
     }
-    private val scheduler = Executors.newSingleThreadScheduledExecutor {
-        Thread(it, "chat-list-index-settle").apply { isDaemon = true }
-    }
-    private val settling = HashMap<String, ScheduledFuture<*>>()
+    private val pending = LinkedHashMap<String, MutableSet<Part>>()
+    private var draining = false
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
     private val main by lazy { Handler(Looper.getMainLooper()) }
-    private var lastNotifiedAt = 0L
 
-    /** Called on the main thread after stored rows change. */
+    private fun core(context: Context): Core = core ?: synchronized(this) {
+        core ?: Core(DatabaseTable(context.applicationContext), ChatSource(context.applicationContext))
+            .also { core = it }
+    }
+
+    /** Called on the main thread after entries change. */
     fun addListener(listener: () -> Unit) { listeners.add(listener) }
     fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
 
-    /** The chat's history or recorded usage changed. Repeated changes are
-     *  read once, after they stop arriving. */
-    fun contentChanged(context: Context, chatId: String) {
-        if (chatId.isBlank()) return
-        val appContext = context.applicationContext
-        synchronized(lock) {
-            settling.remove(chatId)?.cancel(false)
-            settling[chatId] = scheduler.schedule({
-                synchronized(lock) { settling.remove(chatId) }
-                request(appContext, chatId, setOf(Part.CONTENT), retry = true)
-            }, CONTENT_SETTLE_MS, TimeUnit.MILLISECONDS)
-        }
+    private fun notifyChanged() = main.post { listeners.forEach { it() } }
+
+    /** Worker thread only. The entry of one chat, or null if it has none. */
+    fun entryFor(context: Context, chatId: String): Entry? =
+        runCatching { core(context).entryFor(chatId) }.getOrNull()
+
+    /** Worker thread only. Makes sure every chat in [chatIds] has an entry
+     *  before a list shows them. Returns true when any were prepared. */
+    fun ensureReady(context: Context, chatIds: Collection<String>): Boolean =
+        runCatching { core(context).ensureReady(chatIds) }.getOrDefault(false)
+
+    /** Worker thread only. The one-time preparation of existing chats; also
+     *  removes entries of deleted chats. Safe to run any number of times. */
+    fun prepareAll(context: Context) {
+        // A restore prepares the chats it restores; never read a set mid-restore.
+        if (runCatching { PortableRestoreProcessGate.blocksCurrentProcess(context) }.getOrDefault(true)) return
+        if (runCatching { core(context).prepareAll() }.getOrDefault(false)) notifyChanged()
     }
+
+    fun prepareAllInBackground(context: Context) {
+        val app = context.applicationContext
+        worker.execute { prepareAll(app) }
+    }
+
+    /** Called by a restore, on its own thread, before it reports success:
+     *  every restored chat's entry is rebuilt from the restored data. */
+    fun prepareRestored(context: Context, restoredChatIds: Collection<String>) {
+        val changed = runCatching {
+            val target = core(context)
+            target.replace(restoredChatIds) or target.prepareAll()
+        }.getOrDefault(false)
+        if (changed) notifyChanged()
+    }
+
+    /** The chat's history or recorded usage changed. */
+    fun contentChanged(context: Context, chatId: String) = request(context, chatId, setOf(Part.CONTENT))
 
     /** A chat setting shown in the list (model, companion, memory exclusion) changed. */
-    fun settingsChanged(context: Context, chatId: String) = request(context, chatId, setOf(Part.SETTINGS), retry = true)
+    fun settingsChanged(context: Context, chatId: String) = request(context, chatId, setOf(Part.SETTINGS))
 
-    /** A row on screen has not been filled yet. */
-    fun fillNow(context: Context, chatId: String) {
-        request(context, chatId, Part.entries.toSet(), retry = false)
-    }
-
-    /** Queues every unfilled row behind anything on screen. */
-    fun fillMissing(context: Context, chatIds: Collection<String>) {
-        synchronized(lock) {
-            for (chatId in chatIds) {
-                if (fillInPaused) break
-                if (chatId.isBlank() || chatId in unreadable || chatId in urgent || chatId in background) continue
-                background[chatId] = Part.entries.toMutableSet()
-            }
-        }
-        start(context)
-    }
-
-    private fun request(context: Context, chatId: String, parts: Set<Part>, retry: Boolean) {
+    /** A new chat joined the list, possibly reusing a deleted chat's ID. */
+    fun chatCreated(context: Context, chatId: String) {
         if (chatId.isBlank()) return
-        synchronized(lock) {
-            if (retry) unreadable.remove(chatId) else if (chatId in unreadable) return
-            urgent[chatId] = (urgent[chatId] ?: background.remove(chatId) ?: mutableSetOf()).apply { addAll(parts) }
+        val app = context.applicationContext
+        worker.execute {
+            val changed = runCatching { core(app).replace(listOf(chatId)) }.getOrDefault(false)
+            if (changed) notifyChanged()
         }
-        start(context)
     }
 
-    private fun start(context: Context) {
-        synchronized(lock) {
-            if (appContext == null) appContext = context.applicationContext
-            if (running || (urgent.isEmpty() && background.isEmpty())) return
-            running = true
-        }
-        executor.execute(::drain)
+    /** A chat was deleted; its ID may be reused by a later chat. */
+    fun chatDeleted(context: Context, chatId: String) {
+        if (chatId.isBlank()) return
+        val app = context.applicationContext
+        worker.execute { runCatching { core(app).forget(chatId) } }
     }
 
-    private fun drain() {
-        var unannounced = false
+    private fun request(context: Context, chatId: String, parts: Set<Part>) {
+        if (chatId.isBlank()) return
+        val app = context.applicationContext
+        synchronized(pending) {
+            pending.getOrPut(chatId) { mutableSetOf() }.addAll(parts)
+            if (draining) return
+            draining = true
+        }
+        worker.execute { drain(app) }
+    }
+
+    private fun drain(context: Context) {
         while (true) {
-            var inBackground = false
-            val batch = synchronized(lock) {
-                val queue = if (urgent.isNotEmpty()) urgent else background
-                inBackground = queue === background
-                val size = if (queue === urgent) URGENT_BATCH else BACKGROUND_BATCH
-                val taken = LinkedHashMap<String, Set<Part>>()
-                val entries = queue.entries.iterator()
-                while (entries.hasNext() && taken.size < size) {
-                    val entry = entries.next()
-                    taken[entry.key] = entry.value
-                    entries.remove()
-                }
-                if (taken.isEmpty()) running = false
-                taken
-            }
-            if (batch.isEmpty()) break
-            val context = appContext ?: continue
-            if (runCatching { processBatch(context, batch, inBackground) }.getOrDefault(false)) unannounced = true
-            if (unannounced) {
-                val idle = synchronized(lock) { urgent.isEmpty() && background.isEmpty() }
-                val now = SystemClock.elapsedRealtime()
-                if (idle || now - lastNotifiedAt >= NOTIFY_INTERVAL_MS) {
-                    lastNotifiedAt = now
-                    unannounced = false
-                    main.post { listeners.forEach { it() } }
-                }
-            }
-        }
-        if (unannounced) main.post { listeners.forEach { it() } }
-    }
-
-    /** Reads each chat once and saves every changed row in one list write. */
-    private fun processBatch(context: Context, batch: Map<String, Set<Part>>, inBackground: Boolean): Boolean {
-        // A restore replaces the whole chat set; its rows are refilled afterwards.
-        if (PortableRestoreProcessGate.blocksCurrentProcess(context)) return false
-        val storage = ChatPreferences.getChatPreferences()
-        val list = storage.getChatListResult(context, includeFirstMessage = false)
-        if (!ChatStorageHealth.isAuthoritative(list.state)) return false
-        val rows = list.chats.associateBy { ChatPreferences.storedChatId(it) }
-        val updates = LinkedHashMap<String, Update>()
-        for ((chatId, requested) in batch) {
-            if (inBackground && memoryIsTight()) {
-                synchronized(lock) {
-                    fillInPaused = true
-                    background.clear()
-                }
-                break
-            }
-            val row = rows[chatId] ?: continue
-            val update = read(context, chatId, partsToRead(row, requested))
-            if (update == null) {
-                synchronized(lock) { unreadable.add(chatId) }
-            } else updates[chatId] = update
-        }
-        if (updates.isEmpty()) return false
-        return storage.updateChatListRows(context) { current ->
-            var changed = false
-            for (row in current) {
-                val update = updates[ChatPreferences.storedChatId(row)] ?: continue
-                if (apply(row, update)) changed = true
-            }
-            changed
+            val next = synchronized(pending) {
+                val first = pending.entries.firstOrNull()
+                if (first == null) draining = false else pending.remove(first.key)
+                first
+            } ?: return
+            val changed = runCatching { core(context).refresh(next.key, next.value) }.getOrDefault(false)
+            if (changed) notifyChanged()
         }
     }
 
-    private fun memoryIsTight(): Boolean {
-        val runtime = Runtime.getRuntime()
-        return runtime.totalMemory() - runtime.freeMemory() > runtime.maxMemory() / 2
+    /** Reads a chat's details from its own storage. */
+    private class ChatSource(private val context: Context) : Source {
+        override fun chatIds(): List<String>? {
+            val list = ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false)
+            if (!ChatStorageHealth.isAuthoritative(list.state)) return null
+            return list.chats.map { ChatPreferences.storedChatId(it) }
+        }
+
+        override fun read(chatId: String, parts: Set<Part>): Update? {
+            val preferences = Preferences.getPreferences(context, chatId)
+            if (SecurePrefs.isLockedName("settings.$chatId")) return null
+            val settings = if (Part.SETTINGS in parts) SettingsValues(
+                preferences.getModel(), preferences.getPersonaId(), preferences.isChatExcludedFromMemory()
+            ) else null
+            val content = if (Part.CONTENT in parts) {
+                val history = ChatPreferences.getChatPreferences()
+                    .getChatByIdResult(context, chatId, DamagedChatOperation.CHAT_LIST)
+                if (!ChatStorageHealth.isAuthoritative(history.state)) return null
+                val details = ChatListDetails.fromMessages(history.messages)
+                ContentValues(
+                    details.hasBookmarks,
+                    MostUsedChatModel.select(UsageLogStore.read(preferences), history.messages),
+                    details.startedAt
+                )
+            } else null
+            return Update(content, settings)
+        }
     }
 
-    /** null when the chat's history or settings cannot be read right now. */
-    private fun read(context: Context, chatId: String, parts: Set<Part>): Update? {
-        val preferences = Preferences.getPreferences(context, chatId)
-        if (SecurePrefs.isLockedName("settings.$chatId")) return null
-        val settings = if (Part.SETTINGS in parts) SettingsValues(
-            preferences.getModel(), preferences.getPersonaId(), preferences.isChatExcludedFromMemory()
-        ) else null
-        val content = if (Part.CONTENT in parts) {
-            val history = ChatPreferences.getChatPreferences()
-                .getChatByIdResult(context, chatId, DamagedChatOperation.CHAT_LIST)
-            if (!ChatStorageHealth.isAuthoritative(history.state)) return null
-            val details = ChatListDetails.fromMessages(history.messages)
-            ContentValues(
-                details.hasBookmarks,
-                MostUsedChatModel.select(UsageLogStore.read(preferences), history.messages),
-                details.startedAt
-            )
-        } else null
-        return Update(content, settings)
+    /** The encrypted database. It holds only derived values, so a database that
+     *  cannot be opened is discarded and prepared again from the chats. */
+    private class DatabaseTable(private val context: Context) : Table {
+        private var helper: Helper? = null
+
+        @Synchronized
+        private fun database(): SQLiteDatabase {
+            helper?.let { return it.writableDatabase }
+            loadLibrary()
+            val file = context.getDatabasePath(DATABASE_NAME)
+            var key = DatabaseKeys.getOrCreate(context, DatabaseKeys.KEY_CHAT_LIST_DETAILS, file.exists())
+            if (key == null) {
+                discardFiles()
+                key = DatabaseKeys.getOrCreate(context, DatabaseKeys.KEY_CHAT_LIST_DETAILS, false)
+                    ?: throw IllegalStateException("Chat list details key unavailable")
+            }
+            val opened = Helper(context, key)
+            return try {
+                opened.writableDatabase.also { helper = opened }
+            } catch (e: Exception) {
+                runCatching { opened.close() }
+                discardFiles()
+                Helper(context, key).also { helper = it }.writableDatabase
+            }
+        }
+
+        override fun readAll(): Map<String, Entry> = database().rawQuery(
+            "SELECT chat_id, has_bookmarks, most_used_model, model, companion_id, memory_excluded, started_at FROM chat_details",
+            null
+        ).use { cursor ->
+            val out = HashMap<String, Entry>(cursor.count)
+            while (cursor.moveToNext()) {
+                out[cursor.getString(0)] = Entry(
+                    hasBookmarks = cursor.getInt(1) != 0,
+                    mostUsedModel = if (cursor.isNull(2)) null else cursor.getString(2),
+                    model = cursor.getString(3),
+                    companionId = cursor.getString(4),
+                    memoryExcluded = cursor.getInt(5) != 0,
+                    startedAt = if (cursor.isNull(6)) null else cursor.getLong(6)
+                )
+            }
+            out
+        }
+
+        override fun write(entries: Map<String, Entry>) {
+            val db = database()
+            db.beginTransaction()
+            try {
+                for ((chatId, entry) in entries) {
+                    db.insertWithOnConflict("chat_details", null, SqlValues().apply {
+                        put("chat_id", chatId)
+                        put("has_bookmarks", if (entry.hasBookmarks) 1 else 0)
+                        put("most_used_model", entry.mostUsedModel)
+                        put("model", entry.model)
+                        put("companion_id", entry.companionId)
+                        put("memory_excluded", if (entry.memoryExcluded) 1 else 0)
+                        put("started_at", entry.startedAt)
+                    }, SQLiteDatabase.CONFLICT_REPLACE)
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+        }
+
+        override fun delete(chatIds: Collection<String>) {
+            val db = database()
+            db.beginTransaction()
+            try {
+                chatIds.forEach { db.delete("chat_details", "chat_id = ?", arrayOf(it)) }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+        }
+
+        private fun discardFiles() {
+            runCatching { helper?.close() }
+            helper = null
+            listOf("", "-wal", "-shm", "-journal").forEach { suffix ->
+                context.getDatabasePath(DATABASE_NAME + suffix).delete()
+            }
+        }
+
+        private class Helper(context: Context, password: ByteArray) : SQLiteOpenHelper(
+            context, DATABASE_NAME, password, null, DATABASE_VERSION, 0, CloseOnCorruption, null, true
+        ) {
+            override fun onCreate(db: SQLiteDatabase) = createSchema(db)
+
+            override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                // Derived values: a new schema is prepared again from the chats.
+                db.execSQL("DROP TABLE IF EXISTS chat_details")
+                createSchema(db)
+            }
+
+            private fun createSchema(db: SQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS chat_details(" +
+                        "chat_id TEXT PRIMARY KEY NOT NULL, has_bookmarks INTEGER NOT NULL, " +
+                        "most_used_model TEXT, model TEXT NOT NULL, companion_id TEXT NOT NULL, " +
+                        "memory_excluded INTEGER NOT NULL, started_at INTEGER)"
+                )
+            }
+        }
+
+        private object CloseOnCorruption : DatabaseErrorHandler {
+            override fun onCorruption(dbObj: SQLiteDatabase, exception: android.database.sqlite.SQLiteException?) {
+                try { dbObj.close() } catch (_: Exception) { }
+            }
+        }
+
+        companion object {
+            const val DATABASE_NAME = "chat_list_details.db"
+            private const val DATABASE_VERSION = 1
+            @Volatile private var libraryLoaded = false
+
+            private fun loadLibrary() {
+                if (libraryLoaded) return
+                System.loadLibrary("sqlcipher")
+                libraryLoaded = true
+            }
+        }
     }
 }

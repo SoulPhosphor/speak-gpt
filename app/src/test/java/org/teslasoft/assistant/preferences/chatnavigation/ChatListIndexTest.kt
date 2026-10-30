@@ -8,135 +8,214 @@ package org.teslasoft.assistant.preferences.chatnavigation
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageBookmarks
-import org.teslasoft.assistant.preferences.PerChatSettingKeys
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex.Entry
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex.Part
 import org.teslasoft.assistant.ui.drawer.ChatListDetails
 
-/** The chat-list row details that let the drawer draw rows without opening chat files. */
+/** The chat-list details database: complete before anything shows it, current after every change. */
 class ChatListIndexTest {
 
-    private fun row(vararg pairs: Pair<String, String>): HashMap<String, String> =
-        hashMapOf("id" to "chat-1", "name" to "A chat", *pairs)
+    /** A chat as its own files describe it. */
+    private data class Chat(
+        var bookmarked: Boolean = false,
+        var mostUsed: String? = "gpt-4o",
+        var model: String = "gpt-4o-mini",
+        var companion: String = "companion-1",
+        var excluded: Boolean = false,
+        var startedAt: Long? = 1_000L,
+        var readable: Boolean = true
+    )
 
-    private val content = ChatListIndex.ContentValues(hasBookmarks = false, mostUsedModel = "gpt-4o", startedAt = 1_000L)
-    private val settings = ChatListIndex.SettingsValues(model = "gpt-4o-mini", companionId = "companion-1", memoryExcluded = false)
-    private val full = ChatListIndex.Update(content, settings)
-
-    @Test fun `an unfilled row has no stored details`() {
-        assertNull(ChatListIndex.entryOf(row()))
-        // A row filled by an older version is refilled, not trusted.
-        assertNull(ChatListIndex.entryOf(row(ChatListIndex.VERSION_KEY to "0")))
+    private class FakeTable : ChatListIndex.Table {
+        val rows = LinkedHashMap<String, Entry>()
+        var writes = 0
+        override fun readAll() = HashMap(rows)
+        override fun write(entries: Map<String, Entry>) { writes++; rows.putAll(entries) }
+        override fun delete(chatIds: Collection<String>) { chatIds.forEach { rows.remove(it) } }
     }
 
-    @Test fun `filling a row stores every detail and marks it filled`() {
-        val target = row()
-        assertTrue(ChatListIndex.apply(target, full))
-        val entry = assertNotNullEntry(target)
-        assertFalse(entry.hasBookmarks)
-        assertEquals("gpt-4o", entry.mostUsedModel)
-        assertEquals("gpt-4o-mini", entry.model)
-        assertEquals("companion-1", entry.companionId)
-        assertFalse(entry.memoryExcluded)
-        assertEquals("1000", target["created_at"])
+    private class FakeSource : ChatListIndex.Source {
+        val chats = LinkedHashMap<String, Chat>()
+        val reads = ArrayList<String>()
+        override fun chatIds() = chats.keys.toList()
+        override fun read(chatId: String, parts: Set<Part>): ChatListIndex.Update? {
+            val chat = chats[chatId]?.takeIf { it.readable } ?: return null
+            reads.add(chatId)
+            return ChatListIndex.Update(
+                if (Part.CONTENT in parts) ChatListIndex.ContentValues(chat.bookmarked, chat.mostUsed, chat.startedAt) else null,
+                if (Part.SETTINGS in parts) ChatListIndex.SettingsValues(chat.model, chat.companion, chat.excluded) else null
+            )
+        }
     }
 
-    @Test fun `one part alone never marks an unfilled row filled`() {
-        val target = row()
-        ChatListIndex.apply(target, ChatListIndex.Update(settings = settings))
-        assertNull(ChatListIndex.entryOf(target))
-        ChatListIndex.apply(target, ChatListIndex.Update(content = content))
-        assertNull(ChatListIndex.entryOf(target))
+    private val table = FakeTable()
+    private val source = FakeSource()
+    private fun core() = ChatListIndex.Core(table, source)
+    private fun chats(count: Int) = (1..count).forEach { source.chats["chat-$it"] = Chat() }
+
+    @Test fun `preparation gives every chat its details`() {
+        chats(10)
+        val index = core()
+        assertTrue(index.prepareAll())
+        (1..10).forEach { assertEquals("gpt-4o", index.entryFor("chat-$it")?.displayModel) }
+        assertEquals(10, table.rows.size)
     }
 
-    @Test fun `an unchanged value causes no write`() {
-        val target = row()
-        ChatListIndex.apply(target, full)
-        assertFalse(ChatListIndex.apply(target, full))
-        assertFalse(ChatListIndex.apply(target, ChatListIndex.Update(settings = settings)))
-        assertFalse(ChatListIndex.apply(target, ChatListIndex.Update(content = content)))
+    @Test fun `prepared chats are never read again`() {
+        chats(10)
+        core().prepareAll()
+        source.reads.clear()
+        val restarted = core()
+        assertFalse(restarted.prepareAll())
+        assertFalse(restarted.ensureReady(source.chats.keys))
+        assertTrue(source.reads.isEmpty())
     }
 
-    @Test fun `a settings change updates only the settings it covers`() {
-        val target = row()
-        ChatListIndex.apply(target, full)
-        assertTrue(ChatListIndex.apply(target, ChatListIndex.Update(settings = settings.copy(memoryExcluded = true))))
-        val entry = assertNotNullEntry(target)
-        assertTrue(entry.memoryExcluded)
-        assertEquals("gpt-4o", entry.mostUsedModel)
-        assertEquals("companion-1", entry.companionId)
+    @Test fun `an interrupted preparation continues with only the chats it had not reached`() {
+        chats(10)
+        // The first run stops after four chats (the app was closed).
+        ChatListIndex.Core(table, object : ChatListIndex.Source by source {
+            override fun chatIds() = source.chats.keys.take(4)
+        }).prepareAll()
+        source.reads.clear()
+        core().prepareAll()
+        assertEquals((5..10).map { "chat-$it" }, source.reads)
+        assertEquals(10, table.rows.size)
     }
 
-    @Test fun `memory exclusion can be turned back off`() {
-        val target = row()
-        ChatListIndex.apply(target, ChatListIndex.Update(content, settings.copy(memoryExcluded = true)))
-        ChatListIndex.apply(target, ChatListIndex.Update(settings = settings.copy(memoryExcluded = false)))
-        assertFalse(assertNotNullEntry(target).memoryExcluded)
+    @Test fun `a list is never shown with chats that are not ready`() {
+        chats(3)
+        val index = core()
+        assertTrue(index.ensureReady(source.chats.keys))
+        source.chats.keys.forEach { assertTrue(index.entryFor(it) != null) }
+        assertFalse(index.ensureReady(source.chats.keys))
     }
 
-    @Test fun `a new bookmark turns the indicator on and removing it turns it off`() {
-        val target = row()
-        ChatListIndex.apply(target, full)
-        val bookmarked = listOf(mapOf("message" to "hi", "isBot" to false, MessageBookmarks.KEY to true))
-        val details = ChatListDetails.fromMessages(bookmarked)
-        assertTrue(details.hasBookmarks)
-        assertTrue(ChatListIndex.apply(target, ChatListIndex.Update(
-            content = content.copy(hasBookmarks = details.hasBookmarks)
-        )))
-        assertTrue(assertNotNullEntry(target).hasBookmarks)
-        ChatListIndex.apply(target, ChatListIndex.Update(content = content.copy(hasBookmarks = false)))
-        assertFalse(assertNotNullEntry(target).hasBookmarks)
+    @Test fun `a restore rebuilds restored chats from the restored data before it finishes`() {
+        chats(3)
+        val index = core()
+        index.prepareAll()
+        // The restore replaced chat-2 with an older copy that has a bookmark and another companion.
+        source.chats["chat-2"] = Chat(bookmarked = true, companion = "companion-9")
+        source.chats["chat-4"] = Chat(model = "claude", mostUsed = null)
+        index.replace(listOf("chat-2", "chat-4"))
+        assertTrue(index.entryFor("chat-2")!!.hasBookmarks)
+        assertEquals("companion-9", index.entryFor("chat-2")!!.companionId)
+        assertEquals("claude", index.entryFor("chat-4")!!.displayModel)
+        assertEquals("companion-1", index.entryFor("chat-1")!!.companionId)
+    }
+
+    @Test fun `a restored chat that cannot be read keeps no outdated details`() {
+        chats(2)
+        val index = core()
+        index.prepareAll()
+        source.chats["chat-1"]!!.readable = false
+        index.replace(listOf("chat-1"))
+        assertNull(index.entryFor("chat-1"))
+        assertNull(table.rows["chat-1"])
+    }
+
+    @Test fun `bookmarks turn the indicator on and off`() {
+        chats(1)
+        val index = core()
+        index.prepareAll()
+        val messages = listOf(mapOf("message" to "hi", "isBot" to false, MessageBookmarks.KEY to true))
+        source.chats["chat-1"]!!.bookmarked = ChatListDetails.fromMessages(messages).hasBookmarks
+        assertTrue(index.refresh("chat-1", setOf(Part.CONTENT)))
+        assertTrue(index.entryFor("chat-1")!!.hasBookmarks)
+        source.chats["chat-1"]!!.bookmarked = false
+        assertTrue(index.refresh("chat-1", setOf(Part.CONTENT)))
+        assertFalse(index.entryFor("chat-1")!!.hasBookmarks)
     }
 
     @Test fun `the model label is the most-used model, else the selected model`() {
-        val target = row()
-        ChatListIndex.apply(target, full)
-        assertEquals("gpt-4o", assertNotNullEntry(target).displayModel)
-        ChatListIndex.apply(target, ChatListIndex.Update(content = content.copy(mostUsedModel = null)))
-        assertNull(target[ChatListIndex.MOST_USED_MODEL_KEY])
-        assertEquals("gpt-4o-mini", assertNotNullEntry(target).displayModel)
-        ChatListIndex.apply(target, ChatListIndex.Update(settings = settings.copy(model = "claude")))
-        assertEquals("claude", assertNotNullEntry(target).displayModel)
+        chats(1)
+        val index = core()
+        index.prepareAll()
+        assertEquals("gpt-4o", index.entryFor("chat-1")!!.displayModel)
+        source.chats["chat-1"]!!.mostUsed = null
+        index.refresh("chat-1", setOf(Part.CONTENT))
+        assertEquals("gpt-4o-mini", index.entryFor("chat-1")!!.displayModel)
+        source.chats["chat-1"]!!.model = "claude"
+        index.refresh("chat-1", setOf(Part.SETTINGS))
+        assertEquals("claude", index.entryFor("chat-1")!!.displayModel)
     }
 
-    @Test fun `a known start date is never replaced`() {
-        val target = row("created_at" to "500")
-        ChatListIndex.apply(target, full)
-        assertEquals("500", target["created_at"])
+    @Test fun `memory exclusion follows the setting both ways`() {
+        chats(1)
+        val index = core()
+        index.prepareAll()
+        source.chats["chat-1"]!!.excluded = true
+        index.refresh("chat-1", setOf(Part.SETTINGS))
+        assertTrue(index.entryFor("chat-1")!!.memoryExcluded)
+        source.chats["chat-1"]!!.excluded = false
+        index.refresh("chat-1", setOf(Part.SETTINGS))
+        assertFalse(index.entryFor("chat-1")!!.memoryExcluded)
     }
 
-    @Test fun `an unfilled row is read in full whatever was requested`() {
-        val requested = setOf(ChatListIndex.Part.SETTINGS)
-        assertEquals(ChatListIndex.Part.entries.toSet(), ChatListIndex.partsToRead(row(), requested))
-        val filled = row().also { ChatListIndex.apply(it, full) }
-        assertEquals(requested, ChatListIndex.partsToRead(filled, requested))
+    @Test fun `a settings change leaves the conversation details alone`() {
+        chats(1)
+        val index = core()
+        index.prepareAll()
+        source.chats["chat-1"]!!.bookmarked = true
+        source.chats["chat-1"]!!.companion = "companion-2"
+        index.refresh("chat-1", setOf(Part.SETTINGS))
+        assertEquals("companion-2", index.entryFor("chat-1")!!.companionId)
+        assertFalse(index.entryFor("chat-1")!!.hasBookmarks)
     }
 
-    /** An interrupted fill-in resumes with only the rows it had not reached. */
-    @Test fun `after an interruption only unfilled rows are processed again`() {
-        val rows = (1..10).map { hashMapOf("id" to "chat-$it", "name" to "Chat $it") }
-        rows.take(4).forEach { ChatListIndex.apply(it, full) }
-        val stillToFill = rows.filter { ChatListIndex.entryOf(it) == null }.map { ChatPreferences.storedChatId(it) }
-        assertEquals((5..10).map { "chat-$it" }, stillToFill)
+    @Test fun `an unchanged chat causes no write`() {
+        chats(1)
+        val index = core()
+        index.prepareAll()
+        val writes = table.writes
+        assertFalse(index.refresh("chat-1", setOf(Part.CONTENT, Part.SETTINGS)))
+        assertEquals(writes, table.writes)
     }
 
-    @Test fun `display copies never overlap real chat settings or list fields`() {
-        ChatListIndex.KEYS.forEach { key ->
-            assertFalse("$key is a real per-chat setting", key in PerChatSettingKeys.ALL)
-            assertFalse(key in setOf("id", "name", "pinned", "timestamp", "created_at", "folder_id"))
-        }
-        // The real settings the copies are made from stay real settings.
-        assertTrue("memory_excluded" in PerChatSettingKeys.ALL)
-        assertTrue("persona_id" in PerChatSettingKeys.ALL)
+    @Test fun `deleted chats lose their details and a reused ID starts fresh`() {
+        chats(2)
+        val index = core()
+        index.prepareAll()
+        index.forget("chat-1")
+        assertNull(index.entryFor("chat-1"))
+        source.chats.remove("chat-2")
+        index.prepareAll()
+        assertNull(table.rows["chat-2"])
+        source.chats["chat-1"] = Chat(companion = "companion-new")
+        index.replace(listOf("chat-1"))
+        assertEquals("companion-new", index.entryFor("chat-1")!!.companionId)
     }
 
-    private fun assertNotNullEntry(target: Map<String, String>): ChatListIndex.Entry {
-        val entry = ChatListIndex.entryOf(target)
-        assertNotNull(entry)
-        return entry!!
+    @Test fun `an unreadable chat is not reread on every list load but is retried on change`() {
+        chats(1)
+        source.chats["chat-1"]!!.readable = false
+        val index = core()
+        index.ensureReady(listOf("chat-1"))
+        source.chats["chat-1"]!!.readable = true
+        assertFalse(index.ensureReady(listOf("chat-1")))
+        assertTrue(index.refresh("chat-1", setOf(Part.SETTINGS)))
+        assertTrue(index.entryFor("chat-1") != null)
+    }
+
+    @Test fun `thousands of chats are prepared once and looked up from memory`() {
+        chats(5_000)
+        val index = core()
+        val prepareStart = System.nanoTime()
+        index.prepareAll()
+        val prepareMs = (System.nanoTime() - prepareStart) / 1_000_000
+        val lookupStart = System.nanoTime()
+        repeat(10) { source.chats.keys.forEach { chatId -> index.entryFor(chatId) } }
+        val perLookupNs = (System.nanoTime() - lookupStart) / 50_000
+        println("chat-list details: prepared 5000 chats (excluding file reads) in ${prepareMs} ms; one row lookup takes ${perLookupNs} ns")
+        assertEquals(5_000, table.rows.size)
+        // Batched: 5,000 chats in a hundred writes, not five thousand.
+        assertEquals(100, table.writes)
+        // Far below one frame (16 ms) even for a whole screen of rows.
+        assertTrue(perLookupNs < 50_000)
     }
 }

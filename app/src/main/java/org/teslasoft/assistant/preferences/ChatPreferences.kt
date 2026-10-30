@@ -174,6 +174,7 @@ class ChatPreferences private constructor() {
      */
     internal fun cleanupDeletedChatData(context: Context, chatId: String): Boolean {
         if (chatId.isBlank()) return false
+        ChatListIndex.chatDeleted(context, chatId)
         val historyName = "chat_$chatId"
         val settingsName = "settings.$chatId"
         return try {
@@ -330,25 +331,6 @@ class ChatPreferences private constructor() {
             if (row["created_at"]?.toLongOrNull()?.let { it > 0 } == true) return
             row["created_at"] = startedAt.toString()
             SecurePrefs.get(context, "chat_list").edit { putString("data", Gson().toJson(list)) }
-        }
-    }
-
-    /**
-     * Edits chat-list rows in place under the list lock and saves only when
-     * [edit] reports a change. Does nothing while the list is locked, failed
-     * to read, or being replaced by a restore.
-     */
-    fun updateChatListRows(context: Context, edit: (ArrayList<HashMap<String, String>>) -> Boolean): Boolean {
-        if (PortableRestoreProcessGate.blocksCurrentProcess(context)) return false
-        synchronized(CHAT_LIST_LOCK) {
-            val settings = SecurePrefs.get(context, "chat_list")
-            val locked = SecurePrefs.isLockedName("chat_list")
-            val readFailed = "chat_list" in ChatStorageHealth.readFailureNames(context)
-            if (!ChatStorageHealth.writeAllowed(locked, readFailed)) return false
-            val result = getChatListResult(context, includeFirstMessage = false)
-            if (!ChatStorageHealth.isAuthoritative(result.state)) return false
-            if (!edit(result.chats)) return false
-            return settings.edit().putString("data", Gson().toJson(result.chats)).commit()
         }
     }
 
@@ -863,7 +845,7 @@ class ChatPreferences private constructor() {
 
             journal.edit().remove(chatId).commit()
             ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, searchRevision)
-            ChatListIndex.fillNow(context, chatId)
+            ChatListIndex.chatCreated(context, chatId)
             return PendingConversationCommitResult.Ok
         }
     }

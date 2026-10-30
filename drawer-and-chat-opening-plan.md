@@ -1,7 +1,8 @@
 # Drawer Scrolling and Chat Opening Plan
 
-Status, October 30 2026: **section 1 is built** (owner-approved scrolling
-repair; see "As built" below). Section 2 (window fix) waits for owner approval.
+Status, October 30 2026: **section 1 is built as a separate database**
+(owner decision; see "As built" below). The earlier sections of part 1
+describe the superseded chat-list-field design. Section 2 (window fix) waits for owner approval.
 Section 3 is information only.
 
 Related: `duplicated-chats.md` (the duplicated old-client chats, which also
@@ -173,24 +174,33 @@ sent message (the sort timestamp). It does not affect scrolling. Per-row
 storage would remove it but needs a full storage migration, which is not
 required for the scrolling goal.
 
-### As built (October 30 2026)
+### As built (October 30 2026): separate database (owner decision)
 
-- Stored in each chat-list row: `index_version`, `index_has_bookmarks`,
-  `index_most_used_model`, `index_model`, `index_companion`,
-  `index_memory_excluded` (`ChatListIndex`). The start date uses the existing
-  `created_at`.
-- Rows awaiting their details show what is already known (title and, when
-  known, start date); the memory marker appears once the row is filled.
-- Content changes (saves, usage) are reread once they settle for 3 seconds, so
-  a streaming reply causes one read, not one per save.
-- The background fill-in stops for the current app run when half the app's
-  memory is in use and resumes at the next start; rows on screen are still
-  filled.
-- Not built: the in-memory chat-list cache from "Scaling to thousands of
-  chats" (kept out to keep the repair focused).
-- Left out of Recovery Backups (v2 and v3 writers) and the memory export
-  (owner-approved one-line change). Restore code is unchanged: it reads current
-  chats through the same backup writer, so it never sees these fields.
+The owner chose a separate database over extra fields in the chat list. The
+chat-list-field approach was removed before merge.
+
+- `chat_list_details.db`: a small encrypted database (own key,
+  `DatabaseKeys.KEY_CHAT_LIST_DETAILS`) with one row per chat: bookmark
+  indicator, most-used model, selected model, companion, memory exclusion,
+  earliest message time. Loaded into memory once; rows are drawn from memory
+  (`ChatListIndex`). Drawing a row never opens a chat file.
+- Every value is derived from the chats, so the database is never in backups.
+  Backups, their format, restore planning and the memory export are unchanged.
+- Existing chats are prepared once: when the update installs
+  (`MY_PACKAGE_REPLACED` → WorkManager), when the app starts, and, before any
+  list is shown, for any chat still missing (drawer, Folders, Search). A list is
+  never shown with an unprepared chat.
+- A restore rebuilds every restored chat's entry inside the restore
+  (`ChatSetReplacementCoordinator` rebase), before it reports complete.
+- Changes update the entry right away: saves, chat usage, model, companion,
+  memory exclusion (including Archive This Chat and new-chat Quick
+  Settings), new chats (including reused IDs), deletions.
+- Companion pictures are looked up in the background when a list loads.
+- Measured on the JVM: a row lookup takes about 0.0001 ms; preparing 5,000
+  chats' entries takes about 10 ms excluding reading the chat files. Reading
+  real chats can only be timed on a device.
+- Only a chat that cannot be read (locked or damaged) has no entry; it shows
+  its title and start date.
 
 ### Fit with Feature 0 (Chat Storage and Backup Upgrade)
 

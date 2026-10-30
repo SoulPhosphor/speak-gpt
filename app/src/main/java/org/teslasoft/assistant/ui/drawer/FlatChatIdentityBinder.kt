@@ -51,25 +51,20 @@ class FlatChatIdentityBinder(
     }
 
     /**
-     * Draws a chat row. Once its details are stored in the chat list, no chat
-     * file is opened here. [stored] is null until the row's details have been filled in. Until then
-     * the row reads the chat's settings as it always did, so it looks the same
-     * as before; its bookmark indicator and most-used model follow when the row
-     * is filled, as they did when they were read in the background.
+     * Draws a chat row from its prepared details alone; no chat file is opened
+     * here. [index] is null only for a chat that could not be read (locked or
+     * damaged), which shows its title and start date.
      */
     fun bind(chatId: String, displayTitle: String, pinned: Boolean, current: Boolean,
-        stored: ChatListIndex.Entry?, startedAt: Long?, showBookmarkIndicator: Boolean = true,
-        showSelectedModelUntilFilled: Boolean = true) {
+        index: ChatListIndex.Entry?, startedAt: Long?, showBookmarkIndicator: Boolean = true) {
         reset()
-        val index = stored ?: settingsOnly(chatId)
-        val modelLabel = if (stored != null || showSelectedModelUntilFilled) index.displayModel else null
         title.text = displayTitle
         if (displayPreferences.getShowCompanionImagesInChatList()) {
             imageFrame.visibility = View.VISIBLE
             ProfileImageBinder.bind(
                 activity,
                 image,
-                companionImages.imageFor(index.companionId),
+                index?.let { companionImages.imageFor(it.companionId) },
                 GlobalPreferences.getPreferences(activity).getProfileImageShape()
             ) { it.setImageResource(R.drawable.ic_assistant_navigation) }
             bookmarkOverlay.visibility = if (pinned) View.VISIBLE else View.GONE
@@ -81,14 +76,14 @@ class FlatChatIdentityBinder(
             )
         }
         bookmarkIndicator.visibility = if (showBookmarkIndicator && displayPreferences.getShowBookmarkIndicatorInChatList() &&
-            index.hasBookmarks) View.VISIBLE else View.GONE
+            index?.hasBookmarks == true) View.VISIBLE else View.GONE
         val metadata = ChatListDetails.metadata(
             if (displayPreferences.getShowChatStartDateInChatList()) startedAt else null,
-            if (displayPreferences.getShowModelNamesInChatList()) modelLabel else null
+            if (displayPreferences.getShowModelNamesInChatList()) index?.displayModel else null
         )
         model.text = metadata
         model.visibility = if (metadata.isEmpty()) View.GONE else View.VISIBLE
-        if (displayPreferences.getShowMemoryStatusOnChatList()) {
+        if (displayPreferences.getShowMemoryStatusOnChatList() && index != null) {
             val state = if (index.memoryExcluded) "excluded" else memoryStates[chatId]
             if (state != null) {
                 memory.visibility = View.VISIBLE
@@ -106,30 +101,25 @@ class FlatChatIdentityBinder(
         }
     }
 
-    /** The settings-based details of a row that has not been filled yet. */
-    private fun settingsOnly(chatId: String): ChatListIndex.Entry {
-        val chatPreferences = Preferences.getPreferences(activity, chatId)
-        return ChatListIndex.Entry(
-            hasBookmarks = false,
-            mostUsedModel = null,
-            model = chatPreferences.getModel(),
-            companionId = chatPreferences.getPersonaId(),
-            memoryExcluded = chatPreferences.isChatExcludedFromMemory()
-        )
-    }
 }
 
-/** Each companion's picture is looked up once per list refresh, not once per row. */
+/** Each companion's picture, looked up in the background when the list is
+ *  loaded so drawing a row never has to look it up. */
 class CompanionImageLookup(private val activity: FragmentActivity) {
-    private val files = HashMap<String, File?>()
+    private val files = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<File>>()
 
-    fun clear() = files.clear()
+    /** Worker thread. Looks up (again) the pictures of [companionIds]. */
+    fun prepare(companionIds: Collection<String>) {
+        companionIds.toSet().forEach { files[it] = java.util.Optional.ofNullable(resolve(it)) }
+    }
 
-    fun imageFor(companionId: String): File? {
-        if (files.containsKey(companionId)) return files[companionId]
+    fun imageFor(companionId: String): File? =
+        files.getOrPut(companionId) { java.util.Optional.ofNullable(resolve(companionId)) }.orElse(null)
+
+    private fun resolve(companionId: String): File? {
         val ref = if (companionId.isNotEmpty()) try {
             PersonaPreferences.getPersonaPreferences(activity).getPersona(companionId).avatarRef
         } catch (_: Exception) { "" } else ""
-        return ProfileImageResolver.resolveAiImageFile(activity, ref).also { files[companionId] = it }
+        return ProfileImageResolver.resolveAiImageFile(activity, ref)
     }
 }
