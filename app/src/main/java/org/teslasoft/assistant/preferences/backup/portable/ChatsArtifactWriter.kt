@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.preferences.backup.portable
 
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import android.content.Context
 import com.google.gson.Gson
 import java.io.Writer
@@ -92,7 +93,8 @@ internal object ChatsArtifactWriter {
             header.put("name", storedName ?: JSONObject.NULL)
             header.put("chat_id", chatId)
             for ((key, value) in row) {
-                if (key != "name" && key != "first_message") header.put("list_$key", value)
+                // Derived chat-list display values are rebuilt after a restore.
+                if (key != "name" && key != "first_message" && key !in ChatListIndex.KEYS) header.put("list_$key", value)
             }
             val storedModifiedAt =
                 (source.readChatValue(chatId, ChatPreferences.CHAT_CONTENT_MODIFIED_AT_KEY) as? Long) ?: 0L

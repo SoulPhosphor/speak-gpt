@@ -489,7 +489,8 @@ class ChatNavigationRepository internal constructor(
         pinned = row["pinned"] == "true",
         folderId = row[FOLDER_ID_KEY]?.takeIf { it.isNotBlank() },
         titleRevision = row["search_title_revision"]?.takeIf { it.isNotBlank() },
-        startedAt = row["created_at"]?.toLongOrNull()?.takeIf { it > 0 }
+        startedAt = row["created_at"]?.toLongOrNull()?.takeIf { it > 0 },
+        listIndex = ChatListIndex.entryOf(row)
     )
 
     private fun isUuid(value: String): Boolean = try {

@@ -22,9 +22,9 @@ import org.teslasoft.assistant.preferences.chatsearch.SearchResult
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
+import org.teslasoft.assistant.ui.drawer.CompanionImageLookup
 import org.teslasoft.assistant.ui.drawer.FlatChatIdentityBinder
-import org.teslasoft.assistant.ui.drawer.ChatListDetails
-import org.teslasoft.assistant.ui.drawer.ChatListDetailsReader
 import java.util.concurrent.Executors
 import java.util.concurrent.ConcurrentHashMap
 
@@ -34,14 +34,14 @@ class SearchResultAdapter(
 ) : ListAdapter<SearchResult, SearchResultAdapter.Holder>(DIFF) {
     private val preferences = Preferences.getPreferences(activity, "")
     private val memoryStates = ConcurrentHashMap<String, String>()
-    private val details = HashMap<String, ChatListDetails>()
-    private val detailRequests = HashSet<String>()
-    @Volatile private var detailsGeneration = 0
+    private val companionImages = CompanionImageLookup(activity)
+    // Each chat's stored row details, read from the chat list in one pass.
+    private var rows = emptyMap<String, ListRow>()
     @Volatile private var disposed = false
-    // Accessed only by the single metadata worker.
-    private var startDatesGeneration = -1
-    private var startDates = emptyMap<String, Long?>()
     private val metadataExecutor = Executors.newSingleThreadExecutor { Thread(it, "search-metadata") }
+    private val indexListener: () -> Unit = { loadRows() }
+
+    private data class ListRow(val index: ChatListIndex.Entry?, val startedAt: Long?)
 
     init {
         if (preferences.getShowMemoryStatusOnChatList()) metadataExecutor.execute {
@@ -52,6 +52,30 @@ class SearchResultAdapter(
                 }
             } catch (_: Exception) { }
         }
+        loadRows()
+        ChatListIndex.addListener(indexListener)
+    }
+
+    private fun loadRows() {
+        if (disposed) return
+        try { metadataExecutor.execute(::readRows) } catch (_: java.util.concurrent.RejectedExecutionException) { }
+    }
+
+    private fun readRows() {
+        val loaded = try {
+            ChatPreferences.getChatPreferences()
+                .getChatListResult(activity.applicationContext, includeFirstMessage = false).chats.associate {
+                    ChatPreferences.storedChatId(it) to ListRow(
+                        ChatListIndex.entryOf(it),
+                        it["created_at"]?.toLongOrNull()?.takeIf { date -> date > 0 }
+                    )
+                }
+        } catch (_: Exception) { return }
+        activity.runOnUiThread {
+            if (disposed) return@runOnUiThread
+            rows = loaded
+            notifyDataSetChanged()
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder = Holder(
@@ -60,56 +84,18 @@ class SearchResultAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(getItem(position))
 
-    override fun onCurrentListChanged(previousList: MutableList<SearchResult>, currentList: MutableList<SearchResult>) {
-        super.onCurrentListChanged(previousList, currentList)
-        detailsGeneration++
-        details.clear()
-        detailRequests.clear()
-        notifyDataSetChanged()
-    }
-
-    private fun requestDetails(chatId: String) {
-        if (disposed || details.containsKey(chatId) || !(
-            preferences.getShowChatStartDateInChatList() ||
-                preferences.getShowModelNamesInChatList()
-        ) || !detailRequests.add(chatId)) return
-        val generation = detailsGeneration
-        val includeModel = preferences.getShowModelNamesInChatList()
-        metadataExecutor.execute {
-            if (disposed || generation != detailsGeneration) return@execute
-            val loaded = try {
-                val context = activity.applicationContext
-                if (startDatesGeneration != generation) {
-                    startDates = ChatPreferences.getChatPreferences()
-                        .getChatListResult(context, includeFirstMessage = false).chats.associate {
-                            ChatPreferences.storedChatId(it) to it["created_at"]?.toLongOrNull()
-                        }
-                    startDatesGeneration = generation
-                }
-                if (disposed || generation != detailsGeneration) return@execute
-                ChatListDetailsReader.read(context, chatId, startDates[chatId], includeModel)
-            } catch (_: Exception) { ChatListDetails(false, null) }
-            activity.runOnUiThread {
-                if (disposed || generation != detailsGeneration) return@runOnUiThread
-                details[chatId] = loaded
-                currentList.forEachIndexed { position, result ->
-                    if (result.chatId == chatId) notifyItemChanged(position)
-                }
-            }
-        }
-    }
-
     inner class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val title: TextView = itemView.findViewById(R.id.flat_chat_title)
         private val snippet: TextView = itemView.findViewById(R.id.flat_chat_snippet)
         private val date: TextView = itemView.findViewById(R.id.flat_chat_date)
         private val chevron: View = itemView.findViewById(R.id.flat_chat_chevron)
-        private val identity = FlatChatIdentityBinder(activity, itemView, preferences, memoryStates)
+        private val identity = FlatChatIdentityBinder(activity, itemView, preferences, memoryStates, companionImages)
 
         fun bind(result: SearchResult) {
-            requestDetails(result.chatId)
+            val row = rows[result.chatId]
             identity.bind(result.chatId, result.chatTitle, pinned = result.chatPinned, current = false,
-                details = details[result.chatId], showBookmarkIndicator = false)
+                index = row?.index, startedAt = row?.startedAt, showBookmarkIndicator = false)
+            if (row != null && row.index == null) ChatListIndex.fillNow(activity, result.chatId)
             chevron.visibility = View.GONE
             if (result.kind == SearchDocumentKind.TITLE) {
                 title.text = highlighted(result.matchedText, result.highlightRanges)
@@ -159,6 +145,7 @@ class SearchResultAdapter(
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         disposed = true
+        ChatListIndex.removeListener(indexListener)
         metadataExecutor.shutdownNow()
         super.onDetachedFromRecyclerView(recyclerView)
     }

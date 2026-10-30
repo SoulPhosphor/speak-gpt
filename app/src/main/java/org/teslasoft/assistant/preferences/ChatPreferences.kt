@@ -28,6 +28,7 @@ import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexJournal
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection
@@ -332,6 +333,25 @@ class ChatPreferences private constructor() {
         }
     }
 
+    /**
+     * Edits chat-list rows in place under the list lock and saves only when
+     * [edit] reports a change. Does nothing while the list is locked, failed
+     * to read, or being replaced by a restore.
+     */
+    fun updateChatListRows(context: Context, edit: (ArrayList<HashMap<String, String>>) -> Boolean): Boolean {
+        if (PortableRestoreProcessGate.blocksCurrentProcess(context)) return false
+        synchronized(CHAT_LIST_LOCK) {
+            val settings = SecurePrefs.get(context, "chat_list")
+            val locked = SecurePrefs.isLockedName("chat_list")
+            val readFailed = "chat_list" in ChatStorageHealth.readFailureNames(context)
+            if (!ChatStorageHealth.writeAllowed(locked, readFailed)) return false
+            val result = getChatListResult(context, includeFirstMessage = false)
+            if (!ChatStorageHealth.isAuthoritative(result.state)) return false
+            if (!edit(result.chats)) return false
+            return settings.edit().putString("data", Gson().toJson(result.chats)).commit()
+        }
+    }
+
     fun putTimestampToChatById(context: Context, chatId: String) {
         val timestamp = System.currentTimeMillis().toString()
 
@@ -559,6 +579,7 @@ class ChatPreferences private constructor() {
                         runCatching { ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision) }
                     } else ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision)
                 }
+                ChatListIndex.contentChanged(context, chatId)
                 ChatStorageHealth.WriteOutcome.OK
             }
         } catch (_: Exception) {
@@ -842,6 +863,7 @@ class ChatPreferences private constructor() {
 
             journal.edit().remove(chatId).commit()
             ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, searchRevision)
+            ChatListIndex.fillNow(context, chatId)
             return PendingConversationCommitResult.Ok
         }
     }

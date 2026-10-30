@@ -18,6 +18,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 import org.teslasoft.assistant.theme.ThemeManager
@@ -56,7 +57,7 @@ class FoldersActivity : FragmentActivity() {
                     when (row) {
                         is DrawerRow.Folder -> {
                             repository.setFolderExpanded(row.value.id, !row.expanded)
-                            refresh(refreshDetails = false)
+                            refresh()
                         }
                         is DrawerRow.Chat -> {
                             setResult(Activity.RESULT_OK, Intent()
@@ -78,12 +79,18 @@ class FoldersActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        ChatListIndex.addListener(indexListener)
         refresh()
     }
 
-    private fun refresh(refreshDetails: Boolean = true) {
+    override fun onPause() {
+        ChatListIndex.removeListener(indexListener)
+        super.onPause()
+    }
+
+    private fun refresh() {
         refreshJob?.cancel()
-        adapter.refreshDisplayIfChanged(refreshDetails)
+        adapter.refreshDisplayIfChanged()
         refreshJob = lifecycleScope.launch {
             val rows = withContext(Dispatchers.IO) {
                 when (val result = repository.snapshot()) {
@@ -106,6 +113,9 @@ class FoldersActivity : FragmentActivity() {
             }
         }
     }
+
+    // Stored row details were filled in or changed in the background.
+    private val indexListener: () -> Unit = { refresh() }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putParcelable(STATE_SCROLL, list.layoutManager?.onSaveInstanceState())

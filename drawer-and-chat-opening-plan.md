@@ -1,8 +1,8 @@
 # Drawer Scrolling and Chat Opening Plan
 
-Status: **plans for owner review, October 30 2026.** Nothing here is
-implemented. The owner approved *planning* Approach B (section 1); building it,
-and the window fix in section 2, both wait for owner approval of this document.
+Status, October 30 2026: **section 1 is built** (owner-approved scrolling
+repair; see "As built" below). Section 2 (window fix) waits for owner approval.
+Section 3 is information only.
 
 Related: `duplicated-chats.md` (the duplicated old-client chats, which also
 double the length of the drawer list).
@@ -172,6 +172,25 @@ change to it re-encrypts the whole list. This already happens today on every
 sent message (the sort timestamp). It does not affect scrolling. Per-row
 storage would remove it but needs a full storage migration, which is not
 required for the scrolling goal.
+
+### As built (October 30 2026)
+
+- Stored in each chat-list row: `index_version`, `index_has_bookmarks`,
+  `index_most_used_model`, `index_model`, `index_companion`,
+  `index_memory_excluded` (`ChatListIndex`). The start date uses the existing
+  `created_at`.
+- Rows awaiting their details show what is already known (title and, when
+  known, start date); the memory marker appears once the row is filled.
+- Content changes (saves, usage) are reread once they settle for 3 seconds, so
+  a streaming reply causes one read, not one per save.
+- The background fill-in stops for the current app run when half the app's
+  memory is in use and resumes at the next start; rows on screen are still
+  filled.
+- Not built: the in-memory chat-list cache from "Scaling to thousands of
+  chats" (kept out to keep the repair focused).
+- Left out of Recovery Backups (v2 and v3 writers) and the memory export
+  (owner-approved one-line change). Restore code is unchanged: it reads current
+  chats through the same backup writer, so it never sees these fields.
 
 ### Fit with Feature 0 (Chat Storage and Backup Upgrade)
 

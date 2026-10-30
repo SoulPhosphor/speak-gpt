@@ -4,12 +4,14 @@ import android.content.res.ColorStateList
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
+import java.io.File
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.color.MaterialColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageShape
 import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.ProfileImageResolver
@@ -19,7 +21,8 @@ class FlatChatIdentityBinder(
     private val activity: FragmentActivity,
     itemView: View,
     private val displayPreferences: Preferences,
-    private val memoryStates: Map<String, String>
+    private val memoryStates: Map<String, String>,
+    private val companionImages: CompanionImageLookup
 ) {
     private val title: TextView = itemView.findViewById(R.id.flat_chat_title)
     private val leading: ImageView = itemView.findViewById(R.id.flat_chat_leading_icon)
@@ -47,23 +50,25 @@ class FlatChatIdentityBinder(
         title.setTypeface(null, android.graphics.Typeface.NORMAL)
     }
 
+    /**
+     * Draws a chat row from the chat list alone; no chat file is opened here.
+     * [index] is null until the row's details have been filled in, and only the
+     * information already known is shown until then.
+     */
     fun bind(chatId: String, displayTitle: String, pinned: Boolean, current: Boolean,
-        details: ChatListDetails? = null, showBookmarkIndicator: Boolean = true) {
+        index: ChatListIndex.Entry?, startedAt: Long?, showBookmarkIndicator: Boolean = true) {
         reset()
         title.text = displayTitle
-        val chatPreferences = Preferences.getPreferences(activity, chatId)
         if (displayPreferences.getShowCompanionImagesInChatList()) {
             imageFrame.visibility = View.VISIBLE
-            val personaId = chatPreferences.getPersonaId()
-            val ref = if (personaId.isNotEmpty()) try {
-                PersonaPreferences.getPersonaPreferences(activity).getPersona(personaId).avatarRef
-            } catch (_: Exception) { "" } else ""
-            ProfileImageBinder.bind(
-                activity,
-                image,
-                ProfileImageResolver.resolveAiImageFile(activity, ref),
-                GlobalPreferences.getPreferences(activity).getProfileImageShape()
-            ) { it.setImageResource(R.drawable.ic_assistant_navigation) }
+            if (index != null) {
+                ProfileImageBinder.bind(
+                    activity,
+                    image,
+                    companionImages.imageFor(index.companionId),
+                    GlobalPreferences.getPreferences(activity).getProfileImageShape()
+                ) { it.setImageResource(R.drawable.ic_assistant_navigation) }
+            }
             bookmarkOverlay.visibility = if (pinned) View.VISIBLE else View.GONE
         } else if (pinned) {
             leading.visibility = View.VISIBLE
@@ -73,16 +78,15 @@ class FlatChatIdentityBinder(
             )
         }
         bookmarkIndicator.visibility = if (showBookmarkIndicator && displayPreferences.getShowBookmarkIndicatorInChatList() &&
-            details?.hasBookmarks == true) View.VISIBLE else View.GONE
+            index?.hasBookmarks == true) View.VISIBLE else View.GONE
         val metadata = ChatListDetails.metadata(
-            if (displayPreferences.getShowChatStartDateInChatList()) details?.startedAt else null,
-            if (displayPreferences.getShowModelNamesInChatList() && details != null)
-                details.mostUsedModel ?: chatPreferences.getModel() else null
+            if (displayPreferences.getShowChatStartDateInChatList()) startedAt else null,
+            if (displayPreferences.getShowModelNamesInChatList()) index?.displayModel else null
         )
         model.text = metadata
         model.visibility = if (metadata.isEmpty()) View.GONE else View.VISIBLE
-        if (displayPreferences.getShowMemoryStatusOnChatList()) {
-            val state = if (chatPreferences.isChatExcludedFromMemory()) "excluded" else memoryStates[chatId]
+        if (displayPreferences.getShowMemoryStatusOnChatList() && index != null) {
+            val state = if (index.memoryExcluded) "excluded" else memoryStates[chatId]
             if (state != null) {
                 memory.visibility = View.VISIBLE
                 memory.text = activity.getString(when (state) {
@@ -97,5 +101,20 @@ class FlatChatIdentityBinder(
             title.setTextColor(MaterialColors.getColor(title, androidx.appcompat.R.attr.colorPrimary))
             title.setTypeface(null, android.graphics.Typeface.BOLD)
         }
+    }
+}
+
+/** Each companion's picture is looked up once per list refresh, not once per row. */
+class CompanionImageLookup(private val activity: FragmentActivity) {
+    private val files = HashMap<String, File?>()
+
+    fun clear() = files.clear()
+
+    fun imageFor(companionId: String): File? {
+        if (files.containsKey(companionId)) return files[companionId]
+        val ref = if (companionId.isNotEmpty()) try {
+            PersonaPreferences.getPersonaPreferences(activity).getPersona(companionId).avatarRef
+        } catch (_: Exception) { "" } else ""
+        return ProfileImageResolver.resolveAiImageFile(activity, ref).also { files[companionId] = it }
     }
 }
