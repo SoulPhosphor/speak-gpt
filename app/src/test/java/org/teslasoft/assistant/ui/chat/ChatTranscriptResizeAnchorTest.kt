@@ -113,6 +113,28 @@ class ChatTranscriptResizeAnchorTest {
         assertEquals(0, t.manager.findViewByPosition(0)!!.top)
     }
 
+    @Test
+    fun aShortChatThatStopsFittingMovesOnlyEnoughToStayAboveTheComposer() =
+        withTranscript(count = 5) { t ->
+            // 5 rows of 250: fits the tall viewport (1564 usable), not the short one (864).
+            t.layout(TALL)
+            assertEquals(0, t.manager.findViewByPosition(0)!!.top)
+
+            t.resize(SHORT)
+
+            // Sticky to the composer: the last row's bottom sits on it, so the
+            // chat moved up by exactly the 386 it no longer fits by. (Row 0 is
+            // now fully off screen and may be recycled, so row 1 is measured.)
+            assertEquals(SHORT - PADDING, t.lastBottom())
+            assertEquals(ROW - 386, t.manager.findViewByPosition(1)!!.top)
+
+            t.resize(TALL)
+
+            // Coming back down with the composer returns it to where it began.
+            assertEquals(0, t.manager.findViewByPosition(0)!!.top)
+            assertEquals(5 * ROW, t.lastBottom())
+        }
+
     private class Harness(
         val transcript: ChatTranscriptRecyclerView,
         val manager: LinearLayoutManager,
