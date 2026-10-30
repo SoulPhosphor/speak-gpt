@@ -33,6 +33,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
     private var resizeAnchorTopFromBottom = 0
     private var resizeAnchorPending = false
     private var resizeAnchorAtEnd = false
+    private var resizeAnchorHeight = 0
 
     /** Capture the bottommost visible row while this view still has its old height. */
     fun captureResizeAnchor() {
@@ -48,6 +49,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         // row's bottom stays on the composer's top edge, not just the row's top.
         resizeAnchorAtEnd = position == (adapter?.itemCount ?: 0) - 1 &&
             anchor.bottom <= height - paddingBottom + END_TOLERANCE_PX
+        resizeAnchorHeight = anchor.height
         resizeAnchorPending = true
     }
 
@@ -103,18 +105,26 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         // position here makes the new layout consume the exact bottom-relative
         // anchor immediately; there is no later runnable for another IME frame
         // to overtake or overwrite.
-        manager.scrollToPositionWithOffset(
-            position,
-            h + resizeAnchorTopFromBottom
-        )
-        if (resizeAnchorAtEnd) pinEndAfterLayout(manager, position)
+        if (!resizeAnchorAtEnd) {
+            manager.scrollToPositionWithOffset(
+                position,
+                h + resizeAnchorTopFromBottom
+            )
+            return
+        }
+        // At the end, the offset is taken from the last row's own height so
+        // the new layout already puts its bottom on the viewport end.
+        manager.scrollToPositionWithOffset(position, h - paddingBottom - resizeAnchorHeight)
+        pinEndAfterLayout(manager, position)
     }
 
     /**
-     * Completes the end hold inside the same layout pass that consumes the
-     * offset above, aligning the last row's bottom with the new viewport end.
-     * The correction runs from this view's own layout callback, not a posted
-     * runnable, so no IME frame or composer change can land in between.
+     * Checks the end hold once, right after this view lays out at its new
+     * height and before that frame is drawn. It scrolls only if the last row
+     * came out a different height than it had when the anchor was captured;
+     * otherwise the offset above was already exact and nothing moves. It is a
+     * layout callback, not a posted runnable, so no IME frame or composer
+     * change can land in between, and it removes itself after one check.
      */
     private fun pinEndAfterLayout(manager: LinearLayoutManager, last: Int) {
         addOnLayoutChangeListener(object : View.OnLayoutChangeListener {

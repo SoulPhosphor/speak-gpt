@@ -34,86 +34,156 @@ import org.robolectric.annotation.LooperMode
 class ChatTranscriptResizeAnchorTest {
 
     @Test
-    fun shrinkingAtTheEndKeepsTheLastRowAgainstTheComposer() = withTranscript { transcript, manager ->
-        layout(transcript, TALL)
-        manager.scrollToPositionWithOffset(LAST, TALL - PADDING - ROW)
-        layout(transcript, TALL)
-        assertEquals(TALL - PADDING, manager.findViewByPosition(LAST)!!.bottom)
+    fun shrinkingAtTheEndKeepsTheLastRowAgainstTheComposer() = withTranscript { t ->
+        t.showEnd(TALL)
 
-        transcript.captureResizeAnchor()
-        layout(transcript, SHORT)
+        t.resize(SHORT)
 
-        assertEquals(SHORT - PADDING, manager.findViewByPosition(LAST)!!.bottom)
+        assertEquals(SHORT - PADDING, t.lastBottom())
     }
 
     @Test
-    fun growingAtTheEndKeepsTheLastRowAgainstTheComposer() = withTranscript { transcript, manager ->
-        layout(transcript, SHORT)
-        manager.scrollToPositionWithOffset(LAST, SHORT - PADDING - ROW)
-        layout(transcript, SHORT)
+    fun growingAtTheEndKeepsTheLastRowAgainstTheComposer() = withTranscript { t ->
+        t.showEnd(SHORT)
 
-        transcript.captureResizeAnchor()
-        layout(transcript, TALL)
+        t.resize(TALL)
 
-        assertEquals(TALL - PADDING, manager.findViewByPosition(LAST)!!.bottom)
+        assertEquals(TALL - PADDING, t.lastBottom())
     }
 
     @Test
-    fun shrinkingMidChatKeepsTheSameRowTheSameDistanceFromTheComposer() =
-        withTranscript { transcript, manager ->
-            layout(transcript, TALL)
-            manager.scrollToPositionWithOffset(10, 0)
-            layout(transcript, TALL)
-            val anchorPosition = manager.findLastVisibleItemPosition()
-            val distanceFromBottom = manager.findViewByPosition(anchorPosition)!!.top - TALL
+    fun aKeyboardArrivingOverSeveralFramesHoldsTheEndOnEveryFrame() = withTranscript { t ->
+        t.showEnd(TALL)
 
-            transcript.captureResizeAnchor()
-            layout(transcript, SHORT)
+        for (height in listOf(1500, 1320, 1110, 960, SHORT)) {
+            t.resize(height)
+            assertEquals(height - PADDING, t.lastBottom())
+        }
+        for (height in listOf(960, 1250, TALL)) {
+            t.resize(height)
+            assertEquals(height - PADDING, t.lastBottom())
+        }
+    }
 
-            assertEquals(
-                SHORT + distanceFromBottom,
-                manager.findViewByPosition(anchorPosition)!!.top
-            )
+    @Test
+    fun aFinalReplyTallerThanTheScreenKeepsItsEndAgainstTheComposer() =
+        withTranscript(lastRowHeight = 2600) { t ->
+            t.showEnd(TALL)
+
+            t.resize(SHORT)
+
+            assertEquals(SHORT - PADDING, t.lastBottom())
         }
 
-    private fun layout(view: View, height: Int) {
-        view.measure(
-            View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
-        )
-        view.layout(0, 0, WIDTH, height)
+    @Test
+    fun aLastRowThatChangesHeightDuringTheResizeIsStillHeldByItsEnd() = withTranscript { t ->
+        t.showEnd(TALL)
+
+        t.transcript.captureResizeAnchor()
+        t.rows.lastRowHeight = ROW + 120
+        t.rows.notifyItemChanged(LAST)
+        t.layout(SHORT)
+
+        assertEquals(SHORT - PADDING, t.lastBottom())
     }
 
-    private fun withTranscript(test: (ChatTranscriptRecyclerView, LinearLayoutManager) -> Unit) {
+    @Test
+    fun shrinkingMidChatKeepsTheSameRowTheSameDistanceFromTheComposer() = withTranscript { t ->
+        t.layout(TALL)
+        t.manager.scrollToPositionWithOffset(10, 0)
+        t.layout(TALL)
+        val anchorPosition = t.manager.findLastVisibleItemPosition()
+        val distanceFromBottom = t.manager.findViewByPosition(anchorPosition)!!.top - TALL
+
+        t.resize(SHORT)
+
+        assertEquals(
+            SHORT + distanceFromBottom,
+            t.manager.findViewByPosition(anchorPosition)!!.top
+        )
+    }
+
+    @Test
+    fun aShortChatThatStillFitsStaysAtTheTop() = withTranscript(count = 2) { t ->
+        t.layout(TALL)
+        assertEquals(0, t.manager.findViewByPosition(0)!!.top)
+
+        t.resize(SHORT)
+
+        assertEquals(0, t.manager.findViewByPosition(0)!!.top)
+    }
+
+    private class Harness(
+        val transcript: ChatTranscriptRecyclerView,
+        val manager: LinearLayoutManager,
+        val rows: Rows
+    ) {
+        val last get() = rows.itemCount - 1
+
+        fun layout(height: Int) {
+            transcript.measure(
+                View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+            )
+            transcript.layout(0, 0, WIDTH, height)
+        }
+
+        /** Same order as the app: note the anchor at the old size, then resize. */
+        fun resize(height: Int) {
+            transcript.captureResizeAnchor()
+            layout(height)
+        }
+
+        fun showEnd(height: Int) {
+            layout(height)
+            manager.scrollToPositionWithOffset(last, height - PADDING - rows.heightOf(last))
+            layout(height)
+            assertEquals(height - PADDING, lastBottom())
+        }
+
+        fun lastBottom(): Int = manager.findViewByPosition(last)!!.bottom
+    }
+
+    private fun withTranscript(
+        count: Int = COUNT,
+        lastRowHeight: Int = ROW,
+        test: (Harness) -> Unit
+    ) {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         try {
             val activity = controller.get()
             val manager = LinearLayoutManager(activity)
+            val rows = Rows(count, lastRowHeight)
             val transcript = ChatTranscriptRecyclerView(activity).apply {
                 clipToPadding = false
                 setPadding(0, 0, 0, PADDING)
                 layoutManager = manager
                 itemAnimator = null
-                adapter = FixedRows()
+                adapter = rows
             }
             activity.setContentView(FrameLayout(activity).apply { addView(transcript) })
-            test(transcript, manager)
+            test(Harness(transcript, manager, rows))
         } finally {
             controller.pause().stop().destroy()
         }
     }
 
-    private class FixedRows : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private class Rows(
+        private val count: Int,
+        var lastRowHeight: Int
+    ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+        fun heightOf(position: Int): Int = if (position == count - 1) lastRowHeight else ROW
+
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder =
-            object : RecyclerView.ViewHolder(
-                View(parent.context).apply {
-                    layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ROW)
-                }
-            ) {}
+            object : RecyclerView.ViewHolder(View(parent.context)) {}
 
-        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) = Unit
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            holder.itemView.layoutParams =
+                RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, heightOf(position))
+        }
 
-        override fun getItemCount(): Int = COUNT
+        override fun getItemCount(): Int = count
     }
 
     private companion object {
