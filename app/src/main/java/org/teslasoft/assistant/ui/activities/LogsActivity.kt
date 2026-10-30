@@ -56,6 +56,10 @@ class LogsActivity : SettingsPageActivity() {
          *  or empty reply is easy to spot. Stopped, Cancelled and Complete stay
          *  the default color, which keeps them visually distinct from a failure. */
         private val LIFECYCLE_RED_OUTCOME = Regex("(?m)^Outcome: (?:Incomplete|Empty)$")
+
+        private const val STATE_EXPORT_JSON = "export_json"
+        private const val STATE_EXPORT_NEWEST_FIRST = "export_newest_first"
+        private const val STATE_EXPORT_TITLE = "export_title"
     }
 
     /**
@@ -154,7 +158,6 @@ class LogsActivity : SettingsPageActivity() {
      */
     private fun renderLog() {
         val entries = Logger.entriesForDisplay(rawForType(), newestFirst)
-        displayedEntries = entries
         displayedLog = entries.joinToString("\n\n")
         val showCopy = preferences?.getShowLogCopyButtons() ?: true
         logEntries?.removeAllViews()
@@ -206,7 +209,7 @@ class LogsActivity : SettingsPageActivity() {
                 val json = view.findViewById<android.widget.RadioGroup>(R.id.log_export_format)
                     .checkedRadioButtonId == R.id.radio_log_export_json
                 dialog.dismiss()
-                pendingExport = if (json) exportJson() else displayedLog
+                pendingExport = PendingExport(json, newestFirst, title?.toString().orEmpty())
                 exportLauncher.launch(
                     Intent(Intent.ACTION_CREATE_DOCUMENT)
                         .addCategory(Intent.CATEGORY_OPENABLE)
@@ -218,23 +221,42 @@ class LogsActivity : SettingsPageActivity() {
         dialog.show()
     }
 
-    /** The displayed entries, in their current order, as JSON. */
-    private fun exportJson(): String = org.json.JSONObject()
-        .put("log", title?.toString().orEmpty())
-        .put("exported_at", java.time.OffsetDateTime.now().toString())
-        .put("entries", org.json.JSONArray(displayedEntries))
-        .toString(2)
+    /** What Okay chose in the Export Log pop-up. Only the choice is kept —
+     *  not the log text, which may be too large to save with the screen's
+     *  state — so it survives the screen being recreated while the system
+     *  save screen is open; the log is read again from storage when the
+     *  file is written. */
+    private data class PendingExport(val json: Boolean, val newestFirst: Boolean, val title: String)
 
-    private var pendingExport: String? = null
+    private var pendingExport: PendingExport? = null
+
+    private fun exportContent(export: PendingExport): String {
+        val entries = Logger.entriesForDisplay(rawForType(), export.newestFirst)
+        return if (!export.json) entries.joinToString("\n\n") else org.json.JSONObject()
+            .put("log", export.title)
+            .put("exported_at", java.time.OffsetDateTime.now().toString())
+            .put("entries", org.json.JSONArray(entries))
+            .toString(2)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingExport?.let {
+            outState.putBoolean(STATE_EXPORT_JSON, it.json)
+            outState.putBoolean(STATE_EXPORT_NEWEST_FIRST, it.newestFirst)
+            outState.putString(STATE_EXPORT_TITLE, it.title)
+        }
+    }
 
     private val exportLauncher =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-            val content = pendingExport
+            val export = pendingExport
             pendingExport = null
             val uri = result.data?.data
-            if (result.resultCode != RESULT_OK || uri == null || content == null) return@registerForActivityResult
+            if (result.resultCode != RESULT_OK || uri == null || export == null) return@registerForActivityResult
             Thread {
                 val saved = try {
+                    val content = exportContent(export)
                     contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) } != null
                 } catch (_: Exception) {
                     false
@@ -259,7 +281,6 @@ class LogsActivity : SettingsPageActivity() {
     private var switchNewestFirst: MaterialSwitch? = null
     private var logEntries: android.widget.LinearLayout? = null
     private var displayedLog = ""
-    private var displayedEntries: List<String> = emptyList()
     private var logType = ""
     private var newestFirst = true
     private var root: ConstraintLayout? = null
@@ -270,6 +291,17 @@ class LogsActivity : SettingsPageActivity() {
         ThemeManager.getThemeManager().applyPalette(this)
 
         setContentView(R.layout.activity_logs)
+
+        // Read before any result is delivered, so an export finished after
+        // the screen was recreated writes the right log.
+        logType = intent.extras?.getString("type").toString()
+        if (savedInstanceState?.containsKey(STATE_EXPORT_JSON) == true) {
+            pendingExport = PendingExport(
+                savedInstanceState.getBoolean(STATE_EXPORT_JSON),
+                savedInstanceState.getBoolean(STATE_EXPORT_NEWEST_FIRST, true),
+                savedInstanceState.getString(STATE_EXPORT_TITLE).orEmpty()
+            )
+        }
 
         btnClearLog = findViewById(R.id.btn_clear_log)
         btnCopyLog = findViewById(R.id.btn_copy_log)

@@ -38,4 +38,13 @@ class LogCopyButtonContractTest {
         val logs = source("src/main/java/org/teslasoft/assistant/ui/activities/LogsActivity.kt")
         assertTrue(logs.contains("preferences?.getShowLogCopyButtons()"))
     }
+
+    @Test
+    fun exportChoiceSurvivesRecreationAndRereadsTheLog() {
+        val logs = source("src/main/java/org/teslasoft/assistant/ui/activities/LogsActivity.kt")
+        assertTrue(logs.contains("override fun onSaveInstanceState(outState: Bundle)"))
+        assertTrue(logs.contains("outState.putBoolean(STATE_EXPORT_JSON, it.json)"))
+        assertTrue(logs.contains("savedInstanceState?.containsKey(STATE_EXPORT_JSON) == true"))
+        assertTrue(logs.contains("Logger.entriesForDisplay(rawForType(), export.newestFirst)"))
+    }
 }
