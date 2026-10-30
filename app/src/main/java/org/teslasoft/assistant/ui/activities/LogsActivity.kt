@@ -145,19 +145,40 @@ class LogsActivity : SettingsPageActivity() {
     }
 
     /**
-     * Render the current log into the view: order it (newest or oldest first)
-     * and space its entries through [Logger.formatForDisplay], then apply the
-     * per-log color pass (Error Log health headers, Response Lifecycle failed
-     * outcomes). One path used by the initial load, the ordering toggle, and
-     * clearing, so all three stay consistent.
+     * Render the current log into the view: split and order its entries
+     * (newest or oldest first) through [Logger.entriesForDisplay], then give
+     * each entry its own view with the per-log color pass (Error Log health
+     * headers, Response Lifecycle failed outcomes) and, while Show Copy Button
+     * on Logs is on, a Copy for that entry. One path used by the initial load,
+     * the ordering toggle, and clearing, so all three stay consistent.
      */
     private fun renderLog() {
-        val ordered = Logger.formatForDisplay(rawForType(), newestFirst)
-        textLog?.text = when (logType) {
-            "crash" -> renderErrorLog(ordered)
-            "response_lifecycle" -> renderLifecycleLog(ordered)
-            else -> ordered
+        val entries = Logger.entriesForDisplay(rawForType(), newestFirst)
+        displayedLog = entries.joinToString("\n\n")
+        val showCopy = preferences?.getShowLogCopyButtons() ?: true
+        logEntries?.removeAllViews()
+        for (entry in entries) {
+            val row = layoutInflater.inflate(R.layout.view_log_entry, logEntries, false)
+            row.findViewById<TextView>(R.id.log_entry_text).text = when (logType) {
+                "crash" -> renderErrorLog(entry)
+                "response_lifecycle" -> renderLifecycleLog(entry)
+                else -> entry
+            }
+            row.findViewById<MaterialButton>(R.id.btn_log_entry_copy).apply {
+                visibility = if (showCopy) android.view.View.VISIBLE else android.view.View.GONE
+                setOnClickListener { copyToClipboard(entry) }
+            }
+            logEntries?.addView(row)
         }
+    }
+
+    private fun copyToClipboard(content: String) {
+        // Copy to the clipboard so the user can paste the log to a developer
+        // or coding bot before clearing it. Local-only — the stored log
+        // already excludes secrets (see ERROR_CODES.md).
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(this.title ?: "log", content))
+        Toast.makeText(this, R.string.label_log_copied, Toast.LENGTH_SHORT).show()
     }
 
     private var btnClearLog: MaterialButton? = null
@@ -168,7 +189,8 @@ class LogsActivity : SettingsPageActivity() {
     private var activityLogsTitle: TextView? = null
     private var activityLogsTitleCentered: TextView? = null
     private var switchNewestFirst: MaterialSwitch? = null
-    private var textLog: TextView? = null
+    private var logEntries: android.widget.LinearLayout? = null
+    private var displayedLog = ""
     private var logType = ""
     private var newestFirst = true
     private var root: ConstraintLayout? = null
@@ -188,7 +210,7 @@ class LogsActivity : SettingsPageActivity() {
         activityLogsTitle = findViewById(R.id.activity_logs_title)
         activityLogsTitleCentered = findViewById(R.id.activity_logs_title_centered)
         switchNewestFirst = findViewById(R.id.switch_newest_first)
-        textLog = findViewById(R.id.text_log)
+        logEntries = findViewById(R.id.log_entries)
         root = findViewById(R.id.root)
 
         Thread {
@@ -276,16 +298,10 @@ class LogsActivity : SettingsPageActivity() {
                 }
 
                 btnCopyLog?.setOnClickListener {
-                    val content = textLog?.text?.toString().orEmpty()
-                    if (content.isBlank()) {
+                    if (displayedLog.isBlank()) {
                         Toast.makeText(this, R.string.label_log_empty, Toast.LENGTH_SHORT).show()
                     } else {
-                        // Copy to the clipboard so the user can paste the log to a
-                        // developer or coding bot before clearing it. Local-only —
-                        // the stored log already excludes secrets (see ERROR_CODES.md).
-                        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText(this.title ?: "log", content))
-                        Toast.makeText(this, R.string.label_log_copied, Toast.LENGTH_SHORT).show()
+                        copyToClipboard(displayedLog)
                     }
                 }
 

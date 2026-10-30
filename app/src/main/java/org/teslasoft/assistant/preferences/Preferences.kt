@@ -592,6 +592,14 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_list_separate_folders", state, false)
     }
 
+    /** Per-entry Copy buttons in the log viewer; on by default. */
+    fun getShowLogCopyButtons(): Boolean =
+        getGlobalBoolean("logs_show_copy_buttons", true)
+
+    fun setShowLogCopyButtons(state: Boolean) {
+        putGlobalBoolean("logs_show_copy_buttons", state, true)
+    }
+
     fun getShowCompanionImagesInChatList(): Boolean =
         getGlobalBoolean("chat_list_companion_images", false)
 

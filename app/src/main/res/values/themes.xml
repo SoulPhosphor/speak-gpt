@@ -161,6 +161,13 @@
         <item name="android:layout_gravity">center_horizontal</item>
     </style>
 
+    <!-- Label-sized primary button on the end (right) side of its line, for
+         vertical (LinearLayout) hosts, such as the per-entry Copy under each
+         log entry. ConstraintLayout hosts anchor it with an end constraint. -->
+    <style name="AppButton.Primary.Inline.End" parent="AppButton.Primary.Inline">
+        <item name="android:layout_gravity">end</item>
+    </style>
+
     <!-- The outlined counterpart of AppButton.Primary.Inline, for a
          wrap_content pair where one action commits and the other backs out
          (Cancel + Save on the include Edit dialog). Same width rule, same

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One entry in the log viewer (activity_logs.xml): the entry's text, then a
+  right-aligned Copy for that entry alone, shown while Show Copy Button on
+  Logs (App Appearance) is on. Built by LogsActivity.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="16dp"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/log_entry_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textIsSelectable="true" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_log_entry_copy"
+        style="@style/AppButton.Primary.Inline.End"
+        android:layout_marginTop="8dp"
+        android:text="@string/btn_copy" />
+</LinearLayout>

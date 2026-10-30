@@ -68,6 +68,8 @@
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_chat_list_start_date" style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
+            <TextView style="@style/Widget.App.Section.Title"
+                android:text="@string/folder_options_title" />
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/chat_list_lock_folders" />
@@ -82,6 +84,15 @@
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_chat_list_separate_folders" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <TextView style="@style/Widget.App.Section.Title"
+                android:text="@string/other_appearance_options_title" />
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/logs_show_copy_buttons" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_logs_show_copy_buttons" style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
