@@ -76,6 +76,19 @@ class ChatListIndexWiringContractTest {
         assertTrue(prepared < rebase.indexOf("return RebaseResult(searchOk, catalogOk)"))
     }
 
+    @Test fun aFailedRestoreRebuildDiscardsEveryOutdatedDetail() {
+        val restored = body(source("preferences/chatnavigation/ChatListIndex.kt"), "fun prepareRestored(")
+        assertTrue(restored.contains("if (rebuilt.isFailure)"))
+        assertTrue(restored.contains("discardAll(context)"))
+    }
+
+    @Test fun aChangedCompanionPictureRedrawsItsRows() {
+        val lookup = body(source("ui/drawer/FlatChatIdentityBinder.kt"), "fun prepare(companionIds")
+        assertTrue(lookup.contains("if (before != null && before != now) changed.add(id)"))
+        val adapter = body(source("ui/drawer/DrawerHierarchyAdapter.kt"), "fun prepareCompanionImages(")
+        assertTrue(adapter.contains("notifyItemChanged(position)"))
+    }
+
     @Test fun existingChatsArePreparedAfterAnUpdateAndAtStart() {
         val manifest = file("AndroidManifest.xml")
         assertTrue(manifest.contains(".preferences.chatnavigation.AppUpdatedReceiver"))

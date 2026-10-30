@@ -119,6 +119,29 @@ class ChatListIndexTest {
         assertNull(table.rows["chat-1"])
     }
 
+    @Test fun `a restore interrupted while rebuilding leaves no outdated details`() {
+        chats(3)
+        core().prepareAll()
+        // The restore replaced chat-2; the database write then fails mid-rebuild.
+        source.chats["chat-2"] = Chat(bookmarked = true)
+        var failWrites = true
+        val failing = object : ChatListIndex.Table by table {
+            override fun write(entries: Map<String, Entry>) {
+                if (failWrites) throw IllegalStateException("disk busy") else table.write(entries)
+            }
+        }
+        val interrupted = ChatListIndex.Core(failing, source)
+        try { interrupted.replace(listOf("chat-2")) } catch (_: IllegalStateException) { }
+        // The old details are gone rather than outdated, in memory and on disk.
+        assertNull(interrupted.entryFor("chat-2"))
+        assertNull(table.rows["chat-2"])
+        // The next list load prepares it from the restored data.
+        failWrites = false
+        val restarted = core()
+        assertTrue(restarted.ensureReady(source.chats.keys))
+        assertTrue(restarted.entryFor("chat-2")!!.hasBookmarks)
+    }
+
     @Test fun `bookmarks turn the indicator on and off`() {
         chats(1)
         val index = core()

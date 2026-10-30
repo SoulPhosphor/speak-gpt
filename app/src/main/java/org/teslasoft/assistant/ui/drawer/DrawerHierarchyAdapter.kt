@@ -62,10 +62,18 @@ class DrawerHierarchyAdapter(
     )
     private var renderedDisplayOptions = displayOptions()
 
-    /** Worker thread. Looks up the companion pictures [chats] will show. */
+    /** Worker thread. Looks up the companion pictures [chats] will show and
+     *  redraws rows whose companion's picture changed. */
     fun prepareCompanionImages(chats: Collection<org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationItem>) {
-        if (displayPreferences.getShowCompanionImagesInChatList()) {
-            companionImages.prepare(chats.mapNotNull { it.listIndex?.companionId })
+        if (!displayPreferences.getShowCompanionImagesInChatList()) return
+        val changed = companionImages.prepare(chats.mapNotNull { it.listIndex?.companionId })
+        if (changed.isEmpty()) return
+        activity.runOnUiThread {
+            dispatchUpdate {
+                if (!disposed) currentList.forEachIndexed { position, row ->
+                    if (row is DrawerRow.Chat && row.value.listIndex?.companionId in changed) notifyItemChanged(position)
+                }
+            }
         }
     }
 

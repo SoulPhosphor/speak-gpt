@@ -108,9 +108,16 @@ class FlatChatIdentityBinder(
 class CompanionImageLookup(private val activity: FragmentActivity) {
     private val files = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<File>>()
 
-    /** Worker thread. Looks up (again) the pictures of [companionIds]. */
-    fun prepare(companionIds: Collection<String>) {
-        companionIds.toSet().forEach { files[it] = java.util.Optional.ofNullable(resolve(it)) }
+    /** Worker thread. Looks up (again) the pictures of [companionIds] and
+     *  returns the companions whose picture changed since it was last shown. */
+    fun prepare(companionIds: Collection<String>): Set<String> {
+        val changed = HashSet<String>()
+        companionIds.toSet().forEach { id ->
+            val now = java.util.Optional.ofNullable(resolve(id))
+            val before = files.put(id, now)
+            if (before != null && before != now) changed.add(id)
+        }
+        return changed
     }
 
     fun imageFor(companionId: String): File? =

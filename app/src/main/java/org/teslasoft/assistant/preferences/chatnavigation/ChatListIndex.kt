@@ -142,17 +142,20 @@ object ChatListIndex {
             }
         }
 
-        /** Rebuilds the entries of [chatIds] from their current data (a restore). */
+        /**
+         * Rebuilds the entries of [chatIds] from their current data (a restore).
+         * Their old entries are removed first, so an interruption leaves them
+         * missing, and prepared again before any list shows them, never outdated.
+         */
         fun replace(chatIds: Collection<String>): Boolean = synchronized(lock) {
             ensureLoaded()
-            chatIds.forEach { unreadable.remove(it) }
-            val prepared = prepareLocked(chatIds.toList(), retryUnreadable = true)
-            val failed = chatIds.filter { it in unreadable && entries.containsKey(it) }
-            if (failed.isNotEmpty()) {
-                table.delete(failed)
-                failed.forEach { entries.remove(it) }
+            val known = chatIds.filter { entries.containsKey(it) }
+            if (known.isNotEmpty()) {
+                table.delete(known)
+                known.forEach { entries.remove(it) }
             }
-            prepared || failed.isNotEmpty()
+            chatIds.forEach { unreadable.remove(it) }
+            prepareLocked(chatIds.toList(), retryUnreadable = true) || known.isNotEmpty()
         }
 
         /** Applies a change to one chat. Returns true when its entry changed. */
@@ -204,6 +207,7 @@ object ChatListIndex {
     /* ------------------------- the app's instance ------------------------- */
 
     @Volatile private var core: Core? = null
+    @Volatile private var table: DatabaseTable? = null
     private val worker = Executors.newSingleThreadExecutor {
         Thread(it, "chat-list-details").apply { priority = Thread.MIN_PRIORITY }
     }
@@ -213,8 +217,18 @@ object ChatListIndex {
     private val main by lazy { Handler(Looper.getMainLooper()) }
 
     private fun core(context: Context): Core = core ?: synchronized(this) {
-        core ?: Core(DatabaseTable(context.applicationContext), ChatSource(context.applicationContext))
-            .also { core = it }
+        core ?: run {
+            val created = DatabaseTable(context.applicationContext).also { table = it }
+            Core(created, ChatSource(context.applicationContext)).also { core = it }
+        }
+    }
+
+    /** Throws the whole database away; every chat is prepared again before a list shows it. */
+    private fun discardAll(context: Context) = synchronized(this) {
+        val current = table ?: DatabaseTable(context.applicationContext)
+        runCatching { current.discard() }
+        table = null
+        core = null
     }
 
     /** Called on the main thread after entries change. */
@@ -248,11 +262,18 @@ object ChatListIndex {
     /** Called by a restore, on its own thread, before it reports success:
      *  every restored chat's entry is rebuilt from the restored data. */
     fun prepareRestored(context: Context, restoredChatIds: Collection<String>) {
-        val changed = runCatching {
+        val rebuilt = runCatching {
             val target = core(context)
-            target.replace(restoredChatIds) or target.prepareAll()
-        }.getOrDefault(false)
-        if (changed) notifyChanged()
+            target.replace(restoredChatIds)
+            target.prepareAll()
+        }
+        // If the restored chats' details could not be rebuilt, no outdated
+        // details may survive: discard everything and prepare it again.
+        if (rebuilt.isFailure) {
+            discardAll(context)
+            runCatching { core(context).prepareAll() }
+        }
+        notifyChanged()
     }
 
     /** The chat's history or recorded usage changed. */
@@ -405,6 +426,9 @@ object ChatListIndex {
                 db.endTransaction()
             }
         }
+
+        @Synchronized
+        fun discard() = discardFiles()
 
         private fun discardFiles() {
             runCatching { helper?.close() }
