@@ -138,6 +138,13 @@ decisions independently while preserving the approved user experience.
 A fix is not complete merely because the code works or tests pass. It must
 also preserve the expected user experience.
 
+### The user experience outranks ease of implementation (owner ruling, October 30 2026)
+
+When choosing between approaches, pick the one that gives the best experience
+for the user, even when another is quicker or simpler to code. Never recommend
+an approach because it is easier to build when a better one exists. When
+presenting options, say plainly which one gives the better experience.
+
 ### Discussion is not approval
 
 Exploring an idea, asking a question, expressing a preference, or saying "maybe" does not automatically authorize implementation.
