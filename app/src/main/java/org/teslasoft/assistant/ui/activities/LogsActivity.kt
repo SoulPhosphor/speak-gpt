@@ -21,7 +21,9 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -35,6 +37,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.ScreenChrome
 
 class LogsActivity : SettingsPageActivity() {
 
@@ -310,19 +313,29 @@ class LogsActivity : SettingsPageActivity() {
                 btnBack?.backgroundTintList = tint
                 btnVoiceAdvanced?.backgroundTintList = tint
             } else {
-                window.setBackgroundDrawableResource(R.color.window_background)
                 root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
-                actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-                val tint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
-                btnBack?.backgroundTintList = tint
-                btnVoiceAdvanced?.backgroundTintList = tint
+                ScreenChrome.apply(this, actionBar, btnBack, btnVoiceAdvanced)
             }
         } catch (_: Exception) {
-            window.setBackgroundDrawableResource(R.color.window_background)
             root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
-            val tint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
-            btnBack?.backgroundTintList = tint
+            ScreenChrome.apply(this, actionBar, btnBack, btnVoiceAdvanced)
         }
+    }
+
+    /** Edge-to-edge (API 35+): the header extends under the status bar and
+     *  the bottom actions clear the navigation bar, as on the other settings
+     *  screens. */
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (Build.VERSION.SDK_INT < 35) return
+        try {
+            val insets = window.decorView.rootWindowInsets
+            actionBar?.setPadding(0, insets.getInsets(WindowInsets.Type.statusBars()).top, 0, 0)
+            val params = btnClearLog?.layoutParams as? ConstraintLayout.LayoutParams ?: return
+            params.bottomMargin = (24 * resources.displayMetrics.density).toInt() +
+                insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+            btnClearLog?.layoutParams = params
+        } catch (_: Exception) { /* Window insets are not available yet. */ }
     }
 
     private fun isDarkThemeEnabled(): Boolean {
