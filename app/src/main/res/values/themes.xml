@@ -2624,6 +2624,14 @@
         <item name="buttonBarNegativeButtonStyle">@style/App.NegativeButtonStyle</item>
         <item name="buttonBarPositiveButtonStyle">@style/App.PositiveButtonStyle</item>
         <item name="materialAlertDialogTitleTextStyle">@style/App.MaterialAlertDialog.Title</item>
+        <item name="materialAlertDialogTitlePanelStyle">@style/App.MaterialAlertDialog.TitlePanel</item>
+    </style>
+
+    <!-- The title text is only as wide as its words, so centering the text
+         alone left titles at the start edge; the panel holding it centers it
+         too (owner ruling: every pop-up title is centered). -->
+    <style name="App.MaterialAlertDialog.TitlePanel" parent="MaterialAlertDialog.Material3.Title.Panel">
+        <item name="android:gravity">center</item>
     </style>
 
 

@@ -35,6 +35,14 @@ class SummarizerErrorsDialogContractTest {
     }
 
     @Test
+    fun popUpTitlesAreCenteredByTheirPanel() {
+        val themes = source("src/main/res/values/themes.xml")
+        assertTrue(themes.contains("<item name=\"materialAlertDialogTitlePanelStyle\">@style/App.MaterialAlertDialog.TitlePanel</item>"))
+        val panel = themes.substring(themes.indexOf("<style name=\"App.MaterialAlertDialog.TitlePanel\""))
+        assertTrue(panel.substring(0, panel.indexOf("</style>")).contains("<item name=\"android:gravity\">center</item>"))
+    }
+
+    @Test
     fun entriesCarryNoButtonsOfTheirOwn() {
         val entry = source("src/main/res/layout/view_summarizer_error_entry.xml")
         assertFalse(entry.contains("MaterialButton"))

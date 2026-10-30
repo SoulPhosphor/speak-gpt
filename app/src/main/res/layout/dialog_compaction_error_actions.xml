@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Compaction error pop-up actions (owner ruling, Oct 30 2026), beneath the
+  dialog's message: one row of Retry, Copy and Okay, with Okay dropping to
+  the next line, right-aligned, only when the row does not fit (the same
+  wrapping row as the Summarizer Errors pop-up); then Summarizer Settings
+  centered beneath it.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="16dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <androidx.constraintlayout.helper.widget.Flow
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:constraint_referenced_ids="btn_compaction_error_retry,btn_compaction_error_copy,btn_compaction_error_okay"
+            app:flow_firstHorizontalBias="0"
+            app:flow_horizontalBias="0"
+            app:flow_horizontalGap="12dp"
+            app:flow_horizontalStyle="packed"
+            app:flow_lastHorizontalBias="1"
+            app:flow_verticalGap="8dp"
+            app:flow_wrapMode="chain"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_compaction_error_retry"
+            style="@style/AppButton.Primary.Inline"
+            android:text="@string/btn_msg_retry" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_compaction_error_copy"
+            style="@style/AppButton.Primary.Inline"
+            android:text="@string/btn_copy" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_compaction_error_okay"
+            style="@style/AppButton.Destructive.Inline"
+            android:text="@string/okay" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_compaction_error_settings"
+        style="@style/AppButton.Primary.Inline.Centered"
+        android:layout_marginTop="8dp"
+        android:text="@string/title_summarizer_settings" />
+</LinearLayout>

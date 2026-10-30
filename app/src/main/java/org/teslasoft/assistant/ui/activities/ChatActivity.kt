@@ -5732,18 +5732,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 append(getString(R.string.compaction_err_provider, it))
             }
         }
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+        // Retry / Copy / Okay on one row, Summarizer Settings centered beneath
+        // (owner ruling, Oct 30 2026). Copy takes the whole pop-up's text.
+        val actions = layoutInflater.inflate(R.layout.dialog_compaction_error_actions, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(title)
             .setMessage(message)
+            .setView(actions)
             .setCancelable(false)
-            .setNeutralButton(R.string.title_summarizer_settings) { _, _ ->
-                startActivity(Intent(this, SummarizerSettingsActivity::class.java))
-            }
-            .setNegativeButton(R.string.btn_msg_retry) { _, _ ->
-                lastCompactionRequest?.let { startManualCompactionConfirmed(it, lastCompactionFromScratch) }
-            }
-            .setPositiveButton(R.string.okay, null)
-            .show()
+            .create()
+        actions.findViewById<View>(R.id.btn_compaction_error_retry).setOnClickListener {
+            dialog.dismiss()
+            lastCompactionRequest?.let { startManualCompactionConfirmed(it, lastCompactionFromScratch) }
+        }
+        actions.findViewById<View>(R.id.btn_compaction_error_copy).setOnClickListener {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText(getString(title), getString(title) + "\n\n" + message))
+        }
+        actions.findViewById<View>(R.id.btn_compaction_error_okay).setOnClickListener { dialog.dismiss() }
+        actions.findViewById<View>(R.id.btn_compaction_error_settings).setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, SummarizerSettingsActivity::class.java))
+        }
+        dialog.show()
     }
 
     /**
