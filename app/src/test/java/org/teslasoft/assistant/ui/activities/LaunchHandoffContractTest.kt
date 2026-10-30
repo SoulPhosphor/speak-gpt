@@ -34,17 +34,26 @@ class LaunchHandoffContractTest {
     }
 
     @Test
-    fun launchChatShowsItsSurfaceAndSkipsTheLoadingSpinner() {
+    fun chatShowsItsSurfaceBeforeStorageWorkAndLaunchSkipsTheLoadingSpinner() {
         val chat = source("src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+        val manifest = source("src/main/AndroidManifest.xml")
+        val themes = source("src/main/res/values/themes.xml")
         val onCreate = chat.substring(chat.indexOf("override fun onCreate"))
-        val surface = onCreate.indexOf("R.drawable.expandable_window_background_24")
+        val shell = onCreate.indexOf("initializeChatShell()")
         val worker = onCreate.indexOf("Thread {")
-        assertTrue(surface in 0 until worker)
+        assertTrue(shell in 0 until worker)
+        val initializeShell = chat.substringAfter("private fun initializeChatShell()")
+            .substringBefore("private fun prepareChatStartup()")
+        assertTrue(initializeShell.indexOf("R.drawable.expandable_window_background_24") <
+            initializeShell.indexOf("setContentView(R.layout.activity_chat)"))
+        assertTrue(initializeShell.contains("drawerController?.revealChat()"))
+        assertTrue(manifest.contains("android:theme=\"@style/Theme.Chat\""))
+        val chatTheme = themes.substringAfter("<style name=\"Theme.Chat\"")
+            .substringBefore("</style>")
+        assertTrue(chatTheme.contains("<item name=\"android:windowIsTranslucent\">false</item>"))
         assertTrue(chat.contains(
             "threadLoader?.visibility = if (openedAtLaunch()) View.GONE else View.VISIBLE"
         ))
         assertTrue(chat.contains("if (threadLoader?.visibility == View.VISIBLE) Handler("))
-        val content = chat.indexOf("setContentView(R.layout.activity_chat)")
-        assertTrue(chat.indexOf("window.setBackgroundDrawableResource(R.color.shadow)", content) > content)
     }
 }

@@ -2524,6 +2524,14 @@
         <item name="android:fontFamily">@font/default_font</item>
     </style>
 
+    <!-- Chat is a full-screen surface. Keeping its window opaque prevents the
+         launcher behind the task from appearing before the selected chat's
+         first frame; Settings and permission screens retain Theme.Transparent. -->
+    <style name="Theme.Chat" parent="@style/Theme.Transparent">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowIsTranslucent">false</item>
+    </style>
+
     <style name="Theme.Anim.Fade.Material" parent="@style/Theme.AppCompat">
         <item name="android:windowEnterAnimation">@anim/fade_in</item>
         <item name="android:windowExitAnimation">@anim/fade_out</item>

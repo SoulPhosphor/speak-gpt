@@ -2647,12 +2647,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
 
-        // At app start nothing sits behind this translucent window but the home
-        // screen, which the theme's dimmed window background would darken while
-        // the chat loads. Show the chat surface instead until the layout exists.
-        if (openedAtLaunch()) {
-            window.setBackgroundDrawableResource(R.drawable.expandable_window_background_24)
-        }
+        // Put the selected chat's screen under the drawer before encrypted
+        // storage work begins. The drawer can pull back at once, and the
+        // Activity never exposes the phone's home screen while the conversation
+        // is being prepared on the worker below.
+        initializeChatShell()
 
         Thread {
             // Round 4 ordering is load-bearing: resolve the storage lock before
@@ -2682,6 +2681,46 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 initializeChatUi(startupResult.preparedChat!!, savedInstanceState)
             }
         }.start()
+    }
+
+    /**
+     * Draws the selected conversation immediately, before its encrypted data
+     * is ready. The existing thread loader owns the message area until
+     * [initializeChatUi] binds the prepared conversation.
+     */
+    private fun initializeChatShell() {
+        val extras = intent.extras
+        chatId = extras?.getString("chatId", "") ?: ""
+        chatName = extras?.getString("name", "") ?: ""
+        title = chatName
+
+        // Match the window to the chat surface before its first traversal.
+        window.setBackgroundDrawableResource(R.drawable.expandable_window_background_24)
+        setContentView(R.layout.activity_chat)
+
+        drawerController = ChatDrawerController.install(
+            this,
+            findViewById(R.id.expandable_window_root)
+        ) { chatId }
+
+        threadLoader = findViewById(R.id.thread_loader)
+        // The blank chat opened at app start has nothing to load behind the
+        // overlay, so it appears directly instead of flashing the spinner.
+        threadLoader?.visibility = if (openedAtLaunch()) View.GONE else View.VISIBLE
+
+        findViewById<TextView>(R.id.chat_activity_title)?.text =
+            if (chatName.trim().contains("_autoname_")) {
+                getString(R.string.label_untitled_chat)
+            } else {
+                chatName
+            }
+
+        // The selected chat already exists underneath; start revealing it on
+        // the first frame instead of waiting for its storage work to finish.
+        if (intent.getBooleanExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER, false)) {
+            intent.removeExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER)
+            drawerController?.revealChat()
+        }
     }
 
     /**
@@ -2780,7 +2819,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
     }
 
-    /** Build the chat screen only after its encrypted startup data is ready. */
+    /** Bind the prepared encrypted data into the chat screen already on display. */
     private fun initializeChatUi(prepared: PreparedChatStartup, savedInstanceState: Bundle?) {
         chatId = prepared.chatId
         // Opening a chat screen starts every Summarizer prompt from its
@@ -2842,18 +2881,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             })
         }
 
-        setContentView(R.layout.activity_chat)
-        if (openedAtLaunch()) window.setBackgroundDrawableResource(R.color.shadow)
-        drawerController = ChatDrawerController.install(
-            this,
-            findViewById(R.id.expandable_window_root)
-        ) { chatId }
-        // A new or saved chat opened from the drawer is revealed as the drawer pulls back.
-        if (intent.getBooleanExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER, false)) {
-            intent.removeExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER)
-            drawerController?.revealChat()
-        }
-
         // Listen for the notification "Hang Up" action. Registered for the life of
         // the activity (not just the foreground window) so it still fires while the
         // chat is backgrounded with the screen off — exactly when the keep-alive
@@ -2874,11 +2901,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Read-only audio output-route observer (Bluetooth / wired headset
         // connect & disconnect). Diagnostics only; it never changes routing.
         registerAudioRouteDiagnostics()
-
-        threadLoader = findViewById(R.id.thread_loader)
-        // The blank chat opened at app start has nothing to load behind the
-        // overlay, so it appears directly instead of flashing the spinner.
-        threadLoader?.visibility = if (openedAtLaunch()) View.GONE else View.VISIBLE
 
         val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
         val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)

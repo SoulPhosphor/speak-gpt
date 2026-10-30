@@ -281,20 +281,20 @@ permission screens**. The permission screens show a system prompt over the
 chat and likely need the see-through window, so the shared style must not
 change.
 
-### Proposed fix (needs owner approval)
+### As built (October 30 2026)
 
-- Give the chat screen its **own opaque window style**, derived from the
-  current one, with the window background taken from the same theme surface
-  color the chat surface uses, and no translucency. Settings and the
-  permission screens are untouched.
-- Remove the launch-only patch, which becomes unnecessary.
-- What the owner will see: while a chat opens, a brief plain screen in the
-  chat's own background color instead of the home screen. The drawer pull-back
-  reveal is unchanged.
-
-Other option: keep the old chat screen until the new one has drawn (do not
-clear the screen stack first). This is more complex, and it does not fix the
-notification path.
+- The chat has its **own opaque window style**, derived from the current
+  theme. Settings and the permission screens still use the translucent theme.
+  Android therefore cannot expose the launcher while a chat is opening.
+- The selected chat's screen, title, existing loading surface and drawer are
+  created before its encrypted history and settings are read. Storage remains
+  off the main thread, but it no longer holds back the first chat frame.
+- A drawer selection opens that selected chat underneath the already-open
+  drawer and starts the normal drawer-close animation on the first frame. It
+  no longer waits for the drawer refresh or conversation read before beginning
+  the pull-back.
+- Once the encrypted conversation is ready, it is bound into that screen. No
+  new loading state, wording or interaction was added.
 
 ---
 

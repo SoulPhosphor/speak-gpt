@@ -144,14 +144,12 @@ class ChatDrawerController private constructor(
 
     fun isOpen(): Boolean = drawer.isDrawerOpen(GravityCompat.START)
 
-    /**
-     * Starts with the drawer already open, matching the screen New Chat was tapped on, then
-     * pulls it back once its list is filled in so the new chat is revealed underneath.
-     */
+    /** Starts with the drawer already open, matching the screen the row was
+     * tapped on, and immediately pulls it back to reveal the selected chat. */
     fun revealChat() {
         drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START)
         drawer.openDrawer(GravityCompat.START, false)
-        refresh { drawer.post { close() } }
+        drawer.post { close() }
     }
 
     fun refresh(onShown: () -> Unit = {}) {
