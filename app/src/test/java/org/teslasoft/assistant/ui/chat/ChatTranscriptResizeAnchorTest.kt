@@ -8,6 +8,7 @@ package org.teslasoft.assistant.ui.chat
 
 import android.app.Activity
 import android.app.Application
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -135,6 +136,25 @@ class ChatTranscriptResizeAnchorTest {
             assertEquals(5 * ROW, t.lastBottom())
         }
 
+    @Test
+    fun aFingerOnTheChatKeepsTheKeyboardFromMovingIt() = withTranscript { t ->
+        t.showEnd(TALL)
+        val rowTop = t.manager.findViewByPosition(LAST - 1)!!.top
+
+        t.touch(MotionEvent.ACTION_DOWN)
+        t.resize(SHORT)
+
+        // Rule 1: nothing automatic moves the conversation under a finger.
+        assertEquals(rowTop, t.manager.findViewByPosition(LAST - 1)!!.top)
+
+        t.touch(MotionEvent.ACTION_UP)
+        t.showEnd(TALL)
+        t.resize(SHORT)
+
+        // Once the finger is lifted the hold works again.
+        assertEquals(SHORT - PADDING, t.lastBottom())
+    }
+
     private class Harness(
         val transcript: ChatTranscriptRecyclerView,
         val manager: LinearLayoutManager,
@@ -164,6 +184,12 @@ class ChatTranscriptResizeAnchorTest {
         }
 
         fun lastBottom(): Int = manager.findViewByPosition(last)!!.bottom
+
+        fun touch(action: Int) {
+            val event = MotionEvent.obtain(0L, 0L, action, WIDTH / 2f, 100f, 0)
+            transcript.dispatchTouchEvent(event)
+            event.recycle()
+        }
     }
 
     private fun withTranscript(

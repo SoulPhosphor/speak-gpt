@@ -9,6 +9,7 @@ package org.teslasoft.assistant.ui.chat
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -35,8 +36,24 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
     private var resizeAnchorAtEnd = false
     private var resizeAnchorHeight = 0
 
+    /** A finger is on the transcript. While it is, no resize moves the
+     *  conversation (chat-keyboard-behavior.md, rule 1). */
+    private var touching = false
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> touching = true
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touching = false
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
     /** Capture the bottommost visible row while this view still has its old height. */
     fun captureResizeAnchor() {
+        if (touching) {
+            resizeAnchorPending = false
+            return
+        }
         if (height <= 0) return
         val manager = layoutManager as? LinearLayoutManager ?: return
         val position = manager.findLastVisibleItemPosition()
@@ -97,6 +114,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         if (h == oldh || !resizeAnchorPending) return
 
         resizeAnchorPending = false
+        if (touching) return
         val position = resizeAnchorPosition
         if (position == NO_POSITION || position >= (adapter?.itemCount ?: 0)) return
         val manager = layoutManager as? LinearLayoutManager ?: return
@@ -140,6 +158,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
                 oldBottom: Int
             ) {
                 removeOnLayoutChangeListener(this)
+                if (touching) return
                 val lastView = manager.findViewByPosition(last) ?: return
                 // Positive pulls a covered bottom back into view; negative is
                 // clamped at the top for a transcript shorter than the viewport.

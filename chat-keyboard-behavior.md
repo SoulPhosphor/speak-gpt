@@ -170,6 +170,7 @@ These cases are intentionally different and must not be collapsed into one
 | User opens or closes keyboard at the very end of the chat | Last message stays right above the composer and moves with it |
 | User opens keyboard on a short chat that still fits | Nothing moves |
 | User opens keyboard on a short chat that no longer fits | Moves up only enough to keep the last message above the composer; comes back down when the keyboard closes |
+| Keyboard or composer changes size while the user's finger is on the conversation | Nothing moves the conversation (rule 1 wins over the hold) |
 | AI reply arrives/grows while keyboard is open | Do not move conversation |
 | User presses Send | Release hold and start automatic follow for the new reply |
 | User touches/scrolls during generation | Stop automatic follow for the rest of that reply |
@@ -252,8 +253,9 @@ Rules 4a and 4b are checked by `ChatTranscriptResizeAnchorTest`. It lays the
 chat out at the old and new heights and checks where the messages land: at the
 end of a chat, during a keyboard that arrives in several steps, with a last
 reply taller than the screen, with a last message that changes height, in the
-middle of a chat, and with short chats that do and do not still fit. It cannot
-simulate a real keyboard or a finger on the screen.
+middle of a chat, with short chats that do and do not still fit, and with a
+finger on the chat while it resizes. It cannot simulate a real keyboard
+animation or a real finger moving on the screen.
 
 Rule 8 has its own guard in the same class:
 `ChatActionSurfaceSourceContractTest` -> `aFinishedTurnDoesNotOpenTheKeyboard`.
