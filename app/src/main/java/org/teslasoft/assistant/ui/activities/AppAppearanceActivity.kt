@@ -68,6 +68,9 @@ class AppAppearanceActivity : SettingsPageActivity() {
         bindSwitch(R.id.switch_logs_show_copy_buttons, preferences.getShowLogCopyButtons()) {
             preferences.setShowLogCopyButtons(it)
         }
+        bindSwitch(R.id.switch_open_last_used_chat, preferences.getOpenLastUsedChatAtLaunch()) {
+            preferences.setOpenLastUsedChatAtLaunch(it)
+        }
     }
 
     private fun bindSwitch(id: Int, checked: Boolean, save: (Boolean) -> Unit) {

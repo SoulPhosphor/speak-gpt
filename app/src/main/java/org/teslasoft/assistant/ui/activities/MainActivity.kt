@@ -49,6 +49,7 @@ class MainActivity : FragmentActivity() {
         data object Welcome : StartupDestination
         data object RestoreRecovery : StartupDestination
         data class BlankChat(val pending: PendingConversationState) : StartupDestination
+        data class LastUsedChat(val chatId: String, val chatName: String) : StartupDestination
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,9 +110,23 @@ class MainActivity : FragmentActivity() {
             endpoints.migrateFromLegacyEndpoint(this)
         }
 
-        return StartupDestination.BlankChat(
-            NewConversationCoordinator(this).createOrRestoreStartupPendingConversation()
-        )
+        // Always run: it also finishes saving a new chat interrupted on an
+        // earlier launch.
+        val pending = NewConversationCoordinator(this).createOrRestoreStartupPendingConversation()
+        return lastUsedChat(preferences) ?: StartupDestination.BlankChat(pending)
+    }
+
+    /** Client Opens With Last Used Chat Open: the last saved chat, when it
+     *  is still in the chat list. A deleted chat, or a chat list that cannot
+     *  be read, opens a new chat as usual. A damaged chat still opens, so
+     *  the chat screen can show what happened to it. */
+    private fun lastUsedChat(preferences: Preferences): StartupDestination.LastUsedChat? {
+        if (!preferences.getOpenLastUsedChatAtLaunch()) return null
+        val chatId = preferences.getLastUsedChatId().takeIf { it.isNotBlank() } ?: return null
+        val list = ChatPreferences.getChatPreferences().getChatListResult(this, includeFirstMessage = false)
+        if (!ChatStorageHealth.isAuthoritative(list.state)) return null
+        val row = list.chats.firstOrNull { ChatPreferences.storedChatId(it) == chatId } ?: return null
+        return StartupDestination.LastUsedChat(chatId, row["name"].orEmpty())
     }
 
     private fun route(destination: StartupDestination) {
@@ -132,13 +147,18 @@ class MainActivity : FragmentActivity() {
                     .setAction(Intent.ACTION_VIEW)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             )
-            is StartupDestination.BlankChat -> {
-                val chatIntent = ChatActivity.rootIntent(
-                    this,
-                    destination.pending.id,
-                    destination.pending.name,
-                    pendingConversation = true
-                ).putExtra(ChatActivity.EXTRA_OPENED_AT_LAUNCH, true)
+            is StartupDestination.BlankChat, is StartupDestination.LastUsedChat -> {
+                val chatIntent = when (destination) {
+                    is StartupDestination.BlankChat -> ChatActivity.rootIntent(
+                        this,
+                        destination.pending.id,
+                        destination.pending.name,
+                        pendingConversation = true
+                    )
+                    is StartupDestination.LastUsedChat ->
+                        ChatActivity.rootIntent(this, destination.chatId, destination.chatName)
+                    else -> return
+                }.putExtra(ChatActivity.EXTRA_OPENED_AT_LAUNCH, true)
                 if (isTaskRoot) {
                     // This gate is the only screen in the task, so finishing it
                     // already leaves the chat alone in it. Clearing the task as
@@ -150,7 +170,7 @@ class MainActivity : FragmentActivity() {
             }
         }
         finish()
-        if (destination is StartupDestination.BlankChat) {
+        if (destination is StartupDestination.BlankChat || destination is StartupDestination.LastUsedChat) {
             @Suppress("DEPRECATION")
             overridePendingTransition(0, 0)
         }

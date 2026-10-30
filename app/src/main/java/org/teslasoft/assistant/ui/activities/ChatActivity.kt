@@ -2799,6 +2799,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pendingConversation = prepared.pendingConversation
         conversationMode = prepared.conversationMode
         title = chatName
+        // Remembered for Client Opens With Last Used Chat Open; a new chat
+        // not yet sent clears it, so launch opens a new chat as usual.
+        preferences?.setLastUsedChatId(if (pendingConversation) "" else chatId)
 
         // Hands-free is a live, per-session control started from the conversation
         // button — never a persisted setting (there is no settings toggle any
@@ -8816,6 +8819,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun finishPendingCommit() {
         pendingConversation = false
+        preferences?.setLastUsedChatId(chatId)
         conversationModeSelector?.visibility = View.GONE
         intent.putExtra("pendingConversation", false)
     }

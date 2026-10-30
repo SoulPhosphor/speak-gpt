@@ -94,6 +94,13 @@
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_logs_show_copy_buttons" style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/open_last_used_chat_at_launch" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_open_last_used_chat" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

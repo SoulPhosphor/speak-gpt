@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Export Log pop-up (owner-approved, Oct 30 2026): shown when Copy All on a
+  log cannot fit the text on the clipboard. TXT (default) or JSON, then
+  Cancel / Okay; Okay opens the system save screen.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        style="@style/Widget.App.Screen.Intro"
+        android:paddingHorizontal="24dp"
+        android:text="@string/log_export_message" />
+
+    <RadioGroup
+        android:id="@+id/log_export_format"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp">
+
+        <RadioButton
+            android:id="@+id/radio_log_export_txt"
+            style="@style/Widget.App.Row.Radio"
+            android:checked="true"
+            android:text="@string/log_export_txt" />
+
+        <RadioButton
+            android:id="@+id/radio_log_export_json"
+            style="@style/Widget.App.Row.Radio"
+            android:text="@string/log_export_json" />
+    </RadioGroup>
+
+    <include layout="@layout/dialog_two_actions_cancel_first" />
+</LinearLayout>

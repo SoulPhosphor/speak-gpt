@@ -382,6 +382,13 @@
     <string name="title_logs">Logs</string>
     <string name="btn_clear_log">Clear log</string>
     <string name="btn_copy_log">Copy All</string>
+    <!-- Export Log pop-up, shown when Copy All is too large for the
+         clipboard (owner-approved, Oct 30 2026). -->
+    <string name="log_export_title">Export Log</string>
+    <string name="log_export_message">The amount of error text exceeds how much the clipboard can hold. Please choose an export method below.</string>
+    <string name="log_export_txt">TXT</string>
+    <string name="log_export_json">JSON</string>
+    <string name="log_export_save_failed">Save Failed</string>
     <string name="logs_newest_first">Newest First</string>
     <string name="label_log_copied">Log copied to clipboard</string>
     <string name="label_error_copied">Error copied to clipboard</string>
@@ -4152,6 +4159,7 @@
     <string name="folder_options_title">Folder Options</string>
     <string name="other_appearance_options_title">Other Appearance Options</string>
     <string name="logs_show_copy_buttons">Show Copy Button on Logs</string>
+    <string name="open_last_used_chat_at_launch">Client Opens With Last Used Chat Open</string>
     <string name="chat_list_lock_folders_hint">Prevents the folder menus from scrolling off screen when navigating through chats.</string>
     <string name="chat_settings_section_appearance">Chat Appearance</string>
     <string name="chat_settings_section_information">Chat Information</string>

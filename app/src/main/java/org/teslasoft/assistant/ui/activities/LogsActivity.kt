@@ -154,6 +154,7 @@ class LogsActivity : SettingsPageActivity() {
      */
     private fun renderLog() {
         val entries = Logger.entriesForDisplay(rawForType(), newestFirst)
+        displayedEntries = entries
         displayedLog = entries.joinToString("\n\n")
         val showCopy = preferences?.getShowLogCopyButtons() ?: true
         logEntries?.removeAllViews()
@@ -172,14 +173,81 @@ class LogsActivity : SettingsPageActivity() {
         }
     }
 
-    private fun copyToClipboard(content: String) {
+    /** Copies [content]; false when the phone refused it (too large for the
+     *  clipboard), with nothing shown. */
+    private fun copyToClipboard(content: String): Boolean {
         // Copy to the clipboard so the user can paste the log to a developer
         // or coding bot before clearing it. Local-only — the stored log
         // already excludes secrets (see ERROR_CODES.md).
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText(this.title ?: "log", content))
+        try {
+            clipboard.setPrimaryClip(ClipData.newPlainText(this.title ?: "log", content))
+        } catch (_: RuntimeException) {
+            return false
+        }
         Toast.makeText(this, R.string.label_log_copied, Toast.LENGTH_SHORT).show()
+        return true
     }
+
+    /** Export Log pop-up: Copy All did not fit on the clipboard. */
+    private fun showExportDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_log_export, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.log_export_title)
+            .setView(view)
+            .create()
+        view.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        view.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.okay)
+            setOnClickListener {
+                val json = view.findViewById<android.widget.RadioGroup>(R.id.log_export_format)
+                    .checkedRadioButtonId == R.id.radio_log_export_json
+                dialog.dismiss()
+                pendingExport = if (json) exportJson() else displayedLog
+                exportLauncher.launch(
+                    Intent(Intent.ACTION_CREATE_DOCUMENT)
+                        .addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType(if (json) "application/json" else "text/plain")
+                        .putExtra(Intent.EXTRA_TITLE, "${this@LogsActivity.title}.${if (json) "json" else "txt"}")
+                )
+            }
+        }
+        dialog.show()
+    }
+
+    /** The displayed entries, in their current order, as JSON. */
+    private fun exportJson(): String = org.json.JSONObject()
+        .put("log", title?.toString().orEmpty())
+        .put("exported_at", java.time.OffsetDateTime.now().toString())
+        .put("entries", org.json.JSONArray(displayedEntries))
+        .toString(2)
+
+    private var pendingExport: String? = null
+
+    private val exportLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            val content = pendingExport
+            pendingExport = null
+            val uri = result.data?.data
+            if (result.resultCode != RESULT_OK || uri == null || content == null) return@registerForActivityResult
+            Thread {
+                val saved = try {
+                    contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) } != null
+                } catch (_: Exception) {
+                    false
+                }
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        if (saved) R.string.message_saved else R.string.log_export_save_failed,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }.start()
+        }
 
     private var btnClearLog: MaterialButton? = null
     private var btnCopyLog: MaterialButton? = null
@@ -191,6 +259,7 @@ class LogsActivity : SettingsPageActivity() {
     private var switchNewestFirst: MaterialSwitch? = null
     private var logEntries: android.widget.LinearLayout? = null
     private var displayedLog = ""
+    private var displayedEntries: List<String> = emptyList()
     private var logType = ""
     private var newestFirst = true
     private var root: ConstraintLayout? = null
@@ -300,8 +369,8 @@ class LogsActivity : SettingsPageActivity() {
                 btnCopyLog?.setOnClickListener {
                     if (displayedLog.isBlank()) {
                         Toast.makeText(this, R.string.label_log_empty, Toast.LENGTH_SHORT).show()
-                    } else {
-                        copyToClipboard(displayedLog)
+                    } else if (!copyToClipboard(displayedLog)) {
+                        showExportDialog()
                     }
                 }
 
