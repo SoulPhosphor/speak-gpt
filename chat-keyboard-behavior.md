@@ -91,6 +91,30 @@ reply**. Closing the keyboard again does not resume it. The user opened the
 keyboard because something caught their attention, so that content stays in
 front of them until they send the next message.
 
+#### 4a. At the end of a chat, the last message is sticky (owner ruling, Oct 30 2026)
+
+When the user is at the very end of the chat (the bottom of the last message
+is sitting right above the composer), the last message sticks to the composer.
+It rises with the composer and the keyboard so the composer never covers it,
+and it comes back down with them when the keyboard closes or the composer
+shrinks.
+
+This is the same hold as the rest of rule 4, measured by the bottom of the
+last message. A last reply taller than the screen keeps its own end against
+the composer. If the last message is already partly cut off, the user is not
+at the end, and the ordinary hold applies instead.
+
+#### 4b. A short chat moves only when it has to (owner ruling, Oct 30 2026)
+
+If the whole conversation fits on the screen, opening the keyboard does not
+move it as long as the last message is still above the composer.
+
+Once the composer would cover the last message, the conversation moves up
+only as far as needed to keep the bottom of the last message just above the
+composer. It does not jump to some other place. When the keyboard closes or
+the composer shrinks, the conversation comes back down with it, all the way
+back to where it started if everything fits again.
+
 ### 5. The user can scroll freely with the keyboard open
 
 The keyboard being open must never disable or interfere with manual scrolling.
@@ -143,6 +167,10 @@ These cases are intentionally different and must not be collapsed into one
 | --- | --- |
 | User opens keyboard | Hold current position relative to composer |
 | User manually closes keyboard | Hold current position relative to composer |
+| User opens or closes keyboard at the very end of the chat | Last message stays right above the composer and moves with it |
+| User opens keyboard on a short chat that still fits | Nothing moves |
+| User opens keyboard on a short chat that no longer fits | Moves up only enough to keep the last message above the composer; comes back down when the keyboard closes |
+| Keyboard or composer changes size while the user's finger is on the conversation | Nothing moves the conversation (rule 1 wins over the hold) |
 | AI reply arrives/grows while keyboard is open | Do not move conversation |
 | User presses Send | Release hold and start automatic follow for the new reply |
 | User touches/scrolls during generation | Stop automatic follow for the rest of that reply |
@@ -161,6 +189,7 @@ carefully or composing a message.
 | --- | --- |
 | Notes the position before a resize | `ChatActivity.captureTranscriptAnchor()` / `ChatTranscriptRecyclerView.captureResizeAnchor()` |
 | Puts it back during the new-size layout | `ChatTranscriptRecyclerView.onSizeChanged()` |
+| At the end of a chat, keeps the last message's bottom on the composer | `ChatTranscriptRecyclerView.pinEndAfterLayout()` |
 | Keyboard reports before it takes or gives back space | `ChatImeInsetLayout.onBottomInsetChanging` (in `ChatComposerLayout.kt`) |
 | Whether the keyboard is currently up | `ChatImeInsetLayout.isKeyboardOpen` |
 | The lock, and the Send exception | `ChatActivity.scroll()` and `imeClosingForSend` |
@@ -219,6 +248,14 @@ the keyboard pop up on its own again (rule 8).
 
 `ChatActionSurfaceSourceContractTest`
 -> `everyViewportResizePinsTranscriptWithoutFightingTheImeConstraint`
+
+Rules 4a and 4b are checked by `ChatTranscriptResizeAnchorTest`. It lays the
+chat out at the old and new heights and checks where the messages land: at the
+end of a chat, during a keyboard that arrives in several steps, with a last
+reply taller than the screen, with a last message that changes height, in the
+middle of a chat, with short chats that do and do not still fit, and with a
+finger on the chat while it resizes. It cannot simulate a real keyboard
+animation or a real finger moving on the screen.
 
 Rule 8 has its own guard in the same class:
 `ChatActionSurfaceSourceContractTest` -> `aFinishedTurnDoesNotOpenTheKeyboard`.

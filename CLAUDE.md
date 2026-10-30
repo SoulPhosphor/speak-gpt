@@ -584,6 +584,12 @@ Do not hand the owner a wall of unresolved decisions. Group only decisions that 
 
 A question should explain the user-visible consequence and include a recommendation when the evidence supports one.
 
+### Wait for the answer (owner ruling, October 30 2026)
+
+If you ask the owner a question, wait for the owner to answer it before beginning the work. A reply that discusses the problem, describes the expected behavior, or offers to test is not an answer to the question.
+
+If the fix is straightforward and you do not need to ask the owner how to fix it, do not ask. Just fix it.
+
 ### Do not re-ask what the owner already decided
 
 When the owner has already specified something (a label, option list, order,
