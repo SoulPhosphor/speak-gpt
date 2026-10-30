@@ -248,8 +248,9 @@ Use when actions should size to their labels rather than fill the available widt
 its line, for vertical (LinearLayout) hosts. In a ConstraintLayout, center
 `AppButton.Primary.Inline` with start and end constraints instead.
 
-`AppButton.Primary.Inline.End` is the same label-sized button on the end
-(right) side of its line, for vertical (LinearLayout) hosts. Current user: the
+`AppButton.Primary.Inline.End` is a text-sized button on the end (right) side
+of its line, for vertical (LinearLayout) hosts: only as wide as its text plus a
+small inner margin (no minimum width, 12dp side padding). Current user: the
 per-entry Copy under each log entry (`view_log_entry.xml`).
 
 Two-button dialogs use a centered shared layout by default. The existing
