@@ -152,6 +152,27 @@ list. Therefore:
   values are written; they are retried at a later start. Existing damaged-chat
   recording applies; no new log lines.
 
+### Scaling to thousands of chats (added October 30 2026)
+
+The owner's goal is smooth scrolling and no display delays with thousands of
+chats. Two further changes are part of the recommendation:
+
+- **Keep the parsed chat list in memory.** Today every drawer open and every
+  folder open/close decrypts and parses the whole chat list again
+  (`ChatNavigationRepository.snapshot`). At thousands of chats that becomes a
+  visible delay before the list updates. The parsed list is kept in memory and
+  reread only when the list has actually changed (a change counter advanced by
+  every chat-list write).
+- **Fill visible rows first.** The one-time fill-in starts with the rows on
+  screen in the drawer, so labels appear within a moment, and fills the rest
+  in the background.
+
+Known remaining limit: the chat list is stored as one encrypted entry, so any
+change to it re-encrypts the whole list. This already happens today on every
+sent message (the sort timestamp). It does not affect scrolling. Per-row
+storage would remove it but needs a full storage migration, which is not
+required for the scrolling goal.
+
 ### Fit with Feature 0 (Chat Storage and Backup Upgrade)
 
 - The new `chats.db` keeps each chat-list row verbatim (`list_row_json`), so
