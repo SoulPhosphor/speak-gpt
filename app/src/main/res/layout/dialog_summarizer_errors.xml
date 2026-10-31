@@ -20,11 +20,7 @@
         android:layout_weight="1"
         android:fadeScrollbars="false">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="24dp">
+        <LinearLayout style="@style/Widget.App.Dialog.Content">
 
             <TextView
                 android:id="@+id/summarizer_errors_status"
@@ -38,41 +34,28 @@
         </LinearLayout>
     </ScrollView>
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingHorizontal="24dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="16dp">
+    <LinearLayout style="@style/Widget.App.Dialog.Actions">
 
-        <androidx.constraintlayout.helper.widget.Flow
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            app:constraint_referenced_ids="btn_summarizer_errors_copy,btn_summarizer_errors_hide,btn_summarizer_errors_okay"
-            app:flow_firstHorizontalBias="1"
-            app:flow_horizontalBias="1"
-            app:flow_lastHorizontalBias="1"
-            app:flow_horizontalGap="12dp"
-            app:flow_horizontalStyle="packed"
-            app:flow_verticalGap="8dp"
-            app:flow_wrapMode="chain"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+        <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Dialog.Actions.EndRow">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_summarizer_errors_copy"
-            style="@style/AppButton.Primary.Inline"
-            android:text="@string/summarizer_errors_copy" />
+            <androidx.constraintlayout.helper.widget.Flow
+                style="@style/Widget.App.Dialog.Actions.EndRowFlow"
+                app:constraint_referenced_ids="btn_summarizer_errors_copy,btn_summarizer_errors_hide,btn_summarizer_errors_okay" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_summarizer_errors_hide"
-            style="@style/AppButton.Destructive.Inline"
-            android:text="@string/summarizer_errors_hide" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_summarizer_errors_copy"
+                style="@style/AppButton.Primary.Inline"
+                android:text="@string/summarizer_errors_copy" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_summarizer_errors_okay"
-            style="@style/AppButton.Destructive.Inline"
-            android:text="@string/summarizer_errors_okay" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_summarizer_errors_hide"
+                style="@style/AppButton.Destructive.Inline"
+                android:text="@string/summarizer_errors_hide" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_summarizer_errors_okay"
+                style="@style/AppButton.Destructive.Inline"
+                android:text="@string/summarizer_errors_okay" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
 </LinearLayout>

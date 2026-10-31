@@ -24,9 +24,15 @@ class SummarizerErrorsDialogContractTest {
         val dialog = source("src/main/res/layout/dialog_summarizer_errors.xml")
         assertFalse(dialog.contains("dialog_three_actions_cancel_first"))
         assertTrue(dialog.contains("androidx.constraintlayout.helper.widget.Flow"))
-        assertTrue(dialog.contains("app:flow_wrapMode=\"chain\""))
-        assertTrue(dialog.contains("app:flow_firstHorizontalBias=\"1\""))
-        assertTrue(dialog.contains("app:flow_lastHorizontalBias=\"1\""))
+        // The wrapping, right-aligned row comes from the shared pop-up
+        // action style rather than values written into the layout.
+        assertTrue(dialog.contains("style=\"@style/Widget.App.Dialog.Actions.EndRowFlow\""))
+        val themes = source("src/main/res/values/themes.xml")
+        val flow = themes.substring(themes.indexOf("<style name=\"Widget.App.Dialog.Actions.EndRowFlow\""))
+            .let { it.substring(0, it.indexOf("</style>")) }
+        assertTrue(flow.contains("<item name=\"flow_wrapMode\">chain</item>"))
+        assertTrue(flow.contains("<item name=\"flow_firstHorizontalBias\">1</item>"))
+        assertTrue(flow.contains("<item name=\"flow_lastHorizontalBias\">1</item>"))
         assertTrue(
             dialog.contains(
                 "app:constraint_referenced_ids=\"btn_summarizer_errors_copy,btn_summarizer_errors_hide,btn_summarizer_errors_okay\""

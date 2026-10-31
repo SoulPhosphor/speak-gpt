@@ -390,6 +390,16 @@
         <item name="android:paddingBottom">@dimen/dialog_actions_padding_bottom</item>
     </style>
 
+    <!-- A pop-up's own content column inside its custom view (for example
+         the Summarizer Errors list), inset like the dialog's message. -->
+    <style name="Widget.App.Dialog.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/dialog_content_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/dialog_content_padding_horizontal</item>
+    </style>
+
     <style name="Widget.App.Dialog.Actions.EndRow" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

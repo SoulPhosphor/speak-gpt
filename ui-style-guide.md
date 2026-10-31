@@ -291,9 +291,9 @@ with `Widget.App.Dialog.Actions.EndRowFlow` (the right-aligned wrapping row;
 the layout lists only the row's button ids), and
 `AppButton.Primary.Inline.Centered.BelowDialogRow` for a centered action on
 its own line beneath the row. Spacing lives in `dialog_actions_*` and
-`dialog_action_*` dimensions. Backup Attempts Failed uses these styles; the
-Summarizer Errors and Compaction error layouts still carry the same values
-inline and are not yet converted.
+`dialog_action_*` dimensions. Summarizer Errors, the Compaction error pop-up
+and Backup Attempts Failed all use these styles. A pop-up's own scrolling
+content column (the Summarizer Errors list) uses `Widget.App.Dialog.Content`.
 
 Parameter information boxes use `ParameterInfoDialog` and the shared
 `view_parameter_info_title.xml` heading, styled by `Widget.App.ParameterInfo.*`.
