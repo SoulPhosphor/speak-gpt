@@ -599,11 +599,8 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
 
     @Suppress("DEPRECATION")
     private fun applyTheme() {
-        if (isBackupOptionsPage) return
-        if (isRestoreOptionsPage) {
-            org.teslasoft.assistant.ui.util.ScreenChrome.apply(this, findViewById(R.id.action_bar), null)
-            return
-        }
+        // BackUp Options and Restore Options color their own header.
+        if (isBackupOptionsPage || isRestoreOptionsPage) return
         ThemeManager.getThemeManager().applyTheme(this, isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true)
 
         if (isDarkThemeEnabled() && preferences?.getAmoledPitchBlack() == true) {

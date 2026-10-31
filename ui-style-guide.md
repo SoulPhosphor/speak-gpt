@@ -515,6 +515,19 @@ Use when the header contains only a back button and centered title.
 
 The back button style expects the view id `btn_back`.
 
+### Header joined to the top edge
+
+Every full-screen page's `Widget.App.ActionBar` header reaches the top edge of
+the screen, with no gap above it (owner ruling, Oct 31 2026). Call
+`ScreenChrome.fitSystemBars(root, header, content)`
+(`org.teslasoft.assistant.ui.util`) after `ScreenChrome.apply`: on Android 15
+and later it extends the header's background up behind the status bar with
+its contents below it, ends the scrolling content above the navigation bar,
+and keeps the page clear of side insets and cutouts. The layout supplies only
+the ids `root`, `action_bar` and `scroll`. Do not fit the page root inside the
+system bars instead; that leaves a gap above the header. Current users:
+BackUp Options and Restore Options.
+
 ### Header with one trailing action icon
 
 Use:
@@ -1492,9 +1505,5 @@ styles; geometry comes from `restore_*` dimension tokens. The two existing
 full-width actions inherit `AppButton.Primary` through `RestoreSelection` and
 `RestoreDatabase`. This family preserves the prior restore controls' appearance.
 
-`Widget.App.Page.InsetRoot` fits a title-only settings page's entire frame
-inside the status and navigation bars. Restore Options still uses it at its
-root. BackUp Options instead uses the simple screen header (shared back
-button and title) whose background reaches the top edge, with
-`BackupOptionsActivity` padding the header below the status bar and the scroll
-area above the navigation bar, as Backup & Restore does.
+BackUp Options and Restore Options use the simple screen header and
+`ScreenChrome.fitSystemBars` (see Screen headers).

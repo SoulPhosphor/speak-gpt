@@ -2,14 +2,10 @@ package org.teslasoft.assistant.ui.activities
 
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -61,10 +57,11 @@ class BackupOptionsActivity : MemoryBackupRestoreActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val optionsBack = findViewById<View>(R.id.btn_back)
-        ScreenChrome.apply(this, findViewById(R.id.action_bar), optionsBack)
-        optionsBack?.setOnClickListener { finish() }
-        fitHeaderToTopEdge()
+        val header = findViewById<View>(R.id.action_bar)
+        val back = findViewById<View>(R.id.btn_back)
+        ScreenChrome.apply(this, header, back)
+        ScreenChrome.fitSystemBars(findViewById(R.id.root), header, findViewById(R.id.scroll))
+        back?.setOnClickListener { finish() }
         pendingEnableAfterPick = savedInstanceState?.getBoolean("pendingEnableAfterPick") ?: false
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
         btnAutoFrequency = findViewById(R.id.btn_auto_frequency)
@@ -414,27 +411,4 @@ class BackupOptionsActivity : MemoryBackupRestoreActivity() {
                 templateRes, label ?: getString(R.string.backup_location_selected_generic)
             )
         }
-
-    /**
-     * Under edge-to-edge layout (Android 15 and later) the header's own
-     * background runs up behind the status bar, as on Backup & Restore, with
-     * its contents padded below it; the scroll area stops above the
-     * navigation bar and the screen keeps clear of side insets.
-     */
-    private fun fitHeaderToTopEdge() {
-        if (Build.VERSION.SDK_INT < 35) return
-        val root = findViewById<View>(R.id.root) ?: return
-        val header = findViewById<View>(R.id.action_bar) ?: return
-        val scroll = findViewById<View>(R.id.scroll) ?: return
-        val headerTop = header.paddingTop
-        val scrollBottom = scroll.paddingBottom
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.updatePadding(left = bars.left, right = bars.right)
-            header.updatePadding(top = headerTop + bars.top)
-            scroll.updatePadding(bottom = scrollBottom + bars.bottom)
-            insets
-        }
-        ViewCompat.requestApplyInsets(root)
-    }
 }

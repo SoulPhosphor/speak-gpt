@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- BackUp Options. Simple screen header (ui-style-guide.md): shared back
-     button and centered title. The header reaches the top edge of the screen;
-     BackupOptionsActivity pads it below the status bar and keeps the last
-     control above the navigation bar. -->
+<!-- BackUp Options: simple screen header (ui-style-guide.md). ScreenChrome
+     colors it and joins it to the top edge of the screen. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -13,17 +11,10 @@
         style="@style/Widget.App.ActionBar">
         <ImageButton
             android:id="@+id/btn_back"
-            style="@style/Widget.App.ActionBar.BackButton"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            style="@style/Widget.App.ActionBar.BackButton" />
         <TextView
             style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/backup_options_title"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            android:text="@string/backup_options_title" />
     </androidx.constraintlayout.widget.ConstraintLayout>
     <ScrollView
         android:id="@+id/scroll"
