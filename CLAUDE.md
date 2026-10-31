@@ -401,8 +401,8 @@ themed and fixed from one place (like CSS classes, not inline `style=""`).
 - Never copy anything: no screen, layout, code, values or approach from any
   existing file, and never just follow what another screen does, unless the
   owner explicitly says to copy that specific thing (owner ruling, October 31
-  2026). Some screens are converted wrong, so existing screens and code are
-  never a reference; only `ui-style-guide.md` decides how something looks.
+  2026). Some screens are converted wrong, and copying them duplicates what
+  is broken, so existing screens and code are never a reference; only `ui-style-guide.md` decides how something looks.
 - If no shared style fits, create a new shared style (with its dimensions)
   without asking the owner (owner ruling, October 31 2026). Never hard-code a
   value instead, and do not copy values from another layout as a shortcut.
