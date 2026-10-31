@@ -12,6 +12,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
+import org.teslasoft.assistant.R
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
@@ -54,10 +55,14 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
     private var lastDrawSnapshot = ""
     private val tracePreDraw = ViewTreeObserver.OnPreDrawListener {
         if (ResizeTrace.active) {
+            val position = ResizeTrace.baselinePosition
+            val row = position.takeIf { it >= 0 }?.let { layoutManager?.findViewByPosition(it) }
             val frame = ResizeTrace.frameDrawn(
-                ResizeTrace.baselinePosition.takeIf { it >= 0 }?.let(::distanceFromBox)
+                row?.let { it.top - height },
+                position.takeIf { it >= 0 }?.let(::screenDistanceFromComposer),
+                row?.height
             )
-            val snapshot = "h=$height ${rowsDesc()}"
+            val snapshot = "h=$height ${rowsDesc()} ${screenGeometry()}"
             if (snapshot != lastDrawSnapshot) {
                 lastDrawSnapshot = snapshot
                 ResizeTrace.movement("draw#$frame $snapshot")
@@ -134,6 +139,34 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
     fun distanceFromBox(position: Int): Int? =
         layoutManager?.findViewByPosition(position)?.let { it.top - height }
 
+    /** Physical screen measurement, not just RecyclerView-local coordinates.
+     * Debug-only so a window translation or inset mismatch cannot masquerade
+     * as zero anchor drift. No message text or content is accessed. */
+    private fun screenDistanceFromComposer(position: Int): Int? {
+        val row = layoutManager?.findViewByPosition(position) ?: return null
+        val composer = rootView.findViewById<View>(R.id.composer_surface) ?: return null
+        val chatXY = IntArray(2)
+        val composerXY = IntArray(2)
+        getLocationOnScreen(chatXY)
+        composer.getLocationOnScreen(composerXY)
+        return chatXY[1] + row.top - composerXY[1]
+    }
+
+    private fun screenGeometry(): String {
+        val composer = rootView.findViewById<View>(R.id.composer_surface)
+            ?: return "screenComposer=unavailable"
+        val chatXY = IntArray(2)
+        val composerXY = IntArray(2)
+        getLocationOnScreen(chatXY)
+        composer.getLocationOnScreen(composerXY)
+        val row = resizeAnchorPosition.takeIf { it >= 0 }
+            ?.let { layoutManager?.findViewByPosition(it) }
+        return "screen{chatTop=${chatXY[1]} chatBottom=${chatXY[1] + height} " +
+            "composerTop=${composerXY[1]} gap=${composerXY[1] - chatXY[1] - height} " +
+            "anchorTop=${row?.let { chatXY[1] + it.top } ?: "offscreen"} " +
+            "anchorBottom=${row?.let { chatXY[1] + it.bottom } ?: "offscreen"}}"
+    }
+
     private fun rowDesc(position: Int): String {
         if (position == NO_POSITION) return "none"
         val row = layoutManager?.findViewByPosition(position) ?: return "#$position(offscreen)"
@@ -155,7 +188,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
             "retainAfterTouch=$retainPositionAfterTouch heldReleased=$resizeHoldReleasedForLayout " +
             "fingerAnchor=$fingerLayoutAnchor hold=${shouldHoldPositionOnResize()} " +
             "canScrollDown=${canScrollVertically(1)} scrollState=$scrollState " +
-            "${rowsDesc()} ${traceExtraState?.invoke() ?: ""}"
+            "${rowsDesc()} ${screenGeometry()} ${traceExtraState?.invoke() ?: ""}"
     // ---- end Keyboard Chat Interaction Debugging ----
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -219,7 +252,10 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
                 "bottomPastViewport=${anchor.bottom - (height - paddingBottom)} " +
                 "replacesPending=$resizeAnchorPending(prev #$resizeAnchorPosition tfb=$resizeAnchorTopFromBottom)"
         )
-        ResizeTrace.anchorCaptured(position, anchor.top - height)
+        if (ResizeTrace.active) {
+            ResizeTrace.anchorCaptured(position, anchor.top - height,
+                screenDistanceFromComposer(position), anchor.height)
+        }
         if (touching) ResizeTrace.fingerDown()
 
         resizeAnchorPosition = position
@@ -299,6 +335,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         // different height while measuring, only an earlier capture still
         // describes the old position.
         if (h != oldh) {
+            ResizeTrace.transcriptResized(oldh, h)
             val childrenAtOldHeight = layoutManager?.height == oldh
             trace(
                 "onSizeChanged $oldh -> $h lm.h=${layoutManager?.height} " +
