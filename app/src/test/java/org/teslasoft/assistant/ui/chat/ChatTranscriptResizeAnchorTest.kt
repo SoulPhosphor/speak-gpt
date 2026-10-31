@@ -77,15 +77,19 @@ class ChatTranscriptResizeAnchorTest {
         }
 
     @Test
-    fun aLastRowThatChangesHeightDuringTheResizeIsStillHeldByItsEnd() = withTranscript { t ->
+    fun aFreshMeasurementReplacesAnAnchorThatWentStaleBeforeTheResize() = withTranscript { t ->
         t.showEnd(TALL)
-
         t.transcript.captureResizeAnchor()
-        t.rows.lastRowHeight = ROW + 120
-        t.rows.notifyItemChanged(LAST)
+        // The conversation moves after that note was taken, with no resize in
+        // between, so the note no longer describes what touches the composer.
+        t.manager.scrollToPositionWithOffset(10, 0)
+        t.layout(TALL)
+        val watched = t.manager.findLastVisibleItemPosition()
+        val distance = t.manager.findViewByPosition(watched)!!.top - TALL
+
         t.layout(SHORT)
 
-        assertEquals(SHORT - PADDING, t.lastBottom())
+        assertEquals(SHORT + distance, t.manager.findViewByPosition(watched)!!.top)
     }
 
     @Test

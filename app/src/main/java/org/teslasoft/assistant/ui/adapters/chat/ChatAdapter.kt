@@ -282,9 +282,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val MENU_SUMMARY_SECTION = 107
         private const val MENU_COMPACT_TO_HERE = 109
 
-        /** Compact to Here starts at the 15th AI response (owner ruling,
-         *  Oct 29 2026). */
-        private const val COMPACT_TO_HERE_FIRST_RESPONSE = 15
+        /** Compact to Here starts at the 3rd AI response (owner ruling,
+         *  Oct 31 2026). */
+        private const val COMPACT_TO_HERE_FIRST_RESPONSE = 3
 
         // Transient inline image-confirmation card row
         // (image-generation-rebuild-plan.md §5). These rows live only in
@@ -2613,7 +2613,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (owningSection != null) {
                 popup.menu.add(0, MENU_SUMMARY_SECTION, 0, R.string.summary_section_menu)
             }
-            // Compact to Here sits above Share on AI responses 15 and later.
+            // Compact to Here sits above Share on AI responses 3 and later.
             if (chatMessage["isBot"] == true &&
                 aiResponseNumber(chatMessage) >= COMPACT_TO_HERE_FIRST_RESPONSE &&
                 listener?.isCompactToHereAvailable() == true

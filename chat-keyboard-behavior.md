@@ -189,7 +189,7 @@ carefully or composing a message.
 | --- | --- |
 | Notes the position before a resize | `ChatActivity.captureTranscriptAnchor()` / `ChatTranscriptRecyclerView.captureResizeAnchor()` |
 | Puts it back during the new-size layout | `ChatTranscriptRecyclerView.onSizeChanged()` |
-| At the end of a chat, keeps the last message's bottom on the composer | `ChatTranscriptRecyclerView.pinEndAfterLayout()` |
+| At the end of a chat, keeps the last message's bottom on the composer | The same hold in `ChatTranscriptRecyclerView.onSizeChanged()`; there is no separate end-of-chat path |
 | Keyboard reports before it takes or gives back space | `ChatImeInsetLayout.onBottomInsetChanging` (in `ChatComposerLayout.kt`) |
 | Whether the keyboard is currently up | `ChatImeInsetLayout.isKeyboardOpen` |
 | The lock, and the Send exception | `ChatActivity.scroll()` and `imeClosingForSend` |
@@ -233,6 +233,16 @@ viewport height.
 the new message, but it breaks the keyboard-open behavior. An incoming or
 growing reply must not move the conversation merely because it exists.
 
+**A separate end-of-chat path.** The end of a chat once had its own
+placement and an extra scroll after the layout. The ordinary hold worked on
+the device while that end-only path did not. The end of a chat now uses the
+same hold as everywhere else.
+
+**Trusting an old note over a fresh one.** A position noted before the resize
+can go stale if the conversation changes before the resize happens. While the
+rows still sit at the old height, the resize measures them again and that
+fresh measurement wins.
+
 **Turning on `stackFromEnd` to get bottom anchoring.** It would pin the bottom,
 but it also stacks a short conversation against the composer instead of
 starting it at the top. That is a visible change to every new chat and is not
@@ -252,9 +262,9 @@ the keyboard pop up on its own again (rule 8).
 Rules 4a and 4b are checked by `ChatTranscriptResizeAnchorTest`. It lays the
 chat out at the old and new heights and checks where the messages land: at the
 end of a chat, during a keyboard that arrives in several steps, with a last
-reply taller than the screen, with a last message that changes height, in the
-middle of a chat, with short chats that do and do not still fit, and with a
-finger on the chat while it resizes. It cannot simulate a real keyboard
+reply taller than the screen, in the middle of a chat, with short chats that
+do and do not still fit, with a position note that went stale before the
+resize, and with a finger on the chat while it resizes. It cannot simulate a real keyboard
 animation or a real finger moving on the screen.
 
 Rule 8 has its own guard in the same class:
