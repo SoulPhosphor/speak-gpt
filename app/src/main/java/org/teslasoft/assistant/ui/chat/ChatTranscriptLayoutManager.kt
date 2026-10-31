@@ -9,6 +9,7 @@ package org.teslasoft.assistant.ui.chat
 
 import android.content.Context
 import android.view.View
+import android.widget.EditText
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
@@ -21,6 +22,10 @@ import androidx.recyclerview.widget.RecyclerView
  * smooth-scroll that row onto the screen, which drags the conversation away
  * from the composer while the keyboard is opening (chat-keyboard-behavior.md,
  * rule 4). A row receiving focus never moves the conversation here.
+ *
+ * The one exception is a text field inside a row (the image summary editor):
+ * the user tapped Edit on that row, so it keeps the default behavior of being
+ * brought into view.
  */
 class ChatTranscriptLayoutManager(context: Context) : LinearLayoutManager(context) {
 
@@ -29,5 +34,6 @@ class ChatTranscriptLayoutManager(context: Context) : LinearLayoutManager(contex
         state: RecyclerView.State,
         child: View,
         focused: View?
-    ): Boolean = true
+    ): Boolean =
+        if (focused is EditText) super.onRequestChildFocus(parent, state, child, focused) else true
 }
