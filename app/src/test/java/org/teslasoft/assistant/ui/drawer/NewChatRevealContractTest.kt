@@ -67,6 +67,16 @@ class NewChatRevealContractTest {
         assertTrue(restored.contains("putBoolean(KEY_START_DATES_FILLED, false)"))
         assertTrue(restored.contains("fillStartDates(context)"))
 
+        // Every way of removing messages saves their usage records to the log first.
+        listOf(
+            "private fun deleteMessageRange(" to "messages.subList(currentPosition, end).clear()",
+            "private fun deleteBulkSelection(" to "messages.removeAt(pos - p)",
+            "private fun truncateAfter(" to "messages.subList(index + 1, end).clear()"
+        ).forEach { (function, removal) ->
+            val body = chat.substringAfter(function)
+            assertTrue(function, body.indexOf("reconcileUsageBeforeRemoving()") in 0 until body.indexOf(removal))
+        }
+
         val usage = source("usage/UsageLog.kt")
         val seedOnce = usage.substringAfter("fun seedOnce(").substringBefore("fun append(")
         assertTrue(seedOnce.contains("if (current.seeded) current else seed(prefs, messages, nowMs)"))

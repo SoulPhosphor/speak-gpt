@@ -11747,6 +11747,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }
             ?.ifBlank { null }
 
+    /** Copies any usage record still kept only in the messages into the usage
+     * log before messages are removed, so removing them never loses it. Opening
+     * a chat no longer repairs the log, so every removal does it instead. */
+    private fun reconcileUsageBeforeRemoving() {
+        val prefs = preferences ?: return
+        if (chatStorageUnavailable) return
+        val snapshot = messages.map { HashMap(it) }
+        lifecycleScope.launch(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
+            UsageLogStore.seed(prefs, snapshot)
+        }
+    }
+
     /** Adds requests to this chat's usage log. Seeding first also repairs any
      * older message-backed request that a previous append failed to persist. */
     private suspend fun appendUsageLog(
@@ -14750,6 +14762,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @SuppressLint("NotifyDataSetChanged")
     private fun truncateAfter(index: Int) {
         if (index < 0 || index >= messages.size - 1) return
+        reconcileUsageBeforeRemoving()
         val end = messages.size
         messages.subList(index + 1, end).clear()
         realignCondensedBoundaries(index + 1, end)
@@ -15068,6 +15081,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val currentPosition = messages.indexOfFirst { it === target }
             if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@launch
             val end = if (deleteFollowing) messages.size else currentPosition + 1
+            reconcileUsageBeforeRemoving()
             val removed = ArrayList(messages.subList(currentPosition, end))
             messages.subList(currentPosition, end).clear()
             // Gallery records and generated image files have independent lifetimes.
@@ -15353,6 +15367,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     @SuppressLint("NotifyDataSetChanged")
     private fun deleteBulkSelection() {
+        reconcileUsageBeforeRemoving()
         val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
         val manualBoundaryBefore =
             preferences?.getManualCompactionBoundary() ?: 0
