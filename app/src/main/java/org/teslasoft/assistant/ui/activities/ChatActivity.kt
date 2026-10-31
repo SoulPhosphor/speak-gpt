@@ -3366,6 +3366,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // strand the reply off screen. The keyboard coming back up ends it
             // immediately, whatever it interrupts.
             if (imeClosingForSend && (retreating || !keyboardOpen)) {
+                chat?.releaseResizeAnchorForNextLayout()
                 if (!keyboardOpen) imeClosingForSend = false
             } else {
                 imeClosingForSend = false

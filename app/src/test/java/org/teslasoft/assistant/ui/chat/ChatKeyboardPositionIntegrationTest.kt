@@ -6,7 +6,6 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.Insets
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -32,6 +31,40 @@ class ChatKeyboardPositionIntegrationTest {
         for (inset in listOf(150, 300, 500, 700, 500, 300, 150, 0)) {
             t.keyboard(inset)
             assertEquals("Keyboard inset $inset", distance, t.rowTop(row) - t.messageBoxTop())
+        }
+    }
+
+    @Test
+    fun sendExemptionLastsThroughTheLayoutOfTheFinalKeyboardInset() {
+        for (closingFrames in listOf(listOf(0), listOf(400, 100, 0))) {
+            withChat { t ->
+                t.keyboard(700)
+                val row = t.manager.findFirstCompletelyVisibleItemPosition()
+                val top = t.rowTop(row)
+                var closingForSend = true
+                t.transcript.releaseResizeAnchor()
+                t.transcript.shouldHoldPositionOnResize = { !closingForSend }
+                t.host.onBottomInsetChanging = { open, retreating ->
+                    if (closingForSend && (retreating || !open)) {
+                        t.transcript.releaseResizeAnchorForNextLayout()
+                        if (!open) closingForSend = false
+                    } else {
+                        t.transcript.captureResizeAnchor()
+                    }
+                }
+
+                for (inset in closingFrames) {
+                    t.keyboard(inset)
+                    assertEquals("Send close inset $inset", top, t.rowTop(row))
+                }
+                assertEquals(false, closingForSend)
+
+                // A later manual keyboard opening gets the ordinary hold back.
+                val heldRow = t.manager.findLastVisibleItemPosition()
+                val distance = t.rowTop(heldRow) - t.messageBoxTop()
+                t.keyboard(500)
+                assertEquals(distance, t.rowTop(heldRow) - t.messageBoxTop())
+            }
         }
     }
 
@@ -98,9 +131,11 @@ class ChatKeyboardPositionIntegrationTest {
         }
 
         fun keyboard(bottom: Int) {
-            ViewCompat.dispatchApplyWindowInsets(host, WindowInsetsCompat.Builder()
+            host.applyBottomInsets(WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, 36))
                 .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, bottom))
                 .build())
+            assertEquals("Fixture IME state for inset $bottom", bottom > 0, host.isKeyboardOpen)
             layout()
         }
 

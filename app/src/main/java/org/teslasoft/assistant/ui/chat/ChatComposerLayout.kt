@@ -433,20 +433,26 @@ class ChatImeInsetLayout @JvmOverloads constructor(
     private var lastImeBottom = 0
 
     init {
-        ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
-            val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            val targetBottom = baseBottom + max(navBottom, imeBottom)
-            val retreating = imeBottom < lastImeBottom
-            lastImeBottom = imeBottom
-            isKeyboardOpen = imeBottom > 0
-
-            if (view.paddingBottom != targetBottom) {
-                onBottomInsetChanging?.invoke(isKeyboardOpen, retreating)
-                view.setPadding(baseLeft, baseTop, baseRight, targetBottom)
-            }
-            insets
+        ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
+            applyBottomInsets(insets)
         }
+    }
+
+    // Kept in compat form so the same handler can be exercised on API 28;
+    // converting synthetic test insets to platform insets loses the IME type.
+    internal fun applyBottomInsets(insets: WindowInsetsCompat): WindowInsetsCompat {
+        val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+        val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+        val targetBottom = baseBottom + max(navBottom, imeBottom)
+        val retreating = imeBottom < lastImeBottom
+        lastImeBottom = imeBottom
+        isKeyboardOpen = imeBottom > 0
+
+        if (paddingBottom != targetBottom) {
+            onBottomInsetChanging?.invoke(isKeyboardOpen, retreating)
+            setPadding(baseLeft, baseTop, baseRight, targetBottom)
+        }
+        return insets
     }
 
     override fun ownsNavigationInsetFor(viewId: Int): Boolean =

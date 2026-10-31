@@ -126,6 +126,7 @@ class ChatActionSurfaceSourceContractTest {
         // the close back to the hold and strands the reply off screen.
         assertTrue(composer.contains("val retreating = imeBottom < lastImeBottom"))
         assertTrue(activity.contains("if (imeClosingForSend && (retreating || !keyboardOpen))"))
+        assertTrue(activity.contains("chat?.releaseResizeAnchorForNextLayout()"))
         assertTrue(activity.contains("if (!keyboardOpen) imeClosingForSend = false"))
 
         // Opening the keyboard mid-reply ends automatic follow for the rest of

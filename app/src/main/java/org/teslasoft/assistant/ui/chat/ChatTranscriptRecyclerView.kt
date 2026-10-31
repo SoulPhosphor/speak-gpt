@@ -39,6 +39,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
     private var resizeAnchorTop = 0
     private var fingerLayoutAnchor: Pair<Int, Int>? = null
     private var retainPositionAfterTouch = false
+    private var resizeHoldReleasedForLayout = false
 
     /** Send releases the hold; all other viewport changes preserve it. */
     var shouldHoldPositionOnResize: () -> Boolean = { true }
@@ -74,10 +75,17 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         resizeAnchorPending = false
         fingerLayoutAnchor = null
         retainPositionAfterTouch = false
+        resizeHoldReleasedForLayout = false
+    }
+
+    /** The final IME inset can report closed before its padding is laid out. */
+    fun releaseResizeAnchorForNextLayout() {
+        releaseResizeAnchor()
+        resizeHoldReleasedForLayout = true
     }
 
     private fun captureResizeAnchor(height: Int) {
-        if (!shouldHoldPositionOnResize()) return
+        if (resizeHoldReleasedForLayout || !shouldHoldPositionOnResize()) return
         if (height <= 0) return
         val manager = layoutManager as? LinearLayoutManager ?: return
         val position = if (touching) manager.findFirstVisibleItemPosition()
@@ -195,6 +203,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         } else null
         fingerLayoutAnchor = null
         super.onLayout(changed, l, t, r, b)
+        resizeHoldReleasedForLayout = false
         if (anchor == null || manager == null) return
         val row = manager.findViewByPosition(anchor.first) ?: return
         // LinearLayoutManager fills a bottom gap when the keyboard closes,
