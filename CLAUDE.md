@@ -603,8 +603,9 @@ that triggers a second, duplicate review.
 - Check each finding against this repository's rules and the owner's
   instructions; Codex does not know them. Fix the valid findings in one push
   and reply on any finding that is not being fixed, saying why.
-- Comment `@codex review` only for one re-review, and only after pushing
-  fixes. If findings remain after that, bring them to the owner as a short
+- Comment `@codex review` only for one re-review, and only after the fixes
+  are pushed and Android Checks is green on them. Codex never reviews code
+  that has not passed the checks. If findings remain after that, bring them to the owner as a short
   list with a recommendation instead of starting another round.
 - Once Codex has passed it (no findings, or a clean re-review after the
   fixes) and Android Checks is green on the final commit, merge it into
