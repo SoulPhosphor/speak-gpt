@@ -32,6 +32,15 @@
 
     <dimen name="button_corner_radius">4dp</dimen>
 
+    <!-- Widget.App.Dialog.Actions geometry: the inset that keeps a pop-up's
+         buttons clear of the dialog window's rounded corners, the gap
+         between buttons on one line, and the gap between lines. -->
+    <dimen name="dialog_actions_padding_horizontal">24dp</dimen>
+    <dimen name="dialog_actions_padding_top">8dp</dimen>
+    <dimen name="dialog_actions_padding_bottom">16dp</dimen>
+    <dimen name="dialog_action_gap">12dp</dimen>
+    <dimen name="dialog_action_line_gap">8dp</dimen>
+
     <!-- Companion prompt tab file-tab shape (PromptTabBackground): the fixed
          diagonal-cut width on each tab's trailing edge, and the outline
          stroke width matching the app's other 1dp outlined boxes. -->

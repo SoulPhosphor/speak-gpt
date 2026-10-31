@@ -161,6 +161,13 @@
         <item name="android:layout_gravity">center_horizontal</item>
     </style>
 
+    <!-- The centered action on its own line beneath a pop-up's right-aligned
+         action row (Widget.App.Dialog.Actions.EndRow), e.g. Change Backup
+         Folder under Cancel and Retry. -->
+    <style name="AppButton.Primary.Inline.Centered.BelowDialogRow">
+        <item name="android:layout_marginTop">@dimen/dialog_action_line_gap</item>
+    </style>
+
     <!-- Label-sized primary button on the end (right) side of its line, for
          vertical (LinearLayout) hosts, such as the per-entry Copy under each
          log entry. ConstraintLayout hosts anchor it with an end constraint. -->
@@ -362,6 +369,45 @@
     <style name="Widget.App.Row.ProfileImage" parent="Widget.App.Row.Icon">
         <item name="android:layout_width">@dimen/row_profile_image_size</item>
         <item name="android:layout_height">@dimen/row_profile_image_size</item>
+    </style>
+
+    <!-- Pop-up action area set as a MaterialAlertDialog's custom view,
+         beneath the message (owner ruling, Oct 31 2026: use styles). The
+         vertical container keeps every button clear of the dialog window's
+         rounded corners; EndRow + EndRowFlow lay out label-sized
+         AppButton.*.Inline buttons as one right-aligned row whose last
+         button drops to the next line, still on the right, only when the row
+         does not fit. The layout lists the row's buttons in the Flow's
+         constraint_referenced_ids. A centered action beneath the row uses
+         AppButton.Primary.Inline.Centered.BelowDialogRow. -->
+    <style name="Widget.App.Dialog.Actions" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/dialog_actions_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/dialog_actions_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/dialog_actions_padding_top</item>
+        <item name="android:paddingBottom">@dimen/dialog_actions_padding_bottom</item>
+    </style>
+
+    <style name="Widget.App.Dialog.Actions.EndRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+
+    <style name="Widget.App.Dialog.Actions.EndRowFlow" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="flow_wrapMode">chain</item>
+        <item name="flow_horizontalStyle">packed</item>
+        <item name="flow_horizontalBias">1</item>
+        <item name="flow_firstHorizontalBias">1</item>
+        <item name="flow_lastHorizontalBias">1</item>
+        <item name="flow_horizontalGap">@dimen/dialog_action_gap</item>
+        <item name="flow_verticalGap">@dimen/dialog_action_line_gap</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
     <!-- Toggle row (owner request, July 18 2026): a settings row whose

@@ -285,6 +285,16 @@ Summarizer Settings centered beneath as an approved exception), and Backup
 Attempts Failed (`dialog_backup_failed_actions.xml`, Cancel then Retry, with
 Change Backup Folder centered beneath as an approved exception).
 
+The styled form of that action area is `Widget.App.Dialog.Actions` (the
+container, inset from the dialog's rounded corners), `Widget.App.Dialog.Actions.EndRow`
+with `Widget.App.Dialog.Actions.EndRowFlow` (the right-aligned wrapping row;
+the layout lists only the row's button ids), and
+`AppButton.Primary.Inline.Centered.BelowDialogRow` for a centered action on
+its own line beneath the row. Spacing lives in `dialog_actions_*` and
+`dialog_action_*` dimensions. Backup Attempts Failed uses these styles; the
+Summarizer Errors and Compaction error layouts still carry the same values
+inline and are not yet converted.
+
 Parameter information boxes use `ParameterInfoDialog` and the shared
 `view_parameter_info_title.xml` heading, styled by `Widget.App.ParameterInfo.*`.
 The ordinary title TextView inherits the standard dialog title typography and
