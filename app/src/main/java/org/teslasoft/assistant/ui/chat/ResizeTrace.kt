@@ -33,7 +33,9 @@ import kotlin.math.abs
  * While the switch is off nothing here records, measures or allocates.
  */
 internal object ResizeTrace {
-    private const val SETTLE_MS = 300L
+    // Long enough that a keyboard arriving a moment after the composer tap
+    // lands in the same record as the tap.
+    private const val SETTLE_MS = 500L
     private const val MAX_SEQUENCE_MS = 4_000L
     private const val MAX_LINES = 250
     /** Only the newest few records stay in the Error Log (see [finish]). */
