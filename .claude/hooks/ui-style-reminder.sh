@@ -4,7 +4,7 @@
 # whenever a screen, layout, style or drawable file is about to be edited.
 input="$(cat)"
 
-reminder='OWNER RULE FOR ANY UI CHANGE: Never hard-code appearance. Always look in ui-style-guide.md (the styles file at the repository root) and use the style that applies. In the unusual case that no style exists yet for what you are building, create a new shared style (with its dimensions) without asking the owner. Never write visual values (sizes, margins, padding, text size or color, colors, backgrounds, corner shapes) directly into a layout, drawable or Kotlin. Reason: the owner wants the app to have changeable appearances, and that only works when every element gets its look from correct styles.'
+reminder='OWNER RULE FOR ANY UI CHANGE: Never hard-code appearance. Always look in ui-style-guide.md (the styles file at the repository root) and use the style that applies. Do not ask the owner how something should look when the guide already covers it: unless the owner says to make it a different way, just follow the style that applies. In the unusual case that no style exists yet for what you are building, create a new shared style (with its dimensions) without asking the owner. Never write visual values (sizes, margins, padding, text size or color, colors, backgrounds, corner shapes) directly into a layout, drawable or Kotlin. Reason: the owner wants the app to have changeable appearances, and that only works when every element gets its look from correct styles.'
 
 event="$(printf '%s' "$input" | jq -r '.hook_event_name // empty')"
 

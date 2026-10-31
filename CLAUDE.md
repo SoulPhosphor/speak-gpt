@@ -395,6 +395,9 @@ themed and fixed from one place (like CSS classes, not inline `style=""`).
   drawable when a dimension resource should hold it, or into Kotlin code.
 - Boxes that show the same kind of thing use the same styles, so they always
   match.
+- Do not ask the owner how something should look when `ui-style-guide.md`
+  already covers it. Unless the owner says to make it a different way, follow
+  the style that applies (owner ruling, October 31 2026).
 - If no shared style fits, create a new shared style (with its dimensions)
   without asking the owner (owner ruling, October 31 2026). Never hard-code a
   value instead, and do not copy values from another layout as a shortcut.
