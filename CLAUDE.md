@@ -575,9 +575,10 @@ Waiting on a pull request wakes the session and re-reads the whole
 conversation, which spends the owner's usage. Wait only while something is
 actually arriving, such as a running check or a requested review.
 
-- When the owner has said to merge, merge once checks pass and review
-  findings are addressed. Do not hold the merge for a question that does not
-  block the work; raise it after merging as a follow-up.
+- Merge into `beta/new-client` as soon as Codex has passed the pull request
+  and checks are green (see Codex review below). Do not wait for the owner to
+  say merge. Do not hold the merge for a question that does not block the
+  work; raise it after merging as a follow-up.
 - Once a pull request is waiting only on the owner, finish or stop: stop
   watching it and do not schedule check-ins or reminders.
 - A genuinely merge-blocking question is fine: ask it once in chat, leave the
@@ -605,8 +606,13 @@ that triggers a second, duplicate review.
 - Comment `@codex review` only for one re-review, and only after pushing
   fixes. If findings remain after that, bring them to the owner as a short
   list with a recommendation instead of starting another round.
-- Merge into `beta/new-client` when the owner has said to merge, checks are
-  green, and the findings are handled.
+- Once Codex has passed it (no findings, or a clean re-review after the
+  fixes) and Android Checks is green on the final commit, merge it into
+  `beta/new-client` right away, without waiting for the owner to say merge
+  (owner ruling, October 31 2026). Then stop watching it.
+- Stop watching as soon as nothing more needs action. Do not stay subscribed
+  through status-only updates: every notification wakes the session and
+  spends usage.
 
 ### Usage control
 
