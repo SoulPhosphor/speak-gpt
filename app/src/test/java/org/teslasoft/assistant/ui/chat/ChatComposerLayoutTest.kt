@@ -40,6 +40,18 @@ import org.teslasoft.assistant.R
 class ChatComposerLayoutTest {
 
     @Test
+    fun focusingTheEditorStopsFollowBeforeItsPostedPromotion() = withActivity { activity ->
+        val fixture = Fixture(activity)
+        var stopped = false
+        fixture.composer.onEditingStarted = { stopped = true }
+
+        assertTrue(fixture.editor.requestFocus())
+
+        assertTrue(stopped)
+        assertSame(fixture.controls, fixture.editor.parent)
+    }
+
+    @Test
     fun expandingFocusedInlineEditorDoesNotReenterRemoval() = withActivity { activity ->
         val fixture = Fixture(activity)
         fixture.editor.setText("draft text")

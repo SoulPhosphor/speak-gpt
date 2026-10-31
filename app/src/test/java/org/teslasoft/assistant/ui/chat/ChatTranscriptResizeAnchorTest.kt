@@ -158,6 +158,163 @@ class ChatTranscriptResizeAnchorTest {
         assertEquals(SHORT - PADDING, t.lastBottom())
     }
 
+    @Test
+    fun aFingerOnTheChatAlsoWinsWhileTheViewportGrows() = withTranscript { t ->
+        t.showEnd(SHORT)
+        val watched = t.manager.findFirstCompletelyVisibleItemPosition()
+        val rowTop = t.manager.findViewByPosition(watched)!!.top
+
+        t.touch(MotionEvent.ACTION_DOWN)
+        t.resize(TALL)
+
+        assertEquals(rowTop, t.manager.findViewByPosition(watched)!!.top)
+        t.touch(MotionEvent.ACTION_UP)
+    }
+
+    @Test
+    fun aManualScrollAfterCaptureTakesPrecedenceOverTheOldAnchor() = withTranscript { t ->
+        t.showEnd(TALL)
+        t.transcript.captureResizeAnchor()
+        t.touch(MotionEvent.ACTION_DOWN)
+        t.transcript.scrollBy(0, -ROW)
+        t.touch(MotionEvent.ACTION_UP)
+        val watched = t.manager.findLastVisibleItemPosition()
+        val distance = t.manager.findViewByPosition(watched)!!.top - TALL
+
+        t.layout(SHORT)
+
+        assertEquals(SHORT + distance, t.manager.findViewByPosition(watched)!!.top)
+    }
+
+    @Test
+    fun aReplyRelayoutCannotMoveTheConversationUnderAHeldFinger() = withTranscript { t ->
+        t.showEnd(SHORT)
+        val watched = t.manager.findFirstCompletelyVisibleItemPosition()
+        val rowTop = t.manager.findViewByPosition(watched)!!.top
+        t.touch(MotionEvent.ACTION_DOWN)
+        t.resize(TALL)
+
+        t.rows.lastRowHeight += 100
+        t.rows.notifyItemChanged(LAST)
+        t.layout(TALL)
+
+        assertEquals(rowTop, t.manager.findViewByPosition(watched)!!.top)
+        t.touch(MotionEvent.ACTION_UP)
+    }
+
+    @Test
+    fun aGrowingDraftHoldsPositionWithoutAnExplicitComposerModeChange() = withTranscript { t ->
+        t.showEnd(TALL)
+
+        // Typing another line changes the editor's measured height without
+        // calling applyMode or changing the keyboard's inset.
+        t.layout(TALL - 100)
+
+        assertEquals(TALL - 100 - PADDING, t.lastBottom())
+    }
+
+    @Test
+    fun liftingAFingerDoesNotLetTheNextReplyUpdateMoveTheConversation() = withTranscript { t ->
+        t.showEnd(SHORT)
+        val watched = t.manager.findFirstCompletelyVisibleItemPosition()
+        val rowTop = t.manager.findViewByPosition(watched)!!.top
+        t.touch(MotionEvent.ACTION_DOWN)
+        t.resize(TALL)
+        t.touch(MotionEvent.ACTION_UP)
+
+        t.rows.lastRowHeight += 100
+        t.rows.notifyItemChanged(LAST)
+        t.layout(TALL)
+
+        assertEquals(rowTop, t.manager.findViewByPosition(watched)!!.top)
+    }
+
+    @Test
+    fun theRemainingKeyboardFramesHoldThePlaceLeftByTheFinger() = withTranscript { t ->
+        t.showEnd(SHORT)
+        val watched = t.manager.findFirstCompletelyVisibleItemPosition()
+        val top = t.manager.findViewByPosition(watched)!!.top
+        t.touch(MotionEvent.ACTION_DOWN)
+        t.resize(1250)
+        t.touch(MotionEvent.ACTION_UP)
+        val distance = top - 1250
+
+        t.resize(TALL)
+
+        assertEquals(TALL + distance, t.manager.findViewByPosition(watched)!!.top)
+    }
+
+    @Test
+    fun anExplicitJumpReleasesThePlaceRetainedAfterTouch() = withTranscript { t ->
+        t.showEnd(SHORT)
+        t.touch(MotionEvent.ACTION_DOWN)
+        t.resize(TALL)
+        t.touch(MotionEvent.ACTION_UP)
+
+        t.transcript.releaseResizeAnchor()
+        t.manager.scrollToPositionWithOffset(10, 0)
+        t.layout(TALL)
+
+        assertEquals(0, t.manager.findViewByPosition(10)!!.top)
+    }
+
+    @Test
+    fun aFreshSendReleasesTheOldHoldAndAllowsTheNewReplyToMove() = withTranscript { t ->
+        val gate = ChatAutoScrollGate()
+        val queue = ArrayList<Runnable>()
+        t.transcript.onUserInteraction = { gate.disabled = true }
+        t.showEnd(SHORT)
+        val watched = t.manager.findFirstCompletelyVisibleItemPosition()
+        val top = t.manager.findViewByPosition(watched)!!.top
+        t.touch(MotionEvent.ACTION_DOWN)
+        t.resize(TALL)
+        t.touch(MotionEvent.ACTION_UP)
+        t.rows.appendReply(1200)
+        t.layout(TALL)
+        assertEquals(top, t.manager.findViewByPosition(watched)!!.top)
+
+        // This is the same turn-start operation used by typed Send, voice
+        // sends and regeneration in ChatActivity.
+        gate.beginTurn(t.transcript::releaseResizeAnchor)
+        gate.post({ queue.add(it) }, { false }) { t.transcript.scrollToPosition(t.last) }
+        queue.single().run()
+        t.layout(TALL)
+
+        assertEquals(TALL - PADDING, t.lastBottom())
+    }
+
+    @Test
+    fun touchingAMessageChildAlsoStopsAutomaticFollow() = withTranscript { t ->
+        t.showEnd(TALL)
+        var stopped = false
+        var childTouched = false
+        t.transcript.onUserInteraction = { stopped = true }
+        val child = t.manager.findViewByPosition(t.manager.findFirstCompletelyVisibleItemPosition())!!
+        child.setOnTouchListener { _, _ -> childTouched = true; true }
+
+        t.touch(MotionEvent.ACTION_DOWN, child.top + 50f)
+
+        assertEquals(true, stopped)
+        assertEquals(true, childTouched)
+        t.touch(MotionEvent.ACTION_UP, child.top + 50f)
+    }
+
+    @Test
+    fun aSendReleasesAnAlreadyCapturedResizeHold() = withTranscript { t ->
+        t.layout(SHORT)
+        t.manager.scrollToPositionWithOffset(10, 0)
+        t.layout(SHORT)
+        t.transcript.captureResizeAnchor()
+        t.transcript.releaseResizeAnchor()
+        t.transcript.shouldHoldPositionOnResize = { false }
+        val row = t.manager.findFirstCompletelyVisibleItemPosition()
+        val top = t.manager.findViewByPosition(row)!!.top
+
+        t.layout(TALL)
+
+        assertEquals(top, t.manager.findViewByPosition(row)!!.top)
+    }
+
     private class Harness(
         val transcript: ChatTranscriptRecyclerView,
         val manager: LinearLayoutManager,
@@ -188,8 +345,8 @@ class ChatTranscriptResizeAnchorTest {
 
         fun lastBottom(): Int = manager.findViewByPosition(last)!!.bottom
 
-        fun touch(action: Int) {
-            val event = MotionEvent.obtain(0L, 0L, action, WIDTH / 2f, 100f, 0)
+        fun touch(action: Int, y: Float = 100f) {
+            val event = MotionEvent.obtain(0L, 0L, action, WIDTH / 2f, y, 0)
             transcript.dispatchTouchEvent(event)
             event.recycle()
         }
@@ -220,11 +377,17 @@ class ChatTranscriptResizeAnchorTest {
     }
 
     private class Rows(
-        private val count: Int,
+        private var count: Int,
         var lastRowHeight: Int
     ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
         fun heightOf(position: Int): Int = if (position == count - 1) lastRowHeight else ROW
+
+        fun appendReply(height: Int) {
+            count++
+            lastRowHeight = height
+            notifyItemInserted(count - 1)
+        }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder =
             object : RecyclerView.ViewHolder(View(parent.context)) {}

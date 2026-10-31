@@ -692,7 +692,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // provider/model/routing, resolved during initSettings and acted on once the
     // chat UI exists (a dialog + Summoning Circle, or the API Endpoints screen).
     private var providerRestoreOutcome: NewChatProviderRestore.Outcome? = null
-    private var disableAutoScroll = false
+    private val autoScrollGate = org.teslasoft.assistant.ui.chat.ChatAutoScrollGate()
+    private var disableAutoScroll: Boolean
+        get() = autoScrollGate.disabled
+        set(value) {
+            if (value) autoScrollGate.disabled = true
+            else autoScrollGate.beginTurn { chat?.releaseResizeAnchor() }
+        }
 
     // Set when a send closes the keyboard, consumed by the first keyboard
     // change that follows, so only that one close skips the position hold.
@@ -3342,6 +3348,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             before = ::captureTranscriptAnchor,
             after = null
         )
+        composerSurface?.onEditingStarted = {
+            disableAutoScroll = true
+            imeClosingForSend = false
+        }
+        chat?.shouldHoldPositionOnResize = { !imeClosingForSend }
         keyboardInput?.onBottomInsetChanging = { keyboardOpen, retreating ->
             // The keyboard closing because the user hit Send is the one change
             // no position is held across: that send asked for the reply, and
@@ -3355,6 +3366,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // strand the reply off screen. The keyboard coming back up ends it
             // immediately, whatever it interrupts.
             if (imeClosingForSend && (retreating || !keyboardOpen)) {
+                chat?.releaseResizeAnchorForNextLayout()
                 if (!keyboardOpen) imeClosingForSend = false
             } else {
                 imeClosingForSend = false
@@ -3363,7 +3375,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // stops for the rest of that reply, exactly as touching the
                 // conversation does, and putting the keyboard away again does
                 // not start it back up.
-                if (keyboardOpen && replyIsStreaming()) disableAutoScroll = true
+                if (keyboardOpen) disableAutoScroll = true
                 captureTranscriptAnchor()
             }
         }
@@ -3543,16 +3555,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         chat?.post { positionInitialTranscript() }
 
-        chat?.setOnTouchListener { _, event -> run {
-            if (event.action == MotionEvent.ACTION_DOWN ||
-                event.action == MotionEvent.ACTION_SCROLL ||
-                event.action == MotionEvent.ACTION_UP
-            ) {
-                // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_DISABLED
-                disableAutoScroll = true
-            }
-            return@setOnTouchListener false
-        }}
+        // Observe before dispatching to a message child: links, selection and
+        // message controls can consume a touch before an OnTouchListener sees it.
+        chat?.onUserInteraction = {
+            disableAutoScroll = true
+            imeClosingForSend = false
+        }
 
         if (threadLoader?.visibility == View.VISIBLE) Handler(Looper.getMainLooper()).postDelayed({
             val fadeOut: Animation = AnimationUtils.loadAnimation(this, R.anim.fade_out)
@@ -3594,6 +3602,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             chat?.scrollToTranscriptEnd()
             return
         }
+        chat?.releaseResizeAnchor()
         (chat?.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
             target,
             (chat?.height ?: 0) / 4
@@ -3890,7 +3899,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * moment the pre-resize geometry can still be read.
      */
     private fun captureTranscriptAnchor() {
-        chat?.captureResizeAnchor()
+        if (!imeClosingForSend) chat?.captureResizeAnchor()
     }
 
     /**
@@ -5963,6 +5972,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             legacyRole = null,
             fingerprint = null
         ) ?: return
+        chat?.releaseResizeAnchor()
         (chat?.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
             target,
             (chat?.height ?: 0) / 4
@@ -6839,6 +6849,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val boxWasEmpty = messageInput?.text.isNullOrEmpty()
                 if (shouldAutoSendTranscription(boxWasEmpty)) {
                     if (refuseOverLimitTranscript(transcription)) return
+                    disableAutoScroll = false
                     putMessage(prefix + transcription + endSeparator, false)
 
                     chatMessages.add(
@@ -7534,6 +7545,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val boxWasEmpty = messageInput?.text.isNullOrEmpty()
         if (shouldAutoSendTranscription(boxWasEmpty)) {
             if (refuseOverLimitTranscript(transcription)) return
+            disableAutoScroll = false
             putMessage(prefix + transcription + endSeparator, false)
             chatMessages.add(
                 ChatMessage(
@@ -8767,6 +8779,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     showMessageTooLong(prompt)
                     return
                 }
+                disableAutoScroll = false
                 putMessage(prompt, false)
 
                 chatMessages.add(
@@ -10402,8 +10415,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // This close belongs to the send rather than to the user putting the
         // keyboard away, so the transcript is left free to follow the reply
         // instead of holding the position it had before the message was sent.
+        disableAutoScroll = false
+        chat?.releaseResizeAnchor()
         imeClosingForSend = true
         composerSurface?.dismissImeForSend()
+        if (keyboardInput?.isKeyboardOpen != true) imeClosingForSend = false
 
         val compactCommand = org.teslasoft.assistant.util.summarizer.CompactCommand.parse(rawMessage)
         val effectiveMessage = when (compactCommand) {
@@ -11382,11 +11398,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // blob as the text — there is never a window where the text is final but the
     // state is stale.
 
-    /** Whether the newest reply is still being generated. */
-    private fun replyIsStreaming(): Boolean =
-        messages.lastOrNull()?.get(MessageCompletionState.KEY_STATE)?.toString() ==
-            MessageCompletionState.STREAMING
-
     /** Tag the just-added assistant placeholder as actively streaming. Not
      *  saved eagerly: the marker rides the first mid-stream save, so no
      *  fragment ever reaches disk without it. A death before that first save
@@ -12211,7 +12222,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val itemCount = adapter?.itemCount ?: 0
 
             if (mode) {
-                chat?.post {
+                autoScrollGate.post(
+                    enqueue = { chat?.post(it) },
+                    keyboardHolding = { keyboardInput?.isKeyboardOpen == true && !imeClosingForSend }
+                ) {
                     if (itemCount > 0) {
                         chat?.scrollToPosition(itemCount - 1)
 
@@ -12226,7 +12240,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun scrollX(itemCount: Int) {
         if (itemCount <= 0) return
-        chat?.post {
+        autoScrollGate.post(
+            enqueue = { chat?.post(it) },
+            keyboardHolding = { keyboardInput?.isKeyboardOpen == true && !imeClosingForSend }
+        ) {
             val recycler = chat ?: return@post
             val lastView = recycler.layoutManager?.findViewByPosition(itemCount - 1)
             lastView?.let {
@@ -12285,8 +12302,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             restoreUIState()
             return
         }
-
-        disableAutoScroll = false
 
         // Capture the user's message here, the single point every input method flows
         // through (typing, voice recognition, and Whisper transcription), so the
@@ -13593,7 +13608,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         preparedTurn: PreparedRegularTurn? = null,
         suppressImageTools: Boolean = false
     ) {
-        disableAutoScroll = false
         val streamingEnabled = preferences?.getStreaming() ?: true
         val legacyCanonical = if (preparedTurn == null) {
             canonicalConversationSnapshot()
@@ -14670,6 +14684,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     override fun onRetryClick() {
+        disableAutoScroll = false
         // Keep the reply being regenerated as an alternate version instead of
         // discarding it (owner spec, Aug 16 2026). Snapshot the current last
         // assistant turn's existing version list (or wrap its single current

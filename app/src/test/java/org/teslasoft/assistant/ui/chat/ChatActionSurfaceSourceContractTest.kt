@@ -126,12 +126,15 @@ class ChatActionSurfaceSourceContractTest {
         // the close back to the hold and strands the reply off screen.
         assertTrue(composer.contains("val retreating = imeBottom < lastImeBottom"))
         assertTrue(activity.contains("if (imeClosingForSend && (retreating || !keyboardOpen))"))
+        assertTrue(activity.contains("chat?.releaseResizeAnchorForNextLayout()"))
         assertTrue(activity.contains("if (!keyboardOpen) imeClosingForSend = false"))
 
         // Opening the keyboard mid-reply ends automatic follow for the rest of
         // that reply. Closing the keyboard again must not resume it, so this
         // uses the same latch as a touch rather than a keyboard-open check.
-        assertTrue(activity.contains("if (keyboardOpen && replyIsStreaming()) disableAutoScroll = true"))
+        // Opening while request preparation is still running must stop follow
+        // too; waiting until streaming starts misses that user interaction.
+        assertTrue(activity.contains("if (keyboardOpen) disableAutoScroll = true"))
 
         assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
         assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))
