@@ -50,7 +50,10 @@ class BackupRestoreScreenContractTest {
         assertTrue(!layout.contains("@+id/btn_create_recovery"))
         assertTrue(optionsLayout.contains("@+id/btn_create_recovery"))
         assertTrue(!layout.contains("@string/backup_readable_section"))
-        assertTrue(!optionsLayout.contains("ImageButton"))
+        // BackUp Options uses the simple screen header: a shared back button
+        // and centered title (owner ruling, Oct 31 2026).
+        assertTrue(optionsLayout.contains("style=\"@style/Widget.App.ActionBar.BackButton\""))
+        assertTrue(!optionsLayout.contains("Widget.App.Page.InsetRoot"))
         val optionsRow = layout.substringAfter("@+id/row_backup_options")
             .substringBefore("<ImageView")
         assertTrue(!optionsRow.contains("Row.Subtitle"))

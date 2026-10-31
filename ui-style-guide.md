@@ -1493,6 +1493,8 @@ full-width actions inherit `AppButton.Primary` through `RestoreSelection` and
 `RestoreDatabase`. This family preserves the prior restore controls' appearance.
 
 `Widget.App.Page.InsetRoot` fits a title-only settings page's entire frame
-inside the status and navigation bars. Use it at the root of BackUp Options
-and Restore Options so their headers and last controls remain unobscured
-under enforced edge-to-edge layout.
+inside the status and navigation bars. Restore Options still uses it at its
+root. BackUp Options instead uses the simple screen header (shared back
+button and title) whose background reaches the top edge, with
+`BackupOptionsActivity` padding the header below the status bar and the scroll
+area above the navigation bar, as Backup & Restore does.
