@@ -447,11 +447,12 @@ class ChatImeInsetLayout @JvmOverloads constructor(
         val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
         val targetBottom = baseBottom + max(navBottom, imeBottom)
         val retreating = imeBottom < lastImeBottom
-        // Keyboard Chat Interaction Debugging (see ResizeTrace).
-        if (paddingBottom != targetBottom) {
+        // Record each actual keyboard inset step (opening or closing) before
+        // adjusting the host. Padding-only changes remain separate events.
+        if (imeBottom != lastImeBottom) {
+            ResizeTrace.keyboardInsetChanged(lastImeBottom, imeBottom, navBottom, paddingBottom, targetBottom)
+        } else if (paddingBottom != targetBottom) {
             ResizeTrace.resize("insets ime=$imeBottom nav=$navBottom padding ${paddingBottom}->$targetBottom retreating=$retreating")
-        } else if (imeBottom != lastImeBottom) {
-            ResizeTrace.note("insets ime=$imeBottom nav=$navBottom padding unchanged=$paddingBottom")
         }
         lastImeBottom = imeBottom
         isKeyboardOpen = imeBottom > 0

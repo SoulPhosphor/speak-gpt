@@ -65,6 +65,18 @@ internal object ResizeTrace {
         private set
     private var baselineDistance = 0
     private var lastFrameDistance: Int? = null
+    private var baselineScreenDistance: Int? = null
+    private var lastFrameScreenDistance: Int? = null
+    private var maxScreenDrift = 0
+    private var maxScreenFrameJump = 0
+    private var baselineRowHeight: Int? = null
+    private var lastRowHeight: Int? = null
+    private var keyboardOpeningObserved = false
+    private var keyboardClosingObserved = false
+    private var keyboardFrameCount = 0
+    private var initialImeBottom: Int? = null
+    private var finalImeBottom: Int? = null
+    private var viewportResizeCount = 0
     private var maxFrameJump = 0
     private var maxFrameJumpAt = ""
     private var maxDrift = 0
@@ -90,6 +102,26 @@ internal object ResizeTrace {
         extend()
     }
 
+    /** Observe actual IME motion, including an inset frame that does not
+     * change container padding. A keyboard-opening failure must not get
+     * classified as a composer-only resize. */
+    fun keyboardInsetChanged(from: Int, to: Int, nav: Int, padding: Int, targetPadding: Int) {
+        if (!enabled || from == to) return
+        resize("IME ${if (to > from) "OPENING" else "CLOSING"} $from->$to nav=$nav padding=$padding->$targetPadding")
+        if (initialImeBottom == null) initialImeBottom = from
+        finalImeBottom = to
+        keyboardFrameCount++
+        if (to > from) keyboardOpeningObserved = true else keyboardClosingObserved = true
+    }
+
+    /** A keyboard inset without a chat-area resize indicates a missing
+     * resize handoff, and must not receive a successful position-hold label. */
+    fun transcriptResized(oldHeight: Int, newHeight: Int) {
+        if (!active || oldHeight == newHeight) return
+        viewportResizeCount++
+        note("transcript viewport $oldHeight->$newHeight")
+    }
+
     /** Movement during an open sequence also keeps it open, so a runaway
      *  scroll after the resize is captured (up to [MAX_SEQUENCE_MS]). */
     fun movement(line: String) {
@@ -106,11 +138,16 @@ internal object ResizeTrace {
 
     /** The first successful capture of a sequence sets the drift baseline:
      *  the row's top minus the viewport bottom, which is the composer top. */
-    fun anchorCaptured(position: Int, distanceFromBox: Int) {
+    fun anchorCaptured(position: Int, distanceFromBox: Int, screenDistance: Int?, rowHeight: Int?) {
         if (!active || baselinePosition >= 0) return
         baselinePosition = position
         baselineDistance = distanceFromBox
         lastFrameDistance = distanceFromBox
+        baselineScreenDistance = screenDistance
+        lastFrameScreenDistance = screenDistance
+        baselineRowHeight = rowHeight
+        lastRowHeight = rowHeight
+        note("anchor baseline: rowTopFromComposerScreen=${screenDistance ?: "unavailable"} rowHeight=${rowHeight ?: "unavailable"}")
     }
 
     fun fingerDown() {
@@ -123,7 +160,7 @@ internal object ResizeTrace {
 
     /** One drawn frame. [distanceFromBox] is the baseline row's distance from
      *  the message box, or null when that row is not on screen. */
-    fun frameDrawn(distanceFromBox: Int?): Int {
+    fun frameDrawn(distanceFromBox: Int?, screenDistance: Int?, rowHeight: Int?): Int {
         val n = ++frame
         if (baselinePosition < 0) return n
         if (distanceFromBox == null) {
@@ -145,6 +182,22 @@ internal object ResizeTrace {
         if (abs(drift) > abs(maxDrift)) maxDrift = drift
         if (abs(drift) > DRIFT_LIMIT_PX) fail("draw#$n drifted ${drift}px")
         lastFrameDistance = distanceFromBox
+        lastRowHeight = rowHeight
+
+        // The old metric only compared row coordinates within the RecyclerView.
+        // If Android moves the entire chat/composer, the row's local offset can
+        // stay fixed even though its real screen position has changed.
+        if (screenDistance != null && baselineScreenDistance != null) {
+            val screenDrift = screenDistance - baselineScreenDistance!!
+            if (abs(screenDrift) > abs(maxScreenDrift)) maxScreenDrift = screenDrift
+            lastFrameScreenDistance?.let { previous ->
+                maxScreenFrameJump = maxOf(maxScreenFrameJump, abs(screenDistance - previous))
+            }
+            if (abs(screenDrift) > DRIFT_LIMIT_PX) {
+                fail("draw#$n row moved ${screenDrift}px relative to composer on screen")
+            }
+        }
+        lastFrameScreenDistance = screenDistance
         return n
     }
 
@@ -175,6 +228,18 @@ internal object ResizeTrace {
         baselinePosition = -1
         baselineDistance = 0
         lastFrameDistance = null
+        baselineScreenDistance = null
+        lastFrameScreenDistance = null
+        maxScreenDrift = 0
+        maxScreenFrameJump = 0
+        baselineRowHeight = null
+        lastRowHeight = null
+        keyboardOpeningObserved = false
+        keyboardClosingObserved = false
+        keyboardFrameCount = 0
+        initialImeBottom = null
+        finalImeBottom = null
+        viewportResizeCount = 0
         maxFrameJump = 0
         maxFrameJumpAt = ""
         maxDrift = 0
@@ -219,16 +284,25 @@ internal object ResizeTrace {
         }
         if (drift != null && abs(drift) > DRIFT_LIMIT_PX) fail("settled with drift ${drift}px")
 
+        val event = when {
+            keyboardOpeningObserved && keyboardClosingObserved -> "KEYBOARD OPEN/CLOSE"
+            keyboardOpeningObserved -> "KEYBOARD OPEN"
+            keyboardClosingObserved -> "KEYBOARD CLOSE"
+            else -> "COMPOSER/OTHER (no keyboard motion recorded)"
+        }
         val title = when {
             sendClosedKeyboard -> "[Resize Trace: NOT HELD (send closed keyboard)]"
             fingerOnChat -> "[Resize Trace: NOT HELD (finger on chat)]"
             baselinePosition < 0 -> "[Resize Trace: NOT HELD (nothing to hold)]"
             anchorLeftScreen && endDistance == null ->
-                "[Resize Trace: SPIN-OUT / DRIFT (anchor left the screen)]"
-            firstFailure != null -> "[Resize Trace: SPIN-OUT / DRIFT (drift ${drift}px)]"
-            else -> "[Resize Trace: OK (drift ${drift}px)]"
+                "[Resize Trace: $event / SPIN-OUT (anchor left screen)]"
+            firstFailure != null -> "[Resize Trace: $event / DRIFT (row drift ${drift}px)]"
+            keyboardOpeningObserved && viewportResizeCount == 0 ->
+                "[Resize Trace: KEYBOARD OPEN / NO CHAT RESIZE]"
+            else -> "[Resize Trace: $event / ROW HELD (row drift ${drift}px)]"
         }
-        val failed = title.contains("SPIN-OUT")
+        val failed = !sendClosedKeyboard && !fingerOnChat &&
+            (firstFailure != null || title.contains("SPIN-OUT") || title.contains("NO CHAT RESIZE"))
         val message = buildString {
             append(title).append('\n')
             if (baselinePosition >= 0) {
@@ -240,6 +314,18 @@ internal object ResizeTrace {
                 if (maxFrameJumpAt.isNotEmpty()) append(" at ").append(maxFrameJumpAt)
                 append(" (distance = anchor row top - message box top)\n")
             }
+            append("event=").append(event)
+                .append(" IME frames=").append(keyboardFrameCount)
+                .append(" IME bottom=").append(initialImeBottom?.toString() ?: "not observed")
+                .append(" -> ").append(finalImeBottom?.toString() ?: "not observed")
+                .append(" transcript resizes=").append(viewportResizeCount).append('\n')
+            append("screen rowTop-from-composer baseline=")
+                .append(baselineScreenDistance?.toString() ?: "unavailable")
+                .append("px maxDrift=").append(maxScreenDrift)
+                .append("px maxFrameJump=").append(maxScreenFrameJump).append("px\n")
+            append("anchor row height baseline=")
+                .append(baselineRowHeight?.toString() ?: "unavailable")
+                .append(" end=").append(lastRowHeight?.toString() ?: "unavailable").append("px\n")
             firstFailure?.let { append("first problem: ").append(it).append('\n') }
             append("sequence ").append(reason).append(", ").append(frame).append(" frames\n")
             lines.forEach { append(it).append('\n') }
