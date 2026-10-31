@@ -65,7 +65,7 @@ class SummaryResummarizeWiringContractTest {
         assertTrue(actions.contains(
             "app:constraint_referenced_ids=\"btn_compaction_error_retry,btn_compaction_error_copy,btn_compaction_error_okay\""
         ))
-        assertTrue(actions.contains("style=\"@style/AppButton.Primary.Inline.Centered\""))
+        assertTrue(actions.contains("style=\"@style/AppButton.Primary.Inline.Centered.BelowDialogRow\""))
         assertTrue(actions.contains("@string/title_summarizer_settings"))
         assertTrue(activity.contains("R.layout.dialog_compaction_error_actions"))
         assertFalse(activity.contains(".setNegativeButton(R.string.btn_msg_retry)"))

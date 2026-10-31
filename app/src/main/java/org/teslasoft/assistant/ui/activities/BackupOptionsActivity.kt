@@ -57,7 +57,11 @@ class BackupOptionsActivity : MemoryBackupRestoreActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ScreenChrome.apply(this, findViewById(R.id.action_bar), null)
+        val header = findViewById<View>(R.id.action_bar)
+        val back = findViewById<View>(R.id.btn_back)
+        ScreenChrome.apply(this, header, back)
+        ScreenChrome.fitSystemBars(findViewById(R.id.root), header, findViewById(R.id.scroll))
+        back?.setOnClickListener { finish() }
         pendingEnableAfterPick = savedInstanceState?.getBoolean("pendingEnableAfterPick") ?: false
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
         btnAutoFrequency = findViewById(R.id.btn_auto_frequency)
@@ -407,5 +411,4 @@ class BackupOptionsActivity : MemoryBackupRestoreActivity() {
                 templateRes, label ?: getString(R.string.backup_location_selected_generic)
             )
         }
-
 }

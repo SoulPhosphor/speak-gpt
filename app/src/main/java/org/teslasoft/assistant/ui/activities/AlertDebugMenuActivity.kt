@@ -38,6 +38,7 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.chat.ResizeTrace
 
 /**
  * The "Alerts, Errors & Logs" screen, opened from the single full-width tile
@@ -89,6 +90,7 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
     private var fieldResponseLifecycleMaxDays: EditText? = null
     // Text to Speech lifecycle logging: toggle and its own retention pair.
     private var switchTtsLifecycle: MaterialSwitch? = null
+    private var switchKeyboardChatDebugging: MaterialSwitch? = null
     private var fieldTtsLifecycleMaxLogs: EditText? = null
     private var fieldTtsLifecycleMaxDays: EditText? = null
     // Image generation logs (image-generation-rebuild-plan.md §13): the two
@@ -137,6 +139,7 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         fieldResponseLifecycleMaxLogs = findViewById(R.id.field_response_lifecycle_max_logs)
         fieldResponseLifecycleMaxDays = findViewById(R.id.field_response_lifecycle_max_days)
         switchTtsLifecycle = findViewById(R.id.switch_tts_lifecycle)
+        switchKeyboardChatDebugging = findViewById(R.id.switch_keyboard_chat_debugging)
         fieldTtsLifecycleMaxLogs = findViewById(R.id.field_tts_lifecycle_max_logs)
         fieldTtsLifecycleMaxDays = findViewById(R.id.field_tts_lifecycle_max_days)
         switchImageGenErrors = findViewById(R.id.switch_image_gen_errors)
@@ -195,6 +198,7 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         fieldResponseLifecycleMaxDays?.setText(p.getResponseLifecycleLogMaxDays().toString())
 
         switchTtsLifecycle?.isChecked = p.getTtsLifecycleLogging()
+        switchKeyboardChatDebugging?.isChecked = p.getKeyboardChatInteractionDebugging()
         fieldTtsLifecycleMaxLogs?.setText(p.getTtsLifecycleLogMaxEntries().toString())
         fieldTtsLifecycleMaxDays?.setText(p.getTtsLifecycleLogMaxDays().toString())
 
@@ -272,6 +276,10 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         }
 
         switchTtsLifecycle?.setOnCheckedChangeListener { _, checked -> p.setTtsLifecycleLogging(checked) }
+        switchKeyboardChatDebugging?.setOnCheckedChangeListener { _, checked ->
+            p.setKeyboardChatInteractionDebugging(checked)
+            ResizeTrace.enabled = checked
+        }
         wireRetentionField(
             fieldTtsLifecycleMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
             { p.getTtsLifecycleLogMaxEntries() }, { v -> p.setTtsLifecycleLogMaxEntries(v) },

@@ -307,6 +307,7 @@ import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
 import org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
 import org.teslasoft.assistant.ui.chat.ChatTranscriptRecyclerView
+import org.teslasoft.assistant.ui.chat.ResizeTrace
 import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
@@ -1577,6 +1578,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     override fun onResume() {
         super.onResume()
+        // Keyboard Chat Interaction Debugging follows the saved switch.
+        preferences?.let { ResizeTrace.enabled = it.getKeyboardChatInteractionDebugging() }
 
         if (PortableRestoreRecoveryFlow.showIfPending(this)) return
         if (PortableRestoreProcessGate.blocksCurrentProcess(this)) return
@@ -1703,6 +1706,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 NewConversationCoordinator(this@ChatActivity).createDefaultPendingConversation()
             }
             startActivity(rootIntent(this@ChatActivity, pending.id, pending.name, pendingConversation = true))
+        }
+    }
+
+    /**
+     * After this chat is deleted, a fresh chat takes its place with no
+     * animation. The new chat screen opens on top of this one, inside the same
+     * app task, and this screen then closes behind it, so the app always has a
+     * screen showing. Clearing the task first, or finishing this screen on its
+     * own, briefly left no app screen and showed the phone's home screen.
+     */
+    private fun replaceDeletedChatWithNewChat() {
+        lifecycleScope.launch {
+            val pending = withContext(Dispatchers.IO) {
+                NewConversationCoordinator(this@ChatActivity).createDefaultPendingConversation()
+            }
+            if (isFinishing || isDestroyed) return@launch
+            val intent = rootIntent(this@ChatActivity, pending.id, pending.name, pendingConversation = true)
+                .apply {
+                    removeFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                }
+            startActivity(intent)
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+            finish()
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
         }
     }
 
@@ -2818,6 +2848,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         chatName = prepared.chatName
         preferences = prepared.preferences
+        ResizeTrace.enabled = prepared.preferences.getKeyboardChatInteractionDebugging()
         apiEndpointPreferences = prepared.apiEndpointPreferences
         logitBiasPreferences = prepared.logitBiasPreferences
         apiEndpointObject = prepared.apiEndpointObject
@@ -3353,6 +3384,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             imeClosingForSend = false
         }
         chat?.shouldHoldPositionOnResize = { !imeClosingForSend }
+        // Keyboard Chat Interaction Debugging (see ResizeTrace).
+        chat?.traceExtraState = {
+            "imeClosingForSend=$imeClosingForSend disableAutoScroll=$disableAutoScroll " +
+                "keyboardOpen=${keyboardInput?.isKeyboardOpen} composerExpanded=${composerSurface?.isExpanded()}"
+        }
         keyboardInput?.onBottomInsetChanging = { keyboardOpen, retreating ->
             // The keyboard closing because the user hit Send is the one change
             // no position is held across: that send asked for the reply, and
@@ -3366,6 +3402,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // strand the reply off screen. The keyboard coming back up ends it
             // immediately, whatever it interrupts.
             if (imeClosingForSend && (retreating || !keyboardOpen)) {
+                ResizeTrace.resize("activity: send-close, hold released (open=$keyboardOpen retreating=$retreating)")
+                ResizeTrace.sendClosingKeyboard()
                 chat?.releaseResizeAnchorForNextLayout()
                 if (!keyboardOpen) imeClosingForSend = false
             } else {
@@ -3376,7 +3414,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // conversation does, and putting the keyboard away again does
                 // not start it back up.
                 if (keyboardOpen) disableAutoScroll = true
-                captureTranscriptAnchor()
+                captureTranscriptAnchor("keyboard inset open=$keyboardOpen retreating=$retreating")
             }
         }
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -3898,8 +3936,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * leaving. Both report before they change anything, which is the only
      * moment the pre-resize geometry can still be read.
      */
-    private fun captureTranscriptAnchor() {
-        if (!imeClosingForSend) chat?.captureResizeAnchor()
+    private fun captureTranscriptAnchor(reason: String = "composer mode change") {
+        if (!imeClosingForSend) chat?.captureResizeAnchor(reason)
+        else {
+            ResizeTrace.resize("activity: capture[$reason] skipped, imeClosingForSend")
+            ResizeTrace.sendClosingKeyboard()
+        }
     }
 
     /**
@@ -5432,7 +5474,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 pendingChatExportBytes = null
                 cancelAllAiActivity("chat deletion")
             },
-            onCommitted = { finishActivity() },
+            onCommitted = { replaceDeletedChatWithNewChat() },
             onFailed = { deletingChat = false }
         )
     }

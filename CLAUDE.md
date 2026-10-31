@@ -395,8 +395,19 @@ themed and fixed from one place (like CSS classes, not inline `style=""`).
   drawable when a dimension resource should hold it, or into Kotlin code.
 - Boxes that show the same kind of thing use the same styles, so they always
   match.
-- If no shared style fits, stop and ask the owner before adding anything; do
-  not copy values from another layout as a shortcut.
+- Do not ask the owner how something should look when `ui-style-guide.md`
+  already covers it. Unless the owner says to make it a different way, follow
+  the style that applies (owner ruling, October 31 2026).
+- Never copy anything: no screen, layout, code, values or approach from any
+  existing file, and never just follow what another screen does, unless the
+  owner explicitly says to copy that specific thing (owner ruling, October 31
+  2026). Some screens are converted wrong, and copying them duplicates what
+  is broken, so existing screens and code are never a reference; only `ui-style-guide.md` decides how something looks.
+- If no shared style fits, create a new shared style (with its dimensions)
+  without asking the owner (owner ruling, October 31 2026). Never hard-code a
+  value instead, and do not copy values from another layout as a shortcut.
+- The project's `.claude/settings.json` hooks repeat this rule to Claude Code
+  whenever a message is about the app's look or a UI file is edited.
 
 New UI must remain compatible with app-wide themes and palette changes.
 
@@ -470,7 +481,7 @@ For each component, state:
 - what will change;
 - what will remain intentionally different.
 
-If no adequate shared style exists, stop before copying attributes. Explain the missing shared pattern and obtain approval for the shared solution.
+If no adequate shared style exists, do not copy attributes. Create the missing shared style without asking the owner (owner ruling, October 31 2026) and use it.
 
 Do not use a Partial, Unconverted, Legacy / remove, or Unaudited screen from `ui-style-adoption.md` as a whole-screen template.
 

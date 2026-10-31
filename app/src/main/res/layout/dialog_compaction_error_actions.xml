@@ -4,35 +4,18 @@
   dialog's message: one right-aligned row of Retry, Copy and Okay, with Okay
   dropping to the next line, still on the right, only when the row does not
   fit (the same wrapping row as the Summarizer Errors pop-up); then
-  Summarizer Settings centered beneath it.
+  Summarizer Settings centered beneath it. Structure only; every appearance
+  value comes from the Widget.App.Dialog.Actions styles.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingHorizontal="24dp"
-    android:paddingTop="8dp"
-    android:paddingBottom="16dp">
+    style="@style/Widget.App.Dialog.Actions">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+    <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Dialog.Actions.EndRow">
 
         <androidx.constraintlayout.helper.widget.Flow
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            app:constraint_referenced_ids="btn_compaction_error_retry,btn_compaction_error_copy,btn_compaction_error_okay"
-            app:flow_firstHorizontalBias="1"
-            app:flow_horizontalBias="1"
-            app:flow_horizontalGap="12dp"
-            app:flow_horizontalStyle="packed"
-            app:flow_lastHorizontalBias="1"
-            app:flow_verticalGap="8dp"
-            app:flow_wrapMode="chain"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            style="@style/Widget.App.Dialog.Actions.EndRowFlow"
+            app:constraint_referenced_ids="btn_compaction_error_retry,btn_compaction_error_copy,btn_compaction_error_okay" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_compaction_error_retry"
@@ -52,7 +35,6 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_compaction_error_settings"
-        style="@style/AppButton.Primary.Inline.Centered"
-        android:layout_marginTop="8dp"
+        style="@style/AppButton.Primary.Inline.Centered.BelowDialogRow"
         android:text="@string/title_summarizer_settings" />
 </LinearLayout>

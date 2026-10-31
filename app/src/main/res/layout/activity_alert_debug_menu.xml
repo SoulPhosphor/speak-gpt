@@ -848,6 +848,25 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- ============ Keyboard Chat Interaction Debugging ============
+                 Writes each chat keyboard/composer resize to the Error Log with
+                 its anchor drift (owner request, Oct 31 2026). Title only, by
+                 owner instruction: no subtitle. -->
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/keyboard_chat_interaction_debugging_title" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_keyboard_chat_debugging"
+                    style="@style/Widget.App.Row.Switch"
+                    android:contentDescription="@string/keyboard_chat_interaction_debugging_title" />
+            </LinearLayout>
+
             <!-- ============ Audio Debugging shortcut ============ -->
             <!-- All microphone/voice diagnostics moved to their own Audio
                  Debugging screen (reached from Voice & Speech). This row is a

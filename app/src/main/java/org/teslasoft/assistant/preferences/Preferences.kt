@@ -2056,6 +2056,19 @@ class Preferences internal constructor(
     }
 
     /**
+     * Keyboard Chat Interaction Debugging (Alerts, Errors & Logs). When on,
+     * each chat keyboard/composer resize is written to the Error Log with its
+     * anchor drift and step-by-step trace. Off by default.
+     */
+    fun getKeyboardChatInteractionDebugging() : Boolean {
+        return getGlobalBoolean("keyboard_chat_interaction_debugging", false)
+    }
+
+    fun setKeyboardChatInteractionDebugging(enabled: Boolean) {
+        putGlobalBoolean("keyboard_chat_interaction_debugging", enabled, false)
+    }
+
+    /**
      * Log entry ordering for the Logs viewer. On (the default) shows each log
      * newest entry first; off shows oldest first. Remembered app-wide so a
      * person's chosen order carries across every log and across sessions until

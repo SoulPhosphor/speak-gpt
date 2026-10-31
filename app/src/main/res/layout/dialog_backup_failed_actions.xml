@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup Attempts Failed pop-up actions (owner ruling, Oct 31 2026), beneath
+  the dialog's message: Cancel then Retry as one right-aligned row of real
+  buttons, then Change Backup Folder centered beneath it. Structure only;
+  every appearance value comes from the Widget.App.Dialog.Actions styles.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.App.Dialog.Actions">
+
+    <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Dialog.Actions.EndRow">
+
+        <androidx.constraintlayout.helper.widget.Flow
+            style="@style/Widget.App.Dialog.Actions.EndRowFlow"
+            app:constraint_referenced_ids="btn_backup_failed_cancel,btn_backup_failed_retry" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_backup_failed_cancel"
+            style="@style/AppButton.Destructive.Inline"
+            android:text="@string/btn_cancel" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_backup_failed_retry"
+            style="@style/AppButton.Primary.Inline"
+            android:text="@string/health_btn_retry" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_backup_failed_change_folder"
+        style="@style/AppButton.Primary.Inline.Centered.BelowDialogRow"
+        android:text="@string/health_btn_change_folder" />
+</LinearLayout>

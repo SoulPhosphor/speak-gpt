@@ -280,8 +280,20 @@ A row of label-sized actions that may not fit on one line uses a
 `ConstraintLayout` `Flow` (`flow_wrapMode="chain"`, all horizontal biases `1`)
 of `AppButton.*.Inline` buttons, so the last action drops to the next line,
 still on the right. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`)
-and the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
-Summarizer Settings centered beneath as an approved exception).
+the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
+Summarizer Settings centered beneath as an approved exception), and Backup
+Attempts Failed (`dialog_backup_failed_actions.xml`, Cancel then Retry, with
+Change Backup Folder centered beneath as an approved exception).
+
+The styled form of that action area is `Widget.App.Dialog.Actions` (the
+container, inset from the dialog's rounded corners), `Widget.App.Dialog.Actions.EndRow`
+with `Widget.App.Dialog.Actions.EndRowFlow` (the right-aligned wrapping row;
+the layout lists only the row's button ids), and
+`AppButton.Primary.Inline.Centered.BelowDialogRow` for a centered action on
+its own line beneath the row. Spacing lives in `dialog_actions_*` and
+`dialog_action_*` dimensions. Summarizer Errors, the Compaction error pop-up
+and Backup Attempts Failed all use these styles. A pop-up's own scrolling
+content column (the Summarizer Errors list) uses `Widget.App.Dialog.Content`.
 
 Parameter information boxes use `ParameterInfoDialog` and the shared
 `view_parameter_info_title.xml` heading, styled by `Widget.App.ParameterInfo.*`.
@@ -409,7 +421,7 @@ Use these pieces in order:
 1. `Widget.App.Row.Toggle`
 2. `Widget.App.Row.TextColumn`
 3. `Widget.App.Row.Title`
-4. `Widget.App.Row.Subtitle`
+4. `Widget.App.Row.Subtitle` (left out of a title-only toggle)
 5. `Widget.App.Row.Switch`
 
 Use for a setting that changes a Boolean value directly instead of navigating to another screen.
@@ -502,6 +514,19 @@ Use:
 Use when the header contains only a back button and centered title.
 
 The back button style expects the view id `btn_back`.
+
+### Header joined to the top edge
+
+Every full-screen page's `Widget.App.ActionBar` header reaches the top edge of
+the screen, with no gap above it (owner ruling, Oct 31 2026). Call
+`ScreenChrome.fitSystemBars(root, header, content)`
+(`org.teslasoft.assistant.ui.util`) after `ScreenChrome.apply`: on Android 15
+and later it extends the header's background up behind the status bar with
+its contents below it, ends the scrolling content above the navigation bar,
+and keeps the page clear of side insets and cutouts. The layout supplies only
+the ids `root`, `action_bar` and `scroll`. Do not fit the page root inside the
+system bars instead; that leaves a gap above the header. Current users:
+BackUp Options and Restore Options.
 
 ### Header with one trailing action icon
 
@@ -1480,7 +1505,5 @@ styles; geometry comes from `restore_*` dimension tokens. The two existing
 full-width actions inherit `AppButton.Primary` through `RestoreSelection` and
 `RestoreDatabase`. This family preserves the prior restore controls' appearance.
 
-`Widget.App.Page.InsetRoot` fits a title-only settings page's entire frame
-inside the status and navigation bars. Use it at the root of BackUp Options
-and Restore Options so their headers and last controls remain unobscured
-under enforced edge-to-edge layout.
+BackUp Options and Restore Options use the simple screen header and
+`ScreenChrome.fitSystemBars` (see Screen headers).
