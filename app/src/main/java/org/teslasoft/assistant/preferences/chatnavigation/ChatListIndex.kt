@@ -249,6 +249,8 @@ object ChatListIndex {
     }
 
     private const val WRITE_BATCH = 50
+    private const val MAINTENANCE_PREFS = "chat_list_maintenance"
+    private const val KEY_START_DATES_FILLED = "start_dates_filled"
 
     /* ------------------------- the app's instance ------------------------- */
 
@@ -300,6 +302,28 @@ object ChatListIndex {
         // A restore prepares the chats it restores; never read a set mid-restore.
         if (runCatching { PortableRestoreProcessGate.blocksCurrentProcess(context) }.getOrDefault(true)) return
         if (runCatching { core(context).prepareAll() }.getOrDefault(false)) notifyChanged()
+        fillStartDates(context)
+    }
+
+    private fun maintenance(context: Context) =
+        context.getSharedPreferences(MAINTENANCE_PREFS, Context.MODE_PRIVATE)
+
+    /** True once every chat in the list has its start date saved, so opening a
+     *  chat never needs to check. New chats save theirs when created. */
+    fun startDatesFilled(context: Context): Boolean =
+        maintenance(context).getBoolean(KEY_START_DATES_FILLED, false)
+
+    /** Worker thread only. Saves the start date of every chat that has none,
+     *  from its prepared details, once; afterwards it does nothing. */
+    private fun fillStartDates(context: Context) {
+        if (startDatesFilled(context)) return
+        val filled = runCatching {
+            ChatPreferences.getChatPreferences().fillMissingStartDates(context) { chatId ->
+                val entry = core(context).entryFor(chatId) ?: return@fillMissingStartDates null
+                entry.startedAt?.let { ChatPreferences.StartDate.Known(it) } ?: ChatPreferences.StartDate.None
+            }
+        }.getOrDefault(false)
+        if (filled) maintenance(context).edit().putBoolean(KEY_START_DATES_FILLED, true).apply()
     }
 
     fun prepareAllInBackground(context: Context) {
@@ -310,6 +334,8 @@ object ChatListIndex {
     /** Called by a restore, on its own thread, before it reports success:
      *  every restored chat's entry is rebuilt from the restored data. */
     fun prepareRestored(context: Context, restoredChatIds: Collection<String>) {
+        // Restored chats may be missing their start dates; fill them again.
+        maintenance(context).edit().putBoolean(KEY_START_DATES_FILLED, false).commit()
         val rebuilt = runCatching {
             val target = core(context)
             target.replace(restoredChatIds)
@@ -322,6 +348,7 @@ object ChatListIndex {
             runCatching { core(context).prepareAll() }
         }
         notifyChanged()
+        fillStartDates(context)
     }
 
     /** The chat's history or recorded usage changed. */

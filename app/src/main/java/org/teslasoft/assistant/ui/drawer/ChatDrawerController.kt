@@ -11,6 +11,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.doOnPreDraw
 import androidx.core.view.WindowInsetsCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -33,6 +34,7 @@ import org.teslasoft.assistant.ui.activities.FoldersActivity
 import org.teslasoft.assistant.ui.activities.ImageGalleryActivity
 import org.teslasoft.assistant.ui.activities.SearchActivity
 import org.teslasoft.assistant.ui.activities.SettingsActivity
+import java.lang.ref.WeakReference
 
 class ChatDrawerController private constructor(
     private val activity: FragmentActivity,
@@ -52,6 +54,8 @@ class ChatDrawerController private constructor(
     private var lockFolders = false
     private var separateFolders = false
     private val updates = DrawerUpdateDispatcher()
+    // A chat is already being opened from this drawer; further taps wait for it.
+    private var opening = false
     private val rowActions = DrawerRowActions(activity) { refresh() }
     private val rowCallbacks = object : DrawerHierarchyAdapter.Callbacks {
         override fun onClick(row: DrawerRow) = handleClick(row)
@@ -79,6 +83,11 @@ class ChatDrawerController private constructor(
 
     init {
         activity.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            // Back to this screen without the chat having opened.
+            override fun onResume(owner: LifecycleOwner) {
+                opening = false
+            }
+
             override fun onDestroy(owner: LifecycleOwner) {
                 foldersLauncher.unregister()
                 ChatListIndex.removeListener(indexListener)
@@ -145,13 +154,45 @@ class ChatDrawerController private constructor(
     fun isOpen(): Boolean = drawer.isDrawerOpen(GravityCompat.START)
 
     /**
-     * Starts with the drawer already open, matching the screen New Chat was tapped on, then
-     * pulls it back once its list is filled in so the new chat is revealed underneath.
+     * Starts with the drawer open exactly as the previous chat screen left it, list and
+     * scroll position included, then pulls it back so this chat is revealed underneath.
+     * The previous screen stays behind until this drawer is on screen, so nothing else
+     * shows in between. [onCovered] runs once the previous screen has been closed.
      */
-    fun revealChat() {
+    fun revealChat(firstRow: Int, firstRowOffset: Int, onCovered: () -> Unit) {
         drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START)
         drawer.openDrawer(GravityCompat.START, false)
-        refresh { drawer.post { close() } }
+        val pullBack = {
+            if (firstRow != RecyclerView.NO_POSITION) {
+                (list.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(firstRow, firstRowOffset)
+            }
+            // Wait until the open drawer has been drawn once, then pull it back.
+            drawer.doOnPreDraw {
+                drawer.post {
+                    drawer.addDrawerListener(RetireOnMove(onCovered))
+                    close()
+                }
+            }
+        }
+        val shown = lastShown
+        if (shown != null) showProjection(shown) { pullBack() } else refresh { pullBack() }
+    }
+
+    /** Closes the replaced chat screen the moment this drawer starts to move. */
+    private inner class RetireOnMove(private val onCovered: () -> Unit) : DrawerLayout.SimpleDrawerListener() {
+        private var done = false
+
+        override fun onDrawerStateChanged(newState: Int) = finish()
+        override fun onDrawerSlide(drawerView: View, slideOffset: Float) = finish()
+        override fun onDrawerClosed(drawerView: View) = finish()
+
+        private fun finish() {
+            if (done) return
+            done = true
+            drawer.post { drawer.removeDrawerListener(this) }
+            retireReplaced(activity)
+            onCovered()
+        }
     }
 
     fun refresh(onShown: () -> Unit = {}) {
@@ -187,6 +228,7 @@ class ChatDrawerController private constructor(
     }
 
     private fun showProjection(projection: List<DrawerRow>, onShown: () -> Unit) {
+        lastShown = projection
         val mainRows = if (lockFolders) {
             val layers = DrawerHierarchyProjection.lockedLayers(projection)
             val holder = pinnedHolder ?: adapter.onCreateViewHolder(pinnedHeading, 0).also {
@@ -264,11 +306,24 @@ class ChatDrawerController private constructor(
         }
     }
 
-    /** Both new and saved conversations are revealed by the drawer pulling back. */
+    /**
+     * Both new and saved conversations are revealed by the drawer pulling back. The new
+     * chat screen opens on top of this one instead of replacing the app's screens, so this
+     * screen and its open drawer stay visible until the new one has drawn its own drawer.
+     */
     private fun openConversationFromDrawer(intent: Intent) {
+        if (opening) return
+        opening = true
+        val manager = list.layoutManager as? LinearLayoutManager
+        val firstRow = manager?.findFirstVisibleItemPosition() ?: RecyclerView.NO_POSITION
+        val firstRowOffset = (manager?.findViewByPosition(firstRow)?.top ?: 0) - list.paddingTop
+        replaced = WeakReference(activity)
+        intent.removeFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         activity.startActivity(
             intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 .putExtra(EXTRA_REVEAL_FROM_DRAWER, true)
+                .putExtra(EXTRA_DRAWER_FIRST_ROW, firstRow)
+                .putExtra(EXTRA_DRAWER_FIRST_ROW_OFFSET, firstRowOffset)
         )
         @Suppress("DEPRECATION")
         activity.overridePendingTransition(0, 0)
@@ -276,6 +331,25 @@ class ChatDrawerController private constructor(
 
     companion object {
         const val EXTRA_REVEAL_FROM_DRAWER = "revealFromDrawer"
+        const val EXTRA_DRAWER_FIRST_ROW = "drawerFirstRow"
+        const val EXTRA_DRAWER_FIRST_ROW_OFFSET = "drawerFirstRowOffset"
+
+        // The drawer list last shown, so the next chat screen's drawer opens already
+        // filled in instead of reading the whole chat list again first. Main thread only.
+        private var lastShown: List<DrawerRow>? = null
+
+        // The chat screen a drawer tap is replacing. Main thread only.
+        private var replaced: WeakReference<Activity>? = null
+
+        /** Closes the chat screen that [current] was opened to replace, if it is still open. */
+        fun retireReplaced(current: Activity) {
+            val previous = replaced?.get()
+            replaced = null
+            if (previous == null || previous === current || previous.isFinishing) return
+            previous.finish()
+            @Suppress("DEPRECATION")
+            previous.overridePendingTransition(0, 0)
+        }
 
         /** Worker thread only. The chat list, with every chat's details
          *  prepared before it is shown; never a row without them. */

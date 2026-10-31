@@ -2620,6 +2620,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun openedAtLaunch(): Boolean = intent.getBooleanExtra(EXTRA_OPENED_AT_LAUNCH, false)
 
+    // Opened from the drawer: the previous chat screen stays visible behind this one
+    // until this screen's drawer is in place. Its window background is held back
+    // until then so it does not dim the previous screen.
+    private var revealedFromDrawer = false
+    private var heldWindowBackground: android.graphics.drawable.Drawable? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
             enableEdgeToEdge(
@@ -2653,6 +2659,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (openedAtLaunch()) {
             window.setBackgroundDrawableResource(R.drawable.expandable_window_background_24)
         }
+        revealedFromDrawer = intent.getBooleanExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER, false)
+        if (revealedFromDrawer) {
+            heldWindowBackground = window.decorView.background
+            window.setBackgroundDrawableResource(android.R.color.transparent)
+        }
 
         Thread {
             // Round 4 ordering is load-bearing: resolve the storage lock before
@@ -2662,6 +2673,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 val startupResult = startupAttempt.getOrElse { throw it }
+
+                if (startupResult.restoreRecoveryRequired || startupResult.storageLocked) {
+                    ChatDrawerController.retireReplaced(this)
+                }
 
                 if (startupResult.restoreRecoveryRequired) {
                     startActivity(
@@ -2715,10 +2730,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         DefaultUsernameFill.markOpen(preparedChatId)
         fillOpenChatId = preparedChatId
         val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId, DamagedChatOperation.OPENING_A_CHAT)
-        chatPreferences.rememberChatStartDate(
-            this, preparedChatId,
-            org.teslasoft.assistant.ui.drawer.ChatListDetails.fromMessages(historyResult.messages).startedAt
-        )
+        // Saving the start date reads the whole chat list; once every chat's date
+        // has been filled in, there is nothing left to save.
+        if (!org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex.startDatesFilled(this)) {
+            chatPreferences.rememberChatStartDate(
+                this, preparedChatId,
+                org.teslasoft.assistant.ui.drawer.ChatListDetails.fromMessages(historyResult.messages).startedAt
+            )
+        }
         val coordinator = NewConversationCoordinator(this)
         var preparedPending = intent.getBooleanExtra("pendingConversation", false) ||
             coordinator.isPending(preparedChatId)
@@ -2761,7 +2780,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Copy the usage already stored in messages into the chat's usage log
         // once, before any delete or regeneration in this session can drop it.
         if (ChatStorageHealth.isAuthoritative(historyResult.state)) {
-            UsageLogStore.seed(preparedPreferences, historyResult.messages)
+            UsageLogStore.seedOnce(preparedPreferences, historyResult.messages)
         }
 
         return ChatStartupResult(
@@ -2851,7 +2870,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // A new or saved chat opened from the drawer is revealed as the drawer pulls back.
         if (intent.getBooleanExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER, false)) {
             intent.removeExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER)
-            drawerController?.revealChat()
+            drawerController?.revealChat(
+                intent.getIntExtra(ChatDrawerController.EXTRA_DRAWER_FIRST_ROW, androidx.recyclerview.widget.RecyclerView.NO_POSITION),
+                intent.getIntExtra(ChatDrawerController.EXTRA_DRAWER_FIRST_ROW_OFFSET, 0)
+            ) {
+                heldWindowBackground?.let { window.setBackgroundDrawable(it) }
+                heldWindowBackground = null
+            }
         }
 
         // Listen for the notification "Hang Up" action. Registered for the life of
@@ -2877,8 +2902,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         threadLoader = findViewById(R.id.thread_loader)
         // The blank chat opened at app start has nothing to load behind the
-        // overlay, so it appears directly instead of flashing the spinner.
-        threadLoader?.visibility = if (openedAtLaunch()) View.GONE else View.VISIBLE
+        // overlay, so it appears directly instead of flashing the spinner. A chat
+        // opened from the drawer is already loaded and covered by the drawer.
+        threadLoader?.visibility = if (openedAtLaunch() || revealedFromDrawer) View.GONE else View.VISIBLE
 
         val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
         val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
@@ -11721,6 +11747,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }
             ?.ifBlank { null }
 
+    /** Copies any usage record still kept only in the messages into the usage
+     * log before messages are removed, so removing them never loses it. Opening
+     * a chat no longer repairs the log, so every removal does it instead. */
+    private fun reconcileUsageBeforeRemoving() {
+        val prefs = preferences ?: return
+        if (chatStorageUnavailable) return
+        val snapshot = messages.map { HashMap(it) }
+        lifecycleScope.launch(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
+            UsageLogStore.seed(prefs, snapshot)
+        }
+    }
+
     /** Adds requests to this chat's usage log. Seeding first also repairs any
      * older message-backed request that a previous append failed to persist. */
     private suspend fun appendUsageLog(
@@ -14724,6 +14762,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @SuppressLint("NotifyDataSetChanged")
     private fun truncateAfter(index: Int) {
         if (index < 0 || index >= messages.size - 1) return
+        reconcileUsageBeforeRemoving()
         val end = messages.size
         messages.subList(index + 1, end).clear()
         realignCondensedBoundaries(index + 1, end)
@@ -15042,6 +15081,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val currentPosition = messages.indexOfFirst { it === target }
             if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@launch
             val end = if (deleteFollowing) messages.size else currentPosition + 1
+            reconcileUsageBeforeRemoving()
             val removed = ArrayList(messages.subList(currentPosition, end))
             messages.subList(currentPosition, end).clear()
             // Gallery records and generated image files have independent lifetimes.
@@ -15327,6 +15367,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     @SuppressLint("NotifyDataSetChanged")
     private fun deleteBulkSelection() {
+        reconcileUsageBeforeRemoving()
         val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
         val manualBoundaryBefore =
             preferences?.getManualCompactionBoundary() ?: 0

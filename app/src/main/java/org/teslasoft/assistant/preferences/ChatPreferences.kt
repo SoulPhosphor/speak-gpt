@@ -334,6 +334,55 @@ class ChatPreferences private constructor() {
         }
     }
 
+    /**
+     * The one-time fill of start dates for chats saved before chats recorded
+     * one when created. Saves every missing date that [startedAt] knows in one
+     * write. Returns true when no chat is left waiting for its date; a chat
+     * whose date [startedAt] cannot tell yet (null) is filled on a later pass.
+     */
+    fun fillMissingStartDates(context: Context, startedAt: (String) -> StartDate?): Boolean {
+        if (chatWriteBlocked(context, "chat_list", "save chat start dates")) return false
+        synchronized(CHAT_LIST_LOCK) {
+            val result = getChatListResult(context, includeFirstMessage = false)
+            if (!ChatStorageHealth.isAuthoritative(result.state)) return false
+            val fill = applyStartDates(result.chats, startedAt)
+            if (fill.changed && !SecurePrefs.get(context, "chat_list").edit()
+                    .putString("data", Gson().toJson(result.chats)).commit()
+            ) return false
+            return !fill.waiting
+        }
+    }
+
+    class StartDateFill(val changed: Boolean, val waiting: Boolean)
+
+    /** Sets the start date of each row that has none and whose date is known. */
+    internal fun applyStartDates(
+        rows: List<HashMap<String, String>>,
+        startedAt: (String) -> StartDate?
+    ): StartDateFill {
+        var waiting = false
+        var changed = false
+        for (row in rows) {
+            if (row["created_at"]?.toLongOrNull()?.let { it > 0 } == true) continue
+            when (val date = startedAt(storedChatId(row))) {
+                null -> waiting = true
+                is StartDate.Known -> {
+                    row["created_at"] = date.millis.toString()
+                    changed = true
+                }
+                StartDate.None -> Unit
+            }
+        }
+        return StartDateFill(changed, waiting)
+    }
+
+    /** What a chat's own messages say about its start date. */
+    sealed class StartDate {
+        data class Known(val millis: Long) : StartDate()
+        /** The chat has no dated message, so there is nothing to save. */
+        object None : StartDate()
+    }
+
     fun putTimestampToChatById(context: Context, chatId: String) {
         val timestamp = System.currentTimeMillis().toString()
 

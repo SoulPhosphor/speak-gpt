@@ -4,6 +4,23 @@ This file defines how AI agents work with the owner and this repository.
 
 It is not a project history, bug diary, or substitute for the owner's judgment.
 
+## 0. Code workflow (owner ruling, October 31 2026)
+
+Every code change follows these steps, in this order, with no others added:
+
+1. Finish the code changes.
+2. Run the checks and get Android Checks green.
+3. Create the pull request.
+4. Codex reviews it. Codex is the final approval gate.
+5. Fix any Codex findings that need changes, get Android Checks green on the
+   fixes, then ask Codex for its re-review.
+6. Merge into `beta/new-client` as soon as everything passes. Do not wait for
+   the owner to say merge.
+
+- Codex never reviews code that has not passed Android Checks.
+- Nothing is pushed to a pull request after Codex has passed it.
+- Stop watching a pull request the moment nothing more needs action.
+
 ## 1. Success standard
 
 **Completing a task is not success.**
@@ -575,9 +592,10 @@ Waiting on a pull request wakes the session and re-reads the whole
 conversation, which spends the owner's usage. Wait only while something is
 actually arriving, such as a running check or a requested review.
 
-- When the owner has said to merge, merge once checks pass and review
-  findings are addressed. Do not hold the merge for a question that does not
-  block the work; raise it after merging as a follow-up.
+- Merge into `beta/new-client` as soon as Codex has passed the pull request
+  and checks are green (see Codex review below). Do not wait for the owner to
+  say merge. Do not hold the merge for a question that does not block the
+  work; raise it after merging as a follow-up.
 - Once a pull request is waiting only on the owner, finish or stop: stop
   watching it and do not schedule check-ins or reminders.
 - A genuinely merge-blocking question is fine: ask it once in chat, leave the
@@ -602,11 +620,17 @@ that triggers a second, duplicate review.
 - Check each finding against this repository's rules and the owner's
   instructions; Codex does not know them. Fix the valid findings in one push
   and reply on any finding that is not being fixed, saying why.
-- Comment `@codex review` only for one re-review, and only after pushing
-  fixes. If findings remain after that, bring them to the owner as a short
+- Comment `@codex review` only for one re-review, and only after the fixes
+  are pushed and Android Checks is green on them. Codex never reviews code
+  that has not passed the checks. If findings remain after that, bring them to the owner as a short
   list with a recommendation instead of starting another round.
-- Merge into `beta/new-client` when the owner has said to merge, checks are
-  green, and the findings are handled.
+- Once Codex has passed it (no findings, or a clean re-review after the
+  fixes) and Android Checks is green on the final commit, merge it into
+  `beta/new-client` right away, without waiting for the owner to say merge
+  (owner ruling, October 31 2026). Then stop watching it.
+- Stop watching as soon as nothing more needs action. Do not stay subscribed
+  through status-only updates: every notification wakes the session and
+  spends usage.
 
 ### Usage control
 

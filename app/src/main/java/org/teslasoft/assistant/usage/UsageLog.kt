@@ -389,6 +389,17 @@ object UsageLogStore {
         seeded
     }
 
+    /** [seed] only for a chat whose log has never been seeded. Opening a chat
+     * uses this; the Usage screen and every append still run the full repair. */
+    fun seedOnce(
+        prefs: org.teslasoft.assistant.preferences.Preferences,
+        messages: List<Map<String, Any>>,
+        nowMs: Long = System.currentTimeMillis()
+    ): UsageLogState = synchronized(lock) {
+        val current = read(prefs)
+        if (current.seeded) current else seed(prefs, messages, nowMs)
+    }
+
     fun append(
         prefs: org.teslasoft.assistant.preferences.Preferences,
         entries: List<UsageLogEntry>
