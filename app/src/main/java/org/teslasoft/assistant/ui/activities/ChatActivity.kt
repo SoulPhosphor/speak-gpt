@@ -398,9 +398,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         /** Set by the launcher gate on the blank chat it opens at app start. */
         const val EXTRA_OPENED_AT_LAUNCH = "openedAtLaunch"
 
-        /** Set by the drawer when the chat list already holds this chat's start date. */
-        const val EXTRA_START_DATE_SAVED = "startDateSaved"
-
         /** Replace the current app task with exactly one conversation screen. */
         fun rootIntent(
             context: Context,
@@ -2733,9 +2730,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         DefaultUsernameFill.markOpen(preparedChatId)
         fillOpenChatId = preparedChatId
         val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId, DamagedChatOperation.OPENING_A_CHAT)
-        // Saving the start date reads the whole chat list; skip it when the drawer
-        // already knows the date is saved.
-        if (!intent.getBooleanExtra(EXTRA_START_DATE_SAVED, false)) {
+        // Saving the start date reads the whole chat list; once every chat's date
+        // has been filled in, there is nothing left to save.
+        if (!org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex.startDatesFilled(this)) {
             chatPreferences.rememberChatStartDate(
                 this, preparedChatId,
                 org.teslasoft.assistant.ui.drawer.ChatListDetails.fromMessages(historyResult.messages).startedAt

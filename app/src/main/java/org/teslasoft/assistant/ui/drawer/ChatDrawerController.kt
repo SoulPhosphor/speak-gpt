@@ -289,7 +289,6 @@ class ChatDrawerController private constructor(
                 if (row.value.id == currentChatId()) close()
                 else openConversationFromDrawer(
                     ChatActivity.rootIntent(activity, row.value.id, row.value.name)
-                        .putExtra(ChatActivity.EXTRA_START_DATE_SAVED, row.value.startedAt != null)
                 )
             }
             is DrawerRow.Section -> Unit

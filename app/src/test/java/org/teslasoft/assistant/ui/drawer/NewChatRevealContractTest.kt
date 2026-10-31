@@ -55,11 +55,17 @@ class NewChatRevealContractTest {
         // repair stays on the Usage screen and before every append.
         assertTrue(startup.contains("UsageLogStore.seedOnce(preparedPreferences, historyResult.messages)"))
         assertTrue(!startup.contains("UsageLogStore.seed(preparedPreferences"))
-        // The whole chat list is not read just to save a start date the drawer knows is saved.
-        assertTrue(startup.indexOf("if (!intent.getBooleanExtra(EXTRA_START_DATE_SAVED, false))") in 0 until
+        // The whole chat list is not read to save a start date once every chat has one.
+        assertTrue(startup.indexOf("if (!org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex.startDatesFilled(this))") in 0 until
             startup.indexOf("chatPreferences.rememberChatStartDate("))
-        val controller = source("ui/drawer/ChatDrawerController.kt")
-        assertTrue(controller.contains(".putExtra(ChatActivity.EXTRA_START_DATE_SAVED, row.value.startedAt != null)"))
+
+        // Every chat's start date is filled in once, again after a restore.
+        val index = source("preferences/chatnavigation/ChatListIndex.kt")
+        assertTrue(index.substringAfter("fun prepareAll(context: Context)").substringBefore("private fun maintenance(")
+            .contains("fillStartDates(context)"))
+        val restored = index.substringAfter("fun prepareRestored(").substringBefore("fun contentChanged(")
+        assertTrue(restored.contains("putBoolean(KEY_START_DATES_FILLED, false)"))
+        assertTrue(restored.contains("fillStartDates(context)"))
 
         val usage = source("usage/UsageLog.kt")
         val seedOnce = usage.substringAfter("fun seedOnce(").substringBefore("fun append(")
