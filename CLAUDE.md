@@ -4,6 +4,23 @@ This file defines how AI agents work with the owner and this repository.
 
 It is not a project history, bug diary, or substitute for the owner's judgment.
 
+## 0. Code workflow (owner ruling, October 31 2026)
+
+Every code change follows these steps, in this order, with no others added:
+
+1. Finish the code changes.
+2. Run the checks and get Android Checks green.
+3. Create the pull request.
+4. Codex reviews it. Codex is the final approval gate.
+5. Fix any Codex findings that need changes, get Android Checks green on the
+   fixes, then ask Codex for its re-review.
+6. Merge into `beta/new-client` as soon as everything passes. Do not wait for
+   the owner to say merge.
+
+- Codex never reviews code that has not passed Android Checks.
+- Nothing is pushed to a pull request after Codex has passed it.
+- Stop watching a pull request the moment nothing more needs action.
+
 ## 1. Success standard
 
 **Completing a task is not success.**
