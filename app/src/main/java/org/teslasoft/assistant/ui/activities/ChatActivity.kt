@@ -5447,7 +5447,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 pendingChatExportBytes = null
                 cancelAllAiActivity("chat deletion")
             },
-            onCommitted = { finishActivity() },
+            // This screen is the only one in the app's task (rootIntent
+            // clears the task), so finishing it after a delete closed the
+            // whole app. Replace it with a fresh chat instead, the same way
+            // the New Chat button does.
+            onCommitted = { openNewChat() },
             onFailed = { deletingChat = false }
         )
     }
