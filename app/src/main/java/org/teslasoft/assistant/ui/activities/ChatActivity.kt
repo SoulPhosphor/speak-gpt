@@ -307,6 +307,7 @@ import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
 import org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
 import org.teslasoft.assistant.ui.chat.ChatTranscriptRecyclerView
+import org.teslasoft.assistant.ui.chat.ResizeTrace
 import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
@@ -395,6 +396,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
 
     companion object {
+        /** TEMPORARY resize flight recorder menu item (see ResizeTrace). */
+        private const val RESIZE_TRACE_MENU_ID = 9_901
+
         /** Set by the launcher gate on the blank chat it opens at app start. */
         const val EXTRA_OPENED_AT_LAUNCH = "openedAtLaunch"
 
@@ -3353,6 +3357,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             imeClosingForSend = false
         }
         chat?.shouldHoldPositionOnResize = { !imeClosingForSend }
+        // TEMPORARY resize flight recorder (see ResizeTrace).
+        chat?.traceExtraState = {
+            "imeClosingForSend=$imeClosingForSend disableAutoScroll=$disableAutoScroll " +
+                "keyboardOpen=${keyboardInput?.isKeyboardOpen} composerExpanded=${composerSurface?.isExpanded()}"
+        }
         keyboardInput?.onBottomInsetChanging = { keyboardOpen, retreating ->
             // The keyboard closing because the user hit Send is the one change
             // no position is held across: that send asked for the reply, and
@@ -3366,6 +3375,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // strand the reply off screen. The keyboard coming back up ends it
             // immediately, whatever it interrupts.
             if (imeClosingForSend && (retreating || !keyboardOpen)) {
+                ResizeTrace.resize("activity: send-close, hold released (open=$keyboardOpen retreating=$retreating)")
                 chat?.releaseResizeAnchorForNextLayout()
                 if (!keyboardOpen) imeClosingForSend = false
             } else {
@@ -3376,7 +3386,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // conversation does, and putting the keyboard away again does
                 // not start it back up.
                 if (keyboardOpen) disableAutoScroll = true
-                captureTranscriptAnchor()
+                captureTranscriptAnchor("keyboard inset open=$keyboardOpen retreating=$retreating")
             }
         }
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -3898,8 +3908,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * leaving. Both report before they change anything, which is the only
      * moment the pre-resize geometry can still be read.
      */
-    private fun captureTranscriptAnchor() {
-        if (!imeClosingForSend) chat?.captureResizeAnchor()
+    private fun captureTranscriptAnchor(reason: String = "composer mode change") {
+        if (!imeClosingForSend) chat?.captureResizeAnchor(reason)
+        else ResizeTrace.resize("activity: capture[$reason] skipped, imeClosingForSend")
     }
 
     /**
@@ -5344,12 +5355,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 menu.add(Menu.NONE, 5, 2, R.string.usage_cost_title)
                 menu.add(Menu.NONE, 2, 3, R.string.alert_debug_section_logs)
+                // TEMPORARY resize flight recorder (see ResizeTrace).
+                menu.add(Menu.NONE, RESIZE_TRACE_MENU_ID, 6, "Copy Resize Trace")
                 if (savedChat != null) {
                     menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)
                     menu.add(Menu.NONE, 3, 5, R.string.btn_delete)
                 }
                 setOnMenuItemClickListener { item ->
                     when (item.itemId) {
+                        RESIZE_TRACE_MENU_ID -> {
+                            ResizeTrace.copyToClipboard(this@ChatActivity)
+                            true
+                        }
                         4 -> {
                             savedChat?.let { chat ->
                                 lifecycleScope.launch(Dispatchers.IO) {
