@@ -474,6 +474,45 @@ class Logger {
         }
 
         /**
+         * Append one Error Log entry off the main thread, then drop all but the
+         * newest [keep] entries written under the same [tag]. Entries from
+         * every other tag are left exactly as they were.
+         *
+         * For a diagnostic that writes large entries often: without the cap
+         * its entries fill the Error Log, and every later write has to
+         * re-encrypt and rewrite all of them.
+         */
+        fun logErrorLogKeepingNewest(
+            context: Context,
+            tag: String,
+            level: String,
+            message: String,
+            keep: Int
+        ) {
+            val lvl = level.lowercase()
+            if (lvl != "info" && lvl != "error" && lvl != "warning" &&
+                lvl != "debug" && lvl != "verbose"
+            ) return
+            val appContext = context.applicationContext
+            backgroundLogWriter.execute {
+                try {
+                    val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
+                    val logString = "[$timestamp] [$tag] [${lvl.uppercase()}] $message\n"
+                    val log = keepNewestTagged(
+                        trimByEntries(
+                            "${getCrashLog(appContext)}$logString",
+                            ERROR_LOG_MAX_ENTRIES,
+                            ERROR_LOG_MAX_AGE_DAYS
+                        ),
+                        tag,
+                        keep
+                    )
+                    setCrashLog(appContext, log)
+                } catch (_: Throwable) { /* diagnostics must never disturb the caller */ }
+            }
+        }
+
+        /**
          * Append one entry to the Provider Failure Log, in the owner-specified
          * shape (July 31 2026):
          *
@@ -646,6 +685,29 @@ class Logger {
                 entries.add(log.substring(start, end).trimEnd())
             }
             return if (newestFirst) entries.asReversed() else entries
+        }
+
+        /**
+         * Keeps only the newest [keep] entries whose header carries [tag];
+         * entries with any other tag, and text before the first entry, are
+         * kept unchanged and in order. `internal` for unit testing.
+         */
+        internal fun keepNewestTagged(log: String, tag: String, keep: Int): String {
+            val headers = ENTRY_HEADER.findAll(log).toList()
+            if (headers.isEmpty()) return log
+            val marker = " [$tag] "
+            val tagged = headers.indices.filter { i ->
+                log.startsWith(marker, headers[i].range.last + 1)
+            }
+            if (tagged.size <= keep) return log
+            val drop = tagged.subList(0, tagged.size - keep).toHashSet()
+            val out = StringBuilder(log.substring(0, headers[0].range.first))
+            for (i in headers.indices) {
+                if (i in drop) continue
+                val end = if (i + 1 < headers.size) headers[i + 1].range.first else log.length
+                out.append(log, headers[i].range.first, end)
+            }
+            return out.toString()
         }
 
         /**
