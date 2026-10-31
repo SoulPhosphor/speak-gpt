@@ -398,10 +398,11 @@ themed and fixed from one place (like CSS classes, not inline `style=""`).
 - Do not ask the owner how something should look when `ui-style-guide.md`
   already covers it. Unless the owner says to make it a different way, follow
   the style that applies (owner ruling, October 31 2026).
-- Never copy another screen (its layout, code, values or approach) unless the
-  owner explicitly says to copy that screen (owner ruling, October 31 2026).
-  Some screens are converted wrong, so other screens are never a reference;
-  only `ui-style-guide.md` decides how something looks.
+- Never copy anything: no screen, layout, code, values or approach from any
+  existing file, and never just follow what another screen does, unless the
+  owner explicitly says to copy that specific thing (owner ruling, October 31
+  2026). Some screens are converted wrong, so existing screens and code are
+  never a reference; only `ui-style-guide.md` decides how something looks.
 - If no shared style fits, create a new shared style (with its dimensions)
   without asking the owner (owner ruling, October 31 2026). Never hard-code a
   value instead, and do not copy values from another layout as a shortcut.
