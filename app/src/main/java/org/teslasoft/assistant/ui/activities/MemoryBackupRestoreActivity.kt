@@ -2208,15 +2208,27 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         // primary button (owner ruling).
         val body = getString(R.string.health_backup_failed_body, streak, typeLabel(type)) +
             "\n\n" + getString(R.string.backup_current_location, folderLabel)
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+        // Real buttons, never the stock text links (owner ruling, Oct 31
+        // 2026): Cancel then Retry right-aligned, Change Backup Folder
+        // centered beneath them.
+        val actions = layoutInflater.inflate(R.layout.dialog_backup_failed_actions, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.health_backup_failed_title)
             .setMessage(body)
-            .setPositiveButton(R.string.health_btn_change_folder) { _, _ ->
-                autoFolderPicker.launch(null)
-            }
-            .setNeutralButton(R.string.health_btn_retry) { _, _ -> retryAutomaticBackup() }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+            .setView(actions)
+            .create()
+        actions.findViewById<View>(R.id.btn_backup_failed_cancel).setOnClickListener {
+            dialog.dismiss()
+        }
+        actions.findViewById<View>(R.id.btn_backup_failed_retry).setOnClickListener {
+            dialog.dismiss()
+            retryAutomaticBackup()
+        }
+        actions.findViewById<View>(R.id.btn_backup_failed_change_folder).setOnClickListener {
+            dialog.dismiss()
+            autoFolderPicker.launch(null)
+        }
+        dialog.show()
     }
 
     /** Retry from the 3-strikes dialog: run one recovery-backup pass into the

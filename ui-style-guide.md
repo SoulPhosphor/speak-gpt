@@ -280,8 +280,10 @@ A row of label-sized actions that may not fit on one line uses a
 `ConstraintLayout` `Flow` (`flow_wrapMode="chain"`, all horizontal biases `1`)
 of `AppButton.*.Inline` buttons, so the last action drops to the next line,
 still on the right. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`)
-and the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
-Summarizer Settings centered beneath as an approved exception).
+the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
+Summarizer Settings centered beneath as an approved exception), and Backup
+Attempts Failed (`dialog_backup_failed_actions.xml`, Cancel then Retry, with
+Change Backup Folder centered beneath as an approved exception).
 
 Parameter information boxes use `ParameterInfoDialog` and the shared
 `view_parameter_info_title.xml` heading, styled by `Widget.App.ParameterInfo.*`.
