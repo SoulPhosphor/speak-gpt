@@ -18,7 +18,9 @@ import kotlin.math.abs
 /**
  * Keyboard Chat Interaction Debugging (Alerts, Errors & Logs switch, off by
  * default): records each chat viewport resize sequence and writes it to the
- * Error Log as one entry once it settles.
+ * Error Log as one entry once it settles. Only sequences with keyboard
+ * motion, or with a detected failure, are saved, and only the newest
+ * [KEEP_ENTRIES] of them are kept.
  *
  * A sequence starts at the first resize-related event and closes
  * [SETTLE_MS] after the last resize or movement, or after
@@ -31,9 +33,13 @@ import kotlin.math.abs
  * While the switch is off nothing here records, measures or allocates.
  */
 internal object ResizeTrace {
-    private const val SETTLE_MS = 300L
+    // Long enough that a keyboard arriving a moment after the composer tap
+    // lands in the same record as the tap.
+    private const val SETTLE_MS = 500L
     private const val MAX_SEQUENCE_MS = 4_000L
-    private const val MAX_LINES = 500
+    private const val MAX_LINES = 250
+    /** Only the newest few records stay in the Error Log (see [finish]). */
+    private const val KEEP_ENTRIES = 5
     private const val DRIFT_LIMIT_PX = 10
     private const val LOG_TAG = "ResizeTrace"
 
@@ -333,8 +339,16 @@ internal object ResizeTrace {
         }
         active = false
         lines.clear()
+        // A message-box-only change that held correctly is not the keyboard
+        // problem; saving it only buried the keyboard records and kept
+        // rewriting the Error Log. Every keyboard sequence and every failure
+        // is saved in full.
+        val keyboardMoved = keyboardOpeningObserved || keyboardClosingObserved
+        if (!keyboardMoved && !failed) return
         val context = appContext ?: return
-        Logger.logAsync(context, "crash", LOG_TAG, if (failed) "error" else "info", message.trimEnd())
+        Logger.logErrorLogKeepingNewest(
+            context, LOG_TAG, if (failed) "error" else "info", message.trimEnd(), KEEP_ENTRIES
+        )
     }
 
     private fun step(line: String) {

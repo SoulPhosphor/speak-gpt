@@ -3380,6 +3380,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             after = null
         )
         composerSurface?.onEditingStarted = {
+            // Starts the trace at the tap, so the record covers the composer
+            // growing and the keyboard arriving as one sequence.
+            ResizeTrace.resize("composer tapped: editing started")
             disableAutoScroll = true
             imeClosingForSend = false
         }

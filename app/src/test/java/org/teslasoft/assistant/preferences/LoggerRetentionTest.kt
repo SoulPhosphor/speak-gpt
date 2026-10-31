@@ -92,4 +92,27 @@ class LoggerRetentionTest {
         assertTrue(capped.contains("Foo.kt:1"))
         assertTrue(capped.contains("Baz.kt:2"))
     }
+
+    @Test fun keepNewestTaggedDropsOnlyOlderEntriesOfThatTag() {
+        val now = LocalDateTime.now()
+        fun tagged(tag: String, msg: String) =
+            "[${now.format(fmt)}] [$tag] [INFO] $msg\n    0.5  step line\n"
+        val log = tagged("ResizeTrace", "trace1") + entry(now, "crash1") +
+            tagged("ResizeTrace", "trace2") + tagged("ResizeTrace", "trace3") +
+            entry(now, "crash2")
+        val out = Logger.keepNewestTagged(log, "ResizeTrace", 2)
+        assertFalse(out.contains("trace1"))
+        assertTrue(out.contains("trace2"))
+        assertTrue(out.contains("trace3"))
+        assertTrue(out.contains("crash1"))
+        assertTrue(out.contains("crash2"))
+        assertEquals(4, headerCount(out))
+        assertTrue(out.indexOf("crash1") < out.indexOf("trace2"))
+    }
+
+    @Test fun keepNewestTaggedLeavesLogUnchangedUnderTheCap() {
+        val now = LocalDateTime.now()
+        val log = entry(now, "a") + "[${now.format(fmt)}] [ResizeTrace] [INFO] t\n"
+        assertEquals(log, Logger.keepNewestTagged(log, "ResizeTrace", 5))
+    }
 }
