@@ -396,9 +396,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
 
     companion object {
-        /** TEMPORARY resize flight recorder menu item (see ResizeTrace). */
-        private const val RESIZE_TRACE_MENU_ID = 9_901
-
         /** Set by the launcher gate on the blank chat it opens at app start. */
         const val EXTRA_OPENED_AT_LAUNCH = "openedAtLaunch"
 
@@ -1581,6 +1578,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     override fun onResume() {
         super.onResume()
+        // Keyboard Chat Interaction Debugging follows the saved switch.
+        preferences?.let { ResizeTrace.enabled = it.getKeyboardChatInteractionDebugging() }
 
         if (PortableRestoreRecoveryFlow.showIfPending(this)) return
         if (PortableRestoreProcessGate.blocksCurrentProcess(this)) return
@@ -2822,6 +2821,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         chatName = prepared.chatName
         preferences = prepared.preferences
+        ResizeTrace.enabled = prepared.preferences.getKeyboardChatInteractionDebugging()
         apiEndpointPreferences = prepared.apiEndpointPreferences
         logitBiasPreferences = prepared.logitBiasPreferences
         apiEndpointObject = prepared.apiEndpointObject
@@ -3357,7 +3357,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             imeClosingForSend = false
         }
         chat?.shouldHoldPositionOnResize = { !imeClosingForSend }
-        // TEMPORARY resize flight recorder (see ResizeTrace).
+        // Keyboard Chat Interaction Debugging (see ResizeTrace).
         chat?.traceExtraState = {
             "imeClosingForSend=$imeClosingForSend disableAutoScroll=$disableAutoScroll " +
                 "keyboardOpen=${keyboardInput?.isKeyboardOpen} composerExpanded=${composerSurface?.isExpanded()}"
@@ -3376,6 +3376,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // immediately, whatever it interrupts.
             if (imeClosingForSend && (retreating || !keyboardOpen)) {
                 ResizeTrace.resize("activity: send-close, hold released (open=$keyboardOpen retreating=$retreating)")
+                ResizeTrace.sendClosingKeyboard()
                 chat?.releaseResizeAnchorForNextLayout()
                 if (!keyboardOpen) imeClosingForSend = false
             } else {
@@ -3910,7 +3911,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun captureTranscriptAnchor(reason: String = "composer mode change") {
         if (!imeClosingForSend) chat?.captureResizeAnchor(reason)
-        else ResizeTrace.resize("activity: capture[$reason] skipped, imeClosingForSend")
+        else {
+            ResizeTrace.resize("activity: capture[$reason] skipped, imeClosingForSend")
+            ResizeTrace.sendClosingKeyboard()
+        }
     }
 
     /**
@@ -5355,18 +5359,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 menu.add(Menu.NONE, 5, 2, R.string.usage_cost_title)
                 menu.add(Menu.NONE, 2, 3, R.string.alert_debug_section_logs)
-                // TEMPORARY resize flight recorder (see ResizeTrace).
-                menu.add(Menu.NONE, RESIZE_TRACE_MENU_ID, 6, "Copy Resize Trace")
                 if (savedChat != null) {
                     menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)
                     menu.add(Menu.NONE, 3, 5, R.string.btn_delete)
                 }
                 setOnMenuItemClickListener { item ->
                     when (item.itemId) {
-                        RESIZE_TRACE_MENU_ID -> {
-                            ResizeTrace.copyToClipboard(this@ChatActivity)
-                            true
-                        }
                         4 -> {
                             savedChat?.let { chat ->
                                 lifecycleScope.launch(Dispatchers.IO) {

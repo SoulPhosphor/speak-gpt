@@ -409,7 +409,7 @@ Use these pieces in order:
 1. `Widget.App.Row.Toggle`
 2. `Widget.App.Row.TextColumn`
 3. `Widget.App.Row.Title`
-4. `Widget.App.Row.Subtitle`
+4. `Widget.App.Row.Subtitle` (left out of a title-only toggle)
 5. `Widget.App.Row.Switch`
 
 Use for a setting that changes a Boolean value directly instead of navigating to another screen.

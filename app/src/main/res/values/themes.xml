@@ -366,7 +366,8 @@
 
     <!-- Toggle row (owner request, July 18 2026): a settings row whose
          whole point is flipping a boolean, not navigating anywhere, so it
-         has no chevron and always carries a subtitle. Reuses the shared
+         has no chevron and usually carries a subtitle (a title-only toggle
+         leaves the Subtitle out). Reuses the shared
          Widget.App.Row.Title/Subtitle/TextColumn styles so its text
          matches every other row's typography and inherits future theming
          the same way; only the container geometry here is specific to this

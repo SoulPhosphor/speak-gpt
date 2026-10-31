@@ -48,18 +48,19 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
      *  conversation (chat-keyboard-behavior.md, rule 1). */
     private var touching = false
 
-    // ---- TEMPORARY resize flight recorder (see ResizeTrace) ----
+    // ---- Keyboard Chat Interaction Debugging (see ResizeTrace) ----
     /** Extra activity state shown at the start/end of each trace sequence. */
     var traceExtraState: (() -> String)? = null
     private var lastDrawSnapshot = ""
     private val tracePreDraw = ViewTreeObserver.OnPreDrawListener {
         if (ResizeTrace.active) {
+            val frame = ResizeTrace.frameDrawn(
+                ResizeTrace.baselinePosition.takeIf { it >= 0 }?.let(::distanceFromBox)
+            )
             val snapshot = "h=$height ${rowsDesc()}"
             if (snapshot != lastDrawSnapshot) {
                 lastDrawSnapshot = snapshot
-                ResizeTrace.movement("draw#${ResizeTrace.nextFrame()} $snapshot")
-            } else {
-                ResizeTrace.nextFrame()
+                ResizeTrace.movement("draw#$frame $snapshot")
             }
         } else {
             lastDrawSnapshot = ""
@@ -128,6 +129,11 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         super.smoothScrollBy(dx, dy)
     }
 
+    /** A row's top minus the viewport bottom (the message box top), the same
+     *  distance the resize hold keeps; null when the row is not laid out. */
+    fun distanceFromBox(position: Int): Int? =
+        layoutManager?.findViewByPosition(position)?.let { it.top - height }
+
     private fun rowDesc(position: Int): String {
         if (position == NO_POSITION) return "none"
         val row = layoutManager?.findViewByPosition(position) ?: return "#$position(offscreen)"
@@ -150,12 +156,13 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
             "fingerAnchor=$fingerLayoutAnchor hold=${shouldHoldPositionOnResize()} " +
             "canScrollDown=${canScrollVertically(1)} scrollState=$scrollState " +
             "${rowsDesc()} ${traceExtraState?.invoke() ?: ""}"
-    // ---- end TEMPORARY resize flight recorder ----
+    // ---- end Keyboard Chat Interaction Debugging ----
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 ResizeTrace.note("touch DOWN")
+                ResizeTrace.fingerDown()
                 touching = true
                 releaseResizeAnchor()
                 onUserInteraction?.invoke()
@@ -197,7 +204,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
             ResizeTrace.resize("$tag SKIPPED heldReleased=$resizeHoldReleasedForLayout hold=${shouldHoldPositionOnResize()}")
             return
         }
-        if (height <= 0) { ResizeTrace.resize("$tag SKIPPED height<=0"); return }
+        if (height <= 0) { ResizeTrace.note("$tag SKIPPED height<=0"); return }
         val manager = layoutManager as? LinearLayoutManager
             ?: run { ResizeTrace.resize("$tag SKIPPED no LLM"); return }
         val position = if (touching) manager.findFirstVisibleItemPosition()
@@ -212,6 +219,8 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
                 "bottomPastViewport=${anchor.bottom - (height - paddingBottom)} " +
                 "replacesPending=$resizeAnchorPending(prev #$resizeAnchorPosition tfb=$resizeAnchorTopFromBottom)"
         )
+        ResizeTrace.anchorCaptured(position, anchor.top - height)
+        if (touching) ResizeTrace.fingerDown()
 
         resizeAnchorPosition = position
         resizeAnchorTopFromBottom = anchor.top - height
@@ -279,6 +288,9 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        // The first layout (from zero height) is not a resize; it is only
+        // recorded when a sequence is already open.
+        val trace: (String) -> Unit = if (oldh > 0) ResizeTrace::resize else ResizeTrace::note
         // While the layout manager was last laid out at the old height, the
         // children still have their old coordinates here, so a fresh capture
         // replaces any earlier one that may have gone stale since. Wrapping a
@@ -288,7 +300,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         // describes the old position.
         if (h != oldh) {
             val childrenAtOldHeight = layoutManager?.height == oldh
-            ResizeTrace.resize(
+            trace(
                 "onSizeChanged $oldh -> $h lm.h=${layoutManager?.height} " +
                     "childrenAtOldHeight=$childrenAtOldHeight (false = rows already laid out at another height) " +
                     "pending=$resizeAnchorPending touching=$touching ${rowsDesc()}"
@@ -297,23 +309,23 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
                 if (childrenAtOldHeight) resizeAnchorPending = false
                 captureResizeAnchor(oldh, "onSizeChanged fresh at oldh")
             } else {
-                ResizeTrace.resize("onSizeChanged keeps earlier capture #$resizeAnchorPosition tfb=$resizeAnchorTopFromBottom")
+                trace("onSizeChanged keeps earlier capture #$resizeAnchorPosition tfb=$resizeAnchorTopFromBottom")
             }
         }
         super.onSizeChanged(w, h, oldw, oldh)
         if (h == oldh || !resizeAnchorPending) {
-            if (h != oldh) ResizeTrace.resize("onSizeChanged: no pending anchor -> NO placement")
+            if (h != oldh) trace("onSizeChanged: no pending anchor -> NO placement")
             return
         }
 
         resizeAnchorPending = false
         if (!shouldHoldPositionOnResize()) {
-            ResizeTrace.resize("onSizeChanged: hold off -> NO placement")
+            trace("onSizeChanged: hold off -> NO placement")
             return
         }
         val position = resizeAnchorPosition
         if (position == NO_POSITION || position >= (adapter?.itemCount ?: 0)) {
-            ResizeTrace.resize("onSizeChanged: anchor #$position invalid -> NO placement")
+            trace("onSizeChanged: anchor #$position invalid -> NO placement")
             return
         }
         val manager = layoutManager as? LinearLayoutManager ?: return
@@ -323,7 +335,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         // screen coordinates instead of their distance from the composer.
         if (resizeAnchorFromTop) {
             fingerLayoutAnchor = position to resizeAnchorTop
-            ResizeTrace.resize("onSizeChanged: finger anchor #$position top=$resizeAnchorTop (applied in onLayout)")
+            trace("onSizeChanged: finger anchor #$position top=$resizeAnchorTop (applied in onLayout)")
             return
         }
 
@@ -336,7 +348,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         if (retainPositionAfterTouch) {
             fingerLayoutAnchor = position to (h + resizeAnchorTopFromBottom)
         }
-        ResizeTrace.resize(
+        trace(
             "onSizeChanged: PLACE scrollToPositionWithOffset(#$position, offset=$h+($resizeAnchorTopFromBottom)=" +
                 "${h + resizeAnchorTopFromBottom}) retainAfterTouch=$retainPositionAfterTouch"
         )

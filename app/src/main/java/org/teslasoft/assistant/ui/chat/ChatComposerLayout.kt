@@ -202,7 +202,7 @@ class ChatComposerLayout @JvmOverloads constructor(
 
     private fun applyMode() {
         if (!::messageInput.isInitialized) return
-        // TEMPORARY resize flight recorder (see ResizeTrace).
+        // Keyboard Chat Interaction Debugging (see ResizeTrace).
         ResizeTrace.resize("composer applyMode expanded=$expanded active=$active")
         beforeResize?.invoke()
         // removeView() synchronously reports focus loss before clearing the
@@ -447,7 +447,7 @@ class ChatImeInsetLayout @JvmOverloads constructor(
         val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
         val targetBottom = baseBottom + max(navBottom, imeBottom)
         val retreating = imeBottom < lastImeBottom
-        // TEMPORARY resize flight recorder (see ResizeTrace).
+        // Keyboard Chat Interaction Debugging (see ResizeTrace).
         if (paddingBottom != targetBottom) {
             ResizeTrace.resize("insets ime=$imeBottom nav=$navBottom padding ${paddingBottom}->$targetBottom retreating=$retreating")
         } else if (imeBottom != lastImeBottom) {
