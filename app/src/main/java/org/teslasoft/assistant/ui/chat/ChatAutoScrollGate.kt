@@ -10,6 +10,11 @@ class ChatAutoScrollGate {
             revision++
         }
 
+    fun beginTurn(releasePositionHold: () -> Unit) {
+        disabled = false
+        releasePositionHold()
+    }
+
     fun post(
         enqueue: (Runnable) -> Unit,
         keyboardHolding: () -> Boolean,

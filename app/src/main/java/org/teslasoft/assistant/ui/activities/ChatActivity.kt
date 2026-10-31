@@ -695,7 +695,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val autoScrollGate = org.teslasoft.assistant.ui.chat.ChatAutoScrollGate()
     private var disableAutoScroll: Boolean
         get() = autoScrollGate.disabled
-        set(value) { autoScrollGate.disabled = value }
+        set(value) {
+            if (value) autoScrollGate.disabled = true
+            else autoScrollGate.beginTurn { chat?.releaseResizeAnchor() }
+        }
 
     // Set when a send closes the keyboard, consumed by the first keyboard
     // change that follows, so only that one close skips the position hold.
@@ -3598,6 +3601,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             chat?.scrollToTranscriptEnd()
             return
         }
+        chat?.releaseResizeAnchor()
         (chat?.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
             target,
             (chat?.height ?: 0) / 4
@@ -5967,6 +5971,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             legacyRole = null,
             fingerprint = null
         ) ?: return
+        chat?.releaseResizeAnchor()
         (chat?.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
             target,
             (chat?.height ?: 0) / 4
