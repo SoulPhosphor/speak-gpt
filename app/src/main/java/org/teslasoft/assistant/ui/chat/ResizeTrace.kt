@@ -301,7 +301,8 @@ internal object ResizeTrace {
                 "[Resize Trace: KEYBOARD OPEN / NO CHAT RESIZE]"
             else -> "[Resize Trace: $event / ROW HELD (row drift ${drift}px)]"
         }
-        val failed = firstFailure != null || title.contains("SPIN-OUT") || title.contains("NO CHAT RESIZE")
+        val failed = !sendClosedKeyboard && !fingerOnChat &&
+            (firstFailure != null || title.contains("SPIN-OUT") || title.contains("NO CHAT RESIZE"))
         val message = buildString {
             append(title).append('\n')
             if (baselinePosition >= 0) {
