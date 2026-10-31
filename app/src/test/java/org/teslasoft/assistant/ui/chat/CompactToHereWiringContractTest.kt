@@ -28,7 +28,7 @@ class CompactToHereWiringContractTest {
 
     @Test
     fun menuItemSitsAboveShareOnLaterAiResponsesOnly() {
-        assertTrue(adapter.contains("COMPACT_TO_HERE_FIRST_RESPONSE = 15"))
+        assertTrue(adapter.contains("COMPACT_TO_HERE_FIRST_RESPONSE = 3"))
         val compact = adapter.indexOf("R.string.message_compact_to_here")
         val share = adapter.indexOf("popup.menu.add(0, MENU_MESSAGE_SHARE, 1")
         assertTrue(compact in 0 until share)
