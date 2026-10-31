@@ -1709,6 +1709,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /**
+     * After this chat is deleted, a fresh chat takes its place with no
+     * animation. The new chat screen opens on top of this one, inside the same
+     * app task, and this screen then closes behind it, so the app always has a
+     * screen showing. Clearing the task first, or finishing this screen on its
+     * own, briefly left no app screen and showed the phone's home screen.
+     */
+    private fun replaceDeletedChatWithNewChat() {
+        lifecycleScope.launch {
+            val pending = withContext(Dispatchers.IO) {
+                NewConversationCoordinator(this@ChatActivity).createDefaultPendingConversation()
+            }
+            if (isFinishing || isDestroyed) return@launch
+            val intent = rootIntent(this@ChatActivity, pending.id, pending.name, pendingConversation = true)
+                .apply {
+                    removeFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                }
+            startActivity(intent)
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+            finish()
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
+    }
+
     /** Force the chat's top action bar and its buttons back to fully visible. */
     private fun restoreTopBarVisibility() {
         for (v in listOf(actionBar, btnBack, activityTitle, btnQuickSettings, btnSettings)) {
@@ -5447,11 +5474,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 pendingChatExportBytes = null
                 cancelAllAiActivity("chat deletion")
             },
-            // This screen is the only one in the app's task (rootIntent
-            // clears the task), so finishing it after a delete closed the
-            // whole app. Replace it with a fresh chat instead, the same way
-            // the New Chat button does.
-            onCommitted = { openNewChat() },
+            onCommitted = { replaceDeletedChatWithNewChat() },
             onFailed = { deletingChat = false }
         )
     }
