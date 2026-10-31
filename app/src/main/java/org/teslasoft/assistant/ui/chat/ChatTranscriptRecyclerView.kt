@@ -35,6 +35,13 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
     private var resizeAnchorPending = false
     private var resizeAnchorAtEnd = false
     private var resizeAnchorHeight = 0
+    private var resizeAnchorFromTop = false
+    private var resizeAnchorTop = 0
+    private var fingerLayoutAnchor: Pair<Int, Int>? = null
+
+    /** Send releases the hold; all other viewport changes preserve it. */
+    var shouldHoldPositionOnResize: () -> Boolean = { true }
+    var onUserInteraction: (() -> Unit)? = null
 
     /** A finger is on the transcript. While it is, no resize moves the
      *  conversation (chat-keyboard-behavior.md, rule 1). */
@@ -42,26 +49,43 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> touching = true
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touching = false
+            MotionEvent.ACTION_DOWN -> {
+                touching = true
+                releaseResizeAnchor()
+                onUserInteraction?.invoke()
+            }
+            MotionEvent.ACTION_SCROLL -> onUserInteraction?.invoke()
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                touching = false
+                releaseResizeAnchor()
+            }
         }
         return super.dispatchTouchEvent(event)
     }
 
     /** Capture the bottommost visible row while this view still has its old height. */
     fun captureResizeAnchor() {
-        if (touching) {
-            resizeAnchorPending = false
-            return
-        }
+        captureResizeAnchor(height)
+    }
+
+    fun releaseResizeAnchor() {
+        resizeAnchorPending = false
+        fingerLayoutAnchor = null
+    }
+
+    private fun captureResizeAnchor(height: Int) {
+        if (!shouldHoldPositionOnResize()) return
         if (height <= 0) return
         val manager = layoutManager as? LinearLayoutManager ?: return
-        val position = manager.findLastVisibleItemPosition()
+        val position = if (touching) manager.findFirstVisibleItemPosition()
+            else manager.findLastVisibleItemPosition()
         if (position == NO_POSITION) return
         val anchor = manager.findViewByPosition(position) ?: return
 
         resizeAnchorPosition = position
         resizeAnchorTopFromBottom = anchor.top - height
+        resizeAnchorFromTop = touching
+        resizeAnchorTop = anchor.top - paddingTop
         // A transcript sitting at its real end is held by that end: the last
         // row's bottom stays on the composer's top edge, not just the row's top.
         resizeAnchorAtEnd = position == (adapter?.itemCount ?: 0) - 1 &&
@@ -95,6 +119,7 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
                 oldBottom: Int
             ) {
                 removeOnLayoutChangeListener(this)
+                if (touching) return
                 val lastView = manager.findViewByPosition(last) ?: return
                 val overflow = lastView.bottom - (height - paddingBottom)
                 // A negative correction is clamped to zero for a genuinely
@@ -110,14 +135,26 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        // Wrapping a typed line changes the viewport without an IME inset or
+        // composer mode callback. Children still have their old coordinates
+        // here, so capture them before RecyclerView lays out the new height.
+        if (h != oldh && (!resizeAnchorPending || touching)) captureResizeAnchor(oldh)
         super.onSizeChanged(w, h, oldw, oldh)
         if (h == oldh || !resizeAnchorPending) return
 
         resizeAnchorPending = false
-        if (touching) return
+        if (!shouldHoldPositionOnResize()) return
         val position = resizeAnchorPosition
         if (position == NO_POSITION || position >= (adapter?.itemCount ?: 0)) return
         val manager = layoutManager as? LinearLayoutManager ?: return
+
+        // Skipping the hold alone still lets LinearLayoutManager fill a new
+        // bottom gap by moving the rows under a finger. Keep their absolute
+        // screen coordinates instead of their distance from the composer.
+        if (resizeAnchorFromTop) {
+            fingerLayoutAnchor = position to resizeAnchorTop
+            return
+        }
 
         // onSizeChanged runs before RecyclerView.onLayout. Setting the pending
         // position here makes the new layout consume the exact bottom-relative
@@ -134,6 +171,25 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         // the new layout already puts its bottom on the viewport end.
         manager.scrollToPositionWithOffset(position, h - paddingBottom - resizeAnchorHeight)
         pinEndAfterLayout(manager, position)
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        val manager = layoutManager as? LinearLayoutManager
+        val anchor = if (touching && manager != null) {
+            fingerLayoutAnchor ?: manager.findFirstVisibleItemPosition().let { position ->
+                manager.findViewByPosition(position)?.let { position to (it.top - paddingTop) }
+            }
+        } else null
+        fingerLayoutAnchor = null
+        super.onLayout(changed, l, t, r, b)
+        if (anchor == null || !touching || manager == null) return
+        val row = manager.findViewByPosition(anchor.first) ?: return
+        // LinearLayoutManager fills a bottom gap when the keyboard closes,
+        // even with an explicit top anchor. Undo that correction by the
+        // measured absolute position before drawing. scrollBy would clamp at
+        // the end and leave the unwanted movement in place.
+        val correction = paddingTop + anchor.second - row.top
+        if (correction != 0) manager.offsetChildrenVertical(correction)
     }
 
     /**

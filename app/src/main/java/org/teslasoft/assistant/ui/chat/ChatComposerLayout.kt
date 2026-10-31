@@ -63,6 +63,7 @@ class ChatComposerLayout @JvmOverloads constructor(
     private var expansionListener: ((Boolean) -> Unit)? = null
     private var beforeResize: (() -> Unit)? = null
     private var afterResize: (() -> Unit)? = null
+    var onEditingStarted: (() -> Unit)? = null
 
     private val edgeMargin = dp(8)
     private val textBottomGap = dp(4)
@@ -91,6 +92,7 @@ class ChatComposerLayout @JvmOverloads constructor(
         messageInput.setOnFocusChangeListener { _, hasFocus ->
             if (movingFocusedEditor) return@setOnFocusChangeListener
             if (hasFocus) {
+                onEditingStarted?.invoke()
                 active = true
                 // Reparenting the EditText inside this focus callback interrupts
                 // the tap that acquired focus, so the IME may never receive the
