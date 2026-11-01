@@ -295,6 +295,7 @@ import org.teslasoft.assistant.usage.UsageFunction
 import org.teslasoft.assistant.usage.UsageSection
 import org.teslasoft.assistant.usage.UsageLog
 import org.teslasoft.assistant.usage.UsageLogStore
+import org.teslasoft.assistant.ui.chat.ChatTranscriptLayoutManager
 import org.teslasoft.assistant.ui.chat.ChatComposerLayout
 import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportFormatter
@@ -3575,7 +3576,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
-        val linearLayoutManager = LinearLayoutManager(this)
+        val linearLayoutManager = ChatTranscriptLayoutManager(this)
         // linearLayoutManager.stackFromEnd = true
 
         chat?.setLayoutManager(linearLayoutManager)
