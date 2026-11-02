@@ -8,9 +8,10 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.ui.activities.VoiceBrowserActivity
 
-/** Shared TTS error composition; no transcript changes or logging side effects. */
+/** Shared TTS error composition; provider errors are retained once per attempt. */
 object TtsVoiceDialogs {
     fun show(activity: Activity, chatId: String, failure: TtsFailure, retry: () -> Unit = {}): AlertDialog {
+        TtsAndroidServices.recordProviderFailure(activity, failure)
         val message = TtsFailures.message(failure)
         val permanent = "Select New Voice" in message.actions
         val two = permanent || "Retry" in message.actions

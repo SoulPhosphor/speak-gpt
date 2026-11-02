@@ -19,6 +19,7 @@ package org.teslasoft.assistant.ui.activities
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.ImageButton
@@ -149,6 +150,13 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, R.anim.settings_slide_in, R.anim.settings_hold)
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, R.anim.settings_hold, R.anim.settings_slide_out)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(R.anim.settings_slide_in, R.anim.settings_hold)
+        }
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_conversation_summary)
 
@@ -250,6 +258,14 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
     override fun onPause() {
         super.onPause()
         if (isFinishing) SummarizerReviewGate.close(chatId, SummarizerReviewGate.CONVERSATION_SUMMARY)
+    }
+
+    override fun finish() {
+        super.finish()
+        if (Build.VERSION.SDK_INT < 34) {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(R.anim.settings_hold, R.anim.settings_slide_out)
+        }
     }
 
     override fun onDestroy() {
@@ -515,11 +531,8 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
             setText(R.string.btn_ok)
             setOnClickListener {
                 dialog.dismiss()
-                val go = {
-                    setResult(RESULT_OK, Intent().putExtra(RESULT_RECOMPACT_FROM_SCRATCH, true))
-                    finish()
-                }
-                if (isDirty()) DiscardChangesDialog.show(this@ConversationSummaryActivity) { go() } else go()
+                setResult(RESULT_OK, Intent().putExtra(RESULT_RECOMPACT_FROM_SCRATCH, true))
+                finish()
             }
         }
         dialog.show()

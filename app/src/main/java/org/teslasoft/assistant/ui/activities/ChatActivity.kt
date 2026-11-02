@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.providers.ProviderFailureLoggingPolicy
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.tts.api.*
 import org.teslasoft.assistant.preferences.tts.TtsVoiceSelection
@@ -1723,7 +1724,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val pending = withContext(Dispatchers.IO) {
                 NewConversationCoordinator(this@ChatActivity).createDefaultPendingConversation()
             }
-            startActivity(rootIntent(this@ChatActivity, pending.id, pending.name, pendingConversation = true))
+            val motion = android.app.ActivityOptions.makeCustomAnimation(
+                this@ChatActivity, R.anim.chat_slide_in_left, R.anim.settings_hold
+            )
+            startActivity(
+                rootIntent(this@ChatActivity, pending.id, pending.name, pendingConversation = true),
+                motion.toBundle()
+            )
         }
     }
 
@@ -5805,10 +5812,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         val message = buildString {
             append(getString(reason))
-            append("\n\n")
-            append(getString(R.string.compaction_err_unchanged))
             state.providerError?.let {
-                append("\n\n")
+                append("\n")
                 append(getString(R.string.compaction_err_provider, it))
             }
         }
@@ -6998,6 +7003,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         val error = result.exceptionOrNull() ?: return result.getOrNull()
         if (error is CancellationException) throw error
+        (error as? TtsException)?.failure?.let { TtsAndroidServices.recordProviderFailure(app, it) }
         restoreUIState()
         showTranscriptionFailed(error)
         return null
@@ -14288,7 +14294,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         ) { ai!!.chatCompletion(chatCompletionRequest2) }
                             .choices.firstOrNull()?.message?.content
                     )
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
+                    logAuxiliaryProviderFailure(e, titleModel, "Chat Title")
                     logVoiceEvent("auto-name request failed (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS); a later turn retries")
                     null
                 }
@@ -14305,6 +14314,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         applyAutoName(backupName, placeholderName)
                     }
                 }
+            }
+        }
+    }
+
+    /** Auxiliary failures keep the provider wording even when their UI stays silent. */
+    private fun logAuxiliaryProviderFailure(error: Throwable, requestModel: String, function: String) {
+        val classified = GenerationErrorClassifier.classify(error)
+        if (!classified.reachedServer() || preferences?.getLogChatFailures() != true) return
+        val endpoint = apiEndpointObject ?: return
+        val body = org.teslasoft.assistant.util.summarizer.SummarizerDetailSanitizer.sanitize(
+            error.message, listOf(endpoint.apiKey)
+        ) ?: "Provider returned no error message"
+        val parsed = org.teslasoft.assistant.util.ProviderErrorInfo.parse(body)
+        val app = applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            ProviderFailureLoggingPolicy.writeSafely {
+                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                    app, endpoint.label, parsed.providerName ?: "Not Reported", requestModel,
+                    function, body, outerHttpStatus = classified.httpStatus
+                )
             }
         }
     }

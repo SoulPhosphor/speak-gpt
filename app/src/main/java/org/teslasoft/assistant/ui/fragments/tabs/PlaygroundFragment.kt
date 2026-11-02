@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.fragments.tabs
 
+import org.teslasoft.assistant.providers.ProviderFailureLoggingPolicy
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -55,6 +56,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.loadingindicator.LoadingIndicator
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withContext
+import org.teslasoft.assistant.util.reachedServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
@@ -342,6 +345,24 @@ class PlaygroundFragment : Fragment() {
                 btnRun?.visibility = View.VISIBLE
             }
         } catch (e: Exception) {
+            val context = mContext
+            val endpoint = apiEndpoint
+            val classified = org.teslasoft.assistant.util.GenerationErrorClassifier.classify(e)
+            if (context != null && endpoint != null && classified.reachedServer() &&
+                preferences?.getLogChatFailures() == true) {
+                val raw = org.teslasoft.assistant.util.summarizer.SummarizerDetailSanitizer.sanitize(
+                    e.message, listOf(endpoint.apiKey, editTextIn?.text.toString())
+                ) ?: "Provider returned no error message"
+                val parsed = org.teslasoft.assistant.util.ProviderErrorInfo.parse(raw)
+                withContext(Dispatchers.IO) {
+                    ProviderFailureLoggingPolicy.writeSafely {
+                        org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                            context, endpoint.label, parsed.providerName ?: "Not Reported", model,
+                            "Playground", raw, outerHttpStatus = classified.httpStatus
+                        )
+                    }
+                }
+            }
             val response = when {
                 e.stackTraceToString().contains("invalid model") -> {
                     getString(R.string.prompt_no_model_provided)
