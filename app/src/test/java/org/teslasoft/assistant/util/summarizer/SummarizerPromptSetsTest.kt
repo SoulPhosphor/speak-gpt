@@ -149,12 +149,27 @@ class SummarizerPromptSetsTest {
         for (kind in listOf(SummarizerPromptSets.Kind.SUMMARY, SummarizerPromptSets.Kind.COMPACTION)) {
             val builtIn = SummarizerPromptSets.builtIns(kind).first()
             val old = builtIn.copy(text = if (kind == SummarizerPromptSets.Kind.SUMMARY)
-                SummarizerPrompts.SECTION_STORYTELLER.replace(" Preserve the information needed for conversation continuity.", " Stay under {length} words.")
-                else SummarizerPrompts.STORYTELLER.replace("Write in clear, compact prose, preserving the information needed for conversation continuity.", "Write in clear, compact prose under {length} words."))
+                SummarizerPrompts.PRIOR_SECTION_STORYTELLER.replace(" Preserve the information needed for conversation continuity.", " Stay under {length} words.")
+                else SummarizerPrompts.PRIOR_STORYTELLER.replace("Write in clear, compact prose, preserving the information needed for conversation continuity.", "Write in clear, compact prose under {length} words."))
             assertEquals(builtIn.text, SummarizerPromptSets.normalize(kind, listOf(old)).first().text)
             val custom = builtIn.copy(text = "Preserve all names and exact quotations.")
             assertEquals(custom.text, SummarizerPromptSets.normalize(kind, listOf(custom)).first().text)
         }
+    }
+
+    @Test fun untouchedPromptsFromBeforeNovember2MoveToTheCurrentText() {
+        val compact = SummarizerPromptSets.normalize(Kind.COMPACTION, listOf(
+            SummarizerPromptSets.builtIns(Kind.COMPACTION)[0].copy(text = SummarizerPrompts.PRIOR_STORYTELLER),
+            SummarizerPromptSets.builtIns(Kind.COMPACTION)[1].copy(text = SummarizerPrompts.PRIOR_REPORTER)
+        ))
+        assertEquals(SummarizerPrompts.STORYTELLER, compact[0].text)
+        assertEquals(SummarizerPrompts.REPORTER, compact[1].text)
+        val summary = SummarizerPromptSets.normalize(Kind.SUMMARY, listOf(
+            SummarizerPromptSets.builtIns(Kind.SUMMARY)[0].copy(text = SummarizerPrompts.PRIOR_SECTION_STORYTELLER),
+            SummarizerPromptSets.builtIns(Kind.SUMMARY)[1].copy(text = SummarizerPrompts.PRIOR_SECTION_REPORTER)
+        ))
+        assertEquals(SummarizerPrompts.SECTION_STORYTELLER, summary[0].text)
+        assertEquals(SummarizerPrompts.SECTION_REPORTER, summary[1].text)
     }
 
     @Test fun copyingUntouchedSummaryBuiltInsIntoCompactUsesTheRollingPrompt() {

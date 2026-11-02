@@ -118,10 +118,27 @@ class SummarizerPromptsTest {
     }
 
     @Test
-    fun theCompactionRuleOverridesOlderRewriteWordingButKeepsThePromptsStyle() {
-        val rule = SummarizerPrompts.COMPACTION_CONTEXT_RULE
-        assertTrue(rule.contains("asks you to merge, revise, or rewrite an existing summary, ignore that part"))
-        assertTrue(rule.contains("Follow its instructions on style, detail, and what to include."))
+    fun theCompactPromptsAskOnlyForNewMaterialSoTheHiddenRuleNeedsNoOverride() {
+        for (prompt in listOf(SummarizerPrompts.STORYTELLER, SummarizerPrompts.REPORTER)) {
+            assertFalse(prompt.contains("Integrate"))
+            assertFalse(prompt.contains("updated recap"))
+            assertFalse(prompt.contains("updated list"))
+            assertFalse(prompt.contains("revise or remove"))
+            assertFalse(prompt.contains("recent-message window"))
+        }
+        assertTrue(SummarizerPrompts.STORYTELLER.contains("Reply only with the new recap."))
+        assertTrue(SummarizerPrompts.REPORTER.contains("Reply only with the new notes."))
+        assertFalse(SummarizerPrompts.COMPACTION_CONTEXT_RULE.contains("ignore that part"))
+    }
+
+    @Test
+    fun everyShippedConversationPromptWritesTheAiInFirstPerson() {
+        val sentence = "You may refer to the user as user but write the AI portion in first person " +
+            "instead of saying the assistant did things."
+        for (prompt in listOf(SummarizerPrompts.STORYTELLER, SummarizerPrompts.REPORTER,
+            SummarizerPrompts.SECTION_STORYTELLER, SummarizerPrompts.SECTION_REPORTER)) {
+            assertTrue(prompt.contains(sentence))
+        }
     }
 
     @Test
