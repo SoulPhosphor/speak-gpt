@@ -18,7 +18,9 @@ class SummarizerLengthPolicyTest {
         val image = controller.substring(controller.indexOf("suspend fun summarizeImagePrompt"),
             controller.indexOf("private suspend fun compactSnapshot"))
         assertTrue(image.contains("maxTokens = 200"))
-        assertTrue(controller.contains("commitManualCompaction(summary, target, false, target)"))
+        // The finished compaction is saved with no over-length flag; the
+        // version tabs and regeneration lock follow in the same commit.
+        assertTrue(controller.contains("summary, target, false, target,\n                versionsJson = CompactionVersions.toJson(versions)"))
     }
 
     @Test fun theUnusedControlIsRemovedWhileTheStoredPreferenceRemainsCompatible() {

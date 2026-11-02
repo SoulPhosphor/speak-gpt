@@ -118,7 +118,14 @@ class ManualCompactionWiringContractTest {
 
     @Test
     fun compactIsOfferedOnlyWhileTheChatDoesNotUseTheSummarizer() {
-        assertTrue(activity.contains(".isConfigured(this) && preferences?.getChatUseSummarizer() != true"))
+        // The gear's Compact is gone (owner ruling, Nov 2 2026); Compact to
+        // Here keeps the same rule.
+        val available = activity.substring(
+            activity.indexOf("override fun isCompactToHereAvailable()"),
+            activity.indexOf("override fun onCompactToHere(")
+        )
+        assertTrue(available.contains(".isConfigured(this) &&"))
+        assertTrue(available.contains("preferences?.getChatUseSummarizer() != true"))
         assertTrue(activity.contains("R.string.compact_unavailable_with_summarizer"))
     }
 }
