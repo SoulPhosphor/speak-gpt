@@ -565,7 +565,7 @@ Prompts, the Summary / Compaction review screen, Summarizer Settings, System
 Prompt editor, Activation Prompt, Lore Book, User Persona, Memory editor,
 Model Rule editor, Campaign and World details, Possible Match review, API
 endpoint editor, Advanced Memory Settings, Memory Assistant Advanced
-Settings, Voice Advanced Settings, and the alert debug menu. Edit Companion
+Settings, Voice Settings, Voice Advanced Settings, and the alert debug menu. Edit Companion
 and the chat keep their own handling.
 
 ### Header with one trailing action icon

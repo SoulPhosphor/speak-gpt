@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.ui.util.ScreenChrome
+
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -189,11 +191,12 @@ class VoiceSettingsActivity : SettingsPageActivity() {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        // Insets must be applied here, not in onCreate: on S+ the util reads
-        // window.decorView.rootWindowInsets, which is null before the window
-        // attaches — the call silently no-oped and this screen rendered under
-        // the status bar with its last tile cut off behind the gesture area.
-        adjustPaddings()
+        // The scrolling page is the ScrollView whose id is "root".
+        ScreenChrome.fitSystemBarsAndKeyboard(
+            findViewById<android.view.ViewGroup>(android.R.id.content)?.getChildAt(0),
+            actionBar,
+            findViewById<android.view.View>(R.id.root)
+        )
     }
 
     private fun updateVoiceBrowserRow() {
@@ -491,8 +494,4 @@ class VoiceSettingsActivity : SettingsPageActivity() {
         }
     }
 
-    private fun adjustPaddings() {
-        WindowInsetsUtil.adjustPaddings(this, R.id.action_bar, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
-        WindowInsetsUtil.adjustPaddings(this, R.id.scrollable, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS), customPaddingBottom = (48 * resources.displayMetrics.density).roundToInt())
-    }
 }
