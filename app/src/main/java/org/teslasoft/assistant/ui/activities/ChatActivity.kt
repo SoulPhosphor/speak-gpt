@@ -399,6 +399,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
 
     companion object {
+        /** Time between steps of the compaction pop-up's looping dots. */
+        private const val COMPACTION_DOTS_STEP_MS = 450L
         /** Set by the launcher gate on the blank chat it opens at app start. */
         const val EXTRA_OPENED_AT_LAUNCH = "openedAtLaunch"
 
@@ -618,6 +620,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var condenseJob: Job? = null
     private var condenseDialog: AlertDialog? = null
     private var compactionDialog: AlertDialog? = null
+    /** Drives the compaction pop-up's looping dots. */
+    private val compactionDotsHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var compactionDotsStep = 0
+    private val compactionDotsTick = object : Runnable {
+        override fun run() {
+            val dots = compactionDialog?.findViewById<TextView>(R.id.compaction_dots) ?: return
+            compactionDotsStep = (compactionDotsStep + 1) % 4
+            dots.text = ".".repeat(compactionDotsStep)
+            compactionDotsHandler.postDelayed(this, COMPACTION_DOTS_STEP_MS)
+        }
+    }
     /** The messages the last Compact froze, so Retry compacts them again. */
     private var lastCompactionRequest: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null
     private var lastCompactionFromScratch = false
@@ -5704,12 +5717,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (isFinishing || isDestroyed) return true
         when (state) {
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running -> {
-                if (compactionDialog?.isShowing == true) return true
+                compactionDialog?.takeIf { it.isShowing }?.let {
+                    showCompactionPercent(it, state.percent)
+                    return true
+                }
                 val view = layoutInflater.inflate(R.layout.dialog_compaction_progress, null)
                 val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                     .setView(view)
                     .setCancelable(false)
                     .create()
+                dialog.setOnDismissListener { compactionDotsHandler.removeCallbacks(compactionDotsTick) }
                 (view.findViewById<View>(R.id.btn_dialog_primary_action)?.parent as? View)
                     ?.visibility = View.GONE
                 view.findViewById<MaterialButton>(R.id.btn_dialog_action)?.apply {
@@ -5722,10 +5739,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 compactionDialog = dialog
                 dialog.show()
+                showCompactionPercent(dialog, state.percent)
+                // The dots run from the time the pop-up is shown, so a pop-up
+                // reopened after leaving the chat is moving straight away.
+                compactionDotsStep = 0
+                compactionDotsHandler.removeCallbacks(compactionDotsTick)
+                compactionDotsHandler.postDelayed(compactionDotsTick, COMPACTION_DOTS_STEP_MS)
             }
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded -> {
                 val dialog = compactionDialog ?: return true
-                dialog.findViewById<View>(R.id.compaction_progress)?.visibility = View.GONE
+                compactionDotsHandler.removeCallbacks(compactionDotsTick)
+                showCompactionPercent(dialog, 100)
+                dialog.findViewById<TextView>(R.id.compaction_dots)?.visibility = View.GONE
                 dialog.findViewById<TextView>(R.id.compaction_status)
                     ?.setText(R.string.compaction_dialog_complete)
                 (dialog.findViewById<View>(R.id.btn_dialog_action)?.parent as? View)
@@ -5767,6 +5792,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
         return true
+    }
+
+    /** The compaction pop-up's percentage and bar, from messages done. */
+    private fun showCompactionPercent(dialog: AlertDialog, percent: Int) {
+        dialog.findViewById<TextView>(R.id.compaction_percent)
+            ?.text = getString(R.string.compaction_dialog_percent, percent)
+        dialog.findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(
+            R.id.compaction_progress
+        )?.setProgressCompat(percent, true)
     }
 
     /**

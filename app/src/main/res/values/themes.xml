@@ -400,6 +400,69 @@
         <item name="android:paddingEnd">@dimen/dialog_content_padding_horizontal</item>
     </style>
 
+    <!-- Progress pop-up (owner ruling, Nov 2 2026): a title with the
+         percentage done on the same line, a bar showing that percentage,
+         and a status line with three looping dots. The title is left-aligned
+         beside the percentage by the owner's design. -->
+    <style name="Widget.App.ProgressDialog.Content" parent="Widget.App.Dialog.Content">
+        <item name="android:paddingTop">@dimen/progress_dialog_padding_top</item>
+    </style>
+
+    <style name="Widget.App.ProgressDialog.HeaderRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="Widget.App.ProgressDialog.Title" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
+        <item name="android:textSize">@dimen/progress_dialog_title_size</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.ProgressDialog.Percent" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/progress_dialog_percent_gap</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/progress_dialog_percent_size</item>
+    </style>
+
+    <style name="Widget.App.ProgressDialog.Bar" parent="Widget.Material3.LinearProgressIndicator">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/progress_dialog_bar_gap</item>
+        <item name="android:max">100</item>
+        <item name="android:indeterminate">false</item>
+        <item name="indicatorColor">?attr/colorAccent</item>
+        <item name="trackThickness">@dimen/progress_dialog_bar_thickness</item>
+        <item name="trackCornerRadius">@dimen/progress_dialog_bar_radius</item>
+    </style>
+
+    <style name="Widget.App.ProgressDialog.StatusRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/progress_dialog_status_gap</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="Widget.App.ProgressDialog.Status" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/progress_dialog_status_size</item>
+    </style>
+
+    <!-- The looping dots after the status; decorative, so screen readers
+         skip them. -->
+    <style name="Widget.App.ProgressDialog.Dots" parent="Widget.App.ProgressDialog.Status">
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+
     <style name="Widget.App.Dialog.Actions.EndRow" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

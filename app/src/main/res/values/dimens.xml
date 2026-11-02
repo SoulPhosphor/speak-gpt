@@ -214,4 +214,15 @@
          text column and its number field. -->
     <dimen name="row_number_padding_top">20dp</dimen>
     <dimen name="row_number_field_gap">12dp</dimen>
+
+    <!-- Widget.App.ProgressDialog.*: a pop-up showing real progress. -->
+    <dimen name="progress_dialog_padding_top">24dp</dimen>
+    <dimen name="progress_dialog_title_size">20sp</dimen>
+    <dimen name="progress_dialog_percent_size">18sp</dimen>
+    <dimen name="progress_dialog_percent_gap">12dp</dimen>
+    <dimen name="progress_dialog_bar_gap">16dp</dimen>
+    <dimen name="progress_dialog_bar_thickness">8dp</dimen>
+    <dimen name="progress_dialog_bar_radius">4dp</dimen>
+    <dimen name="progress_dialog_status_gap">12dp</dimen>
+    <dimen name="progress_dialog_status_size">15sp</dimen>
 </resources>

@@ -100,7 +100,12 @@ class SummarizerController(
             val chatName: String,
             val requestedMessages: Int,
             val successfulMessages: Int
-        ) : OperationState
+        ) : OperationState {
+            /** How far through the run is, from messages actually done. */
+            val percent: Int
+                get() = if (requestedMessages <= 0) 0
+                else (successfulMessages.toLong() * 100 / requestedMessages).toInt().coerceIn(0, 100)
+        }
         data class Succeeded(val kind: OperationKind, val chatName: String) : OperationState
         data class Failed(
             val kind: OperationKind,
@@ -1297,6 +1302,13 @@ class SummarizerController(
                     chatIdProvider(),
                     state.chatName,
                     state.kind
+                )
+            }
+            if (state.kind == OperationKind.COMPACTING) {
+                org.teslasoft.assistant.service.SummarizerForegroundService.progress(
+                    appContext,
+                    chatIdProvider(),
+                    state.percent
                 )
             }
         } else if (previous is OperationState.Running) {

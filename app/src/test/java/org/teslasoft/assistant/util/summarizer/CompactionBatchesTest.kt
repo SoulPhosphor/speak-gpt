@@ -50,4 +50,14 @@ class CompactionBatchesTest {
     fun theDefaultAmountIs4000() {
         assertEquals(4000, CompactionBatches.DEFAULT_TOKENS)
     }
+
+    @Test
+    fun thePercentageComesFromMessagesDone() {
+        fun running(requested: Int, done: Int) = SummarizerController.OperationState.Running(
+            SummarizerController.OperationKind.COMPACTING, "Chat", requested, done
+        )
+        assertEquals(0, running(0, 0).percent)
+        assertEquals(75, running(1000, 750).percent)
+        assertEquals(100, running(40, 40).percent)
+    }
 }

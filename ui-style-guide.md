@@ -310,6 +310,17 @@ heading during measurement and retain that smaller size. Keep the body and
 Close action in the standard Material dialog; do not special-case individual
 parameter headings or set their text size in Kotlin.
 
+### Progress pop-up
+
+Use `Widget.App.ProgressDialog.*` for a pop-up that shows real progress:
+`Content` (the column), `HeaderRow` with `Title` and `Percent` on one line,
+`Bar` (a `LinearProgressIndicator` filled to the percentage), and `StatusRow`
+with `Status` and `Dots` (the three looping dots). The title is left-aligned
+beside the percentage by the owner's design (Nov 2 2026), an approved
+exception to centered dialog titles. The percentage must come from work
+actually done, never a guess. Spacing and sizes live in `progress_dialog_*`
+dimensions. Current user: the compaction pop-up (`dialog_compaction_progress.xml`).
+
 ### Title and explanatory text
 
 Use `setTitle` for the dialog heading or its single short question.
