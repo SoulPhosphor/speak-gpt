@@ -1,0 +1,29 @@
+name: No Hard-Coded UI
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  no-hardcoded-ui:
+    name: No hard-coded UI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block hard-coded sizes, colors, fonts and shapes in added lines
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            base="origin/$BASE_REF"
+          else
+            base="origin/beta/new-client"
+          fi
+          git fetch --no-tags origin "+refs/heads/*:refs/remotes/origin/*"
+          python3 .claude/hooks/check_hardcoded_ui.py --base "$base"
