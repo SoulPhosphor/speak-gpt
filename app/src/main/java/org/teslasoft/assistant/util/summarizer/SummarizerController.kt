@@ -654,6 +654,10 @@ class SummarizerController(
             )
         )
 
+        // An ordinary compaction with no new messages adds nothing: no new
+        // version, so older versions are not pushed out.
+        if (!fromScratch && redone == null && operationStartFolded >= target) return true
+
         // Compaction only adds (owner ruling, Nov 2 2026): the text it starts
         // from is kept exactly, and each reply is appended after it. Nothing
         // is saved until the whole run succeeds; a failure keeps nothing.

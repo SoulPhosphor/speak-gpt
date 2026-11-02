@@ -91,6 +91,14 @@ class CompactionVersionsTest {
     }
 
     @Test
+    fun bulkDeletionShiftsEveryTabByEachRemovedMessage() {
+        val state = CompactionVersions.State(listOf(v(5, "a"), v(15, "b", 5, "a")), 1)
+        val after = CompactionVersions.afterPositionsRemoved(state, listOf(1, 3, 10))
+        assertEquals(listOf(3, 12), after.versions.map { it.count })
+        assertEquals(3, after.versions[1].baseCount)
+    }
+
+    @Test
     fun storageRoundTrips() {
         val state = CompactionVersions.State(listOf(v(5, "a"), v(15, "b", 5, "a")), 0)
         assertEquals(state, CompactionVersions.fromJson(CompactionVersions.toJson(state)))

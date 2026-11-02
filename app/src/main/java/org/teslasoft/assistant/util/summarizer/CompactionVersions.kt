@@ -137,6 +137,13 @@ object CompactionVersions {
             }
         )
 
+    /** Stored messages at [positions] (indexes from before any removal)
+     *  were deleted, possibly not next to each other (bulk delete). */
+    fun afterPositionsRemoved(state: State, positions: List<Int>): State =
+        positions.distinct().sortedDescending().fold(state) { acc, position ->
+            afterRangeRemoval(acc, position, position + 1)
+        }
+
     /** The furthest any kept version reaches, so replies inside any version
      *  (in use or Unused) stay fixed while that version can still be used. */
     fun furthestCount(state: State): Int = state.versions.maxOfOrNull { it.count } ?: 0

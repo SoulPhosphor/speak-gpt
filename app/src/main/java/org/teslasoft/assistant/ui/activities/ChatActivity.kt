@@ -15360,17 +15360,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (realigned(compactionLock) != compactionLock) {
             prefs.setCompactionRegenerationLockBoundary(realigned(compactionLock))
         }
-        val versionsJson = prefs.getCompactionVersions()
-        if (versionsJson.isNotBlank()) {
-            val versions = org.teslasoft.assistant.util.summarizer.CompactionVersions.fromJson(versionsJson)
-            prefs.setCompactionVersions(
-                org.teslasoft.assistant.util.summarizer.CompactionVersions.toJson(
-                    org.teslasoft.assistant.util.summarizer.CompactionVersions.afterRangeRemoval(versions, start, end)
-                )
-            )
-        }
+        realignCompactionVersions((start until end).toList())
         refreshManualCompactionMarker()
         refreshSummarizerIcons()
+    }
+
+    /** Shrinks every compaction version tab's coverage by the removed stored
+     *  messages at [positions] (indexes from before the removal), the same
+     *  way as the compaction marker, so Use This Summary and Redo This
+     *  Summary keep covering the right messages. */
+    private fun realignCompactionVersions(positions: List<Int>) {
+        val prefs = preferences ?: return
+        if (positions.isEmpty()) return
+        val json = prefs.getCompactionVersions()
+        if (json.isBlank()) return
+        val versions = org.teslasoft.assistant.util.summarizer.CompactionVersions.fromJson(json)
+        val realigned = org.teslasoft.assistant.util.summarizer.CompactionVersions
+            .afterPositionsRemoved(versions, positions)
+        if (realigned != versions) {
+            prefs.setCompactionVersions(
+                org.teslasoft.assistant.util.summarizer.CompactionVersions.toJson(realigned)
+            )
+        }
     }
 
     override fun onMessageDeleted() {
@@ -15597,6 +15608,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         var removedBeforeManualBoundary = 0
         var removedBeforeSummaryLock = 0
         var removedBeforeCompactionLock = 0
+        val removedPositions = ArrayList<Int>()
         var pos = 0
         var p = 0
         while (pos < messagesSelectionProjection.size) {
@@ -15610,6 +15622,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 if (pos < summaryLockBefore) removedBeforeSummaryLock++
                 if (pos < compactionLockBefore) removedBeforeCompactionLock++
+                removedPositions.add(pos)
                 messages.removeAt(pos - p)
                 p++
             }
@@ -15634,6 +15647,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 compactionLockBefore - removedBeforeCompactionLock
             )
         }
+        realignCompactionVersions(removedPositions)
 
         syncChatProjection()
         saveSettings()
