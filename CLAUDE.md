@@ -4,6 +4,11 @@ This file defines how AI agents work with the owner and this repository.
 
 It is not a project history, bug diary, or substitute for the owner's judgment.
 
+## No new Markdown files without permission (owner ruling, November 2 2026)
+
+You are not allowed to create Markdown (`.md`) files without the owner's
+permission. Ask first, and say why the file is needed.
+
 ## 0. Code workflow (owner ruling, October 31 2026)
 
 Every code change follows these steps, in this order, with no others added:
