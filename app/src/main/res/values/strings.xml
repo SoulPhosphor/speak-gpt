@@ -3591,7 +3591,6 @@
     <string name="include_artifact_bookmark_desc">Edit removed document bookmarks</string>
     <string name="include_icon_desc">Attached file</string>
     <string name="btn_attach_document">Document</string>
-    <string name="composer_compact_action">Compact</string>
     <string name="composer_create_image_action">Create Image</string>
     <string name="manual_compaction_marker">Compacted</string>
     <string name="summarizer_boundary_marker">──────── Summarized ────────</string>
@@ -3760,6 +3759,9 @@
     <string name="compaction_uncompact_body">This will not delete the compaction summary and you can return to the screen at any time to recompact using the previous summary.</string>
     <string name="compaction_uncompact_hide">Hide this hint for the rest of the chat</string>
     <string name="compaction_recompact_title">Recompact this Conversation?</string>
+    <string name="compaction_recompact_from_scratch_action">Recompact Messages from Scratch</string>
+    <string name="compaction_recompact_from_scratch_title">Recompact From Scratch</string>
+    <string name="compaction_recompact_from_scratch_body">This will be run the summarizer AI from the last compacted message to the beginning of the conversation. All previous compacted summarized text will be deleted and replaced.</string>
     <string name="compaction_recompact_body">The AI will no longer receive the compacted messages in full and instead will receive the compacted text below.</string>
     <string name="compaction_recompact_hide">Hide this message in this chat</string>
 

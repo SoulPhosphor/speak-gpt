@@ -1686,6 +1686,14 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- A label-sized primary action centered on its own line directly
+         below a screen's intro text (Widget.App.Screen.Intro), for vertical
+         (LinearLayout) hosts. First user: Recompact Messages from Scratch on
+         the Compaction Summary screen. -->
+    <style name="AppButton.Primary.Inline.Centered.BelowIntro">
+        <item name="android:layout_marginTop">@dimen/screen_intro_action_gap</item>
+    </style>
+
     <!-- Chat header. Every color and size of the bar, its title and its
          action icons is defined here; recolor the header from these styles
          and bg_chat_header* (which use bg_surface_level4* on Android 12+). -->

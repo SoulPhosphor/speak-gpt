@@ -80,6 +80,15 @@
                 android:id="@+id/text_condensed_intro"
                 style="@style/Widget.App.Screen.Intro" />
 
+            <!-- Compaction mode only: replaces all compacted text with one
+                 fresh compaction of everything through the last compacted
+                 message, after confirmation. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_recompact_from_scratch"
+                style="@style/AppButton.Primary.Inline.Centered.BelowIntro"
+                android:text="@string/compaction_recompact_from_scratch_action"
+                android:visibility="gone" />
+
             <!-- Compaction status: a spinner with "in progress" while the
                  compactor runs, then the success line. Hidden otherwise. -->
             <LinearLayout

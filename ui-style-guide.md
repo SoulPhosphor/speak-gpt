@@ -248,6 +248,12 @@ Use when actions should size to their labels rather than fill the available widt
 its line, for vertical (LinearLayout) hosts. In a ConstraintLayout, center
 `AppButton.Primary.Inline` with start and end constraints instead.
 
+`AppButton.Primary.Inline.Centered.BelowIntro` is the same centered
+label-sized button placed on its own line directly beneath a screen's intro
+text (`Widget.App.Screen.Intro`); it adds only the gap above it
+(`screen_intro_action_gap`). First user: **Recompact Messages from Scratch** on
+the Compaction Summary screen.
+
 `AppButton.Primary.Inline.End` is the same label-sized button on the end
 (right) side of its line, for vertical (LinearLayout) hosts. Current user: the
 per-entry Copy under each log entry (`view_log_entry.xml`).

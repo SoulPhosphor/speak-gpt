@@ -28,11 +28,13 @@ class ManualCompactionWiringContractTest {
     fun gearAndMenuAreCapabilityDriven() {
         val layout = source("src/main/res/layout/activity_chat.xml")
         assertTrue(layout.indexOf("@+id/btn_chat_tools") > layout.indexOf("@+id/btn_attach"))
-        assertTrue(layout.contains("@+id/action_compact"))
+        // Compact was removed from the gear menu (owner ruling, Nov 2 2026);
+        // Compact to Here in the AI message menu stays.
+        assertFalse(layout.contains("@+id/action_compact"))
         assertTrue(layout.contains("@+id/action_create_image"))
-        assertTrue(activity.contains("val compactAvailable ="))
+        assertFalse(activity.contains("val compactAvailable ="))
         assertTrue(activity.contains("val imageAvailable = imageGeneratorConfigured()"))
-        assertTrue(activity.contains("if (compactAvailable || imageAvailable)"))
+        assertTrue(activity.contains("btnChatTools?.visibility = if (imageAvailable) View.VISIBLE else View.GONE"))
     }
 
     @Test

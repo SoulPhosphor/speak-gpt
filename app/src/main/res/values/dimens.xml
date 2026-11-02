@@ -29,6 +29,8 @@
          place to tune the line spacing for all of them (owner ask, July 10
          2026 — "a variable that's the same"). -->
     <dimen name="card_section_gap">12dp</dimen>
+    <!-- Space between a screen's intro text and the action centered below it. -->
+    <dimen name="screen_intro_action_gap">12dp</dimen>
 
     <dimen name="button_corner_radius">4dp</dimen>
 

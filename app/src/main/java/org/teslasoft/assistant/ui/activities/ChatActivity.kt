@@ -599,7 +599,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var btnVisionActionCamera: View? = null
     private var btnVisionActionGallery: View? = null
     private var btnVisionActionDocument: View? = null
-    private var btnToolCompact: View? = null
     private var btnToolCreateImage: View? = null
     private var explicitImagineDraft = false
 
@@ -3370,7 +3369,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnVisionActionCamera = findViewById(R.id.action_camera)
         btnVisionActionGallery = findViewById(R.id.action_gallery)
         btnVisionActionDocument = findViewById(R.id.action_document)
-        btnToolCompact = findViewById(R.id.action_compact)
         btnToolCreateImage = findViewById(R.id.action_create_image)
         includeStrip = findViewById(R.id.include_strip)
         initIncludeStrip()
@@ -5279,11 +5277,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (toolActions?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
-        btnToolCompact?.setOnClickListener {
-            toolActions?.visibility = View.GONE
-            startManualCompaction()
-        }
-
         btnToolCreateImage?.setOnClickListener {
             toolActions?.visibility = View.GONE
             insertExplicitImagineDraft()
@@ -6110,17 +6103,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Show only configured composer tools; hide the gear when none are usable. */
     private fun refreshComposerTools() {
-        // A chat that uses the summarizer is not compacted (owner ruling,
-        // Oct 3 2026): Compact is offered only while Use Summarizer is off.
-        val compactAvailable =
-            org.teslasoft.assistant.util.summarizer.SummarizerController
-                .isConfigured(this) && preferences?.getChatUseSummarizer() != true
         val imageAvailable = imageGeneratorConfigured()
-        btnToolCompact?.visibility = if (compactAvailable) View.VISIBLE else View.GONE
         btnToolCreateImage?.visibility = if (imageAvailable) View.VISIBLE else View.GONE
-        btnChatTools?.visibility =
-            if (compactAvailable || imageAvailable) View.VISIBLE else View.GONE
-        if (!compactAvailable && !imageAvailable) {
+        btnChatTools?.visibility = if (imageAvailable) View.VISIBLE else View.GONE
+        if (!imageAvailable) {
             toolActions?.visibility = View.GONE
         }
     }
