@@ -150,8 +150,7 @@
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_compaction_tokens"
                     style="@style/Widget.App.Row.Number.Field"
-                    android:ems="6"
-                    android:maxLength="6" />
+                    android:ems="6" />
             </LinearLayout>
 
             <!-- ============ Summary Model ============ -->

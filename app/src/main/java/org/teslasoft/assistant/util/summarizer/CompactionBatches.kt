@@ -14,8 +14,6 @@ import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
  */
 object CompactionBatches {
     const val DEFAULT_TOKENS = 4000
-    const val MIN_TOKENS = 500
-    const val MAX_TOKENS = 100_000
 
     fun estimateTokens(entry: SummarizerController.Entry): Int =
         if (entry.text.isBlank()) 0 else IncludeTextPolicy.estimateTokens(entry.text)

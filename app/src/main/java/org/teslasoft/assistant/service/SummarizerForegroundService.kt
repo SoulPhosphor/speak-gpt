@@ -112,8 +112,12 @@ class SummarizerForegroundService : Service() {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             if (percent != null) {
-                builder.setProgress(100, percent, false)
-                    .setContentText(context.getString(R.string.compaction_dialog_percent, percent))
+                // Matches the compaction pop-up: its title, its status line,
+                // the percentage done and a bar filled to it.
+                builder.setContentTitle(context.getString(R.string.compaction_dialog_title))
+                    .setContentText(context.getString(R.string.compaction_dialog_processing))
+                    .setSubText(context.getString(R.string.compaction_dialog_percent, percent))
+                    .setProgress(100, percent, false)
             }
             return builder.build()
         }

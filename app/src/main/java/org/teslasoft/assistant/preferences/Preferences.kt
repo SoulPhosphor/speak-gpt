@@ -2930,21 +2930,11 @@ class Preferences internal constructor(
      *  4000): about how many tokens of whole messages one compaction
      *  request sends. */
     fun getCompactionAverageTokens(): Int =
-        (getGlobalString("compaction_average_tokens", "")
-            .toIntOrNull() ?: org.teslasoft.assistant.util.summarizer.CompactionBatches.DEFAULT_TOKENS)
-            .coerceIn(
-                org.teslasoft.assistant.util.summarizer.CompactionBatches.MIN_TOKENS,
-                org.teslasoft.assistant.util.summarizer.CompactionBatches.MAX_TOKENS
-            )
+        getGlobalString("compaction_average_tokens", "").toIntOrNull()
+            ?: org.teslasoft.assistant.util.summarizer.CompactionBatches.DEFAULT_TOKENS
 
     fun setCompactionAverageTokens(value: Int) {
-        putGlobalString(
-            "compaction_average_tokens",
-            value.coerceIn(
-                org.teslasoft.assistant.util.summarizer.CompactionBatches.MIN_TOKENS,
-                org.teslasoft.assistant.util.summarizer.CompactionBatches.MAX_TOKENS
-            ).toString()
-        )
+        putGlobalString("compaction_average_tokens", value.toString())
     }
 
     /** Summary Length in words (decision 13; default 300). */

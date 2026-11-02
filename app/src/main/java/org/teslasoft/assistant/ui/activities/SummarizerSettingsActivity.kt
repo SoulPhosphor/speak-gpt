@@ -181,11 +181,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
             override fun afterTextChanged(s: Editable?) {
                 if (suppressWatchers) return
                 val parsed = s?.toString()?.trim()?.toIntOrNull() ?: return
-                if (parsed in org.teslasoft.assistant.util.summarizer.CompactionBatches.MIN_TOKENS..
-                    org.teslasoft.assistant.util.summarizer.CompactionBatches.MAX_TOKENS
-                ) {
-                    preferences?.setCompactionAverageTokens(parsed)
-                }
+                preferences?.setCompactionAverageTokens(parsed)
             }
         })
 
