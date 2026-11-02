@@ -1,8 +1,7 @@
-package org.teslasoft.assistant.tts.api
+package org.teslasoft.assistant.providers
 
-import org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot
 
-internal object TtsFailureLoggingPolicy {
+internal object ProviderFailureLoggingPolicy {
     fun hasProviderFailure(evidence: ProviderDiagnosticSnapshot): Boolean =
         evidence.errorEvents.isNotEmpty() ||
             evidence.outerHttpStatus?.let { it !in 200..299 } == true

@@ -1,5 +1,6 @@
 package org.teslasoft.assistant.tts.api
 
+import org.teslasoft.assistant.providers.ProviderFailureLoggingPolicy
 import kotlinx.coroutines.launch
 import android.content.Context
 import org.teslasoft.assistant.R
@@ -18,7 +19,7 @@ object TtsAndroidServices {
     /** Keep a provider's error even when playback has no foreground screen. */
     fun recordProviderFailure(context: Context, failure: TtsFailure) {
         val evidence = failure.evidence ?: return
-        if (!TtsFailureLoggingPolicy.hasProviderFailure(evidence)) return
+        if (!ProviderFailureLoggingPolicy.hasProviderFailure(evidence)) return
         val app = context.applicationContext
         if (!org.teslasoft.assistant.preferences.Preferences.getPreferences(app, "").getLogChatFailures()) return
         synchronized(loggedAttempts) {
@@ -31,7 +32,7 @@ object TtsAndroidServices {
             }
         ) ?: "Provider returned no error message"
         logScope.launch {
-            val recorded = TtsFailureLoggingPolicy.writeSafely {
+            val recorded = ProviderFailureLoggingPolicy.writeSafely {
                 org.teslasoft.assistant.preferences.Logger.logProviderFailure(
                     app, failure.endpointName, evidence.actualServingProvider ?: "Not Reported",
                     failure.target.modelId, failure.operation.label, detail,

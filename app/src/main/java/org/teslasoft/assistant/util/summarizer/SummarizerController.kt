@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.util.summarizer
 
+import org.teslasoft.assistant.providers.ProviderFailureLoggingPolicy
 import android.content.Context
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
@@ -508,19 +509,21 @@ class SummarizerController(
                     }
                 }
                 scope.launch(Dispatchers.IO) {
-                    org.teslasoft.assistant.preferences.Logger.logProviderFailure(
-                        appContext, SummarizerDetailSanitizer.sanitize(endpoint.label, allPrivate) ?: "Not Reported",
-                        SummarizerDetailSanitizer.sanitize(providerEvidence.actualServingProvider, allPrivate) ?: "Not Reported",
-                        SummarizerDetailSanitizer.sanitize(model, allPrivate) ?: "Not Reported", function, message,
-                        requestedRoutedProvider = SummarizerDetailSanitizer.sanitize(requestedProvider, allPrivate),
-                        outerHttpStatus = providerEvidence.outerHttpStatus,
-                        embeddedProviderStatus = providerEvidence.embeddedHttpStatus,
-                        providerCode = SummarizerDetailSanitizer.sanitize(providerEvidence.providerCode, allPrivate),
-                        providerType = SummarizerDetailSanitizer.sanitize(providerEvidence.providerType, allPrivate),
-                        providerErrorType = SummarizerDetailSanitizer.sanitize(providerEvidence.providerErrorType, allPrivate),
-                        contentFilterSide = providerEvidence.contentFilterSide?.wire,
-                        attemptId = providerEvidence.attemptId
-                    )
+                    ProviderFailureLoggingPolicy.writeSafely {
+                        org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                            appContext, SummarizerDetailSanitizer.sanitize(endpoint.label, allPrivate) ?: "Not Reported",
+                            SummarizerDetailSanitizer.sanitize(providerEvidence.actualServingProvider, allPrivate) ?: "Not Reported",
+                            SummarizerDetailSanitizer.sanitize(model, allPrivate) ?: "Not Reported", function, message,
+                            requestedRoutedProvider = SummarizerDetailSanitizer.sanitize(requestedProvider, allPrivate),
+                            outerHttpStatus = providerEvidence.outerHttpStatus,
+                            embeddedProviderStatus = providerEvidence.embeddedHttpStatus,
+                            providerCode = SummarizerDetailSanitizer.sanitize(providerEvidence.providerCode, allPrivate),
+                            providerType = SummarizerDetailSanitizer.sanitize(providerEvidence.providerType, allPrivate),
+                            providerErrorType = SummarizerDetailSanitizer.sanitize(providerEvidence.providerErrorType, allPrivate),
+                            contentFilterSide = providerEvidence.contentFilterSide?.wire,
+                            attemptId = providerEvidence.attemptId
+                        )
+                    }
                 }
             }
         )
@@ -1283,19 +1286,21 @@ class SummarizerController(
                     requestSize?.let { append("\n").append(it.format()) }
                 }
                 scope.launch(Dispatchers.IO) {
-                    org.teslasoft.assistant.preferences.Logger.logProviderFailure(
-                        appContext, SummarizerDetailSanitizer.sanitize(endpoint?.label, privateValues) ?: "Not Reported",
-                        SummarizerDetailSanitizer.sanitize(providerEvidence?.actualServingProvider, privateValues) ?: "Not Reported",
-                        SummarizerDetailSanitizer.sanitize(model, privateValues) ?: "Not Reported", function, message,
-                        requestedRoutedProvider = SummarizerDetailSanitizer.sanitize(requested, privateValues),
-                        outerHttpStatus = providerEvidence?.outerHttpStatus,
-                        embeddedProviderStatus = providerEvidence?.embeddedHttpStatus,
-                        providerCode = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerCode, privateValues),
-                        providerType = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerType, privateValues),
-                        providerErrorType = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerErrorType, privateValues),
-                        contentFilterSide = providerEvidence?.contentFilterSide?.wire,
-                        attemptId = providerEvidence?.attemptId
-                    )
+                    ProviderFailureLoggingPolicy.writeSafely {
+                        org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                            appContext, SummarizerDetailSanitizer.sanitize(endpoint?.label, privateValues) ?: "Not Reported",
+                            SummarizerDetailSanitizer.sanitize(providerEvidence?.actualServingProvider, privateValues) ?: "Not Reported",
+                            SummarizerDetailSanitizer.sanitize(model, privateValues) ?: "Not Reported", function, message,
+                            requestedRoutedProvider = SummarizerDetailSanitizer.sanitize(requested, privateValues),
+                            outerHttpStatus = providerEvidence?.outerHttpStatus,
+                            embeddedProviderStatus = providerEvidence?.embeddedHttpStatus,
+                            providerCode = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerCode, privateValues),
+                            providerType = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerType, privateValues),
+                            providerErrorType = SummarizerDetailSanitizer.sanitize(providerEvidence?.providerErrorType, privateValues),
+                            contentFilterSide = providerEvidence?.contentFilterSide?.wire,
+                            attemptId = providerEvidence?.attemptId
+                        )
+                    }
                 }
             }
         )

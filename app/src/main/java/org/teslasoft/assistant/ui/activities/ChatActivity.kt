@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.providers.ProviderFailureLoggingPolicy
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.tts.api.*
 import org.teslasoft.assistant.preferences.tts.TtsVoiceSelection
@@ -14328,10 +14329,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val parsed = org.teslasoft.assistant.util.ProviderErrorInfo.parse(body)
         val app = applicationContext
         CoroutineScope(Dispatchers.IO).launch {
-            org.teslasoft.assistant.preferences.Logger.logProviderFailure(
-                app, endpoint.label, parsed.providerName ?: "Not Reported", requestModel,
-                function, body, outerHttpStatus = classified.httpStatus
-            )
+            ProviderFailureLoggingPolicy.writeSafely {
+                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                    app, endpoint.label, parsed.providerName ?: "Not Reported", requestModel,
+                    function, body, outerHttpStatus = classified.httpStatus
+                )
+            }
         }
     }
 

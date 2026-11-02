@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.fragments.tabs
 
+import org.teslasoft.assistant.providers.ProviderFailureLoggingPolicy
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -354,10 +355,12 @@ class PlaygroundFragment : Fragment() {
                 ) ?: "Provider returned no error message"
                 val parsed = org.teslasoft.assistant.util.ProviderErrorInfo.parse(raw)
                 withContext(Dispatchers.IO) {
-                    org.teslasoft.assistant.preferences.Logger.logProviderFailure(
-                        context, endpoint.label, parsed.providerName ?: "Not Reported", model,
-                        "Playground", raw, outerHttpStatus = classified.httpStatus
-                    )
+                    ProviderFailureLoggingPolicy.writeSafely {
+                        org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                            context, endpoint.label, parsed.providerName ?: "Not Reported", model,
+                            "Playground", raw, outerHttpStatus = classified.httpStatus
+                        )
+                    }
                 }
             }
             val response = when {

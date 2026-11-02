@@ -1,5 +1,6 @@
 package org.teslasoft.assistant.tts.api
 
+import org.teslasoft.assistant.providers.ProviderFailureLoggingPolicy
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -12,25 +13,25 @@ class TtsFailureTest {
             val evidence = failure.evidence!!
             assertTrue(evidence.errorEvents.isEmpty())
             assertEquals(503, evidence.outerHttpStatus)
-            assertTrue(TtsFailureLoggingPolicy.hasProviderFailure(evidence))
+            assertTrue(ProviderFailureLoggingPolicy.hasProviderFailure(evidence))
         }
     }
 
     @Test fun successfulResponsesAndLocalFailuresAreNotProviderFailureEntries() {
         val local = org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot("local")
-        assertFalse(TtsFailureLoggingPolicy.hasProviderFailure(local))
-        assertFalse(TtsFailureLoggingPolicy.hasProviderFailure(local.copy(outerHttpStatus = 200)))
+        assertFalse(ProviderFailureLoggingPolicy.hasProviderFailure(local))
+        assertFalse(ProviderFailureLoggingPolicy.hasProviderFailure(local.copy(outerHttpStatus = 200)))
         val explicitError = assertThrows(TtsException::class.java) {
             response("""{"error":{"message":"Invalid voice"}}""", 200)
                 .requireSuccess(source(), TtsOperation.SPEECH)
         }.failure.evidence!!
-        assertTrue(TtsFailureLoggingPolicy.hasProviderFailure(explicitError))
+        assertTrue(ProviderFailureLoggingPolicy.hasProviderFailure(explicitError))
     }
 
     @Test fun diagnosticStorageFailuresCannotEscapeTheRecorder() {
-        assertFalse(TtsFailureLoggingPolicy.writeSafely { throw IllegalStateException("Keystore unavailable") })
+        assertFalse(ProviderFailureLoggingPolicy.writeSafely { throw IllegalStateException("Keystore unavailable") })
         var writes = 0
-        assertTrue(TtsFailureLoggingPolicy.writeSafely { writes++ })
+        assertTrue(ProviderFailureLoggingPolicy.writeSafely { writes++ })
         assertEquals(1, writes)
     }
 
