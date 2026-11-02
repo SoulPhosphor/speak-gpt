@@ -183,7 +183,9 @@
     <dimen name="bookmark_marker_gap">6dp</dimen>
     <dimen name="bookmark_search_gap">8dp</dimen>
     <dimen name="bookmark_counter_text_size">14sp</dimen>
-    <dimen name="bookmark_message_action_size">32dp</dimen>
+    <!-- Chat message action icons (Widget.App.Chat.MessageAction). -->
+    <dimen name="chat_message_action_size">32dp</dimen>
+    <dimen name="chat_message_action_gap">8dp</dimen>
     <dimen name="chat_list_bookmark_size">16dp</dimen>
     <dimen name="section_title_field_gap">8dp</dimen>
     <dimen name="backup_status_text_size">15sp</dimen>

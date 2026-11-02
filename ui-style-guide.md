@@ -1099,6 +1099,15 @@ Camera/Image/Document and the conditional Compact/Create Image menu share this f
 
 Their shared runtime blur radius is `@dimen/chat_action_menu_blur_radius`; keep it centralized with this family rather than placing a numeric radius in `ChatActivity`.
 
+### Chat message action icons
+
+`Widget.App.Chat.MessageAction` is one icon in a message's action row (Copy,
+Edit, More, and the rest): `chat_message_action_size` square, spaced by
+`chat_message_action_gap`, glyph only. It sets no tint and no background; the
+chat adapter colors every action icon with the bubble's foreground in one
+place, so the icons contrast with any bubble. The row sits in the bottom corner
+opposite the speaker's name.
+
 ### Manual compaction marker
 
 `Widget.App.Chat.CompactionMarker` is the centered **Compacted** title between message units. It inherits the shared section-title typography and owns its spacing and alignment. Both user and assistant row layouts carry the same normally hidden marker slot; the adapter shows exactly one slot at the persisted manual boundary without inserting a synthetic conversation message.
@@ -1461,8 +1470,8 @@ When this guide and current style definitions disagree, inspect `themes.xml`, ve
 ## Chat bookmarks
 
 `Widget.App.Bookmark.*` owns the fixed bookmark navigation strip, centered
-counter, borderless navigation controls, expandable search field, user-message
-overflow button, and speaker-marker spacing. The speaker marker spacing also
+counter, borderless navigation controls, expandable search field, and
+speaker-marker spacing. The speaker marker spacing also
 places the hidden-from-AI marker (`ic_visibility_off`, sized by
 `bookmark_icon_size`) on the other side of the name; with names off, the same
 line keeps the markers in the name's place. `AppButton.Primary.Inline.BookmarkSearch`

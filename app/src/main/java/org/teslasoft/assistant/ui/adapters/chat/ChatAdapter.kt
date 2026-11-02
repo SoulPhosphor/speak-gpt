@@ -2445,10 +2445,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             message.tag = if (placeOnStart) "ai" else "user"
             constrainToSpeakerEdge(message, placeOnStart)
             constrainToSpeakerEdge(includeBookmarks, placeOnStart)
-            // Message actions sit at the start of the bubble's bottom edge on
-            // every message, including user messages placed on the end side
-            // (owner ruling, Nov 2 2026), matching the AI replies.
-            constrainToSpeakerEdge(messageActionsRow, placeOnStart = true)
+            // Message actions sit in the bottom corner opposite the side the
+            // name is (or would be) on (owner ruling, Nov 2 2026).
+            constrainToSpeakerEdge(messageActionsRow, placeOnStart = !placeOnStart)
             constrainToSpeakerEdge(includeSummary, placeOnStart)
 
             val imageParams = imageFrame.layoutParams as? ConstraintLayout.LayoutParams

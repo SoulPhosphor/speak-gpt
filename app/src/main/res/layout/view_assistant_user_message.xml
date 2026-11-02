@@ -298,7 +298,7 @@
                     android:tooltipText="@string/btn_msg_edit"
                     app:srcCompat="@drawable/ic_edit" />
                 <ImageButton android:id="@+id/btn_more"
-                    style="@style/Widget.App.Bookmark.MessageAction"
+                    style="@style/Widget.App.Chat.MessageAction"
                     android:contentDescription="@string/message_more_actions"
                     android:tooltipText="@string/message_more_actions"
                     android:src="@drawable/ic_more_vert" />
