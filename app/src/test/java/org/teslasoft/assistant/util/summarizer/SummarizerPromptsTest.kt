@@ -101,6 +101,26 @@ class SummarizerPromptsTest {
     }
 
     @Test
+    fun compactionTellsTheAiTheExistingTextIsContextOnly() {
+        val body = SummarizerPrompts.foldInRequestBody("PROMPT", "Earlier text", listOf(Pair("User", "Hi")))
+        assertTrue(body.contains(SummarizerPrompts.COMPACTION_CONTEXT_RULE))
+        assertTrue(body.contains("Existing compacted text:\nEarlier text"))
+        assertTrue(body.contains("New messages to summarize:\n"))
+        assertTrue(body.indexOf("PROMPT") < body.indexOf(SummarizerPrompts.COMPACTION_CONTEXT_RULE))
+    }
+
+    @Test
+    fun appendingNeverChangesTheExistingText() {
+        val existing = "First part, word for word."
+        val joined = SummarizerPrompts.appendCompaction(existing, "Second part.")
+        assertTrue(joined.startsWith(existing))
+        assertEquals("First part, word for word.\n\nSecond part.", joined)
+        assertEquals("Only.", SummarizerPrompts.appendCompaction("", "Only."))
+        assertEquals(existing, SummarizerPrompts.appendCompaction(existing, ""))
+        assertEquals("A\n\nB", SummarizerPrompts.appendCompaction("A\n", "B"))
+    }
+
+    @Test
     fun anEmptySummaryIsNamedRatherThanBlank() {
         val body = SummarizerPrompts.foldInRequestBody("PROMPT", "", listOf(Pair("User", "Hi")))
         assertTrue(body.contains("None yet."))

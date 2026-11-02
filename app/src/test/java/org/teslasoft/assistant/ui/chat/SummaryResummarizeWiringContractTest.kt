@@ -48,7 +48,9 @@ class SummaryResummarizeWiringContractTest {
 
     @Test
     fun compactCancelKeepsNothingAndHasNoSetting() {
-        assertTrue(activity.contains("savePartialOnCancel = false,"))
+        // Cancel keeps nothing; there is no partial save at all (owner
+        // ruling, Nov 2 2026).
+        assertFalse(activity.contains("savePartialOnCancel"))
         assertFalse(source("src/main/res/layout/activity_summarizer_settings.xml").contains("compacting_cancel"))
         assertTrue(activity.contains("if (renderCompactionDialog(state)) return"))
         // After "Compaction complete!", Cancel undoes the compaction; Okay keeps it.
@@ -73,9 +75,9 @@ class SummaryResummarizeWiringContractTest {
         // ruling, Oct 4 2026): length is never treated as a failure.
         val controller = source("src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt")
         assertFalse(controller.contains("finishReason?.value == \"length\""))
-        // A failed compaction keeps the batches that finished.
-        assertTrue(controller.contains("prefs.commitManualCompaction(summary, folded, false, folded)"))
-        assertTrue(controller.contains("partialSavedMessages = folded - operationStartFolded"))
+        // A failed compaction saves nothing (owner ruling, Nov 2 2026).
+        assertFalse(controller.contains("prefs.commitManualCompaction(summary, folded, false, folded)"))
+        assertFalse(controller.contains("partialSavedMessages"))
     }
 
     @Test

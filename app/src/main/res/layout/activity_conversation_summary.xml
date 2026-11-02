@@ -139,13 +139,32 @@
                 android:text="@string/summary_section_stale_note"
                 android:visibility="gone" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_condensed_text"
-                style="@style/Widget.App.Field.Box"
-                android:layout_marginTop="16dp"
-                android:gravity="top"
-                android:inputType="textMultiLine|textCapSentences"
-                android:minLines="10" />
+            <!-- Compaction mode: one prompt-style tab per saved compaction
+                 version (CompactionVersions), built in code, above the frame
+                 holding the version's text and its three-dot menu. -->
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/compaction_version_tabs"
+                style="@style/Widget.App.VersionTabs.Row" />
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/compaction_version_frame"
+                style="@style/Widget.App.VersionTabs.Frame">
+
+                <ImageButton
+                    android:id="@+id/btn_compaction_version_menu"
+                    style="@style/Widget.App.VersionTabs.Menu"
+                    android:contentDescription="@string/message_more_actions"
+                    android:src="@drawable/ic_more_vert"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_condensed_text"
+                    style="@style/Widget.App.VersionTabs.Field"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/btn_compaction_version_menu" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <!-- Appears only while the text differs from its last save. -->
             <com.google.android.material.button.MaterialButton

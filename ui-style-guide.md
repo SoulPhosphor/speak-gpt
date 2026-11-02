@@ -730,6 +730,23 @@ Inherits all sizing from the inactive tab. Background: `PromptTabBackground` wit
 
 Fixed 36x36dp square, centered "+" label. Outlined box (`bg_prompt_tab` drawable, plain rectangle) — intentionally kept as a plain square rather than the angled tab shape, since it's a small icon control and not a labeled file tab. Always placed at the end of the wrapping row.
 
+### Unused tab
+
+`Widget.App.PromptTab.Unused`
+
+Same sizing and text as the inactive tab. Its `PromptTabBackground` outline is drawn in `?attr/colorError` (red), resolved by the caller like every tab color. Used for a compaction version that is no longer in use; the tab's label is "Unused" before its number (owner ruling, Nov 2 2026).
+
+### Compaction version tabs
+
+On the Compaction Summary screen, one prompt tab per saved compaction version, titled with the number of the last message it covers, above a frame holding that version's text (owner design, Nov 2 2026; `compaction-versions-plan.md`). The app adds tabs; there is no add-tab button.
+
+- `Widget.App.VersionTabs.Row` — the wrapping `ChipGroup` of tabs (`version_tab_spacing`, `version_tabs_top_gap`).
+- `Widget.App.VersionTabs.Frame` — the frame beneath the tabs, on `bg_prompt_editor` so the shown tab continues into it.
+- `Widget.App.VersionTabs.Menu` — the three-dot menu at the frame's top end (`version_tab_menu_size`, `version_tab_menu_inset`).
+- `Widget.App.VersionTabs.Field` — the version's text, transparent inside the frame (`version_tab_field_padding`).
+
+The shown tab uses `Widget.App.PromptTab.Active`; other tabs use `Widget.App.PromptTab`, or `Widget.App.PromptTab.Unused` when Unused.
+
 ### Prompt tab row
 
 A `ChipGroup` with `singleLine="false"` and `chipSpacingHorizontal/Vertical="10dp"`. The tabs are plain `TextView` views constructed in code with the style passed as the `defStyleRes` constructor argument (`TextView(context, null, 0, styleRes)`), not `setTextAppearance` — `setTextAppearance` only applies text color/size/weight and was silently dropping the style's padding, gravity, maxWidth, maxLines, ellipsize, clickable and focusable. The `ChipGroup` provides only the wrapping-row layout; it does not use Material `Chip` widgets. Do not duplicate style properties (dimensions, padding, gravity, maxLines, ellipsize, maxWidth) in Kotlin; the styles own those values, and the background/colors are resolved once per render pass and handed to `PromptTabBackground`.

@@ -18,8 +18,14 @@ the AI returned. When an AI left out earlier text, that text was lost.
 - A failed compaction, recompaction, or redo saves nothing. The existing
   compacted text and the "Compacted" marker stay exactly as they were, and the
   error is shown. No partial saves.
-- No change to any text sent to the AI: not the visible prompts, not the
-  hidden text the app adds around them, and no first-person instruction.
+- The visible prompts are not changed, and no first-person instruction is
+  added anywhere. Only the hidden text the app adds after the prompt changes,
+  because the AI now receives the earlier compacted text as context:
+  - Added after the prompt: "The existing compacted text below is for context
+    only. Do not repeat, rewrite, or correct it. Write only about the new
+    messages; your reply will be added after the existing text."
+  - Hidden headings: "Existing compacted text:" and "New messages to
+    summarize:".
 - The Summarizer is not changed. It already adds new sections without
   rewriting earlier ones.
 

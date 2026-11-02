@@ -86,7 +86,8 @@ class Preferences internal constructor(
             "manual_compaction_boundary",
             "condensed_conversation_kind",
             "compaction_regeneration_lock_boundary",
-            "compaction_stale"
+            "compaction_stale",
+            "compaction_versions"
         )
 
         private const val LAST_SUCCESS_ENDPOINT_ID = "last_success_endpoint_id"
@@ -3256,12 +3257,6 @@ class Preferences internal constructor(
             "summary_regeneration_lock_boundary", value
         )
 
-    /** A usable manual batch permanently fixes its processed prefix. */
-    fun advanceCompactionRegenerationLockBoundary(value: Int): Boolean =
-        advanceCondensedRegenerationLockBoundary(
-            "compaction_regeneration_lock_boundary", value
-        )
-
     private fun advanceCondensedRegenerationLockBoundary(key: String, value: Int): Boolean {
         if (!ensureCondensedRegenerationLockMigration()) return false
         val current = getString(key, "0").toIntOrNull()?.coerceAtLeast(0) ?: 0
@@ -3309,6 +3304,7 @@ class Preferences internal constructor(
                 .putString("summarizer_over_length", "false")
                 .putString("summarizer_episode", "")
                 .putString("manual_compaction_boundary", "0")
+                .putString("compaction_versions", "")
                 .putString(
                     "summarizer_projection_version",
                     SummarizerProjectionContract.VERSION.toString()
@@ -3413,10 +3409,19 @@ class Preferences internal constructor(
         summary: String,
         foldedCount: Int,
         overLength: Boolean,
-        boundaryCount: Int
+        boundaryCount: Int,
+        /** The compaction version tabs after this compaction (CompactionVersions). */
+        versionsJson: String? = null,
+        /** The compaction regeneration lock to save with it. */
+        regenerationLock: Int? = null
     ): Boolean {
         return summarizerStorageCommit("Compacting: commitManualCompaction", listOf(summary)) {
-            preferences.edit()
+            val editor = preferences.edit()
+            if (versionsJson != null) editor.putString("compaction_versions", versionsJson)
+            if (regenerationLock != null) {
+                editor.putString("compaction_regeneration_lock_boundary", regenerationLock.coerceAtLeast(0).toString())
+            }
+            editor
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
                 .putString("summarizer_over_length", if (overLength) "true" else "false")
@@ -3428,6 +3433,39 @@ class Preferences internal constructor(
                     "summarizer_projection_version",
                     SummarizerProjectionContract.VERSION.toString()
                 )
+                .commit()
+        }
+    }
+
+    /** The compaction version tabs, as stored (CompactionVersions JSON). */
+    fun getCompactionVersions(): String = getString("compaction_versions", "")
+
+    /** Direct realignment of the version tabs after a deletion. */
+    fun setCompactionVersions(json: String) {
+        putString("compaction_versions", json)
+    }
+
+    /**
+     * Use This Summary: the chosen version's text becomes the compacted text
+     * sent to the main AI, the compaction marker moves to the end of what it
+     * covers, and the version list records which version is in use, all in
+     * one commit.
+     */
+    fun commitCompactionVersionSwitch(
+        summary: String,
+        boundaryCount: Int,
+        versionsJson: String,
+        regenerationLock: Int
+    ): Boolean {
+        if (getSummarizerProjectionVersion() != SummarizerProjectionContract.VERSION) return false
+        return summarizerStorageCommit("Compacting: commitCompactionVersionSwitch", listOf(summary)) {
+            preferences.edit()
+                .putString("summarizer_summary", summary)
+                .putString("summarizer_folded", boundaryCount.coerceAtLeast(0).toString())
+                .putString("summarizer_over_length", "false")
+                .putString("manual_compaction_boundary", boundaryCount.coerceAtLeast(0).toString())
+                .putString("compaction_versions", versionsJson)
+                .putString("compaction_regeneration_lock_boundary", regenerationLock.coerceAtLeast(0).toString())
                 .commit()
         }
     }

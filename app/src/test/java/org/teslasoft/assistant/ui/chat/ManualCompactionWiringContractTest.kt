@@ -69,7 +69,9 @@ class ManualCompactionWiringContractTest {
         )
 
         assertTrue(controller.contains("advanceSummaryRegenerationLockBoundary("))
-        assertTrue(controller.contains("advanceCompactionRegenerationLockBoundary("))
+        // A finished compaction saves its regeneration lock in the same
+        // commit as its text (compaction no longer saves batch by batch).
+        assertTrue(controller.contains("regenerationLock = CompactionVersions.furthestCount(versions)"))
         assertTrue(preferences.contains("ensureCondensedRegenerationLockMigration()"))
         assertTrue(adapter.contains("R.drawable.ic_rule_settings"))
         assertTrue(adapter.contains("showRegenerateUnavailablePopup(anchor, lockKind)"))

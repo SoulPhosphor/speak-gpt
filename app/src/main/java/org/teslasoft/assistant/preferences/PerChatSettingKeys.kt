@@ -141,6 +141,7 @@ object PerChatSettingKeys {
         "summary_sections",
         "summary_resummarize_choice",
         "compaction_stale",
+        "compaction_versions",
         "condensed_conversation_kind",
         "summarizer_catch_up_pending",
         "auto_name_attempts",

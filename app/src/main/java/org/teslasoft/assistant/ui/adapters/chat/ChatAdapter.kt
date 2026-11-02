@@ -2659,9 +2659,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (owningSection != null) {
                 popup.menu.add(0, MENU_SUMMARY_SECTION, 0, R.string.summary_section_menu)
             }
-            // Compact to Here sits above Share on AI responses 3 and later.
+            // Compact to Here sits above Share on AI responses 3 and later,
+            // and only after the Compacted marker: messages already compacted
+            // never offer it (owner ruling, Nov 2 2026).
             if (chatMessage["isBot"] == true &&
                 aiResponseNumber(chatMessage) >= COMPACT_TO_HERE_FIRST_RESPONSE &&
+                dataArray.indexOfFirst { it === chatMessage } + 1 > manualCompactionBoundary &&
                 listener?.isCompactToHereAvailable() == true
             ) {
                 popup.menu.add(0, MENU_COMPACT_TO_HERE, 0, R.string.message_compact_to_here)
