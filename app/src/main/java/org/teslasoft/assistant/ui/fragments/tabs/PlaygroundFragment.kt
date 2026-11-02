@@ -56,6 +56,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.loadingindicator.LoadingIndicator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
+import org.teslasoft.assistant.util.reachedServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
