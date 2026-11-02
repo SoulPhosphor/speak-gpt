@@ -196,10 +196,17 @@ Do not independently summarize or reproduce the attachment itself. However, fact
      * scaffolding, not one of the editable prompts, so it holds whichever
      * prompt the user has selected.
      */
-    val COMPACTION_CONTEXT_RULE =
-        "The existing compacted text below is for context only. Do not repeat, rewrite, " +
-            "or correct it. Write only about the new messages; your reply will be added " +
-            "after the existing text."
+    val COMPACTION_CONTEXT_RULE = """
+MANUAL COMPACTION INSTRUCTIONS
+
+The existing compacted text below is kept exactly as saved. Your reply will be added after it. Use the existing text only as context: to understand the conversation and to avoid repeating it. Do not rewrite, correct, shorten, or reproduce any of it.
+
+Summarize only the new messages. If they correct or change something in the existing text, record that change in your new summary.
+
+If the summarization prompt above asks you to merge, revise, or rewrite an existing summary, ignore that part. Follow its instructions on style, detail, and what to include.
+
+Reply with the new summary only, with no introduction or comments about this process.
+    """.trimIndent()
 
     /**
      * The complete user-message body of one compaction call: the rendered

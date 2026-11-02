@@ -110,6 +110,37 @@ class SummarizerPromptsTest {
     }
 
     @Test
+    fun theCompactionRuleAsksForOnlyTheNewSummary() {
+        val rule = SummarizerPrompts.COMPACTION_CONTEXT_RULE
+        assertTrue(rule.contains("Summarize only the new messages."))
+        assertTrue(rule.contains("Do not rewrite, correct, shorten, or reproduce any of it."))
+        assertTrue(rule.contains("Reply with the new summary only"))
+    }
+
+    @Test
+    fun theCompactionRuleOverridesOlderRewriteWordingButKeepsThePromptsStyle() {
+        val rule = SummarizerPrompts.COMPACTION_CONTEXT_RULE
+        assertTrue(rule.contains("asks you to merge, revise, or rewrite an existing summary, ignore that part"))
+        assertTrue(rule.contains("Follow its instructions on style, detail, and what to include."))
+    }
+
+    @Test
+    fun theCompactionRuleRidesAlongWithEveryPromptWithoutChangingIt() {
+        for (prompt in listOf(SummarizerPrompts.STORYTELLER, SummarizerPrompts.REPORTER, "My own prompt.")) {
+            val body = SummarizerPrompts.foldInRequestBody(prompt, "Earlier text", listOf(Pair("User", "Hi")))
+            assertTrue(body.startsWith(prompt + "\n\n"))
+            assertTrue(body.contains(SummarizerPrompts.COMPACTION_CONTEXT_RULE))
+            assertTrue(body.indexOf(SummarizerPrompts.COMPACTION_CONTEXT_RULE) <
+                body.indexOf("Existing compacted text:\nEarlier text"))
+            assertTrue(body.indexOf("Existing compacted text:") <
+                body.indexOf("New messages to summarize:\n\nUser: Hi"))
+        }
+        // The rule is app scaffolding: it is never written into the editable prompts.
+        assertFalse(SummarizerPrompts.STORYTELLER.contains("MANUAL COMPACTION INSTRUCTIONS"))
+        assertFalse(SummarizerPrompts.REPORTER.contains("MANUAL COMPACTION INSTRUCTIONS"))
+    }
+
+    @Test
     fun appendingNeverChangesTheExistingText() {
         val existing = "First part, word for word."
         val joined = SummarizerPrompts.appendCompaction(existing, "Second part.")
