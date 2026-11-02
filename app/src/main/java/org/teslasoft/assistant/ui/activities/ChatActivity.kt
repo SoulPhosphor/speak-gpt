@@ -435,6 +435,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // if the notice ever fires off more than one thread.
         private val memoryDegradedNotified = java.util.concurrent.atomic.AtomicBoolean(false)
 
+        /** Transcript capture and memory visibility updates run one at a time
+         *  in the order they happened, so a quick hide-then-show never lands
+         *  reversed and a hide never runs before its turn is captured. */
+        private val memoryWriteQueue = java.util.concurrent.Executors.newSingleThreadExecutor()
+
         /**
          * Key under which a user message stores the attachments it carried,
          * as the JSON produced by `ChatInclude.listToJson`. Absent = none, so
@@ -6397,6 +6402,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (!org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)) return
         val targets = messages.mapNotNull { msg ->
             if (msg["isBot"] != true) return@mapNotNull null
+            // A hidden image's prompt is not sent to any model.
+            if (MessageVisibility.isHidden(msg)) return@mapNotNull null
             val meta = GeneratedImageMetadata.fromJson(msg[GeneratedImageMetadata.KEY]?.toString())
                 ?: return@mapNotNull null
             if (meta.status != GeneratedImageMetadata.STATUS_COMPLETE) return@mapNotNull null
@@ -12835,7 +12842,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val turnUserPersonaId = preferences?.getChatUserPersonaId()?.takeIf { it.isNotBlank() }
             val turnProjectId = preferences?.getChatProjectId()?.takeIf { it.isNotBlank() }
 
-            Thread {
+            memoryWriteQueue.execute {
                 TranscriptRecorder.recordTurn(
                     appContext, turnChatId, turnPersonaId, request, reply,
                     turnModel, quickSettings, excluded, replyComplete,
@@ -12849,7 +12856,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     userHidden = userHidden,
                     assistantHidden = assistantHidden
                 )
-            }.start()
+            }
         } catch (e: Exception) {
             // Capture must never break a turn — but a silently swallowed error
             // here is why a capture failure was invisible. Log it (best effort).
@@ -14970,9 +14977,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
         if (turnChatId.isBlank() || marks.isEmpty()) return
-        lifecycleScope.launch(Dispatchers.IO) {
+        memoryWriteQueue.execute {
             try {
-                if (!MemoryStore.isProvisioned(appContext)) return@launch
+                if (!MemoryStore.isProvisioned(appContext)) return@execute
                 val store = MemoryStore.getInstance(appContext)
                 marks.forEach { store.setTranscriptMessageHidden(turnChatId, it) }
             } catch (_: Exception) {
