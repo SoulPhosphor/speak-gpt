@@ -54,6 +54,9 @@ class AppearanceActivity : SettingsPageActivity() {
         findViewById<View>(R.id.row_chat_behavior)?.setOnClickListener {
             startActivity(Intent(this, ChatSettingsActivity::class.java))
         }
+        findViewById<View>(R.id.row_chat_behaviors)?.setOnClickListener {
+            startActivity(Intent(this, ChatBehaviorsActivity::class.java))
+        }
     }
 
     override fun onAttachedToWindow() {

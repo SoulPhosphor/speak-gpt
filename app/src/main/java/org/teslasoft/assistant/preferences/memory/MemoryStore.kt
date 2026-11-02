@@ -3407,6 +3407,54 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     /* transcripts (Phase 2: capture queue for the Archivist)                 */
     /* ---------------------------------------------------------------------- */
 
+    /** One chat message's hidden-from-AI state, with the role and text that
+     *  identify its turns captured before turns carried a message ID. */
+    data class TranscriptMessageMark(
+        val messageId: String,
+        val role: String,
+        val text: String,
+        val hidden: Boolean
+    )
+
+    /**
+     * Marks every captured turn of one chat message as hidden from (or visible
+     * to) the Memory Assistant. Only rows not yet analyzed and not claimed by
+     * a running analysis change; the turn text is kept, so making the message
+     * visible again restores it. Returns how many rows changed.
+     */
+    fun setTranscriptMessageHidden(chatId: String, mark: TranscriptMessageMark): Int {
+        if (chatId.isBlank() || (mark.messageId.isBlank() && mark.text.isBlank())) return 0
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val rows = ArrayList<Pair<String, String>>()
+            db.query(
+                "transcripts", arrayOf("transcript_id", "content"),
+                "chat_id = ? AND processed_at IS NULL AND claim_run_id IS NULL", arrayOf(chatId),
+                null, null, null
+            ).use {
+                while (it.moveToNext()) rows.add(it.getString(0) to it.getString(1))
+            }
+            // Older turns without a message ID are matched by text only when
+            // exactly one turn matches, so a repeated short message never
+            // hides another message's turn.
+            val allowTextMatch = rows.sumOf { (_, content) ->
+                TranscriptTurnVisibility.textMatchCount(content, mark)
+            } == 1
+            val updates = rows.mapNotNull { (id, content) ->
+                TranscriptTurnVisibility.withMessageHidden(content, mark, allowTextMatch)?.let { id to it }
+            }
+            for ((id, content) in updates) {
+                db.update("transcripts", ContentValues().apply { put("content", content) },
+                    "transcript_id = ?", arrayOf(id))
+            }
+            db.setTransactionSuccessful()
+            return updates.size
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /**
      * Appends one completed turn to the chat's open transcript row (creating
      * one when needed). "Open" = the chat's newest unprocessed row, still
@@ -3440,7 +3488,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         campaignId: String? = null,
         roleplayCharacterId: String? = null,
         userPersonaId: String? = null,
-        projectId: String? = null
+        projectId: String? = null,
+        userMessageId: String = "",
+        assistantMessageId: String = "",
+        userHidden: Boolean = false,
+        assistantHidden: Boolean = false
     ): String {
         val now = nowIso()
         val db = writableDatabase
@@ -3497,7 +3549,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             }
 
             val turns = org.json.JSONArray(content)
-            turns.put(org.json.JSONObject().put("role", "user").put("content", userMessage).put("at", now))
+            val userTurn = org.json.JSONObject().put("role", "user").put("content", userMessage).put("at", now)
+            TranscriptTurnVisibility.stamp(userTurn, userMessageId, userHidden)
+            turns.put(userTurn)
             // "complete": false marks an assistant reply that did not finish
             // streaming, so the Archivist never mines a truncated fragment as a
             // reliable fact. Absent (the common case) means complete — backward
@@ -3505,6 +3559,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             val assistantTurn = org.json.JSONObject()
                 .put("role", "assistant").put("content", assistantMessage).put("at", now)
             if (!assistantComplete) assistantTurn.put("complete", false)
+            TranscriptTurnVisibility.stamp(assistantTurn, assistantMessageId, assistantHidden)
             turns.put(assistantTurn)
 
             val outcome: String

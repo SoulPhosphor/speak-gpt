@@ -252,6 +252,8 @@ The array may be empty. A conversation that yields nothing is a successful run â
             val turns = JSONArray(contentJson)
             for (i in 0 until turns.length()) {
                 val turn = turns.optJSONObject(i) ?: continue
+                // The user hid this message from the AI; it is not analyzed.
+                if (org.teslasoft.assistant.preferences.memory.TranscriptTurnVisibility.isHidden(turn)) continue
                 val isAssistant = turn.optString("role") == "assistant"
                 // An assistant reply that did not finish streaming is a truncated
                 // fragment â€” never mine it as a reliable fact. It is dropped from

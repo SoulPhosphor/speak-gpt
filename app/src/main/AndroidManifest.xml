@@ -390,6 +390,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ChatBehaviorsActivity"
+            android:exported="false"
+            android:label="@string/chat_behaviors_title" />
+
+        <activity
             android:name=".ui.activities.VoiceAdvancedSettingsActivity"
             android:exported="false"
             android:label="@string/title_voice_advanced"

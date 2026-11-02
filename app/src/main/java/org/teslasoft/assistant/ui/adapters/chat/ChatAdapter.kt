@@ -281,6 +281,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val MENU_MESSAGE_DELETE = 106
         private const val MENU_SUMMARY_SECTION = 107
         private const val MENU_COMPACT_TO_HERE = 109
+        private const val MENU_MESSAGE_VISIBILITY = 110
 
         /** Compact to Here starts at the 3rd AI response (owner ruling,
          *  Oct 31 2026). */
@@ -522,6 +523,24 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             summaryRegenerationLockBoundary,
             compactionRegenerationLockBoundary
         )
+
+    /** Hidden messages whose visibility can still change: Show All's targets. */
+    fun changeableHiddenMessages(): List<HashMap<String, Any>> =
+        dataArray.indices
+            .filter {
+                org.teslasoft.assistant.preferences.MessageVisibility.isHidden(dataArray[it]) &&
+                    !isCondensed(it)
+            }
+            .map { dataArray[it] }
+
+    /** A summary or compaction has condensed the message at [position], so
+     *  whether the AI sees it is fixed (owner ruling, Nov 2 2026). */
+    private fun isCondensed(position: Int): Boolean {
+        if (position < 0) return false
+        if (regenerationLockKind(position) != null) return true
+        val id = org.teslasoft.assistant.preferences.MessageIdentity.idOf(dataArray[position])
+        return summarySectionOwners.containsKey(id)
+    }
 
     /**
      * Which messages currently have their "Includes" record opened. Held on
@@ -2198,9 +2217,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 staggeredResponses = preferences.getStaggeredResponses()
             )
 
+            // The identity line carries the bookmark, the name, the hidden-from-
+            // AI marker and the top read-aloud control, in that order (owner
+            // ruling, Nov 2 2026). With names off it still holds any of those
+            // icons, in the name's place beside the portrait or inside the
+            // bubble, so they never fall onto or behind the portrait.
+            val bookmarked = org.teslasoft.assistant.preferences.MessageBookmarks.isBookmarked(chatMessage)
+            val hiddenFromAi = org.teslasoft.assistant.preferences.MessageVisibility.isHidden(chatMessage)
+            val showsTopAudio = usesTopAudioControl(chatMessage)
+            val showIdentityLine = showName || bookmarked || hiddenFromAi || showsTopAudio
+
             boundIsBot = isBot
             boundShowsPortrait = showPortrait
-            boundShowsName = showName
+            boundShowsName = showIdentityLine
             boundIsGeneratedImage = isImage
 
             ui.setBackgroundColor(0x00000000)
@@ -2221,9 +2250,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             // Generated images use the same row-level speaker label as ordinary
             // replies. The image changes the bubble content, not identity placement.
-            username.text = nameText
+            username.text = if (showName) nameText else ""
             ChatNameStyle.apply(username, context, nameStyle)
-            username.visibility = if (showName) View.VISIBLE else View.GONE
+            username.visibility = if (showIdentityLine) View.VISIBLE else View.GONE
             bubbleName?.visibility = View.GONE
 
             icon.visibility = if (showPortrait) View.VISIBLE else View.GONE
@@ -2235,21 +2264,36 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateIdentityGeometry(
                 placeOnStart,
                 showPortrait,
-                showName,
+                showIdentityLine,
                 showBubble,
                 isImage
             )
             updateBubbleDecoration(isBot, showBubble)
-            val bookmarked = org.teslasoft.assistant.preferences.MessageBookmarks.isBookmarked(chatMessage)
-            val marker = if (bookmarked) {
-                androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.ic_bookmark_star)
-                    ?.mutate()?.apply {
-                        androidx.core.graphics.drawable.DrawableCompat.setTint(this, username.currentTextColor)
-                    }
-            } else null
-            // Physical left of the name, regardless of conversation placement.
-            username.setCompoundDrawablesWithIntrinsicBounds(marker, null, null, null)
+            // Bookmark on the physical left of the name, hidden-from-AI marker
+            // on its right; the top read-aloud control follows the line.
+            username.setCompoundDrawablesWithIntrinsicBounds(
+                identityMarker(bookmarked, R.drawable.ic_bookmark_star),
+                null,
+                identityMarker(hiddenFromAi, R.drawable.ic_visibility_off),
+                null
+            )
         }
+
+        private fun identityMarker(shown: Boolean, drawable: Int): android.graphics.drawable.Drawable? {
+            if (!shown) return null
+            return androidx.appcompat.content.res.AppCompatResources.getDrawable(context, drawable)
+                ?.mutate()?.apply {
+                    androidx.core.graphics.drawable.DrawableCompat.setTint(this, username.currentTextColor)
+                }
+        }
+
+        /** Read-aloud applies to assistant text replies only; generated
+         *  images use `~file:` markers and are not speakable. */
+        private fun isSpeakable(message: Map<String, Any>): Boolean =
+            message["isBot"] == true && !message["message"].toString().contains("~file:")
+
+        private fun usesTopAudioControl(message: Map<String, Any>): Boolean =
+            isSpeakable(message) && preferences.getTopPositionedAudioControl() && btnSpeakTop != null
 
         private fun updateBubbleDecoration(isBot: Boolean, showBubble: Boolean) {
             if (!showBubble) {
@@ -2401,7 +2445,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             message.tag = if (placeOnStart) "ai" else "user"
             constrainToSpeakerEdge(message, placeOnStart)
             constrainToSpeakerEdge(includeBookmarks, placeOnStart)
-            constrainToSpeakerEdge(messageActionsRow, placeOnStart)
+            // Message actions sit in the bottom corner opposite the side the
+            // name is (or would be) on (owner ruling, Nov 2 2026).
+            constrainToSpeakerEdge(messageActionsRow, placeOnStart = !placeOnStart)
             constrainToSpeakerEdge(includeSummary, placeOnStart)
 
             val imageParams = imageFrame.layoutParams as? ConstraintLayout.LayoutParams
@@ -2620,6 +2666,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             ) {
                 popup.menu.add(0, MENU_COMPACT_TO_HERE, 0, R.string.message_compact_to_here)
             }
+            // Make Hidden / Make Visible follows Compact to Here on AI replies
+            // and Bookmark on user messages (owner ruling, Nov 2 2026).
+            val visibilityAction = org.teslasoft.assistant.preferences.MessageVisibility.menuAction(
+                hidden = org.teslasoft.assistant.preferences.MessageVisibility.isHidden(chatMessage),
+                allowHiding = preferences.getAllowMessageVisibility(),
+                condensed = isCondensed(dataArray.indexOfFirst { it === chatMessage })
+            )
+            if (visibilityAction != null) {
+                popup.menu.add(
+                    0, MENU_MESSAGE_VISIBILITY, 0,
+                    if (visibilityAction == org.teslasoft.assistant.preferences.MessageVisibility.Action.MAKE_HIDDEN)
+                        R.string.message_make_hidden else R.string.message_make_visible
+                )
+            }
             popup.menu.add(0, MENU_MESSAGE_SHARE, 1, R.string.message_share_action)
             popup.menu.add(0, MENU_MESSAGE_DELETE, 2, R.string.btn_delete)
             popup.setOnMenuItemClickListener { item ->
@@ -2646,6 +2706,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                         if (currentPosition >= 0) listener?.onCompactToHere(currentPosition)
                         true
                     }
+                    MENU_MESSAGE_VISIBILITY -> {
+                        val currentPosition = dataArray.indexOfFirst { it === chatMessage }
+                        if (currentPosition >= 0) listener?.onVisibilityToggle(currentPosition)
+                        true
+                    }
                     MENU_MESSAGE_DELETE -> {
                         val currentPosition = dataArray.indexOfFirst { it === chatMessage }
                         if (currentPosition >= 0) onDelete(currentPosition)
@@ -2668,8 +2733,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // Re-read only makes sense for assistant text replies. Generated
             // images use `~file:` compatibility markers and are not speakable.
             val msg = chatMessage["message"].toString()
-            val speakable = chatMessage["isBot"] == true &&
-                    !msg.contains("~file:")
+            val speakable = isSpeakable(chatMessage)
             val useTopControl = preferences.getTopPositionedAudioControl() && btnSpeakTop != null
             btnSpeak.visibility = if (speakable && !useTopControl) View.VISIBLE else View.GONE
             btnSpeakTop?.visibility = if (speakable && useTopControl) View.VISIBLE else View.GONE
@@ -3567,6 +3631,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onMakeVersionCurrent(position: Int)
 
         fun onBookmarkToggle(position: Int) {}
+
+        /** Hide the message at [position] from the AI, or make it visible again. */
+        fun onVisibilityToggle(position: Int) {}
 
         fun onMessageEdited()
         fun onMessageDeleted()

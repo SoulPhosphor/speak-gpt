@@ -301,6 +301,8 @@ import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportFormatter
 import org.teslasoft.assistant.ui.chat.FirstMessagePortraitInset
 import org.teslasoft.assistant.preferences.MessageBookmarks
+import org.teslasoft.assistant.preferences.MessageVisibility
+import org.teslasoft.assistant.ui.util.UnhideAllMessagesDialog
 import org.teslasoft.assistant.ui.chat.BookmarkNavigation
 import org.teslasoft.assistant.ui.chat.BookmarkNavigationController
 import org.teslasoft.assistant.ui.chat.ChatExportMessage
@@ -432,6 +434,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // toast the same degraded session again. compareAndSet keeps it correct
         // if the notice ever fires off more than one thread.
         private val memoryDegradedNotified = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /** Transcript capture and memory visibility updates run one at a time
+         *  in the order they happened, so a quick hide-then-show never lands
+         *  reversed and a hide never runs before its turn is captured. */
+        private val memoryWriteQueue = java.util.concurrent.Executors.newSingleThreadExecutor()
 
         /**
          * Key under which a user message stores the attachments it carried,
@@ -3258,6 +3265,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (reconciledStreaming) saveSettings()
 
             for (message: HashMap<String, Any> in messages) {
+                if (MessageVisibility.isHidden(message)) continue
                 if (message["isBot"] == true) {
                     chatMessages.add(
                         ChatMessage(
@@ -4118,6 +4126,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         chatMessages = arrayListOf()
         chatMessageIncludes = arrayListOf()
         for (message in messages) {
+            if (MessageVisibility.isHidden(message)) continue
             val content = modelFacingContent(message)
             if (content.isBlank()) continue
             chatMessages.add(
@@ -5389,6 +5398,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     menu.add(Menu.NONE, 1, 1, R.string.chat_menu_export)
                 }
                 menu.add(Menu.NONE, 5, 2, R.string.usage_cost_title)
+                if (adapter?.changeableHiddenMessages()?.isNotEmpty() == true) {
+                    menu.add(Menu.NONE, 8, 2, R.string.chat_menu_show_all)
+                }
                 menu.add(Menu.NONE, 2, 3, R.string.alert_debug_section_logs)
                 if (savedChat != null) {
                     menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)
@@ -5430,6 +5442,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         }
                         5 -> {
                             openUsageAndCost()
+                            true
+                        }
+                        8 -> {
+                            confirmShowAllHiddenMessages()
                             true
                         }
                         3 -> {
@@ -6317,13 +6333,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun canonicalConversationSnapshot(): List<CanonicalConversationMessage> =
-        messages.map { message ->
-            CanonicalConversationMessage(
-                isBot = message["isBot"] == true,
-                text = conversationTextWithoutIncludePayloads(message),
-                includes = if (message["isBot"] == true) emptyList() else includesOf(message)
-            )
+        messages.map(::canonicalMessage)
+
+    /** A message hidden from the AI keeps its slot (so indexes stay aligned
+     *  with the fold-in bookmark) but contributes no words or attachments. */
+    private fun canonicalMessage(message: HashMap<String, Any>): CanonicalConversationMessage {
+        val isBot = message["isBot"] == true
+        if (MessageVisibility.isHidden(message)) {
+            return CanonicalConversationMessage(isBot = isBot, text = "")
         }
+        return CanonicalConversationMessage(
+            isBot = isBot,
+            text = conversationTextWithoutIncludePayloads(message),
+            includes = if (isBot) emptyList() else includesOf(message)
+        )
+    }
 
     /** One snapshot entry per stored message so indexes stay aligned with
      *  the fold-in bookmark; blank entries advance it without being sent. */
@@ -6343,18 +6367,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
                     it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
             }
-        val storedCanonical = storedMessages
-            .map { message ->
-                CanonicalConversationMessage(
-                    isBot = message["isBot"] == true,
-                    text = conversationTextWithoutIncludePayloads(message),
-                    includes = if (message["isBot"] == true) {
-                        emptyList()
-                    } else {
-                        includesOf(message)
-                    }
-                )
-            }
+        val storedCanonical = storedMessages.map(::canonicalMessage)
         val entries = SummarizerSafeIncludeProjectionBuilder
             .summarizerConversation(storedCanonical)
             .mapIndexed { index, it ->
@@ -6389,6 +6402,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (!org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)) return
         val targets = messages.mapNotNull { msg ->
             if (msg["isBot"] != true) return@mapNotNull null
+            // A hidden image's prompt is not sent to any model.
+            if (MessageVisibility.isHidden(msg)) return@mapNotNull null
             val meta = GeneratedImageMetadata.fromJson(msg[GeneratedImageMetadata.KEY]?.toString())
                 ?: return@mapNotNull null
             if (meta.status != GeneratedImageMetadata.STATUS_COMPLETE) return@mapNotNull null
@@ -12781,6 +12796,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (last["isBot"] != true) return
             val reply = last["message"].toString()
             if (reply.isBlank() || request.isBlank()) return
+            // Each captured turn names the chat message it came from, so
+            // hiding that message later can keep it out of memory analysis.
+            // IDs were assigned by the save that ends every turn.
+            val userMessage = messages.subList(0, messages.size - 1).lastOrNull { it["isBot"] != true }
+            val userMessageId = userMessage?.let {
+                org.teslasoft.assistant.preferences.MessageIdentity.idOf(it)
+            }.orEmpty()
+            val userHidden = userMessage?.let(MessageVisibility::isHidden) == true
+            val assistantMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(last)
+            val assistantHidden = MessageVisibility.isHidden(last)
 
             // The reply is captured either way (nothing successfully received is
             // silently dropped), but a reply that did not finish streaming is
@@ -12817,7 +12842,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val turnUserPersonaId = preferences?.getChatUserPersonaId()?.takeIf { it.isNotBlank() }
             val turnProjectId = preferences?.getChatProjectId()?.takeIf { it.isNotBlank() }
 
-            Thread {
+            memoryWriteQueue.execute {
                 TranscriptRecorder.recordTurn(
                     appContext, turnChatId, turnPersonaId, request, reply,
                     turnModel, quickSettings, excluded, replyComplete,
@@ -12825,9 +12850,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     campaignId = turnCampaignId,
                     roleplayCharacterId = turnRpCharacterId,
                     userPersonaId = turnUserPersonaId,
-                    projectId = turnProjectId
+                    projectId = turnProjectId,
+                    userMessageId = userMessageId,
+                    assistantMessageId = assistantMessageId,
+                    userHidden = userHidden,
+                    assistantHidden = assistantHidden
                 )
-            }.start()
+            }
         } catch (e: Exception) {
             // Capture must never break a turn — but a silently swallowed error
             // here is why a capture failure was invisible. Log it (best effort).
@@ -14912,6 +14941,82 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (!saved) Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
         adapter?.notifyItemChanged(position)
         bookmarkNavigation?.refresh()
+    }
+
+    override fun onVisibilityToggle(position: Int) {
+        if (chatStorageUnavailable || deletingChat) return
+        val message = messages.getOrNull(position) ?: return
+        val saved = MessageVisibility.toggleAndSave(message) {
+            saveSettings(synchronous = true) == ChatStorageHealth.WriteOutcome.OK
+        }
+        adapter?.notifyItemChanged(position)
+        if (!saved) {
+            restoreStoredHistoryAfterFailedSave()
+            Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+        syncMemoryVisibility(listOf(message))
+        // What the AI reads changed: the same path as an edit, so a summary
+        // in progress is cancelled and the request projection is rebuilt.
+        onMessageEdited()
+    }
+
+    /**
+     * Carries each message's hidden mark onto its captured memory turns, so
+     * the Memory Assistant skips hidden messages that it has not analyzed
+     * yet and reads them again once they are visible.
+     */
+    private fun syncMemoryVisibility(changed: List<HashMap<String, Any>>) {
+        val turnChatId = chatId
+        val appContext = applicationContext
+        val marks = changed.map { message ->
+            MemoryStore.TranscriptMessageMark(
+                messageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
+                role = if (message["isBot"] == true) "assistant" else "user",
+                text = message["message"]?.toString().orEmpty(),
+                hidden = MessageVisibility.isHidden(message)
+            )
+        }
+        if (turnChatId.isBlank() || marks.isEmpty()) return
+        memoryWriteQueue.execute {
+            try {
+                if (!MemoryStore.isProvisioned(appContext)) return@execute
+                val store = MemoryStore.getInstance(appContext)
+                marks.forEach { store.setTranscriptMessageHidden(turnChatId, it) }
+            } catch (_: Exception) {
+                // Memory is best-effort and must never disturb the chat.
+            }
+        }
+    }
+
+    /**
+     * Android may report a failed commit after already updating the
+     * process-local preferences map. Once the in-memory messages are rolled
+     * back, saving them again puts the restored history into that map too,
+     * so reopening the chat in this process cannot load the failed change.
+     */
+    private fun restoreStoredHistoryAfterFailedSave() {
+        saveSettings(synchronous = true)
+    }
+
+    /** Show All: every hidden message whose visibility can still change. */
+    private fun confirmShowAllHiddenMessages() {
+        val targets = adapter?.changeableHiddenMessages().orEmpty()
+        if (targets.isEmpty()) return
+        UnhideAllMessagesDialog.show(this, targets.size) {
+            if (chatStorageUnavailable || deletingChat) return@show
+            val saved = MessageVisibility.showAllAndSave(targets) {
+                saveSettings(synchronous = true) == ChatStorageHealth.WriteOutcome.OK
+            }
+            adapter?.notifyDataSetChanged()
+            if (!saved) {
+                restoreStoredHistoryAfterFailedSave()
+                Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
+                return@show
+            }
+            syncMemoryVisibility(targets)
+            onMessageEdited()
+        }
     }
 
     override fun onResponseVersionChanged() {

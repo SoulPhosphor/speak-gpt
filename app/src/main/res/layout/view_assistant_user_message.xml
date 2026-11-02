@@ -298,10 +298,10 @@
                     android:tooltipText="@string/btn_msg_edit"
                     app:srcCompat="@drawable/ic_edit" />
                 <ImageButton android:id="@+id/btn_more"
-                    style="@style/Widget.App.Bookmark.MessageAction"
+                    style="@style/Widget.App.Chat.MessageAction"
                     android:contentDescription="@string/message_more_actions"
                     android:tooltipText="@string/message_more_actions"
-                    app:srcCompat="@drawable/ic_more_vert" />
+                    android:src="@drawable/ic_more_vert" />
             </LinearLayout>
 
             <!-- Record of what was attached to this message (document-includes-plan.md).

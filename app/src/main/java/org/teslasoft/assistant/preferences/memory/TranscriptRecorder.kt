@@ -75,7 +75,11 @@ object TranscriptRecorder {
         campaignId: String? = null,
         roleplayCharacterId: String? = null,
         userPersonaId: String? = null,
-        projectId: String? = null
+        projectId: String? = null,
+        userMessageId: String = "",
+        assistantMessageId: String = "",
+        userHidden: Boolean = false,
+        assistantHidden: Boolean = false
     ) {
         try {
             // Diagnostic breadcrumbs: capture is otherwise invisible, so each
@@ -122,7 +126,11 @@ object TranscriptRecorder {
                 campaignId = campaignId,
                 roleplayCharacterId = roleplayCharacterId,
                 userPersonaId = userPersonaId,
-                projectId = projectId
+                projectId = projectId,
+                userMessageId = userMessageId,
+                assistantMessageId = assistantMessageId,
+                userHidden = userHidden,
+                assistantHidden = assistantHidden
             )
             MemoryLog.log(context, "Transcript", "info",
                 "captured chat=$chatId companion=${companionId ?: "none"} complete=$assistantComplete -> $outcome")
@@ -191,6 +199,11 @@ object TranscriptRecorder {
                     if (content.isBlank()) continue
                     val role = if (m["isBot"] == true) "assistant" else "user"
                     val turn = JSONObject().put("role", role).put("content", content)
+                    TranscriptTurnVisibility.stamp(
+                        turn,
+                        org.teslasoft.assistant.preferences.MessageIdentity.idOf(m),
+                        org.teslasoft.assistant.preferences.MessageVisibility.isHidden(m)
+                    )
                     // An assistant reply that never finished streaming is marked
                     // so the Archivist won't mine a truncated fragment as fact.
                     // Absent "complete" means complete (legacy rows, user turns).

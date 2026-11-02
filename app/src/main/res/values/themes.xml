@@ -2842,11 +2842,15 @@
     <style name="Widget.App.Bookmark.SpeakerMarker" parent="">
         <item name="android:drawablePadding">@dimen/bookmark_marker_gap</item>
     </style>
-    <style name="Widget.App.Bookmark.MessageAction" parent="Widget.App.Bookmark.Action">
-        <item name="android:layout_width">@dimen/bookmark_message_action_size</item>
-        <item name="android:layout_height">@dimen/bookmark_message_action_size</item>
-        <item name="android:layout_marginStart">@dimen/bookmark_search_gap</item>
-        <item name="android:padding">0dp</item>
+    <!-- Chat message action icon (Copy, Edit, More, ...): glyph only, no
+         background or tint of its own. ChatAdapter colors every action icon
+         with the bubble's foreground through one shared path, so the icon
+         contrasts with whichever bubble it sits on. -->
+    <style name="Widget.App.Chat.MessageAction" parent="">
+        <item name="android:layout_width">@dimen/chat_message_action_size</item>
+        <item name="android:layout_height">@dimen/chat_message_action_size</item>
+        <item name="android:layout_marginStart">@dimen/chat_message_action_gap</item>
+        <item name="android:background">@android:color/transparent</item>
         <item name="android:descendantFocusability">blocksDescendants</item>
     </style>
     <style name="Widget.App.FlatChatRow.BookmarkIndicator" parent="">
