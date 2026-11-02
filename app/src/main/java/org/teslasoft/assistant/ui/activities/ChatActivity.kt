@@ -14951,6 +14951,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         adapter?.notifyItemChanged(position)
         if (!saved) {
+            restoreStoredHistoryAfterFailedSave()
             Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
             return
         }
@@ -14988,6 +14989,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /**
+     * Android may report a failed commit after already updating the
+     * process-local preferences map. Once the in-memory messages are rolled
+     * back, saving them again puts the restored history into that map too,
+     * so reopening the chat in this process cannot load the failed change.
+     */
+    private fun restoreStoredHistoryAfterFailedSave() {
+        saveSettings(synchronous = true)
+    }
+
     /** Show All: every hidden message whose visibility can still change. */
     private fun confirmShowAllHiddenMessages() {
         val targets = adapter?.changeableHiddenMessages().orEmpty()
@@ -14999,6 +15010,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             adapter?.notifyDataSetChanged()
             if (!saved) {
+                restoreStoredHistoryAfterFailedSave()
                 Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
                 return@show
             }

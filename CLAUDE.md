@@ -13,7 +13,7 @@ Every code change follows these steps, in this order, with no others added:
 3. Create the pull request.
 4. Codex reviews it. Codex is the final approval gate.
 5. Fix any Codex findings that need changes, get Android Checks green on the
-   fixes, then ask Codex for its re-review.
+   fixes, then ask Codex for its re-review. Repeat until Codex passes it.
 6. Merge into `beta/new-client` as soon as everything passes. Do not wait for
    the owner to say merge.
 
@@ -631,10 +631,11 @@ that triggers a second, duplicate review.
 - Check each finding against this repository's rules and the owner's
   instructions; Codex does not know them. Fix the valid findings in one push
   and reply on any finding that is not being fixed, saying why.
-- Comment `@codex review` only for one re-review, and only after the fixes
-  are pushed and Android Checks is green on them. Codex never reviews code
-  that has not passed the checks. If findings remain after that, bring them to the owner as a short
-  list with a recommendation instead of starting another round.
+- After the fixes are pushed and Android Checks is green on them, comment
+  `@codex review` for a re-review. Codex never reviews code that has not
+  passed the checks. Keep repeating this cycle (fix valid findings, get
+  Android Checks green, request a re-review) until Codex passes it, without
+  stopping to ask the owner between rounds (owner ruling, November 2 2026).
 - Once Codex has passed it (no findings, or a clean re-review after the
   fixes) and Android Checks is green on the final commit, merge it into
   `beta/new-client` right away, without waiting for the owner to say merge
