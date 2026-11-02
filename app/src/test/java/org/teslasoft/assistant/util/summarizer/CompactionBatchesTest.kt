@@ -47,6 +47,18 @@ class CompactionBatchesTest {
     }
 
     @Test
+    fun aRejectedRequestAlwaysShrinks() {
+        // A one-token exchange followed by blank (zero-token) messages: halving
+        // the budget alone would pick the same messages again.
+        val entries = listOf(user(4), bot(0), user(0), bot(0), user(0))
+        val (end, _) = CompactionBatches.shrink(entries, 0, entries.size, entries.size)
+        assertEquals(2, end)
+        val mixed = List(10) { if (it % 2 == 0) user(200) else bot(200) }
+        val (half, _) = CompactionBatches.shrink(mixed, 0, 10, 10)
+        assertEquals(4, half)
+    }
+
+    @Test
     fun theDefaultAmountIs4000() {
         assertEquals(4000, CompactionBatches.DEFAULT_TOKENS)
     }

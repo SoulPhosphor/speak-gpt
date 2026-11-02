@@ -1079,8 +1079,9 @@ class SummarizerController(
                 if (category == SummarizerErrorCategory.REQUEST_TOO_LARGE &&
                     end > CompactionBatches.exchangeEnd(entries, folded, target)
                 ) {
-                    budget = (CompactionBatches.tokens(entries, folded, end) / 2).coerceAtLeast(1)
-                    end = CompactionBatches.batchEnd(entries, folded, target, budget)
+                    val (smallerEnd, smallerBudget) = CompactionBatches.shrink(entries, folded, end, target)
+                    end = smallerEnd
+                    budget = smallerBudget
                     continue
                 }
                 // Keep the real error beneath the entry's plain-language

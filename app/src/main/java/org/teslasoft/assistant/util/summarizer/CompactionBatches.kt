@@ -49,6 +49,24 @@ object CompactionBatches {
         return end
     }
 
+    /**
+     * A smaller request after the service called [from] until [end] too
+     * large: about half its estimated tokens in whole exchanges. Always ends
+     * strictly before [end] (at least one whole exchange), so a retry never
+     * repeats the rejected request. Returns the new end and token amount.
+     */
+    fun shrink(
+        entries: List<SummarizerController.Entry>,
+        from: Int,
+        end: Int,
+        limit: Int
+    ): Pair<Int, Int> {
+        val budget = tokens(entries, from, end) / 2
+        val smaller = batchEnd(entries, from, limit, budget)
+        val newEnd = if (smaller < end) smaller else exchangeEnd(entries, from, limit)
+        return newEnd to budget
+    }
+
     /** Estimated tokens of entries [from] until [end]. */
     fun tokens(entries: List<SummarizerController.Entry>, from: Int, end: Int): Int =
         (from until end).sumOf { estimateTokens(entries[it]) }
