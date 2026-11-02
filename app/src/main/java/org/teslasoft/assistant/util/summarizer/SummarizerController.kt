@@ -899,7 +899,7 @@ class SummarizerController(
         owned: List<SummarySections.SourceMessage>,
         context: List<SummarySections.SourceMessage>
     ): String? {
-        fun role(m: SummarySections.SourceMessage) = if (m.isBot) "AI" else "User"
+        fun role(m: SummarySections.SourceMessage) = if (m.isBot) "Assistant" else "User"
         val body = SummarizerPrompts.sectionRequestBody(
             runtime.prompt,
             context.filter { it.text.isNotBlank() }.map { role(it) to it.text },
@@ -1068,7 +1068,7 @@ class SummarizerController(
         // never split. Only then is the error stored.
         while (true) {
             val departing = entries.subList(folded, end)
-                .map { Pair(if (it.isBot) "AI" else "User", it.text) }
+                .map { Pair(if (it.isBot) "Assistant" else "User", it.text) }
                 .filter { it.second.isNotBlank() }
 
             if (departing.isEmpty()) {

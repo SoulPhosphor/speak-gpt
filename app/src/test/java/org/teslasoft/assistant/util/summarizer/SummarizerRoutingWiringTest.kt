@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.util.summarizer
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -50,7 +51,11 @@ class SummarizerRoutingWiringTest {
         assertTrue(controller.contains("DedicatedModelRoutingPolicy.favoriteForRequest"))
         assertTrue(controller.contains("ProviderRoutingResolver.resolve"))
         assertTrue(controller.contains("ProviderRoutingSerializer.augmentBody"))
-        assertTrue(controller.contains("buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)"))
+        // Image summaries and backup titles both carry dedicated routing and
+        // request-local response evidence. Sections and compaction do likewise.
+        fun calls(text: String) = Regex(Regex.escape(text)).findAll(controller).count()
+        assertEquals(2, calls("buildClient(endpoint, routingResolution.providerJson, evidence, attempt)"))
+        assertEquals(2, calls("buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)"))
     }
 
     @Test
