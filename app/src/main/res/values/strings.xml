@@ -3856,11 +3856,23 @@
     <string name="summarizer_sections_injection_header">The following conversation summaries are ordered chronologically from oldest to newest. Later summaries describe later parts of the conversation and may update or supersede earlier information.</string>
 
     <!-- Chat redesign: Appearance destination and companion name-style override. -->
-    <string name="appearance_title">Appearance</string>
+    <string name="appearance_title">Appearance &amp; Behaviors</string>
     <string name="appearance_subtitle">Customize the look of your chat.</string>
     <!-- Chat Behavior destination (owner ruling, Sept 2026): opened from the
          Chat Behavior row in Appearance, holding optional chat controls. -->
     <string name="chat_settings_tile_title">Chat Settings</string>
+    <!-- Chat Behaviors destination (owner ruling, Nov 2 2026): opened from the
+         Chat Behaviors row under Chat Settings in Appearance & Behaviors. -->
+    <string name="chat_behaviors_title">Chat Behaviors</string>
+    <string name="chat_behaviors_allow_message_visibility">Allow Message Visibility</string>
+    <string name="chat_behaviors_allow_message_visibility_hint">Allows you to hide messages from you or the AI from the AI. They will still be visible in your chat history and this is reversible.</string>
+    <!-- Message menu actions for hiding a message from the AI (owner wording, Nov 2 2026). -->
+    <string name="message_make_hidden">Make Hidden</string>
+    <string name="message_make_visible">Make Visible</string>
+    <!-- Chat menu action and its confirmation (owner wording, Nov 2 2026). -->
+    <string name="chat_menu_show_all">Show All</string>
+    <string name="unhide_all_messages_title">Unhide All Messages</string>
+    <string name="unhide_all_messages_body">All %1$d messages that are currently hidden from the AI will be Shown</string>
     <string name="chat_behavior_section_identity">Identity</string>
     <string name="chat_behavior_default_username">Default Displayed Username</string>
     <string name="chat_behavior_apply_previous_chats">Apply to Previous Chats with No Name</string>

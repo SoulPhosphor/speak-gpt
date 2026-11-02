@@ -1462,7 +1462,10 @@ When this guide and current style definitions disagree, inspect `themes.xml`, ve
 
 `Widget.App.Bookmark.*` owns the fixed bookmark navigation strip, centered
 counter, borderless navigation controls, expandable search field, user-message
-overflow button, and speaker-marker spacing. `AppButton.Primary.Inline.BookmarkSearch`
+overflow button, and speaker-marker spacing. The speaker marker spacing also
+places the hidden-from-AI marker (`ic_visibility_off`, sized by
+`bookmark_icon_size`) on the other side of the name; with names off, the same
+line keeps the markers in the name's place. `AppButton.Primary.Inline.BookmarkSearch`
 inherits the shared label-sized Search button. Measurements live in `dimens.xml`;
 `bookmark_action_tint` resolves enabled and disabled colors from theme attributes.
 The strip is part of the chat layout beneath its header and above the transcript;

@@ -745,6 +745,15 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_top_positioned_audio_control", state, true)
     }
 
+    /** Chat Behaviors: whether messages may be newly hidden from the AI.
+     *  Off by default. Turning it off never changes messages already hidden. */
+    fun getAllowMessageVisibility(): Boolean =
+        getGlobalBoolean("chat_allow_message_visibility", false)
+
+    fun setAllowMessageVisibility(state: Boolean) {
+        putGlobalBoolean("chat_allow_message_visibility", state, false)
+    }
+
     /** Renamed presentation of Desktop Mode; the stored key and behavior stay intact. */
     fun getHardwareKeyboardShortcuts(): Boolean = getDesktopMode()
 

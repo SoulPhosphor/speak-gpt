@@ -106,6 +106,27 @@
                     android:contentDescription="@string/chat_settings_tile_title" />
             </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/row_chat_behaviors"
+                style="@style/Widget.App.Row.TitleOnly">
+
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_tune" />
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/chat_behaviors_title" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/chat_behaviors_title" />
+            </LinearLayout>
+
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
