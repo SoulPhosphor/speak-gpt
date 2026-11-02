@@ -51,6 +51,13 @@ import org.teslasoft.assistant.util.summarizer.SummarizerController
 import org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
 import org.teslasoft.assistant.util.summarizer.SummarizerOperationMessages
 import org.teslasoft.assistant.util.summarizer.SummarizerReviewGate
+import org.teslasoft.assistant.util.summarizer.CompactionVersions
+import org.teslasoft.assistant.ui.util.PromptTabBackground
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import android.text.method.KeyListener
+import android.widget.PopupMenu
 
 /**
  * Summary / Compaction review (owner ruling, Oct 3 2026), opened from the
@@ -119,6 +126,18 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
     private var btnRevert: MaterialButton? = null
     private var sectionsPanel: SummarySectionsPanel? = null
 
+    /* Compaction version tabs (compaction-versions-plan.md). */
+    private var versionTabs: ChipGroup? = null
+    private var versionFrame: View? = null
+    private var btnVersionMenu: ImageButton? = null
+    private var btnRecompactFromScratch: MaterialButton? = null
+    private var versionState = CompactionVersions.EMPTY
+    /** The tab on screen; the version in use is versionState.activeIndex. */
+    private var shownIndex = -1
+    /** Unsaved text of the version in use while another tab is shown. */
+    private var activeDraft: String? = null
+    private var editableKeyListener: KeyListener? = null
+
     /** The text as last saved — the Revert target and unsaved-changes baseline. */
     private var savedText = ""
     /** True while the summarizer or compactor runs for this chat. */
@@ -158,13 +177,24 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         textReadOnly = findViewById(R.id.text_condensed_read_only)
         field = findViewById(R.id.field_condensed_text)
         btnRevert = findViewById(R.id.btn_revert_condensed)
+        versionTabs = findViewById(R.id.compaction_version_tabs)
+        versionFrame = findViewById(R.id.compaction_version_frame)
+        btnVersionMenu = findViewById(R.id.btn_compaction_version_menu)
+        btnRecompactFromScratch = findViewById(R.id.btn_recompact_from_scratch)
+        editableKeyListener = field?.keyListener
+        // The field shows whichever version tab is open, so Android must not
+        // restore its text by itself after the screen is recreated: the
+        // version in use's draft is saved and restored explicitly
+        // (STATE_DRAFT), and the screen reopens on that version.
+        field?.isSaveEnabled = false
         findViewById<TextView>(R.id.activity_title)?.setText(mode.titleRes)
         findViewById<TextView>(R.id.text_condensed_intro)?.setText(mode.introRes)
         ScreenChrome.apply(this, actionBar, btnBack, btnToggle, btnSave)
 
         if (mode == Mode.SUMMARY) {
             // The Summarizer's sections replace the single text box.
-            field?.visibility = View.GONE
+            versionTabs?.visibility = View.GONE
+            versionFrame?.visibility = View.GONE
             btnRevert?.visibility = View.GONE
             val container = findViewById<android.widget.LinearLayout>(R.id.summary_sections)
             container.visibility = View.VISIBLE
@@ -184,15 +214,21 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         } else {
             val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true
             savedText = if (compatible) preferences?.getSummarizerSummary().orEmpty() else ""
+            loadVersions()
             field?.setText(savedInstanceState?.getString(STATE_DRAFT) ?: savedText)
             field?.addTextChangedListener { refreshRevert() }
+            btnRecompactFromScratch?.visibility =
+                if ((preferences?.getManualCompactionBoundary() ?: 0) > 0) View.VISIBLE else View.GONE
+            btnRecompactFromScratch?.setOnClickListener { confirmRecompactFromScratch() }
+            btnVersionMenu?.setOnClickListener { showVersionMenu(it) }
+            renderVersionTabs()
             findViewById<View>(R.id.text_compaction_stale)?.visibility =
                 if (preferences?.getCompactionStale() == true) View.VISIBLE else View.GONE
         }
 
         btnBack?.setOnClickListener { attemptLeave() }
         btnSave?.setOnClickListener { save() }
-        btnRevert?.setOnClickListener { field?.setText(savedText) }
+        btnRevert?.setOnClickListener { if (showingActive()) field?.setText(savedText) }
         btnToggle?.setOnClickListener { onToggleCondensed() }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -223,7 +259,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         val panel = sectionsPanel
         outState.putString(
             STATE_DRAFT,
-            if (panel != null) encodeDrafts(panel.drafts()) else field?.text?.toString().orEmpty()
+            if (panel != null) encodeDrafts(panel.drafts()) else activeText()
         )
     }
 
@@ -274,14 +310,18 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
                 bindSections()
             } else {
                 savedText = preferences?.getSummarizerSummary().orEmpty()
+                activeDraft = null
+                loadVersions()
                 field?.setText(savedText)
+                btnRecompactFromScratch?.visibility =
+                    if ((preferences?.getManualCompactionBoundary() ?: 0) > 0) View.VISIBLE else View.GONE
             }
         }
         sectionsPanel?.setLocked(locked)
 
-        field?.isFocusable = !locked
-        field?.isFocusableInTouchMode = !locked
-        if (locked) field?.clearFocus()
+        applyFieldMode()
+        renderVersionTabs()
+        btnRecompactFromScratch?.isEnabled = !locked
         btnSave?.isEnabled = !locked
         btnSave?.alpha = if (locked) 0.38f else 1f
         refreshRevert()
@@ -290,11 +330,195 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
     /* ------------------------------ edit / save ------------------------------ */
 
     private fun isDirty(): Boolean = sectionsPanel?.isDirty()
-        ?: ((field?.text?.toString() ?: savedText) != savedText)
+        ?: (activeText() != savedText)
 
     private fun refreshRevert() {
         if (sectionsPanel != null) return
-        btnRevert?.visibility = if (isDirty() && !locked) View.VISIBLE else View.GONE
+        btnRevert?.visibility =
+            if (isDirty() && !locked && showingActive()) View.VISIBLE else View.GONE
+    }
+
+    /* ------------------------------ compaction version tabs ------------------------------ */
+
+    /** True while the tab on screen is the version in use (or there are no tabs). */
+    private fun showingActive(): Boolean =
+        versionState.versions.isEmpty() || shownIndex == versionState.activeIndex
+
+    /** The text of the version in use, including unsaved edits. */
+    private fun activeText(): String =
+        if (showingActive()) field?.text?.toString() ?: savedText else activeDraft ?: savedText
+
+    private fun loadVersions() {
+        val prefs = preferences ?: return
+        versionState = CompactionVersions.current(
+            prefs.getCompactionVersions(), savedText, prefs.getManualCompactionBoundary()
+        )
+        shownIndex = versionState.activeIndex
+    }
+
+    private fun loadVersionsKeepingShown() {
+        val shown = shownIndex
+        loadVersions()
+        if (shown in versionState.versions.indices) shownIndex = shown
+        renderVersionTabs()
+    }
+
+    /** Only the version in use is editable; other tabs can be read and
+     *  their text selected and copied. Nothing is editable while the
+     *  compactor runs. */
+    private fun applyFieldMode() {
+        val f = field ?: return
+        val editable = !locked && showingActive()
+        f.keyListener = if (editable) editableKeyListener else null
+        f.isFocusable = !locked
+        f.isFocusableInTouchMode = !locked
+        if (locked) f.clearFocus()
+        btnVersionMenu?.visibility =
+            if (!locked && (!showingActive() || CompactionVersions.canRedo(versionState, shownIndex))) {
+                View.VISIBLE
+            } else View.GONE
+    }
+
+    private fun renderVersionTabs() {
+        val row = versionTabs ?: return
+        row.removeAllViews()
+        if (mode != Mode.COMPACTION || versionState.versions.isEmpty()) {
+            row.visibility = View.GONE
+            return
+        }
+        row.visibility = View.VISIBLE
+        val outline = MaterialColors.getColor(row, com.google.android.material.R.attr.colorOutline)
+        val error = MaterialColors.getColor(row, androidx.appcompat.R.attr.colorError)
+        val surface = MaterialColors.getColor(row, com.google.android.material.R.attr.colorSurfaceContainerHigh)
+        val transparent = android.graphics.Color.TRANSPARENT
+        val strokeWidth = resources.getDimension(R.dimen.prompt_tab_stroke_width)
+        val slant = resources.getDimension(R.dimen.prompt_tab_slant_width)
+        versionState.versions.forEachIndexed { index, version ->
+            val shown = index == shownIndex
+            val unused = versionState.isUnused(index)
+            val style = when {
+                shown -> R.style.Widget_App_PromptTab_Active
+                unused -> R.style.Widget_App_PromptTab_Unused
+                else -> R.style.Widget_App_PromptTab
+            }
+            val tab = TextView(this, null, 0, style)
+            tab.text = if (unused) {
+                getString(R.string.compaction_version_unused, version.count)
+            } else {
+                version.count.toString()
+            }
+            tab.background = PromptTabBackground(
+                if (shown) surface else transparent,
+                if (unused) error else outline,
+                strokeWidth,
+                slant
+            )
+            tab.setOnClickListener { showVersion(index) }
+            row.addView(tab)
+        }
+    }
+
+    private fun showVersion(index: Int) {
+        if (index == shownIndex || index !in versionState.versions.indices) return
+        if (showingActive()) activeDraft = field?.text?.toString()
+        shownIndex = index
+        field?.setText(
+            if (showingActive()) activeDraft ?: savedText
+            else versionState.versions[index].text
+        )
+        if (showingActive()) activeDraft = null
+        applyFieldMode()
+        renderVersionTabs()
+        refreshRevert()
+    }
+
+    /** Three-dot menu: Use This Summary on a tab that is not in use; Redo
+     *  This Summary on the newest tab while it is in use. */
+    private fun showVersionMenu(anchor: View) {
+        if (locked) return
+        val index = shownIndex
+        val canRedo = CompactionVersions.canRedo(versionState, index)
+        if (showingActive() && !canRedo) return
+        val popup = PopupMenu(this, anchor)
+        if (showingActive()) {
+            popup.menu.add(0, MENU_REDO_VERSION, 0, R.string.compaction_version_redo)
+        } else {
+            popup.menu.add(0, MENU_USE_VERSION, 0, R.string.compaction_version_use)
+        }
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                MENU_USE_VERSION -> {
+                    if (isDirty()) DiscardChangesDialog.show(this) { useVersion(index) } else useVersion(index)
+                    true
+                }
+                MENU_REDO_VERSION -> {
+                    // No confirmation, even over unsaved edits (owner ruling,
+                    // Nov 2 2026). The chat runs it with the compacting
+                    // progress pop-up, so this screen closes.
+                    setResult(RESULT_OK, Intent().putExtra(RESULT_REDO_NEWEST, true))
+                    finish()
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    /**
+     * Use This Summary: the chosen version becomes the text sent to the main
+     * AI and the one the next compaction builds on, and the chat's Compacted
+     * marker moves to just after its last message. Versions after it show as
+     * Unused until a new compaction deletes them.
+     */
+    private fun useVersion(index: Int) {
+        val prefs = preferences ?: return
+        if (locked) return
+        val withSavedActive = CompactionVersions.current(
+            prefs.getCompactionVersions(), prefs.getSummarizerSummary(), prefs.getManualCompactionBoundary()
+        )
+        val next = CompactionVersions.use(withSavedActive, index)
+        val chosen = next.active ?: return
+        val lock = maxOf(prefs.getCompactionRegenerationLockBoundary(), CompactionVersions.furthestCount(next))
+        if (!prefs.commitCompactionVersionSwitch(chosen.text, chosen.count, CompactionVersions.toJson(next), lock)) {
+            Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+        savedText = chosen.text
+        activeDraft = null
+        loadVersions()
+        field?.setText(savedText)
+        applyFieldMode()
+        renderVersionTabs()
+        refreshRevert()
+    }
+
+    /** Recompact Messages from Scratch, after its confirmation. The chat runs
+     *  it with the compacting progress pop-up, so this screen closes. */
+    private fun confirmRecompactFromScratch() {
+        if (locked) return
+        val actions = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.compaction_recompact_from_scratch_title)
+            .setMessage(R.string.compaction_recompact_from_scratch_body)
+            .setView(actions)
+            .create()
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.btn_ok)
+            setOnClickListener {
+                dialog.dismiss()
+                val go = {
+                    setResult(RESULT_OK, Intent().putExtra(RESULT_RECOMPACT_FROM_SCRATCH, true))
+                    finish()
+                }
+                if (isDirty()) DiscardChangesDialog.show(this@ConversationSummaryActivity) { go() } else go()
+            }
+        }
+        dialog.show()
     }
 
     /* ------------------------------ summary sections ------------------------------ */
@@ -398,12 +622,14 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
             Toast.makeText(this, R.string.companion_editor_saved_toast, Toast.LENGTH_SHORT).show()
             return
         }
-        val text = field?.text?.toString().orEmpty()
+        val text = activeText()
         if (preferences?.commitSummarizerSummaryEdit(text) != true) {
             Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
             return
         }
         savedText = text
+        activeDraft = null
+        loadVersionsKeepingShown()
         // Saving the user's own wording answers the "messages changed" note.
         preferences?.setCompactionStale(false)
         findViewById<View>(R.id.text_compaction_stale)?.visibility = View.GONE
@@ -515,6 +741,15 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
 
         /** Result extra: the chat message the user chose in the preview. */
         const val RESULT_MESSAGE_ID = "goToMessageId"
+
+        /** Result extra: the user confirmed Recompact Messages from Scratch. */
+        const val RESULT_RECOMPACT_FROM_SCRATCH = "recompactFromScratch"
+
+        /** Result extra: the user chose Redo This Summary on the newest tab. */
+        const val RESULT_REDO_NEWEST = "redoNewestCompaction"
+
+        private const val MENU_USE_VERSION = 1
+        private const val MENU_REDO_VERSION = 2
         private const val STATE_DRAFT = "state_condensed_draft"
 
         /** [sectionId], when given, is scrolled to, flagged, and highlighted. */

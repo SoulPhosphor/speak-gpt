@@ -772,19 +772,6 @@
                         style="@style/Widget.App.Chat.ActionMenu.Content">
 
                         <LinearLayout
-                            android:id="@+id/action_compact"
-                            style="@style/Widget.App.Chat.ActionMenu.Row">
-
-                            <ImageView
-                                style="@style/Widget.App.Chat.ActionMenu.Icon"
-                                android:src="@drawable/ic_subject" />
-
-                            <TextView
-                                style="@style/Widget.App.Chat.ActionMenu.Label"
-                                android:text="@string/composer_compact_action" />
-                        </LinearLayout>
-
-                        <LinearLayout
                             android:id="@+id/action_create_image"
                             style="@style/Widget.App.Chat.ActionMenu.Row">
 

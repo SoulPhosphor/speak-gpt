@@ -248,6 +248,12 @@ Use when actions should size to their labels rather than fill the available widt
 its line, for vertical (LinearLayout) hosts. In a ConstraintLayout, center
 `AppButton.Primary.Inline` with start and end constraints instead.
 
+`AppButton.Primary.Inline.Centered.BelowIntro` is the same centered
+label-sized button placed on its own line directly beneath a screen's intro
+text (`Widget.App.Screen.Intro`); it adds only the gap above it
+(`screen_intro_action_gap`). First user: **Recompact Messages from Scratch** on
+the Compaction Summary screen.
+
 `AppButton.Primary.Inline.End` is the same label-sized button on the end
 (right) side of its line, for vertical (LinearLayout) hosts. Current user: the
 per-entry Copy under each log entry (`view_log_entry.xml`).
@@ -723,6 +729,23 @@ Inherits all sizing from the inactive tab. Background: `PromptTabBackground` wit
 `Widget.App.PromptTab.Add`
 
 Fixed 36x36dp square, centered "+" label. Outlined box (`bg_prompt_tab` drawable, plain rectangle) — intentionally kept as a plain square rather than the angled tab shape, since it's a small icon control and not a labeled file tab. Always placed at the end of the wrapping row.
+
+### Unused tab
+
+`Widget.App.PromptTab.Unused`
+
+Same sizing and text as the inactive tab. Its `PromptTabBackground` outline is drawn in `?attr/colorError` (red), resolved by the caller like every tab color. Used for a compaction version that is no longer in use; the tab's label is "Unused" before its number (owner ruling, Nov 2 2026).
+
+### Compaction version tabs
+
+On the Compaction Summary screen, one prompt tab per saved compaction version, titled with the number of the last message it covers, above a frame holding that version's text (owner design, Nov 2 2026; `compaction-versions-plan.md`). The app adds tabs; there is no add-tab button.
+
+- `Widget.App.VersionTabs.Row` — the wrapping `ChipGroup` of tabs (`version_tab_spacing`, `version_tabs_top_gap`).
+- `Widget.App.VersionTabs.Frame` — the frame beneath the tabs, on `bg_prompt_editor` so the shown tab continues into it.
+- `Widget.App.VersionTabs.Menu` — the three-dot menu at the frame's top end (`version_tab_menu_size`, `version_tab_menu_inset`).
+- `Widget.App.VersionTabs.Field` — the version's text, transparent inside the frame (`version_tab_field_padding`).
+
+The shown tab uses `Widget.App.PromptTab.Active`; other tabs use `Widget.App.PromptTab`, or `Widget.App.PromptTab.Unused` when Unused.
 
 ### Prompt tab row
 

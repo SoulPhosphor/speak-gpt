@@ -599,7 +599,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var btnVisionActionCamera: View? = null
     private var btnVisionActionGallery: View? = null
     private var btnVisionActionDocument: View? = null
-    private var btnToolCompact: View? = null
     private var btnToolCreateImage: View? = null
     private var explicitImagineDraft = false
 
@@ -622,6 +621,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** The messages the last Compact froze, so Retry compacts them again. */
     private var lastCompactionRequest: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null
     private var lastCompactionFromScratch = false
+    private var lastCompactionRedoNewest = false
     private var reduceJob: Job? = null
     private var reduceDialog: AlertDialog? = null
     private val artifactJobs: MutableMap<String, Job> = HashMap()
@@ -3370,7 +3370,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnVisionActionCamera = findViewById(R.id.action_camera)
         btnVisionActionGallery = findViewById(R.id.action_gallery)
         btnVisionActionDocument = findViewById(R.id.action_document)
-        btnToolCompact = findViewById(R.id.action_compact)
         btnToolCreateImage = findViewById(R.id.action_create_image)
         includeStrip = findViewById(R.id.include_strip)
         initIncludeStrip()
@@ -5279,11 +5278,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (toolActions?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
-        btnToolCompact?.setOnClickListener {
-            toolActions?.visibility = View.GONE
-            startManualCompaction()
-        }
-
         btnToolCreateImage?.setOnClickListener {
             toolActions?.visibility = View.GONE
             insertExplicitImagineDraft()
@@ -5814,16 +5808,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.UNEXPECTED ->
                 R.string.compaction_err_unexpected_title to R.string.compaction_err_unexpected
         }
-        // Retry continues from what a partly finished run saved.
-        if (state.savedMessages > 0) lastCompactionFromScratch = false
         val message = buildString {
             append(getString(reason))
             append("\n\n")
-            if (state.savedMessages > 0) {
-                append(getString(R.string.compaction_err_partial_saved, state.savedMessages))
-            } else {
-                append(getString(R.string.compaction_err_unchanged))
-            }
+            append(getString(R.string.compaction_err_unchanged))
             state.providerError?.let {
                 append("\n\n")
                 append(getString(R.string.compaction_err_provider, it))
@@ -5840,7 +5828,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .create()
         actions.findViewById<View>(R.id.btn_compaction_error_retry).setOnClickListener {
             dialog.dismiss()
-            lastCompactionRequest?.let { startManualCompactionConfirmed(it, lastCompactionFromScratch) }
+            lastCompactionRequest?.let {
+                startManualCompactionConfirmed(it, lastCompactionFromScratch, lastCompactionRedoNewest)
+            }
         }
         actions.findViewById<View>(R.id.btn_compaction_error_copy).setOnClickListener {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
@@ -6002,12 +5992,51 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         compactThroughMessage(position)
     }
 
-    /** The preview's "go to this message" comes back here. */
+    /** The preview's "go to this message" and Recompact Messages from
+     *  Scratch come back here. Use This Summary may have moved the
+     *  compaction marker while the review screen was open. */
     private val conversationSummaryLauncher =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            refreshManualCompactionMarker()
+            refreshCondensedRegenerationLocks()
+            refreshSummarizerIcons()
+            if (result.resultCode != RESULT_OK) return@registerForActivityResult
+            if (result.data?.getBooleanExtra(ConversationSummaryActivity.RESULT_RECOMPACT_FROM_SCRATCH, false) == true) {
+                recompactFromScratch()
+                return@registerForActivityResult
+            }
+            if (result.data?.getBooleanExtra(ConversationSummaryActivity.RESULT_REDO_NEWEST, false) == true) {
+                redoNewestCompaction()
+                return@registerForActivityResult
+            }
             val messageId = result.data?.getStringExtra(ConversationSummaryActivity.RESULT_MESSAGE_ID)
-            if (result.resultCode == RESULT_OK && !messageId.isNullOrBlank()) jumpToMessage(messageId)
+            if (!messageId.isNullOrBlank()) jumpToMessage(messageId)
         }
+
+    /** Redo This Summary: the newest compaction step runs again over the
+     *  same messages, from the text it started from. Its result replaces
+     *  only that newest version, and only on success. */
+    private fun redoNewestCompaction() {
+        val prefs = preferences ?: return
+        val snapshot = summarizerSnapshot() ?: return
+        val newest = org.teslasoft.assistant.util.summarizer.CompactionVersions.current(
+            prefs.getCompactionVersions(), prefs.getSummarizerSummary(), prefs.getManualCompactionBoundary()
+        ).versions.lastOrNull() ?: return
+        if (newest.count <= 0 || newest.count > snapshot.entries.size) return
+        startManualCompaction(snapshot.copy(entries = snapshot.entries.take(newest.count)), redoNewest = true)
+    }
+
+    /** Recompact Messages from Scratch: one fresh compaction of everything
+     *  from the first message through the last compacted message, from the
+     *  same snapshot as every compaction (messages hidden from the AI add no
+     *  text). It replaces the existing compacted text only on success. */
+    private fun recompactFromScratch() {
+        val prefs = preferences ?: return
+        val snapshot = summarizerSnapshot() ?: return
+        val boundary = prefs.getManualCompactionBoundary().coerceAtMost(snapshot.entries.size)
+        if (boundary <= 0) return
+        startManualCompaction(snapshot.copy(entries = snapshot.entries.take(boundary)), fromScratch = true)
+    }
 
     /** Opens the Summary / Compaction review; [sectionId] (Summarizer only)
      *  is scrolled to, flagged, and highlighted there. */
@@ -6110,17 +6139,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Show only configured composer tools; hide the gear when none are usable. */
     private fun refreshComposerTools() {
-        // A chat that uses the summarizer is not compacted (owner ruling,
-        // Oct 3 2026): Compact is offered only while Use Summarizer is off.
-        val compactAvailable =
-            org.teslasoft.assistant.util.summarizer.SummarizerController
-                .isConfigured(this) && preferences?.getChatUseSummarizer() != true
         val imageAvailable = imageGeneratorConfigured()
-        btnToolCompact?.visibility = if (compactAvailable) View.VISIBLE else View.GONE
         btnToolCreateImage?.visibility = if (imageAvailable) View.VISIBLE else View.GONE
-        btnChatTools?.visibility =
-            if (compactAvailable || imageAvailable) View.VISIBLE else View.GONE
-        if (!compactAvailable && !imageAvailable) {
+        btnChatTools?.visibility = if (imageAvailable) View.VISIBLE else View.GONE
+        if (!imageAvailable) {
             toolActions?.visibility = View.GONE
         }
     }
@@ -6158,7 +6180,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun startManualCompaction(
         requestedSnapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null,
         /** Rewrite the compacted text from the first message (Recompact). */
-        fromScratch: Boolean = false
+        fromScratch: Boolean = false,
+        /** Redo This Summary: run the newest compaction step again. */
+        redoNewest: Boolean = false
     ) {
         // A chat that uses the summarizer is not compacted; /compact says so.
         if (preferences?.getChatUseSummarizer() == true) {
@@ -6179,11 +6203,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // that text once, then only the raw messages that compaction will
         // actually send after its existing bookmark; otherwise a partially
         // condensed long chat can produce a wildly inflated cost warning.
-        val alreadyFolded = if (fromScratch) 0 else (preferences?.getSummarizerFoldedCount() ?: 0)
-            .coerceIn(0, snapshot.entries.size)
+        val redone = if (redoNewest) {
+            preferences?.let {
+                org.teslasoft.assistant.util.summarizer.CompactionVersions.current(
+                    it.getCompactionVersions(), it.getSummarizerSummary(), it.getManualCompactionBoundary()
+                ).versions.lastOrNull()
+            } ?: return
+        } else null
+        val alreadyFolded = when {
+            fromScratch -> 0
+            redone != null -> redone.baseCount
+            else -> preferences?.getSummarizerFoldedCount() ?: 0
+        }.coerceIn(0, snapshot.entries.size)
         val estimatedTokens = org.teslasoft.assistant.util.summarizer
             .LargeSummarizerOperationPolicy.estimateInputTokens(
-                if (fromScratch) "" else preferences?.getSummarizerSummary().orEmpty(),
+                when {
+                    fromScratch -> ""
+                    redone != null -> redone.baseText
+                    else -> preferences?.getSummarizerSummary().orEmpty()
+                },
                 snapshot.entries.drop(alreadyFolded)
             )
         if (org.teslasoft.assistant.util.summarizer.LargeSummarizerOperationPolicy
@@ -6199,23 +6237,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
                 .setNegativeButton(R.string.btn_cancel, null)
                 .setPositiveButton(R.string.compact_anyway) { _, _ ->
-                    startManualCompactionConfirmed(snapshot, fromScratch)
+                    startManualCompactionConfirmed(snapshot, fromScratch, redoNewest)
                 }
                 .show()
             return
         }
-        startManualCompactionConfirmed(snapshot, fromScratch)
+        startManualCompactionConfirmed(snapshot, fromScratch, redoNewest)
     }
 
     private fun startManualCompactionConfirmed(
         snapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot,
-        fromScratch: Boolean = false
+        fromScratch: Boolean = false,
+        redoNewest: Boolean = false
     ) {
         val controller = summarizerController ?: return
         val frozenEntries = snapshot.entries.toList()
         val frozen = snapshot.copy(entries = frozenEntries)
         lastCompactionRequest = frozen
         lastCompactionFromScratch = fromScratch
+        lastCompactionRedoNewest = redoNewest
         val frozenChatId = chatId
         val frozenRows = org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard
             .rows(messages)
@@ -6224,8 +6264,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         controller.runManualCompaction(
             snapshot = frozen,
             chatName = chatName,
-            // Cancel keeps nothing from the run (owner ruling, Oct 4 2026).
-            savePartialOnCancel = false,
             stillCurrent = {
                 val stored = org.teslasoft.assistant.preferences.ChatPreferences
                     .getChatPreferences().getChatById(app, frozenChatId, DamagedChatOperation.OPENING_A_CHAT)
@@ -6236,7 +6274,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
             },
             onFinished = { /* registry listener refreshes any attached screen */ },
-            fromScratch = fromScratch
+            fromScratch = fromScratch,
+            redoNewest = redoNewest
         )
     }
 
@@ -6252,9 +6291,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
     }
 
-    /** Compact to Here: compacts every stored message through the AI
-     * response at [position]. A point at or before the current compacted
-     * range rewrites the compacted text from the first message. */
+    /** Compact to Here: compacts every stored message after the compacted
+     * range through the AI response at [position], adding to the compacted
+     * text. It is not offered on messages that are already compacted. */
     private fun compactThroughMessage(position: Int) {
         val target = messages.getOrNull(position) ?: return
         if (target["isBot"] != true) return
@@ -6269,12 +6308,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val count = storedIndex + 1
         if (count > snapshot.entries.size) return
         val prefs = preferences ?: return
-        val fromScratch = count <= prefs.getSummarizerFoldedCount() ||
-            count <= prefs.getManualCompactionBoundary()
-        startManualCompaction(
-            snapshot.copy(entries = snapshot.entries.take(count)),
-            fromScratch = fromScratch
-        )
+        if (count <= prefs.getSummarizerFoldedCount() || count <= prefs.getManualCompactionBoundary()) return
+        startManualCompaction(snapshot.copy(entries = snapshot.entries.take(count)))
     }
 
     /** True when this chat's requests use summarizer transmission at all —
@@ -15325,8 +15360,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (realigned(compactionLock) != compactionLock) {
             prefs.setCompactionRegenerationLockBoundary(realigned(compactionLock))
         }
+        realignCompactionVersions((start until end).toList())
         refreshManualCompactionMarker()
         refreshSummarizerIcons()
+    }
+
+    /** Shrinks every compaction version tab's coverage by the removed stored
+     *  messages at [positions] (indexes from before the removal), the same
+     *  way as the compaction marker, so Use This Summary and Redo This
+     *  Summary keep covering the right messages. */
+    private fun realignCompactionVersions(positions: List<Int>) {
+        val prefs = preferences ?: return
+        if (positions.isEmpty()) return
+        val json = prefs.getCompactionVersions()
+        if (json.isBlank()) return
+        val versions = org.teslasoft.assistant.util.summarizer.CompactionVersions.fromJson(json)
+        val realigned = org.teslasoft.assistant.util.summarizer.CompactionVersions
+            .afterPositionsRemoved(versions, positions)
+        if (realigned != versions) {
+            prefs.setCompactionVersions(
+                org.teslasoft.assistant.util.summarizer.CompactionVersions.toJson(realigned)
+            )
+        }
     }
 
     override fun onMessageDeleted() {
@@ -15553,6 +15608,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         var removedBeforeManualBoundary = 0
         var removedBeforeSummaryLock = 0
         var removedBeforeCompactionLock = 0
+        val removedPositions = ArrayList<Int>()
         var pos = 0
         var p = 0
         while (pos < messagesSelectionProjection.size) {
@@ -15566,6 +15622,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 if (pos < summaryLockBefore) removedBeforeSummaryLock++
                 if (pos < compactionLockBefore) removedBeforeCompactionLock++
+                removedPositions.add(pos)
                 messages.removeAt(pos - p)
                 p++
             }
@@ -15590,6 +15647,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 compactionLockBefore - removedBeforeCompactionLock
             )
         }
+        realignCompactionVersions(removedPositions)
 
         syncChatProjection()
         saveSettings()

@@ -1686,6 +1686,14 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- A label-sized primary action centered on its own line directly
+         below a screen's intro text (Widget.App.Screen.Intro), for vertical
+         (LinearLayout) hosts. First user: Recompact Messages from Scratch on
+         the Compaction Summary screen. -->
+    <style name="AppButton.Primary.Inline.Centered.BelowIntro">
+        <item name="android:layout_marginTop">@dimen/screen_intro_action_gap</item>
+    </style>
+
     <!-- Chat header. Every color and size of the bar, its title and its
          action icons is defined here; recolor the header from these styles
          and bg_chat_header* (which use bg_surface_level4* on Android 12+). -->
@@ -2629,6 +2637,51 @@
     <style name="Widget.App.PromptTab.Active" parent="Widget.App.PromptTab">
         <item name="android:textColor">?attr/appTitleTextColor</item>
         <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- A compaction version tab that is no longer in use (Use This Summary
+         chose an older version). Same sizing and text as the inactive tab;
+         its outline is drawn in ?attr/colorError by the caller through
+         PromptTabBackground, like every tab color. -->
+    <style name="Widget.App.PromptTab.Unused" parent="Widget.App.PromptTab" />
+
+    <!-- Compaction version tabs (compaction-versions-plan.md): the prompt
+         tabs above a frame holding one version's text and its three-dot
+         menu. The frame shares bg_prompt_editor with the prompt editor so
+         the active tab continues into it. -->
+    <style name="Widget.App.VersionTabs.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/version_tabs_top_gap</item>
+        <item name="singleLine">false</item>
+        <item name="chipSpacingHorizontal">@dimen/version_tab_spacing</item>
+        <item name="chipSpacingVertical">@dimen/version_tab_spacing</item>
+    </style>
+
+    <style name="Widget.App.VersionTabs.Frame" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/bg_prompt_editor</item>
+    </style>
+
+    <style name="Widget.App.VersionTabs.Menu" parent="">
+        <item name="android:layout_width">@dimen/version_tab_menu_size</item>
+        <item name="android:layout_height">@dimen/version_tab_menu_size</item>
+        <item name="android:layout_marginTop">@dimen/version_tab_menu_inset</item>
+        <item name="android:layout_marginEnd">@dimen/version_tab_menu_inset</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:tint">?attr/appSubtleTextColor</item>
+    </style>
+
+    <style name="Widget.App.VersionTabs.Field" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:padding">@dimen/version_tab_field_padding</item>
+        <item name="android:gravity">top|start</item>
+        <item name="android:inputType">textMultiLine|textCapSentences</item>
+        <item name="android:minLines">10</item>
     </style>
 
     <style name="Widget.App.PromptTab.Add" parent="">

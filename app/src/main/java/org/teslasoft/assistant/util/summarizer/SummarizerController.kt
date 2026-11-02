@@ -107,9 +107,7 @@ class SummarizerController(
             val chatName: String,
             val category: SummarizerErrorCategory,
             /** The AI service's own error text, when it sent one. */
-            val providerError: String? = null,
-            /** Messages a failed compaction still compacted and saved. */
-            val savedMessages: Int = 0
+            val providerError: String? = null
         ) : OperationState
         data class Cancelled(
             val kind: OperationKind,
@@ -159,8 +157,10 @@ class SummarizerController(
 
     private sealed interface FoldBatchResult {
         data class Advanced(
+            /** The compaction's new part for this batch, to be appended. */
             val summary: String,
-            val foldedCount: Int
+            val foldedCount: Int,
+            val batchSize: Int
         ) : FoldBatchResult
 
         data object Failed : FoldBatchResult
@@ -245,9 +245,6 @@ class SummarizerController(
 
     /** The compaction regeneration lock when the current run started. */
     private var runStartLock: Int? = null
-
-    /** Messages the current run compacted and saved before it failed. */
-    private var partialSavedMessages = 0
 
     /** Puts back the regeneration lock a stopped run's finished batches
      *  advanced. Never raises it, so a deletion's realignment stands. */
@@ -338,12 +335,14 @@ class SummarizerController(
     fun runManualCompaction(
         snapshot: Snapshot,
         chatName: String,
-        savePartialOnCancel: Boolean,
         stillCurrent: () -> Boolean,
         onFinished: (Boolean) -> Unit,
         /** Rewrite the compacted text from the first message instead of
          *  adding to it (Recompact after compacted messages were deleted). */
-        fromScratch: Boolean = false
+        fromScratch: Boolean = false,
+        /** Redo This Summary: run only the newest compaction step again,
+         *  from the text it started from, replacing that newest version. */
+        redoNewest: Boolean = false
     ) {
         if (manualCompactionRunning) return
         cancel()
@@ -351,7 +350,6 @@ class SummarizerController(
         lastFailureCategory = null
         lastFailureProviderError = null
         runStartLock = null
-        partialSavedMessages = 0
         setOperationState(
             OperationState.Running(
                 OperationKind.COMPACTING,
@@ -366,20 +364,19 @@ class SummarizerController(
                 committed = compactSnapshot(
                     snapshot,
                     chatName,
-                    savePartialOnCancel,
                     stillCurrent,
-                    fromScratch
+                    fromScratch,
+                    redoNewest
                 )
             } catch (_: CancellationException) {
-                // compactSnapshot owns the optional partial commit.
+                // A cancelled compaction keeps nothing.
             } catch (e: Exception) {
                 recordUnexpectedFailure(e, OperationKind.COMPACTING, chatName)
             } finally {
                 manualCompactionRunning = false
                 if (operationState is OperationState.Running) {
-                    // A failed run that saved nothing puts back the lock its
-                    // finished batches advanced.
-                    if (!committed && partialSavedMessages == 0) {
+                    // A failed run saves nothing and puts back the lock.
+                    if (!committed) {
                         val chatId = chatIdProvider()
                         val startLock = runStartLock
                         if (chatId.isNotBlank() && startLock != null) {
@@ -394,8 +391,7 @@ class SummarizerController(
                                 OperationKind.COMPACTING,
                                 chatName,
                                 lastFailureCategory ?: SummarizerErrorCategory.UNEXPECTED,
-                                lastFailureProviderError,
-                                partialSavedMessages
+                                lastFailureProviderError
                             )
                         }
                     )
@@ -603,9 +599,9 @@ class SummarizerController(
     private suspend fun compactSnapshot(
         snapshot: Snapshot,
         chatName: String,
-        savePartialOnCancel: Boolean,
         stillCurrent: () -> Boolean,
-        fromScratch: Boolean = false
+        fromScratch: Boolean = false,
+        redoNewest: Boolean = false
     ): Boolean {
         val chatId = chatIdProvider()
         if (chatId.isBlank() || snapshot.entries.isEmpty()) return false
@@ -634,7 +630,20 @@ class SummarizerController(
         val startingSummary = prefs.getSummarizerSummary()
         val startingFolded = prefs.getSummarizerFoldedCount()
         val startingVersion = prefs.getSummarizerProjectionVersion()
-        val operationStartFolded = if (fromScratch) 0 else startingFolded.coerceAtMost(target)
+        val priorVersions = CompactionVersions.current(
+            prefs.getCompactionVersions(), startingSummary, prefs.getManualCompactionBoundary()
+        )
+        // Redo applies only to the newest version while it is the one in use.
+        val redone = if (redoNewest) {
+            priorVersions.versions.lastOrNull()?.takeIf {
+                priorVersions.activeIndex == priorVersions.versions.lastIndex && it.count == target
+            } ?: return false
+        } else null
+        val operationStartFolded = when {
+            fromScratch -> 0
+            redone != null -> redone.baseCount.coerceAtMost(target)
+            else -> startingFolded.coerceAtMost(target)
+        }
 
         setOperationState(
             OperationState.Running(
@@ -645,8 +654,21 @@ class SummarizerController(
             )
         )
 
-        var summary = if (fromScratch) "" else startingSummary
+        // An ordinary compaction with no new messages adds nothing: no new
+        // version, so older versions are not pushed out.
+        if (!fromScratch && redone == null && operationStartFolded >= target) return true
+
+        // Compaction only adds (owner ruling, Nov 2 2026): the text it starts
+        // from is kept exactly, and each reply is appended after it. Nothing
+        // is saved until the whole run succeeds; a failure keeps nothing.
+        val baseSummary = when {
+            fromScratch -> ""
+            redone != null -> redone.baseText
+            else -> startingSummary
+        }
+        var summary = baseSummary
         var folded = operationStartFolded
+        var maxBatch = (target - folded).coerceAtLeast(1)
 
         try {
             if (folded < target) {
@@ -658,23 +680,13 @@ class SummarizerController(
                         entries = snapshot.entries,
                         folded = folded,
                         pending = target - folded,
-                        summary = summary
+                        summary = summary,
+                        maxBatch = maxBatch
                     )) {
                         is FoldBatchResult.Advanced -> {
-                            summary = result.summary
+                            summary = SummarizerPrompts.appendCompaction(summary, result.summary)
+                            maxBatch = result.batchSize
                             folded = result.foldedCount
-                            if (!prefs.advanceCompactionRegenerationLockBoundary(folded)) {
-                                recordFailure(
-                                    prefs,
-                                    SummarizerErrorCategory.SAVE_FAILED,
-                                    runtime.endpoint.label,
-                                    runtime.model,
-                                    null,
-                                    "The compacted batch was usable, but its permanent regeneration lock could not be saved."
-                                )
-                                return false
-                            }
-                            notifyStateChanged()
                             setOperationState(
                                 OperationState.Running(
                                     OperationKind.COMPACTING,
@@ -684,46 +696,15 @@ class SummarizerController(
                                 )
                             )
                         }
-                        FoldBatchResult.Failed -> {
-                            // A failure keeps the batches that finished (owner
-                            // ruling, Oct 4 2026), when the messages and saved
-                            // state they came from are unchanged.
-                            if (folded > operationStartFolded &&
-                                chatIdProvider() == chatId &&
-                                stillCurrent() &&
-                                prefs.getSummarizerSummary() == startingSummary &&
-                                prefs.getSummarizerFoldedCount() == startingFolded &&
-                                prefs.getSummarizerProjectionVersion() == startingVersion &&
-                                prefs.commitManualCompaction(summary, folded, false, folded)
-                            ) {
-                                partialSavedMessages = folded - operationStartFolded
-                                notifyStateChanged()
-                            }
-                            return false
-                        }
+                        FoldBatchResult.Failed -> return false
                     }
                 }
             }
         } catch (cancelled: CancellationException) {
-            val completedThisRun = folded - startingFolded.coerceAtMost(target)
-            val saved = if (savePartialOnCancel && completedThisRun > 0 && stillCurrent()) {
-                withContext(NonCancellable) {
-                    prefs.commitManualCompaction(summary, folded, false, folded)
-                }
-            } else {
-                // Nothing from the run is kept, including the regeneration
-                // lock its finished batches advanced.
-                withContext(NonCancellable) { restoreRunLock(prefs, startingLock) }
-                false
-            }
-            setOperationState(
-                OperationState.Cancelled(
-                    OperationKind.COMPACTING,
-                    chatName,
-                    if (saved) completedThisRun else 0
-                )
-            )
-            if (saved) notifyStateChanged()
+            // A cancelled compaction keeps nothing (owner rulings, Oct 4 and
+            // Nov 2 2026), including the regeneration lock.
+            withContext(NonCancellable) { restoreRunLock(prefs, startingLock) }
+            setOperationState(OperationState.Cancelled(OperationKind.COMPACTING, chatName, 0))
             throw cancelled
         }
 
@@ -750,7 +731,18 @@ class SummarizerController(
             return false
         }
 
-        if (!prefs.commitManualCompaction(summary, target, false, target)) {
+        val added = CompactionVersions.Version(target, summary, operationStartFolded, baseSummary)
+        val versions = when {
+            fromScratch -> CompactionVersions.afterRecompactFromScratch(added)
+            redone != null -> CompactionVersions.afterRedoNewest(priorVersions, added)
+            else -> CompactionVersions.afterCompaction(priorVersions, added)
+        }
+        if (!prefs.commitManualCompaction(
+                summary, target, false, target,
+                versionsJson = CompactionVersions.toJson(versions),
+                regenerationLock = CompactionVersions.furthestCount(versions)
+            )
+        ) {
             val configuredModel = prefs.getSummarizerModel()
             recordFailure(
                 prefs,
@@ -1024,9 +1016,12 @@ class SummarizerController(
         entries: List<Entry>,
         folded: Int,
         pending: Int,
-        summary: String
+        summary: String,
+        /** The largest batch to try: a request the service called too large
+         *  is not tried again at that size in the same run. */
+        maxBatch: Int = pending
     ): FoldBatchResult {
-        var batch = pending.coerceAtMost(BATCH_SIZE)
+        var batch = pending.coerceAtMost(maxBatch.coerceAtLeast(1))
 
         // §2.9: on a too-large rejection, split the batch and retry, down to
         // one message; only then is the error stored.
@@ -1036,10 +1031,7 @@ class SummarizerController(
                 .filter { it.second.isNotBlank() }
 
             if (departing.isEmpty()) {
-                return FoldBatchResult.Advanced(
-                    summary,
-                    folded + batch
-                )
+                return FoldBatchResult.Advanced("", folded + batch, batch)
             }
 
             val body = SummarizerPrompts.foldInRequestBody(
@@ -1116,7 +1108,7 @@ class SummarizerController(
                 return FoldBatchResult.Failed
             }
 
-            return FoldBatchResult.Advanced(text, folded + batch)
+            return FoldBatchResult.Advanced(text, folded + batch, batch)
         }
     }
 

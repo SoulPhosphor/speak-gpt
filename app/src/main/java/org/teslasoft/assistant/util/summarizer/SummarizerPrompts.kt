@@ -190,9 +190,22 @@ Do not independently summarize or reproduce the attachment itself. However, fact
     """.trimIndent()
 
     /**
-     * The complete user-message body of one fold-in call: the rendered slot
-     * prompt, the current summary, and the departing messages under plain
-     * "Existing summary:" / "New messages to add to the summary:" labels.
+     * Owner-approved (Nov 2 2026). Compaction only adds: the app keeps the
+     * existing compacted text exactly as stored and appends the AI's reply
+     * after it, so the AI receives that text as context only. This is app
+     * scaffolding, not one of the editable prompts, so it holds whichever
+     * prompt the user has selected.
+     */
+    val COMPACTION_CONTEXT_RULE =
+        "The existing compacted text below is for context only. Do not repeat, rewrite, " +
+            "or correct it. Write only about the new messages; your reply will be added " +
+            "after the existing text."
+
+    /**
+     * The complete user-message body of one compaction call: the rendered
+     * prompt, the context-only rule, the existing compacted text, and the new
+     * messages under plain "Existing compacted text:" / "New messages to
+     * summarize:" labels.
      */
     fun foldInRequestBody(
         renderedPrompt: String,
@@ -206,12 +219,23 @@ Do not independently summarize or reproduce the attachment itself. However, fact
         ) {
             sb.append("\n\n").append(ATTACHMENT_RULE)
         }
-        sb.append("\n\nExisting summary:\n")
+        sb.append("\n\n").append(COMPACTION_CONTEXT_RULE)
+        sb.append("\n\nExisting compacted text:\n")
         sb.append(existingSummary.ifBlank { "None yet." })
-        sb.append("\n\nNew messages to add to the summary:\n")
+        sb.append("\n\nNew messages to summarize:\n")
         for ((role, text) in departingMessages) {
             sb.append('\n').append(role).append(": ").append(text).append('\n')
         }
         return sb.toString()
+    }
+
+    /** Adds a compaction's new part after the existing compacted text,
+     *  leaving the existing text exactly as it was. */
+    fun appendCompaction(existing: String, addition: String): String = when {
+        addition.isBlank() -> existing
+        existing.isBlank() -> addition
+        existing.endsWith("\n\n") -> existing + addition
+        existing.endsWith("\n") -> existing + "\n" + addition
+        else -> existing + "\n\n" + addition
     }
 }

@@ -29,6 +29,8 @@
          place to tune the line spacing for all of them (owner ask, July 10
          2026 — "a variable that's the same"). -->
     <dimen name="card_section_gap">12dp</dimen>
+    <!-- Space between a screen's intro text and the action centered below it. -->
+    <dimen name="screen_intro_action_gap">12dp</dimen>
 
     <dimen name="button_corner_radius">4dp</dimen>
 
@@ -48,6 +50,12 @@
          stroke width matching the app's other 1dp outlined boxes. -->
     <dimen name="prompt_tab_slant_width">10dp</dimen>
     <dimen name="prompt_tab_stroke_width">1dp</dimen>
+    <!-- Compaction version tabs (Widget.App.VersionTabs). -->
+    <dimen name="version_tabs_top_gap">16dp</dimen>
+    <dimen name="version_tab_spacing">10dp</dimen>
+    <dimen name="version_tab_menu_size">36dp</dimen>
+    <dimen name="version_tab_menu_inset">2dp</dimen>
+    <dimen name="version_tab_field_padding">12dp</dimen>
 
     <!-- Widget.App.Row.ProfileImage's leading preview size (profile-images-plan.md). -->
     <dimen name="row_profile_image_size">48dp</dimen>

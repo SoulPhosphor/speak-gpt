@@ -28,11 +28,13 @@ class ManualCompactionWiringContractTest {
     fun gearAndMenuAreCapabilityDriven() {
         val layout = source("src/main/res/layout/activity_chat.xml")
         assertTrue(layout.indexOf("@+id/btn_chat_tools") > layout.indexOf("@+id/btn_attach"))
-        assertTrue(layout.contains("@+id/action_compact"))
+        // Compact was removed from the gear menu (owner ruling, Nov 2 2026);
+        // Compact to Here in the AI message menu stays.
+        assertFalse(layout.contains("@+id/action_compact"))
         assertTrue(layout.contains("@+id/action_create_image"))
-        assertTrue(activity.contains("val compactAvailable ="))
+        assertFalse(activity.contains("val compactAvailable ="))
         assertTrue(activity.contains("val imageAvailable = imageGeneratorConfigured()"))
-        assertTrue(activity.contains("if (compactAvailable || imageAvailable)"))
+        assertTrue(activity.contains("btnChatTools?.visibility = if (imageAvailable) View.VISIBLE else View.GONE"))
     }
 
     @Test
@@ -67,7 +69,9 @@ class ManualCompactionWiringContractTest {
         )
 
         assertTrue(controller.contains("advanceSummaryRegenerationLockBoundary("))
-        assertTrue(controller.contains("advanceCompactionRegenerationLockBoundary("))
+        // A finished compaction saves its regeneration lock in the same
+        // commit as its text (compaction no longer saves batch by batch).
+        assertTrue(controller.contains("regenerationLock = CompactionVersions.furthestCount(versions)"))
         assertTrue(preferences.contains("ensureCondensedRegenerationLockMigration()"))
         assertTrue(adapter.contains("R.drawable.ic_rule_settings"))
         assertTrue(adapter.contains("showRegenerateUnavailablePopup(anchor, lockKind)"))
@@ -114,7 +118,21 @@ class ManualCompactionWiringContractTest {
 
     @Test
     fun compactIsOfferedOnlyWhileTheChatDoesNotUseTheSummarizer() {
-        assertTrue(activity.contains(".isConfigured(this) && preferences?.getChatUseSummarizer() != true"))
+        // The gear's Compact is gone (owner ruling, Nov 2 2026); Compact to
+        // Here keeps the same rule.
+        val available = activity.substring(
+            activity.indexOf("override fun isCompactToHereAvailable()"),
+            activity.indexOf("override fun onCompactToHere(")
+        )
+        assertTrue(available.contains(".isConfigured(this) &&"))
+        assertTrue(available.contains("preferences?.getChatUseSummarizer() != true"))
         assertTrue(activity.contains("R.string.compact_unavailable_with_summarizer"))
+    }
+
+    @Test
+    fun recreatingTheSummaryScreenNeverPutsAnotherTabsTextIntoTheVersionInUse() {
+        val screen = source("src/main/java/org/teslasoft/assistant/ui/activities/ConversationSummaryActivity.kt")
+        assertTrue(screen.contains("field?.isSaveEnabled = false"))
+        assertTrue(screen.contains("encodeDrafts(panel.drafts()) else activeText()"))
     }
 }
