@@ -339,7 +339,10 @@ class SummarizerController(
         onFinished: (Boolean) -> Unit,
         /** Rewrite the compacted text from the first message instead of
          *  adding to it (Recompact after compacted messages were deleted). */
-        fromScratch: Boolean = false
+        fromScratch: Boolean = false,
+        /** Redo This Summary: run only the newest compaction step again,
+         *  from the text it started from, replacing that newest version. */
+        redoNewest: Boolean = false
     ) {
         if (manualCompactionRunning) return
         cancel()
@@ -362,7 +365,8 @@ class SummarizerController(
                     snapshot,
                     chatName,
                     stillCurrent,
-                    fromScratch
+                    fromScratch,
+                    redoNewest
                 )
             } catch (_: CancellationException) {
                 // A cancelled compaction keeps nothing.
@@ -596,7 +600,8 @@ class SummarizerController(
         snapshot: Snapshot,
         chatName: String,
         stillCurrent: () -> Boolean,
-        fromScratch: Boolean = false
+        fromScratch: Boolean = false,
+        redoNewest: Boolean = false
     ): Boolean {
         val chatId = chatIdProvider()
         if (chatId.isBlank() || snapshot.entries.isEmpty()) return false
@@ -625,7 +630,20 @@ class SummarizerController(
         val startingSummary = prefs.getSummarizerSummary()
         val startingFolded = prefs.getSummarizerFoldedCount()
         val startingVersion = prefs.getSummarizerProjectionVersion()
-        val operationStartFolded = if (fromScratch) 0 else startingFolded.coerceAtMost(target)
+        val priorVersions = CompactionVersions.current(
+            prefs.getCompactionVersions(), startingSummary, prefs.getManualCompactionBoundary()
+        )
+        // Redo applies only to the newest version while it is the one in use.
+        val redone = if (redoNewest) {
+            priorVersions.versions.lastOrNull()?.takeIf {
+                priorVersions.activeIndex == priorVersions.versions.lastIndex && it.count == target
+            } ?: return false
+        } else null
+        val operationStartFolded = when {
+            fromScratch -> 0
+            redone != null -> redone.baseCount.coerceAtMost(target)
+            else -> startingFolded.coerceAtMost(target)
+        }
 
         setOperationState(
             OperationState.Running(
@@ -639,7 +657,11 @@ class SummarizerController(
         // Compaction only adds (owner ruling, Nov 2 2026): the text it starts
         // from is kept exactly, and each reply is appended after it. Nothing
         // is saved until the whole run succeeds; a failure keeps nothing.
-        val baseSummary = if (fromScratch) "" else startingSummary
+        val baseSummary = when {
+            fromScratch -> ""
+            redone != null -> redone.baseText
+            else -> startingSummary
+        }
         var summary = baseSummary
         var folded = operationStartFolded
         var maxBatch = (target - folded).coerceAtLeast(1)
@@ -705,14 +727,11 @@ class SummarizerController(
             return false
         }
 
-        val priorVersions = CompactionVersions.current(
-            prefs.getCompactionVersions(), startingSummary, prefs.getManualCompactionBoundary()
-        )
         val added = CompactionVersions.Version(target, summary, operationStartFolded, baseSummary)
-        val versions = if (fromScratch) {
-            CompactionVersions.afterRecompactFromScratch(added)
-        } else {
-            CompactionVersions.afterCompaction(priorVersions, added)
+        val versions = when {
+            fromScratch -> CompactionVersions.afterRecompactFromScratch(added)
+            redone != null -> CompactionVersions.afterRedoNewest(priorVersions, added)
+            else -> CompactionVersions.afterCompaction(priorVersions, added)
         }
         if (!prefs.commitManualCompaction(
                 summary, target, false, target,

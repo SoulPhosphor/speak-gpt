@@ -621,6 +621,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** The messages the last Compact froze, so Retry compacts them again. */
     private var lastCompactionRequest: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null
     private var lastCompactionFromScratch = false
+    private var lastCompactionRedoNewest = false
     private var reduceJob: Job? = null
     private var reduceDialog: AlertDialog? = null
     private val artifactJobs: MutableMap<String, Job> = HashMap()
@@ -5827,7 +5828,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .create()
         actions.findViewById<View>(R.id.btn_compaction_error_retry).setOnClickListener {
             dialog.dismiss()
-            lastCompactionRequest?.let { startManualCompactionConfirmed(it, lastCompactionFromScratch) }
+            lastCompactionRequest?.let {
+                startManualCompactionConfirmed(it, lastCompactionFromScratch, lastCompactionRedoNewest)
+            }
         }
         actions.findViewById<View>(R.id.btn_compaction_error_copy).setOnClickListener {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
@@ -6002,9 +6005,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 recompactFromScratch()
                 return@registerForActivityResult
             }
+            if (result.data?.getBooleanExtra(ConversationSummaryActivity.RESULT_REDO_NEWEST, false) == true) {
+                redoNewestCompaction()
+                return@registerForActivityResult
+            }
             val messageId = result.data?.getStringExtra(ConversationSummaryActivity.RESULT_MESSAGE_ID)
             if (!messageId.isNullOrBlank()) jumpToMessage(messageId)
         }
+
+    /** Redo This Summary: the newest compaction step runs again over the
+     *  same messages, from the text it started from. Its result replaces
+     *  only that newest version, and only on success. */
+    private fun redoNewestCompaction() {
+        val prefs = preferences ?: return
+        val snapshot = summarizerSnapshot() ?: return
+        val newest = org.teslasoft.assistant.util.summarizer.CompactionVersions.current(
+            prefs.getCompactionVersions(), prefs.getSummarizerSummary(), prefs.getManualCompactionBoundary()
+        ).versions.lastOrNull() ?: return
+        if (newest.count <= 0 || newest.count > snapshot.entries.size) return
+        startManualCompaction(snapshot.copy(entries = snapshot.entries.take(newest.count)), redoNewest = true)
+    }
 
     /** Recompact Messages from Scratch: one fresh compaction of everything
      *  from the first message through the last compacted message, from the
@@ -6160,7 +6180,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun startManualCompaction(
         requestedSnapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null,
         /** Rewrite the compacted text from the first message (Recompact). */
-        fromScratch: Boolean = false
+        fromScratch: Boolean = false,
+        /** Redo This Summary: run the newest compaction step again. */
+        redoNewest: Boolean = false
     ) {
         // A chat that uses the summarizer is not compacted; /compact says so.
         if (preferences?.getChatUseSummarizer() == true) {
@@ -6181,11 +6203,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // that text once, then only the raw messages that compaction will
         // actually send after its existing bookmark; otherwise a partially
         // condensed long chat can produce a wildly inflated cost warning.
-        val alreadyFolded = if (fromScratch) 0 else (preferences?.getSummarizerFoldedCount() ?: 0)
-            .coerceIn(0, snapshot.entries.size)
+        val redone = if (redoNewest) {
+            preferences?.let {
+                org.teslasoft.assistant.util.summarizer.CompactionVersions.current(
+                    it.getCompactionVersions(), it.getSummarizerSummary(), it.getManualCompactionBoundary()
+                ).versions.lastOrNull()
+            } ?: return
+        } else null
+        val alreadyFolded = when {
+            fromScratch -> 0
+            redone != null -> redone.baseCount
+            else -> preferences?.getSummarizerFoldedCount() ?: 0
+        }.coerceIn(0, snapshot.entries.size)
         val estimatedTokens = org.teslasoft.assistant.util.summarizer
             .LargeSummarizerOperationPolicy.estimateInputTokens(
-                if (fromScratch) "" else preferences?.getSummarizerSummary().orEmpty(),
+                when {
+                    fromScratch -> ""
+                    redone != null -> redone.baseText
+                    else -> preferences?.getSummarizerSummary().orEmpty()
+                },
                 snapshot.entries.drop(alreadyFolded)
             )
         if (org.teslasoft.assistant.util.summarizer.LargeSummarizerOperationPolicy
@@ -6201,23 +6237,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
                 .setNegativeButton(R.string.btn_cancel, null)
                 .setPositiveButton(R.string.compact_anyway) { _, _ ->
-                    startManualCompactionConfirmed(snapshot, fromScratch)
+                    startManualCompactionConfirmed(snapshot, fromScratch, redoNewest)
                 }
                 .show()
             return
         }
-        startManualCompactionConfirmed(snapshot, fromScratch)
+        startManualCompactionConfirmed(snapshot, fromScratch, redoNewest)
     }
 
     private fun startManualCompactionConfirmed(
         snapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot,
-        fromScratch: Boolean = false
+        fromScratch: Boolean = false,
+        redoNewest: Boolean = false
     ) {
         val controller = summarizerController ?: return
         val frozenEntries = snapshot.entries.toList()
         val frozen = snapshot.copy(entries = frozenEntries)
         lastCompactionRequest = frozen
         lastCompactionFromScratch = fromScratch
+        lastCompactionRedoNewest = redoNewest
         val frozenChatId = chatId
         val frozenRows = org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard
             .rows(messages)
@@ -6236,7 +6274,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
             },
             onFinished = { /* registry listener refreshes any attached screen */ },
-            fromScratch = fromScratch
+            fromScratch = fromScratch,
+            redoNewest = redoNewest
         )
     }
 

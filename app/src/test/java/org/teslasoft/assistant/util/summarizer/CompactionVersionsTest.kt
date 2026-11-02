@@ -72,6 +72,17 @@ class CompactionVersionsTest {
     }
 
     @Test
+    fun redoReplacesOnlyTheNewestTabAndOnlyWhileItIsInUse() {
+        val state = CompactionVersions.State(listOf(v(5, "a"), v(15, "a\n\nb", 5, "a")), 1)
+        assertTrue(CompactionVersions.canRedo(state, 1))
+        assertFalse(CompactionVersions.canRedo(state, 0))
+        assertFalse(CompactionVersions.canRedo(CompactionVersions.use(state, 0), 1))
+        val redone = CompactionVersions.afterRedoNewest(state, v(15, "a\n\nbetter b", 5, "a"))
+        assertEquals(listOf("a", "a\n\nbetter b"), redone.versions.map { it.text })
+        assertEquals(1, redone.activeIndex)
+    }
+
+    @Test
     fun deletingMessagesShiftsEveryTabLikeTheMarker() {
         val state = CompactionVersions.State(listOf(v(5, "a"), v(15, "b", 5, "a")), 1)
         val after = CompactionVersions.afterRangeRemoval(state, 2, 4)

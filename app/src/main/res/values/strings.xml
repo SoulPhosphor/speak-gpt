@@ -3760,6 +3760,7 @@
     <string name="compaction_recompact_title">Recompact this Conversation?</string>
     <string name="compaction_version_unused">Unused %1$d</string>
     <string name="compaction_version_use">Use This Summary</string>
+    <string name="compaction_version_redo">Redo This Summary</string>
     <string name="compaction_recompact_from_scratch_action">Recompact Messages from Scratch</string>
     <string name="compaction_recompact_from_scratch_title">Recompact From Scratch</string>
     <string name="compaction_recompact_from_scratch_body">This will be run the summarizer AI from the last compacted message to the beginning of the conversation. All previous compacted summarized text will be deleted and replaced.</string>

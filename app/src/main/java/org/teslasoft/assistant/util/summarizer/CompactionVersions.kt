@@ -108,6 +108,16 @@ object CompactionVersions {
         return State(all, all.lastIndex)
     }
 
+    /** Redo This Summary: the newest version is replaced by its redo. */
+    fun afterRedoNewest(state: State, redone: Version): State {
+        val all = state.versions.dropLast(1) + redone
+        return State(all, all.lastIndex)
+    }
+
+    /** Redo This Summary is offered on the newest version while it is in use. */
+    fun canRedo(state: State, index: Int): Boolean =
+        index == state.versions.lastIndex && index == state.activeIndex
+
     /** Recompact Messages from Scratch: every version is replaced by one. */
     fun afterRecompactFromScratch(added: Version): State = State(listOf(added), 0)
 

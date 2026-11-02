@@ -369,7 +369,9 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         f.isFocusableInTouchMode = !locked
         if (locked) f.clearFocus()
         btnVersionMenu?.visibility =
-            if (!locked && !showingActive()) View.VISIBLE else View.GONE
+            if (!locked && (!showingActive() || CompactionVersions.canRedo(versionState, shownIndex))) {
+                View.VISIBLE
+            } else View.GONE
     }
 
     private fun renderVersionTabs() {
@@ -425,17 +427,35 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         refreshRevert()
     }
 
-    /** Three-dot menu of a tab that is not in use: Use This Summary. */
+    /** Three-dot menu: Use This Summary on a tab that is not in use; Redo
+     *  This Summary on the newest tab while it is in use. */
     private fun showVersionMenu(anchor: View) {
-        if (locked || showingActive()) return
+        if (locked) return
         val index = shownIndex
+        val canRedo = CompactionVersions.canRedo(versionState, index)
+        if (showingActive() && !canRedo) return
         val popup = PopupMenu(this, anchor)
-        popup.menu.add(0, MENU_USE_VERSION, 0, R.string.compaction_version_use)
+        if (showingActive()) {
+            popup.menu.add(0, MENU_REDO_VERSION, 0, R.string.compaction_version_redo)
+        } else {
+            popup.menu.add(0, MENU_USE_VERSION, 0, R.string.compaction_version_use)
+        }
         popup.setOnMenuItemClickListener { item ->
-            if (item.itemId == MENU_USE_VERSION) {
-                if (isDirty()) DiscardChangesDialog.show(this) { useVersion(index) } else useVersion(index)
-                true
-            } else false
+            when (item.itemId) {
+                MENU_USE_VERSION -> {
+                    if (isDirty()) DiscardChangesDialog.show(this) { useVersion(index) } else useVersion(index)
+                    true
+                }
+                MENU_REDO_VERSION -> {
+                    // No confirmation, even over unsaved edits (owner ruling,
+                    // Nov 2 2026). The chat runs it with the compacting
+                    // progress pop-up, so this screen closes.
+                    setResult(RESULT_OK, Intent().putExtra(RESULT_REDO_NEWEST, true))
+                    finish()
+                    true
+                }
+                else -> false
+            }
         }
         popup.show()
     }
@@ -720,7 +740,11 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         /** Result extra: the user confirmed Recompact Messages from Scratch. */
         const val RESULT_RECOMPACT_FROM_SCRATCH = "recompactFromScratch"
 
+        /** Result extra: the user chose Redo This Summary on the newest tab. */
+        const val RESULT_REDO_NEWEST = "redoNewestCompaction"
+
         private const val MENU_USE_VERSION = 1
+        private const val MENU_REDO_VERSION = 2
         private const val STATE_DRAFT = "state_condensed_draft"
 
         /** [sectionId], when given, is scrolled to, flagged, and highlighted. */
