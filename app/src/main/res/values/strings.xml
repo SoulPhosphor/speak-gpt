@@ -3872,7 +3872,7 @@
     <!-- Chat menu action and its confirmation (owner wording, Nov 2 2026). -->
     <string name="chat_menu_show_all">Show All</string>
     <string name="unhide_all_messages_title">Unhide All Messages</string>
-    <string name="unhide_all_messages_body">All %1$d messages that are currently hidden from the AI will be Shown</string>
+    <string name="unhide_all_messages_body">All %1$d messages that are currently hidden from the AI will be shown</string>
     <string name="chat_behavior_section_identity">Identity</string>
     <string name="chat_behavior_default_username">Default Displayed Username</string>
     <string name="chat_behavior_apply_previous_chats">Apply to Previous Chats with No Name</string>

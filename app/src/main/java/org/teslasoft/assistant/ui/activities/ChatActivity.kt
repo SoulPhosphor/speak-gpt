@@ -12789,6 +12789,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (last["isBot"] != true) return
             val reply = last["message"].toString()
             if (reply.isBlank() || request.isBlank()) return
+            // Each captured turn names the chat message it came from, so
+            // hiding that message later can keep it out of memory analysis.
+            // IDs were assigned by the save that ends every turn.
+            val userMessage = messages.subList(0, messages.size - 1).lastOrNull { it["isBot"] != true }
+            val userMessageId = userMessage?.let {
+                org.teslasoft.assistant.preferences.MessageIdentity.idOf(it)
+            }.orEmpty()
+            val userHidden = userMessage?.let(MessageVisibility::isHidden) == true
+            val assistantMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(last)
+            val assistantHidden = MessageVisibility.isHidden(last)
 
             // The reply is captured either way (nothing successfully received is
             // silently dropped), but a reply that did not finish streaming is
@@ -12833,7 +12843,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     campaignId = turnCampaignId,
                     roleplayCharacterId = turnRpCharacterId,
                     userPersonaId = turnUserPersonaId,
-                    projectId = turnProjectId
+                    projectId = turnProjectId,
+                    userMessageId = userMessageId,
+                    assistantMessageId = assistantMessageId,
+                    userHidden = userHidden,
+                    assistantHidden = assistantHidden
                 )
             }.start()
         } catch (e: Exception) {
@@ -14933,9 +14947,38 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
             return
         }
+        syncMemoryVisibility(listOf(message))
         // What the AI reads changed: the same path as an edit, so a summary
         // in progress is cancelled and the request projection is rebuilt.
         onMessageEdited()
+    }
+
+    /**
+     * Carries each message's hidden mark onto its captured memory turns, so
+     * the Memory Assistant skips hidden messages that it has not analyzed
+     * yet and reads them again once they are visible.
+     */
+    private fun syncMemoryVisibility(changed: List<HashMap<String, Any>>) {
+        val turnChatId = chatId
+        val appContext = applicationContext
+        val marks = changed.map { message ->
+            MemoryStore.TranscriptMessageMark(
+                messageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
+                role = if (message["isBot"] == true) "assistant" else "user",
+                text = message["message"]?.toString().orEmpty(),
+                hidden = MessageVisibility.isHidden(message)
+            )
+        }
+        if (turnChatId.isBlank() || marks.isEmpty()) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                if (!MemoryStore.isProvisioned(appContext)) return@launch
+                val store = MemoryStore.getInstance(appContext)
+                marks.forEach { store.setTranscriptMessageHidden(turnChatId, it) }
+            } catch (_: Exception) {
+                // Memory is best-effort and must never disturb the chat.
+            }
+        }
     }
 
     /** Show All: every hidden message whose visibility can still change. */
@@ -14952,6 +14995,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
                 return@show
             }
+            syncMemoryVisibility(targets)
             onMessageEdited()
         }
     }
