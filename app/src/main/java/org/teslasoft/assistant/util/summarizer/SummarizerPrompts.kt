@@ -64,7 +64,7 @@ Keep only information that may be needed later, including:
 - important facts stated by the user;
 - the present status of active work.
 
-Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an assistant suggestion into a decision. If the new messages correct, replace, complete, or cancel an earlier item, note the change.
+Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an AI suggestion into a decision. If the new messages correct, replace, complete, or cancel an earlier item, note the change.
 
 You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
 
@@ -110,7 +110,7 @@ Keep only information that may be needed later, including:
 - important facts stated by the user;
 - the present status of active work.
 
-Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an assistant suggestion into a decision. If newer information in the section corrects, replaces, completes, or cancels an older item, keep only the newer version.
+Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an AI suggestion into a decision. If newer information in the section corrects, replaces, completes, or cancels an older item, keep only the newer version.
 
 You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
 

@@ -65,4 +65,37 @@ object ScreenChrome {
         }
         ViewCompat.requestApplyInsets(root)
     }
+
+    /**
+     * [fitSystemBars] for a page the user types into. While the keyboard is
+     * open the page ends at the keyboard's top edge, the same max(navigation
+     * bar, keyboard) measure the chat composer uses, so everything in the
+     * page can still be scrolled into view above the keyboard. The page keeps
+     * its scroll position when the keyboard opens or closes; only a focused
+     * cursor that would end up behind the keyboard is brought into view.
+     */
+    fun fitSystemBarsAndKeyboard(root: View?, header: View?, content: View?) {
+        if (Build.VERSION.SDK_INT < 35 || root == null) return
+        val headerTop = header?.paddingTop ?: 0
+        val contentBottom = content?.paddingBottom ?: 0
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val keyboardOpen = keyboard > bars.bottom
+            // An open keyboard shortens the page itself, so the scrolling
+            // area ends above it; closed, the content runs behind the
+            // navigation bar as on every other page.
+            view.updatePadding(
+                left = bars.left,
+                right = bars.right,
+                bottom = if (keyboardOpen) keyboard else 0
+            )
+            header?.updatePadding(top = headerTop + bars.top)
+            content?.updatePadding(bottom = contentBottom + if (keyboardOpen) 0 else bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+    }
 }

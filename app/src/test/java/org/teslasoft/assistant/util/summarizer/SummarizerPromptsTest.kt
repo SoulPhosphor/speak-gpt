@@ -132,6 +132,16 @@ class SummarizerPromptsTest {
     }
 
     @Test
+    fun shippedPromptsSayAiRatherThanAssistant() {
+        val sentence = "You may refer to the user as user but write the AI portion in first person " +
+            "instead of saying the assistant did things."
+        for (prompt in listOf(SummarizerPrompts.STORYTELLER, SummarizerPrompts.REPORTER,
+            SummarizerPrompts.SECTION_STORYTELLER, SummarizerPrompts.SECTION_REPORTER)) {
+            assertFalse(prompt.replace(sentence, "").contains("assistant", ignoreCase = true))
+        }
+    }
+
+    @Test
     fun everyShippedConversationPromptWritesTheAiInFirstPerson() {
         val sentence = "You may refer to the user as user but write the AI portion in first person " +
             "instead of saying the assistant did things."

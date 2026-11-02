@@ -557,6 +557,12 @@ the ids `root`, `action_bar` and `scroll`. Do not fit the page root inside the
 system bars instead; that leaves a gap above the header. Current users:
 BackUp Options and Restore Options.
 
+A page the user types into calls `ScreenChrome.fitSystemBarsAndKeyboard`
+instead: the same, plus the page ends at the top of an open keyboard (the
+chat composer's max(navigation bar, keyboard) measure), so every part of a
+long field can be scrolled into view above it. Current user: Summarizer
+Prompts.
+
 ### Header with one trailing action icon
 
 Use:

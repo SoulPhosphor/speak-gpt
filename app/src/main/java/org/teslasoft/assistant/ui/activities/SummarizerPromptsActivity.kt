@@ -18,11 +18,8 @@ package org.teslasoft.assistant.ui.activities
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
-import android.view.WindowInsets
 import android.widget.ImageButton
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -82,6 +79,7 @@ class SummarizerPromptsActivity : SettingsPageActivity() {
         textKindTitle = findViewById(R.id.text_prompt_kind_title)
         textKindHint = findViewById(R.id.text_prompt_kind_hint)
         ScreenChrome.apply(this, actionBar, btnBack, btnSave)
+        ScreenChrome.fitSystemBarsAndKeyboard(findViewById(R.id.root), actionBar, findViewById(R.id.scroll))
 
         // Built-in prompts of whichever collection is open keep their names,
         // cannot be deleted, and can always return to their shipped text.
@@ -207,32 +205,6 @@ class SummarizerPromptsActivity : SettingsPageActivity() {
         } else {
             finish()
         }
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        adjustPaddings()
-    }
-
-    private fun adjustPaddings() {
-        if (Build.VERSION.SDK_INT < 35) return
-        try {
-            actionBar?.setPadding(
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
-                0,
-                0
-            )
-            val scroll = findViewById<ScrollView>(R.id.scroll)
-            val density = resources.displayMetrics.density
-            scroll?.setPadding(
-                0,
-                0,
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom +
-                    (24 * density).toInt()
-            )
-        } catch (_: Exception) { /* unused */ }
     }
 
     companion object {
