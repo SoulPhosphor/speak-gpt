@@ -22,7 +22,7 @@ class ChatHeaderStyleContractTest {
         assertTrue(header.contains("style=\"@style/Widget.App.Chat.HeaderAction.Leading\""))
         listOf(
             "btn_chat_menu", "btn_conversation_summary", "btn_settings", "btn_new_chat",
-            "btn_quick_settings", "btn_active_profile", "btn_summarizer_errors"
+            "btn_active_profile", "btn_summarizer_errors"
         ).forEach { id ->
             val button = header.substringAfter("android:id=\"@+id/$id\"").substringBefore("/>")
             assertTrue("$id is not on the shared header style",

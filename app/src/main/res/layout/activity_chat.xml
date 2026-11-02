@@ -233,10 +233,10 @@
                             <ImageButton
                                 style="@style/Widget.App.Chat.ComposerAction"
                                 android:id="@+id/btn_chat_tools"
-                                android:contentDescription="@string/chat_options"
-                                android:src="@drawable/ic_settings_outline"
-                                android:visibility="gone"
-                                app:srcCompat="@drawable/ic_settings_outline" />
+                                android:contentDescription="@string/btn_quick_settings"
+                                android:src="@drawable/ic_history_edu"
+                                android:tooltipText="@string/btn_quick_settings"
+                                app:srcCompat="@drawable/ic_history_edu" />
 
                             <ImageButton
                                 android:id="@+id/btn_persistent_includes"
@@ -416,17 +416,7 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_settings" />
 
-            <ImageButton
-                android:id="@+id/btn_quick_settings"
-                style="@style/Widget.App.Chat.HeaderAction"
-                android:contentDescription="@string/btn_quick_settings"
-                android:tooltipText="@string/btn_quick_settings"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_new_chat"
-                app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/ic_history_edu" />
-
-            <!-- New Chat: right of Quick Settings, shown once this chat has an
+            <!-- New Chat: shown once this chat has an
                  assistant reply. Opens a fresh chat, as the drawer's New Chat does. -->
             <ImageButton
                 android:id="@+id/btn_new_chat"
@@ -450,7 +440,7 @@
                 android:tooltipText="@string/chat_active_profile_desc"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
+                app:layout_constraintEnd_toStartOf="@+id/btn_new_chat"
                 app:layout_constraintTop_toTopOf="parent"
                 android:src="@drawable/ic_theater_comedy"
                 app:srcCompat="@drawable/ic_theater_comedy"
@@ -494,7 +484,7 @@
                 android:layout_height="wrap_content"
                 app:barrierAllowsGoneWidgets="false"
                 app:barrierDirection="start"
-                app:constraint_referenced_ids="btn_summarizer_errors,btn_active_profile,btn_quick_settings,btn_new_chat,btn_settings,btn_conversation_summary,btn_chat_menu" />
+                app:constraint_referenced_ids="btn_summarizer_errors,btn_active_profile,btn_new_chat,btn_settings,btn_conversation_summary,btn_chat_menu" />
 
             <ImageButton
                 android:id="@+id/btn_back"
@@ -738,6 +728,22 @@
                                 android:text="@string/btn_attach_document" />
                         </LinearLayout>
 
+                        <!-- Create Image (owner ruling, Nov 2 2026): last in
+                             this menu, shown when an image generator is set up. -->
+                        <LinearLayout
+                            android:id="@+id/action_create_image"
+                            android:visibility="gone"
+                            style="@style/Widget.App.Chat.ActionMenu.Row">
+
+                            <ImageView
+                                style="@style/Widget.App.Chat.ActionMenu.Icon"
+                                android:src="@drawable/ic_image" />
+
+                            <TextView
+                                style="@style/Widget.App.Chat.ActionMenu.Label"
+                                android:text="@string/composer_create_image_action" />
+                        </LinearLayout>
+
                         <!-- Pre-existing hidden legacy action. -->
                         <ImageButton
                             android:id="@+id/action_sources"
@@ -749,40 +755,6 @@
                             android:tooltipText="Data Sources"
                             android:visibility="gone"
                             app:srcCompat="@drawable/ic_book" />
-                    </LinearLayout>
-                </eightbitlab.com.blurview.BlurView>
-            </com.google.android.material.card.MaterialCardView>
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/tool_action_selector"
-            style="@style/Widget.App.Chat.ActionMenu.Popup"
-            android:visibility="gone"
-            app:layout_constraintBottom_toTopOf="@+id/include_strip"
-            app:layout_constraintStart_toStartOf="parent">
-
-            <com.google.android.material.card.MaterialCardView
-                style="@style/Widget.App.Chat.ActionMenu.Card">
-
-                <eightbitlab.com.blurview.BlurView
-                    android:id="@+id/tool_bg"
-                    style="@style/Widget.App.Chat.ActionMenu.Surface">
-
-                    <LinearLayout
-                        style="@style/Widget.App.Chat.ActionMenu.Content">
-
-                        <LinearLayout
-                            android:id="@+id/action_create_image"
-                            style="@style/Widget.App.Chat.ActionMenu.Row">
-
-                            <ImageView
-                                style="@style/Widget.App.Chat.ActionMenu.Icon"
-                                android:src="@drawable/ic_image" />
-
-                            <TextView
-                                style="@style/Widget.App.Chat.ActionMenu.Label"
-                                android:text="@string/composer_create_image_action" />
-                        </LinearLayout>
                     </LinearLayout>
                 </eightbitlab.com.blurview.BlurView>
             </com.google.android.material.card.MaterialCardView>
