@@ -3737,7 +3737,6 @@
     <string name="compaction_err_save">The app couldn\'t save the compacted state. Technical details were recorded in the Error Log.</string>
     <string name="compaction_err_unexpected_title">Internal Compaction Error</string>
     <string name="compaction_err_unexpected">An internal compaction error occurred. Technical details were recorded in the Error Log.</string>
-    <string name="compaction_err_unchanged">Your conversation was not changed.</string>
     <string name="compaction_err_provider">Provider error: %1$s</string>
     <string name="compaction_recompact_after_delete_title">Recompact Conversation?</string>
     <string name="compaction_edit_summary">Edit Summary</string>

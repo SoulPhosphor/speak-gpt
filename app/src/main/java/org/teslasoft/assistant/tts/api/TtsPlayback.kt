@@ -132,6 +132,7 @@ class TtsPlayback(
                 val failure = (error as? TtsException)?.failure?.copy(operation = operation)
                     ?: TtsFailure(operation, target, endpointName,
                         if (preparing) TtsFailureKind.PLAYBACK else TtsFailureKind.UNKNOWN)
+                TtsAndroidServices.recordProviderFailure(app, failure)
                 token.deliver { gate.cancel(); releaseAudio(); if (stillCurrent()) onFailure(failure) }
             } finally { staged?.delete() }
         }

@@ -453,14 +453,14 @@ class SummarizerController(
             throw e
         } catch (e: Exception) {
             val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
-            recordImagePromptFailure(
+            recordOneShotFailure(
                 prefs, SummarizerDiagnostics.owner(e, classified, evidence), e, evidence,
                 endpoint, model, requestFavorite?.selectedProvider, privateValues
             )
             return null
         }
         if (text.isBlank()) {
-            recordImagePromptFailure(
+            recordOneShotFailure(
                 prefs, SummarizerDiagnostics.Owner.EXTERNAL, null, evidence,
                 endpoint, model, requestFavorite?.selectedProvider, privateValues
             )
@@ -475,7 +475,7 @@ class SummarizerController(
      * Provider Failure Log as "Summarize Image Prompt", anything else in the
      * Error Log. Cancellation and missing setup are not recorded.
      */
-    private fun recordImagePromptFailure(
+    private fun recordOneShotFailure(
         prefs: Preferences,
         owner: SummarizerDiagnostics.Owner,
         error: Throwable?,
@@ -483,9 +483,9 @@ class SummarizerController(
         endpoint: ApiEndpointObject,
         model: String,
         requestedProvider: String?,
-        privateValues: List<String>
+        privateValues: List<String>,
+        function: String = appContext.getString(R.string.provider_function_summarize_image_prompt)
     ) {
-        val function = appContext.getString(R.string.provider_function_summarize_image_prompt)
         val allPrivate = privateValues + evidence.privateResponseValues()
         val providerEvidence = evidence.snapshot()
         SummarizerDiagnostics.record(
@@ -498,10 +498,15 @@ class SummarizerController(
                     ))
             },
             external = {
-                val message = SummarizerDetailSanitizer.sanitize(
-                    providerEvidence.errorMessages.joinToString("\n").ifBlank { null }
-                        ?: error?.message, allPrivate
-                ) ?: "Provider returned no usable completion"
+                val message = buildString {
+                    append(SummarizerDetailSanitizer.sanitize(
+                        providerEvidence.errorMessages.joinToString("\n").ifBlank { null }
+                            ?: error?.message, allPrivate
+                    ) ?: "Provider returned no usable completion")
+                    SummarizerDetailSanitizer.sanitize(evidence.body, allPrivate)?.let {
+                        append("\nResponse evidence: ").append(it)
+                    }
+                }
                 scope.launch(Dispatchers.IO) {
                     org.teslasoft.assistant.preferences.Logger.logProviderFailure(
                         appContext, SummarizerDetailSanitizer.sanitize(endpoint.label, allPrivate) ?: "Not Reported",
@@ -537,7 +542,9 @@ class SummarizerController(
         val (endpoint, model, requestFavorite, routingResolution) =
             resolveOneShotTarget(prefs) ?: return null
 
-        return try {
+        val evidence = SummarizerDiagnostics.RequestEvidence()
+        val privateValues = messages.mapNotNull { it.content } + endpoint.apiKey
+        val text = try {
             withContext(Dispatchers.IO) {
                 val request = ChatCompletionRequest(
                     model = ModelId(model),
@@ -548,15 +555,29 @@ class SummarizerController(
                     endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
                     UsageFunction.SUMMARIZING
                 ) { attempt ->
-                    buildClient(endpoint, routingResolution.providerJson, usageAttempt = attempt)
-                        .chatCompletion(request)
+                    val client = buildClient(endpoint, routingResolution.providerJson, evidence, attempt)
+                    evidence.dispatched = true
+                    client.chatCompletion(request)
                 }.choices.firstOrNull()?.message?.content?.toString()
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
+            recordOneShotFailure(
+                prefs, SummarizerDiagnostics.owner(e, classified, evidence), e, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues, "Chat Title"
+            )
+            return null
         }
+        if (text.isNullOrBlank()) {
+            recordOneShotFailure(
+                prefs, SummarizerDiagnostics.Owner.EXTERNAL, null, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues, "Chat Title"
+            )
+            return null
+        }
+        return text
     }
 
     private data class OneShotTarget(
@@ -677,7 +698,8 @@ class SummarizerController(
         // Requests of about the Compaction Average Token Amount, whole
         // exchanges only; lowered for the rest of the run when the service
         // says a request is too large.
-        var tokenBudget = prefs.getCompactionAverageTokens()
+        val configuredBatchTokens = prefs.getCompactionAverageTokens()
+        var tokenBudget = configuredBatchTokens
 
         try {
             if (folded < target) {
@@ -690,7 +712,8 @@ class SummarizerController(
                         folded = folded,
                         target = target,
                         summary = summary,
-                        tokenBudget = tokenBudget
+                        tokenBudget = tokenBudget,
+                        configuredBatchTokens = configuredBatchTokens
                     )) {
                         is FoldBatchResult.Advanced -> {
                             summary = SummarizerPrompts.appendCompaction(summary, result.summary)
@@ -882,6 +905,9 @@ class SummarizerController(
             context.filter { it.text.isNotBlank() }.map { role(it) to it.text },
             owned.filter { it.text.isNotBlank() }.map { role(it) to it.text }
         )
+        val requestSize = SummarizerRequestSize.capture(
+            body, owned.filter { it.text.isNotBlank() }.map { it.text }
+        )
         val evidence = SummarizerDiagnostics.RequestEvidence()
         val privateValues = (owned + context).map { it.text } + listOf(body, runtime.endpoint.apiKey)
         val choice = try {
@@ -920,6 +946,7 @@ class SummarizerController(
                 providerEvidence = evidence.snapshot(),
                 requestEndpoint = runtime.endpoint,
                 requestedProvider = runtime.requestedProvider,
+                requestSize = requestSize,
                 privateValues = privateValues + evidence.privateResponseValues()
             )
             return null
@@ -933,6 +960,7 @@ class SummarizerController(
                 providerEvidence = evidence.snapshot(),
                 requestEndpoint = runtime.endpoint,
                 requestedProvider = runtime.requestedProvider,
+                requestSize = requestSize,
                 privateValues = privateValues + evidence.privateResponseValues(),
                 rawResponseBody = evidence.body
             )
@@ -1029,7 +1057,8 @@ class SummarizerController(
         /** About how many tokens of messages one request carries: a request
          *  the service called too large is not tried again at that size in
          *  the same run. */
-        tokenBudget: Int
+        tokenBudget: Int,
+        configuredBatchTokens: Int
     ): FoldBatchResult {
         var budget = tokenBudget.coerceAtLeast(1)
         var end = CompactionBatches.batchEnd(entries, folded, target, budget)
@@ -1050,6 +1079,9 @@ class SummarizerController(
                 runtime.prompt,
                 summary,
                 departing
+            )
+            val requestSize = SummarizerRequestSize.capture(
+                body, departing.map { it.second }, summary, configuredBatchTokens, budget
             )
             val evidence = SummarizerDiagnostics.RequestEvidence()
             val privateValues = departing.map { it.second } + listOf(summary, body, runtime.endpoint.apiKey)
@@ -1101,6 +1133,7 @@ class SummarizerController(
                     providerEvidence = evidence.snapshot(),
                     requestEndpoint = runtime.endpoint,
                     requestedProvider = runtime.requestedProvider,
+                    requestSize = requestSize,
                     privateValues = privateValues + evidence.privateResponseValues()
                 )
                 return FoldBatchResult.Failed
@@ -1118,6 +1151,7 @@ class SummarizerController(
                     providerEvidence = evidence.snapshot(),
                     requestEndpoint = runtime.endpoint,
                     requestedProvider = runtime.requestedProvider,
+                    requestSize = requestSize,
                     privateValues = privateValues + evidence.privateResponseValues(),
                     rawResponseBody = evidence.body
                 )
@@ -1144,7 +1178,8 @@ class SummarizerController(
         requestEndpoint: ApiEndpointObject? = null,
         requestedProvider: String? = null,
         privateValues: List<String> = emptyList(),
-        diagnosticRecorded: Boolean = false
+        diagnosticRecorded: Boolean = false,
+        requestSize: SummarizerRequestSize? = null
     ) {
         if (failureOwner == SummarizerDiagnostics.Owner.CANCELLED) return
         lastFailureCategory = category
@@ -1152,11 +1187,13 @@ class SummarizerController(
             SummarizerDetailSanitizer.sanitize(providerEvidence?.errorMessages?.joinToString("\n")
                 ?.ifBlank { null } ?: rawProviderError, privateValues) else null
         val safeDetail = SummarizerDetailSanitizer.sanitize(lastFailureProviderError ?: detail, privateValues)
-        val decorated = if (httpStatus != null) {
+        val responseDetail = if (httpStatus != null) {
             "HTTP status: $httpStatus" + (safeDetail?.let { "\n$it" } ?: "")
         } else {
             safeDetail
         }
+        val decorated = listOfNotNull(responseDetail, requestSize?.format()).joinToString("\n")
+            .ifBlank { null }
         // Owner ruling (Oct 4 2026, replacing July 29): a failure the AI
         // service caused goes to the Provider Failure Log with what was being
         // done (Summarizing or Compacting); any other failure goes to the
@@ -1177,8 +1214,9 @@ class SummarizerController(
                 requestedProvider = requestedProvider,
                 privateValues = privateValues,
                 rawProviderError = rawProviderError,
-                technicalDetail = decorated,
-                rawResponseBody = rawResponseBody
+                technicalDetail = responseDetail,
+                rawResponseBody = rawResponseBody,
+                requestSize = requestSize
             )
         }
 
@@ -1217,7 +1255,8 @@ class SummarizerController(
         privateValues: List<String>,
         rawProviderError: String?,
         technicalDetail: String?,
-        rawResponseBody: String? = null
+        rawResponseBody: String? = null,
+        requestSize: SummarizerRequestSize? = null
     ) {
         val function = if (state.kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
         SummarizerDiagnostics.record(
@@ -1229,7 +1268,8 @@ class SummarizerController(
                 if (category != SummarizerErrorCategory.SAVE_FAILED || prefs.summarizerStorageFailure == null) {
                 val error = exception ?: IllegalStateException(technicalDetail ?: "Local $function failure: $category")
                 org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
-                    SummarizerDiagnostics.localDetail(function, error, privateValues))
+                    listOfNotNull(SummarizerDiagnostics.localDetail(function, error, privateValues),
+                        requestSize?.format()).joinToString("\n"))
                 }
             },
             external = {
@@ -1240,6 +1280,7 @@ class SummarizerController(
                         ?.ifBlank { null } ?: rawProviderError ?: technicalDetail, privateValues) ?: "Provider returned no usable completion")
                     // Strip completion and request payload fields before keeping wire evidence.
                     SummarizerDetailSanitizer.sanitize(rawResponseBody, privateValues)?.let { append("\nResponse evidence (").append(rawResponseBody?.length ?: 0).append(" characters): ").append(it) }
+                    requestSize?.let { append("\n").append(it.format()) }
                 }
                 scope.launch(Dispatchers.IO) {
                     org.teslasoft.assistant.preferences.Logger.logProviderFailure(

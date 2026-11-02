@@ -437,16 +437,24 @@ object Archivist {
             // error response. Tests replace this transport and exercise the
             // same Stage-E request shape without a provider credential.
             capturedErrorBody = null
-            val response = ai.chatCompletion(
-                ChatCompletionRequest(
-                    model = ModelId(request.model),
-                    messages = listOf(
-                        ChatMessage(role = ChatRole.System, content = request.systemPrompt),
-                        ChatMessage(role = ChatRole.User, content = request.conversationData)
-                    ),
-                    temperature = request.temperature
+            val response = try {
+                ai.chatCompletion(
+                    ChatCompletionRequest(
+                        model = ModelId(request.model),
+                        messages = listOf(
+                            ChatMessage(role = ChatRole.System, content = request.systemPrompt),
+                            ChatMessage(role = ChatRole.User, content = request.conversationData)
+                        ),
+                        temperature = request.temperature
+                    )
                 )
-            )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                recordRequestProviderFailure(context, endpoint, request.model, e,
+                    capturedErrorBody, listOf(request.systemPrompt, request.conversationData))
+                throw e
+            }
             val responseChoice = response.choices.firstOrNull()
             val raw = responseChoice?.message?.content.orEmpty()
             if (ArchivistRetryPolicy.looksClearlyTruncated(
@@ -992,31 +1000,8 @@ object Archivist {
                 .map { ArchivistFailureCategory.of(it.first, it.second) }
                 .groupingBy { it }.eachCount()
 
-        // Record archivist provider failures to the SAME Provider Failure Log as
-        // chat (owner ruling, Aug 1 2026) — when logging is on and the server
-        // actually answered — with Function: Archiving. Background, so a failure
-        // is logged even when no screen is watching.
-        if (outcome == "full_failed" && dominantGen != null && dominantGen.reachedServer() &&
-            prefs.getLogChatFailures()
-        ) {
-            try {
-                val notReported = context.getString(R.string.provider_value_not_reported)
-                val raw = listOfNotNull(
-                    dominantGen.httpStatus?.toString(),
-                    (providerInfo.message ?: runError)?.trim()?.ifBlank { null }
-                ).joinToString(" ").ifBlank { "(no message)" }
-                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
-                    context,
-                    apiProviderName ?: notReported,
-                    providerInfo.providerName?.trim()?.ifBlank { null } ?: notReported,
-                    runModel ?: notReported,
-                    context.getString(R.string.mem_arch_function_archiving),
-                    raw
-                )
-            } catch (e: Exception) {
-                MemoryLog.log(context, "Archivist", "error", "provider failure log write failed: ${e.message}")
-            }
-        }
+        // Each failed provider request is recorded at its transport boundary,
+        // including retries and failures in an otherwise successful run.
 
         // Failure and partial-failure records are ALWAYS written to the
         // Memory Debug Log (owner rule — recovery information, not optional
@@ -1126,6 +1111,29 @@ object Archivist {
      * client exception exposes. Prefer its classified limit kind when present
      * so a final bounded context failure is reported as request-too-large, not
      * an unknown local error. */
+    private fun recordRequestProviderFailure(
+        context: Context,
+        endpoint: ApiEndpointObject,
+        model: String,
+        error: Throwable,
+        responseBody: String?,
+        privateValues: List<String>
+    ) {
+        val classified = classifyGenerationFailure(error, responseBody)
+        if (!classified.reachedServer() || !Preferences.getPreferences(context, "").getLogChatFailures()) return
+        val raw = org.teslasoft.assistant.util.summarizer.SummarizerDetailSanitizer.sanitize(
+            responseBody?.takeIf { it.isNotBlank() } ?: error.message, privateValues + endpoint.apiKey
+        ) ?: "Provider returned no error message"
+        val provider = ProviderErrorInfo.parse(raw)
+        try {
+            org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                context, endpoint.label, provider.providerName ?: "Not Reported", model,
+                context.getString(R.string.mem_arch_function_archiving), raw,
+                outerHttpStatus = classified.httpStatus
+            )
+        } catch (_: Exception) { /* A diagnostic failure must not replace the request failure. */ }
+    }
+
     private fun classifyGenerationFailure(error: Throwable, providerBody: String?): GenErrorResult {
         val direct = GenerationErrorClassifier.classify(error)
         val body = providerBody?.takeIf { it.isNotBlank() }?.let {

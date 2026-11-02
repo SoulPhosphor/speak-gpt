@@ -1,5 +1,6 @@
 package org.teslasoft.assistant.tts.api
 
+import kotlinx.coroutines.launch
 import android.content.Context
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
@@ -9,6 +10,40 @@ import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.providerDetailBlock
 
 object TtsAndroidServices {
+    private val loggedAttempts = LinkedHashSet<String>()
+    private val logScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+    )
+
+    /** Keep a provider's error even when playback has no foreground screen. */
+    fun recordProviderFailure(context: Context, failure: TtsFailure) {
+        val evidence = failure.evidence ?: return
+        if (evidence.errorEvents.isEmpty()) return
+        val app = context.applicationContext
+        if (!org.teslasoft.assistant.preferences.Preferences.getPreferences(app, "").getLogChatFailures()) return
+        synchronized(loggedAttempts) {
+            if (!loggedAttempts.add(evidence.attemptId)) return
+            while (loggedAttempts.size > 256) loggedAttempts.remove(loggedAttempts.first())
+        }
+        val detail = org.teslasoft.assistant.util.summarizer.SummarizerDetailSanitizer.sanitize(
+            evidence.errorMessages.joinToString("\n").ifBlank {
+                evidence.errorEvents.mapNotNull { it.rawPayload }.joinToString("\n")
+            }
+        ) ?: "Provider returned no error message"
+        logScope.launch {
+            org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                app, failure.endpointName, evidence.actualServingProvider ?: "Not Reported",
+                failure.target.modelId, failure.operation.label, detail,
+                requestedRoutedProvider = TtsRouting.requestedProvider(failure.target.routing),
+                outerHttpStatus = evidence.outerHttpStatus,
+                embeddedProviderStatus = evidence.embeddedHttpStatus,
+                providerCode = evidence.providerCode, providerType = evidence.providerType,
+                providerErrorType = evidence.providerErrorType,
+                contentFilterSide = evidence.contentFilterSide.wire, attemptId = evidence.attemptId
+            )
+        }
+    }
+
     fun resolver(context: Context): TtsSourceResolver {
         val app = context.applicationContext
         return TtsSourceResolver(
