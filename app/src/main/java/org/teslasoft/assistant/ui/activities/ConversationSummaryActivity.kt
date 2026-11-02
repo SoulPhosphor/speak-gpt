@@ -182,6 +182,11 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         btnVersionMenu = findViewById(R.id.btn_compaction_version_menu)
         btnRecompactFromScratch = findViewById(R.id.btn_recompact_from_scratch)
         editableKeyListener = field?.keyListener
+        // The field shows whichever version tab is open, so Android must not
+        // restore its text by itself after the screen is recreated: the
+        // version in use's draft is saved and restored explicitly
+        // (STATE_DRAFT), and the screen reopens on that version.
+        field?.isSaveEnabled = false
         findViewById<TextView>(R.id.activity_title)?.setText(mode.titleRes)
         findViewById<TextView>(R.id.text_condensed_intro)?.setText(mode.introRes)
         ScreenChrome.apply(this, actionBar, btnBack, btnToggle, btnSave)

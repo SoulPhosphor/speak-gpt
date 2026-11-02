@@ -128,4 +128,11 @@ class ManualCompactionWiringContractTest {
         assertTrue(available.contains("preferences?.getChatUseSummarizer() != true"))
         assertTrue(activity.contains("R.string.compact_unavailable_with_summarizer"))
     }
+
+    @Test
+    fun recreatingTheSummaryScreenNeverPutsAnotherTabsTextIntoTheVersionInUse() {
+        val screen = source("src/main/java/org/teslasoft/assistant/ui/activities/ConversationSummaryActivity.kt")
+        assertTrue(screen.contains("field?.isSaveEnabled = false"))
+        assertTrue(screen.contains("encodeDrafts(panel.drafts()) else activeText()"))
+    }
 }
