@@ -19,12 +19,9 @@ package org.teslasoft.assistant.ui.activities
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.WindowInsets
 import android.widget.ImageButton
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -192,6 +189,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         findViewById<TextView>(R.id.activity_title)?.setText(mode.titleRes)
         findViewById<TextView>(R.id.text_condensed_intro)?.setText(mode.introRes)
         ScreenChrome.apply(this, actionBar, btnBack, btnSettings, btnToggle, btnSave)
+        ScreenChrome.fitSystemBarsAndKeyboard(findViewById(R.id.root), actionBar, findViewById(R.id.scroll))
         if (mode == Mode.COMPACTION) btnSettings?.visibility = View.VISIBLE
 
         if (mode == Mode.SUMMARY) {
@@ -712,32 +710,6 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
     private fun recompact() {
         preferences?.setUseSummarizedConversationProjection(true)
         refreshToggle()
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        adjustPaddings()
-    }
-
-    private fun adjustPaddings() {
-        if (Build.VERSION.SDK_INT < 35) return
-        try {
-            actionBar?.setPadding(
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
-                0,
-                0
-            )
-            val scroll = findViewById<ScrollView>(R.id.scroll)
-            val density = resources.displayMetrics.density
-            scroll?.setPadding(
-                0,
-                0,
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom +
-                    (24 * density).toInt()
-            )
-        } catch (_: Exception) { /* unused */ }
     }
 
     companion object {

@@ -560,8 +560,8 @@ BackUp Options and Restore Options.
 A page the user types into calls `ScreenChrome.fitSystemBarsAndKeyboard`
 instead: the same, plus the page ends at the top of an open keyboard (the
 chat composer's max(navigation bar, keyboard) measure), so every part of a
-long field can be scrolled into view above it. Current user: Summarizer
-Prompts.
+long field can be scrolled into view above it. Current users: Summarizer
+Prompts and the Summary / Compaction review screen.
 
 ### Header with one trailing action icon
 
