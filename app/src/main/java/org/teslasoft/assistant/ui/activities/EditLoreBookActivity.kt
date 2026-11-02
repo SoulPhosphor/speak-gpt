@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.ui.util.ScreenChrome
+
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -312,18 +314,11 @@ class EditLoreBookActivity : SettingsPageActivity() {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        adjustPaddings()
-    }
-
-    @Suppress("DEPRECATION")
-    private fun adjustPaddings() {
-        if (Build.VERSION.SDK_INT < 35) return
-        try {
-            val insets = window.decorView.rootWindowInsets
-            actionBar?.setPadding(0, insets.getInsets(WindowInsets.Type.statusBars()).top, 0, 0)
-            val navBottom = insets.getInsets(WindowInsets.Type.navigationBars()).bottom
-            findViewById<ScrollView>(R.id.scroll)?.setPadding(0, 0, 0, dpToPx(12) + navBottom)
-        } catch (_: Exception) { /* unused */ }
+        ScreenChrome.fitSystemBarsAndKeyboard(
+            findViewById<android.view.ViewGroup>(android.R.id.content)?.getChildAt(0),
+            actionBar,
+            findViewById<android.view.View>(R.id.scroll)
+        )
     }
 
     private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()

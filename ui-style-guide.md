@@ -561,7 +561,12 @@ A page the user types into calls `ScreenChrome.fitSystemBarsAndKeyboard`
 instead: the same, plus the page ends at the top of an open keyboard (the
 chat composer's max(navigation bar, keyboard) measure), so every part of a
 long field can be scrolled into view above it. Current users: Summarizer
-Prompts and the Summary / Compaction review screen.
+Prompts, the Summary / Compaction review screen, Summarizer Settings, System
+Prompt editor, Activation Prompt, Lore Book, User Persona, Memory editor,
+Model Rule editor, Campaign and World details, Possible Match review, API
+endpoint editor, Advanced Memory Settings, Memory Assistant Advanced
+Settings, Voice Advanced Settings, and the alert debug menu. Edit Companion
+and the chat keep their own handling.
 
 ### Header with one trailing action icon
 
