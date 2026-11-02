@@ -3794,8 +3794,6 @@
     <string name="summarizer_notification_channel">Summarization and Compaction</string>
     <string name="summarizer_notification_text">Summarizing “%1$s”…</string>
     <string name="compaction_notification_text">Compacting “%1$s”…</string>
-    <string name="summarizer_app_status_running">Summarizing “%1$s”…</string>
-    <string name="compaction_app_status_running">Compacting “%1$s”…</string>
     <string name="large_summarization_title">Large Summarization</string>
     <string name="large_summarization_body">This operation is unusually large and is estimated to send about %1$s input tokens to the summarization model. It may require multiple requests and use significantly more API credits than usual.</string>
     <string name="summarize_anyway">Summarize Anyway</string>

@@ -515,11 +515,8 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
             setText(R.string.btn_ok)
             setOnClickListener {
                 dialog.dismiss()
-                val go = {
-                    setResult(RESULT_OK, Intent().putExtra(RESULT_RECOMPACT_FROM_SCRATCH, true))
-                    finish()
-                }
-                if (isDirty()) DiscardChangesDialog.show(this@ConversationSummaryActivity) { go() } else go()
+                setResult(RESULT_OK, Intent().putExtra(RESULT_RECOMPACT_FROM_SCRATCH, true))
+                finish()
             }
         }
         dialog.show()
