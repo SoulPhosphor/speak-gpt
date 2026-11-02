@@ -3743,7 +3743,7 @@
     <string name="compact_unavailable_with_summarizer">Compact isn\'t available while the Summarizer is on for this chat.</string>
 
     <!-- Compaction Summary screen (owner ruling, Oct 3 2026). -->
-    <string name="title_compaction_summary">Compaction Summary</string>
+    <string name="title_compaction_summary">Summary</string>
     <string name="compaction_icon_desc">Compaction Summary</string>
     <string name="compaction_summary_intro">This is the compacted text from your conversation that is sent instead of the full messages to save on token use.</string>
     <string name="compaction_summary_in_progress">Compacting in Progress…</string>

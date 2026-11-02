@@ -117,6 +117,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnToggle: ImageButton? = null
+    private var btnSettings: ImageButton? = null
     private var btnSave: ImageButton? = null
     private var rowStatus: View? = null
     private var spinner: View? = null
@@ -170,6 +171,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnToggle = findViewById(R.id.btn_toggle_condensed)
+        btnSettings = findViewById(R.id.btn_summarizer_settings)
         btnSave = findViewById(R.id.btn_save)
         rowStatus = findViewById(R.id.row_condensed_status)
         spinner = findViewById(R.id.spinner_condensed)
@@ -189,7 +191,8 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         field?.isSaveEnabled = false
         findViewById<TextView>(R.id.activity_title)?.setText(mode.titleRes)
         findViewById<TextView>(R.id.text_condensed_intro)?.setText(mode.introRes)
-        ScreenChrome.apply(this, actionBar, btnBack, btnToggle, btnSave)
+        ScreenChrome.apply(this, actionBar, btnBack, btnSettings, btnToggle, btnSave)
+        if (mode == Mode.COMPACTION) btnSettings?.visibility = View.VISIBLE
 
         if (mode == Mode.SUMMARY) {
             // The Summarizer's sections replace the single text box.
@@ -230,6 +233,9 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         btnSave?.setOnClickListener { save() }
         btnRevert?.setOnClickListener { if (showingActive()) field?.setText(savedText) }
         btnToggle?.setOnClickListener { onToggleCondensed() }
+        btnSettings?.setOnClickListener {
+            startActivity(Intent(this, SummarizerSettingsActivity::class.java))
+        }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 attemptLeave()

@@ -38,7 +38,18 @@
         <TextView
             android:id="@+id/activity_title"
             style="@style/Widget.App.ActionBar.Title.NearBack"
-            app:layout_constraintEnd_toStartOf="@+id/btn_toggle_condensed" />
+            app:layout_constraintEnd_toStartOf="@+id/btn_summarizer_settings" />
+
+        <!-- Compaction mode only: opens Summarizer Settings; Back returns here. -->
+        <ImageButton
+            android:id="@+id/btn_summarizer_settings"
+            style="@style/Widget.App.ActionBar.ChainedButton"
+            android:contentDescription="@string/title_summarizer_settings"
+            android:src="@drawable/ic_settings"
+            android:tooltipText="@string/title_summarizer_settings"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@+id/btn_toggle_condensed"
+            app:srcCompat="@drawable/ic_settings" />
 
         <ImageButton
             android:id="@+id/btn_toggle_condensed"
