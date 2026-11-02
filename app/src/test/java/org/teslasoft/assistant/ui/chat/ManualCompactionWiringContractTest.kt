@@ -25,16 +25,24 @@ class ManualCompactionWiringContractTest {
     }
 
     @Test
-    fun gearAndMenuAreCapabilityDriven() {
+    fun createImageIsLastInThePlusMenuAndQuickSettingsSitsBesidePlus() {
         val layout = source("src/main/res/layout/activity_chat.xml")
         assertTrue(layout.indexOf("@+id/btn_chat_tools") > layout.indexOf("@+id/btn_attach"))
-        // Compact was removed from the gear menu (owner ruling, Nov 2 2026);
-        // Compact to Here in the AI message menu stays.
+        // Compact to Here in the AI message menu stays; no composer Compact.
         assertFalse(layout.contains("@+id/action_compact"))
-        assertTrue(layout.contains("@+id/action_create_image"))
+        // Create Image moved from the gear menu to the end of the plus menu
+        // (owner ruling, Nov 2 2026); the gear menu is gone.
+        val plusMenu = layout.substringAfter("android:id=\"@+id/vision_action_selector\"")
+        assertTrue(plusMenu.indexOf("@+id/action_create_image") > plusMenu.indexOf("@+id/action_document"))
+        assertFalse(layout.contains("tool_action_selector"))
         assertFalse(activity.contains("val compactAvailable ="))
         assertTrue(activity.contains("val imageAvailable = imageGeneratorConfigured()"))
-        assertTrue(activity.contains("btnChatTools?.visibility = if (imageAvailable) View.VISIBLE else View.GONE"))
+        assertTrue(activity.contains("btnToolCreateImage?.visibility = if (imageAvailable) View.VISIBLE else View.GONE"))
+        // The composer button is Quick Settings; the header no longer has it.
+        val composerButton = layout.substringAfter("android:id=\"@+id/btn_chat_tools\"").substringBefore("/>")
+        assertTrue(composerButton.contains("@drawable/ic_history_edu"))
+        assertFalse(layout.contains("@+id/btn_quick_settings"))
+        assertTrue(activity.contains("btnChatTools?.setOnClickListener {\n            visionActions?.visibility = View.GONE\n            openSummoningCircle()"))
     }
 
     @Test

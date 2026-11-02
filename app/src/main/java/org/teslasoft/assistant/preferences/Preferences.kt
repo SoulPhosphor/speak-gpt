@@ -2926,6 +2926,17 @@ class Preferences internal constructor(
         putGlobalString("summarizer_default_window", value.coerceAtLeast(1).toString())
     }
 
+    /** Compaction Average Token Amount (owner ruling, Nov 2 2026; default
+     *  4000): about how many tokens of whole messages one compaction
+     *  request sends. */
+    fun getCompactionAverageTokens(): Int =
+        getGlobalString("compaction_average_tokens", "").toIntOrNull()
+            ?: org.teslasoft.assistant.util.summarizer.CompactionBatches.DEFAULT_TOKENS
+
+    fun setCompactionAverageTokens(value: Int) {
+        putGlobalString("compaction_average_tokens", value.toString())
+    }
+
     /** Summary Length in words (decision 13; default 300). */
     fun getSummarizerLength(): Int =
         getGlobalString("summarizer_length", "300").toIntOrNull()?.coerceAtLeast(10) ?: 300

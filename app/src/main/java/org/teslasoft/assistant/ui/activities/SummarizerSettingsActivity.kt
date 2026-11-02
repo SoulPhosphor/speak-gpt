@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.ui.util.ScreenChrome
+
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Build
@@ -70,6 +72,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
     private var sectionRouting: View? = null
     private var textRoutingValue: TextView? = null
     private var fieldCompleteMessages: TextInputEditText? = null
+    private var fieldCompactionTokens: TextInputEditText? = null
     private var switchNewChats: MaterialSwitch? = null
 
     private var suppressWatchers = false
@@ -134,6 +137,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
         sectionRouting = findViewById(R.id.section_summarizer_routing)
         textRoutingValue = findViewById(R.id.text_summarizer_routing_value)
         fieldCompleteMessages = findViewById(R.id.field_complete_messages)
+        fieldCompactionTokens = findViewById(R.id.field_compaction_tokens)
         switchNewChats = findViewById(R.id.switch_summarizer_new_chats)
     }
 
@@ -165,7 +169,21 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
 
         suppressWatchers = true
         fieldCompleteMessages?.setText(preferences?.getSummarizerDefaultWindow()?.toString() ?: "20")
+        fieldCompactionTokens?.setText(
+            (preferences?.getCompactionAverageTokens()
+                ?: org.teslasoft.assistant.util.summarizer.CompactionBatches.DEFAULT_TOKENS).toString()
+        )
         suppressWatchers = false
+
+        fieldCompactionTokens?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (suppressWatchers) return
+                val parsed = s?.toString()?.trim()?.toIntOrNull() ?: return
+                preferences?.setCompactionAverageTokens(parsed)
+            }
+        })
 
         fieldCompleteMessages?.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -345,27 +363,11 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        adjustPaddings()
+        ScreenChrome.fitSystemBarsAndKeyboard(
+            findViewById<android.view.ViewGroup>(android.R.id.content)?.getChildAt(0),
+            actionBar,
+            findViewById<android.view.View>(R.id.scroll)
+        )
     }
 
-    private fun adjustPaddings() {
-        if (Build.VERSION.SDK_INT < 35) return
-        try {
-            actionBar?.setPadding(
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
-                0,
-                0
-            )
-            val scroll = findViewById<ScrollView>(R.id.scroll)
-            val density = resources.displayMetrics.density
-            scroll?.setPadding(
-                0,
-                0,
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom +
-                    (24 * density).toInt()
-            )
-        } catch (_: Exception) { /* unused */ }
-    }
 }

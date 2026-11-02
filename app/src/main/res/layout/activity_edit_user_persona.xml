@@ -68,6 +68,7 @@
 
     <ScrollView
         android:id="@+id/scroll"
+        android:paddingBottom="@dimen/page_scroll_end_gap_compact"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:clipToPadding="false"

@@ -399,6 +399,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
 
     companion object {
+        /** Time between steps of the compaction pop-up's looping dots. */
+        private const val COMPACTION_DOTS_STEP_MS = 450L
         /** Set by the launcher gate on the blank chat it opens at app start. */
         const val EXTRA_OPENED_AT_LAUNCH = "openedAtLaunch"
 
@@ -510,7 +512,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var progress: CircularProgressIndicator? = null
     private var chat: ChatTranscriptRecyclerView? = null
     private var activityTitle: TextView? = null
-    private var btnQuickSettings: ImageButton? = null
     private var btnNewChat: ImageButton? = null
     private var fileContents: ByteArray? = null
     private var pendingChatExportBytes: ByteArray? = null
@@ -594,7 +595,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var btnExpandContent: ImageButton? = null
     private var btnCollapseContent: ImageButton? = null
     private var visionActions: LinearLayout? = null
-    private var toolActions: LinearLayout? = null
     // Each paperclip-menu action is a labeled row, not an icon-only button.
     private var btnVisionActionCamera: View? = null
     private var btnVisionActionGallery: View? = null
@@ -618,6 +618,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var condenseJob: Job? = null
     private var condenseDialog: AlertDialog? = null
     private var compactionDialog: AlertDialog? = null
+    /** Drives the compaction pop-up's looping dots. */
+    private val compactionDotsHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var compactionDotsStep = 0
+    private val compactionDotsTick = object : Runnable {
+        override fun run() {
+            val dots = compactionDialog?.findViewById<TextView>(R.id.compaction_dots) ?: return
+            compactionDotsStep = (compactionDotsStep + 1) % 4
+            dots.text = ".".repeat(compactionDotsStep)
+            compactionDotsHandler.postDelayed(this, COMPACTION_DOTS_STEP_MS)
+        }
+    }
     /** The messages the last Compact froze, so Retry compacts them again. */
     private var lastCompactionRequest: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null
     private var lastCompactionFromScratch = false
@@ -634,7 +645,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var selectedCount: TextView? = null
     private var expandableWindowRoot: CoordinatorLayout? = null
     private var blurSelectorView: BlurView? = null
-    private var blurToolView: BlurView? = null
 
     // Init chat
     private var bookmarkNavigation: BookmarkNavigationController? = null
@@ -1746,7 +1756,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Force the chat's top action bar and its buttons back to fully visible. */
     private fun restoreTopBarVisibility() {
-        for (v in listOf(actionBar, btnBack, activityTitle, btnQuickSettings, btnSettings)) {
+        for (v in listOf(actionBar, btnBack, activityTitle, btnSettings)) {
             v?.visibility = View.VISIBLE
             v?.alpha = 1f
         }
@@ -2055,12 +2065,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )!!, this
             )
 
-            btnQuickSettings?.background = getAmoledAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
 
             btnSettings?.background = getAmoledAccentDrawable(
                 AppCompatResources.getDrawable(
@@ -2088,7 +2092,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             actionBar?.setBackgroundResource(R.drawable.bg_chat_header)
             activityTitle?.setBackgroundResource(R.drawable.bg_chat_header)
             btnBack?.setBackgroundResource(R.drawable.btn_chat_header_action)
-            btnQuickSettings?.setBackgroundResource(R.drawable.btn_chat_header_action)
             btnSettings?.setBackgroundResource(R.drawable.btn_chat_header_action)
             btnPersistentIncludes?.setBackgroundResource(R.drawable.btn_accent_tonal_v5)
         }
@@ -3019,19 +3022,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (!touchedInsideComposer) surface.collapseIfEmptyOutsideTap()
             }
 
-            if (toolActions?.visibility == View.VISIBLE) {
-                val bounds = Rect()
-                val touchedInsideMenu =
-                    toolActions?.getGlobalVisibleRect(bounds) == true &&
-                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
-                val touchedGear =
-                    btnChatTools?.getGlobalVisibleRect(bounds) == true &&
-                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
-
-                if (!touchedInsideMenu && !touchedGear) {
-                    toolActions?.visibility = View.GONE
-                }
-            }
         }
         return super.dispatchTouchEvent(event)
     }
@@ -3342,7 +3332,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnSend = findViewById(R.id.btn_send)
         progress = findViewById(R.id.progress)
         activityTitle = findViewById(R.id.chat_activity_title)
-        btnQuickSettings = findViewById(R.id.btn_quick_settings)
         btnNewChat = findViewById(R.id.btn_new_chat)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
@@ -3366,7 +3355,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnExpandContent = findViewById(R.id.btn_expand_content)
         btnCollapseContent = findViewById(R.id.btn_collapse_content)
         visionActions = findViewById(R.id.vision_action_selector)
-        toolActions = findViewById(R.id.tool_action_selector)
         btnVisionActionCamera = findViewById(R.id.action_camera)
         btnVisionActionGallery = findViewById(R.id.action_gallery)
         btnVisionActionDocument = findViewById(R.id.action_document)
@@ -3475,7 +3463,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         selectedCount = findViewById(R.id.text_selected_count)
         expandableWindowRoot = findViewById(R.id.expandable_window_root)
         blurSelectorView = findViewById(R.id.attach_bg)
-        blurToolView = findViewById(R.id.tool_bg)
 
         healthBanner = findViewById(R.id.health_banner)
         healthBannerText = findViewById(R.id.health_banner_text)
@@ -3507,14 +3494,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         blurSelectorView?.setupWith(rootView)
             ?.setFrameClearDrawable(windowBackground)
             ?.setBlurRadius(radius)
-        blurToolView?.setupWith(rootView)
-            ?.setFrameClearDrawable(windowBackground)
-            ?.setBlurRadius(radius)
 
         blurSelectorView?.outlineProvider = ViewOutlineProvider.BACKGROUND
         blurSelectorView?.setClipToOutline(true)
-        blurToolView?.outlineProvider = ViewOutlineProvider.BACKGROUND
-        blurToolView?.setClipToOutline(true)
 
         if (isDarkThemeEnabled() && GlobalPreferences.getPreferences(this).getAmoledPitchBlack()) {
             expandableWindowRoot?.backgroundTintList = ColorStateList.valueOf(getColor(R.color.amoled_window_background))
@@ -3527,9 +3509,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         chat?.itemAnimator = null
 
         visionActions?.visibility = View.GONE
-        toolActions?.visibility = View.GONE
 
-        btnQuickSettings?.setImageResource(R.drawable.ic_history_edu)
         btnBack?.setImageResource(R.drawable.ic_back)
         btnChatMenu?.setImageResource(R.drawable.ic_more_vert)
 
@@ -5266,20 +5246,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         btnAttachFile?.setOnClickListener {
-            toolActions?.visibility = View.GONE
+            refreshComposerTools()
             visionActions?.visibility = if (visionActions?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
+        // Quick Settings, beside the plus button (owner ruling, Nov 2 2026).
         btnChatTools?.setOnClickListener {
             visionActions?.visibility = View.GONE
-            refreshComposerTools()
-            if (btnChatTools?.visibility != View.VISIBLE) return@setOnClickListener
-            toolActions?.visibility =
-                if (toolActions?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            openSummoningCircle()
         }
 
         btnToolCreateImage?.setOnClickListener {
-            toolActions?.visibility = View.GONE
+            visionActions?.visibility = View.GONE
             insertExplicitImagineDraft()
         }
 
@@ -5343,10 +5321,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         btnNewChat?.setOnClickListener { openNewChat() }
-
-        btnQuickSettings?.setOnClickListener {
-            openSummoningCircle()
-        }
 
         initSummarizer()
     }
@@ -5704,12 +5678,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (isFinishing || isDestroyed) return true
         when (state) {
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running -> {
-                if (compactionDialog?.isShowing == true) return true
+                compactionDialog?.takeIf { it.isShowing }?.let {
+                    showCompactionPercent(it, state.percent)
+                    return true
+                }
                 val view = layoutInflater.inflate(R.layout.dialog_compaction_progress, null)
                 val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                     .setView(view)
                     .setCancelable(false)
                     .create()
+                dialog.setOnDismissListener { compactionDotsHandler.removeCallbacks(compactionDotsTick) }
                 (view.findViewById<View>(R.id.btn_dialog_primary_action)?.parent as? View)
                     ?.visibility = View.GONE
                 view.findViewById<MaterialButton>(R.id.btn_dialog_action)?.apply {
@@ -5722,10 +5700,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 compactionDialog = dialog
                 dialog.show()
+                showCompactionPercent(dialog, state.percent)
+                // The dots run from the time the pop-up is shown, so a pop-up
+                // reopened after leaving the chat is moving straight away.
+                compactionDotsStep = 0
+                compactionDotsHandler.removeCallbacks(compactionDotsTick)
+                compactionDotsHandler.postDelayed(compactionDotsTick, COMPACTION_DOTS_STEP_MS)
             }
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded -> {
                 val dialog = compactionDialog ?: return true
-                dialog.findViewById<View>(R.id.compaction_progress)?.visibility = View.GONE
+                compactionDotsHandler.removeCallbacks(compactionDotsTick)
+                showCompactionPercent(dialog, 100)
+                dialog.findViewById<TextView>(R.id.compaction_dots)?.visibility = View.GONE
                 dialog.findViewById<TextView>(R.id.compaction_status)
                     ?.setText(R.string.compaction_dialog_complete)
                 (dialog.findViewById<View>(R.id.btn_dialog_action)?.parent as? View)
@@ -5767,6 +5753,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
         return true
+    }
+
+    /** The compaction pop-up's percentage and bar, from messages done. */
+    private fun showCompactionPercent(dialog: AlertDialog, percent: Int) {
+        dialog.findViewById<TextView>(R.id.compaction_percent)
+            ?.text = getString(R.string.compaction_dialog_percent, percent)
+        dialog.findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(
+            R.id.compaction_progress
+        )?.setProgressCompat(percent, true)
     }
 
     /**
@@ -6137,14 +6132,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         false
     }
 
-    /** Show only configured composer tools; hide the gear when none are usable. */
+    /** Create Image appears in the plus menu only when an image generator is set up. */
     private fun refreshComposerTools() {
         val imageAvailable = imageGeneratorConfigured()
         btnToolCreateImage?.visibility = if (imageAvailable) View.VISIBLE else View.GONE
-        btnChatTools?.visibility = if (imageAvailable) View.VISIBLE else View.GONE
-        if (!imageAvailable) {
-            toolActions?.visibility = View.GONE
-        }
     }
 
     /**
@@ -8952,7 +8943,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         keyboardInput?.visibility = if (playground) View.GONE else View.VISIBLE
         summarizerOperationChip?.visibility = View.GONE
         visionActions?.visibility = View.GONE
-        toolActions?.visibility = View.GONE
         includeStrip?.visibility = if (playground) View.GONE
             else if (pendingIncludes.isEmpty()) View.GONE else View.VISIBLE
         if (playground) {

@@ -209,4 +209,25 @@
     <dimen name="restore_database_type_gap">20dp</dimen>
     <dimen name="restore_progress_size">18dp</dimen>
     <dimen name="restore_progress_text_size">14sp</dimen>
+
+    <!-- Widget.App.Row.Number: space above the row, and the gap between its
+         text column and its number field. -->
+    <dimen name="row_number_padding_top">20dp</dimen>
+    <dimen name="row_number_field_gap">12dp</dimen>
+
+    <!-- Space after the last item of a scrolling page whose layout had this
+         gap set in code before ScreenChrome.fitSystemBarsAndKeyboard. -->
+    <dimen name="page_scroll_end_gap">24dp</dimen>
+    <dimen name="page_scroll_end_gap_compact">12dp</dimen>
+
+    <!-- Widget.App.ProgressDialog.*: a pop-up showing real progress. -->
+    <dimen name="progress_dialog_padding_top">24dp</dimen>
+    <dimen name="progress_dialog_title_size">20sp</dimen>
+    <dimen name="progress_dialog_percent_size">18sp</dimen>
+    <dimen name="progress_dialog_percent_gap">12dp</dimen>
+    <dimen name="progress_dialog_bar_gap">16dp</dimen>
+    <dimen name="progress_dialog_bar_thickness">8dp</dimen>
+    <dimen name="progress_dialog_bar_radius">4dp</dimen>
+    <dimen name="progress_dialog_status_gap">12dp</dimen>
+    <dimen name="progress_dialog_status_size">15sp</dimen>
 </resources>

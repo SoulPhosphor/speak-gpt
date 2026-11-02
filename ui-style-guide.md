@@ -310,6 +310,17 @@ heading during measurement and retain that smaller size. Keep the body and
 Close action in the standard Material dialog; do not special-case individual
 parameter headings or set their text size in Kotlin.
 
+### Progress pop-up
+
+Use `Widget.App.ProgressDialog.*` for a pop-up that shows real progress:
+`Content` (the column), `HeaderRow` with `Title` and `Percent` on one line,
+`Bar` (a `LinearProgressIndicator` filled to the percentage), and `StatusRow`
+with `Status` and `Dots` (the three looping dots). The title is left-aligned
+beside the percentage by the owner's design (Nov 2 2026), an approved
+exception to centered dialog titles. The percentage must come from work
+actually done, never a guess. Spacing and sizes live in `progress_dialog_*`
+dimensions. Current user: the compaction pop-up (`dialog_compaction_progress.xml`).
+
 ### Title and explanatory text
 
 Use `setTitle` for the dialog heading or its single short question.
@@ -436,6 +447,18 @@ A toggle row has no chevron. The row container is not the tap target; the switch
 
 A toggle may exist on only one screen. Its use of shared row and switch styling does not require adding the toggle to other screens.
 
+### Number row
+
+Use these pieces in order:
+
+1. `Widget.App.Row.Number`
+2. `Widget.App.Row.TextColumn`
+3. `Widget.App.Row.Title`
+4. `Widget.App.Row.Subtitle`
+5. `Widget.App.Row.Number.Field`
+
+Use for a setting whose value is a whole number typed into a small field at the end of the row. The title and subtitle are the same as a toggle row's. Set `android:ems` and `android:maxLength` on each field for the digits it accepts. Current users: Complete Messages and Compaction Average Token Amount (Summarizer Settings).
+
 ### Title information icons
 
 When an information icon explains a title, label, or setting name, it appears
@@ -533,6 +556,17 @@ and keeps the page clear of side insets and cutouts. The layout supplies only
 the ids `root`, `action_bar` and `scroll`. Do not fit the page root inside the
 system bars instead; that leaves a gap above the header. Current users:
 BackUp Options and Restore Options.
+
+A page the user types into calls `ScreenChrome.fitSystemBarsAndKeyboard`
+instead: the same, plus the page ends at the top of an open keyboard (the
+chat composer's max(navigation bar, keyboard) measure), so every part of a
+long field can be scrolled into view above it. Current users: Summarizer
+Prompts, the Summary / Compaction review screen, Summarizer Settings, System
+Prompt editor, Activation Prompt, Lore Book, User Persona, Memory editor,
+Model Rule editor, Campaign and World details, Possible Match review, API
+endpoint editor, Advanced Memory Settings, Memory Assistant Advanced
+Settings, Voice Settings, Voice Advanced Settings, and the alert debug menu. Edit Companion
+and the chat keep their own handling.
 
 ### Header with one trailing action icon
 

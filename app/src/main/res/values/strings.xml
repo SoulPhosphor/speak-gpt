@@ -3658,6 +3658,8 @@
 
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
+    <string name="summarizer_compaction_tokens">Compaction Average Token Amount</string>
+    <string name="summarizer_compaction_tokens_hint">Average tokens sent together to the summarizing AI at one time to be compacted. No partial messages will be sent.</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
     <string name="summarizer_new_chats_toggle_hint">Summarizer model is still used as a backup for chat titling and compaction when summarizing is turned off.</string>
     <string name="summarizer_length">Summary Length</string>
@@ -3703,6 +3705,9 @@
     <string name="summarizer_always_resummarize_toggle">When editing or regenerating a message always resummarize that section.</string>
     <string name="summarizer_always_resummarize_hint">When off you will be prompted if you would like to resummarize the changed text segment.</string>
     <string name="compaction_dialog_complete">Compaction complete!</string>
+    <string name="compaction_dialog_title">Compacting Conversation</string>
+    <string name="compaction_dialog_processing">Processing Conversation History</string>
+    <string name="compaction_dialog_percent">%1$d%%</string>
     <!-- Compact error box (owner-approved wording, Oct 4 2026). -->
     <string name="compaction_err_model_missing_title">Summary Model Configuration Needed</string>
     <string name="compaction_err_model_missing">Summary Model configuration is missing or incomplete. Check the model, endpoint, and routing in Summarizer Settings.</string>
@@ -3743,7 +3748,7 @@
     <string name="compact_unavailable_with_summarizer">Compact isn\'t available while the Summarizer is on for this chat.</string>
 
     <!-- Compaction Summary screen (owner ruling, Oct 3 2026). -->
-    <string name="title_compaction_summary">Compaction Summary</string>
+    <string name="title_compaction_summary">Summary</string>
     <string name="compaction_icon_desc">Compaction Summary</string>
     <string name="compaction_summary_intro">This is the compacted text from your conversation that is sent instead of the full messages to save on token use.</string>
     <string name="compaction_summary_in_progress">Compacting in Progress…</string>

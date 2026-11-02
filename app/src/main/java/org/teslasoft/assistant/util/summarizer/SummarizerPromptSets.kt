@@ -91,11 +91,13 @@ object SummarizerPromptSets {
         STORYTELLER_ID -> setOf(
             SummarizerPrompts.STORYTELLER,
             SummarizerPrompts.SECTION_STORYTELLER,
-            SummarizerPrompts.STORYTELLER.replace(
+            SummarizerPrompts.PRIOR_STORYTELLER,
+            SummarizerPrompts.PRIOR_SECTION_STORYTELLER,
+            SummarizerPrompts.PRIOR_STORYTELLER.replace(
                 "Write in clear, compact prose, preserving the information needed for conversation continuity.",
                 "Write in clear, compact prose under {length} words."
             ),
-            SummarizerPrompts.SECTION_STORYTELLER.replace(
+            SummarizerPrompts.PRIOR_SECTION_STORYTELLER.replace(
                 " Preserve the information needed for conversation continuity.",
                 " Stay under {length} words."
             )
@@ -103,11 +105,13 @@ object SummarizerPromptSets {
         REPORTER_ID -> setOf(
             SummarizerPrompts.REPORTER,
             SummarizerPrompts.SECTION_REPORTER,
-            SummarizerPrompts.REPORTER.replace(
+            SummarizerPrompts.PRIOR_REPORTER,
+            SummarizerPrompts.PRIOR_SECTION_REPORTER,
+            SummarizerPrompts.PRIOR_REPORTER.replace(
                 "Preserve the information needed for conversation continuity without repetition.",
                 "Keep the complete list under {length} words."
             ),
-            SummarizerPrompts.SECTION_REPORTER.replace(
+            SummarizerPrompts.PRIOR_SECTION_REPORTER.replace(
                 "Keep the list as short as the section allows while preserving information needed for conversation continuity.",
                 "Keep the list as short as the section allows, and under {length} words."
             )

@@ -33,7 +33,7 @@ object SummarizerPrompts {
     const val REPORTER_NAME = "Reporter"
 
     val STORYTELLER = """
-You maintain a concise narrative recap of this conversation. Below are the existing recap and the messages that have just moved out of the recent-message window. Integrate the new information into one coherent updated recap.
+You write a concise narrative recap of newly compacted messages in this conversation. Below are the earlier compacted text, for context, and the new messages to summarize. Write a recap of the new messages that continues on from the earlier text.
 
 Preserve:
 
@@ -44,13 +44,15 @@ Preserve:
 - unresolved questions, problems, or next steps;
 - the current state of active topics.
 
-Remove repetition, casual filler, and details that no longer affect the conversation. When newer information replaces or corrects older information, update the recap rather than preserving both versions. Do not present suggestions, guesses, or possibilities as settled facts.
+Remove repetition, casual filler, and details that no longer affect the conversation. When the new messages replace or correct something in the earlier text, say what changed. Do not present suggestions, guesses, or possibilities as settled facts.
 
-Write in clear, compact prose, preserving the information needed for conversation continuity. Reply only with the updated recap.
+You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
+
+Write in clear, compact prose, preserving the information needed for conversation continuity. Reply only with the new recap.
     """.trimIndent()
 
     val REPORTER = """
-You maintain compact reference notes for this conversation. Below are the existing notes and the messages that have just moved out of the recent-message window. Update the notes using short, standalone statements.
+You write compact reference notes for newly compacted messages in this conversation. Below are the earlier compacted notes, for context, and the new messages to take notes on. Write notes for the new messages using short, standalone statements.
 
 Keep only information that may be needed later, including:
 
@@ -62,9 +64,11 @@ Keep only information that may be needed later, including:
 - important facts stated by the user;
 - the present status of active work.
 
-Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an assistant suggestion into a decision. If newer information corrects, replaces, completes, or cancels an older item, revise or remove the older item.
+Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an AI suggestion into a decision. If the new messages correct, replace, complete, or cancel an earlier item, note the change.
 
-Use brief bullet points, with one fact per bullet. Preserve the information needed for conversation continuity without repetition. Reply only with the updated list.
+You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
+
+Use brief bullet points, with one fact per bullet. Do not repeat earlier notes. Preserve the information needed for conversation continuity. Reply only with the new notes.
     """.trimIndent()
 
     /**
@@ -88,10 +92,86 @@ Preserve:
 
 Remove repetition, casual filler, and details that no longer affect the conversation. When newer information in the section replaces or corrects older information, keep only the newer version. Do not present suggestions, guesses, or possibilities as settled facts.
 
+You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
+
 Write in clear, compact prose. Be as brief as the section allows; a simple section may need only a sentence or two. Preserve the information needed for conversation continuity. Reply only with the summary.
     """.trimIndent()
 
     val SECTION_REPORTER = """
+You write compact reference notes for one section of this conversation. Below are the messages in that section. The exchange just before the section may also be included, for context only; do not take notes on it.
+
+Keep only information that may be needed later, including:
+
+- names and relevant identifying details;
+- explicit preferences, requirements, and constraints;
+- decisions that were actually made;
+- current plans and commitments;
+- unresolved tasks or questions;
+- important facts stated by the user;
+- the present status of active work.
+
+Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an AI suggestion into a decision. If newer information in the section corrects, replaces, completes, or cancels an older item, keep only the newer version.
+
+You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
+
+Use brief bullet points, with one fact per bullet. Keep the list as short as the section allows while preserving information needed for conversation continuity. Reply only with the list.
+    """.trimIndent()
+
+    /* The shipped texts before Nov 2 2026, so saved copies nobody edited
+     * move to the current text (SummarizerPromptSets). */
+    internal val PRIOR_STORYTELLER = """
+You maintain a concise narrative recap of this conversation. Below are the existing recap and the messages that have just moved out of the recent-message window. Integrate the new information into one coherent updated recap.
+
+Preserve:
+
+- the main events and their order;
+- the user's goals and concerns;
+- important reasoning or context behind decisions;
+- decisions that were made;
+- unresolved questions, problems, or next steps;
+- the current state of active topics.
+
+Remove repetition, casual filler, and details that no longer affect the conversation. When newer information replaces or corrects older information, update the recap rather than preserving both versions. Do not present suggestions, guesses, or possibilities as settled facts.
+
+Write in clear, compact prose, preserving the information needed for conversation continuity. Reply only with the updated recap.
+    """.trimIndent()
+
+    internal val PRIOR_REPORTER = """
+You maintain compact reference notes for this conversation. Below are the existing notes and the messages that have just moved out of the recent-message window. Update the notes using short, standalone statements.
+
+Keep only information that may be needed later, including:
+
+- names and relevant identifying details;
+- explicit preferences, requirements, and constraints;
+- decisions that were actually made;
+- current plans and commitments;
+- unresolved tasks or questions;
+- important facts stated by the user;
+- the present status of active work.
+
+Do not preserve conversational flow, emotional narration, repeated explanations, abandoned ideas, or temporary details with no likely future use. Do not turn an assistant suggestion into a decision. If newer information corrects, replaces, completes, or cancels an older item, revise or remove the older item.
+
+Use brief bullet points, with one fact per bullet. Preserve the information needed for conversation continuity without repetition. Reply only with the updated list.
+    """.trimIndent()
+
+    internal val PRIOR_SECTION_STORYTELLER = """
+You write a concise narrative summary of one section of this conversation. Below are the messages in that section. The exchange just before the section may also be included, for context only; do not summarize it.
+
+Preserve:
+
+- the main events and their order;
+- the user's goals and concerns;
+- important reasoning or context behind decisions;
+- decisions that were made;
+- unresolved questions, problems, or next steps;
+- the current state of active topics.
+
+Remove repetition, casual filler, and details that no longer affect the conversation. When newer information in the section replaces or corrects older information, keep only the newer version. Do not present suggestions, guesses, or possibilities as settled facts.
+
+Write in clear, compact prose. Be as brief as the section allows; a simple section may need only a sentence or two. Preserve the information needed for conversation continuity. Reply only with the summary.
+    """.trimIndent()
+
+    internal val PRIOR_SECTION_REPORTER = """
 You write compact reference notes for one section of this conversation. Below are the messages in that section. The exchange just before the section may also be included, for context only; do not take notes on it.
 
 Keep only information that may be needed later, including:
@@ -196,10 +276,15 @@ Do not independently summarize or reproduce the attachment itself. However, fact
      * scaffolding, not one of the editable prompts, so it holds whichever
      * prompt the user has selected.
      */
-    val COMPACTION_CONTEXT_RULE =
-        "The existing compacted text below is for context only. Do not repeat, rewrite, " +
-            "or correct it. Write only about the new messages; your reply will be added " +
-            "after the existing text."
+    val COMPACTION_CONTEXT_RULE = """
+MANUAL COMPACTION INSTRUCTIONS
+
+The existing compacted text below is kept exactly as saved. Your reply will be added after it. Use the existing text only as context: to understand the conversation and to avoid repeating it. Do not rewrite, correct, shorten, or reproduce any of it.
+
+Summarize only the new messages. If they correct or change something in the existing text, record that change in your new summary.
+
+Reply with the new summary only, with no introduction or comments about this process.
+    """.trimIndent()
 
     /**
      * The complete user-message body of one compaction call: the rendered

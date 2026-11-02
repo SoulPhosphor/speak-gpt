@@ -1,33 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Compact progress (owner ruling, Oct 4 2026): spinner and status text
-     with a single Cancel while compacting; after success the status reads
-     "Compaction complete!" with Cancel (undo the compaction) and Okay.
-     Same shape as dialog_include_condense_progress.xml, plus the
-     cancel-first action pair for the finished state. -->
+<!-- Compact progress (owner rulings, Oct 4 and Nov 2 2026): title with the
+     real percentage done, a bar showing it, and "Processing Conversation
+     History" with three looping dots, plus a single Cancel. After success
+     the status reads "Compaction complete!" with Cancel (undo the
+     compaction) and Okay. Styles: Widget.App.ProgressDialog.* -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:gravity="center_horizontal"
     android:orientation="vertical">
 
-    <com.google.android.material.progressindicator.CircularProgressIndicator
-        android:id="@+id/compaction_progress"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginTop="16dp"
-        android:indeterminate="true" />
+    <LinearLayout style="@style/Widget.App.ProgressDialog.Content">
 
-    <TextView
-        android:id="@+id/compaction_status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:paddingHorizontal="24dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="8dp"
-        android:text="@string/compaction_status_running"
-        android:textColor="@color/text"
-        android:textSize="16sp" />
+        <LinearLayout style="@style/Widget.App.ProgressDialog.HeaderRow">
+
+            <TextView
+                android:id="@+id/compaction_title"
+                style="@style/Widget.App.ProgressDialog.Title"
+                android:text="@string/compaction_dialog_title" />
+
+            <TextView
+                android:id="@+id/compaction_percent"
+                style="@style/Widget.App.ProgressDialog.Percent" />
+        </LinearLayout>
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/compaction_progress"
+            style="@style/Widget.App.ProgressDialog.Bar" />
+
+        <LinearLayout style="@style/Widget.App.ProgressDialog.StatusRow">
+
+            <TextView
+                android:id="@+id/compaction_status"
+                style="@style/Widget.App.ProgressDialog.Status"
+                android:text="@string/compaction_dialog_processing" />
+
+            <TextView
+                android:id="@+id/compaction_dots"
+                style="@style/Widget.App.ProgressDialog.Dots" />
+        </LinearLayout>
+    </LinearLayout>
 
     <include layout="@layout/dialog_single_action" />
 

@@ -110,6 +110,64 @@ class SummarizerPromptsTest {
     }
 
     @Test
+    fun theCompactionRuleAsksForOnlyTheNewSummary() {
+        val rule = SummarizerPrompts.COMPACTION_CONTEXT_RULE
+        assertTrue(rule.contains("Summarize only the new messages."))
+        assertTrue(rule.contains("Do not rewrite, correct, shorten, or reproduce any of it."))
+        assertTrue(rule.contains("Reply with the new summary only"))
+    }
+
+    @Test
+    fun theCompactPromptsAskOnlyForNewMaterialSoTheHiddenRuleNeedsNoOverride() {
+        for (prompt in listOf(SummarizerPrompts.STORYTELLER, SummarizerPrompts.REPORTER)) {
+            assertFalse(prompt.contains("Integrate"))
+            assertFalse(prompt.contains("updated recap"))
+            assertFalse(prompt.contains("updated list"))
+            assertFalse(prompt.contains("revise or remove"))
+            assertFalse(prompt.contains("recent-message window"))
+        }
+        assertTrue(SummarizerPrompts.STORYTELLER.contains("Reply only with the new recap."))
+        assertTrue(SummarizerPrompts.REPORTER.contains("Reply only with the new notes."))
+        assertFalse(SummarizerPrompts.COMPACTION_CONTEXT_RULE.contains("ignore that part"))
+    }
+
+    @Test
+    fun shippedPromptsSayAiRatherThanAssistant() {
+        val sentence = "You may refer to the user as user but write the AI portion in first person " +
+            "instead of saying the assistant did things."
+        for (prompt in listOf(SummarizerPrompts.STORYTELLER, SummarizerPrompts.REPORTER,
+            SummarizerPrompts.SECTION_STORYTELLER, SummarizerPrompts.SECTION_REPORTER)) {
+            assertFalse(prompt.replace(sentence, "").contains("assistant", ignoreCase = true))
+        }
+    }
+
+    @Test
+    fun everyShippedConversationPromptWritesTheAiInFirstPerson() {
+        val sentence = "You may refer to the user as user but write the AI portion in first person " +
+            "instead of saying the assistant did things."
+        for (prompt in listOf(SummarizerPrompts.STORYTELLER, SummarizerPrompts.REPORTER,
+            SummarizerPrompts.SECTION_STORYTELLER, SummarizerPrompts.SECTION_REPORTER)) {
+            assertTrue(prompt.contains(sentence))
+        }
+    }
+
+    @Test
+    fun theCompactionRuleRidesAlongWithEveryPromptWithoutChangingIt() {
+        for (prompt in listOf(SummarizerPrompts.STORYTELLER, SummarizerPrompts.REPORTER, "My own prompt.")) {
+            val body = SummarizerPrompts.foldInRequestBody(prompt, "Earlier text", listOf(Pair("User", "Hi")))
+            assertTrue(body.startsWith(prompt + "\n\n"))
+            assertTrue(body.contains(SummarizerPrompts.COMPACTION_CONTEXT_RULE))
+            assertTrue(body.indexOf(SummarizerPrompts.COMPACTION_CONTEXT_RULE) <
+                body.indexOf("Existing compacted text:\nEarlier text"))
+            assertTrue(body.indexOf("Existing compacted text:") <
+                body.indexOf("New messages to summarize:\n\nUser: Hi"))
+        }
+        // The rule is app scaffolding: it is never written into the editable prompts.
+        assertFalse(SummarizerPrompts.STORYTELLER.contains("MANUAL COMPACTION INSTRUCTIONS"))
+        assertFalse(SummarizerPrompts.REPORTER.contains("MANUAL COMPACTION INSTRUCTIONS"))
+    }
+
+    @Test
     fun appendingNeverChangesTheExistingText() {
         val existing = "First part, word for word."
         val joined = SummarizerPrompts.appendCompaction(existing, "Second part.")

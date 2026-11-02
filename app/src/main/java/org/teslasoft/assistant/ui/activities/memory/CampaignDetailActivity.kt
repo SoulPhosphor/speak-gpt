@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.ui.activities.memory
 
+import org.teslasoft.assistant.ui.util.ScreenChrome
+
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -727,25 +729,11 @@ class CampaignDetailActivity : SettingsPageActivity() {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        adjustPaddings()
-    }
-
-    private fun adjustPaddings() {
-        if (Build.VERSION.SDK_INT < 35) return
-        try {
-            actionBar?.setPadding(
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
-                0,
-                0
-            )
-            findViewById<ScrollView>(R.id.scroll)?.setPadding(
-                0,
-                0,
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom + pxToDp(24)
-            )
-        } catch (_: Exception) { /* unused */ }
+        ScreenChrome.fitSystemBarsAndKeyboard(
+            findViewById<android.view.ViewGroup>(android.R.id.content)?.getChildAt(0),
+            actionBar,
+            findViewById<android.view.View>(R.id.scroll)
+        )
     }
 
     private fun pxToDp(px: Int): Int = (px * resources.displayMetrics.density).toInt()

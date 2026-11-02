@@ -31,11 +31,21 @@ class SummarizerForegroundService : Service() {
         private const val EXTRA_CHAT_ID = "chatId"
         private const val EXTRA_CHAT_NAME = "chatName"
         private const val EXTRA_KIND = "kind"
-        private data class Notice(val name: String, val kind: SummarizerController.OperationKind)
+        private data class Notice(
+            val name: String,
+            val kind: SummarizerController.OperationKind,
+            /** Compaction progress, 0-100; null for the Summarizer. */
+            val percent: Int? = null
+        )
         private val active = ConcurrentHashMap<String, Notice>()
+        /** The chat the notification currently shows. */
+        @Volatile private var shownChatId: String? = null
 
         fun begin(context: Context, chatId: String, chatName: String, kind: SummarizerController.OperationKind) {
-            active[chatId] = Notice(chatName, kind)
+            val percent = if (kind == SummarizerController.OperationKind.COMPACTING) {
+                active[chatId]?.percent ?: 0
+            } else null
+            active[chatId] = Notice(chatName, kind, percent)
             val intent = Intent(context, SummarizerForegroundService::class.java)
                 .setAction(ACTION_UPDATE)
                 .putExtra(EXTRA_CHAT_ID, chatId)
@@ -45,6 +55,71 @@ class SummarizerForegroundService : Service() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
                 else context.startService(intent)
             } catch (_: Exception) { /* operation continues without notification */ }
+        }
+
+        /** Shows a compaction's progress in its notification. */
+        fun progress(context: Context, chatId: String, percent: Int) {
+            val notice = active[chatId] ?: return
+            if (notice.percent == percent) return
+            active[chatId] = notice.copy(percent = percent)
+            if (shownChatId != chatId) return
+            try {
+                context.getSystemService(NotificationManager::class.java)?.notify(
+                    NOTIFICATION_ID,
+                    build(context, chatId, notice.name, notice.kind, percent)
+                )
+            } catch (_: Exception) { /* the operation continues without the update */ }
+        }
+
+        private fun build(
+            context: Context,
+            chatId: String,
+            chatName: String,
+            kind: SummarizerController.OperationKind,
+            percent: Int?
+        ): Notification {
+            val open = PendingIntent.getActivity(
+                context,
+                31,
+                Intent(context, ChatActivity::class.java)
+                    .putExtra("chatId", chatId)
+                    .putExtra("name", chatName)
+                    .setAction(Intent.ACTION_VIEW),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val cancel = PendingIntent.getService(
+                context,
+                32,
+                Intent(context, SummarizerForegroundService::class.java)
+                    .setAction(ACTION_CANCEL)
+                    .putExtra(EXTRA_CHAT_ID, chatId),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val text = context.getString(
+                if (kind == SummarizerController.OperationKind.COMPACTING) {
+                    R.string.compaction_notification_text
+                } else R.string.summarizer_notification_text,
+                chatName.ifBlank { context.getString(R.string.label_untitled_chat) }
+            )
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_subject)
+                .setContentTitle(text)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setSilent(true)
+                .setContentIntent(open)
+                .addAction(0, context.getString(R.string.btn_cancel), cancel)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            if (percent != null) {
+                // Matches the compaction pop-up: its title, its status line,
+                // the percentage done and a bar filled to it.
+                builder.setContentTitle(context.getString(R.string.compaction_dialog_title))
+                    .setContentText(context.getString(R.string.compaction_dialog_processing))
+                    .setSubText(context.getString(R.string.compaction_dialog_percent, percent))
+                    .setProgress(100, percent, false)
+            }
+            return builder.build()
         }
 
         fun end(context: Context, chatId: String) {
@@ -102,39 +177,7 @@ class SummarizerForegroundService : Service() {
         chatName: String,
         kind: SummarizerController.OperationKind
     ): Notification {
-        val open = PendingIntent.getActivity(
-            this,
-            31,
-            Intent(this, ChatActivity::class.java)
-                .putExtra("chatId", chatId)
-                .putExtra("name", chatName)
-                .setAction(Intent.ACTION_VIEW),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val cancel = PendingIntent.getService(
-            this,
-            32,
-            Intent(this, SummarizerForegroundService::class.java)
-                .setAction(ACTION_CANCEL)
-                .putExtra(EXTRA_CHAT_ID, chatId),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val text = getString(
-            if (kind == SummarizerController.OperationKind.COMPACTING) {
-                R.string.compaction_notification_text
-            } else R.string.summarizer_notification_text,
-            chatName.ifBlank { getString(R.string.label_untitled_chat) }
-        )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_subject)
-            .setContentTitle(text)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
-            .setContentIntent(open)
-            .addAction(0, getString(R.string.btn_cancel), cancel)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .build()
+        shownChatId = chatId
+        return build(this, chatId, chatName, kind, active[chatId]?.percent)
     }
 }

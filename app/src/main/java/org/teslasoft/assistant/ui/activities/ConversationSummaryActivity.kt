@@ -19,12 +19,9 @@ package org.teslasoft.assistant.ui.activities
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.WindowInsets
 import android.widget.ImageButton
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -117,6 +114,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnToggle: ImageButton? = null
+    private var btnSettings: ImageButton? = null
     private var btnSave: ImageButton? = null
     private var rowStatus: View? = null
     private var spinner: View? = null
@@ -170,6 +168,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnToggle = findViewById(R.id.btn_toggle_condensed)
+        btnSettings = findViewById(R.id.btn_summarizer_settings)
         btnSave = findViewById(R.id.btn_save)
         rowStatus = findViewById(R.id.row_condensed_status)
         spinner = findViewById(R.id.spinner_condensed)
@@ -189,7 +188,9 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         field?.isSaveEnabled = false
         findViewById<TextView>(R.id.activity_title)?.setText(mode.titleRes)
         findViewById<TextView>(R.id.text_condensed_intro)?.setText(mode.introRes)
-        ScreenChrome.apply(this, actionBar, btnBack, btnToggle, btnSave)
+        ScreenChrome.apply(this, actionBar, btnBack, btnSettings, btnToggle, btnSave)
+        ScreenChrome.fitSystemBarsAndKeyboard(findViewById(R.id.root), actionBar, findViewById(R.id.scroll))
+        if (mode == Mode.COMPACTION) btnSettings?.visibility = View.VISIBLE
 
         if (mode == Mode.SUMMARY) {
             // The Summarizer's sections replace the single text box.
@@ -230,6 +231,9 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         btnSave?.setOnClickListener { save() }
         btnRevert?.setOnClickListener { if (showingActive()) field?.setText(savedText) }
         btnToggle?.setOnClickListener { onToggleCondensed() }
+        btnSettings?.setOnClickListener {
+            startActivity(Intent(this, SummarizerSettingsActivity::class.java))
+        }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 attemptLeave()
@@ -706,32 +710,6 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
     private fun recompact() {
         preferences?.setUseSummarizedConversationProjection(true)
         refreshToggle()
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        adjustPaddings()
-    }
-
-    private fun adjustPaddings() {
-        if (Build.VERSION.SDK_INT < 35) return
-        try {
-            actionBar?.setPadding(
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
-                0,
-                0
-            )
-            val scroll = findViewById<ScrollView>(R.id.scroll)
-            val density = resources.displayMetrics.density
-            scroll?.setPadding(
-                0,
-                0,
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom +
-                    (24 * density).toInt()
-            )
-        } catch (_: Exception) { /* unused */ }
     }
 
     companion object {
