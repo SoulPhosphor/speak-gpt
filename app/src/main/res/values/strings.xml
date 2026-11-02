@@ -3658,6 +3658,8 @@
 
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
+    <string name="summarizer_compaction_tokens">Compaction Average Token Amount</string>
+    <string name="summarizer_compaction_tokens_hint">Average tokens sent together to the summarizing AI at one time to be compacted. No partial messages will be sent.</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
     <string name="summarizer_new_chats_toggle_hint">Summarizer model is still used as a backup for chat titling and compaction when summarizing is turned off.</string>
     <string name="summarizer_length">Summary Length</string>

@@ -439,6 +439,25 @@
         <item name="android:paddingTop">20dp</item>
     </style>
 
+    <!-- Number row (owner ruling, Nov 2 2026): a setting whose value is a
+         whole number typed into a small field at the end of the row. The
+         title and subtitle use Widget.App.Row.Title / Row.Subtitle inside
+         Widget.App.Row.TextColumn, so they match toggle rows exactly. -->
+    <style name="Widget.App.Row.Number" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingTop">@dimen/row_number_padding_top</item>
+    </style>
+
+    <!-- Trailing number field for Widget.App.Row.Number. Set android:ems and
+         android:maxLength per field for the digits it accepts. -->
+    <style name="Widget.App.Row.Number.Field" parent="Widget.App.Field.NumberBlank">
+        <item name="android:layout_marginStart">@dimen/row_number_field_gap</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
     <!-- Trailing switch for Widget.App.Row.Toggle. -->
     <style name="Widget.App.Row.Switch" parent="">
         <item name="android:layout_width">wrap_content</item>

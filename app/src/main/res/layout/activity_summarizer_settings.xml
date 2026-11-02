@@ -112,41 +112,46 @@
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
-            <!-- ============ Complete Messages (default for new chats) ============
-                 NumberBlank belongs inline with its label (its own style
-                 contract, matched by every other use in the app) — the
-                 label/hint sit in a text column beside it, the same shape as
-                 Widget.App.Row.WithSubtitle's TextColumn but paired with a
-                 NumberBlank instead of a Dropdown.Value. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+            <!-- ============ Complete Messages (default for new chats) ============ -->
+            <LinearLayout style="@style/Widget.App.Row.Number">
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:paddingEnd="12dp">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
                     <TextView
-                        style="@style/Widget.App.Field.Label"
+                        style="@style/Widget.App.Row.Title"
                         android:text="@string/summarizer_complete_messages" />
 
                     <TextView
-                        style="@style/Widget.App.Field.Hint"
+                        style="@style/Widget.App.Row.Subtitle"
                         android:text="@string/summarizer_complete_messages_hint" />
                 </LinearLayout>
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/field_complete_messages"
-                    style="@style/Widget.App.Field.NumberBlank"
+                    style="@style/Widget.App.Row.Number.Field"
                     android:ems="4"
-                    android:maxLength="4"
-                    android:singleLine="true" />
+                    android:maxLength="4" />
+            </LinearLayout>
+
+            <!-- ============ Compaction Average Token Amount ============ -->
+            <LinearLayout style="@style/Widget.App.Row.Number">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_compaction_tokens" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/summarizer_compaction_tokens_hint" />
+                </LinearLayout>
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_compaction_tokens"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:ems="6"
+                    android:maxLength="6" />
             </LinearLayout>
 
             <!-- ============ Summary Model ============ -->

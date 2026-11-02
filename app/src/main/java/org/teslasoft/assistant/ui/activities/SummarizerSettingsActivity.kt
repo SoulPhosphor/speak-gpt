@@ -70,6 +70,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
     private var sectionRouting: View? = null
     private var textRoutingValue: TextView? = null
     private var fieldCompleteMessages: TextInputEditText? = null
+    private var fieldCompactionTokens: TextInputEditText? = null
     private var switchNewChats: MaterialSwitch? = null
 
     private var suppressWatchers = false
@@ -134,6 +135,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
         sectionRouting = findViewById(R.id.section_summarizer_routing)
         textRoutingValue = findViewById(R.id.text_summarizer_routing_value)
         fieldCompleteMessages = findViewById(R.id.field_complete_messages)
+        fieldCompactionTokens = findViewById(R.id.field_compaction_tokens)
         switchNewChats = findViewById(R.id.switch_summarizer_new_chats)
     }
 
@@ -165,7 +167,25 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
 
         suppressWatchers = true
         fieldCompleteMessages?.setText(preferences?.getSummarizerDefaultWindow()?.toString() ?: "20")
+        fieldCompactionTokens?.setText(
+            (preferences?.getCompactionAverageTokens()
+                ?: org.teslasoft.assistant.util.summarizer.CompactionBatches.DEFAULT_TOKENS).toString()
+        )
         suppressWatchers = false
+
+        fieldCompactionTokens?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (suppressWatchers) return
+                val parsed = s?.toString()?.trim()?.toIntOrNull() ?: return
+                if (parsed in org.teslasoft.assistant.util.summarizer.CompactionBatches.MIN_TOKENS..
+                    org.teslasoft.assistant.util.summarizer.CompactionBatches.MAX_TOKENS
+                ) {
+                    preferences?.setCompactionAverageTokens(parsed)
+                }
+            }
+        })
 
         fieldCompleteMessages?.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}

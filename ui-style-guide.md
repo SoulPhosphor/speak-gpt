@@ -436,6 +436,18 @@ A toggle row has no chevron. The row container is not the tap target; the switch
 
 A toggle may exist on only one screen. Its use of shared row and switch styling does not require adding the toggle to other screens.
 
+### Number row
+
+Use these pieces in order:
+
+1. `Widget.App.Row.Number`
+2. `Widget.App.Row.TextColumn`
+3. `Widget.App.Row.Title`
+4. `Widget.App.Row.Subtitle`
+5. `Widget.App.Row.Number.Field`
+
+Use for a setting whose value is a whole number typed into a small field at the end of the row. The title and subtitle are the same as a toggle row's. Set `android:ems` and `android:maxLength` on each field for the digits it accepts. Current users: Complete Messages and Compaction Average Token Amount (Summarizer Settings).
+
 ### Title information icons
 
 When an information icon explains a title, label, or setting name, it appears

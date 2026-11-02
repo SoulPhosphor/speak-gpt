@@ -160,7 +160,8 @@ class SummarizerController(
             /** The compaction's new part for this batch, to be appended. */
             val summary: String,
             val foldedCount: Int,
-            val batchSize: Int
+            /** The token amount still allowed for the next request. */
+            val tokenBudget: Int
         ) : FoldBatchResult
 
         data object Failed : FoldBatchResult
@@ -668,7 +669,10 @@ class SummarizerController(
         }
         var summary = baseSummary
         var folded = operationStartFolded
-        var maxBatch = (target - folded).coerceAtLeast(1)
+        // Requests of about the Compaction Average Token Amount, whole
+        // exchanges only; lowered for the rest of the run when the service
+        // says a request is too large.
+        var tokenBudget = prefs.getCompactionAverageTokens()
 
         try {
             if (folded < target) {
@@ -679,13 +683,13 @@ class SummarizerController(
                         runtime = runtime,
                         entries = snapshot.entries,
                         folded = folded,
-                        pending = target - folded,
+                        target = target,
                         summary = summary,
-                        maxBatch = maxBatch
+                        tokenBudget = tokenBudget
                     )) {
                         is FoldBatchResult.Advanced -> {
                             summary = SummarizerPrompts.appendCompaction(summary, result.summary)
-                            maxBatch = result.batchSize
+                            tokenBudget = result.tokenBudget
                             folded = result.foldedCount
                             setOperationState(
                                 OperationState.Running(
@@ -1015,23 +1019,26 @@ class SummarizerController(
         runtime: FoldRuntime,
         entries: List<Entry>,
         folded: Int,
-        pending: Int,
+        target: Int,
         summary: String,
-        /** The largest batch to try: a request the service called too large
-         *  is not tried again at that size in the same run. */
-        maxBatch: Int = pending
+        /** About how many tokens of messages one request carries: a request
+         *  the service called too large is not tried again at that size in
+         *  the same run. */
+        tokenBudget: Int
     ): FoldBatchResult {
-        var batch = pending.coerceAtMost(maxBatch.coerceAtLeast(1))
+        var budget = tokenBudget.coerceAtLeast(1)
+        var end = CompactionBatches.batchEnd(entries, folded, target, budget)
 
-        // §2.9: on a too-large rejection, split the batch and retry, down to
-        // one message; only then is the error stored.
+        // §2.9: on a too-large rejection, send fewer whole exchanges and
+        // retry, down to one exchange; a user message and its AI reply are
+        // never split. Only then is the error stored.
         while (true) {
-            val departing = entries.subList(folded, folded + batch)
+            val departing = entries.subList(folded, end)
                 .map { Pair(if (it.isBot) "Assistant" else "User", it.text) }
                 .filter { it.second.isNotBlank() }
 
             if (departing.isEmpty()) {
-                return FoldBatchResult.Advanced("", folded + batch, batch)
+                return FoldBatchResult.Advanced("", end, budget)
             }
 
             val body = SummarizerPrompts.foldInRequestBody(
@@ -1064,8 +1071,11 @@ class SummarizerController(
                 if (classified.code == org.teslasoft.assistant.util.GenErrorCode.C1) throw CancellationException("Request cancelled", e)
                 val owner = SummarizerDiagnostics.owner(e, classified, evidence)
                 val category = if (owner == SummarizerDiagnostics.Owner.LOCAL) SummarizerErrorCategory.UNEXPECTED else SummarizerErrorClassifier.categorize(classified)
-                if (category == SummarizerErrorCategory.REQUEST_TOO_LARGE && batch > 1) {
-                    batch = (batch / 2).coerceAtLeast(1)
+                if (category == SummarizerErrorCategory.REQUEST_TOO_LARGE &&
+                    end > CompactionBatches.exchangeEnd(entries, folded, target)
+                ) {
+                    budget = (CompactionBatches.tokens(entries, folded, end) / 2).coerceAtLeast(1)
+                    end = CompactionBatches.batchEnd(entries, folded, target, budget)
                     continue
                 }
                 // Keep the real error beneath the entry's plain-language
@@ -1108,7 +1118,7 @@ class SummarizerController(
                 return FoldBatchResult.Failed
             }
 
-            return FoldBatchResult.Advanced(text, folded + batch, batch)
+            return FoldBatchResult.Advanced(text, end, budget)
         }
     }
 
