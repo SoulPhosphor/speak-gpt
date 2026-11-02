@@ -18,7 +18,7 @@ object TtsAndroidServices {
     /** Keep a provider's error even when playback has no foreground screen. */
     fun recordProviderFailure(context: Context, failure: TtsFailure) {
         val evidence = failure.evidence ?: return
-        if (evidence.errorEvents.isEmpty()) return
+        if (!TtsFailureLoggingPolicy.hasProviderFailure(evidence)) return
         val app = context.applicationContext
         if (!org.teslasoft.assistant.preferences.Preferences.getPreferences(app, "").getLogChatFailures()) return
         synchronized(loggedAttempts) {
@@ -31,16 +31,19 @@ object TtsAndroidServices {
             }
         ) ?: "Provider returned no error message"
         logScope.launch {
-            org.teslasoft.assistant.preferences.Logger.logProviderFailure(
-                app, failure.endpointName, evidence.actualServingProvider ?: "Not Reported",
-                failure.target.modelId, failure.operation.label, detail,
-                requestedRoutedProvider = TtsRouting.requestedProvider(failure.target.routing),
-                outerHttpStatus = evidence.outerHttpStatus,
-                embeddedProviderStatus = evidence.embeddedHttpStatus,
-                providerCode = evidence.providerCode, providerType = evidence.providerType,
-                providerErrorType = evidence.providerErrorType,
-                contentFilterSide = evidence.contentFilterSide.wire, attemptId = evidence.attemptId
-            )
+            val recorded = TtsFailureLoggingPolicy.writeSafely {
+                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                    app, failure.endpointName, evidence.actualServingProvider ?: "Not Reported",
+                    failure.target.modelId, failure.operation.label, detail,
+                    requestedRoutedProvider = TtsRouting.requestedProvider(failure.target.routing),
+                    outerHttpStatus = evidence.outerHttpStatus,
+                    embeddedProviderStatus = evidence.embeddedHttpStatus,
+                    providerCode = evidence.providerCode, providerType = evidence.providerType,
+                    providerErrorType = evidence.providerErrorType,
+                    contentFilterSide = evidence.contentFilterSide.wire, attemptId = evidence.attemptId
+                )
+            }
+            if (!recorded) synchronized(loggedAttempts) { loggedAttempts.remove(evidence.attemptId) }
         }
     }
 
