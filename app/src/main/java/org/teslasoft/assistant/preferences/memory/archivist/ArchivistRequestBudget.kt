@@ -225,6 +225,12 @@ object ArchivistConversationChunker {
     }
 }
 
+class ArchivistShrinkRequiredException(
+    val nextTargetTokens: Int,
+    message: String,
+    cause: Throwable? = null
+) : Exception(message, cause)
+
 object ArchivistRetryPolicy {
     const val MAX_SHRINK_DEPTH = 2
 
