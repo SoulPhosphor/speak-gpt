@@ -116,38 +116,6 @@
                     style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
             </LinearLayout>
 
-            <LinearLayout style="@style/Widget.App.Page.ControlRow">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/mem_edit_label_type" />
-
-                <ImageButton
-                    android:id="@+id/btn_info_type"
-                    style="@style/Widget.App.InfoButton" />
-
-                <TextView
-                    android:id="@+id/btn_mem_type"
-                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_importance"
-                style="@style/Widget.App.Page.ControlRow">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/mem_edit_label_importance" />
-
-                <ImageButton
-                    android:id="@+id/btn_info_importance"
-                    style="@style/Widget.App.InfoButton" />
-
-                <TextView
-                    android:id="@+id/btn_mem_importance"
-                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
-            </LinearLayout>
-
             <!-- Target picker (owner rework, July 8–9 2026): "Associated
                  <Scope>" label + a boxed dropdown on the SAME line (the box
                  wraps the dropdown only, 5dp corners — never the whole line,
@@ -211,6 +179,38 @@
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
+
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/mem_edit_label_type" />
+
+                <ImageButton
+                    android:id="@+id/btn_info_type"
+                    style="@style/Widget.App.InfoButton" />
+
+                <TextView
+                    android:id="@+id/btn_mem_type"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_importance"
+                style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/mem_edit_label_importance" />
+
+                <ImageButton
+                    android:id="@+id/btn_info_importance"
+                    style="@style/Widget.App.InfoButton" />
+
+                <TextView
+                    android:id="@+id/btn_mem_importance"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+            </LinearLayout>
 
             <!-- Roleplay drafts only (owner design, July 8 2026 evening):
                  "Link to Lore Card:" — picking a card + section here makes
