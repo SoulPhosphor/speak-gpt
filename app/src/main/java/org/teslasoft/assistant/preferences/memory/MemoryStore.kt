@@ -5279,24 +5279,34 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     /** Review-state summary derived from the Stage-B bookmark authority. */
     fun chatReviewStates(): HashMap<String, String> {
         val out = HashMap<String, String>()
-        val eligibleByChat = bookmarkEligibleTranscripts()
-            .mapNotNull { row -> row.chatId?.let { it to row } }
-            .groupBy({ it.first }, { it.second })
-        val db = readableDatabase
-        val chatIds = ArrayList<String>()
-        db.rawQuery(
-            "SELECT DISTINCT chat_id FROM transcripts WHERE chat_id IS NOT NULL ORDER BY chat_id",
-            emptyArray<String>()
-        ).use { while (it.moveToNext()) chatIds.add(it.getString(0)) }
-        for (chatId in chatIds) {
-            val bookmark = getAnalysisBookmark(chatId)
-            val hasReviewedPrefix = bookmark?.lastTranscriptId != null
-            val hasEligible = eligibleByChat[chatId].orEmpty().isNotEmpty()
-            out[chatId] = when {
-                hasEligible && hasReviewedPrefix -> "partial"
-                hasEligible -> "pending"
-                else -> "processed"
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            requireBookmarkCutover(db)
+            val chatIds = ArrayList<String>()
+            db.rawQuery(
+                "SELECT DISTINCT chat_id FROM transcripts WHERE chat_id IS NOT NULL ORDER BY chat_id",
+                emptyArray<String>()
+            ).use { while (it.moveToNext()) chatIds.add(it.getString(0)) }
+            for (chatId in chatIds) {
+                val bookmark = analysisBookmarkTx(db, chatId)
+                val ordered = transcriptsForChatTx(db, chatId)
+                val unscanned = AnalysisBookmark.eligibleRange(
+                    rows = ordered,
+                    boundary = bookmarkBoundary(bookmark),
+                    skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
+                    idOf = { it.transcriptId },
+                    boundaryOf = { transcriptBoundary(it) }
+                )
+                out[chatId] = AnalysisBookmark.chatReviewState(
+                    hasClaimedRows = ordered.any { it.claimRunId != null },
+                    hasUnscannedRows = unscanned.isNotEmpty(),
+                    hasScannedPrefix = bookmark.lastTranscriptId != null
+                )
             }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
         return out
     }

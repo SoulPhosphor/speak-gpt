@@ -220,4 +220,13 @@ class AnalysisBookmarkTest {
         assertFalse(visibleByChat.containsKey("failure"))
         assertFalse(bookmarks.containsKey("failure"))
     }
+
+    @Test
+    fun chatListStatusFollowsScanCoverageAndShowsRunningScans() {
+        assertEquals("pending", AnalysisBookmark.chatReviewState(false, true, false))
+        assertEquals("partial", AnalysisBookmark.chatReviewState(false, true, true))
+        assertEquals("processed", AnalysisBookmark.chatReviewState(false, false, true))
+        assertEquals("processing", AnalysisBookmark.chatReviewState(true, true, true))
+        assertEquals("processing", AnalysisBookmark.chatReviewState(true, false, false))
+    }
 }

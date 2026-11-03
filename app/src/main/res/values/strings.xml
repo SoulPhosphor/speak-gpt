@@ -1910,10 +1910,11 @@
     <string name="label_chat_memory_enabled">Use Saved Memories</string>
     <string name="label_chat_lorebooks_enabled">Use Lorebooks in This Chat</string>
     <string name="label_chat_memory_excluded">Archive This Chat</string>
-    <string name="memory_marker_pending">Memory: waiting for review</string>
-    <string name="memory_marker_partial">Memory: partially archived</string>
-    <string name="memory_marker_processed">Memory: archived</string>
-    <string name="memory_marker_excluded">Memory: excluded</string>
+    <string name="memory_marker_pending">Memory: Waiting for Review</string>
+    <string name="memory_marker_partial">Memory: Partially Archived</string>
+    <string name="memory_marker_processing">Memory: Currently Processing</string>
+    <string name="memory_marker_processed">Memory: Archived</string>
+    <string name="memory_marker_excluded">Memory: Excluded</string>
 
     <!-- Memory system Phase 3: librarian (embedding model + semantic search) -->
     <string name="memory_section_librarian">Librarian (semantic memory)</string>

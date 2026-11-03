@@ -90,6 +90,7 @@ class FlatChatIdentityBinder(
                 memory.text = activity.getString(when (state) {
                     "pending" -> R.string.memory_marker_pending
                     "partial" -> R.string.memory_marker_partial
+                    "processing" -> R.string.memory_marker_processing
                     "processed" -> R.string.memory_marker_processed
                     else -> R.string.memory_marker_excluded
                 })

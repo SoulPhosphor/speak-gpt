@@ -162,4 +162,22 @@ object FrozenChatRangeExecutor {
         for (chunk in chunks) staged.add(analyzeChunk(chunk, staged.toList()))
         return commit(staged)
     }
+
+    /**
+     * Chat-list memory status. A chat with any row claimed by an analysis run
+     * is "processing". Otherwise the status follows scan coverage only:
+     * nothing scanned is "pending", some scanned and some not is "partial",
+     * everything scanned is "processed". The Archive pause is deliberately
+     * not an input, so a paused chat is never reported as fully scanned.
+     */
+    fun chatReviewState(
+        hasClaimedRows: Boolean,
+        hasUnscannedRows: Boolean,
+        hasScannedPrefix: Boolean
+    ): String = when {
+        hasClaimedRows -> "processing"
+        hasUnscannedRows && hasScannedPrefix -> "partial"
+        hasUnscannedRows -> "pending"
+        else -> "processed"
+    }
 }
