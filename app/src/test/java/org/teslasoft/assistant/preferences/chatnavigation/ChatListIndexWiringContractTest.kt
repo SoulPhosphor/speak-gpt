@@ -120,7 +120,7 @@ class ChatListIndexWiringContractTest {
         val drawer = source("ui/drawer/DrawerHierarchyAdapter.kt")
         assertTrue(drawer.contains("MemoryStore.getInstance(activity).chatReviewStates()"))
         val bind = body(source("ui/drawer/FlatChatIdentityBinder.kt"), "fun bind(chatId: String")
-        assertTrue(bind.contains("if (index.memoryExcluded) \"excluded\" else memoryStates[chatId]"))
+        assertTrue(bind.contains("AnalysisBookmark.chatListState(index.memoryExcluded, memoryStates[chatId])"))
     }
 
     @Test fun backupsAndTheMemoryExportAreUntouched() {
