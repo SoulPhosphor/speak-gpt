@@ -1282,11 +1282,14 @@
         <item name="android:layout_weight">1</item>
     </style>
 
-    <!-- Shown right after the current mode word while filters are on. -->
+    <!-- Shown right after the current mode word while filters are on. Hidden
+         as gone, so it takes no room until it shows; the right-aligned line
+         then grows to make room for it. Its color is set here only. -->
     <style name="Widget.App.ListTools.FilteredIcon" parent="">
         <item name="android:layout_width">@dimen/list_tools_filtered_icon_size</item>
         <item name="android:layout_height">@dimen/list_tools_filtered_icon_size</item>
         <item name="android:src">@drawable/ic_filter_list</item>
+        <item name="android:tint">?attr/colorPrimary</item>
         <item name="android:contentDescription">@string/mem_filtered_indicator</item>
         <item name="android:visibility">gone</item>
     </style>
