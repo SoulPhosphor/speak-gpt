@@ -140,6 +140,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
 
     companion object {
         private const val STATE_MEMORY_ID = "memoryId"
+        private const val STATE_CONTENT_EXPANDED = "contentExpanded"
         // No Type plus the five starter Types. Lore is not a Type (§5.1) and is
         // deliberately absent. The keys map to type_ids at save time.
         private val TYPE_KEYS = listOf("none", "fact", "preference", "event", "status", "instruction")
@@ -726,8 +727,29 @@ class MemoryEditorActivity : SettingsPageActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        // The expanded panel holds the current text while open; copy it to the
+        // small box before the views save their state, so the small box is
+        // always the one source of the text across recreation.
+        val expanded = panelContentExpanded?.visibility == View.VISIBLE
+        if (expanded) {
+            val from = fieldContentExpanded
+            val to = fieldContent
+            if (from != null && to != null) {
+                val start = from.selectionStart
+                val end = from.selectionEnd
+                to.setText(from.text)
+                val length = to.text?.length ?: 0
+                if (start in 0..length && end in 0..length) to.setSelection(start, end)
+            }
+        }
         super.onSaveInstanceState(outState)
         memoryId?.let { outState.putString(STATE_MEMORY_ID, it) }
+        outState.putBoolean(STATE_CONTENT_EXPANDED, expanded)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        if (savedInstanceState.getBoolean(STATE_CONTENT_EXPANDED, false)) setContentExpanded(true)
     }
 
     /* ------------------------------ Memory box ------------------------------ */
