@@ -62,7 +62,6 @@ class MemoryControlsActivity : SettingsPageActivity() {
 
     private var switchDefaultMemory: MaterialSwitch? = null
     private var switchCompanionInRoleplay: MaterialSwitch? = null
-    private var switchChatListMemoryStatus: MaterialSwitch? = null
     private var switchUseImportanceRatings: MaterialSwitch? = null
 
 
@@ -91,7 +90,6 @@ class MemoryControlsActivity : SettingsPageActivity() {
         btnBack = findViewById(R.id.btn_back)
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
         switchCompanionInRoleplay = findViewById(R.id.switch_companion_in_roleplay)
-        switchChatListMemoryStatus = findViewById(R.id.switch_chat_list_memory_status)
         switchUseImportanceRatings = findViewById(R.id.switch_use_importance_ratings)
         textMemoryEngineValue = findViewById(R.id.text_memory_engine_value)
     }
@@ -135,14 +133,6 @@ class MemoryControlsActivity : SettingsPageActivity() {
         switchCompanionInRoleplay?.isChecked = preferences?.getAllowCompanionMemoriesInRoleplay() ?: false
         switchCompanionInRoleplay?.setOnCheckedChangeListener { _, checked ->
             preferences?.setAllowCompanionMemoriesInRoleplay(checked)
-        }
-
-        // Display-only: this controls the small review/archive line in the
-        // chat list and never changes memory capture or stored memory state.
-        switchChatListMemoryStatus?.isChecked =
-            preferences?.getShowMemoryStatusOnChatList() ?: true
-        switchChatListMemoryStatus?.setOnCheckedChangeListener { _, checked ->
-            preferences?.setShowMemoryStatusOnChatList(checked)
         }
 
         // Importance is global, defaults ON, and is a pure retrieval/UI gate.

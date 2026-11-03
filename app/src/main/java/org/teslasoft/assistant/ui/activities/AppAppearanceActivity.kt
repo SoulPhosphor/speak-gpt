@@ -59,6 +59,10 @@ class AppAppearanceActivity : SettingsPageActivity() {
         bindSwitch(R.id.switch_chat_list_start_date, preferences.getShowChatStartDateInChatList()) {
             preferences.setShowChatStartDateInChatList(it)
         }
+        // Display-only: never changes memory capture or stored memory state.
+        bindSwitch(R.id.switch_chat_list_memory_status, preferences.getShowMemoryStatusOnChatList()) {
+            preferences.setShowMemoryStatusOnChatList(it)
+        }
         bindSwitch(R.id.switch_chat_list_lock_folders, preferences.getLockFolderLocationInChatList()) {
             preferences.setLockFolderLocationInChatList(it)
         }
