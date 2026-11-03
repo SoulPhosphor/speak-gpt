@@ -2459,6 +2459,30 @@ class Preferences internal constructor(
         putGlobalString("archivist_custom_conversation_tokens", valid.toString())
     }
 
+    /** Carry forward an explicitly chosen legacy amount; Auto becomes 8,000. */
+    fun getMemoryScannerAverageTokens(): Int {
+        getGlobalString("memory_scanner_average_tokens", "").toIntOrNull()?.takeIf { it > 0 }?.let { return it }
+        val budget = org.teslasoft.assistant.preferences.memory.archivist.ArchivistRequestBudget
+        return when (getArchivistConversationAmount()) {
+            budget.CHOICE_SMALL -> budget.SMALL_TOKENS
+            budget.CHOICE_LARGE -> budget.LARGE_TOKENS
+            budget.CHOICE_CUSTOM -> getArchivistCustomConversationTokens()
+            else -> budget.STANDARD_TOKENS
+        }
+    }
+
+    fun getMemoryScannerMaximumTokens(): Int = maxOf(
+        getMemoryScannerAverageTokens(),
+        getGlobalString("memory_scanner_maximum_tokens", "").toIntOrNull()?.takeIf { it > 0 }
+            ?: org.teslasoft.assistant.util.ConversationTokenChunks.DEFAULT_MAXIMUM_TOKENS
+    )
+
+    fun setMemoryScannerTokenAmounts(average: Int, maximum: Int) {
+        if (average <= 0 || maximum < average) return
+        putGlobalString("memory_scanner_average_tokens", average.toString())
+        putGlobalString("memory_scanner_maximum_tokens", maximum.toString())
+    }
+
     /** Analysis temperature, 0.0–2.0. Recommended/default 0.3. */
     fun getArchivistTemperature(): Float =
         getGlobalString("archivist_temperature", "0.3").toFloatOrNull()?.coerceIn(0.0f, 2.0f) ?: 0.3f
@@ -2946,7 +2970,7 @@ class Preferences internal constructor(
         getCompactionAverageTokens(),
         getGlobalString("compaction_maximum_tokens", "").toIntOrNull()
             ?.takeIf { it > 0 }
-            ?: org.teslasoft.assistant.util.summarizer.CompactionBatches.DEFAULT_MAXIMUM_TOKENS
+            ?: org.teslasoft.assistant.util.ConversationTokenChunks.DEFAULT_MAXIMUM_TOKENS
     )
 
     fun setCompactionMaximumTokens(value: Int) {

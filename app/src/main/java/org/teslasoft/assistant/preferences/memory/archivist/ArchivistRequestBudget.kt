@@ -20,6 +20,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
+import org.teslasoft.assistant.util.ConversationTokenChunks
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.util.ProviderLimitKind
 
@@ -82,6 +83,13 @@ object ArchivistRequestBudget {
         return minOf(selected, safe)
     }
 
+    /** Actual model capacity, independent of the user's soft average. */
+    fun effectiveMaximumTokens(configuredMaximum: Int, verifiedContextTokens: Int?, requestHeadroomTokens: Int): Int {
+        if (verifiedContextTokens == null) return configuredMaximum.coerceAtLeast(1)
+        return minOf(configuredMaximum, (verifiedContextTokens.toLong() - requestHeadroomTokens)
+            .coerceAtLeast(1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+    }
+
     fun headroomTokens(completeSystemPrompt: String): Int =
         IncludeTextPolicy.estimateTokens(completeSystemPrompt) +
             EXPECTED_OUTPUT_TOKENS + SAFETY_MARGIN_TOKENS
@@ -93,166 +101,129 @@ data class ArchivistRequestChunk(
 )
 
 /**
- * Token-targeted request chunks. Whole messages remain intact whenever they
- * fit. An individually oversized message is split first at paragraph breaks,
- * then sentence breaks, with a hard token-bounded cut only when the text has no
- * usable natural boundary. Captured scene changes always close the chunk.
+ * Memory Scanner source chunks. The average can stretch by a flat allowance
+ * to finish an exchange. Only an individual message above the maximum splits,
+ * always between sentences; a single oversized sentence is kept whole.
+ * Captured scene changes always close the chunk. Source rows are never edited.
  */
 object ArchivistConversationChunker {
     private const val MESSAGE_OVERHEAD_TOKENS = 4
 
-    private data class RowFragment(
-        val transcript: TranscriptRecord,
-        val tokens: Int
-    )
+    private data class RowFragment(val transcript: TranscriptRecord, val tokens: Int, val isBot: Boolean)
 
     fun split(
         transcripts: List<TranscriptRecord>,
-        targetTokens: Int
+        targetTokens: Int,
+        maximumTokens: Int = targetTokens,
+        allowanceTokens: Int = 0
     ): List<ArchivistRequestChunk> {
         if (transcripts.isEmpty()) return emptyList()
-        val budget = targetTokens.coerceAtLeast(ArchivistRequestBudget.MIN_RUNTIME_TRANSCRIPT_TOKENS)
-        val fragments = transcripts.flatMap { splitRow(it, budget) }
+        val budget = targetTokens.coerceAtLeast(1)
+        val maximum = maximumTokens.coerceAtLeast(1)
+        val requestLimit = minOf(maximum.toLong(), budget.toLong() + allowanceTokens.coerceAtLeast(0))
+        val fragments = transcripts.flatMap { splitRow(it, maximum) }
         val out = ArrayList<ArchivistRequestChunk>()
         var current = ArrayList<TranscriptRecord>()
-        var currentTokens = 0
+        var currentTokens = 0L
         var currentScene: ArchivistSceneContext? = null
 
         fun flush() {
             if (current.isEmpty()) return
-            out.add(ArchivistRequestChunk(current, currentTokens))
+            out.add(ArchivistRequestChunk(coalesceRows(current), currentTokens.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
             current = ArrayList()
             currentTokens = 0
             currentScene = null
         }
 
-        for (fragment in fragments) {
-            val scene = ArchivistSceneContext.from(fragment.transcript)
-            if (current.isNotEmpty() &&
-                (scene != currentScene || currentTokens + fragment.tokens > budget)
-            ) {
-                flush()
-            }
+        fun append(fragment: RowFragment) {
             current.add(fragment.transcript)
             currentTokens += fragment.tokens
-            currentScene = scene
+            currentScene = ArchivistSceneContext.from(fragment.transcript)
+        }
+
+        var from = 0
+        while (from < fragments.size) {
+            val scene = ArchivistSceneContext.from(fragments[from].transcript)
+            var end = from + 1
+            while (end < fragments.size && fragments[end].isBot &&
+                ArchivistSceneContext.from(fragments[end].transcript) == scene) end++
+            val exchangeTokens = (from until end).sumOf { fragments[it].tokens.toLong() }
+            if (exchangeTokens <= requestLimit) {
+                if (current.isNotEmpty() && (currentScene != scene || currentTokens >= budget ||
+                        currentTokens + exchangeTokens > requestLimit)) flush()
+                // The pair is admitted together. Do not flush at its user/AI boundary.
+                for (i in from until end) append(fragments[i])
+            } else {
+                // The pair alone exceeds average + allowance: separate between
+                // messages. A single whole message may exceed the average.
+                for (i in from until end) {
+                    val fragment = fragments[i]
+                    if (current.isNotEmpty() && (scene != currentScene || currentTokens >= budget ||
+                            currentTokens + fragment.tokens > requestLimit)) flush()
+                    append(fragment)
+                }
+            }
+            from = end
         }
         flush()
         return out
     }
 
-    private fun splitRow(row: TranscriptRecord, budget: Int): List<RowFragment> {
-        val turns = try {
-            JSONArray(row.content)
-        } catch (_: Exception) {
-            null
+    /** Merge adjacent fragments of the same source row in one pass. */
+    private fun coalesceRows(rows: List<TranscriptRecord>): List<TranscriptRecord> {
+        val result = ArrayList<TranscriptRecord>()
+        var base: TranscriptRecord? = null
+        var pending: JSONArray? = null
+        fun flush() {
+            val row = base
+            val turns = pending
+            if (row != null && turns != null) result.add(row.copy(content = turns.toString()))
+            base = null
+            pending = null
         }
+        for (row in rows) {
+            val turns = runCatching { JSONArray(row.content) }.getOrNull()
+            if (turns == null) {
+                flush()
+                result.add(row)
+                continue
+            }
+            if (base?.copy(content = row.content) != row) flush()
+            if (base == null) {
+                base = row
+                pending = JSONArray()
+            }
+            for (i in 0 until turns.length()) pending!!.put(turns.get(i))
+        }
+        flush()
+        return result
+    }
+
+    private fun splitRow(row: TranscriptRecord, maximum: Int): List<RowFragment> {
+        val turns = runCatching { JSONArray(row.content) }.getOrNull()
         if (turns == null) {
-            return splitOversizedText(row.content, budget).map { part ->
-                RowFragment(row.copy(content = part), IncludeTextPolicy.estimateTokens(part))
+            return ConversationTokenChunks.splitSentences(row.content, maximum).map { part ->
+                RowFragment(row.copy(content = part), IncludeTextPolicy.estimateTokens(part), false)
             }
         }
-
         val pieces = ArrayList<RowFragment>()
-        var pending = JSONArray()
-        var pendingTokens = 0
-
-        fun flushPending() {
-            if (pending.length() == 0) return
-            pieces.add(RowFragment(row.copy(content = pending.toString()), pendingTokens))
-            pending = JSONArray()
-            pendingTokens = 0
-        }
-
         for (index in 0 until turns.length()) {
             val turn = turns.optJSONObject(index) ?: continue
             val content = turn.optString("content")
-            val tokenCost = IncludeTextPolicy.estimateTokens(content) + MESSAGE_OVERHEAD_TOKENS
-            if (tokenCost <= budget) {
-                if (pending.length() > 0 && pendingTokens + tokenCost > budget) flushPending()
-                pending.put(JSONObject(turn.toString()))
-                pendingTokens += tokenCost
-                continue
-            }
-
-            flushPending()
-            val contentBudget = (budget - MESSAGE_OVERHEAD_TOKENS)
-                .coerceAtLeast(ArchivistRequestBudget.MIN_RUNTIME_TRANSCRIPT_TOKENS / 2)
-            for (part in splitOversizedText(content, contentBudget)) {
+            for (part in ConversationTokenChunks.splitSentences(content, (maximum - MESSAGE_OVERHEAD_TOKENS).coerceAtLeast(1))) {
                 val splitTurn = JSONObject(turn.toString()).put("content", part)
-                pieces.add(
-                    RowFragment(
-                        row.copy(content = JSONArray().put(splitTurn).toString()),
-                        IncludeTextPolicy.estimateTokens(part) + MESSAGE_OVERHEAD_TOKENS
-                    )
-                )
+                pieces.add(RowFragment(
+                    row.copy(content = JSONArray().put(splitTurn).toString()),
+                    (IncludeTextPolicy.estimateTokens(part).toLong() + MESSAGE_OVERHEAD_TOKENS)
+                        .coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                    turn.optString("role") == "assistant"
+                ))
             }
         }
-        flushPending()
-        if (pieces.isEmpty()) pieces.add(RowFragment(row.copy(content = "[]"), 0))
+        if (pieces.isEmpty()) pieces.add(RowFragment(row.copy(content = "[]"), 0, false))
         return pieces
     }
-
-    private fun splitOversizedText(text: String, budgetTokens: Int): List<String> {
-        if (text.isEmpty() || IncludeTextPolicy.estimateTokens(text) <= budgetTokens) {
-            return listOf(text)
-        }
-        val out = ArrayList<String>()
-        var start = 0
-        while (start < text.length) {
-            val remaining = text.substring(start)
-            if (IncludeTextPolicy.estimateTokens(remaining) <= budgetTokens) {
-                out.add(remaining)
-                break
-            }
-            val hardEnd = largestFittingEnd(text, start, budgetTokens)
-            val paragraphEnd = lastBoundaryAtOrBefore(text, start, hardEnd, PARAGRAPH_BREAK)
-            val sentenceEnd = if (paragraphEnd == null) {
-                lastBoundaryAtOrBefore(text, start, hardEnd, SENTENCE_BREAK)
-            } else null
-            val end = paragraphEnd ?: sentenceEnd ?: hardEnd
-            out.add(text.substring(start, end))
-            start = end
-        }
-        return out
-    }
-
-    private fun largestFittingEnd(text: String, start: Int, budgetTokens: Int): Int {
-        var low = start + 1
-        var high = text.length
-        var best = low
-        while (low <= high) {
-            val middle = (low + high) ushr 1
-            if (IncludeTextPolicy.estimateTokens(text.substring(start, middle)) <= budgetTokens) {
-                best = middle
-                low = middle + 1
-            } else {
-                high = middle - 1
-            }
-        }
-        return best.coerceAtMost(text.length)
-    }
-
-    private fun lastBoundaryAtOrBefore(
-        text: String,
-        start: Int,
-        hardEnd: Int,
-        pattern: Regex
-    ): Int? = pattern.findAll(text, start)
-        .map { it.range.last + 1 }
-        .takeWhile { it <= hardEnd }
-        .lastOrNull()
-        ?.takeIf { it > start }
-
-    private val PARAGRAPH_BREAK = Regex("(?:\\r?\\n){2,}")
-    private val SENTENCE_BREAK = Regex("(?<=[.!?])\\s+")
 }
-
-class ArchivistShrinkRequiredException(
-    val nextTargetTokens: Int,
-    message: String,
-    cause: Throwable? = null
-) : Exception(message, cause)
 
 object ArchivistRetryPolicy {
     const val MAX_SHRINK_DEPTH = 2

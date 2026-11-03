@@ -84,7 +84,7 @@ class ArchivistRequestBudgetTest {
 
     @Test
     fun legacyTwoHundredThousandCharacterRequestFallbackIsGone() {
-        val original = "paragraph sentence. ".repeat(14_000)
+        val original = "Paragraph sentence. ".repeat(14_000)
         assertTrue(original.length > 200_000)
         val chunks = ArchivistConversationChunker.split(
             listOf(transcript(original)),
@@ -166,6 +166,57 @@ class ArchivistRequestBudgetTest {
                 "{\"memories\":[],\"model_rules\":[]}", "stop"
             )
         )
+    }
+
+    @Test
+    fun scannerUsesFlatAllowanceAndKeepsTheFinalPairWhole() {
+        val turns = JSONArray()
+        repeat(3) {
+            turns.put(JSONObject().put("role", "user").put("content", "u".repeat(6_000)))
+            turns.put(JSONObject().put("role", "assistant").put("content", "a".repeat(5_968)))
+        }
+        // Each pair costs 3,000 including role overhead: two fit 4,000 + 2,000.
+        val row = transcript().copy(content = turns.toString())
+        val chunks = ArchivistConversationChunker.split(listOf(row), 4_000, 100_000, 2_000)
+        assertEquals(2, chunks.size)
+        assertEquals(6_000, chunks.first().estimatedTranscriptTokens)
+        assertEquals(4, JSONArray(chunks.first().transcripts.single().content).length())
+        assertEquals(row.transcriptId, chunks.first().transcripts.single().transcriptId)
+    }
+
+    @Test
+    fun scannerSeparatesAnOversizedPairWithoutSplittingIndividualMessages() {
+        val turns = JSONArray()
+            .put(JSONObject().put("role", "user").put("content", "u".repeat(16_000)))
+            .put(JSONObject().put("role", "assistant").put("content", "a".repeat(12_000)))
+        val row = transcript().copy(content = turns.toString())
+        val chunks = ArchivistConversationChunker.split(listOf(row), 4_000, 100_000, 2_000)
+        assertEquals(2, chunks.size)
+        val rebuilt = chunks.flatMap { it.transcripts }.flatMap {
+            val data = JSONArray(it.content)
+            (0 until data.length()).map { i -> data.getJSONObject(i).getString("content") }
+        }
+        assertEquals(listOf("u".repeat(16_000), "a".repeat(12_000)), rebuilt)
+    }
+
+    @Test
+    fun scannerSentenceChunksKeepAllTextAndPermanentTranscriptIds() {
+        val original = "A complete sentence. ".repeat(100)
+        val row = transcript(original)
+        val chunks = ArchivistConversationChunker.split(listOf(row), 20, 100, 2_000)
+        assertTrue(chunks.size > 1)
+        val rows = chunks.flatMap { it.transcripts }
+        assertEquals(original, rows.joinToString("") { JSONArray(it.content).getJSONObject(0).getString("content") })
+        rows.forEach { assertEquals(row.transcriptId, it.transcriptId) }
+    }
+
+    @Test
+    fun scannerKeepsASentenceAboveTheMaximumWholeAndAlone() {
+        val sentence = "A " + "very ".repeat(100) + "long sentence. "
+        val row = transcript("Short. " + sentence + "Last. ")
+        val chunks = ArchivistConversationChunker.split(listOf(row), 10, 20, 2_000)
+        val messages = chunks.map { JSONArray(it.transcripts.single().content).getJSONObject(0).getString("content") }
+        assertEquals(listOf("Short. ", sentence, "Last. "), messages)
     }
 
     private fun target(choice: String, custom: Int? = null): Int =

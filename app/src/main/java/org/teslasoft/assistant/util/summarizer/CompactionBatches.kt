@@ -5,8 +5,7 @@
 package org.teslasoft.assistant.util.summarizer
 
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
-import java.text.BreakIterator
-import java.util.Locale
+import org.teslasoft.assistant.util.ConversationTokenChunks
 
 /**
  * Splits a compaction into requests of about the Compaction Average Token
@@ -16,8 +15,8 @@ import java.util.Locale
  */
 object CompactionBatches {
     const val DEFAULT_TOKENS = 4000
-    const val DEFAULT_MAXIMUM_TOKENS = 100_000
-    const val EXCHANGE_ALLOWANCE_TOKENS = 2_000
+    const val DEFAULT_MAXIMUM_TOKENS = ConversationTokenChunks.DEFAULT_MAXIMUM_TOKENS
+    const val EXCHANGE_ALLOWANCE_TOKENS = ConversationTokenChunks.EXCHANGE_ALLOWANCE_TOKENS
 
     fun estimateTokens(entry: SummarizerController.Entry): Int =
         if (entry.text.isBlank()) 0 else IncludeTextPolicy.estimateTokens(entry.text)
@@ -80,49 +79,8 @@ object CompactionBatches {
      * Counts match IncludeTextPolicy without repeatedly recounting the growing
      * chunk. An oversized sentence is the sole exception to the maximum.
      */
-    fun splitMessage(entry: SummarizerController.Entry, maximumTokens: Int): List<SummarizerController.Entry> {
-        val maximum = maximumTokens.coerceAtLeast(1)
-        if (estimateTokens(entry) <= maximum) return listOf(entry)
-        val text = entry.text
-        val sentences = BreakIterator.getSentenceInstance(Locale.ROOT).apply { setText(text) }
-        val chunks = ArrayList<SummarizerController.Entry>()
-        var chunkStart = 0
-        var sentenceStart = sentences.first()
-        var ascii = 0L
-        var other = 0L
-        var sentenceEnd = sentences.next()
-        while (sentenceEnd != BreakIterator.DONE) {
-            var sentenceAscii = 0L
-            var sentenceOther = 0L
-            var offset = sentenceStart
-            while (offset < sentenceEnd) {
-                val codePoint = text.codePointAt(offset)
-                if (codePoint <= 0x7F) sentenceAscii++
-                else sentenceOther += Character.charCount(codePoint)
-                offset += Character.charCount(codePoint)
-            }
-            val candidateTokens = (ascii + sentenceAscii + 3) / 4 + other + sentenceOther
-            if (candidateTokens > maximum && sentenceStart > chunkStart) {
-                chunks.add(entry.copy(text = text.substring(chunkStart, sentenceStart)))
-                chunkStart = sentenceStart
-                ascii = 0
-                other = 0
-            }
-            ascii += sentenceAscii
-            other += sentenceOther
-            if ((ascii + 3) / 4 + other > maximum) {
-                // One sentence alone is oversized. Never cut it or add more to it.
-                chunks.add(entry.copy(text = text.substring(chunkStart, sentenceEnd)))
-                chunkStart = sentenceEnd
-                ascii = 0
-                other = 0
-            }
-            sentenceStart = sentenceEnd
-            sentenceEnd = sentences.next()
-        }
-        if (chunkStart < text.length) chunks.add(entry.copy(text = text.substring(chunkStart)))
-        return chunks
-    }
+    fun splitMessage(entry: SummarizerController.Entry, maximumTokens: Int): List<SummarizerController.Entry> =
+        ConversationTokenChunks.splitSentences(entry.text, maximumTokens).map { entry.copy(text = it) }
 
     /**
      * Divide one oversized exchange between messages at [requestTokens]. A
