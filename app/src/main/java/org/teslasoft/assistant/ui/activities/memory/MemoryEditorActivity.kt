@@ -804,8 +804,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         ScreenChrome.fitSystemBarsAndKeyboard(
             findViewById<android.view.ViewGroup>(android.R.id.content)?.getChildAt(0),
             actionBar,
-            findViewById<android.view.View>(R.id.scroll),
-            panelContentExpanded
+            findViewById<android.view.View>(R.id.scroll)
         )
     }
 

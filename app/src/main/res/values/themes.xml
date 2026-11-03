@@ -2676,8 +2676,8 @@
     </style>
 
     <!-- Transparent holder for the expanded panel. It fills the page below
-         the header and takes the navigation-bar / keyboard spacing, so the
-         panel always stays fully on screen. -->
+         the header; keyboard spacing comes from the screen's shared
+         ScreenChrome.fitSystemBarsAndKeyboard handling. -->
     <style name="Widget.App.Field.ExpandedPanel.Holder" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">0dp</item>

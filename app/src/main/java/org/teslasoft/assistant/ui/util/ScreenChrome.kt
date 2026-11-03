@@ -74,10 +74,10 @@ object ScreenChrome {
      * its scroll position when the keyboard opens or closes; only a focused
      * cursor that would end up behind the keyboard is brought into view.
      */
-    fun fitSystemBarsAndKeyboard(root: View?, header: View?, vararg contents: View?) {
+    fun fitSystemBarsAndKeyboard(root: View?, header: View?, content: View?) {
         if (Build.VERSION.SDK_INT < 35 || root == null) return
         val headerTop = header?.paddingTop ?: 0
-        val contentBottoms = contents.map { it?.paddingBottom ?: 0 }
+        val contentBottom = content?.paddingBottom ?: 0
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
@@ -93,9 +93,7 @@ object ScreenChrome {
                 bottom = if (keyboardOpen) keyboard else 0
             )
             header?.updatePadding(top = headerTop + bars.top)
-            contents.forEachIndexed { i, content ->
-                content?.updatePadding(bottom = contentBottoms[i] + if (keyboardOpen) 0 else bars.bottom)
-            }
+            content?.updatePadding(bottom = contentBottom + if (keyboardOpen) 0 else bars.bottom)
             insets
         }
         ViewCompat.requestApplyInsets(root)
