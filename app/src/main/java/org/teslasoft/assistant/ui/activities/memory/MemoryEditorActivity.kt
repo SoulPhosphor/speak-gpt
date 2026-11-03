@@ -16,7 +16,9 @@
 
 package org.teslasoft.assistant.ui.activities.memory
 
+import org.teslasoft.assistant.ui.util.ParameterInfoDialog
 import org.teslasoft.assistant.ui.util.SaveIconFlash
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
 import android.content.res.ColorStateList
@@ -83,10 +85,9 @@ class MemoryEditorActivity : SettingsPageActivity() {
     private var panelContentExpanded: View? = null
     private var scrollView: View? = null
     private var btnHeaderSave: ImageButton? = null
-    private var btnType: MaterialButton? = null
-    private var typeHint: TextView? = null
-    private var btnImportance: MaterialButton? = null
-    private var btnScope: MaterialButton? = null
+    private var btnType: TextView? = null
+    private var btnImportance: TextView? = null
+    private var btnScope: TextView? = null
     private var sectionTargets: View? = null
     private var targetsHeading: TextView? = null
     private var chipsTargets: ChipGroup? = null
@@ -164,7 +165,6 @@ class MemoryEditorActivity : SettingsPageActivity() {
         scrollView = findViewById(R.id.scroll)
         btnHeaderSave = findViewById(R.id.btn_header_save)
         btnType = findViewById(R.id.btn_mem_type)
-        typeHint = findViewById(R.id.text_type_hint)
         btnImportance = findViewById(R.id.btn_mem_importance)
         btnScope = findViewById(R.id.btn_mem_scope)
         sectionTargets = findViewById(R.id.section_targets)
@@ -189,9 +189,17 @@ class MemoryEditorActivity : SettingsPageActivity() {
         // an edit preserves its stored value without exposing the control.
         val importanceOn = preferences?.getUseImportanceRatings() == true
         val importanceVisibility = if (importanceOn) View.VISIBLE else View.GONE
-        findViewById<TextView>(R.id.text_importance_label)?.visibility = importanceVisibility
-        btnImportance?.visibility = importanceVisibility
+        findViewById<View>(R.id.row_importance)?.visibility = importanceVisibility
         btnScope?.setOnClickListener { showScopePicker() }
+        findViewById<View>(R.id.btn_info_scope)?.setOnClickListener {
+            ParameterInfoDialog.show(this, getString(R.string.mem_info_scope_title), getString(R.string.mem_info_scope_body))
+        }
+        findViewById<View>(R.id.btn_info_type)?.setOnClickListener {
+            ParameterInfoDialog.show(this, getString(R.string.mem_info_type_title), typeDefinitionsText())
+        }
+        findViewById<View>(R.id.btn_info_importance)?.setOnClickListener {
+            ParameterInfoDialog.show(this, getString(R.string.mem_info_importance_title), getString(R.string.mem_info_importance_body))
+        }
         dropdownTargets?.setOnClickListener { showTargetDropdown(it) }
         btnSave?.setOnClickListener { save(activate = false) }
         btnAccept?.setOnClickListener { save(activate = true) }
@@ -378,27 +386,32 @@ class MemoryEditorActivity : SettingsPageActivity() {
             else -> memTypes.firstOrNull { it.typeId == currentTypeId }?.name
                 ?: typeLabel(starterKeyFor(currentTypeId))
         }
-        typeHint?.text = typeHintText(starterKeyFor(currentTypeId))
     }
+
+    /** The Type Definitions pop-up: every Type the picker offers, each with
+     *  its definition, separated by a blank line. */
+    private fun typeDefinitionsText(): String =
+        TYPE_KEYS.joinToString("\n\n") {
+            getString(R.string.mem_info_type_line_fmt, typeLabel(it), typeHintText(it))
+        }
 
     private fun showTypePicker() {
         // The picker offers No Type plus the starter Types only (the dynamic
         // Type picker is Phase 2). A custom Type stays selected until the user
         // explicitly chooses one of these, so opening the picker without picking
         // never drops a custom Type.
-        val labels = TYPE_KEYS.map { typeLabel(it) }.toTypedArray()
-        val current = TYPE_KEYS.indexOf(starterKeyFor(currentTypeId))
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_edit_label_type)
-            .setSingleChoiceItems(labels, current) { d, which ->
-                // index 0 = No Type; 1..5 = the matching starter Type id.
-                currentTypeId = if (which == 0) null
-                    else MemoryTypeMigration.STARTER_TYPES[which - 1].typeId
-                refreshType()
-                d.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        val anchor = btnType ?: return
+        val labels = TYPE_KEYS.map { typeLabel(it) }
+        val key = starterKeyFor(currentTypeId)
+        // A custom Type is not one of these options, so nothing is marked
+        // selected and No Type stays in the list.
+        val current = if (currentTypeId != null && key == "none") -1 else TYPE_KEYS.indexOf(key)
+        AppDropdown.show(anchor, labels, current) { which ->
+            // index 0 = No Type; 1..5 = the matching starter Type id.
+            currentTypeId = if (which == 0) null
+                else MemoryTypeMigration.STARTER_TYPES[which - 1].typeId
+            refreshType()
+        }
     }
 
     /* ------------------------------ importance ------------------------------ */
@@ -421,17 +434,13 @@ class MemoryEditorActivity : SettingsPageActivity() {
     private fun showImportancePicker() {
         // Signed scale: -2, -1, 0 (neutral), +1, +2, +3 (mandatory when relevant).
         val values = listOf(-2, -1, 0, 1, 2, 3)
-        val labels = values.map { importanceLabel(it) }.toTypedArray()
+        val anchor = btnImportance ?: return
+        val labels = values.map { importanceLabel(it) }
         val selected = values.indexOf(currentImportance.coerceIn(-2, 3)).coerceAtLeast(0)
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_edit_label_importance)
-            .setSingleChoiceItems(labels, selected) { d, which ->
-                currentImportance = values[which]
-                refreshImportance()
-                d.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        AppDropdown.show(anchor, labels, selected) { which ->
+            currentImportance = values[which]
+            refreshImportance()
+        }
     }
 
     /* ------------------------------ scope ------------------------------ */
@@ -461,22 +470,18 @@ class MemoryEditorActivity : SettingsPageActivity() {
     }
 
     private fun showScopePicker() {
-        val labels = SCOPE_KEYS.map { scopeLabel(it) }.toTypedArray()
+        val anchor = btnScope ?: return
+        val labels = SCOPE_KEYS.map { scopeLabel(it) }
         val current = SCOPE_KEYS.indexOf(currentScope).coerceAtLeast(0)
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_edit_label_scope)
-            .setSingleChoiceItems(labels, current) { d, which ->
-                val picked = SCOPE_KEYS[which]
-                if (picked != currentScope) {
-                    currentScope = picked
-                    // Targets belong to one category; switching clears them.
-                    selectedTargets.clear()
-                    refreshScope()
-                }
-                d.dismiss()
+        AppDropdown.show(anchor, labels, current) { which ->
+            val picked = SCOPE_KEYS[which]
+            if (picked != currentScope) {
+                currentScope = picked
+                // Targets belong to one category; switching clears them.
+                selectedTargets.clear()
+                refreshScope()
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        }
     }
 
     /* ------------------------------ targets ------------------------------ */

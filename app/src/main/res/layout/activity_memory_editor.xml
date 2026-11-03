@@ -98,63 +98,55 @@
                     style="@style/Widget.App.Field.ExpandableBox.Toggle" />
             </FrameLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="20dp"
-                android:text="@string/mem_edit_label_type"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+            <!-- Scope, Type and Importance (owner order, Nov 3 2026): each
+                 label has its information icon right after it and the
+                 dropdown fills the rest of the line. -->
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_mem_type"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                app:icon="@drawable/ic_edit" />
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/mem_edit_label_scope" />
 
-            <TextView
-                android:id="@+id/text_type_hint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="6dp"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
+                <ImageButton
+                    android:id="@+id/btn_info_scope"
+                    style="@style/Widget.App.InfoButton" />
 
-            <TextView
-                android:id="@+id/text_importance_label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="20dp"
-                android:text="@string/mem_edit_label_importance"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/btn_mem_scope"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+            </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_mem_importance"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="20dp"
-                android:text="@string/mem_edit_label_scope"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/mem_edit_label_type" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_mem_scope"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
+                <ImageButton
+                    android:id="@+id/btn_info_type"
+                    style="@style/Widget.App.InfoButton" />
+
+                <TextView
+                    android:id="@+id/btn_mem_type"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_importance"
+                style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/mem_edit_label_importance" />
+
+                <ImageButton
+                    android:id="@+id/btn_info_importance"
+                    style="@style/Widget.App.InfoButton" />
+
+                <TextView
+                    android:id="@+id/btn_mem_importance"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+            </LinearLayout>
 
             <!-- Target picker (owner rework, July 8–9 2026): "Associated
                  <Scope>" label + a boxed dropdown on the SAME line (the box

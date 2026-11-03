@@ -1253,6 +1253,13 @@
         <item name="android:layout_marginStart">16dp</item>
     </style>
 
+    <!-- A dropdown value after its label on a ControlRow that fills the rest
+         of the line, per the canonical labeled-row placement. -->
+    <style name="Widget.App.Dropdown.CanonicalValue.Trailing.Fill">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+
     <!-- The same position as a dropdown value when there is only one choice:
          plain text, no box or chevron. -->
     <style name="Widget.App.Dropdown.StaticValue" parent="">

@@ -653,7 +653,7 @@ vocabulary.
 
 `Widget.App.Page.Content` is a plain page body with the standard side gutter;
 `Widget.App.Page.ControlRow` is one label-and-control line in it. A dropdown
-value after its label uses `Widget.App.Dropdown.CanonicalValue.Trailing`; when
+value after its label uses `Widget.App.Dropdown.CanonicalValue.Trailing`, or `Widget.App.Dropdown.CanonicalValue.Trailing.Fill` to fill the rest of the line (the canonical labeled-row placement; a `Widget.App.InfoButton` may sit between the label and the value); when
 there is only one choice, `Widget.App.Dropdown.StaticValue` shows it as plain
 text. A label-sized action after a field on the same line uses
 `AppButton.Primary.Inline.Trailing`.
