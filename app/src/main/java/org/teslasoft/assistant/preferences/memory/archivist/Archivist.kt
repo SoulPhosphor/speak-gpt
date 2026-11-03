@@ -669,7 +669,9 @@ object Archivist {
                                             .headroomTokens(requestSystemPrompt)
                                         val safeTranscriptTarget = ArchivistRequestBudget
                                             .effectiveMaximumTokens(
-                                                configuredMaximum = scannerMaximumTokens,
+                                                // The user maximum has a whole-sentence exception.
+                                                // This check must enforce actual model capacity only.
+                                                configuredMaximum = Int.MAX_VALUE,
                                                 verifiedContextTokens = verifiedContextTokens,
                                                 requestHeadroomTokens = requestHeadroom
                                             )
