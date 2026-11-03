@@ -107,8 +107,6 @@ data class ArchivistRequestChunk(
  * Captured scene changes always close the chunk. Source rows are never edited.
  */
 object ArchivistConversationChunker {
-    private const val MESSAGE_OVERHEAD_TOKENS = 4
-
     private data class RowFragment(val transcript: TranscriptRecord, val tokens: Int, val isBot: Boolean)
 
     fun split(
@@ -210,12 +208,11 @@ object ArchivistConversationChunker {
         for (index in 0 until turns.length()) {
             val turn = turns.optJSONObject(index) ?: continue
             val content = turn.optString("content")
-            for (part in ConversationTokenChunks.splitSentences(content, (maximum - MESSAGE_OVERHEAD_TOKENS).coerceAtLeast(1))) {
+            for (part in ConversationTokenChunks.splitSentences(content, maximum)) {
                 val splitTurn = JSONObject(turn.toString()).put("content", part)
                 pieces.add(RowFragment(
                     row.copy(content = JSONArray().put(splitTurn).toString()),
-                    (IncludeTextPolicy.estimateTokens(part).toLong() + MESSAGE_OVERHEAD_TOKENS)
-                        .coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                    if (part.isBlank()) 0 else IncludeTextPolicy.estimateTokens(part),
                     turn.optString("role") == "assistant"
                 ))
             }

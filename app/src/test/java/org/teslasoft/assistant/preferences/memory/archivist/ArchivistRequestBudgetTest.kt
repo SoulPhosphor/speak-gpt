@@ -173,9 +173,9 @@ class ArchivistRequestBudgetTest {
         val turns = JSONArray()
         repeat(3) {
             turns.put(JSONObject().put("role", "user").put("content", "u".repeat(6_000)))
-            turns.put(JSONObject().put("role", "assistant").put("content", "a".repeat(5_968)))
+            turns.put(JSONObject().put("role", "assistant").put("content", "a".repeat(6_000)))
         }
-        // Each pair costs 3,000 including role overhead: two fit 4,000 + 2,000.
+        // Each pair contains 3,000 source-text tokens: two fit 4,000 + 2,000.
         val row = transcript().copy(content = turns.toString())
         val chunks = ArchivistConversationChunker.split(listOf(row), 4_000, 100_000, 2_000)
         assertEquals(2, chunks.size)
