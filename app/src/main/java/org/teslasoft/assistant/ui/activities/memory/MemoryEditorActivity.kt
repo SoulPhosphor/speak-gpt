@@ -139,6 +139,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
     private val loreCards = ArrayList<Triple<String, String, String>>()
 
     companion object {
+        private const val STATE_MEMORY_ID = "memoryId"
         // No Type plus the five starter Types. Lore is not a Type (§5.1) and is
         // deliberately absent. The keys map to type_ids at save time.
         private val TYPE_KEYS = listOf("none", "fact", "preference", "event", "status", "instruction")
@@ -152,7 +153,10 @@ class MemoryEditorActivity : SettingsPageActivity() {
         setContentView(R.layout.activity_memory_editor)
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
-        memoryId = intent.extras?.getString("memoryId")?.takeIf { it.isNotEmpty() }
+        val openedMemoryId = intent.extras?.getString("memoryId")?.takeIf { it.isNotEmpty() }
+        // A memory saved from this screen keeps its id across recreation, so a
+        // later save updates it instead of adding another.
+        memoryId = savedInstanceState?.getString(STATE_MEMORY_ID)?.takeIf { it.isNotEmpty() } ?: openedMemoryId
         preferences = Preferences.getPreferences(this, chatId)
 
         actionBar = findViewById(R.id.action_bar)
@@ -177,7 +181,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         dropdownLinkCard = findViewById(R.id.dropdown_link_card)
         dropdownLinkSection = findViewById(R.id.dropdown_link_section)
 
-        titleView?.setText(if (memoryId == null) R.string.mem_edit_title_new else R.string.mem_edit_title_edit)
+        titleView?.setText(if (openedMemoryId == null) R.string.mem_edit_title_new else R.string.mem_edit_title_edit)
 
         applyTheme()
 
@@ -719,6 +723,11 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 }
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        memoryId?.let { outState.putString(STATE_MEMORY_ID, it) }
     }
 
     /* ------------------------------ Memory box ------------------------------ */
