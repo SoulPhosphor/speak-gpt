@@ -20,9 +20,12 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.view.WindowInsets
 import android.widget.HorizontalScrollView
+import androidx.activity.OnBackPressedCallback
 import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
@@ -70,6 +73,10 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
     private var filterChips: ChipGroup? = null
     private var pendingBanner: com.google.android.material.button.MaterialButton? = null
     private var btnFilter: ImageButton? = null
+    private var btnSearchToggle: ImageButton? = null
+    private var filteredMemories: View? = null
+    private var filteredPending: View? = null
+    private var searchBackCallback: OnBackPressedCallback? = null
     private var modeToggleContainer: View? = null
     private var btnModeMemories: TextView? = null
     private var btnModePending: TextView? = null
@@ -97,6 +104,10 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
 
     /** Show the search field. Default true. */
     protected open fun showSearch(): Boolean = true
+
+    /** The search field stays hidden until the search icon on the tools line
+     *  opens it (the memory browser). Default false: always shown. */
+    protected open fun searchCollapsible(): Boolean = false
 
     /** FAB label, or null to hide the "add" button (read-only screens). */
     protected open fun addButtonText(): String? = null
@@ -180,6 +191,57 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         }
     }
 
+    /** Show the filtered icon after the [mode] word ("memories" / "pending"),
+     *  or hide both when null. */
+    protected fun setFilteredMarker(mode: String?) {
+        filteredMemories?.visibility = if (mode == "memories") View.VISIBLE else View.GONE
+        filteredPending?.visibility = if (mode == "pending") View.VISIBLE else View.GONE
+    }
+
+    /* ------------------------------ collapsible search ------------------------------ */
+
+    /** Open the search field (focused, keyboard up) or close it. Closing
+     *  clears the search, so the list is never narrowed by a hidden query. */
+    private fun setSearchOpen(open: Boolean) {
+        val bar = searchBar ?: return
+        val field = fieldSearch ?: return
+        val imm = getSystemService(InputMethodManager::class.java)
+        if (open) {
+            bar.visibility = View.VISIBLE
+            field.requestFocus()
+            imm?.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
+        } else {
+            if (!field.text.isNullOrEmpty()) field.setText("")
+            field.clearFocus()
+            imm?.hideSoftInputFromWindow(field.windowToken, 0)
+            bar.visibility = View.GONE
+        }
+        searchBackCallback?.isEnabled = open
+    }
+
+    /** A tap anywhere outside an open, empty search field closes it. A field
+     *  with text stays open so the user can see why the list is narrowed. */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN && searchCollapsible()) {
+            val bar = searchBar
+            if (bar != null && bar.visibility == View.VISIBLE && fieldSearch?.text.isNullOrEmpty() &&
+                !isTouchInside(bar, ev) && btnSearchToggle?.let { isTouchInside(it, ev) } != true
+            ) {
+                setSearchOpen(false)
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun isTouchInside(view: View, ev: MotionEvent): Boolean {
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        val x = ev.rawX
+        val y = ev.rawY
+        return x >= location[0] && x < location[0] + view.width &&
+            y >= location[1] && y < location[1] + view.height
+    }
+
     /* ------------------------------ event hooks ------------------------------ */
 
     protected open fun onAddClick() {}
@@ -210,6 +272,9 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         filterChips = findViewById(R.id.chips_filter)
         pendingBanner = findViewById(R.id.pending_banner)
         btnFilter = findViewById(R.id.btn_filter)
+        btnSearchToggle = findViewById(R.id.btn_search_toggle)
+        filteredMemories = findViewById(R.id.filtered_memories)
+        filteredPending = findViewById(R.id.filtered_pending)
         modeToggleContainer = findViewById(R.id.mode_toggle_container)
         btnModeMemories = findViewById(R.id.btn_mode_memories)
         btnModePending = findViewById(R.id.btn_mode_pending)
@@ -231,6 +296,15 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
             fieldSearch?.doAfterTextChanged {
                 searchQuery = it?.toString() ?: ""
                 reload()
+            }
+            if (searchCollapsible()) {
+                searchBar?.visibility = View.GONE
+                btnSearchToggle?.setOnClickListener { setSearchOpen(searchBar?.visibility != View.VISIBLE) }
+                val callback = object : OnBackPressedCallback(false) {
+                    override fun handleOnBackPressed() = setSearchOpen(false)
+                }
+                onBackPressedDispatcher.addCallback(this, callback)
+                searchBackCallback = callback
             }
         } else {
             searchBar?.visibility = View.GONE

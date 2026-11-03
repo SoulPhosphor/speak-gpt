@@ -1239,6 +1239,58 @@
         <item name="android:paddingBottom">24dp</item>
     </style>
 
+    <!-- Memory browser tools line (owner design, Nov 3 2026): the search
+         and filter-menu icons on the left, the Memories | Pending words on
+         the right, and the pending count beneath the words. -->
+    <style name="Widget.App.ListTools.Container" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/list_tools_row_margin_top</item>
+        <item name="android:gravity">end</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/list_tools_row_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/list_tools_row_padding_horizontal</item>
+    </style>
+
+    <style name="Widget.App.ListTools.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <!-- Search toggle: icon only, no background of its own. -->
+    <style name="Widget.App.ListTools.Action" parent="">
+        <item name="android:layout_width">@dimen/list_tools_action_size</item>
+        <item name="android:layout_height">@dimen/list_tools_action_size</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <!-- The filter-menu (kebab) button keeps the tonal background it already
+         had; it sits after the search icon. -->
+    <style name="Widget.App.ListTools.Action.Filled">
+        <item name="android:layout_marginStart">@dimen/list_tools_action_gap</item>
+        <item name="android:background">@drawable/btn_accent_icon_large_100</item>
+    </style>
+
+    <!-- Fills the space between the icons and the mode words. -->
+    <style name="Widget.App.ListTools.Spacer" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+
+    <!-- Shown right after the current mode word while filters are on. -->
+    <style name="Widget.App.ListTools.FilteredIcon" parent="">
+        <item name="android:layout_width">@dimen/list_tools_filtered_icon_size</item>
+        <item name="android:layout_height">@dimen/list_tools_filtered_icon_size</item>
+        <item name="android:src">@drawable/ic_filter_list</item>
+        <item name="android:contentDescription">@string/mem_filtered_indicator</item>
+        <item name="android:visibility">gone</item>
+    </style>
+
     <!-- Label-and-control line (dropdown, value, field + action). -->
     <style name="Widget.App.Page.ControlRow" parent="">
         <item name="android:layout_width">match_parent</item>

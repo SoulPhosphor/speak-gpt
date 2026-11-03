@@ -2269,6 +2269,7 @@
     <string name="mem_filter_superseded_only">Only</string>
     <string name="mem_filter_reset_full">Reset Filters</string>
     <string name="mem_filter_open">Open Memory Filters</string>
+    <string name="mem_filtered_indicator">Filters are on</string>
     <string name="mem_filter_close">Close Memory Filters</string>
     <string name="mem_filter_remove">Remove filter</string>
     <string name="mem_filter_option_all">All</string>
