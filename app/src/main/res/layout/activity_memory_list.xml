@@ -102,7 +102,7 @@
                  slide-out panel. -->
             <ImageButton
                 android:id="@+id/btn_filter"
-                style="@style/Widget.App.ListTools.Action.Filled"
+                style="@style/Widget.App.ListTools.Action"
                 android:contentDescription="@string/mem_filter_open"
                 android:src="@drawable/ic_more_vert"
                 android:tooltipText="@string/mem_filter_open"

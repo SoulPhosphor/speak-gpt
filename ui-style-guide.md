@@ -1139,7 +1139,7 @@ Approved October 9 2026 for the Voice Input choice:
 
 ## List tools line
 
-`Widget.App.ListTools.*` is the memory browser's line under the header (owner design, Nov 3 2026): `Container` (the line plus the pending-count line beneath, aligned right), `Row`, `Action` (the borderless search icon, which opens and closes the search field), `Action.Filled` (the filter-menu kebab, which keeps its existing tonal background), `Spacer` (pushes the mode words to the right), and `FilteredIcon` (the Material `filter_list` icon, shown directly after the current mode word only while a filter narrows that view). Sizes live in `list_tools_*` dimensions. The Memories | Pending words keep their current local typography until the owner decides their font.
+`Widget.App.ListTools.*` is the memory browser's line under the header (owner design, Nov 3 2026): `Container` (the line plus the pending-count line beneath, aligned right), `Row`, `Action` (the search icon, which opens and closes the search field, and the filter-menu kebab; both on the borderless `Widget.App.QuickTile.EditButton` icon style), `Spacer` (pushes the mode words to the right), and `FilteredIcon` (the Material `filter_list` icon, shown directly after the current mode word only while a filter narrows that view). Sizes live in `list_tools_*` dimensions. The Memories | Pending words keep their current local typography until the owner decides their font.
 
 ## Chat composer host and surface
 

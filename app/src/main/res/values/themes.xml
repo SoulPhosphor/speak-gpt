@@ -1259,21 +1259,10 @@
         <item name="android:orientation">horizontal</item>
     </style>
 
-    <!-- Search toggle: icon only, no background of its own. -->
-    <style name="Widget.App.ListTools.Action" parent="">
-        <item name="android:layout_width">@dimen/list_tools_action_size</item>
-        <item name="android:layout_height">@dimen/list_tools_action_size</item>
-        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
-        <item name="android:scaleType">center</item>
-        <item name="android:tint">?attr/colorPrimary</item>
-    </style>
-
-    <!-- The filter-menu (kebab) button keeps the tonal background it already
-         had; it sits after the search icon. -->
-    <style name="Widget.App.ListTools.Action.Filled">
-        <item name="android:layout_marginStart">@dimen/list_tools_action_gap</item>
-        <item name="android:background">@drawable/btn_accent_icon_large_100</item>
-    </style>
+    <!-- The search icon and the filter-menu kebab: the guide's borderless
+         icon style (icons have no background of their own). Each instance
+         sets only its icon and labels. -->
+    <style name="Widget.App.ListTools.Action" parent="Widget.App.QuickTile.EditButton" />
 
     <!-- Fills the space between the icons and the mode words. -->
     <style name="Widget.App.ListTools.Spacer" parent="">
