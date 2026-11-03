@@ -529,6 +529,7 @@ class ChatListAdapter(
                         "processing" -> R.string.memory_marker_processing
                         "partial_paused" -> R.string.memory_marker_partial_paused
                         "processed" -> R.string.memory_marker_processed
+                        "processed_excluded" -> R.string.memory_marker_processed_excluded
                         else -> R.string.memory_marker_excluded
                     }
                 )

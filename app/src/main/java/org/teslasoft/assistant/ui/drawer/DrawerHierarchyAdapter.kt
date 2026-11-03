@@ -16,9 +16,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
-import org.teslasoft.assistant.preferences.memory.MemoryStore
-import java.util.concurrent.Executors
-import java.util.concurrent.ConcurrentHashMap
 
 class DrawerHierarchyAdapter(
     private val activity: FragmentActivity,
@@ -30,23 +27,9 @@ class DrawerHierarchyAdapter(
     private val companionImages = CompanionImageLookup(activity)
     private var disposed = false
     private var folderPlaceholderHeight: Int? = null
-    private val memoryStates = ConcurrentHashMap<String, String>()
-    private val metadataExecutor = Executors.newSingleThreadExecutor { Thread(it, "drawer-metadata") }
 
     init {
         setHasStableIds(true)
-        if (displayPreferences.getShowMemoryStatusOnChatList()) loadMemoryStates()
-    }
-
-    private fun loadMemoryStates() {
-        metadataExecutor.execute {
-            try {
-                if (MemoryStore.isProvisioned(activity)) {
-                    memoryStates.putAll(MemoryStore.getInstance(activity).chatReviewStates())
-                    activity.runOnUiThread { dispatchUpdate { if (!disposed) notifyDataSetChanged() } }
-                }
-            } catch (_: Exception) { }
-        }
     }
 
     /** The chat-list display options rows are drawn with. Rows whose chat data
@@ -80,11 +63,8 @@ class DrawerHierarchyAdapter(
     fun refreshDisplayIfChanged() {
         val current = displayOptions()
         if (current == renderedDisplayOptions) return
-        val memoryStatusTurnedOn = displayPreferences.getShowMemoryStatusOnChatList() &&
-            renderedDisplayOptions[2] == false
         renderedDisplayOptions = current
         notifyDataSetChanged()
-        if (memoryStatusTurnedOn) loadMemoryStates()
     }
 
     interface Callbacks {
@@ -125,7 +105,7 @@ class DrawerHierarchyAdapter(
         private val chevron: ImageView = itemView.findViewById(R.id.flat_chat_chevron)
         private val snippet: TextView = itemView.findViewById(R.id.flat_chat_snippet)
         private val date: TextView = itemView.findViewById(R.id.flat_chat_date)
-        private val identity = FlatChatIdentityBinder(activity, itemView, displayPreferences, memoryStates, companionImages)
+        private val identity = FlatChatIdentityBinder(activity, itemView, displayPreferences, companionImages)
         private val baseStart = itemView.resources.getDimensionPixelSize(R.dimen.drawer_row_padding_start)
         private val nestedExtra = itemView.resources.getDimensionPixelSize(R.dimen.drawer_nested_indent)
 
@@ -209,7 +189,6 @@ class DrawerHierarchyAdapter(
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         disposed = true
-        metadataExecutor.shutdownNow()
         super.onDetachedFromRecyclerView(recyclerView)
     }
 }

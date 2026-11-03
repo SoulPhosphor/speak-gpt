@@ -23,6 +23,7 @@ import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
+import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.ui.drawer.ChatListDetails
 import org.teslasoft.assistant.ui.drawer.MostUsedChatModel
 import org.teslasoft.assistant.usage.UsageLogStore
@@ -43,17 +44,27 @@ object ChatListIndex {
         val companionId: String,
         val memoryExcluded: Boolean,
         /** Earliest message time; the chat list's own start date comes first. */
-        val startedAt: Long?
+        val startedAt: Long?,
+        /** How much of the chat memory has scanned ("pending", "partial",
+         *  "processing" or "processed"), or null when memory holds nothing
+         *  from it. Kept here so a row draws its memory status at once. */
+        val memoryState: String? = null
     ) {
         /** The model label: what the chat used most, else its selected model. */
         val displayModel: String get() = mostUsedModel ?: model
     }
 
-    enum class Part { CONTENT, SETTINGS }
+    enum class Part { CONTENT, SETTINGS, MEMORY }
 
     data class ContentValues(val hasBookmarks: Boolean, val mostUsedModel: String?, val startedAt: Long?)
     data class SettingsValues(val model: String, val companionId: String, val memoryExcluded: Boolean)
-    data class Update(val content: ContentValues? = null, val settings: SettingsValues? = null)
+    data class MemoryValues(val state: String?)
+    /** [memory] is null when memory could not be read right now. */
+    data class Update(
+        val content: ContentValues? = null,
+        val settings: SettingsValues? = null,
+        val memory: MemoryValues? = null
+    )
 
     /** The entry after [update]; null when a chat with no entry gets only part of its details. */
     fun merge(existing: Entry?, update: Update): Entry? {
@@ -73,6 +84,7 @@ object ChatListIndex {
             companionId = settings.companionId,
             memoryExcluded = settings.memoryExcluded
         )
+        update.memory?.let { entry = entry.copy(memoryState = it.state) }
         return entry
     }
 
@@ -176,6 +188,12 @@ object ChatListIndex {
         /** Records a change to one chat; [applyPending] applies it. */
         fun markChanged(chatId: String, parts: Set<Part>) { pending.mark(chatId, parts) }
 
+        /** Records a change to every chat that has an entry. */
+        fun markAllChanged(parts: Set<Part>) {
+            ensureLoaded()
+            entries.keys.toList().forEach { pending.mark(it, parts) }
+        }
+
         /**
          * Applies every recorded change. A record is removed only once its entry
          * is up to date, so a change that fails or is interrupted is applied on
@@ -208,6 +226,7 @@ object ChatListIndex {
                 return if (source.chatIds()?.contains(chatId) == false) false else null
             }
             val update = source.read(chatId, parts) ?: return null
+            if (Part.MEMORY in parts && update.memory == null) return null
             val next = merge(existing, update) ?: return null
             if (next == existing) return false
             table.write(mapOf(chatId to next))
@@ -227,11 +246,14 @@ object ChatListIndex {
             val batch = LinkedHashMap<String, Entry>()
             for (chatId in chatIds) {
                 if (!retryUnreadable && chatId in unreadable) continue
-                val entry = source.read(chatId, Part.entries.toSet())?.let { merge(null, it) }
+                val update = source.read(chatId, Part.entries.toSet())
+                val entry = update?.let { merge(null, it) }
                 if (entry == null) {
                     unreadable.add(chatId)
                     continue
                 }
+                // Memory that cannot be read right now is read again later.
+                if (update.memory == null) pending.mark(chatId, setOf(Part.MEMORY))
                 unreadable.remove(chatId)
                 batch[chatId] = entry
                 if (batch.size >= WRITE_BATCH) prepared = flush(batch) || prepared
@@ -357,6 +379,18 @@ object ChatListIndex {
     /** A chat setting shown in the list (model, companion, memory exclusion) changed. */
     fun settingsChanged(context: Context, chatId: String) = request(context, chatId, setOf(Part.SETTINGS))
 
+    /** What memory holds from the chat changed (captured, scanned, or a scan started or ended). */
+    fun memoryChanged(context: Context, chatId: String) = request(context, chatId, setOf(Part.MEMORY))
+
+    /** Memory as a whole may have changed (opened, restored, imported or reset). */
+    fun memoryChangedForAll(context: Context) {
+        val app = context.applicationContext
+        worker.execute {
+            if (runCatching { core(app).markAllChanged(setOf(Part.MEMORY)) }.isFailure) return@execute
+            drainFromWorker(app)
+        }
+    }
+
     /** A new chat joined the list, possibly reusing a deleted chat's ID. */
     fun chatCreated(context: Context, chatId: String) {
         if (chatId.isBlank()) return
@@ -385,6 +419,16 @@ object ChatListIndex {
             draining = true
         }
         worker.execute { drain(app) }
+    }
+
+    /** Worker thread only. Applies recorded changes unless a drain is already queued. */
+    private fun drainFromWorker(context: Context) {
+        synchronized(drainLock) {
+            changedAgain = true
+            if (draining) return
+            draining = true
+        }
+        drain(context)
     }
 
     private fun drain(context: Context) {
@@ -456,8 +500,15 @@ object ChatListIndex {
                     details.startedAt
                 )
             } else null
-            return Update(content, settings)
+            val memory = if (Part.MEMORY in parts) readMemory(chatId) else null
+            return Update(content, settings, memory)
         }
+
+        /** null when memory cannot be read right now. */
+        private fun readMemory(chatId: String): MemoryValues? = runCatching {
+            if (!MemoryStore.isProvisioned(context)) MemoryValues(null)
+            else MemoryValues(MemoryStore.getInstance(context).chatMemoryState(chatId))
+        }.getOrNull()
     }
 
     /** The encrypted database. It holds only derived values, so a database that
@@ -487,7 +538,7 @@ object ChatListIndex {
         }
 
         override fun readAll(): Map<String, Entry> = database().rawQuery(
-            "SELECT chat_id, has_bookmarks, most_used_model, model, companion_id, memory_excluded, started_at FROM chat_details",
+            "SELECT chat_id, has_bookmarks, most_used_model, model, companion_id, memory_excluded, started_at, memory_state FROM chat_details",
             null
         ).use { cursor ->
             val out = HashMap<String, Entry>(cursor.count)
@@ -498,7 +549,8 @@ object ChatListIndex {
                     model = cursor.getString(3),
                     companionId = cursor.getString(4),
                     memoryExcluded = cursor.getInt(5) != 0,
-                    startedAt = if (cursor.isNull(6)) null else cursor.getLong(6)
+                    startedAt = if (cursor.isNull(6)) null else cursor.getLong(6),
+                    memoryState = if (cursor.isNull(7)) null else cursor.getString(7)
                 )
             }
             out
@@ -517,6 +569,7 @@ object ChatListIndex {
                         put("companion_id", entry.companionId)
                         put("memory_excluded", if (entry.memoryExcluded) 1 else 0)
                         put("started_at", entry.startedAt)
+                        put("memory_state", entry.memoryState)
                     }, SQLiteDatabase.CONFLICT_REPLACE)
                 }
                 db.setTransactionSuccessful()
@@ -563,7 +616,7 @@ object ChatListIndex {
                     "CREATE TABLE IF NOT EXISTS chat_details(" +
                         "chat_id TEXT PRIMARY KEY NOT NULL, has_bookmarks INTEGER NOT NULL, " +
                         "most_used_model TEXT, model TEXT NOT NULL, companion_id TEXT NOT NULL, " +
-                        "memory_excluded INTEGER NOT NULL, started_at INTEGER)"
+                        "memory_excluded INTEGER NOT NULL, started_at INTEGER, memory_state TEXT)"
                 )
             }
         }
@@ -576,7 +629,7 @@ object ChatListIndex {
 
         companion object {
             const val DATABASE_NAME = "chat_list_details.db"
-            private const val DATABASE_VERSION = 1
+            private const val DATABASE_VERSION = 2
             @Volatile private var libraryLoaded = false
 
             private fun loadLibrary() {

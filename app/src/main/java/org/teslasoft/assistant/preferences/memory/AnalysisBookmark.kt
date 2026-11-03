@@ -146,13 +146,17 @@ object AnalysisBookmark {
     }
 
     /**
-     * What the chat-list line shows. A chat with Archive This Chat turned off
-     * reads "partial_paused" when some of it was scanned before the pause and
-     * some was not; otherwise it reads "excluded", as it always has.
+     * What the chat-list line shows. A running scan always reads
+     * "processing". With Archive This Chat turned off, a chat reads
+     * "partial_paused" when part of it was scanned and part was not,
+     * "processed_excluded" when all of it was scanned, and "excluded" when
+     * none of it was.
      */
     fun chatListState(excludedByUser: Boolean, reviewState: String?): String? = when {
+        reviewState == "processing" -> "processing"
         !excludedByUser -> reviewState
         reviewState == "partial" -> "partial_paused"
+        reviewState == "processed" -> "processed_excluded"
         else -> "excluded"
     }
 }

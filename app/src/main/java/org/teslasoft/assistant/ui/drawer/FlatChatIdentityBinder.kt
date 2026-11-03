@@ -22,7 +22,6 @@ class FlatChatIdentityBinder(
     private val activity: FragmentActivity,
     itemView: View,
     private val displayPreferences: Preferences,
-    private val memoryStates: Map<String, String>,
     private val companionImages: CompanionImageLookup
 ) {
     private val title: TextView = itemView.findViewById(R.id.flat_chat_title)
@@ -85,7 +84,7 @@ class FlatChatIdentityBinder(
         model.text = metadata
         model.visibility = if (metadata.isEmpty()) View.GONE else View.VISIBLE
         if (displayPreferences.getShowMemoryStatusOnChatList() && index != null) {
-            val state = AnalysisBookmark.chatListState(index.memoryExcluded, memoryStates[chatId])
+            val state = AnalysisBookmark.chatListState(index.memoryExcluded, index.memoryState)
             if (state != null) {
                 memory.visibility = View.VISIBLE
                 memory.text = activity.getString(when (state) {
@@ -94,6 +93,7 @@ class FlatChatIdentityBinder(
                     "processing" -> R.string.memory_marker_processing
                     "partial_paused" -> R.string.memory_marker_partial_paused
                     "processed" -> R.string.memory_marker_processed
+                    "processed_excluded" -> R.string.memory_marker_processed_excluded
                     else -> R.string.memory_marker_excluded
                 })
             }
