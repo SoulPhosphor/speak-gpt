@@ -153,6 +153,24 @@
                     android:ems="6" />
             </LinearLayout>
 
+            <!-- ============ Maximum Compaction Token Amount ============ -->
+            <LinearLayout style="@style/Widget.App.Row.Number">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_compaction_maximum_tokens" />
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/summarizer_compaction_maximum_tokens_hint" />
+                </LinearLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_compaction_maximum_tokens"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:ems="6"
+                    android:maxLength="10"
+                    android:imeOptions="actionDone" />
+            </LinearLayout>
+
             <!-- ============ Summary Model ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"

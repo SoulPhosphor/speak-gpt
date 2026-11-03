@@ -2934,7 +2934,25 @@ class Preferences internal constructor(
             ?: org.teslasoft.assistant.util.summarizer.CompactionBatches.DEFAULT_TOKENS
 
     fun setCompactionAverageTokens(value: Int) {
-        putGlobalString("compaction_average_tokens", value.toString())
+        if (value <= getCompactionMaximumTokens()) {
+            putGlobalString("compaction_average_tokens", value.toString())
+        }
+    }
+
+    /** Maximum estimated message tokens per compaction request. A sentence
+     *  larger than this is kept whole and sent alone. Legacy averages larger
+     *  than the default still get a compatible maximum. */
+    fun getCompactionMaximumTokens(): Int = maxOf(
+        getCompactionAverageTokens(),
+        getGlobalString("compaction_maximum_tokens", "").toIntOrNull()
+            ?.takeIf { it > 0 }
+            ?: org.teslasoft.assistant.util.summarizer.CompactionBatches.DEFAULT_MAXIMUM_TOKENS
+    )
+
+    fun setCompactionMaximumTokens(value: Int) {
+        if (value > 0 && value >= getCompactionAverageTokens()) {
+            putGlobalString("compaction_maximum_tokens", value.toString())
+        }
     }
 
     /** Summary Length in words (decision 13; default 300). */
