@@ -230,9 +230,15 @@
     <dimen name="progress_dialog_bar_radius">4dp</dimen>
     <dimen name="progress_dialog_status_gap">12dp</dimen>
     <dimen name="progress_dialog_status_size">15sp</dimen>
-    <!-- Expandable text box (Widget.App.Field.ExpandableBox / ExpandedPanel). -->
+    <!-- Expandable text box (Widget.App.Field.ExpandableBox / ExpandedPanel).
+         The expanded panel uses the chat message box's expanded measurements. -->
     <dimen name="field_label_page_top_gap">16dp</dimen>
     <dimen name="field_expandable_padding">12dp</dimen>
     <dimen name="field_expandable_toggle_size">48dp</dimen>
-    <dimen name="field_expanded_panel_margin">16dp</dimen>
+    <dimen name="field_expanded_panel_margin_horizontal">12dp</dimen>
+    <dimen name="field_expanded_panel_margin_vertical">8dp</dimen>
+    <dimen name="field_expanded_input_padding_horizontal">8dp</dimen>
+    <dimen name="field_expanded_input_padding_vertical">13dp</dimen>
+    <dimen name="field_expanded_input_text_size">16sp</dimen>
+    <dimen name="field_expanded_toggle_margin">8dp</dimen>
 </resources>

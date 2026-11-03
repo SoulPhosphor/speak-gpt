@@ -23,7 +23,6 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.widget.EditText
@@ -199,7 +198,6 @@ class MemoryEditorActivity : SettingsPageActivity() {
         btnHeaderSave?.setOnClickListener { save(activate = false) }
         findViewById<View>(R.id.btn_expand_content)?.setOnClickListener { setContentExpanded(true) }
         findViewById<View>(R.id.btn_collapse_content)?.setOnClickListener { setContentExpanded(false) }
-        keepScrollInsideBox(fieldContent)
 
         // Preset scope/target for a new memory opened from a scoped browser door.
         intent.getStringExtra("presetScope")?.takeIf { it in SCOPE_KEYS }?.let { currentScope = it }
@@ -740,23 +738,6 @@ class MemoryEditorActivity : SettingsPageActivity() {
         panelContentExpanded?.visibility = if (expanded) View.VISIBLE else View.GONE
         scrollView?.visibility = if (expanded) View.GONE else View.VISIBLE
         to.requestFocus()
-    }
-
-    /**
-     * The small Memory box scrolls its own text. While a drag starts inside a
-     * box that has more text than it shows, the page does not take the drag.
-     */
-    private fun keepScrollInsideBox(field: EditText?) {
-        field?.setOnTouchListener { view, event ->
-            if (view.canScrollVertically(1) || view.canScrollVertically(-1)) {
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> view.parent?.requestDisallowInterceptTouchEvent(true)
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
-                        view.parent?.requestDisallowInterceptTouchEvent(false)
-                }
-            }
-            false
-        }
     }
 
     /* ------------------------------ tags ------------------------------ */
