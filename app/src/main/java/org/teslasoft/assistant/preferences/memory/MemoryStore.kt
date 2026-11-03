@@ -27,6 +27,7 @@ import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreCoordinator
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.models.ModelIdentity
@@ -172,7 +173,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         ?: throw IllegalStateException(
                             "Memory store key unavailable (database exists but its key could not be read)"
                         )
-                    MemoryStore(appContext, key).also { instance = it }
+                    MemoryStore(appContext, key).also {
+                        it.reportsToChatList = true
+                        instance = it
+                        // Opening may have recovered interrupted scans or
+                        // migrated data; the chat list reads every status again.
+                        ChatListIndex.memoryChangedForAll(appContext)
+                    }
                 }
             }
         }
@@ -185,6 +192,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
          */
         fun invalidateInstance() {
             synchronized(this) {
+                // The file is being replaced; the chat list reads every status again.
+                instance?.takeIf { it.reportsToChatList }?.let { ChatListIndex.memoryChangedForAll(it.appContext) }
                 try { instance?.close() } catch (_: Exception) { }
                 instance = null
             }
@@ -3066,6 +3075,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+            chatListMemoryChangedForAll()
         }
         return report
     }
@@ -3601,6 +3611,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             return outcome
         } finally {
             db.endTransaction()
+            chatListMemoryChanged(chatId)
         }
     }
 
@@ -3868,6 +3879,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+            chatListMemoryChanged(*transcriptIdsByChat.keys.toTypedArray())
         }
         return frozen
     }
@@ -3973,9 +3985,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      *  failure, or interruption). Processed rows already dropped theirs. */
     fun releaseAnalysisClaims(runId: String) {
         val db = writableDatabase
+        val affectedChats = ArrayList<String>()
         db.beginTransaction()
         try {
-            val affectedChats = ArrayList<String>()
             val candidateCollections = ArrayList<String>()
             db.rawQuery(
                 "SELECT DISTINCT chat_id FROM transcripts WHERE claim_run_id = ? AND chat_id IS NOT NULL",
@@ -4004,6 +4016,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+            chatListMemoryChanged(*affectedChats.toTypedArray())
         }
     }
 
@@ -4147,6 +4160,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+            chatListMemoryChanged(range.chatId)
         }
         return CommittedChatOutputs(
             memoryIds = memories.map { it.memoryId },
@@ -4268,6 +4282,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+            chatListMemoryChangedForAll()
         }
         return deadRunIds.size
     }
@@ -5224,6 +5239,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             false
         } finally {
             db.endTransaction()
+            chatListMemoryChanged(chatId)
         }
     }
 
@@ -5273,32 +5289,73 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+            chatListMemoryChanged(oldChatId, newChatId)
         }
     }
 
     /** Review-state summary derived from the Stage-B bookmark authority. */
     fun chatReviewStates(): HashMap<String, String> {
         val out = HashMap<String, String>()
-        val eligibleByChat = bookmarkEligibleTranscripts()
-            .mapNotNull { row -> row.chatId?.let { it to row } }
-            .groupBy({ it.first }, { it.second })
-        val db = readableDatabase
-        val chatIds = ArrayList<String>()
-        db.rawQuery(
-            "SELECT DISTINCT chat_id FROM transcripts WHERE chat_id IS NOT NULL ORDER BY chat_id",
-            emptyArray<String>()
-        ).use { while (it.moveToNext()) chatIds.add(it.getString(0)) }
-        for (chatId in chatIds) {
-            val bookmark = getAnalysisBookmark(chatId)
-            val hasReviewedPrefix = bookmark?.lastTranscriptId != null
-            val hasEligible = eligibleByChat[chatId].orEmpty().isNotEmpty()
-            out[chatId] = when {
-                hasEligible && hasReviewedPrefix -> "partial"
-                hasEligible -> "pending"
-                else -> "processed"
-            }
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            requireBookmarkCutover(db)
+            val chatIds = ArrayList<String>()
+            db.rawQuery(
+                "SELECT DISTINCT chat_id FROM transcripts WHERE chat_id IS NOT NULL ORDER BY chat_id",
+                emptyArray<String>()
+            ).use { while (it.moveToNext()) chatIds.add(it.getString(0)) }
+            for (chatId in chatIds) chatReviewStateTx(db, chatId)?.let { out[chatId] = it }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
         return out
+    }
+
+    /** The memory status of one chat, or null when memory holds nothing from it. */
+    fun chatMemoryState(chatId: String): String? {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            requireBookmarkCutover(db)
+            val state = chatReviewStateTx(db, chatId)
+            db.setTransactionSuccessful()
+            return state
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun chatReviewStateTx(db: SQLiteDatabase, chatId: String): String? {
+        val ordered = transcriptsForChatTx(db, chatId)
+        if (ordered.isEmpty()) return null
+        val bookmark = analysisBookmarkTx(db, chatId)
+        val unscanned = AnalysisBookmark.eligibleRange(
+            rows = ordered,
+            boundary = bookmarkBoundary(bookmark),
+            skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
+            idOf = { it.transcriptId },
+            boundaryOf = { transcriptBoundary(it) }
+        )
+        return AnalysisBookmark.chatReviewState(
+            hasClaimedRows = ordered.any { it.claimRunId != null },
+            hasUnscannedRows = unscanned.isNotEmpty(),
+            hasScannedPrefix = bookmark.lastTranscriptId != null
+        )
+    }
+
+    /** Only the app's own store reports to the chat list; test stores never do. */
+    @Volatile private var reportsToChatList = false
+
+    /** Tells the chat list that what memory holds from these chats changed. */
+    private fun chatListMemoryChanged(vararg chatIds: String) {
+        if (!reportsToChatList) return
+        chatIds.forEach { ChatListIndex.memoryChanged(appContext, it) }
+    }
+
+    private fun chatListMemoryChangedForAll() {
+        if (reportsToChatList) ChatListIndex.memoryChangedForAll(appContext)
     }
 
     /* ---------------------------------------------------------------------- */
@@ -6949,6 +7006,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+            chatListMemoryChangedForAll()
         }
     }
 

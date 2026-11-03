@@ -475,8 +475,8 @@ object Archivist {
         // extraction prompt replaces the built-in one (Reset clears to built-in).
         val maxSuggestions = prefs.getArchivistMaxSuggestions()
         val temperature = prefs.getArchivistTemperature().toDouble()
-        val conversationAmount = prefs.getArchivistConversationAmount()
-        val customConversationTokens = prefs.getArchivistCustomConversationTokens()
+        val scannerAverageTokens = prefs.getMemoryScannerAverageTokens()
+        val scannerMaximumTokens = prefs.getMemoryScannerMaximumTokens()
         val verifiedContextTokens = endpoint.contextWindowTokens?.takeIf {
             endpoint.contextWindowModelId == model
         }
@@ -540,16 +540,18 @@ object Archivist {
                         } else {
                             ArchivistPrompt.withCurrentTypes(conversationBasePrompt, memoryTypes)
                         }
-                        val initialTranscriptTarget = ArchivistRequestBudget
-                            .effectiveTranscriptTarget(
-                                choice = conversationAmount,
-                                customTokens = customConversationTokens,
-                                verifiedContextTokens = verifiedContextTokens,
-                                requestHeadroomTokens = ArchivistRequestBudget
-                                    .headroomTokens(baselinePrompt)
-                            )
+                        val initialMaximum = ArchivistRequestBudget.effectiveMaximumTokens(
+                            scannerMaximumTokens, verifiedContextTokens,
+                            ArchivistRequestBudget.headroomTokens(baselinePrompt)
+                        )
+                        val initialTranscriptTarget = minOf(scannerAverageTokens, initialMaximum)
+                        val initialAllowance = minOf(
+                            org.teslasoft.assistant.util.ConversationTokenChunks.EXCHANGE_ALLOWANCE_TOKENS,
+                            initialMaximum - initialTranscriptTarget
+                        )
                         val chunks = ArchivistConversationChunker.split(
-                            conversation.transcripts, initialTranscriptTarget
+                            conversation.transcripts, initialTranscriptTarget,
+                            scannerMaximumTokens, initialAllowance
                         )
                         if (chunks.size > 1) {
                             MemoryLog.log(context, "Archivist", "info",
@@ -666,9 +668,10 @@ object Archivist {
                                         val requestHeadroom = ArchivistRequestBudget
                                             .headroomTokens(requestSystemPrompt)
                                         val safeTranscriptTarget = ArchivistRequestBudget
-                                            .effectiveTranscriptTarget(
-                                                choice = conversationAmount,
-                                                customTokens = customConversationTokens,
+                                            .effectiveMaximumTokens(
+                                                // The user maximum has a whole-sentence exception.
+                                                // This check must enforce actual model capacity only.
+                                                configuredMaximum = Int.MAX_VALUE,
                                                 verifiedContextTokens = verifiedContextTokens,
                                                 requestHeadroomTokens = requestHeadroom
                                             )
@@ -772,7 +775,8 @@ object Archivist {
                                                     failedChunk.estimatedTranscriptTokens / 2
                                                 )
                                         ArchivistConversationChunker.split(
-                                            failedChunk.transcripts, nextTarget
+                                            failedChunk.transcripts, nextTarget,
+                                            scannerMaximumTokens, allowanceTokens = 0
                                         )
                                     }
                                 )

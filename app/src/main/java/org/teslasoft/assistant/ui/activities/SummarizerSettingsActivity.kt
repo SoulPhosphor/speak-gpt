@@ -73,6 +73,8 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
     private var textRoutingValue: TextView? = null
     private var fieldCompleteMessages: TextInputEditText? = null
     private var fieldCompactionTokens: TextInputEditText? = null
+    private var fieldCompactionMaximumTokens: TextInputEditText? = null
+    private var compactionFieldsReady = false
     private var switchNewChats: MaterialSwitch? = null
 
     private var suppressWatchers = false
@@ -138,6 +140,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
         textRoutingValue = findViewById(R.id.text_summarizer_routing_value)
         fieldCompleteMessages = findViewById(R.id.field_complete_messages)
         fieldCompactionTokens = findViewById(R.id.field_compaction_tokens)
+        fieldCompactionMaximumTokens = findViewById(R.id.field_compaction_maximum_tokens)
         switchNewChats = findViewById(R.id.switch_summarizer_new_chats)
     }
 
@@ -173,17 +176,27 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
             (preferences?.getCompactionAverageTokens()
                 ?: org.teslasoft.assistant.util.summarizer.CompactionBatches.DEFAULT_TOKENS).toString()
         )
+        fieldCompactionMaximumTokens?.setText(preferences?.getCompactionMaximumTokens()?.toString())
         suppressWatchers = false
-
-        fieldCompactionTokens?.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (suppressWatchers) return
-                val parsed = s?.toString()?.trim()?.toIntOrNull() ?: return
-                preferences?.setCompactionAverageTokens(parsed)
-            }
-        })
+        compactionFieldsReady = true
+        fieldCompactionTokens?.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) saveCompactionField(maximum = false)
+        }
+        fieldCompactionMaximumTokens?.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) saveCompactionField(maximum = true)
+        }
+        fieldCompactionTokens?.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                if (saveCompactionField(maximum = false)) fieldCompactionTokens?.clearFocus()
+                true
+            } else false
+        }
+        fieldCompactionMaximumTokens?.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                if (saveCompactionField(maximum = true)) fieldCompactionMaximumTokens?.clearFocus()
+                true
+            } else false
+        }
 
         fieldCompleteMessages?.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -206,6 +219,51 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
                 preferences?.setSummarizerAlwaysResummarize(checked)
             }
         }
+    }
+
+    // Validate the completed number, not each intermediate digit while typing.
+    private fun saveCompactionField(maximum: Boolean): Boolean {
+        if (!compactionFieldsReady || suppressWatchers) return true
+        val prefs = preferences ?: return true
+        val field = if (maximum) fieldCompactionMaximumTokens else fieldCompactionTokens
+        val saved = if (maximum) prefs.getCompactionMaximumTokens() else prefs.getCompactionAverageTokens()
+        val value = field?.text?.toString()?.trim()?.toIntOrNull()
+        val invalidOrder = value != null && if (maximum) value < prefs.getCompactionAverageTokens()
+            else value > prefs.getCompactionMaximumTokens()
+        if (value == null || invalidOrder || (maximum && value <= 0)) {
+            suppressWatchers = true
+            field?.setText(saved.toString())
+            suppressWatchers = false
+            if (invalidOrder) showCompactionMaximumError()
+            return !invalidOrder
+        }
+        if (maximum) prefs.setCompactionMaximumTokens(value) else prefs.setCompactionAverageTokens(value)
+        return true
+    }
+
+    private fun showCompactionMaximumError() {
+        val actions = layoutInflater.inflate(R.layout.dialog_single_action, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.summarizer_compaction_maximum_error_title)
+            .setMessage(R.string.summarizer_compaction_maximum_error_message)
+            .setView(actions)
+            .create()
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_action).apply {
+            setText(R.string.okay)
+            setOnClickListener { dialog.dismiss() }
+        }
+        dialog.show()
+    }
+
+    override fun finish() {
+        if (!saveCompactionField(maximum = true) || !saveCompactionField(maximum = false)) return
+        super.finish()
+    }
+
+    override fun onPause() {
+        saveCompactionField(maximum = true)
+        saveCompactionField(maximum = false)
+        super.onPause()
     }
 
     /* ------------------------------ Summary Model ------------------------------ */

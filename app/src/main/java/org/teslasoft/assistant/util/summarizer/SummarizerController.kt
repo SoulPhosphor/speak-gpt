@@ -698,10 +698,11 @@ class SummarizerController(
         }
         var summary = baseSummary
         var folded = operationStartFolded
-        // Requests of about the Compaction Average Token Amount, whole
-        // exchanges only; lowered for the rest of the run when the service
-        // says a request is too large.
+        // Average is a soft target, with at most 2,000 extra tokens to finish
+        // a prompt/reply pair. Only messages over the maximum split, and
+        // sentences always stay whole.
         val configuredBatchTokens = prefs.getCompactionAverageTokens()
+        val maximumTokens = prefs.getCompactionMaximumTokens()
         var tokenBudget = configuredBatchTokens
 
         try {
@@ -716,7 +717,8 @@ class SummarizerController(
                         target = target,
                         summary = summary,
                         tokenBudget = tokenBudget,
-                        configuredBatchTokens = configuredBatchTokens
+                        configuredBatchTokens = configuredBatchTokens,
+                        maximumTokens = maximumTokens
                     )) {
                         is FoldBatchResult.Advanced -> {
                             summary = SummarizerPrompts.appendCompaction(summary, result.summary)
@@ -1050,8 +1052,55 @@ class SummarizerController(
         )
     }
 
-    /** Fold one bounded batch without persisting it. */
+    /** A stored message is counted as folded only after all its pieces succeed. */
     private suspend fun foldBatch(
+        runtime: FoldRuntime,
+        entries: List<Entry>,
+        folded: Int,
+        target: Int,
+        summary: String,
+        tokenBudget: Int,
+        configuredBatchTokens: Int,
+        maximumTokens: Int
+    ): FoldBatchResult {
+        val budgetAtStart = tokenBudget.coerceIn(1, maximumTokens)
+        // A flat 2,000-token allowance finishes the last prompt/reply pair.
+        // Never add it back after a provider has forced a smaller budget.
+        val allowance = if (tokenBudget >= configuredBatchTokens) {
+            minOf(CompactionBatches.EXCHANGE_ALLOWANCE_TOKENS, maximumTokens - budgetAtStart)
+        } else 0
+        val requestLimit = budgetAtStart + allowance
+        val exchangeEnd = CompactionBatches.exchangeEnd(entries, folded, target)
+        if (CompactionBatches.tokens(entries, folded, exchangeEnd) <= requestLimit) {
+            return foldRequest(runtime, entries, folded, target, summary,
+                budgetAtStart, configuredBatchTokens, allowance)
+        }
+        var addition = ""
+        var context = summary
+        var budget = budgetAtStart
+        for (request in CompactionBatches.boundedRequests(
+            entries.subList(folded, exchangeEnd), maximumTokens, requestLimit
+        )) {
+            var done = 0
+            while (done < request.size) {
+                val remainingAllowance = if (budget >= configuredBatchTokens) allowance else 0
+                when (val result = foldRequest(runtime, request, done, request.size, context,
+                    budget, configuredBatchTokens, remainingAllowance)) {
+                    is FoldBatchResult.Advanced -> {
+                        addition = SummarizerPrompts.appendCompaction(addition, result.summary)
+                        context = SummarizerPrompts.appendCompaction(context, result.summary)
+                        done = result.foldedCount
+                        budget = result.tokenBudget
+                    }
+                    FoldBatchResult.Failed -> return FoldBatchResult.Failed
+                }
+            }
+        }
+        return FoldBatchResult.Advanced(addition, exchangeEnd, tokenBudget.coerceAtMost(budget))
+    }
+
+    /** Fold one bounded batch without persisting it. */
+    private suspend fun foldRequest(
         runtime: FoldRuntime,
         entries: List<Entry>,
         folded: Int,
@@ -1061,14 +1110,15 @@ class SummarizerController(
          *  the service called too large is not tried again at that size in
          *  the same run. */
         tokenBudget: Int,
-        configuredBatchTokens: Int
+        configuredBatchTokens: Int,
+        overrunTokens: Int = 0
     ): FoldBatchResult {
         var budget = tokenBudget.coerceAtLeast(1)
-        var end = CompactionBatches.batchEnd(entries, folded, target, budget)
+        var end = CompactionBatches.batchEnd(entries, folded, target, budget, overrunTokens)
 
-        // §2.9: on a too-large rejection, send fewer whole exchanges and
-        // retry, down to one exchange; a user message and its AI reply are
-        // never split. Only then is the error stored.
+        // On a too-large rejection, retry fewer whole exchanges. Oversized
+        // exchanges have already been divided by foldBatch; a provider error
+        // never permits skipping the rest of a message or cutting a sentence.
         while (true) {
             val departing = entries.subList(folded, end)
                 .map { Pair(if (it.isBot) "Assistant" else "User", it.text) }

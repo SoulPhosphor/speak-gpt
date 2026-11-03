@@ -1398,7 +1398,7 @@
     <string name="title_memory_manager">Memory Manager</string>
     <string name="row_memory_browser_title">Memory Browser</string>
     <string name="row_memory_browser_subtitle">View, search, edit, approve, or remove saved and pending memories.</string>
-    <string name="row_memory_assistant_title">Memory Assistant</string>
+    <string name="row_memory_assistant_title">Memory Scanner</string>
     <string name="row_memory_assistant_subtitle">Analyze conversation history and review pending memories.</string>
     <string name="row_lorebooks_subtitle">Simple memory notes triggered invisibly by keywords for your companion.</string>
     <!-- Memory Manager hub, fourth row (memory_settings_reorg_spec.md placement
@@ -1910,10 +1910,13 @@
     <string name="label_chat_memory_enabled">Use Saved Memories</string>
     <string name="label_chat_lorebooks_enabled">Use Lorebooks in This Chat</string>
     <string name="label_chat_memory_excluded">Archive This Chat</string>
-    <string name="memory_marker_pending">Memory: waiting for review</string>
-    <string name="memory_marker_partial">Memory: partially archived</string>
-    <string name="memory_marker_processed">Memory: archived</string>
-    <string name="memory_marker_excluded">Memory: excluded</string>
+    <string name="memory_marker_pending">Memory: Waiting for Review</string>
+    <string name="memory_marker_partial">Memory: Partially Archived</string>
+    <string name="memory_marker_partial_paused">Memory: Partially Archived. Remainder Paused.</string>
+    <string name="memory_marker_processing">Memory: Currently Processing</string>
+    <string name="memory_marker_processed">Memory: Archived</string>
+    <string name="memory_marker_processed_excluded">Memory: Archived. Future Changes Excluded.</string>
+    <string name="memory_marker_excluded">Memory: Excluded</string>
 
     <!-- Memory system Phase 3: librarian (embedding model + semantic search) -->
     <string name="memory_section_librarian">Librarian (semantic memory)</string>
@@ -2289,7 +2292,7 @@
          ============================================================ -->
     <!-- Screen titles (also the manifest activity labels) -->
     <string name="title_memory_controls">Memory Controls</string>
-    <string name="title_memory_assistant_advanced">Memory Assistant Advanced Settings</string>
+    <string name="title_memory_assistant_advanced">Advanced Memory Scanner Settings</string>
     <string name="title_advanced_memory_settings">Advanced Memory Settings</string>
 
     <!-- Memory Controls (spec §1) -->
@@ -2307,6 +2310,9 @@
     <string name="memory_controls_row_assistant_hint">Find possible memories in finished conversations, then review them in Pending before saving.</string>
     <string name="memory_controls_max_suggestions">Maximum Suggestions Per Conversation</string>
     <string name="memory_controls_max_suggestions_hint">Limit how many memory drafts Memory Assistant can create from each conversation.</string>
+    <string name="memory_scanner_average_tokens">Memory Scanner Average Token Amount</string>
+    <string name="memory_scanner_average_tokens_hint">Average tokens sent together to the memory scanner AI at one time to be scanned. No partial messages will be sent unless the response exceeds the maximum token count.</string>
+    <string name="memory_scanner_maximum_tokens">Maximum Memory Scanner Token Amount</string>
     <string name="memory_assistant_conversation_amount">Conversation Amount Per Request</string>
     <string name="memory_assistant_conversation_amount_hint">Controls how much conversation text is sent in each AI request. Smaller amounts work with more models and providers but require more requests.</string>
     <string name="memory_assistant_conversation_amount_auto">Auto</string>
@@ -2315,7 +2321,7 @@
     <string name="memory_assistant_conversation_amount_large">Large · About 16,000 Tokens</string>
     <string name="memory_assistant_conversation_amount_custom">Custom</string>
     <string name="memory_assistant_conversation_tokens">Conversation Tokens Per Request</string>
-    <string name="memory_controls_row_advanced_assistant">Advanced Memory Assistant Settings</string>
+    <string name="memory_controls_row_advanced_assistant">Advanced Memory Scanner Settings</string>
     <string name="memory_controls_row_advanced_assistant_subtitle">Tune extraction temperature, importance, and prompt behavior.</string>
     <string name="memory_controls_section_engine">Memory Engine</string>
     <string name="memory_controls_row_engine">Memory Engine</string>
@@ -3658,8 +3664,12 @@
 
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
+    <string name="summarizer_compaction_maximum_tokens">Maximum Compaction Token Amount</string>
+    <string name="summarizer_compaction_maximum_tokens_hint">If messages are incredibly long, this will prevent too many tokens from being sent to the AI.</string>
+    <string name="summarizer_compaction_maximum_error_title">Maximum Tokens Cannot Be Less Then Average Tokens.</string>
+    <string name="summarizer_compaction_maximum_error_message">The maximum token count has not been saved. Please choose an amount higher than the average token sent.</string>
     <string name="summarizer_compaction_tokens">Compaction Average Token Amount</string>
-    <string name="summarizer_compaction_tokens_hint">Average tokens sent together to the summarizing AI at one time to be compacted. No partial messages will be sent.</string>
+    <string name="summarizer_compaction_tokens_hint">Average tokens sent together to the summarizing AI at one time to be compacted. No partial messages will be sent unless the response exceeds the maximum token count.</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
     <string name="summarizer_new_chats_toggle_hint">Summarizer model is still used as a backup for chat titling and compaction when summarizing is turned off.</string>
     <string name="summarizer_length">Summary Length</string>

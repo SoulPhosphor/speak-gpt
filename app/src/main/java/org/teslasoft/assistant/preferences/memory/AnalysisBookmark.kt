@@ -126,6 +126,39 @@ object AnalysisBookmark {
         }
         return advanced to remaining
     }
+
+    /**
+     * Chat-list memory status. A chat with any row claimed by an analysis run
+     * is "processing". Otherwise the status follows scan coverage only:
+     * nothing scanned is "pending", some scanned and some not is "partial",
+     * everything scanned is "processed". The Archive pause is deliberately
+     * not an input, so a paused chat is never reported as fully scanned.
+     */
+    fun chatReviewState(
+        hasClaimedRows: Boolean,
+        hasUnscannedRows: Boolean,
+        hasScannedPrefix: Boolean
+    ): String = when {
+        hasClaimedRows -> "processing"
+        hasUnscannedRows && hasScannedPrefix -> "partial"
+        hasUnscannedRows -> "pending"
+        else -> "processed"
+    }
+
+    /**
+     * What the chat-list line shows. A running scan always reads
+     * "processing". With Archive This Chat turned off, a chat reads
+     * "partial_paused" when part of it was scanned and part was not,
+     * "processed_excluded" when all of it was scanned, and "excluded" when
+     * none of it was.
+     */
+    fun chatListState(excludedByUser: Boolean, reviewState: String?): String? = when {
+        reviewState == "processing" -> "processing"
+        !excludedByUser -> reviewState
+        reviewState == "partial" -> "partial_paused"
+        reviewState == "processed" -> "processed_excluded"
+        else -> "excluded"
+    }
 }
 
 /**

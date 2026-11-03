@@ -116,11 +116,20 @@ class ChatListIndexWiringContractTest {
         }
     }
 
-    @Test fun memoryStatusIsStillReadInOneBulkPass() {
-        val drawer = source("ui/drawer/DrawerHierarchyAdapter.kt")
-        assertTrue(drawer.contains("MemoryStore.getInstance(activity).chatReviewStates()"))
+    @Test fun memoryStatusComesFromTheRowDetailsWithoutOpeningMemory() {
+        listOf("ui/drawer/DrawerHierarchyAdapter.kt", "ui/adapters/SearchResultAdapter.kt").forEach {
+            assertFalse("$it must not open memory to draw rows", source(it).contains("MemoryStore"))
+        }
         val bind = body(source("ui/drawer/FlatChatIdentityBinder.kt"), "fun bind(chatId: String")
-        assertTrue(bind.contains("if (index.memoryExcluded) \"excluded\" else memoryStates[chatId]"))
+        assertTrue(bind.contains("AnalysisBookmark.chatListState(index.memoryExcluded, index.memoryState)"))
+        val store = source("preferences/memory/MemoryStore.kt")
+        listOf("fun appendTranscriptTurn(", "fun beginAnalysisRun(", "fun releaseAnalysisClaims(",
+            "fun commitFrozenChatRange(", "fun insertBackfillTranscript(", "fun repointChat(").forEach {
+            assertTrue("$it must report to the chat list", body(store, it).contains("chatListMemoryChanged("))
+        }
+        listOf("fun importData(", "fun reconcileInterruptedAnalysisRuns(", "fun resetAllMemoryData(").forEach {
+            assertTrue("$it must report to the chat list", body(store, it).contains("chatListMemoryChangedForAll()"))
+        }
     }
 
     @Test fun backupsAndTheMemoryExportAreUntouched() {

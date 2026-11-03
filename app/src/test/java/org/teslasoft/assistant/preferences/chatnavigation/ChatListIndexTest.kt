@@ -27,7 +27,9 @@ class ChatListIndexTest {
         var companion: String = "companion-1",
         var excluded: Boolean = false,
         var startedAt: Long? = 1_000L,
-        var readable: Boolean = true
+        var readable: Boolean = true,
+        var memoryState: String? = null,
+        var memoryReadable: Boolean = true
     )
 
     private class FakeTable : ChatListIndex.Table {
@@ -47,7 +49,8 @@ class ChatListIndexTest {
             reads.add(chatId)
             return ChatListIndex.Update(
                 if (Part.CONTENT in parts) ChatListIndex.ContentValues(chat.bookmarked, chat.mostUsed, chat.startedAt) else null,
-                if (Part.SETTINGS in parts) ChatListIndex.SettingsValues(chat.model, chat.companion, chat.excluded) else null
+                if (Part.SETTINGS in parts) ChatListIndex.SettingsValues(chat.model, chat.companion, chat.excluded) else null,
+                if (Part.MEMORY in parts && chat.memoryReadable) ChatListIndex.MemoryValues(chat.memoryState) else null
             )
         }
     }
@@ -290,5 +293,51 @@ class ChatListIndexTest {
         assertEquals(100, table.writes)
         // Far below one frame (16 ms) even for a whole screen of rows.
         assertTrue(perLookupNs < 50_000)
+    }
+
+    @Test fun `memory status is ready with the rest of the row`() {
+        chats(1)
+        source.chats["chat-1"]!!.memoryState = "partial"
+        val index = core()
+        index.prepareAll()
+        assertEquals("partial", index.entryFor("chat-1")!!.memoryState)
+        assertEquals("partial", table.rows["chat-1"]!!.memoryState)
+    }
+
+    @Test fun `a memory change updates only the memory status`() {
+        chats(1)
+        val index = core()
+        index.prepareAll()
+        assertNull(index.entryFor("chat-1")!!.memoryState)
+        source.chats["chat-1"]!!.memoryState = "processing"
+        index.markChanged("chat-1", setOf(Part.MEMORY))
+        assertTrue(index.applyPending())
+        assertEquals("processing", index.entryFor("chat-1")!!.memoryState)
+        assertTrue(pending.records.isEmpty())
+    }
+
+    @Test fun `memory that cannot be read is read again later`() {
+        chats(1)
+        source.chats["chat-1"]!!.memoryState = "pending"
+        source.chats["chat-1"]!!.memoryReadable = false
+        val index = core()
+        index.prepareAll()
+        // The row is still prepared; only its memory status waits.
+        assertEquals("gpt-4o", index.entryFor("chat-1")!!.displayModel)
+        assertTrue(pending.records["chat-1"]!!.first.contains(Part.MEMORY))
+        source.chats["chat-1"]!!.memoryReadable = true
+        assertTrue(index.applyPending())
+        assertEquals("pending", index.entryFor("chat-1")!!.memoryState)
+        assertTrue(pending.records.isEmpty())
+    }
+
+    @Test fun `memory reopening refreshes every chat`() {
+        chats(3)
+        val index = core()
+        index.prepareAll()
+        source.chats.values.forEach { it.memoryState = "processed" }
+        index.markAllChanged(setOf(Part.MEMORY))
+        assertTrue(index.applyPending())
+        source.chats.keys.forEach { assertEquals("processed", index.entryFor(it)!!.memoryState) }
     }
 }

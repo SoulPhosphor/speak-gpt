@@ -21,19 +21,16 @@ import org.teslasoft.assistant.preferences.chatsearch.SearchDocumentKind
 import org.teslasoft.assistant.preferences.chatsearch.SearchResult
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.ChatPreferences
-import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
 import org.teslasoft.assistant.ui.drawer.CompanionImageLookup
 import org.teslasoft.assistant.ui.drawer.FlatChatIdentityBinder
 import java.util.concurrent.Executors
-import java.util.concurrent.ConcurrentHashMap
 
 class SearchResultAdapter(
     private val activity: FragmentActivity,
     private val onClick: (SearchResult) -> Unit
 ) : ListAdapter<SearchResult, SearchResultAdapter.Holder>(DIFF) {
     private val preferences = Preferences.getPreferences(activity, "")
-    private val memoryStates = ConcurrentHashMap<String, String>()
     private val companionImages = CompanionImageLookup(activity)
     // Each chat's stored row details, read from the chat list in one pass.
     private var rows = emptyMap<String, ListRow>()
@@ -44,14 +41,6 @@ class SearchResultAdapter(
     private data class ListRow(val index: ChatListIndex.Entry?, val startedAt: Long?)
 
     init {
-        if (preferences.getShowMemoryStatusOnChatList()) metadataExecutor.execute {
-            try {
-                if (MemoryStore.isProvisioned(activity)) {
-                    memoryStates.putAll(MemoryStore.getInstance(activity).chatReviewStates())
-                    activity.runOnUiThread { notifyDataSetChanged() }
-                }
-            } catch (_: Exception) { }
-        }
         loadRows()
         ChatListIndex.addListener(indexListener)
     }
@@ -95,7 +84,7 @@ class SearchResultAdapter(
         private val snippet: TextView = itemView.findViewById(R.id.flat_chat_snippet)
         private val date: TextView = itemView.findViewById(R.id.flat_chat_date)
         private val chevron: View = itemView.findViewById(R.id.flat_chat_chevron)
-        private val identity = FlatChatIdentityBinder(activity, itemView, preferences, memoryStates, companionImages)
+        private val identity = FlatChatIdentityBinder(activity, itemView, preferences, companionImages)
 
         fun bind(result: SearchResult) {
             val row = rows[result.chatId]

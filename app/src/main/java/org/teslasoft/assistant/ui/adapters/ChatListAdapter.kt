@@ -55,6 +55,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.drawer.ChatListDetails
 import org.teslasoft.assistant.ui.drawer.ChatListDetailsReader
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageShape
+import org.teslasoft.assistant.preferences.memory.AnalysisBookmark
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.ui.activities.ChatActivity
@@ -128,11 +129,10 @@ class ChatListAdapter(
                         if (!boundMemoryStates.containsKey(chatId)) return@forEachIndexed
 
                         val previousState = boundMemoryStates[chatId]
-                        val currentState = if (boundMemoryExclusions[chatId] == true) {
-                            "excluded"
-                        } else {
+                        val currentState = AnalysisBookmark.chatListState(
+                            boundMemoryExclusions[chatId] == true,
                             states[chatId]
-                        }
+                        )
                         if (previousState != currentState) {
                             boundMemoryStates[chatId] = currentState
                             changedRows.add(position)
@@ -515,7 +515,7 @@ class ChatListAdapter(
             }
 
             val excluded = chatPreferences.isChatExcludedFromMemory()
-            val memoryState = if (excluded) "excluded" else reviewStates?.get(chatHash)
+            val memoryState = AnalysisBookmark.chatListState(excluded, reviewStates?.get(chatHash))
             boundMemoryExclusions[chatHash] = excluded
             boundMemoryStates[chatHash] = memoryState
             if (memoryState == null) {
@@ -526,7 +526,10 @@ class ChatListAdapter(
                     when (memoryState) {
                         "pending" -> R.string.memory_marker_pending
                         "partial" -> R.string.memory_marker_partial
+                        "processing" -> R.string.memory_marker_processing
+                        "partial_paused" -> R.string.memory_marker_partial_paused
                         "processed" -> R.string.memory_marker_processed
+                        "processed_excluded" -> R.string.memory_marker_processed_excluded
                         else -> R.string.memory_marker_excluded
                     }
                 )
