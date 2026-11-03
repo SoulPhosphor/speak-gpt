@@ -213,6 +213,17 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         searchBackCallback?.isEnabled = open
     }
 
+    /** When the screen is recreated, Android restores the search text after
+     *  onCreate hid the field; reopen it (without raising the keyboard) so
+     *  the list is never narrowed by a search the user cannot see. */
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        if (showSearch() && searchCollapsible() && !fieldSearch?.text.isNullOrEmpty()) {
+            searchBar?.visibility = View.VISIBLE
+            searchBackCallback?.isEnabled = true
+        }
+    }
+
     /** A tap anywhere outside an open, empty search field closes it. A field
      *  with text stays open so the user can see why the list is narrowed. */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
