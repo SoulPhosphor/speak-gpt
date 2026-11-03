@@ -112,32 +112,19 @@
 
             <TextView
                 android:id="@+id/btn_mode_memories"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="8dp"
-                android:text="@string/mem_mode_memories"
-                android:textSize="17sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.ListTools.ModeWord"
+                android:text="@string/mem_mode_memories" />
 
             <ImageView
                 android:id="@+id/filtered_memories"
                 style="@style/Widget.App.ListTools.FilteredIcon" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/mem_mode_separator"
-                android:textColor="@color/text_subtitle"
-                android:textSize="17sp" />
+            <TextView style="@style/Widget.App.ListTools.ModeSeparator" />
 
             <TextView
                 android:id="@+id/btn_mode_pending"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="8dp"
-                android:text="@string/mem_mode_pending"
-                android:textSize="17sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.ListTools.ModeWord"
+                android:text="@string/mem_mode_pending" />
 
             <ImageView
                 android:id="@+id/filtered_pending"
@@ -146,10 +133,7 @@
 
         <TextView
             android:id="@+id/mode_pending_count"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/text_subtitle"
-            android:textSize="13sp"
+            style="@style/Widget.App.ListTools.PendingCount"
             android:visibility="gone" />
     </LinearLayout>
 

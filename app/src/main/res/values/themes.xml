@@ -1271,6 +1271,34 @@
         <item name="android:layout_weight">1</item>
     </style>
 
+    <!-- The Memories / Pending words. Code marks the current one selected;
+         its color comes from list_tools_mode_word_text. -->
+    <style name="Widget.App.ListTools.ModeWord" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:padding">@dimen/list_tools_mode_word_padding</item>
+        <item name="android:textColor">@color/list_tools_mode_word_text</item>
+        <item name="android:textSize">@dimen/list_tools_mode_word_text_size</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- The "|" between the mode words. -->
+    <style name="Widget.App.ListTools.ModeSeparator" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:text">@string/mem_mode_separator</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/list_tools_mode_word_text_size</item>
+    </style>
+
+    <!-- "N Memories Pending" under the mode words. -->
+    <style name="Widget.App.ListTools.PendingCount" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/list_tools_pending_count_text_size</item>
+    </style>
+
     <!-- Shown right after the current mode word while filters are on. Hidden
          as gone, so it takes no room until it shows; the right-aligned line
          then grows to make room for it. Its color is set here only. -->

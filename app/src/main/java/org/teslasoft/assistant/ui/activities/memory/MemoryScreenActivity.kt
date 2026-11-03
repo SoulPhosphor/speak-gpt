@@ -163,15 +163,9 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
     /** Refresh the toggle's selected word and the count line beneath it
      *  (null hides the count — it never shows when nothing is pending). */
     protected fun updateModeToggle(mode: String, pendingCountLine: String?) {
-        // colorPrimary via appcompat's R — material inherits the attr rather
-        // than declaring it (colorError failed to resolve from material.R in
-        // CI; colorPrimary has the same risk).
-        val selected = com.google.android.material.color.MaterialColors.getColor(
-            titleView ?: return, androidx.appcompat.R.attr.colorPrimary
-        )
-        val unselected = ResourcesCompat.getColor(resources, R.color.text_subtitle, theme)
-        btnModeMemories?.setTextColor(if (mode == "memories") selected else unselected)
-        btnModePending?.setTextColor(if (mode == "pending") selected else unselected)
+        // The current word's color comes from its style (selected state).
+        btnModeMemories?.isSelected = mode == "memories"
+        btnModePending?.isSelected = mode == "pending"
         if (pendingCountLine == null) {
             modePendingCount?.visibility = View.GONE
         } else {
