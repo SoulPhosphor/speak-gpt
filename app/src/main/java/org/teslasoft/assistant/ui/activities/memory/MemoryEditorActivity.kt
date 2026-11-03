@@ -16,6 +16,9 @@
 
 package org.teslasoft.assistant.ui.activities.memory
 
+import org.teslasoft.assistant.ui.util.ParameterInfoDialog
+import org.teslasoft.assistant.ui.util.SaveIconFlash
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
 import android.content.res.ColorStateList
@@ -31,11 +34,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
-import androidx.core.graphics.drawable.toDrawable
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
 import org.json.JSONArray
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
@@ -79,11 +80,14 @@ class MemoryEditorActivity : SettingsPageActivity() {
     private var btnBack: ImageButton? = null
     private var titleView: TextView? = null
     private var fieldTitle: TextInputEditText? = null
-    private var fieldContent: TextInputEditText? = null
-    private var btnType: MaterialButton? = null
-    private var typeHint: TextView? = null
-    private var btnImportance: MaterialButton? = null
-    private var btnScope: MaterialButton? = null
+    private var fieldContent: EditText? = null
+    private var fieldContentExpanded: EditText? = null
+    private var panelContentExpanded: View? = null
+    private var scrollView: View? = null
+    private var btnHeaderSave: ImageButton? = null
+    private var btnType: TextView? = null
+    private var btnImportance: TextView? = null
+    private var btnScope: TextView? = null
     private var sectionTargets: View? = null
     private var targetsHeading: TextView? = null
     private var chipsTargets: ChipGroup? = null
@@ -135,6 +139,8 @@ class MemoryEditorActivity : SettingsPageActivity() {
     private val loreCards = ArrayList<Triple<String, String, String>>()
 
     companion object {
+        private const val STATE_MEMORY_ID = "memoryId"
+        private const val STATE_CONTENT_EXPANDED = "contentExpanded"
         // No Type plus the five starter Types. Lore is not a Type (§5.1) and is
         // deliberately absent. The keys map to type_ids at save time.
         private val TYPE_KEYS = listOf("none", "fact", "preference", "event", "status", "instruction")
@@ -148,7 +154,10 @@ class MemoryEditorActivity : SettingsPageActivity() {
         setContentView(R.layout.activity_memory_editor)
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
-        memoryId = intent.extras?.getString("memoryId")?.takeIf { it.isNotEmpty() }
+        val openedMemoryId = intent.extras?.getString("memoryId")?.takeIf { it.isNotEmpty() }
+        // A memory saved from this screen keeps its id across recreation, so a
+        // later save updates it instead of adding another.
+        memoryId = savedInstanceState?.getString(STATE_MEMORY_ID)?.takeIf { it.isNotEmpty() } ?: openedMemoryId
         preferences = Preferences.getPreferences(this, chatId)
 
         actionBar = findViewById(R.id.action_bar)
@@ -156,8 +165,11 @@ class MemoryEditorActivity : SettingsPageActivity() {
         titleView = findViewById(R.id.activity_title)
         fieldTitle = findViewById(R.id.field_mem_title)
         fieldContent = findViewById(R.id.field_mem_content)
+        fieldContentExpanded = findViewById(R.id.field_mem_content_expanded)
+        panelContentExpanded = findViewById(R.id.panel_content_expanded)
+        scrollView = findViewById(R.id.scroll)
+        btnHeaderSave = findViewById(R.id.btn_header_save)
         btnType = findViewById(R.id.btn_mem_type)
-        typeHint = findViewById(R.id.text_type_hint)
         btnImportance = findViewById(R.id.btn_mem_importance)
         btnScope = findViewById(R.id.btn_mem_scope)
         sectionTargets = findViewById(R.id.section_targets)
@@ -170,7 +182,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         dropdownLinkCard = findViewById(R.id.dropdown_link_card)
         dropdownLinkSection = findViewById(R.id.dropdown_link_section)
 
-        titleView?.setText(if (memoryId == null) R.string.mem_edit_title_new else R.string.mem_edit_title_edit)
+        titleView?.setText(if (openedMemoryId == null) R.string.mem_edit_title_new else R.string.mem_edit_title_edit)
 
         applyTheme()
 
@@ -182,12 +194,23 @@ class MemoryEditorActivity : SettingsPageActivity() {
         // an edit preserves its stored value without exposing the control.
         val importanceOn = preferences?.getUseImportanceRatings() == true
         val importanceVisibility = if (importanceOn) View.VISIBLE else View.GONE
-        findViewById<TextView>(R.id.text_importance_label)?.visibility = importanceVisibility
-        btnImportance?.visibility = importanceVisibility
+        findViewById<View>(R.id.row_importance)?.visibility = importanceVisibility
         btnScope?.setOnClickListener { showScopePicker() }
+        findViewById<View>(R.id.btn_info_scope)?.setOnClickListener {
+            ParameterInfoDialog.show(this, getString(R.string.mem_info_scope_title), getString(R.string.mem_info_scope_body))
+        }
+        findViewById<View>(R.id.btn_info_type)?.setOnClickListener {
+            ParameterInfoDialog.show(this, getString(R.string.mem_info_type_title), typeDefinitionsText())
+        }
+        findViewById<View>(R.id.btn_info_importance)?.setOnClickListener {
+            ParameterInfoDialog.show(this, getString(R.string.mem_info_importance_title), getString(R.string.mem_info_importance_body))
+        }
         dropdownTargets?.setOnClickListener { showTargetDropdown(it) }
         btnSave?.setOnClickListener { save(activate = false) }
         btnAccept?.setOnClickListener { save(activate = true) }
+        btnHeaderSave?.setOnClickListener { save(activate = false) }
+        findViewById<View>(R.id.btn_expand_content)?.setOnClickListener { setContentExpanded(true) }
+        findViewById<View>(R.id.btn_collapse_content)?.setOnClickListener { setContentExpanded(false) }
 
         // Preset scope/target for a new memory opened from a scoped browser door.
         intent.getStringExtra("presetScope")?.takeIf { it in SCOPE_KEYS }?.let { currentScope = it }
@@ -368,27 +391,32 @@ class MemoryEditorActivity : SettingsPageActivity() {
             else -> memTypes.firstOrNull { it.typeId == currentTypeId }?.name
                 ?: typeLabel(starterKeyFor(currentTypeId))
         }
-        typeHint?.text = typeHintText(starterKeyFor(currentTypeId))
     }
+
+    /** The Type Definitions pop-up: every Type the picker offers, each with
+     *  its definition, separated by a blank line. */
+    private fun typeDefinitionsText(): String =
+        TYPE_KEYS.joinToString("\n\n") {
+            getString(R.string.mem_info_type_line_fmt, typeLabel(it), typeHintText(it))
+        }
 
     private fun showTypePicker() {
         // The picker offers No Type plus the starter Types only (the dynamic
         // Type picker is Phase 2). A custom Type stays selected until the user
         // explicitly chooses one of these, so opening the picker without picking
         // never drops a custom Type.
-        val labels = TYPE_KEYS.map { typeLabel(it) }.toTypedArray()
-        val current = TYPE_KEYS.indexOf(starterKeyFor(currentTypeId))
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_edit_label_type)
-            .setSingleChoiceItems(labels, current) { d, which ->
-                // index 0 = No Type; 1..5 = the matching starter Type id.
-                currentTypeId = if (which == 0) null
-                    else MemoryTypeMigration.STARTER_TYPES[which - 1].typeId
-                refreshType()
-                d.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        val anchor = btnType ?: return
+        val labels = TYPE_KEYS.map { typeLabel(it) }
+        val key = starterKeyFor(currentTypeId)
+        // A custom Type is not one of these options, so nothing is marked
+        // selected and No Type stays in the list.
+        val current = if (currentTypeId != null && key == "none") -1 else TYPE_KEYS.indexOf(key)
+        AppDropdown.show(anchor, labels, current) { which ->
+            // index 0 = No Type; 1..5 = the matching starter Type id.
+            currentTypeId = if (which == 0) null
+                else MemoryTypeMigration.STARTER_TYPES[which - 1].typeId
+            refreshType()
+        }
     }
 
     /* ------------------------------ importance ------------------------------ */
@@ -411,17 +439,13 @@ class MemoryEditorActivity : SettingsPageActivity() {
     private fun showImportancePicker() {
         // Signed scale: -2, -1, 0 (neutral), +1, +2, +3 (mandatory when relevant).
         val values = listOf(-2, -1, 0, 1, 2, 3)
-        val labels = values.map { importanceLabel(it) }.toTypedArray()
+        val anchor = btnImportance ?: return
+        val labels = values.map { importanceLabel(it) }
         val selected = values.indexOf(currentImportance.coerceIn(-2, 3)).coerceAtLeast(0)
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_edit_label_importance)
-            .setSingleChoiceItems(labels, selected) { d, which ->
-                currentImportance = values[which]
-                refreshImportance()
-                d.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        AppDropdown.show(anchor, labels, selected) { which ->
+            currentImportance = values[which]
+            refreshImportance()
+        }
     }
 
     /* ------------------------------ scope ------------------------------ */
@@ -451,22 +475,18 @@ class MemoryEditorActivity : SettingsPageActivity() {
     }
 
     private fun showScopePicker() {
-        val labels = SCOPE_KEYS.map { scopeLabel(it) }.toTypedArray()
+        val anchor = btnScope ?: return
+        val labels = SCOPE_KEYS.map { scopeLabel(it) }
         val current = SCOPE_KEYS.indexOf(currentScope).coerceAtLeast(0)
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_edit_label_scope)
-            .setSingleChoiceItems(labels, current) { d, which ->
-                val picked = SCOPE_KEYS[which]
-                if (picked != currentScope) {
-                    currentScope = picked
-                    // Targets belong to one category; switching clears them.
-                    selectedTargets.clear()
-                    refreshScope()
-                }
-                d.dismiss()
+        AppDropdown.show(anchor, labels, current) { which ->
+            val picked = SCOPE_KEYS[which]
+            if (picked != currentScope) {
+                currentScope = picked
+                // Targets belong to one category; switching clears them.
+                selectedTargets.clear()
+                refreshScope()
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        }
     }
 
     /* ------------------------------ targets ------------------------------ */
@@ -619,7 +639,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         }
         // Titles are retired (§3.1): only content is required, and the stored
         // title is the inert empty placeholder.
-        val content = fieldContent?.text?.toString()?.trim().orEmpty()
+        val content = activeContentField()?.text?.toString()?.trim().orEmpty()
         if (content.isEmpty()) {
             Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
             return
@@ -657,6 +677,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 }
                 return@runOffThread
             }
+            var savedId = prior?.memoryId
             if (prior == null) {
                 val record = MemoryRecord(
                     memoryId = org.teslasoft.assistant.preferences.memory.MemoryId
@@ -672,6 +693,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 )
                 store.insertMemory(record)
                 Librarian.getInstance(this).reindexMemory(record.memoryId)
+                savedId = record.memoryId
             } else {
                 val updated = prior.copy(
                     scope = currentScope, typeId = typeId, content = content,
@@ -684,11 +706,74 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 store.updateMemory(updated, getString(R.string.memory_change_edited))
                 Librarian.getInstance(this).reindexMemory(prior.memoryId)
             }
+            val saved = savedId?.let { store.getMemory(it) }
             runOnUiThread {
-                Toast.makeText(this, R.string.memory_saved, Toast.LENGTH_SHORT).show()
-                finish()
+                if (activate) {
+                    Toast.makeText(this, R.string.memory_saved, Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    // The header save icon keeps the user on this screen
+                    // (owner ruling, Nov 3 2026). Later saves update this
+                    // same memory instead of adding another.
+                    if (saved != null) {
+                        existing = saved
+                        memoryId = saved.memoryId
+                    }
+                    btnHeaderSave?.let { SaveIconFlash.flash(it) }
+                    Toast.makeText(this, R.string.mem_edit_saved_toast, Toast.LENGTH_SHORT).show()
+                }
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        // The expanded panel holds the current text while open; copy it to the
+        // small box before the views save their state, so the small box is
+        // always the one source of the text across recreation.
+        val expanded = panelContentExpanded?.visibility == View.VISIBLE
+        if (expanded) {
+            val from = fieldContentExpanded
+            val to = fieldContent
+            if (from != null && to != null) {
+                val start = from.selectionStart
+                val end = from.selectionEnd
+                to.setText(from.text)
+                val length = to.text?.length ?: 0
+                if (start in 0..length && end in 0..length) to.setSelection(start, end)
+            }
+        }
+        super.onSaveInstanceState(outState)
+        memoryId?.let { outState.putString(STATE_MEMORY_ID, it) }
+        outState.putBoolean(STATE_CONTENT_EXPANDED, expanded)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        if (savedInstanceState.getBoolean(STATE_CONTENT_EXPANDED, false)) setContentExpanded(true)
+    }
+
+    /* ------------------------------ Memory box ------------------------------ */
+
+    /** The Memory box the user is typing in: the expanded panel while open. */
+    private fun activeContentField(): EditText? =
+        if (panelContentExpanded?.visibility == View.VISIBLE) fieldContentExpanded else fieldContent
+
+    /**
+     * Expand fills the page below the header with the Memory box; Collapse
+     * returns to the small box. The text and cursor carry across both ways.
+     */
+    private fun setContentExpanded(expanded: Boolean) {
+        val from = if (expanded) fieldContent else fieldContentExpanded
+        val to = if (expanded) fieldContentExpanded else fieldContent
+        if (from == null || to == null) return
+        val start = from.selectionStart
+        val end = from.selectionEnd
+        to.setText(from.text)
+        val length = to.text?.length ?: 0
+        if (start in 0..length && end in 0..length) to.setSelection(start, end)
+        panelContentExpanded?.visibility = if (expanded) View.VISIBLE else View.GONE
+        scrollView?.visibility = if (expanded) View.GONE else View.VISIBLE
+        to.requestFocus()
     }
 
     /* ------------------------------ tags ------------------------------ */
@@ -738,13 +823,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
-            window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
-            if (Build.VERSION.SDK_INT <= 34) {
-                window.navigationBarColor = SurfaceColors.SURFACE_0.getColor(this)
-                window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
-            }
-            actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            ScreenChrome.apply(this, actionBar, btnBack, btnHeaderSave)
         }
     }
 

@@ -96,7 +96,14 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
     override fun screenTitle(): String = titleOverride ?: getString(R.string.title_memories)
     override fun showSearch(): Boolean = true
-    override fun addButtonText(): String = getString(R.string.btn_new_memory)
+    // Search opens from the magnifying-glass icon on the tools line (owner
+    // design, Nov 3 2026) instead of always showing.
+    override fun searchCollapsible(): Boolean = true
+    // New memory is the header's + icon, right of the Companions icon
+    // (owner ruling, Nov 3 2026); the floating Add memory button is gone.
+    override fun actionIcon(): Int = R.drawable.ic_add
+    override fun actionLabel(): String = getString(R.string.btn_new_memory)
+    override fun onActionClick() = onAddClick()
 
     /** The old chip bar is retired; the slide-out panel is opened via the
      *  three-dots button beside the search field (owner ruling, July 8 2026). */
@@ -139,6 +146,19 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             else -> getString(R.string.mem_pending_count_many, pendingCount)
         }
         updateModeToggle(mode, countLine)
+        // The filter icon sits after the current mode word while any filter
+        // narrows that view (sort order is not a filter).
+        setFilteredMarker(if (isFiltered()) mode else null)
+    }
+
+    private fun isFiltered(): Boolean {
+        val f = MemoryBrowserFilterState
+        return (!isScoped() && f.scope.isNotEmpty()) ||
+            f.type.isNotEmpty() ||
+            f.importance.isNotEmpty() ||
+            f.source != "all" ||
+            f.tags.isNotEmpty() ||
+            (mode == "memories" && f.superseded != "hide")
     }
 
     // Companions link (unscoped browser only).

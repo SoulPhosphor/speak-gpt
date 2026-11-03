@@ -45,136 +45,95 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/action_bar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurfaceContainerHigh"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        style="@style/Widget.App.ActionBar">
 
         <ImageButton
             android:id="@+id/btn_back"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
-            android:contentDescription="@string/go_back"
-            android:src="@drawable/ic_back"
-            android:tooltipText="@string/go_back"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_back" />
+            style="@style/Widget.App.ActionBar.BackButton" />
 
         <TextView
             android:id="@+id/activity_title"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:ellipsize="end"
-            android:maxLines="1"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
             android:text="@string/title_memories"
-            android:textColor="@color/text_title"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_action_secondary"
-            app:layout_constraintHorizontal_bias="0.0"
-            app:layout_constraintStart_toEndOf="@+id/btn_back"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintEnd_toStartOf="@+id/btn_action_secondary" />
 
         <!-- Optional secondary action (e.g. the browser's Companions link). Sits
              left of the primary action; hidden unless the screen supplies an
              icon, in which case it collapses to a point next to btn_action. -->
         <ImageButton
             android:id="@+id/btn_action_secondary"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
+            style="@style/Widget.App.ActionBar.ChainedButton"
             android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_action"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintEnd_toStartOf="@+id/btn_action" />
 
         <ImageButton
             android:id="@+id/btn_action"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
             android:contentDescription="@string/memory_row_actions"
             android:src="@drawable/ic_settings"
             android:tooltipText="@string/memory_row_actions"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_settings" />
+            android:visibility="gone" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Two-mode header (owner design, July 8 2026 evening): centered
-         "Memories | Pending" words — tap a word to switch views — with the
-         "N Memories Pending" count line under it (hidden when none are
-         pending). Only the memory browser opts in; other list screens keep
-         this collapsed. -->
+    <!-- Tools line (owner design, Nov 3 2026; Memories | Pending words from
+         the July 8 2026 two-mode design): the search toggle and filter menu
+         on the left, the mode words on the right with the filtered icon
+         after the current one, and the "N Memories Pending" count line under
+         the words (hidden when none are pending). Only the memory browser
+         opts in; other list screens keep this collapsed. -->
     <LinearLayout
         android:id="@+id/mode_toggle_container"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
+        style="@style/Widget.App.ListTools.Container"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/action_bar">
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+        <LinearLayout style="@style/Widget.App.ListTools.Row">
+
+            <ImageButton
+                android:id="@+id/btn_search_toggle"
+                style="@style/Widget.App.ListTools.Action"
+                android:contentDescription="@string/memory_search_hint"
+                android:src="@drawable/ic_search"
+                android:tooltipText="@string/memory_search_hint" />
+
+            <!-- Three-dots (vertical) filter button: opens the Memory Filters
+                 slide-out panel. -->
+            <ImageButton
+                android:id="@+id/btn_filter"
+                style="@style/Widget.App.ListTools.Action"
+                android:contentDescription="@string/mem_filter_open"
+                android:src="@drawable/ic_more_vert"
+                android:tooltipText="@string/mem_filter_open"
+                android:visibility="gone" />
+
+            <Space style="@style/Widget.App.ListTools.Spacer" />
 
             <TextView
                 android:id="@+id/btn_mode_memories"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="8dp"
-                android:text="@string/mem_mode_memories"
-                android:textSize="17sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.ListTools.ModeWord"
+                android:text="@string/mem_mode_memories" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/mem_mode_separator"
-                android:textColor="@color/text_subtitle"
-                android:textSize="17sp" />
+            <ImageView
+                android:id="@+id/filtered_memories"
+                style="@style/Widget.App.ListTools.FilteredIcon" />
+
+            <TextView style="@style/Widget.App.ListTools.ModeSeparator" />
 
             <TextView
                 android:id="@+id/btn_mode_pending"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="8dp"
-                android:text="@string/mem_mode_pending"
-                android:textSize="17sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.ListTools.ModeWord"
+                android:text="@string/mem_mode_pending" />
+
+            <ImageView
+                android:id="@+id/filtered_pending"
+                style="@style/Widget.App.ListTools.FilteredIcon" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/mode_pending_count"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/text_subtitle"
-            android:textSize="13sp"
+            style="@style/Widget.App.ListTools.PendingCount"
             android:visibility="gone" />
     </LinearLayout>
 
@@ -192,7 +151,7 @@
         app:boxCornerRadiusTopEnd="16dp"
         app:boxCornerRadiusTopStart="16dp"
         app:startIconDrawable="@drawable/ic_search"
-        app:layout_constraintEnd_toStartOf="@+id/btn_filter"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/mode_toggle_container">
 
@@ -204,23 +163,6 @@
             android:singleLine="true"
             android:textColorHint="@color/memory_hint_soft" />
     </com.google.android.material.textfield.TextInputLayout>
-
-    <!-- Three-dots (vertical) filter button. Only visible on screens whose
-         hosting activity opts in (the memory browser today; other list screens
-         don't have filters). Opens the Memory Filters slide-out panel. -->
-    <ImageButton
-        android:id="@+id/btn_filter"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginEnd="12dp"
-        android:background="@drawable/btn_accent_icon_large_100"
-        android:contentDescription="@string/mem_filter_open"
-        android:src="@drawable/ic_more_vert"
-        android:tooltipText="@string/mem_filter_open"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@+id/search_bar"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@+id/search_bar" />
 
     <!-- Legacy horizontal chip row (Stage 2.3). Replaced by the slide-out
          Memory Filters panel; kept in the layout in case another list screen

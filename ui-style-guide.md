@@ -653,7 +653,7 @@ vocabulary.
 
 `Widget.App.Page.Content` is a plain page body with the standard side gutter;
 `Widget.App.Page.ControlRow` is one label-and-control line in it. A dropdown
-value after its label uses `Widget.App.Dropdown.CanonicalValue.Trailing`; when
+value after its label uses `Widget.App.Dropdown.CanonicalValue.Trailing`, or `Widget.App.Dropdown.CanonicalValue.Trailing.Fill` to fill the rest of the line (the canonical labeled-row placement; a `Widget.App.InfoButton` may sit between the label and the value); when
 there is only one choice, `Widget.App.Dropdown.StaticValue` shows it as plain
 text. A label-sized action after a field on the same line uses
 `AppButton.Primary.Inline.Trailing`.
@@ -668,6 +668,15 @@ rest of this session."
 ### Bounded, internally-scrolling variant
 
 Set `minLines`/`maxLines` and `android:scrollbars="vertical"` (plus `android:isScrollContainer="true"`, or the field never actually scrolls) on the individual `Widget.App.Field.Box` input to pin it to a fixed number of visible lines instead of letting it grow the dialog taller — the same bounded-height-scrolls-past-that idea as the Prompt Editor's `field_prompt`/`bg_prompt_editor` skin above, applied here to the standard `bg_field_box` skin instead. Current example: `dialog_edit_chat_title.xml` (ChatActivity's title-edit dialog, opened by tapping the chat header title) — a 4-line field, since an AI-generated chat title can run far longer than the header ever shows.
+
+### Expandable text box
+
+Use for a long free-text field the user may want more room to write in:
+
+1. `Widget.App.Field.Label` (or `Widget.App.Field.Label.PageTop` when it is the first thing below the header, which adds `field_label_page_top_gap` above it);
+2. `Widget.App.Field.ExpandableBox` (the `bg_field_box` skin; it never changes on focus) holding `Widget.App.Field.ExpandableBox.Input` and `Widget.App.Field.ExpandableBox.Toggle`.
+
+The input keeps the field's normal size: three lines, growing with the text. The toggle is the Expand Content icon in the box's lower-right corner (`Widget.App.Chat.ComposerContentToggle` geometry). Tapping it shows `Widget.App.Field.ExpandedPanel` inside a transparent `Widget.App.Field.ExpandedPanel.Holder` that fills the page below the header (keyboard spacing comes from the screen's shared `ScreenChrome.fitSystemBarsAndKeyboard` handling, not from the panel). The panel has the look of the expanded chat message box by owner ruling (Nov 3 2026): `Widget.App.Chat.ComposerSurface` with the composer's margins, and `Widget.App.Field.ExpandedPanel.Input` with the composer editor's padding and text size, scrolling with its own scroll bar. `Widget.App.Field.ExpandedPanel.Toggle` is the Collapse Content icon in its upper-right corner and returns to the small box. Sizes live in `field_expandable_*` and `field_expanded_*`. Current user: the Memory editor's Memory box (`activity_memory_editor.xml`).
 
 ### Small inline number field
 
@@ -1127,6 +1136,10 @@ Approved October 9 2026 for the Voice Input choice:
 - `Widget.App.Row.Cog` — the trailing settings gear that opens the option's
   own screen without selecting it. While the option is flagged, an
   `AppButton.Primary.Inline` action (Install, Set Up) replaces the gear.
+
+## List tools line
+
+`Widget.App.ListTools.*` is the memory browser's line under the header (owner design, Nov 3 2026): `Container` (the line plus the pending-count line beneath, aligned right), `Row`, `Action` (the search icon, which opens and closes the search field, and the filter-menu kebab; both on the borderless `Widget.App.QuickTile.EditButton` icon style), `Spacer` (pushes the mode words to the right), and `FilteredIcon` (the Material `filter_list` icon, shown directly after the current mode word only while a filter narrows that view). Sizes live in `list_tools_*` dimensions. `ModeWord` is each of the Memories / Pending words (its own style so the owner can later restyle it, or replace it with a toggle, in one place); code only marks the current word selected, and the colors come from `@color/list_tools_mode_word_text` (`colorPrimary` selected, `appSubtleTextColor` otherwise). `ModeSeparator` is the "|" between them and `PendingCount` the count line beneath.
 
 ## Chat composer host and surface
 

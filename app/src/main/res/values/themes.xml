@@ -1239,6 +1239,78 @@
         <item name="android:paddingBottom">24dp</item>
     </style>
 
+    <!-- Memory browser tools line (owner design, Nov 3 2026): the search
+         and filter-menu icons on the left, the Memories | Pending words on
+         the right, and the pending count beneath the words. -->
+    <style name="Widget.App.ListTools.Container" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/list_tools_row_margin_top</item>
+        <item name="android:gravity">end</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/list_tools_row_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/list_tools_row_padding_horizontal</item>
+    </style>
+
+    <style name="Widget.App.ListTools.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <!-- The search icon and the filter-menu kebab: the guide's borderless
+         icon style (icons have no background of their own). Each instance
+         sets only its icon and labels. -->
+    <style name="Widget.App.ListTools.Action" parent="Widget.App.QuickTile.EditButton" />
+
+    <!-- Fills the space between the icons and the mode words. -->
+    <style name="Widget.App.ListTools.Spacer" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+
+    <!-- The Memories / Pending words. Code marks the current one selected;
+         its color comes from list_tools_mode_word_text. -->
+    <style name="Widget.App.ListTools.ModeWord" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:padding">@dimen/list_tools_mode_word_padding</item>
+        <item name="android:textColor">@color/list_tools_mode_word_text</item>
+        <item name="android:textSize">@dimen/list_tools_mode_word_text_size</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- The "|" between the mode words. -->
+    <style name="Widget.App.ListTools.ModeSeparator" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:text">@string/mem_mode_separator</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/list_tools_mode_word_text_size</item>
+    </style>
+
+    <!-- "N Memories Pending" under the mode words. -->
+    <style name="Widget.App.ListTools.PendingCount" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/list_tools_pending_count_text_size</item>
+    </style>
+
+    <!-- Shown right after the current mode word while filters are on. Hidden
+         as gone, so it takes no room until it shows; the right-aligned line
+         then grows to make room for it. Its color is set here only. -->
+    <style name="Widget.App.ListTools.FilteredIcon" parent="">
+        <item name="android:layout_width">@dimen/list_tools_filtered_icon_size</item>
+        <item name="android:layout_height">@dimen/list_tools_filtered_icon_size</item>
+        <item name="android:src">@drawable/ic_filter_list</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+        <item name="android:contentDescription">@string/mem_filtered_indicator</item>
+        <item name="android:visibility">gone</item>
+    </style>
+
     <!-- Label-and-control line (dropdown, value, field + action). -->
     <style name="Widget.App.Page.ControlRow" parent="">
         <item name="android:layout_width">match_parent</item>
@@ -1251,6 +1323,13 @@
     <!-- A dropdown value placed after its label on a ControlRow. -->
     <style name="Widget.App.Dropdown.CanonicalValue.Trailing">
         <item name="android:layout_marginStart">16dp</item>
+    </style>
+
+    <!-- A dropdown value after its label on a ControlRow that fills the rest
+         of the line, per the canonical labeled-row placement. -->
+    <style name="Widget.App.Dropdown.CanonicalValue.Trailing.Fill">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
     </style>
 
     <!-- The same position as a dropdown value when there is only one choice:
@@ -2557,6 +2636,85 @@
         <item name="android:paddingHorizontal">16dp</item>
         <item name="android:paddingTop">8dp</item>
         <item name="android:paddingBottom">16dp</item>
+    </style>
+
+    <!-- A field label that is the first thing on a page body, below the
+         header: the same label with a gap above it. -->
+    <style name="Widget.App.Field.Label.PageTop">
+        <item name="android:layout_marginTop">@dimen/field_label_page_top_gap</item>
+    </style>
+
+    <!-- Expandable text box: a Widget.App.Field.Box with the Expand Content
+         icon in its lower-right corner. The input keeps the field's normal
+         size (three lines, growing with the text). Expanding shows the
+         ExpandedPanel, which has the look of the chat message box when it is
+         expanded (owner ruling, Nov 3 2026): the composer surface filling the
+         page below the header, with the Collapse Content icon in its
+         upper-right corner. The box never changes on focus. Layouts set only
+         ids, text references and the holder's constraints. -->
+    <style name="Widget.App.Field.ExpandableBox" parent="Widget.App.Field.Box">
+        <item name="android:padding">0dp</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandableBox.Input" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@null</item>
+        <item name="android:padding">@dimen/field_expandable_padding</item>
+        <item name="android:paddingEnd">@dimen/field_expandable_toggle_size</item>
+        <item name="android:gravity">top|start</item>
+        <item name="android:inputType">textMultiLine|textCapSentences</item>
+        <item name="android:minLines">3</item>
+        <item name="android:scrollbars">vertical</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandableBox.Toggle" parent="Widget.App.Chat.ComposerContentToggle">
+        <item name="android:layout_gravity">bottom|end</item>
+        <item name="android:src">@drawable/ic_expand_content</item>
+        <item name="android:contentDescription">@string/expand_content</item>
+        <item name="android:tooltipText">@string/expand_content</item>
+    </style>
+
+    <!-- Transparent holder for the expanded panel. It fills the page below
+         the header; keyboard spacing comes from the screen's shared
+         ScreenChrome.fitSystemBarsAndKeyboard handling. -->
+    <style name="Widget.App.Field.ExpandedPanel.Holder" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandedPanel" parent="Widget.App.Chat.ComposerSurface">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_marginStart">@dimen/field_expanded_panel_margin_horizontal</item>
+        <item name="android:layout_marginEnd">@dimen/field_expanded_panel_margin_horizontal</item>
+        <item name="android:layout_marginTop">@dimen/field_expanded_panel_margin_vertical</item>
+        <item name="android:layout_marginBottom">@dimen/field_expanded_panel_margin_vertical</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandedPanel.Input" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:gravity">top|start</item>
+        <item name="android:inputType">textMultiLine|textCapSentences</item>
+        <item name="android:isScrollContainer">true</item>
+        <item name="android:overScrollMode">ifContentScrolls</item>
+        <item name="android:scrollbars">vertical</item>
+        <item name="android:paddingStart">@dimen/field_expanded_input_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/field_expandable_toggle_size</item>
+        <item name="android:paddingTop">@dimen/field_expanded_input_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/field_expanded_input_padding_vertical</item>
+        <item name="android:textSize">@dimen/field_expanded_input_text_size</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandedPanel.Toggle" parent="Widget.App.Chat.ComposerContentToggle">
+        <item name="android:layout_gravity">top|end</item>
+        <item name="android:layout_marginTop">@dimen/field_expanded_toggle_margin</item>
+        <item name="android:layout_marginEnd">@dimen/field_expanded_toggle_margin</item>
+        <item name="android:src">@drawable/ic_collapse_content</item>
+        <item name="android:contentDescription">@string/collapse_content</item>
+        <item name="android:tooltipText">@string/collapse_content</item>
     </style>
 
     <!-- A small, right-sized numeric input blank (owner spec, July 23 2026 —

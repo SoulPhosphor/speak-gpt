@@ -20,9 +20,12 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.view.WindowInsets
 import android.widget.HorizontalScrollView
+import androidx.activity.OnBackPressedCallback
 import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
@@ -70,6 +73,10 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
     private var filterChips: ChipGroup? = null
     private var pendingBanner: com.google.android.material.button.MaterialButton? = null
     private var btnFilter: ImageButton? = null
+    private var btnSearchToggle: ImageButton? = null
+    private var filteredMemories: View? = null
+    private var filteredPending: View? = null
+    private var searchBackCallback: OnBackPressedCallback? = null
     private var modeToggleContainer: View? = null
     private var btnModeMemories: TextView? = null
     private var btnModePending: TextView? = null
@@ -98,11 +105,18 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
     /** Show the search field. Default true. */
     protected open fun showSearch(): Boolean = true
 
+    /** The search field stays hidden until the search icon on the tools line
+     *  opens it (the memory browser). Default false: always shown. */
+    protected open fun searchCollapsible(): Boolean = false
+
     /** FAB label, or null to hide the "add" button (read-only screens). */
     protected open fun addButtonText(): String? = null
 
     /** Bar action icon (e.g. a filter or teardown), or null to hide it. */
     protected open fun actionIcon(): Int? = null
+
+    /** Accessible label / tooltip for the bar action, or null to keep the default. */
+    protected open fun actionLabel(): String? = null
 
     /** Optional second bar action, left of the primary one (e.g. the browser's
      *  Companions link), or null to hide it. */
@@ -149,15 +163,9 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
     /** Refresh the toggle's selected word and the count line beneath it
      *  (null hides the count — it never shows when nothing is pending). */
     protected fun updateModeToggle(mode: String, pendingCountLine: String?) {
-        // colorPrimary via appcompat's R — material inherits the attr rather
-        // than declaring it (colorError failed to resolve from material.R in
-        // CI; colorPrimary has the same risk).
-        val selected = com.google.android.material.color.MaterialColors.getColor(
-            titleView ?: return, androidx.appcompat.R.attr.colorPrimary
-        )
-        val unselected = ResourcesCompat.getColor(resources, R.color.text_subtitle, theme)
-        btnModeMemories?.setTextColor(if (mode == "memories") selected else unselected)
-        btnModePending?.setTextColor(if (mode == "pending") selected else unselected)
+        // The current word's color comes from its style (selected state).
+        btnModeMemories?.isSelected = mode == "memories"
+        btnModePending?.isSelected = mode == "pending"
         if (pendingCountLine == null) {
             modePendingCount?.visibility = View.GONE
         } else {
@@ -175,6 +183,68 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
             pendingBanner?.text = text
             pendingBanner?.setOnClickListener { onClick?.invoke() }
         }
+    }
+
+    /** Show the filtered icon after the [mode] word ("memories" / "pending"),
+     *  or hide both when null. */
+    protected fun setFilteredMarker(mode: String?) {
+        filteredMemories?.visibility = if (mode == "memories") View.VISIBLE else View.GONE
+        filteredPending?.visibility = if (mode == "pending") View.VISIBLE else View.GONE
+    }
+
+    /* ------------------------------ collapsible search ------------------------------ */
+
+    /** Open the search field (focused, keyboard up) or close it. Closing
+     *  clears the search, so the list is never narrowed by a hidden query. */
+    private fun setSearchOpen(open: Boolean) {
+        val bar = searchBar ?: return
+        val field = fieldSearch ?: return
+        val imm = getSystemService(InputMethodManager::class.java)
+        if (open) {
+            bar.visibility = View.VISIBLE
+            field.requestFocus()
+            imm?.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
+        } else {
+            if (!field.text.isNullOrEmpty()) field.setText("")
+            field.clearFocus()
+            imm?.hideSoftInputFromWindow(field.windowToken, 0)
+            bar.visibility = View.GONE
+        }
+        searchBackCallback?.isEnabled = open
+    }
+
+    /** When the screen is recreated, Android restores the search text after
+     *  onCreate hid the field; reopen it (without raising the keyboard) so
+     *  the list is never narrowed by a search the user cannot see. */
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        if (showSearch() && searchCollapsible() && !fieldSearch?.text.isNullOrEmpty()) {
+            searchBar?.visibility = View.VISIBLE
+            searchBackCallback?.isEnabled = true
+        }
+    }
+
+    /** A tap anywhere outside an open, empty search field closes it. A field
+     *  with text stays open so the user can see why the list is narrowed. */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN && searchCollapsible()) {
+            val bar = searchBar
+            if (bar != null && bar.visibility == View.VISIBLE && fieldSearch?.text.isNullOrEmpty() &&
+                !isTouchInside(bar, ev) && btnSearchToggle?.let { isTouchInside(it, ev) } != true
+            ) {
+                setSearchOpen(false)
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun isTouchInside(view: View, ev: MotionEvent): Boolean {
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        val x = ev.rawX
+        val y = ev.rawY
+        return x >= location[0] && x < location[0] + view.width &&
+            y >= location[1] && y < location[1] + view.height
     }
 
     /* ------------------------------ event hooks ------------------------------ */
@@ -207,6 +277,9 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         filterChips = findViewById(R.id.chips_filter)
         pendingBanner = findViewById(R.id.pending_banner)
         btnFilter = findViewById(R.id.btn_filter)
+        btnSearchToggle = findViewById(R.id.btn_search_toggle)
+        filteredMemories = findViewById(R.id.filtered_memories)
+        filteredPending = findViewById(R.id.filtered_pending)
         modeToggleContainer = findViewById(R.id.mode_toggle_container)
         btnModeMemories = findViewById(R.id.btn_mode_memories)
         btnModePending = findViewById(R.id.btn_mode_pending)
@@ -229,6 +302,15 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
                 searchQuery = it?.toString() ?: ""
                 reload()
             }
+            if (searchCollapsible()) {
+                searchBar?.visibility = View.GONE
+                btnSearchToggle?.setOnClickListener { setSearchOpen(searchBar?.visibility != View.VISIBLE) }
+                val callback = object : OnBackPressedCallback(false) {
+                    override fun handleOnBackPressed() = setSearchOpen(false)
+                }
+                onBackPressedDispatcher.addCallback(this, callback)
+                searchBackCallback = callback
+            }
         } else {
             searchBar?.visibility = View.GONE
         }
@@ -244,6 +326,10 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         if (icon != null) {
             btnAction?.visibility = View.VISIBLE
             btnAction?.setImageResource(icon)
+            actionLabel()?.let {
+                btnAction?.contentDescription = it
+                btnAction?.tooltipText = it
+            }
             btnAction?.setOnClickListener { onActionClick() }
         }
 

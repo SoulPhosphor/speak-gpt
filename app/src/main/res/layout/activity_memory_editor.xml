@@ -24,41 +24,24 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/action_bar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurfaceContainerHigh"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        style="@style/Widget.App.ActionBar">
 
         <ImageButton
             android:id="@+id/btn_back"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
-            android:contentDescription="@string/go_back"
-            android:src="@drawable/ic_back"
-            android:tooltipText="@string/go_back"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_back" />
+            style="@style/Widget.App.ActionBar.BackButton" />
 
         <TextView
             android:id="@+id/activity_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
             android:text="@string/mem_edit_title_new"
-            android:textColor="@color/text_title"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintEnd_toStartOf="@+id/btn_header_save" />
+
+        <ImageButton
+            android:id="@+id/btn_header_save"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <ScrollView
@@ -98,79 +81,40 @@
                     android:singleLine="true" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="@string/mem_edit_hint_content">
+            <TextView
+                style="@style/Widget.App.Field.Label.PageTop"
+                android:labelFor="@+id/field_mem_content"
+                android:text="@string/mem_edit_label_content" />
 
-                <com.google.android.material.textfield.TextInputEditText
+            <FrameLayout style="@style/Widget.App.Field.ExpandableBox">
+
+                <EditText
                     android:id="@+id/field_mem_content"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="3" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    style="@style/Widget.App.Field.ExpandableBox.Input"
+                    android:importantForAutofill="no" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="20dp"
-                android:text="@string/mem_edit_label_type"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                <ImageButton
+                    android:id="@+id/btn_expand_content"
+                    style="@style/Widget.App.Field.ExpandableBox.Toggle" />
+            </FrameLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_mem_type"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                app:icon="@drawable/ic_edit" />
+            <!-- Scope, Type and Importance (owner order, Nov 3 2026): each
+                 label has its information icon right after it and the
+                 dropdown fills the rest of the line. -->
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
 
-            <TextView
-                android:id="@+id/text_type_hint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="6dp"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/mem_edit_label_scope" />
 
-            <TextView
-                android:id="@+id/text_importance_label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="20dp"
-                android:text="@string/mem_edit_label_importance"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                <ImageButton
+                    android:id="@+id/btn_info_scope"
+                    style="@style/Widget.App.InfoButton" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_mem_importance"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="20dp"
-                android:text="@string/mem_edit_label_scope"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_mem_scope"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
+                <TextView
+                    android:id="@+id/btn_mem_scope"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+            </LinearLayout>
 
             <!-- Target picker (owner rework, July 8–9 2026): "Associated
                  <Scope>" label + a boxed dropdown on the SAME line (the box
@@ -235,6 +179,38 @@
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
+
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/mem_edit_label_type" />
+
+                <ImageButton
+                    android:id="@+id/btn_info_type"
+                    style="@style/Widget.App.InfoButton" />
+
+                <TextView
+                    android:id="@+id/btn_mem_type"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_importance"
+                style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/mem_edit_label_importance" />
+
+                <ImageButton
+                    android:id="@+id/btn_info_importance"
+                    style="@style/Widget.App.InfoButton" />
+
+                <TextView
+                    android:id="@+id/btn_mem_importance"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+            </LinearLayout>
 
             <!-- Roleplay drafts only (owner design, July 8 2026 evening):
                  "Link to Lore Card:" — picking a card + section here makes
@@ -330,9 +306,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
+                android:visibility="gone"
                 android:text="@string/mem_edit_btn_save" />
 
-            <!-- Shown only when editing a draft (§14): accept = save + activate. -->
+            <!-- The bottom Save / Approve All As Shown button above and this Accept
+                 button are hidden (owner ruling, Nov 3 2026): the header save
+                 icon saves. Their wiring stays for later use. -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_mem_accept"
                 style="@style/Widget.Material3.Button.OutlinedButton"
@@ -343,4 +322,28 @@
                 android:text="@string/mem_edit_accept" />
         </LinearLayout>
     </ScrollView>
+
+    <!-- Expanded Memory box: fills the page below the header. -->
+    <FrameLayout
+        android:id="@+id/panel_content_expanded"
+        style="@style/Widget.App.Field.ExpandedPanel.Holder"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <FrameLayout style="@style/Widget.App.Field.ExpandedPanel">
+
+            <EditText
+                android:id="@+id/field_mem_content_expanded"
+                style="@style/Widget.App.Field.ExpandedPanel.Input"
+                android:contentDescription="@string/mem_edit_label_content"
+                android:importantForAutofill="no" />
+
+            <ImageButton
+                android:id="@+id/btn_collapse_content"
+                style="@style/Widget.App.Field.ExpandedPanel.Toggle" />
+        </FrameLayout>
+    </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
