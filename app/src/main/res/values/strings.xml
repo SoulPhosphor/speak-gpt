@@ -1398,7 +1398,7 @@
     <string name="title_memory_manager">Memory Manager</string>
     <string name="row_memory_browser_title">Memory Browser</string>
     <string name="row_memory_browser_subtitle">View, search, edit, approve, or remove saved and pending memories.</string>
-    <string name="row_memory_assistant_title">Memory Assistant</string>
+    <string name="row_memory_assistant_title">Memory Scanner</string>
     <string name="row_memory_assistant_subtitle">Analyze conversation history and review pending memories.</string>
     <string name="row_lorebooks_subtitle">Simple memory notes triggered invisibly by keywords for your companion.</string>
     <!-- Memory Manager hub, fourth row (memory_settings_reorg_spec.md placement
