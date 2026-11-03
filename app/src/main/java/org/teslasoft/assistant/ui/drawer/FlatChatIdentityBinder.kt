@@ -12,6 +12,7 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
+import org.teslasoft.assistant.preferences.memory.AnalysisBookmark
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageShape
 import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.ProfileImageResolver
@@ -84,13 +85,14 @@ class FlatChatIdentityBinder(
         model.text = metadata
         model.visibility = if (metadata.isEmpty()) View.GONE else View.VISIBLE
         if (displayPreferences.getShowMemoryStatusOnChatList() && index != null) {
-            val state = if (index.memoryExcluded) "excluded" else memoryStates[chatId]
+            val state = AnalysisBookmark.chatListState(index.memoryExcluded, memoryStates[chatId])
             if (state != null) {
                 memory.visibility = View.VISIBLE
                 memory.text = activity.getString(when (state) {
                     "pending" -> R.string.memory_marker_pending
                     "partial" -> R.string.memory_marker_partial
                     "processing" -> R.string.memory_marker_processing
+                    "partial_paused" -> R.string.memory_marker_partial_paused
                     "processed" -> R.string.memory_marker_processed
                     else -> R.string.memory_marker_excluded
                 })

@@ -229,4 +229,14 @@ class AnalysisBookmarkTest {
         assertEquals("processing", AnalysisBookmark.chatReviewState(true, true, true))
         assertEquals("processing", AnalysisBookmark.chatReviewState(true, false, false))
     }
+
+    @Test
+    fun pausedChatShowsPartialOnlyWhenSomeWasScannedBeforeThePause() {
+        assertEquals("partial_paused", AnalysisBookmark.chatListState(true, "partial"))
+        assertEquals("excluded", AnalysisBookmark.chatListState(true, "pending"))
+        assertEquals("excluded", AnalysisBookmark.chatListState(true, "processed"))
+        assertEquals("excluded", AnalysisBookmark.chatListState(true, null))
+        assertEquals("partial", AnalysisBookmark.chatListState(false, "partial"))
+        assertEquals(null, AnalysisBookmark.chatListState(false, null))
+    }
 }

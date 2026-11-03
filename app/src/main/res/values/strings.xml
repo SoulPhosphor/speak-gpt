@@ -1912,6 +1912,7 @@
     <string name="label_chat_memory_excluded">Archive This Chat</string>
     <string name="memory_marker_pending">Memory: Waiting for Review</string>
     <string name="memory_marker_partial">Memory: Partially Archived</string>
+    <string name="memory_marker_partial_paused">Memory: Partially Archived. Remainder Paused.</string>
     <string name="memory_marker_processing">Memory: Currently Processing</string>
     <string name="memory_marker_processed">Memory: Archived</string>
     <string name="memory_marker_excluded">Memory: Excluded</string>

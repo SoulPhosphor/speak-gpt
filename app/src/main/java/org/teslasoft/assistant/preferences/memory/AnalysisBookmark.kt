@@ -180,4 +180,15 @@ object FrozenChatRangeExecutor {
         hasUnscannedRows -> "pending"
         else -> "processed"
     }
+
+    /**
+     * What the chat-list line shows. A chat with Archive This Chat turned off
+     * reads "partial_paused" when some of it was scanned before the pause and
+     * some was not; otherwise it reads "excluded", as it always has.
+     */
+    fun chatListState(excludedByUser: Boolean, reviewState: String?): String? = when {
+        !excludedByUser -> reviewState
+        reviewState == "partial" -> "partial_paused"
+        else -> "excluded"
+    }
 }
