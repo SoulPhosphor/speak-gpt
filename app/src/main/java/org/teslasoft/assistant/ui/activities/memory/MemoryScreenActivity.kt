@@ -104,6 +104,9 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
     /** Bar action icon (e.g. a filter or teardown), or null to hide it. */
     protected open fun actionIcon(): Int? = null
 
+    /** Accessible label / tooltip for the bar action, or null to keep the default. */
+    protected open fun actionLabel(): String? = null
+
     /** Optional second bar action, left of the primary one (e.g. the browser's
      *  Companions link), or null to hide it. */
     protected open fun secondaryActionIcon(): Int? = null
@@ -244,6 +247,10 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         if (icon != null) {
             btnAction?.visibility = View.VISIBLE
             btnAction?.setImageResource(icon)
+            actionLabel()?.let {
+                btnAction?.contentDescription = it
+                btnAction?.tooltipText = it
+            }
             btnAction?.setOnClickListener { onActionClick() }
         }
 

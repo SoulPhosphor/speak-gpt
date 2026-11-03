@@ -45,79 +45,34 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/action_bar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurfaceContainerHigh"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        style="@style/Widget.App.ActionBar">
 
         <ImageButton
             android:id="@+id/btn_back"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
-            android:contentDescription="@string/go_back"
-            android:src="@drawable/ic_back"
-            android:tooltipText="@string/go_back"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_back" />
+            style="@style/Widget.App.ActionBar.BackButton" />
 
         <TextView
             android:id="@+id/activity_title"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:ellipsize="end"
-            android:maxLines="1"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
             android:text="@string/title_memories"
-            android:textColor="@color/text_title"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_action_secondary"
-            app:layout_constraintHorizontal_bias="0.0"
-            app:layout_constraintStart_toEndOf="@+id/btn_back"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintEnd_toStartOf="@+id/btn_action_secondary" />
 
         <!-- Optional secondary action (e.g. the browser's Companions link). Sits
              left of the primary action; hidden unless the screen supplies an
              icon, in which case it collapses to a point next to btn_action. -->
         <ImageButton
             android:id="@+id/btn_action_secondary"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
+            style="@style/Widget.App.ActionBar.ChainedButton"
             android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_action"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintEnd_toStartOf="@+id/btn_action" />
 
         <ImageButton
             android:id="@+id/btn_action"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
             android:contentDescription="@string/memory_row_actions"
             android:src="@drawable/ic_settings"
             android:tooltipText="@string/memory_row_actions"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_settings" />
+            android:visibility="gone" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Two-mode header (owner design, July 8 2026 evening): centered

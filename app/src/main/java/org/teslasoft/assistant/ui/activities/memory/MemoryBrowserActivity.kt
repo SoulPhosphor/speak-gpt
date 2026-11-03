@@ -96,7 +96,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
     override fun screenTitle(): String = titleOverride ?: getString(R.string.title_memories)
     override fun showSearch(): Boolean = true
-    override fun addButtonText(): String = getString(R.string.btn_new_memory)
+    // New memory is the header's + icon, right of the Companions icon
+    // (owner ruling, Nov 3 2026); the floating Add memory button is gone.
+    override fun actionIcon(): Int = R.drawable.ic_add
+    override fun actionLabel(): String = getString(R.string.btn_new_memory)
+    override fun onActionClick() = onAddClick()
 
     /** The old chip bar is retired; the slide-out panel is opened via the
      *  three-dots button beside the search field (owner ruling, July 8 2026). */
