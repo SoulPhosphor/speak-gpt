@@ -7,4 +7,6 @@
     <integer name="settings_page_slide_duration">600</integer>
     <integer name="sampling_slider_ruler_intervals">20</integer>
     <integer name="sampling_slider_ruler_major_interval">5</integer>
+    <!-- The expanded text panel has no line limit; it fills its space and scrolls. -->
+    <integer name="field_expanded_max_lines">2147483647</integer>
 </resources>

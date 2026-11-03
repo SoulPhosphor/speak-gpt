@@ -2559,6 +2559,78 @@
         <item name="android:paddingBottom">16dp</item>
     </style>
 
+    <!-- A field label that is the first thing on a page body, below the
+         header: the same label with a gap above it. -->
+    <style name="Widget.App.Field.Label.PageTop">
+        <item name="android:layout_marginTop">@dimen/field_label_page_top_gap</item>
+    </style>
+
+    <!-- Expandable text box: a Widget.App.Field.Box whose input shows a
+         bounded number of lines and scrolls inside itself, with an Expand
+         icon in its lower-right corner. Expanding swaps it for the
+         ExpandedPanel, which fills the page below the header and carries a
+         Collapse icon in its upper-right corner. The box never changes on
+         focus. Layouts set only ids, text references and the panel's
+         constraints. -->
+    <style name="Widget.App.Field.ExpandableBox" parent="Widget.App.Field.Box">
+        <item name="android:padding">0dp</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandableBox.Input" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@null</item>
+        <item name="android:padding">@dimen/field_expandable_padding</item>
+        <item name="android:paddingEnd">@dimen/field_expandable_toggle_size</item>
+        <item name="android:gravity">top|start</item>
+        <item name="android:inputType">textMultiLine|textCapSentences</item>
+        <item name="android:minLines">3</item>
+        <item name="android:maxLines">8</item>
+        <item name="android:scrollbars">vertical</item>
+        <item name="android:fadeScrollbars">false</item>
+        <item name="android:isScrollContainer">true</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandableBox.Toggle" parent="">
+        <item name="android:layout_width">@dimen/field_expandable_toggle_size</item>
+        <item name="android:layout_height">@dimen/field_expandable_toggle_size</item>
+        <item name="android:layout_gravity">bottom|end</item>
+        <item name="android:background">@color/transparent</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+        <item name="android:src">@drawable/ic_expand_content</item>
+        <item name="android:contentDescription">@string/expand_content</item>
+        <item name="android:tooltipText">@string/expand_content</item>
+    </style>
+
+    <!-- Transparent holder for the expanded panel. It fills the page below
+         the header and takes the navigation-bar / keyboard spacing, so the
+         panel's border always stays fully on screen. -->
+    <style name="Widget.App.Field.ExpandedPanel.Holder" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandedPanel" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_margin">@dimen/field_expanded_panel_margin</item>
+        <item name="android:background">@drawable/bg_field_box</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandedPanel.Input" parent="Widget.App.Field.ExpandableBox.Input">
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:minLines">1</item>
+        <item name="android:maxLines">@integer/field_expanded_max_lines</item>
+    </style>
+
+    <style name="Widget.App.Field.ExpandedPanel.Toggle" parent="Widget.App.Field.ExpandableBox.Toggle">
+        <item name="android:layout_gravity">top|end</item>
+        <item name="android:src">@drawable/ic_collapse_content</item>
+        <item name="android:contentDescription">@string/collapse_content</item>
+        <item name="android:tooltipText">@string/collapse_content</item>
+    </style>
+
     <!-- A small, right-sized numeric input blank (owner spec, July 23 2026 —
          the per-log "Maximum Logs Saved" / "Maximum Days Saved" fields on
          Alerts, Errors & Logs). Same bg_field_box skin as Widget.App.Field.Box

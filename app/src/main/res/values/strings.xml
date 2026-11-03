@@ -2151,6 +2151,8 @@
     <string name="mem_edit_new_project">New project</string>
     <string name="mem_edit_new_project_hint">Project name</string>
     <string name="mem_edit_btn_save">Save</string>
+    <string name="mem_edit_label_content">Memory</string>
+    <string name="mem_edit_saved_toast">Saved</string>
     <string name="mem_edit_required">Content is required.</string>
     <string name="mem_edit_still_loading">Still loading — try again in a moment.</string>
     <string name="mem_edit_op_failed">Couldn\'t save: %1$s</string>

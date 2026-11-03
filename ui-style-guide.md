@@ -669,6 +669,15 @@ rest of this session."
 
 Set `minLines`/`maxLines` and `android:scrollbars="vertical"` (plus `android:isScrollContainer="true"`, or the field never actually scrolls) on the individual `Widget.App.Field.Box` input to pin it to a fixed number of visible lines instead of letting it grow the dialog taller — the same bounded-height-scrolls-past-that idea as the Prompt Editor's `field_prompt`/`bg_prompt_editor` skin above, applied here to the standard `bg_field_box` skin instead. Current example: `dialog_edit_chat_title.xml` (ChatActivity's title-edit dialog, opened by tapping the chat header title) — a 4-line field, since an AI-generated chat title can run far longer than the header ever shows.
 
+### Expandable text box
+
+Use for a long free-text field the user may want more room to write in:
+
+1. `Widget.App.Field.Label` (or `Widget.App.Field.Label.PageTop` when it is the first thing below the header, which adds `field_label_page_top_gap` above it);
+2. `Widget.App.Field.ExpandableBox` (the `bg_field_box` skin; it never changes on focus) holding `Widget.App.Field.ExpandableBox.Input` and `Widget.App.Field.ExpandableBox.Toggle`.
+
+The input shows 3 to 8 lines and then scrolls inside the box with its own scroll bar. The toggle is the Expand Content icon in the box's lower-right corner. Tapping it shows `Widget.App.Field.ExpandedPanel` inside a transparent `Widget.App.Field.ExpandedPanel.Holder` that fills the page below the header (the holder takes the navigation-bar and keyboard spacing). The panel holds `Widget.App.Field.ExpandedPanel.Input` and `Widget.App.Field.ExpandedPanel.Toggle`, the Collapse Content icon in its upper-right corner, which returns to the small box. Sizes live in `field_expandable_*` and `field_expanded_panel_margin`. Current user: the Memory editor's Memory box (`activity_memory_editor.xml`).
+
 ### Small inline number field
 
 `Widget.App.Field.NumberBlank`

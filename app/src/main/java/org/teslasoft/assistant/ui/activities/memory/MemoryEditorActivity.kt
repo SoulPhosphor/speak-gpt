@@ -16,12 +16,14 @@
 
 package org.teslasoft.assistant.ui.activities.memory
 
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.widget.EditText
@@ -31,11 +33,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
-import androidx.core.graphics.drawable.toDrawable
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
 import org.json.JSONArray
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
@@ -79,7 +79,11 @@ class MemoryEditorActivity : SettingsPageActivity() {
     private var btnBack: ImageButton? = null
     private var titleView: TextView? = null
     private var fieldTitle: TextInputEditText? = null
-    private var fieldContent: TextInputEditText? = null
+    private var fieldContent: EditText? = null
+    private var fieldContentExpanded: EditText? = null
+    private var panelContentExpanded: View? = null
+    private var scrollView: View? = null
+    private var btnHeaderSave: ImageButton? = null
     private var btnType: MaterialButton? = null
     private var typeHint: TextView? = null
     private var btnImportance: MaterialButton? = null
@@ -156,6 +160,10 @@ class MemoryEditorActivity : SettingsPageActivity() {
         titleView = findViewById(R.id.activity_title)
         fieldTitle = findViewById(R.id.field_mem_title)
         fieldContent = findViewById(R.id.field_mem_content)
+        fieldContentExpanded = findViewById(R.id.field_mem_content_expanded)
+        panelContentExpanded = findViewById(R.id.panel_content_expanded)
+        scrollView = findViewById(R.id.scroll)
+        btnHeaderSave = findViewById(R.id.btn_header_save)
         btnType = findViewById(R.id.btn_mem_type)
         typeHint = findViewById(R.id.text_type_hint)
         btnImportance = findViewById(R.id.btn_mem_importance)
@@ -188,6 +196,10 @@ class MemoryEditorActivity : SettingsPageActivity() {
         dropdownTargets?.setOnClickListener { showTargetDropdown(it) }
         btnSave?.setOnClickListener { save(activate = false) }
         btnAccept?.setOnClickListener { save(activate = true) }
+        btnHeaderSave?.setOnClickListener { save(activate = false) }
+        findViewById<View>(R.id.btn_expand_content)?.setOnClickListener { setContentExpanded(true) }
+        findViewById<View>(R.id.btn_collapse_content)?.setOnClickListener { setContentExpanded(false) }
+        keepScrollInsideBox(fieldContent)
 
         // Preset scope/target for a new memory opened from a scoped browser door.
         intent.getStringExtra("presetScope")?.takeIf { it in SCOPE_KEYS }?.let { currentScope = it }
@@ -619,7 +631,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         }
         // Titles are retired (§3.1): only content is required, and the stored
         // title is the inert empty placeholder.
-        val content = fieldContent?.text?.toString()?.trim().orEmpty()
+        val content = activeContentField()?.text?.toString()?.trim().orEmpty()
         if (content.isEmpty()) {
             Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
             return
@@ -657,6 +669,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 }
                 return@runOffThread
             }
+            var savedId = prior?.memoryId
             if (prior == null) {
                 val record = MemoryRecord(
                     memoryId = org.teslasoft.assistant.preferences.memory.MemoryId
@@ -672,6 +685,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 )
                 store.insertMemory(record)
                 Librarian.getInstance(this).reindexMemory(record.memoryId)
+                savedId = record.memoryId
             } else {
                 val updated = prior.copy(
                     scope = currentScope, typeId = typeId, content = content,
@@ -684,10 +698,64 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 store.updateMemory(updated, getString(R.string.memory_change_edited))
                 Librarian.getInstance(this).reindexMemory(prior.memoryId)
             }
+            val saved = savedId?.let { store.getMemory(it) }
             runOnUiThread {
-                Toast.makeText(this, R.string.memory_saved, Toast.LENGTH_SHORT).show()
-                finish()
+                if (activate) {
+                    Toast.makeText(this, R.string.memory_saved, Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    // The header save icon keeps the user on this screen
+                    // (owner ruling, Nov 3 2026). Later saves update this
+                    // same memory instead of adding another.
+                    if (saved != null) {
+                        existing = saved
+                        memoryId = saved.memoryId
+                    }
+                    btnHeaderSave?.let { SaveIconFlash.flash(it) }
+                    Toast.makeText(this, R.string.mem_edit_saved_toast, Toast.LENGTH_SHORT).show()
+                }
             }
+        }
+    }
+
+    /* ------------------------------ Memory box ------------------------------ */
+
+    /** The Memory box the user is typing in: the expanded panel while open. */
+    private fun activeContentField(): EditText? =
+        if (panelContentExpanded?.visibility == View.VISIBLE) fieldContentExpanded else fieldContent
+
+    /**
+     * Expand fills the page below the header with the Memory box; Collapse
+     * returns to the small box. The text and cursor carry across both ways.
+     */
+    private fun setContentExpanded(expanded: Boolean) {
+        val from = if (expanded) fieldContent else fieldContentExpanded
+        val to = if (expanded) fieldContentExpanded else fieldContent
+        if (from == null || to == null) return
+        val start = from.selectionStart
+        val end = from.selectionEnd
+        to.setText(from.text)
+        val length = to.text?.length ?: 0
+        if (start in 0..length && end in 0..length) to.setSelection(start, end)
+        panelContentExpanded?.visibility = if (expanded) View.VISIBLE else View.GONE
+        scrollView?.visibility = if (expanded) View.GONE else View.VISIBLE
+        to.requestFocus()
+    }
+
+    /**
+     * The small Memory box scrolls its own text. While a drag starts inside a
+     * box that has more text than it shows, the page does not take the drag.
+     */
+    private fun keepScrollInsideBox(field: EditText?) {
+        field?.setOnTouchListener { view, event ->
+            if (view.canScrollVertically(1) || view.canScrollVertically(-1)) {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> view.parent?.requestDisallowInterceptTouchEvent(true)
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+            }
+            false
         }
     }
 
@@ -738,13 +806,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
-            window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
-            if (Build.VERSION.SDK_INT <= 34) {
-                window.navigationBarColor = SurfaceColors.SURFACE_0.getColor(this)
-                window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
-            }
-            actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            ScreenChrome.apply(this, actionBar, btnBack, btnHeaderSave)
         }
     }
 
@@ -756,7 +818,8 @@ class MemoryEditorActivity : SettingsPageActivity() {
         ScreenChrome.fitSystemBarsAndKeyboard(
             findViewById<android.view.ViewGroup>(android.R.id.content)?.getChildAt(0),
             actionBar,
-            findViewById<android.view.View>(R.id.scroll)
+            findViewById<android.view.View>(R.id.scroll),
+            panelContentExpanded
         )
     }
 
