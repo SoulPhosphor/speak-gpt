@@ -4128,7 +4128,7 @@
     <string name="image_gallery_catalog_unavailable">Image Gallery is temporarily unavailable.</string>
     <string name="image_gallery_avatar_save_failed">The avatar image could not be saved.</string>
     <string name="search_title">Search</string>
-    <string name="search_whole_words">Whole Words</string>
+    <string name="search_whole_words">Select Whole Words Only</string>
     <string name="search_match_case">Match Case</string>
     <string name="search_preparing">Preparing Search…</string>
     <string name="search_rebuilding">Rebuilding Search Index…</string>

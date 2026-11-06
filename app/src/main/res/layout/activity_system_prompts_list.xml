@@ -46,11 +46,29 @@
             android:id="@+id/btn_back"
             style="@style/Widget.App.ActionBar.BackButton" />
 
+        <ImageButton
+            android:id="@+id/btn_search_toggle"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:src="@drawable/ic_search"
+            android:contentDescription="@string/search_title"
+            android:tooltipText="@string/search_title" />
+
         <TextView
             android:id="@+id/activity_title"
-            style="@style/Widget.App.ActionBar.Title"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            app:layout_constraintEnd_toStartOf="@id/btn_search_toggle"
             android:text="@string/title_system_prompts" />
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <include
+        android:id="@+id/search_controls"
+        layout="@layout/view_search_controls"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/action_bar" />
 
     <TextView
         android:id="@+id/empty_view"
@@ -65,7 +83,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/action_bar" />
+        app:layout_constraintTop_toBottomOf="@id/search_controls" />
 
     <ListView
         android:id="@+id/list_view"
@@ -77,6 +95,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/action_bar"
+        app:layout_constraintTop_toBottomOf="@id/search_controls"
         app:layout_constraintVertical_bias="0.0" />
 </androidx.constraintlayout.widget.ConstraintLayout>

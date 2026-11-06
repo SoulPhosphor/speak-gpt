@@ -40,7 +40,9 @@ import com.google.android.material.floatingactionbutton.ExtendedFloatingActionBu
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
+import org.teslasoft.assistant.ui.util.PromptLibrarySearch
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.chatsearch.SearchOptions
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
@@ -81,6 +83,15 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
     private var btnModeMemories: TextView? = null
     private var btnModePending: TextView? = null
     private var modePendingCount: TextView? = null
+
+    private var librarySearch: PromptLibrarySearch? = null
+    private var loadGeneration = 0
+    @Volatile private var promptSearchOptions = SearchOptions()
+
+    protected open fun promptLibrarySearch(): Boolean = false
+
+    protected fun matchesPrompt(query: String, vararg fields: String): Boolean =
+        PromptLibrarySearch.matches(query, promptSearchOptions, *fields)
 
     protected var searchQuery: String = ""
 
@@ -269,7 +280,7 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         btnActionSecondary = findViewById(R.id.btn_action_secondary)
         titleView = findViewById(R.id.activity_title)
         searchBar = findViewById(R.id.search_bar)
-        fieldSearch = findViewById(R.id.field_search)
+        if (!promptLibrarySearch()) fieldSearch = findViewById(R.id.field_search)
         listView = findViewById(R.id.list_view)
         emptyView = findViewById(R.id.empty_view)
         btnAdd = findViewById(R.id.btn_add)
@@ -297,7 +308,13 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
 
         btnBack?.setOnClickListener { finish() }
 
-        if (showSearch()) {
+        if (promptLibrarySearch()) {
+            librarySearch = PromptLibrarySearch(this, savedInstanceState) {
+                searchQuery = librarySearch?.query.orEmpty()
+                reload()
+            }
+            searchQuery = librarySearch?.query.orEmpty()
+        } else if (showSearch()) {
             fieldSearch?.doAfterTextChanged {
                 searchQuery = it?.toString() ?: ""
                 reload()
@@ -359,6 +376,11 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        librarySearch?.saveState(outState)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onResume() {
         super.onResume()
         reload()
@@ -367,6 +389,8 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
     /** Reload the list off-thread, then swap the adapter on the UI thread. */
     protected fun reload() {
         val query = searchQuery
+        promptSearchOptions = librarySearch?.options ?: SearchOptions()
+        val generation = ++loadGeneration
         Thread {
             val rows: List<MemoryRow> = try {
                 loadRows(query)
@@ -391,6 +415,10 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
                 emptyList()
             }
             runOnUiThread {
+                if (generation != loadGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                if (promptLibrarySearch()) {
+                    emptyView?.setText(if (query.isBlank()) R.string.memory_list_empty else R.string.search_no_results)
+                }
                 listView?.adapter = buildListAdapter(rows)
                 emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
                 onRowsRendered()
