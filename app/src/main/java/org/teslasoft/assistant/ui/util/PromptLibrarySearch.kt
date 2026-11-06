@@ -21,34 +21,34 @@ class PromptLibrarySearch(
     private val onChanged: () -> Unit
 ) {
     private val controls = activity.findViewById<View>(R.id.search_controls)
-    private val field = activity.findViewById<EditText>(R.id.field_search)
+    private val searchField = activity.findViewById<EditText>(R.id.field_search)
     private val wholeWords = activity.findViewById<MaterialSwitch>(R.id.check_whole_words)
     private val toggle = activity.findViewById<ImageButton>(R.id.btn_search_toggle)
     private val back = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = setOpen(false)
     }
 
-    val query: String get() = field.text.toString()
+    val query: String get() = searchField.text.toString()
     val options: SearchOptions get() = SearchOptions(wholeWords = wholeWords.isChecked)
 
     init {
         // Own restoration as a unit: a restored filter must always remain visible.
-        field.isSaveEnabled = false
+        searchField.isSaveEnabled = false
         wholeWords.isSaveEnabled = false
-        field.setText(savedState?.getString(STATE_QUERY).orEmpty())
+        searchField.setText(savedState?.getString(STATE_QUERY).orEmpty())
         wholeWords.isChecked = savedState?.getBoolean(STATE_WHOLE) ?: false
         setOpen(savedState?.getBoolean(STATE_OPEN) == true, focus = false)
         activity.onBackPressedDispatcher.addCallback(activity, back)
         toggle.setOnClickListener { setOpen(controls.visibility != View.VISIBLE) }
-        field.doAfterTextChanged { onChanged() }
+        searchField.doAfterTextChanged { onChanged() }
         wholeWords.setOnCheckedChangeListener { _, _ -> onChanged() }
         activity.findViewById<View>(R.id.btn_search).setOnClickListener {
-            activity.getSystemService<InputMethodManager>()?.hideSoftInputFromWindow(field.windowToken, 0)
+            activity.getSystemService<InputMethodManager>()?.hideSoftInputFromWindow(searchField.windowToken, 0)
             onChanged()
         }
-        field.setOnEditorActionListener { _, action, _ ->
+        searchField.setOnEditorActionListener { _, action, _ ->
             if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
-                activity.getSystemService<InputMethodManager>()?.hideSoftInputFromWindow(field.windowToken, 0)
+                activity.getSystemService<InputMethodManager>()?.hideSoftInputFromWindow(searchField.windowToken, 0)
                 onChanged()
                 true
             } else false
@@ -68,16 +68,16 @@ class PromptLibrarySearch(
         back.isEnabled = open
         toggle.isSelected = open
         if (open && focus) {
-            field.requestFocus()
-            field.post {
+            searchField.requestFocus()
+            searchField.post {
                 if (controls.visibility == View.VISIBLE) {
-                    activity.getSystemService<InputMethodManager>()?.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
+                    activity.getSystemService<InputMethodManager>()?.showSoftInput(searchField, InputMethodManager.SHOW_IMPLICIT)
                 }
             }
         } else if (!open) {
-            field.text.clear()
-            field.clearFocus()
-            activity.getSystemService<InputMethodManager>()?.hideSoftInputFromWindow(field.windowToken, 0)
+            searchField.text.clear()
+            searchField.clearFocus()
+            activity.getSystemService<InputMethodManager>()?.hideSoftInputFromWindow(searchField.windowToken, 0)
         }
     }
 
