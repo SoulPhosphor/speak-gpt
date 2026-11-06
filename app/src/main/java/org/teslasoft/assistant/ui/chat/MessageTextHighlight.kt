@@ -368,11 +368,12 @@ internal class MessageTextHighlight(private val context: Context) {
             }
             Drag.END -> {
                 val grown = if (offset > end) MessageHighlightText.endOfWordAt(text, offset) else offset
-                end = grown.coerceIn(start + 1, length)
+                // The handles never meet, and never split a character.
+                end = grown.coerceIn(MessageHighlightText.characterEndAfter(text, start), length)
             }
             Drag.START -> {
                 val grown = if (offset < start) MessageHighlightText.startOfWordAt(text, offset) else offset
-                start = grown.coerceIn(0, end - 1)
+                start = grown.coerceIn(0, MessageHighlightText.characterStartBefore(text, end))
             }
             Drag.NONE -> return
         }

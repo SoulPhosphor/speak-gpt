@@ -38,6 +38,24 @@ class MessageHighlightTextTest {
     }
 
     @Test
+    fun aMessageThatIsOnlyAnEmojiHighlightsTheWholeEmoji() {
+        val emoji = "\uD83D\uDE00"
+        assertEquals(0 to 2, MessageHighlightText.wordAt(emoji, 0))
+        assertEquals(0 to 2, MessageHighlightText.wordAt(emoji, 2))
+        assertEquals(emoji, MessageHighlightText.copyText(emoji, 0, 2).toString())
+    }
+
+    @Test
+    fun handlesStepOverWholeCharactersOnly() {
+        val text = "a\uD83D\uDE00b"
+        assertEquals(3, MessageHighlightText.characterEndAfter(text, 1))
+        assertEquals(1, MessageHighlightText.characterStartBefore(text, 3))
+        assertEquals(1, MessageHighlightText.characterEndAfter(text, 0))
+        assertEquals(text.length, MessageHighlightText.characterEndAfter(text, text.length))
+        assertEquals(0, MessageHighlightText.characterStartBefore(text, 0))
+    }
+
+    @Test
     fun emptyTextHasNoWord() {
         assertNull(MessageHighlightText.wordAt("", 0))
     }

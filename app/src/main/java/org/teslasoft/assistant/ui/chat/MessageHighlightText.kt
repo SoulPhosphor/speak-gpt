@@ -47,7 +47,29 @@ internal object MessageHighlightText {
                 return segmentEnd to after
             }
         }
-        return if (position < source.length) position to position + 1 else position - 1 to position
+        // No word nearby (for example, a message that is only an emoji):
+        // highlight the one whole character pressed, never half of one.
+        return if (position < source.length) {
+            position to characterEndAfter(source, position)
+        } else {
+            characterStartBefore(source, position) to position
+        }
+    }
+
+    /** The end of the whole character that starts at [offset] (emoji and accents included). */
+    fun characterEndAfter(text: CharSequence, offset: Int): Int {
+        val source = text.toString()
+        if (offset >= source.length) return source.length
+        val end = characterIterator(source).following(offset.coerceAtLeast(0))
+        return if (end == BreakIterator.DONE) source.length else end
+    }
+
+    /** The start of the whole character that ends at [offset] (emoji and accents included). */
+    fun characterStartBefore(text: CharSequence, offset: Int): Int {
+        val source = text.toString()
+        if (offset <= 0) return 0
+        val start = characterIterator(source).preceding(offset.coerceAtMost(source.length))
+        return if (start == BreakIterator.DONE) 0 else start
     }
 
     /** A growing end edge inside a word moves to that word's end. */
@@ -85,6 +107,9 @@ internal object MessageHighlightText {
 
     private fun wordIterator(source: String): BreakIterator =
         BreakIterator.getWordInstance().apply { setText(source) }
+
+    private fun characterIterator(source: String): BreakIterator =
+        BreakIterator.getCharacterInstance().apply { setText(source) }
 
     private fun insideWord(source: String, position: Int): Boolean =
         position > 0 && position < source.length &&
