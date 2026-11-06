@@ -416,6 +416,9 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
             }
             runOnUiThread {
                 if (generation != loadGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                if (promptLibrarySearch()) {
+                    emptyView?.setText(if (query.isBlank()) R.string.memory_list_empty else R.string.search_no_results)
+                }
                 listView?.adapter = buildListAdapter(rows)
                 emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
                 onRowsRendered()

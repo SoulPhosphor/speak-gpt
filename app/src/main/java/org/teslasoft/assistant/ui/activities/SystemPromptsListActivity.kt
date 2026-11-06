@@ -179,6 +179,7 @@ class SystemPromptsListActivity : SettingsPageActivity() {
         }
 
         runOnUiThread {
+            emptyView?.setText(if (librarySearch?.query.isNullOrBlank()) R.string.system_prompts_empty else R.string.search_no_results)
             emptyView?.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
             adapter = SystemPromptListItemAdapter(list, this, pickMode)
             adapter!!.setOnSelectListener(onSelectListener)
