@@ -7,4 +7,6 @@
     <integer name="settings_page_slide_duration">600</integer>
     <integer name="sampling_slider_ruler_intervals">20</integer>
     <integer name="sampling_slider_ruler_major_interval">5</integer>
+    <integer name="save_icon_success_duration_ms">2500</integer>
+    <integer name="save_icon_error_duration_ms">5000</integer>
 </resources>

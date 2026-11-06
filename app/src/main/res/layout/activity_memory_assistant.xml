@@ -53,13 +53,9 @@
             app:srcCompat="@drawable/ic_back" />
 
         <TextView
+            style="@style/Widget.App.ActionBar.Title.Compact"
             android:id="@+id/activity_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:text="@string/title_memory_assistant"
-            android:textColor="@color/text_title"
-            android:textSize="20sp"
-            android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"

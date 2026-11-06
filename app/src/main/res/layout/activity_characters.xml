@@ -54,9 +54,7 @@
             android:paddingHorizontal="20dp"
             android:paddingBottom="24dp">
 
-            <!-- Personas: opens the persona library. Subtitle shows the persona
-                 active for this chat. First review slice for the canonical
-                 title-plus-subtitle row style. -->
+            <!-- Companions library with a fixed explanatory subtitle. -->
             <LinearLayout
                 android:id="@+id/row_personas"
                 style="@style/Widget.App.Row.WithSubtitle"
@@ -71,7 +69,7 @@
                     <TextView
                         android:id="@+id/text_personas_subtitle"
                         style="@style/Widget.App.Row.Subtitle"
-                        android:text="@string/label_tap_to_set" />
+                        android:text="@string/tile_personas_desc" />
                 </LinearLayout>
 
                 <ImageView

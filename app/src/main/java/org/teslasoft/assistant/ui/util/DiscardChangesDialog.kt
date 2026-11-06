@@ -33,10 +33,10 @@ import org.teslasoft.assistant.R
  * message/body size) and centered — the "single question, no subtext" case
  * of the app's title+subtext dialog convention (see ui-style-guide.md). The
  * two actions are real buttons, not flat text: the primary action
- * (@string/okay, "Okay") comes first/start and discards and proceeds; the
- * destructive action (@string/btn_cancel, "Cancel") comes second/end and
+ * (@string/okay, "Okay") is on the right and discards and proceeds; the
+ * destructive action (@string/btn_cancel, "Cancel") is on the left and
  * only dismisses the dialog, leaving the screen untouched. Built from
- * dialog_two_actions.xml (AppButton.Primary.DialogAction /
+ * dialog_two_actions_cancel_first.xml (AppButton.Primary.DialogAction /
  * AppButton.Destructive.DialogAction) inside the app's standard
  * App_MaterialAlertDialog theme, which centers the title on its own
  * (materialAlertDialogTitleTextStyle) - no per-call gravity tweak needed.
@@ -45,7 +45,7 @@ object DiscardChangesDialog {
     // titleRes admits an owner-approved per-screen question (e.g. the
     // Summarizer prompt editor); every other caller keeps the standard title.
     fun show(context: Context, titleRes: Int = R.string.discard_changes_q, onDiscard: () -> Unit) {
-        val actionsView = LayoutInflater.from(context).inflate(R.layout.dialog_two_actions, null)
+        val actionsView = LayoutInflater.from(context).inflate(R.layout.dialog_two_actions_cancel_first, null)
 
         val dialog = MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
             .setTitle(titleRes)

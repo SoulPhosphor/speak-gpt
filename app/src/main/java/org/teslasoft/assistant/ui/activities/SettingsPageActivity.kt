@@ -30,6 +30,10 @@ abstract class SettingsPageActivity : FragmentActivity() {
         }
     }
 
+    /** Opt a specific internal destination into the shared right-edge motion. */
+    protected fun withSettingsPageMotion(destination: Intent): Intent =
+        destination.putExtra(EXTRA_SETTINGS_PAGE_MOTION, true)
+
     // Activity Result launchers and ordinary startActivity calls both reach
     // this method. Pass the policy only to explicit screens within this app.
     @Suppress("DEPRECATION")

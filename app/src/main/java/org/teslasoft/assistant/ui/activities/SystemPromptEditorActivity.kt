@@ -34,6 +34,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SystemPromptsPreferences
 import org.teslasoft.assistant.theme.ThemeManager
@@ -111,6 +112,7 @@ class SystemPromptEditorActivity : SettingsPageActivity() {
 
         if (title.isEmpty()) {
             // Persistent, inline field error — never a toast (owner rule).
+            btnSave?.let { SaveIconFlash.flashError(it) }
             titleFieldError?.text = getString(R.string.system_prompt_needs_title)
             titleFieldError?.visibility = View.VISIBLE
             return
@@ -123,6 +125,7 @@ class SystemPromptEditorActivity : SettingsPageActivity() {
         }
 
         systemPromptsPreferences?.applyEffectiveToGlobal(preferences ?: return)
+        btnSave?.let { SaveIconFlash.flash(it) }
         finish()
     }
 
@@ -155,7 +158,6 @@ class SystemPromptEditorActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = amoledTint
-            btnSave?.backgroundTintList = amoledTint
             btnDelete?.backgroundTintList = amoledTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
@@ -166,7 +168,6 @@ class SystemPromptEditorActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = barTint
-            btnSave?.backgroundTintList = barTint
             btnDelete?.backgroundTintList = barTint
         }
     }

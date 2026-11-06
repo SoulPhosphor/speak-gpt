@@ -343,7 +343,6 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         renderVersionTabs()
         btnRecompactFromScratch?.isEnabled = !locked
         btnSave?.isEnabled = !locked
-        btnSave?.alpha = if (locked) 0.38f else 1f
         refreshRevert()
     }
 
@@ -631,6 +630,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         if (locked) return
         sectionsPanel?.let { panel ->
             if (!saveSections(panel)) {
+                btnSave?.let { SaveIconFlash.flashError(it) }
                 Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
                 return
             }
@@ -641,6 +641,7 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
         }
         val text = activeText()
         if (preferences?.commitSummarizerSummaryEdit(text) != true) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
             return
         }

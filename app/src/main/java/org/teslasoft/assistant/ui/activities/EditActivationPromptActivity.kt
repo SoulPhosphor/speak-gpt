@@ -38,6 +38,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ActivationPromptObject
 import org.teslasoft.assistant.theme.ThemeManager
@@ -163,6 +164,7 @@ class EditActivationPromptActivity : SettingsPageActivity() {
     private fun save() {
         if (fieldTitle?.text.toString().isEmpty()) {
             // Inline field error keeps the user on the screen (no lost work).
+            btnSave?.let { SaveIconFlash.flashError(it) }
             fieldTitleError?.text = getString(R.string.label_error_activation_prompt_empty)
             fieldTitleError?.visibility = View.VISIBLE
             return
@@ -180,12 +182,9 @@ class EditActivationPromptActivity : SettingsPageActivity() {
         finish()
     }
 
-    /** This screen closes on save with no toast - a brief green flash on the
-     *  save icon's own background (same as Edit Companion) is the only save
-     *  confirmation the user sees, visible during the closing slide-out
-     *  transition since it's set synchronously right before finish(). */
+    /** Shows shared save feedback on the disc during the closing transition. */
     private fun flashSaveButtonGreen() {
-        btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
+        btnSave?.let { SaveIconFlash.flash(it) }
     }
 
     /** Serialised form of the editable fields, used only for change detection
@@ -206,10 +205,10 @@ class EditActivationPromptActivity : SettingsPageActivity() {
     }
 
     /** Delete confirmation. Same real Primary/Destructive two-button shape as
-     *  the discard dialog (dialog_two_actions), with its own title + explanatory
+     *  the discard dialog (dialog_two_actions_cancel_first), with its own title + explanatory
      *  subtext. Deleting returns ACTION_DELETE to ActivationPromptsListActivity. */
     private fun confirmDelete() {
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.label_delete_activation_prompt)
@@ -260,7 +259,6 @@ class EditActivationPromptActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = amoledTint
-            btnSave?.backgroundTintList = amoledTint
             btnDelete?.backgroundTintList = amoledTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
@@ -271,7 +269,6 @@ class EditActivationPromptActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = barTint
-            btnSave?.backgroundTintList = barTint
             btnDelete?.backgroundTintList = barTint
         }
     }

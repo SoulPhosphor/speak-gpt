@@ -78,6 +78,15 @@ data class CompanionPromptVariant(
                 ?: ""
         }
 
+        /** Companion Save drops blank drafts and retains one populated default. */
+        fun forProfileSave(variants: List<CompanionPromptVariant>): List<CompanionPromptVariant> {
+            val populated = variants.filter { it.text.isNotBlank() }
+            val defaultIndex = populated.indexOfFirst { it.isDefault }.coerceAtLeast(0)
+            return populated.mapIndexed { index, variant ->
+                variant.copy(isDefault = index == defaultIndex)
+            }
+        }
+
         fun nextPromptName(variants: List<CompanionPromptVariant>): String {
             var max = 0
             for (v in variants) {

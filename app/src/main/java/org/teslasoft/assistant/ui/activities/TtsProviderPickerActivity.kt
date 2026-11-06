@@ -3,6 +3,7 @@ package org.teslasoft.assistant.ui.activities
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,6 +11,7 @@ import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.radiobutton.MaterialRadioButton
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.stt.api.SttWording
 import org.teslasoft.assistant.preferences.tts.TtsRoutingMode
 import org.teslasoft.assistant.tts.api.*
@@ -196,15 +198,20 @@ class TtsProviderPickerActivity : TtsPickerActivity() {
 
     private fun save() {
         val result = try { state.result() } catch (error: TtsException) {
+            SaveIconFlash.flashError(findViewById<ImageButton>(R.id.btn_save))
             showFailure(error.failure, ::save); return
         }
         // Resolve again on Save: profile/source removal must not cause a stale result to be accepted.
         loading = false
         findViewById<View>(R.id.tts_provider_progress).visibility = View.GONE
         findViewById<View>(R.id.btn_save).isEnabled = false
-        discover(result, TtsOperation.PROVIDERS, { _, _ -> result }, { returnSelection(it) }, {
+        discover(result, TtsOperation.PROVIDERS, { _, _ -> result }, {
+            SaveIconFlash.flash(findViewById<ImageButton>(R.id.btn_save))
+            returnSelection(it)
+        }, {
             findViewById<View>(R.id.btn_save).isEnabled = true
             render()
+            SaveIconFlash.flashError(findViewById<ImageButton>(R.id.btn_save))
             showFailure(it, ::save)
         })
     }

@@ -24,18 +24,12 @@
 
         <TextView
             android:id="@+id/activity_title"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/image_gallery_title" />
+            style="@style/Widget.App.ActionBar.Title.BeforeAction"
+            android:text="@string/image_gallery_title" app:layout_constraintEnd_toStartOf="@id/btn_select" />
 
         <TextView
+            style="@style/Widget.App.HeaderTitle.Selection"
             android:id="@+id/text_selection_count"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:maxLines="1"
-            android:textColor="@color/text_title"
-            android:textSize="18sp"
-            android:textStyle="bold"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"

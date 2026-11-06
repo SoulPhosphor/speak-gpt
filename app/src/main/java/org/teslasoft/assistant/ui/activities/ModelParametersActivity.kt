@@ -28,11 +28,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.preferences.FavoriteModelParameters
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -208,12 +208,11 @@ class ModelParametersActivity : FragmentActivity() {
     }
 
     private fun markSaveButtonGreen() {
-        btnSave?.backgroundTintList =
-            ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
+        btnSave?.let { SaveIconFlash.markSaved(it) }
     }
 
     private fun resetSaveButtonTint() {
-        btnSave?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+        btnSave?.let { SaveIconFlash.reset(it) }
     }
 
     /** Standard surface chrome for the header and window. AMOLED work is paused
@@ -229,7 +228,7 @@ class ModelParametersActivity : FragmentActivity() {
         actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
         val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         btnBack?.backgroundTintList = barTint
-        btnSave?.backgroundTintList = barTint
+
     }
 
     override fun onAttachedToWindow() {

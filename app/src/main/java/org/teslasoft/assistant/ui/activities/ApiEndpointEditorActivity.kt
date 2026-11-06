@@ -43,6 +43,7 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.imagegen.ToolCapability
 import org.teslasoft.assistant.imagegen.ToolCapabilityScope
 import org.teslasoft.assistant.imagegen.ToolCapabilityStore
@@ -74,7 +75,7 @@ import org.teslasoft.assistant.ui.widgets.SamplingParameterSpec
  *   gave the label. Save and Delete are the disk and trash-can icons at the
  *   header's trailing edge (same chained-icon shape as Edit Companion/Edit
  *   Persona) — Save just saves (no confirm), Delete confirms first with the
- *   house two-button dialog shape (dialog_two_actions.xml).
+ *   house two-button dialog shape (dialog_two_actions_cancel_first.xml).
  * - The API-key field shows a run of stars when a key already exists; tapping
  *   in clears it to an empty cursor. Leaving it untouched (or blank) keeps the
  *   existing key, even on save.
@@ -329,7 +330,6 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = amoledTint
-            btnSave?.backgroundTintList = amoledTint
             btnDelete?.backgroundTintList = amoledTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
@@ -340,7 +340,6 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = barTint
-            btnSave?.backgroundTintList = barTint
             btnDelete?.backgroundTintList = barTint
         }
     }
@@ -710,16 +709,19 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
         clearFieldError(labelError)
 
         if (label.isEmpty()) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             setFieldError(labelError, getString(R.string.label_error_api_endpoint_empty))
             return
         }
 
         if (host.isEmpty()) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             setFieldError(hostError, getString(R.string.label_error_api_endpoint_empty))
             return
         }
 
         if (!isValidEndpointUrl(host)) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             setFieldError(hostError, getString(R.string.label_error_api_endpoint_invalid_url))
             return
         }
@@ -727,6 +729,7 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
         // A preferred model is required; a new endpoint no longer defaults to
         // one silently. Nothing is saved until the user chooses.
         if (selectedModel.isBlank()) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             showNoticeDialog(getString(R.string.api_endpoint_model_required_message))
             return
         }
@@ -735,6 +738,7 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
         // to the boundary, and stop this save so they can see the corrected value
         // and save again.
         if (!checkTimeoutInRange()) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             return
         }
 
@@ -822,6 +826,7 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
         data.putExtra("apiEndpointId", savedId)
         data.putExtra("deleted", false)
         setResult(RESULT_OK, data)
+        btnSave?.let { SaveIconFlash.flash(it) }
         finish()
     }
 
@@ -838,9 +843,9 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
 
         // House two-button destructive shape (same as Edit Companion/Edit
         // Persona's delete confirm and the Discard Changes dialog): a real
-        // Primary button first ("Delete", proceeds) and a real Destructive-
-        // styled button second ("Cancel", just dismisses).
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        // Primary button on the right ("Delete", proceeds) and a Destructive-
+        // styled button on the left ("Cancel", just dismisses).
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.api_endpoint_delete_title)
@@ -1068,7 +1073,7 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
     }
 
     private fun confirmClearToolCapability() {
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.tool_capability_clear_confirm_title)
@@ -1095,7 +1100,7 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
     }
 
     private fun confirmClearCapability() {
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.image_capability_clear_confirm_title)
