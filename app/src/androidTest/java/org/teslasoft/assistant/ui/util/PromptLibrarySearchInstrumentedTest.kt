@@ -2,14 +2,12 @@ package org.teslasoft.assistant.ui.util
 
 import android.content.Context
 import android.content.Intent
-import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.junit.Assert.*
 import org.junit.Test
@@ -47,14 +45,16 @@ class PromptLibrarySearchInstrumentedTest {
     }
 
     @Test fun allFiveLayoutsInflateSharedSearchControls() {
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val context = ContextThemeWrapper(ApplicationProvider.getApplicationContext(), R.style.Theme_App)
-            for (layout in listOf(R.layout.activity_persona_list, R.layout.activity_activation_prompt_list,
-                R.layout.activity_system_prompts_list, R.layout.activity_prompt_memory_list, R.layout.activity_search)) {
-                val root = LayoutInflater.from(context).inflate(layout, null)
-                assertNotNull(root.findViewById<EditText>(R.id.field_search))
-                assertFalse(root.findViewById<MaterialSwitch>(R.id.check_whole_words).isChecked)
-                if (layout != R.layout.activity_search) assertNotNull(root.findViewById<View>(R.id.btn_search_toggle))
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        ActivityScenario.launch<PersonasListActivity>(Intent(context, PersonasListActivity::class.java)).use { scenario ->
+            scenario.onActivity { activity ->
+                for (layout in listOf(R.layout.activity_persona_list, R.layout.activity_activation_prompt_list,
+                    R.layout.activity_system_prompts_list, R.layout.activity_prompt_memory_list, R.layout.activity_search)) {
+                    val root = LayoutInflater.from(activity).inflate(layout, null)
+                    assertNotNull(root.findViewById<EditText>(R.id.field_search))
+                    assertFalse(root.findViewById<MaterialSwitch>(R.id.check_whole_words).isChecked)
+                    if (layout != R.layout.activity_search) assertNotNull(root.findViewById<View>(R.id.btn_search_toggle))
+                }
             }
         }
     }
