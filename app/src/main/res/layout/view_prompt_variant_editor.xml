@@ -74,17 +74,11 @@
 
         <ImageButton
             android:id="@+id/btn_prompt_menu"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_marginEnd="4dp"
-            android:layout_marginTop="2dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            style="@style/Widget.App.PromptEditor.Menu"
             android:contentDescription="@string/prompt_menu_rename"
             android:src="@drawable/ic_more_vert"
-            android:scaleType="centerInside"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="?attr/appSubtleTextColor" />
+            app:layout_constraintTop_toTopOf="parent" />
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/field_prompt"

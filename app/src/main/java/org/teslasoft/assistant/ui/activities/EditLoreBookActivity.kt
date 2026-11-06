@@ -38,6 +38,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.theme.ThemeManager
@@ -161,7 +162,7 @@ class EditLoreBookActivity : SettingsPageActivity() {
 
         activityTitle?.text =
             if (position == -1) getString(R.string.title_create_lorebook)
-            else getString(R.string.title_edit_lorebook_fmt, originalName)
+            else getString(R.string.title_edit_lorebook)
 
         // Delete only exists for a book that has already been created.
         btnDelete?.visibility = if (position == -1) View.GONE else View.VISIBLE
@@ -189,6 +190,7 @@ class EditLoreBookActivity : SettingsPageActivity() {
     private fun save() {
         if (fieldName?.text.toString().isBlank()) {
             // Inline field error keeps the user on the screen (no lost work).
+            btnSave?.let { SaveIconFlash.flashError(it) }
             fieldNameError?.text = getString(R.string.label_error_lorebook_empty)
             fieldNameError?.visibility = View.VISIBLE
             return
@@ -208,12 +210,9 @@ class EditLoreBookActivity : SettingsPageActivity() {
         finish()
     }
 
-    /** This screen closes on save with no toast - a brief green flash on the
-     *  save icon's own background is the only save confirmation the user sees,
-     *  visible during the closing slide-out transition since it's set
-     *  synchronously right before finish() (matches the Companion editor). */
+    /** Shows shared save feedback on the disc during the closing transition. */
     private fun flashSaveButtonGreen() {
-        btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
+        btnSave?.let { SaveIconFlash.flash(it) }
     }
 
     /** Serialised form of the editable fields, used only for change detection
@@ -235,10 +234,10 @@ class EditLoreBookActivity : SettingsPageActivity() {
     }
 
     /** Delete confirmation. Title carries the book's name; a short subtext
-     *  reads "This can't be undone." The Delete action takes the destructive
-     *  slot and Cancel the primary slot (owner ruling, Aug 3 2026). */
+     *  reads "This can't be undone." Cancel is on the left and Delete on the
+     *  right, using the shared cancel-first confirmation layout. */
     private fun confirmDelete() {
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(getString(R.string.lorebook_delete_title_fmt, originalName))
@@ -246,12 +245,12 @@ class EditLoreBookActivity : SettingsPageActivity() {
             .setView(actionsView)
             .create()
 
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
             setText(R.string.btn_cancel)
             setOnClickListener { dialog.dismiss() }
         }
 
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
             setText(R.string.btn_delete)
             setOnClickListener {
                 dialog.dismiss()
@@ -289,7 +288,6 @@ class EditLoreBookActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = amoledTint
-            btnSave?.backgroundTintList = amoledTint
             btnDelete?.backgroundTintList = amoledTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
@@ -300,7 +298,6 @@ class EditLoreBookActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = barTint
-            btnSave?.backgroundTintList = barTint
             btnDelete?.backgroundTintList = barTint
         }
     }

@@ -20,6 +20,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -98,6 +99,12 @@ class EditPersonaActivity : SettingsPageActivity() {
         private const val STATE_PROMPT_VARIANTS = "state_prompt_variants"
         private const val STATE_ACTIVE_TAB = "state_active_tab"
         private const val STATE_SAVED_PROMPT_VARIANTS = "state_saved_prompt_variants"
+        private const val STATE_ACTIVATION_ID = "state_activation_id"
+        private const val STATE_CORE_LOREBOOK = "state_core_lorebook"
+        private const val STATE_ADDITIONAL_LOREBOOKS = "state_additional_lorebooks"
+        private const val STATE_INITIAL_SNAPSHOT = "state_initial_snapshot"
+        private const val STATE_ORIGINAL_LABEL = "state_original_label"
+        private const val STATE_LAST_USED_LOREBOOKS = "state_last_used_lorebooks"
 
         fun createIntent(context: Context, persona: PersonaObject, position: Int): Intent {
             return Intent(context, EditPersonaActivity::class.java)
@@ -139,9 +146,12 @@ class EditPersonaActivity : SettingsPageActivity() {
     private var btnBack: ImageButton? = null
     private var activityTitle: TextView? = null
     private var fieldLabelError: TextView? = null
+    private var fieldPromptError: TextView? = null
     private var fieldLabel: TextInputEditText? = null
     private var fieldActivationPrompt: TextView? = null
     private var fieldCoreLoreBook: TextView? = null
+    private var btnEditActivationPrompt: ImageButton? = null
+    private var btnOpenCoreLoreBook: ImageButton? = null
     private var signature: ChatSignatureSection? = null
     private var additionalLoreBooksList: LinearLayout? = null
     private var btnAddLoreBooks: MaterialButton? = null
@@ -174,6 +184,27 @@ class EditPersonaActivity : SettingsPageActivity() {
                 persistImageOnlyIfExisting(hash)
             }
         }
+    }
+
+    // The activation editor returns its own save/delete result. Applying that
+    // result never saves the companion's pending fields or selected links.
+    private val editActivationPromptLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        val prompts = ActivationPromptPreferences.getActivationPromptPreferences(this)
+        when (data.getStringExtra(EditActivationPromptActivity.EXTRA_RESULT_ACTION)) {
+            EditActivationPromptActivity.ACTION_SAVE -> {
+                prompts.setActivationPrompt(EditActivationPromptActivity.readResultActivationPrompt(data))
+            }
+            EditActivationPromptActivity.ACTION_DELETE -> {
+                val id = data.getStringExtra(EditActivationPromptActivity.EXTRA_RESULT_ID)
+                if (!id.isNullOrEmpty()) {
+                    prompts.deleteActivationPrompt(id)
+                    if (selectedActivationPromptId == id) selectedActivationPromptId = ""
+                }
+            }
+        }
+        refreshActivationPrompt()
     }
 
     /**
@@ -213,9 +244,12 @@ class EditPersonaActivity : SettingsPageActivity() {
         btnBack = findViewById(R.id.btn_back)
         activityTitle = findViewById(R.id.activity_title)
         fieldLabelError = findViewById(R.id.text_field_label_error)
+        fieldPromptError = findViewById(R.id.text_field_prompt_error)
         fieldLabel = findViewById(R.id.field_label)
         fieldActivationPrompt = findViewById(R.id.field_activation_prompt)
         fieldCoreLoreBook = findViewById(R.id.field_core_lorebook)
+        btnEditActivationPrompt = findViewById(R.id.btn_edit_activation_prompt)
+        btnOpenCoreLoreBook = findViewById(R.id.btn_open_core_lorebook)
         signature = ChatSignatureSection(findViewById(R.id.chat_signature)) {
             startActivity(NameStyleActivity.companionIntent(this, personaId))
         }
@@ -236,8 +270,10 @@ class EditPersonaActivity : SettingsPageActivity() {
 
         position = intent.getIntExtra(EXTRA_POSITION, -1)
         personaId = intent.getStringExtra(EXTRA_ID) ?: ""
-        originalLabel = intent.getStringExtra(EXTRA_LABEL) ?: ""
-        lastUsedLoreBookIds = intent.getStringExtra(EXTRA_LAST_USED_LOREBOOKS) ?: ""
+        originalLabel = savedInstanceState?.getString(STATE_ORIGINAL_LABEL)
+            ?: intent.getStringExtra(EXTRA_LABEL).orEmpty()
+        lastUsedLoreBookIds = savedInstanceState?.getString(STATE_LAST_USED_LOREBOOKS)
+            ?: intent.getStringExtra(EXTRA_LAST_USED_LOREBOOKS).orEmpty()
 
         activityTitle?.setText(if (position == -1) R.string.title_companion_creation else R.string.title_edit_companion)
 
@@ -265,11 +301,14 @@ class EditPersonaActivity : SettingsPageActivity() {
             )
         }
 
-        selectedActivationPromptId = intent.getStringExtra(EXTRA_ACTIVATION_ID) ?: ""
+        selectedActivationPromptId = savedInstanceState?.getString(STATE_ACTIVATION_ID)
+            ?: intent.getStringExtra(EXTRA_ACTIVATION_ID).orEmpty()
         fieldActivationPrompt?.setText(activationPromptLabel(selectedActivationPromptId))
 
-        selectedCoreLoreBookId = intent.getStringExtra(EXTRA_CORE_LOREBOOK) ?: ""
-        additionalLoreBookIds = PersonaObject.splitIds(intent.getStringExtra(EXTRA_ADDITIONAL_LOREBOOKS) ?: "")
+        selectedCoreLoreBookId = savedInstanceState?.getString(STATE_CORE_LOREBOOK)
+            ?: intent.getStringExtra(EXTRA_CORE_LOREBOOK).orEmpty()
+        additionalLoreBookIds = savedInstanceState?.getStringArrayList(STATE_ADDITIONAL_LOREBOOKS)
+            ?: PersonaObject.splitIds(intent.getStringExtra(EXTRA_ADDITIONAL_LOREBOOKS).orEmpty())
 
         // Restore the pending pick across recreation; else the saved avatarRef.
         selectedAvatarRef = savedInstanceState?.getString(STATE_AVATAR_REF)
@@ -279,11 +318,20 @@ class EditPersonaActivity : SettingsPageActivity() {
         imgPersonaAvatar?.setOnClickListener { openGalleryForPicture() }
         updateAvatarUi()
 
-        fieldLabel?.setOnFocusChangeListener { _, _ -> fieldLabelError?.visibility = View.GONE }
-        fieldLabel?.doAfterTextChanged { updateSignaturePreview() }
+        fieldLabel?.doAfterTextChanged {
+            if (!it.isNullOrBlank()) fieldLabelError?.visibility = View.GONE
+            updateSignaturePreview()
+        }
+        promptEditor?.field?.doAfterTextChanged {
+            if (promptEditor?.variants()?.any { variant -> variant.text.isNotBlank() } == true) {
+                fieldPromptError?.visibility = View.GONE
+            }
+        }
 
         fieldActivationPrompt?.setOnClickListener { showActivationPromptChooser() }
         fieldCoreLoreBook?.setOnClickListener { showCoreLoreBookChooser() }
+        btnEditActivationPrompt?.setOnClickListener { openSelectedActivationPrompt() }
+        btnOpenCoreLoreBook?.setOnClickListener { openSelectedCoreLoreBook() }
 
         btnAddLoreBooks?.setOnClickListener {
             val intent = Intent(this, LoreBooksListActivity::class.java)
@@ -306,13 +354,13 @@ class EditPersonaActivity : SettingsPageActivity() {
 
         // Baseline for the unsaved-changes check; every field is set above.
         ready = true
-        initialSnapshot = snapshot()
+        initialSnapshot = savedInstanceState?.getString(STATE_INITIAL_SNAPSHOT) ?: snapshot()
     }
 
     override fun onResume() {
         super.onResume()
-        // Books may have been renamed/deleted in the entries editor; the Default
-        // Shape may have changed - re-resolve both, cheaply.
+        // Refresh linked item labels in place; keep all pending profile edits.
+        refreshActivationPrompt()
         updateCoreLoreBookLabel()
         renderAdditionalLoreBooks()
         updateAvatarUi()
@@ -322,7 +370,15 @@ class EditPersonaActivity : SettingsPageActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        // Temporary activity state only: returning from linked editors must
+        // retain pending choices, even if Android recreated this screen.
         outState.putString(STATE_AVATAR_REF, selectedAvatarRef)
+        outState.putString(STATE_ACTIVATION_ID, selectedActivationPromptId)
+        outState.putString(STATE_CORE_LOREBOOK, selectedCoreLoreBookId)
+        outState.putStringArrayList(STATE_ADDITIONAL_LOREBOOKS, ArrayList(additionalLoreBookIds))
+        outState.putString(STATE_INITIAL_SNAPSHOT, initialSnapshot)
+        outState.putString(STATE_ORIGINAL_LABEL, originalLabel)
+        outState.putString(STATE_LAST_USED_LOREBOOKS, lastUsedLoreBookIds)
         promptEditor?.let {
             outState.putString(STATE_PROMPT_VARIANTS, it.toJson())
             outState.putString(STATE_SAVED_PROMPT_VARIANTS, it.savedStateJson())
@@ -377,6 +433,31 @@ class EditPersonaActivity : SettingsPageActivity() {
         return if (label != "") label else getString(R.string.label_activation_none)
     }
 
+    private fun refreshActivationPrompt() {
+        fieldActivationPrompt?.text = activationPromptLabel(selectedActivationPromptId)
+        btnEditActivationPrompt?.isEnabled = selectedActivationPromptId.isNotEmpty() &&
+            ActivationPromptPreferences.getActivationPromptPreferences(this)
+                .getActivationPromptsList().any { it.id == selectedActivationPromptId }
+    }
+
+    private fun openSelectedActivationPrompt() {
+        val prompts = ActivationPromptPreferences.getActivationPromptPreferences(this).getActivationPromptsList()
+        val index = prompts.indexOfFirst { it.id == selectedActivationPromptId }
+        if (index < 0) return
+        editActivationPromptLauncher.launch(withSettingsPageMotion(
+            EditActivationPromptActivity.createIntent(this, prompts[index], index)
+        ))
+    }
+
+    private fun openSelectedCoreLoreBook() {
+        val book = loreStoreOrNull()?.getBook(selectedCoreLoreBookId) ?: return
+        startActivity(withSettingsPageMotion(
+            Intent(this, LoreBookEntriesActivity::class.java)
+                .putExtra("lorebookId", book.id)
+                .putExtra("lorebookName", book.name)
+        ))
+    }
+
     private fun showActivationPromptChooser() {
         val prompts = ActivationPromptPreferences.getActivationPromptPreferences(this).getActivationPromptsList()
         val ids = arrayListOf("")
@@ -391,7 +472,7 @@ class EditPersonaActivity : SettingsPageActivity() {
         val dropdown = fieldActivationPrompt ?: return
         AppDropdown.show(dropdown, labels, current) { which ->
             selectedActivationPromptId = ids[which]
-            dropdown.text = activationPromptLabel(selectedActivationPromptId)
+            refreshActivationPrompt()
         }
     }
 
@@ -419,6 +500,8 @@ class EditPersonaActivity : SettingsPageActivity() {
             selectedCoreLoreBookId = ""
         }
         fieldCoreLoreBook?.setText(coreLoreBookLabel(selectedCoreLoreBookId))
+        btnOpenCoreLoreBook?.isEnabled = selectedCoreLoreBookId.isNotEmpty() &&
+            store?.getBook(selectedCoreLoreBookId) != null
     }
 
     private fun showCoreLoreBookChooser() {
@@ -443,7 +526,7 @@ class EditPersonaActivity : SettingsPageActivity() {
         val dropdown = fieldCoreLoreBook ?: return
         AppDropdown.show(dropdown, labels, current) { which ->
             selectedCoreLoreBookId = ids[which]
-            dropdown.text = coreLoreBookLabel(selectedCoreLoreBookId)
+            updateCoreLoreBookLabel()
         }
     }
 
@@ -536,7 +619,7 @@ class EditPersonaActivity : SettingsPageActivity() {
     /* --------------------------- save / delete --------------------------- */
 
     private fun buildPersonaObject(): PersonaObject {
-        val promptVariants = promptEditor?.variants().orEmpty()
+        val promptVariants = CompanionPromptVariant.forProfileSave(promptEditor?.variants().orEmpty())
         val lastUsed = PersonaObject.splitIds(lastUsedLoreBookIds)
             .filter { additionalLoreBookIds.contains(it) }
         return PersonaObject(
@@ -564,14 +647,34 @@ class EditPersonaActivity : SettingsPageActivity() {
     }
 
     private fun save() {
-        if (fieldLabel?.text.toString().isEmpty()) {
-            // Inline field error keeps the user on the screen (no lost work).
-            fieldLabelError?.text = getString(R.string.label_error_persona_empty)
-            fieldLabelError?.visibility = View.VISIBLE
+        val nameMissing = fieldLabel?.text.isNullOrBlank()
+        val promptMissing = promptEditor?.variants().orEmpty().none { it.text.isNotBlank() }
+        fieldLabelError?.setText(R.string.label_error_persona_empty)
+        fieldLabelError?.visibility = if (nameMissing) View.VISIBLE else View.GONE
+        fieldPromptError?.visibility = if (promptMissing) View.VISIBLE else View.GONE
+        if (nameMissing || promptMissing) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
+            Toast.makeText(
+                this,
+                if (nameMissing) R.string.companion_editor_name_required_toast
+                else R.string.companion_editor_prompt_required_toast,
+                Toast.LENGTH_SHORT
+            ).show()
+            if (nameMissing) {
+                fieldLabel?.post {
+                    fieldLabel?.let { field ->
+                        // ScrollView moves only when the requested field is outside its viewport.
+                        field.requestRectangleOnScreen(Rect(0, 0, field.width, field.height), false)
+                    }
+                }
+            }
             return
         }
 
         val persona = buildPersonaObject()
+        val activePromptId = promptEditor?.let { editor ->
+            editor.variants().getOrNull(editor.activeIndex())?.id
+        }
 
         // Existing companions save directly so the editor can remain open.
         // Creation still returns to the caller, which owns mint/select/finish.
@@ -580,7 +683,9 @@ class EditPersonaActivity : SettingsPageActivity() {
             personaId = persona.id
             originalLabel = persona.label
             lastUsedLoreBookIds = persona.lastUsedLoreBookIds
-            promptEditor?.markSaved()
+            val activeIndex = persona.promptVariants.indexOfFirst { it.id == activePromptId }
+            val defaultIndex = persona.promptVariants.indexOfFirst { it.isDefault }
+            promptEditor?.load(persona.promptVariants, if (activeIndex >= 0) activeIndex else defaultIndex)
             initialSnapshot = snapshot()
             btnSave?.let { SaveIconFlash.flash(it) }
             Toast.makeText(this, R.string.companion_editor_saved_toast, Toast.LENGTH_SHORT).show()
@@ -631,7 +736,7 @@ class EditPersonaActivity : SettingsPageActivity() {
     }
 
     /** Delete confirmation (owner ruling, July 20 2026). Same real Primary/
-     *  Destructive two-button shape as the discard dialog (dialog_two_actions),
+     *  Destructive two-button shape with Cancel left and Delete right,
      *  with its own title + explanatory subtext. Deleting returns ACTION_DELETE
      *  to PersonasListActivity, whose deletePersona now also removes this
      *  companion's memory record and its sole-owned memories (memories shared
@@ -659,7 +764,7 @@ class EditPersonaActivity : SettingsPageActivity() {
     }
 
     private fun showDeleteDialog(name: String, count: Int) {
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
         val body: CharSequence = if (count >= 0 && name.isNotBlank()) {
             resources.getQuantityString(R.plurals.persona_delete_body_count, count, name, count)
         } else {
@@ -715,7 +820,6 @@ class EditPersonaActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = amoledTint
-            btnSave?.backgroundTintList = amoledTint
             btnDelete?.backgroundTintList = amoledTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
@@ -726,7 +830,6 @@ class EditPersonaActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = barTint
-            btnSave?.backgroundTintList = barTint
             btnDelete?.backgroundTintList = barTint
         }
     }

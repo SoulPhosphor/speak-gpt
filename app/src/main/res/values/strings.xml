@@ -240,7 +240,7 @@
     <string name="btn_unlink_lorebook">Unlink from this Companion</string>
     <string name="btn_delete_lorebook">Delete lorebook</string>
     <string name="persona_core_lorebook_hint">Core Lorebook</string>
-    <string name="persona_core_lorebook_help">Always active while this Companion is used. Optional.</string>
+    <string name="persona_core_lorebook_help">Always active while this companion is used. Optional.</string>
     <string name="persona_additional_lorebooks">Additional Lorebooks</string>
     <string name="persona_no_additional_lorebooks">No lorebooks linked yet.</string>
     <string name="label_lorebook_none">None</string>
@@ -250,10 +250,10 @@
     <string name="label_add_lorebook">Add lorebook</string>
     <string name="label_edit_lorebook">Edit lorebook</string>
     <!-- Full-screen lorebook editor (header titles and its delete confirm).
-         The edit title carries the book's name; the delete confirm carries it
-         in the title with a short subtext beneath. -->
+         The edit header is generic; the delete confirm carries the book's
+         name in its title with a short subtext beneath. -->
     <string name="title_create_lorebook">Create Lorebook</string>
-    <string name="title_edit_lorebook_fmt">Edit %1$s</string>
+    <string name="title_edit_lorebook">Edit Lorebook</string>
     <string name="lorebook_delete_title_fmt">Delete %1$s?</string>
     <string name="lorebook_delete_body">This can\'t be undone.</string>
     <string name="label_delete_lorebook">Delete lorebook</string>
@@ -310,7 +310,7 @@
     </plurals>
     <string name="persona_friendly_name">Companion Name</string>
     <string name="persona_prompt_hint">Companion Prompt</string>
-    <string name="persona_prompt_help">Sent before your system message at the start of every request.</string>
+    <string name="persona_prompt_help">Define your companion\'s personality.</string>
     <string name="btn_add_prompt">Add prompt</string>
     <string name="prompt_menu_make_default">Make Default</string>
     <string name="prompt_menu_rename">Rename</string>
@@ -334,7 +334,7 @@
     <string name="prompt_rename_title">Rename Prompt</string>
 <string name="prompt_empty_marker">(empty)</string>
     <string name="hint_prompt_write">Write your companion prompt here…</string>
-    <string name="label_error_persona_empty">Please enter a Companion name</string>
+    <string name="label_error_persona_empty">Please enter a companion name</string>
     <string name="label_persona_none">No Companion</string>
     <string name="create_first_companion_message">Please create a new companion to begin a chat.</string>
     <string name="create_first_companion_button">Create Companion</string>
@@ -572,6 +572,7 @@
     <string name="logit_bias_error_empty">Please fill logit bias field</string>
     <string name="logit_bias_error_range">Logit bias must be in range from -100 to 100</string>
     <string name="logit_bias_error_token_id">Please fill token or token ID field</string>
+    <string name="title_logit_bias_editor">Logit Bias</string>
     <string name="logit_bias_config">Logit Bias Config</string>
     <string name="logit_bias_help">Logit Bias Config is a feature that allows you to set custom logit bias for specific tokens. Logit bias is a value that is added to the logit of the token. It can be used to increase or decrease the probability of the token in the output sequence. For example, if you set logit bias to 100, the token will be more likely to appear in the output sequence. If you set logit bias to -100, the token will be less likely to appear in the output sequence.</string>
     <string name="label_disable_this_feature">Disable this feature</string>
@@ -612,7 +613,7 @@
     <string name="tile_profiles_desc">Create and switch between API connection profiles. Each profile holds a base URL, API key, chat completions endpoint and auth mode.</string>
     <string name="tile_personas_title">Companions</string>
     <string name="tile_personas_subtitle">Manage companions</string>
-    <string name="tile_personas_desc">Create and switch between companions. A companion is a reusable prompt (persona) merged ahead of your system message, and it carries its own long-term memory. Companions are shared across all chats.</string>
+    <string name="tile_personas_desc">Define personalities for your AI companions to use. One must be active in every chat.</string>
     <string name="tile_characters_title">Characters</string>
     <string name="tile_characters_desc">Companions, activation prompts and your system message — all in one place.</string>
     <string name="title_characters">Characters</string>
@@ -624,13 +625,13 @@
     <string name="label_edit_activation_prompt">Edit activation prompt</string>
     <string name="label_delete_activation_prompt">Delete activation prompt</string>
     <string name="message_delete_activation_prompt">Are you sure you want to delete this activation prompt? This action cannot be undone.</string>
-    <string name="activation_prompt_friendly_name">Activation prompt title</string>
-    <string name="activation_prompt_hint">Activation prompt</string>
+    <string name="activation_prompt_friendly_name">Activation Prompt Title</string>
+    <string name="activation_prompt_hint">Activation Prompt</string>
     <string name="activation_prompt_help">Sent as the first user message when this activation is applied.</string>
     <string name="label_error_activation_prompt_empty">Please enter a title</string>
     <string name="label_activation_none">None</string>
     <string name="persona_activation_hint">Activation Prompt</string>
-    <string name="persona_activation_help">The activation prompt to use with this Companion. None is always available.</string>
+    <string name="persona_activation_help">The activation prompt to use with this companion. None is always available.</string>
     <string name="label_activation">Activation</string>
     <string name="btn_edit_persona">Edit Companion</string>
     <string name="btn_edit_activation_prompt">Edit activation prompt</string>

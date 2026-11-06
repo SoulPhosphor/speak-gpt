@@ -210,9 +210,9 @@ Destructive style; affirmative actions use the Primary style.
 
 Use `layout/dialog_two_actions_cancel_first.xml` for this cancel-left,
 action-right order. `layout/dialog_two_actions.xml` (action-first) predates this
-ruling: do not use it for new dialogs, and move an existing dialog onto the
-cancel-first order when that screen is next revised rather than in a blind
-app-wide reorder.
+ruling and has no current callers. All confirmation dialogs previously using
+it now use the shared cancel-first layout, including discard changes and the
+prompt editor's Rename, Copy From, Clear, and Delete confirmations.
 
 ### Three dialog actions
 
@@ -331,7 +331,9 @@ A dialog containing only a short question should place that question in the titl
 
 ### Save confirmation on a header Save icon
 
-Use `SaveIconFlash.flash(button)` (`org.teslasoft.assistant.ui.util`) after a successful save from a header Save icon, together with the save toast. The icon itself turns green, then returns to its normal tint; the button background is never recolored (owner ruling, Oct 3 2026). Current users: Edit Companion and Summarizer Prompts.
+All header save discs use `Widget.App.ActionBar.SaveButton`, which inherits the standard header geometry and supplies a neutral borderless background plus the shared normal/disabled tint (`color/save_icon_tint`). Per-screen chrome and `ScreenChrome` must not recolor their backgrounds. This applies to every header save disc, including both API Endpoint layouts.
+
+Use `SaveIconFlash.flash(button)` after a successful save and `flashError(button)` when validation or a reported save failure blocks it. Feedback colors come only from `Widget.App.SaveIcon.Success` and `.Error`; the helper changes only the drawable tint. Red lasts five seconds; success lasts 2.5 seconds. Both durations live in shared integer resources. Screens that keep a saved indicator until the next edit use `markSaved` and `reset`. Repeated feedback retains the original normal tint, including when switching between failure and success.
 
 ### Confirmation with a "hide this hint" switch
 
@@ -544,6 +546,14 @@ Use when the header contains only a back button and centered title.
 
 The back button style expects the view id `btn_back`.
 
+### Header title fitting
+
+Every non-chat screen and panel header title uses the shared `Widget.App.HeaderTitle` typography, through its appropriate `ActionBar.Title` placement variant. Android automatically chooses the largest size that fits a bounded two-line area, with no ellipsis. The maximum stays at the title's previous default: 24sp for ordinary headers, 20sp for compact headers and close panels. The minimum is the standard in-screen section heading size, 18sp, shared through `section_title_text_size`. Sizing steps, title height and placement gaps live in `dimens.xml`; screens do not calculate font sizes or override these settings.
+
+Centered titles reserve shared space on both sides for header controls. Titles before measured actions use `ActionBar.Title.BeforeAction`; those following Back use `ActionBar.Title.NearBack` with an end constraint to the nearest action. Older 20sp centered titles use `ActionBar.Title.Compact`. Standalone page headers use `HeaderTitle.Floating`. Gallery selection counts remain at their existing 18sp floor and wrap to two lines through `HeaderTitle.Selection`.
+
+The chat header uses its independent `Widget.App.Chat.HeaderTitle` family and is unchanged. Lorebook screens use the generic Edit Lorebook header; the Logit Bias editor uses Logit Bias instead of a configuration name.
+
 ### Header joined to the top edge
 
 Every full-screen page's `Widget.App.ActionBar` header reaches the top edge of
@@ -578,7 +588,7 @@ Use:
 
 Use when the header contains one trailing Save, Delete, Help, Debug, Edit, or similar icon action.
 
-`Title.NearBack` is left-aligned after the back button and ellipsizes before the trailing icon. The layout must set the title's end constraint to that icon.
+`Title.NearBack` is left-aligned after the back button and fits within two lines before the trailing icon. The layout must set the title's end constraint to that icon.
 
 `Widget.App.ActionBar.SecondaryButton` is a positional header-icon style. It is unrelated to the semantic `AppButton.Secondary` role.
 
@@ -1468,6 +1478,8 @@ text color, bold); the count/tag/description line uses `LoreBookDetails`
 `LoreBookAction`, a bare borderless icon inheriting `Widget.App.QuickTile.EditButton`
 (no background shape). Spacing lives in the `companion_editor_*` and
 `companion_lorebook_*` dimens.
+
+The activation prompt and core lorebook dropdowns on Edit Companion use `Widget.App.CompanionEditor.LinkedFieldRow` and `Widget.App.Dropdown.CanonicalValue.Fill`, followed by the existing `Widget.App.Row.Cog` gear. The gear opens the selected item's editor with the shared right-edge motion; returning keeps the companion's pending edits. Gears are disabled when no existing item is selected. These shortcuts do not save the companion profile.
 
 ## Message Details popup
 

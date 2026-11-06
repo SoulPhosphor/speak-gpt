@@ -153,7 +153,7 @@ class LogitBiasConfigActivity : FragmentActivity() {
 
             if (configId != null) {
                 logitBiasPreferences = LogitBiasPreferences(this, configId)
-                activityTitle!!.text = extras.getString("label") ?: getString(R.string.logit_bias_config)
+                activityTitle!!.setText(R.string.title_logit_bias_editor)
                 initialize()
             } else {
                 finish()

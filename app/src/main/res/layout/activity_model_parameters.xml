@@ -38,7 +38,7 @@
 
         <ImageButton
             android:id="@+id/btn_save"
-            style="@style/Widget.App.ActionBar.SecondaryButton"
+            style="@style/Widget.App.ActionBar.SaveButton"
             android:contentDescription="@string/btn_save"
             android:src="@drawable/ic_save"
             android:tooltipText="@string/btn_save"

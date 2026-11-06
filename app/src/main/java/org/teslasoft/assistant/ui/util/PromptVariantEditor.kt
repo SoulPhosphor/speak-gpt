@@ -305,7 +305,7 @@ class PromptVariantEditor(
         input.setSelection(current.name.length)
         input.setPadding(dpToPx(24), dpToPx(16), dpToPx(24), dpToPx(8))
 
-        val actionsView = activity.layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val actionsView = activity.layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
         val wrapper = LinearLayout(activity)
         wrapper.orientation = LinearLayout.VERTICAL
         wrapper.addView(input)
@@ -366,7 +366,7 @@ class PromptVariantEditor(
             .setTitle(R.string.prompt_copy_from_header)
             .setItems(names) { _, which ->
                 if (currentHasText) {
-                    val actionsView = activity.layoutInflater.inflate(R.layout.dialog_two_actions, null)
+                    val actionsView = activity.layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
                     val confirmDialog = MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
                         .setTitle(R.string.prompt_copy_replace_title)
                         .setView(actionsView)
@@ -408,7 +408,7 @@ class PromptVariantEditor(
         val currentText = field.text?.toString() ?: ""
         if (currentText.isBlank()) return
 
-        val actionsView = activity.layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val actionsView = activity.layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
         val dialog = MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.prompt_clear_title)
             .setView(actionsView)
@@ -502,7 +502,7 @@ class PromptVariantEditor(
             return
         }
 
-        val actionsView = activity.layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val actionsView = activity.layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
         val dialog = MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.prompt_delete_title)
             .setView(actionsView)

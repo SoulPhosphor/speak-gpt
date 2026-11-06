@@ -65,7 +65,6 @@ class LoreBookEntriesActivity : SettingsPageActivity() {
     private var store: LoreBookStore? = null
 
     private var lorebookId: String = ""
-    private var lorebookName: String = ""
 
     private fun openEditDialog(position: Int) {
         val entry = if (position == -1) LoreBookEntry(lorebookId = lorebookId) else list[position]
@@ -133,12 +132,9 @@ class LoreBookEntriesActivity : SettingsPageActivity() {
         }
     }
 
-    /** Title + tag/description line reflect the stored book, so edits made in
-     *  the dialog (or elsewhere) show up as soon as we render. */
+    /** Refresh the stored tag/description while keeping the generic header. */
     private fun refreshBookHeader() {
         val book = store?.getBook(lorebookId)
-        if (book != null && book.name.isNotEmpty()) lorebookName = book.name
-        if (lorebookName.isNotEmpty()) activityTitle?.text = lorebookName
 
         val summary = listOf(book?.tag.orEmpty(), book?.description.orEmpty())
             .filter { it.isNotBlank() }
@@ -159,7 +155,6 @@ class LoreBookEntriesActivity : SettingsPageActivity() {
         setContentView(R.layout.activity_lorebook_entries)
 
         lorebookId = intent.getStringExtra("lorebookId") ?: ""
-        lorebookName = intent.getStringExtra("lorebookName") ?: ""
 
         btnAdd = findViewById(R.id.btn_add)
         btnBack = findViewById(R.id.btn_back)
@@ -170,7 +165,7 @@ class LoreBookEntriesActivity : SettingsPageActivity() {
         listView = findViewById(R.id.list_view)
         actionBar = findViewById(R.id.action_bar)
 
-        if (lorebookName.isNotEmpty()) activityTitle?.text = lorebookName
+        activityTitle?.setText(R.string.title_edit_lorebook)
 
         val preferences = Preferences.getPreferences(this, "")
 
