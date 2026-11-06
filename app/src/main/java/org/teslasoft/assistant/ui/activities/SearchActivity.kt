@@ -13,7 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.checkbox.MaterialCheckBox
+import com.google.android.material.materialswitch.MaterialSwitch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -31,8 +31,8 @@ import org.teslasoft.assistant.ui.adapters.SearchResultAdapter
 
 class SearchActivity : FragmentActivity() {
     private lateinit var field: EditText
-    private lateinit var wholeWords: MaterialCheckBox
-    private lateinit var matchCase: MaterialCheckBox
+    private lateinit var wholeWords: MaterialSwitch
+    private lateinit var matchCase: MaterialSwitch
     private lateinit var status: TextView
     private lateinit var rebuild: MaterialButton
     private lateinit var results: RecyclerView
@@ -49,6 +49,7 @@ class SearchActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_search)
+        findViewById<View>(R.id.search_case_row).visibility = View.VISIBLE
         field = findViewById(R.id.field_search)
         wholeWords = findViewById(R.id.check_whole_words)
         matchCase = findViewById(R.id.check_match_case)
