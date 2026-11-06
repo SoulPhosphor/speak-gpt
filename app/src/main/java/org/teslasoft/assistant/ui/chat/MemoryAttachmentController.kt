@@ -27,15 +27,20 @@ class MemoryAttachmentController(
     }
     private val drafts by lazy { activity.getSharedPreferences("pending_memory_attachments", Context.MODE_PRIVATE) }
     private var chatId = ""
+    private var bound = false
+    private var resultBeforeBind: List<String>? = null
     private var selectedIds: List<String> = emptyList()
     private var strip: View? = null
     private var label: TextView? = null
     private val picker = activity.registerForActivityResult(MemorySelectionContract()) { result ->
-        if (result != null) replace(result)
+        if (result != null) {
+            if (bound) replace(result) else resultBeforeBind = result
+        }
     }
     fun bind(chatId: String) {
         this.chatId = chatId
         selectedIds = decode(drafts.getString(chatId, null))
+        bound = true
         strip = activity.findViewById(R.id.memory_attachment_strip)
         label = activity.findViewById(R.id.memory_attachment_label)
         activity.findViewById<View>(R.id.action_add_memory).setOnClickListener {
@@ -44,7 +49,9 @@ class MemoryAttachmentController(
         }
         activity.findViewById<View>(R.id.memory_attachment_settings).setOnClickListener { open() }
         activity.findViewById<View>(R.id.memory_attachment_remove).setOnClickListener { confirmRemoval() }
-        render()
+        val restoredResult = resultBeforeBind
+        resultBeforeBind = null
+        if (restoredResult != null) replace(restoredResult) else render()
     }
     fun ids(): List<String> = selectedIds.toList()
     private fun open() { picker.launch(MemorySelectionRequest(chatId, ids())) }
