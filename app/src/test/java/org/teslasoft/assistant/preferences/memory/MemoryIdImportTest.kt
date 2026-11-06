@@ -128,6 +128,33 @@ class MemoryIdImportTest {
         assertEquals(false, b == c) // a content change is a different substance
     }
 
+    @Test
+    fun titleOnlyEditAndClearAreVersionConflicts() {
+        val stored = record("same content", emptyList()).copy(title = "Original label")
+        val live = MemoryIdImport.Existing.Live(stored.createdAt, MemoryIdImport.substanceOf(stored))
+        for (newTitle in listOf("Revised label", "")) {
+            val incoming = stored.copy(title = newTitle)
+            assertEquals(
+                MemoryIdImport.Disposition.CONFLICT_VERSION,
+                MemoryIdImport.classify(incoming.memoryId, incoming.createdAt,
+                    MemoryIdImport.substanceOf(incoming), type, live)
+            )
+        }
+    }
+
+    @Test
+    fun identicalOptionalTitleStillPreservesExistingMemory() {
+        for (title in listOf("", "Same label")) {
+            val stored = record("same content", emptyList()).copy(title = title)
+            assertEquals(
+                MemoryIdImport.Disposition.PRESERVE_EXISTING,
+                MemoryIdImport.classify(stored.memoryId, stored.createdAt,
+                    MemoryIdImport.substanceOf(stored), type,
+                    MemoryIdImport.Existing.Live(stored.createdAt, MemoryIdImport.substanceOf(stored)))
+            )
+        }
+    }
+
     private fun record(content: String, worldIds: List<String>) = MemoryRecord(
         memoryId = id, scope = "world", content = content, embeddingText = null, tagsJson = "[]",
         importance = 0, worldIds = worldIds, roleplayCharacterIds = emptyList(),
