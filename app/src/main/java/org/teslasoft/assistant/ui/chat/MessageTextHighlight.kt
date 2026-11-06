@@ -339,7 +339,9 @@ internal class MessageTextHighlight(private val context: Context) {
     private fun updateDrag() {
         val view = target ?: return
         if (!textStillMatches(fromDraw = false)) return
-        val text = view.text ?: return
+        // The plain copy kept when the highlight started (and checked just
+        // above), so dragging never copies the message text again.
+        val text = targetString
         val length = text.length
         if (length == 0) return
         val offset = offsetAt(view, fingerX - grabDx, fingerY - grabDy)
