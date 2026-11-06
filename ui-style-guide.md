@@ -1184,10 +1184,13 @@ opposite the speaker's name.
 header (`view_chat_selection_bar.xml`): `SelectionBar` is the rounded surface
 in the header's own color (`bg_chat_header_rounded`), `Count` the bold
 "N Selected" line, `Hint` the small explanation beneath it (inherits
-`Widget.App.Row.Subtitle`), and `Action` the Copy, Share, Delete and
-more-options icons (borderless, inherits `Widget.App.QuickTile.EditButton`).
-Sizes live in `chat_selection_*` dimensions. The header itself does not change
-in Selection Mode.
+`Widget.App.Row.Subtitle`), and `Action` the Copy, Share, Delete, Export
+(Material Symbols `file_save`) and more-options icons (borderless, inherits
+`Widget.App.QuickTile.EditButton`). `Action` tints through
+`chat_selection_action_tint`, which fades an icon while it is turned off;
+Copy, Share, Delete and Export are off while nothing is selected. Sizes live
+in `chat_selection_*` dimensions. The header itself does not change in
+Selection Mode.
 
 `bg_chat_selection_outline` is the dashed cut-line outline drawn around each
 selected message's bubble area, whether or not bubbles are shown. It replaces

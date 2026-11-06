@@ -33,17 +33,18 @@ internal class ChatSelectionBar(
     }
 
     private val count: TextView = root.findViewById(R.id.chat_selection_count)
+    private val copy: View = root.findViewById(R.id.chat_selection_copy)
+    private val share: View = root.findViewById(R.id.chat_selection_share)
+    private val delete: View = root.findViewById(R.id.chat_selection_delete)
+    private val export: View = root.findViewById(R.id.chat_selection_export)
 
     init {
-        root.findViewById<View>(R.id.chat_selection_copy).setOnClickListener { actions.onCopySelected() }
-        root.findViewById<View>(R.id.chat_selection_share).setOnClickListener { actions.onShareSelected() }
-        root.findViewById<View>(R.id.chat_selection_delete).setOnClickListener { actions.onDeleteSelected() }
-        root.findViewById<View>(R.id.chat_selection_export).setOnClickListener { actions.onExportSelected() }
+        copy.setOnClickListener { actions.onCopySelected() }
+        share.setOnClickListener { actions.onShareSelected() }
+        delete.setOnClickListener { actions.onDeleteSelected() }
+        export.setOnClickListener { actions.onExportSelected() }
         root.findViewById<View>(R.id.chat_selection_more).setOnClickListener { anchor -> showMoreMenu(anchor) }
     }
-
-    val isShowing: Boolean
-        get() = root.visibility == View.VISIBLE
 
     fun show(selectedCount: Int) {
         setCount(selectedCount)
@@ -54,8 +55,11 @@ internal class ChatSelectionBar(
         root.visibility = View.GONE
     }
 
+    /** Shows the count. Copy, Share, Delete and Export are off while nothing is selected. */
     fun setCount(selectedCount: Int) {
         count.text = root.resources.getString(R.string.chat_selection_count, selectedCount)
+        val anySelected = selectedCount > 0
+        for (action in listOf(copy, share, delete, export)) action.isEnabled = anySelected
     }
 
     private fun showMoreMenu(anchor: View) {

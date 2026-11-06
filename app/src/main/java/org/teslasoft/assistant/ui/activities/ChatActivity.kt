@@ -314,6 +314,7 @@ import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ConversationModeSelector
 import org.teslasoft.assistant.ui.chat.ChatSelectionMode
+import org.teslasoft.assistant.ui.chat.ChatExportBuilder
 import org.teslasoft.assistant.ui.drawer.ChatDrawerController
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
@@ -641,6 +642,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         override fun deleteSelected() = deleteSelectedMessages()
+
+        override fun exportSelected() = showSelectedExportDialog()
     })
     private var expandableWindowRoot: CoordinatorLayout? = null
     private var blurSelectorView: BlurView? = null
@@ -5346,6 +5349,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /** Selection Mode's export: the same pop-up as Export Chat, with txt preselected. */
+    private fun showSelectedExportDialog() {
+        val selected = selectionMode.selectedMessages()
+        if (selected.isEmpty()) return
+        ChatExportDialog.show(this, initialFormat = ChatExportFormat.TEXT) { options ->
+            exportChat(options, selected)
+        }
+    }
+
     private fun openUsageAndCost() {
         lifecycleScope.launch {
             val summary = refreshConversationUsageSummary()
@@ -5379,44 +5391,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
     }
 
-    private fun exportChat(options: ChatExportOptions) {
+    /** Exports [source]: the whole conversation, or Selection Mode's selected messages. */
+    private fun exportChat(
+        options: ChatExportOptions,
+        source: List<HashMap<String, Any>> = messages
+    ) {
         if (chatStorageUnavailable || deletingChat) return
 
-        val currentCompanion = currentCompanionLabel()
-        val chatUsername = preferences?.getChatUsername()
-        val snapshot = messages
-            .filterNot {
-                it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
-                    it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
-            }
-            .map { message ->
-                val isCompanion = message["isBot"] == true ||
-                    message["isBot"]?.toString() == "true"
-                ChatExportMessage(
-                    isCompanion = isCompanion,
-                    name = if (isCompanion) {
-                        ChatSpeakerNames.companionName(this, message, currentCompanion)
-                    } else {
-                        ChatSpeakerNames.displayedUserName(this, message, chatUsername)
-                    },
-                    bookmarked = MessageBookmarks.isBookmarked(message),
-                    messageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
-                    content = message["message"]?.toString().orEmpty(),
-                    timestampMillis = message[ChatAdapter.KEY_MESSAGE_TIME]
-                        ?.toString()
-                        ?.toLongOrNull(),
-                    model = if (isCompanion) {
-                        message[ChatAdapter.KEY_MESSAGE_MODEL]?.toString()
-                    } else {
-                        null
-                    },
-                    thinking = if (isCompanion) {
-                        message[ChatAdapter.KEY_MESSAGE_REASONING]?.toString()
-                    } else {
-                        null
-                    }
-                )
-            }
+        val snapshot = ChatExportBuilder.snapshot(
+            this,
+            source,
+            currentCompanionLabel(),
+            preferences?.getChatUsername()
+        )
 
         lifecycleScope.launch {
             val folderNames = if (options.format == ChatExportFormat.JSON && snapshot.isNotEmpty()) withContext(Dispatchers.IO) {
@@ -5430,45 +5417,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             val folderName = folderNames[chatId]
             val bytes = withContext(Dispatchers.Default) {
-                val tokenized = if (
-                    options.includeUserTokenCount || options.includeCompanionTokenCount
-                ) {
-                    val tokenizer = Tokenizer.of(Encoding.CL100K_BASE)
-                    snapshot.map { message ->
-                        val includeTokens = if (message.isCompanion) {
-                            options.includeCompanionTokenCount
-                        } else {
-                            options.includeUserTokenCount
-                        }
-                        if (!includeTokens) {
-                            message
-                        } else {
-                            message.copy(
-                                tokenCount = runCatching {
-                                    tokenizer.encode(message.content).size
-                                }.getOrNull()
-                            )
-                        }
-                    }
-                } else {
-                    snapshot
-                }
-
-                when (options.format) {
-                    ChatExportFormat.JSON ->
-                        ChatExportFormatter.formatJson(tokenized, options, folderName = folderName)
-                            .toByteArray(Charsets.UTF_8)
-                    ChatExportFormat.TEXT,
-                    ChatExportFormat.MARKDOWN ->
-                        ChatExportFormatter.formatText(tokenized, options)
-                            .toByteArray(Charsets.UTF_8)
-                    ChatExportFormat.PDF ->
-                        ChatExportPdfWriter.toBytes(
-                            this@ChatActivity,
-                            tokenized,
-                            options
-                        )
-                }
+                ChatExportBuilder.bytes(this@ChatActivity, snapshot, options, folderName)
             }
 
             if (isFinishing || isDestroyed || deletingChat) return@launch
@@ -15424,6 +15373,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @SuppressLint("NotifyDataSetChanged")
     private fun deleteSelectedMessages() {
         val selected = selectionMode.entries.indices.filter { selectionMode.isSelected(it) }
+        if (selected.isEmpty()) return
         if (selected.size == 1) {
             onMessageDeleteRequested(selected.first())
             return

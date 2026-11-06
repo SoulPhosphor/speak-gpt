@@ -27,6 +27,8 @@ class ChatSelectionModeTest {
             override fun deleteSelected() {
                 deleteRequests++
             }
+
+            override fun exportSelected() = Unit
         }
     )
 
@@ -121,5 +123,19 @@ class ChatSelectionModeTest {
         assertEquals(listOf(1), selected())
         mode.onSelectionChanged(1, false)
         assertEquals(emptyList<Int>(), selected())
+    }
+
+    @Test fun `selected messages come back in conversation order`() {
+        val first = message("a", false)
+        val second = message("b", true)
+        val third = message("c", false)
+        mode.rebuild(arrayListOf(first, second, third))
+        mode.enter()
+        mode.toggle(2)
+        mode.toggle(0)
+        val picked = mode.selectedMessages()
+        assertEquals(2, picked.size)
+        assertTrue(picked[0] === first)
+        assertTrue(picked[1] === third)
     }
 }

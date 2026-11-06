@@ -1926,10 +1926,11 @@
         <item name="android:layout_marginTop">@dimen/chat_selection_hint_margin_top</item>
     </style>
 
-    <!-- Copy, Share, Delete and more-options icons: borderless shared icon
-         buttons, spaced by chat_selection_action_gap. -->
+    <!-- Copy, Share, Delete, Export and more-options icons: borderless shared
+         icon buttons, spaced by chat_selection_action_gap, faded while off. -->
     <style name="Widget.App.Chat.SelectionBar.Action" parent="Widget.App.QuickTile.EditButton">
         <item name="android:layout_marginEnd">@dimen/chat_selection_action_gap</item>
+        <item name="android:tint">@color/chat_selection_action_tint</item>
     </style>
 
     <!-- Chat composer host: the space behind the floating composer stays transparent. -->

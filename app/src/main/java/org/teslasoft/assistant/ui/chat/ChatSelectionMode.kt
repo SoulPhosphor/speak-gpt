@@ -33,6 +33,9 @@ internal class ChatSelectionMode(
 
         /** Delete the selected messages, after the user confirms. */
         fun deleteSelected()
+
+        /** Export the selected messages. */
+        fun exportSelected()
     }
 
     /** One entry per message, shared with the message list. */
@@ -54,7 +57,7 @@ internal class ChatSelectionMode(
             override fun onDeleteSelected() = host.deleteSelected()
             override fun onSelectAll() = selectAll()
             override fun onDeselectAll() = deselectAll()
-            override fun onExportSelected() = Unit
+            override fun onExportSelected() = host.exportSelected()
             override fun onExitMode() = exit()
         })
         if (alreadyOnTranscript) return
@@ -108,6 +111,12 @@ internal class ChatSelectionMode(
         redraw()
     }
 
+    /** The selected conversation messages, in conversation order. */
+    @Suppress("UNCHECKED_CAST")
+    fun selectedMessages(): List<HashMap<String, Any>> = entries
+        .filter { it["selected"].toString() == "true" }
+        .mapNotNull { it[SOURCE_KEY] as? HashMap<String, Any> }
+
     fun isSelected(position: Int): Boolean =
         entries.getOrNull(position)?.get("selected").toString() == "true"
 
@@ -153,6 +162,7 @@ internal class ChatSelectionMode(
     }
 
     private fun copySelected() {
+        if (selectedCount() == 0) return
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("Copied messages", selectedText())
         clipboard.setPrimaryClip(clip)
@@ -160,6 +170,7 @@ internal class ChatSelectionMode(
     }
 
     private fun shareSelected() {
+        if (selectedCount() == 0) return
         val intent = Intent(Intent.ACTION_SEND)
         intent.type = "text/plain"
         intent.putExtra(Intent.EXTRA_TEXT, selectedText())
