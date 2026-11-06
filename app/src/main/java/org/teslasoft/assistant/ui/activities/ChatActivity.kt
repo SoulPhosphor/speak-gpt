@@ -35,7 +35,6 @@ import android.content.res.Configuration
 import android.content.res.Configuration.KEYBOARD_QWERTY
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
@@ -43,7 +42,6 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -108,7 +106,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
 import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
-import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.aallam.ktoken.Encoding
@@ -297,6 +294,7 @@ import org.teslasoft.assistant.usage.UsageSection
 import org.teslasoft.assistant.usage.UsageLog
 import org.teslasoft.assistant.usage.UsageLogStore
 import org.teslasoft.assistant.ui.chat.ChatTranscriptLayoutManager
+import org.teslasoft.assistant.ui.chat.MessageTextHighlight
 import org.teslasoft.assistant.ui.chat.ChatComposerLayout
 import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportFormatter
@@ -316,6 +314,8 @@ import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ConversationModeSelector
+import org.teslasoft.assistant.ui.chat.ChatSelectionMode
+import org.teslasoft.assistant.ui.chat.ChatExportBuilder
 import org.teslasoft.assistant.ui.drawer.ChatDrawerController
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
@@ -637,13 +637,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var reduceJob: Job? = null
     private var reduceDialog: AlertDialog? = null
     private val artifactJobs: MutableMap<String, Job> = HashMap()
-    private var bulkContainer: ConstraintLayout? = null
-    private var btnSelectAll: ImageButton? = null
-    private var btnDeselectAll: ImageButton? = null
-    private var btnDeleteSelected: ImageButton? = null
-    private var btnCopySelected: ImageButton? = null
-    private var btnShareSelected: ImageButton? = null
-    private var selectedCount: TextView? = null
+    private val selectionMode = ChatSelectionMode(this, object : ChatSelectionMode.Host {
+        override fun setListSelectionMode(active: Boolean) {
+            adapter?.setBulkActionMode(active)
+        }
+
+        override fun deleteSelected() = deleteSelectedMessages()
+
+        override fun exportSelected() = showSelectedExportDialog()
+    })
+    private val textHighlight by lazy { MessageTextHighlight(this) }
     private var expandableWindowRoot: CoordinatorLayout? = null
     private var blurSelectorView: BlurView? = null
 
@@ -656,7 +659,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  saving and generation are refused so the preserved encrypted value
      *  can never be overwritten by this screen's (empty) in-memory view. */
     private var chatStorageUnavailable = false
-    private var messagesSelectionProjection: ArrayList<HashMap<String, Any>> = arrayListOf()
     private var adapter: ChatAdapter? = null
     private var chatMessages: ArrayList<ChatMessage> = arrayListOf()
     private var chatMessageIncludes: ArrayList<String?> = arrayListOf()
@@ -729,7 +731,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var usageOut: Int = 0
     private var conversationUsageSummary = ConversationUsageSummary(emptyList())
     private var conversationUsageSections: List<UsageSection> = emptyList()
-    private var bulkSelectionMode: Boolean = false
 
     // init AI
     private var ai: OpenAI? = null
@@ -2894,8 +2895,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     drawerController?.close()
                 } else if (includeStripController?.collapseIfExpanded() == true) {
                     // The expanded Includes overlay consumes Back first.
-                } else if (bulkSelectionMode) {
-                    deselectAll()
+                } else if (textHighlight.isActive) {
+                    textHighlight.clear()
+                } else if (selectionMode.isActive) {
+                    selectionMode.exit()
                 } else {
                     finishActivity()
                 }
@@ -2907,8 +2910,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         drawerController?.close()
                     } else if (includeStripController?.collapseIfExpanded() == true) {
                         // The expanded Includes overlay consumes Back first.
-                    } else if (bulkSelectionMode) {
-                        deselectAll()
+                    } else if (textHighlight.isActive) {
+                        textHighlight.clear()
+                    } else if (selectionMode.isActive) {
+                        selectionMode.exit()
                     } else {
                         finishActivity()
                     }
@@ -2996,6 +3001,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_DOWN) {
+            textHighlight.onWindowTouchDown(event.rawX, event.rawY)
+
             if (includeStripController?.isExpanded() == true) {
                 val bounds = Rect()
                 val touchedInsideStrip =
@@ -3284,10 +3291,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             reconcileChatImages()
             reconcileChatPdfs()
 
-            updateMessagesSelectionProjection()
+            selectionMode.rebuild(messages)
 
 
-            adapter = ChatAdapter(messages, messagesSelectionProjection, this, preferences!!, chatId)
+            adapter = ChatAdapter(messages, selectionMode.entries, this, preferences!!, chatId)
             adapter?.setChatUsername(preferences?.getChatUsername().orEmpty())
             adapter?.setManualCompactionBoundary(
                 preferences?.getManualCompactionBoundary() ?: 0
@@ -3461,13 +3468,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
         refreshPersistentIncludeControls()
-        bulkContainer = findViewById(R.id.bulk_container)
-        btnSelectAll = findViewById(R.id.btn_select_all)
-        btnDeselectAll = findViewById(R.id.btn_deselect_all)
-        btnDeleteSelected = findViewById(R.id.btn_delete_selected)
-        btnCopySelected = findViewById(R.id.btn_copy_selected)
-        btnShareSelected = findViewById(R.id.btn_share_selected)
-        selectedCount = findViewById(R.id.text_selected_count)
         expandableWindowRoot = findViewById(R.id.expandable_window_root)
         blurSelectorView = findViewById(R.id.attach_bg)
 
@@ -3511,8 +3511,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             expandableWindowRoot?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_1.getColor(this))
         }
 
-        bulkContainer?.visibility = View.GONE
-
         chat?.itemAnimator = null
 
         visionActions?.visibility = View.GONE
@@ -3531,26 +3529,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // conversation waveform).
         refreshConversationButton()
         btnSettings?.setImageResource(R.drawable.ic_settings)
-
-        btnSelectAll?.setOnClickListener {
-            selectAll()
-        }
-
-        btnDeselectAll?.setOnClickListener {
-            deselectAll()
-        }
-
-        btnDeleteSelected?.setOnClickListener {
-            deleteSelectedMessages()
-        }
-
-        btnCopySelected?.setOnClickListener {
-            copySelectedMessages()
-        }
-
-        btnShareSelected?.setOnClickListener {
-            shareSelectedMessages()
-        }
 
         btnBack?.contentDescription = getString(R.string.drawer_open)
         btnBack?.setOnClickListener { drawerController?.open() }
@@ -3575,8 +3553,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         chat?.setLayoutManager(linearLayoutManager)
 
-        val itemTouchHelper = ItemTouchHelper(itemTouchCallback)
-        itemTouchHelper.attachToRecyclerView(chat)
+        // Text highlighting first, so a tap that clears a highlight is not
+        // also taken as a Selection Mode toggle.
+        chat?.let { textHighlight.attach(it) }
+        chat?.let { selectionMode.attach(findViewById(R.id.chat_selection_bar), it) }
         chat?.addItemDecoration(
             FirstMessagePortraitInset { preferences?.getShowChatProfileImages() == true }
         )
@@ -3646,76 +3626,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         adapter?.emphasizeSearchTarget(target)
     }
 
-    private val itemTouchCallback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
-        override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
-            return false
-        }
-
-        @SuppressLint("NotifyDataSetChanged")
-        override fun onSwiped(viewHolder: RecyclerView.ViewHolder, swipeDir: Int) {
-            val position = viewHolder.bindingAdapterPosition
-
-            viewHolder.itemView.post {
-                adapter?.notifyItemChanged(position)
-                adapter?.notifyDataSetChanged() // ??? ...
-
-                if (viewHolder is ChatAdapter.ViewHolder) {
-                    viewHolder.resetView()
-                }
-
-                if (swipeDir == ItemTouchHelper.LEFT && !bulkSelectionMode) {
-                    adapter?.onDelete(position)
-                }
-            }
-        }
-
-        override fun onChildDraw(c: Canvas, recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder,
-                                 dX: Float, dY: Float, actionState: Int, isCurrentlyActive: Boolean) {
-
-            val iconDRight = if (maxX(dX.toInt() / 5) == dpToPx(-32)) {
-                ResourcesCompat.getDrawable(resources, R.drawable.ic_delete_action_active, theme)!!
-            } else {
-                ResourcesCompat.getDrawable(resources, R.drawable.ic_delete_action, theme)!!
-            }
-            val itemView = viewHolder.itemView
-            val background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                setColor(ResourcesCompat.getColor(resources, R.color.transparent, theme))
-                cornerRadius = dpToPx(128).toFloat()
-            }
-
-            if (dX < 0) { // Swiping to the left
-                val iconMargin = 48
-                val iconTop = itemView.top + (itemView.height - iconDRight.intrinsicHeight) / 2
-                val iconBottom = iconTop + iconDRight.intrinsicHeight
-                val iconLeft = itemView.right - iconMargin - iconDRight.intrinsicWidth
-                val iconRight = itemView.right - iconMargin
-                iconDRight.setBounds(iconLeft, iconTop, iconRight, iconBottom)
-                background.setColor(ResourcesCompat.getColor(resources, R.color.delete_tint, theme))
-                if (maxX(dX.toInt() / 5) == dpToPx(-32)) {
-                    background.setColor(ResourcesCompat.getColor(resources, R.color.delete_tint_active, theme))
-                }
-
-                background.setBounds(iconLeft + maxX(dX.toInt() / 5), iconTop + maxX(dX.toInt() / 5), iconRight - maxX(dX.toInt() / 5), iconBottom - maxX(dX.toInt() / 5))
-                background.draw(c)
-                iconDRight.draw(c)
-            }
-
-            if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE && !isCurrentlyActive) {
-                getDefaultUIUtil().clearView(viewHolder.itemView)
-            }
-            super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
-        }
-    }
-
     private fun dpToPx(dp: Int): Int {
         return (dp * resources?.displayMetrics?.density!!).toInt()
-    }
-
-    private fun maxX(x: Int) : Int {
-        if (x < dpToPx(-32)) return dpToPx(-32)
-        else if (x < dpToPx(32)) return x
-        return dpToPx(32)
     }
 
     private fun getAmoledAccentDrawable(drawable: Drawable, context: Context) : Drawable {
@@ -5377,6 +5289,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     menu.add(Menu.NONE, 8, 2, R.string.chat_menu_show_all)
                 }
                 menu.add(Menu.NONE, 2, 3, R.string.alert_debug_section_logs)
+                // Same order as Delete and added before it, so Selection Mode
+                // sits directly above Delete.
+                menu.add(Menu.NONE, 9, 5, R.string.chat_menu_selection_mode)
                 if (savedChat != null) {
                     menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)
                     menu.add(Menu.NONE, 3, 5, R.string.btn_delete)
@@ -5419,6 +5334,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             openUsageAndCost()
                             true
                         }
+                        9 -> {
+                            selectionMode.enter()
+                            true
+                        }
                         8 -> {
                             confirmShowAllHiddenMessages()
                             true
@@ -5438,6 +5357,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun showChatExportDialog() {
         ChatExportDialog.show(this) { options ->
             exportChat(options)
+        }
+    }
+
+    /** Selection Mode's export: the same pop-up as Export Chat, with txt preselected. */
+    private fun showSelectedExportDialog() {
+        val selected = selectionMode.selectedMessages()
+        if (selected.isEmpty()) return
+        ChatExportDialog.show(this, initialFormat = ChatExportFormat.TEXT) { options ->
+            exportChat(options, selected)
         }
     }
 
@@ -5474,44 +5402,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
     }
 
-    private fun exportChat(options: ChatExportOptions) {
+    /** Exports [source]: the whole conversation, or Selection Mode's selected messages. */
+    private fun exportChat(
+        options: ChatExportOptions,
+        source: List<HashMap<String, Any>> = messages
+    ) {
         if (chatStorageUnavailable || deletingChat) return
 
-        val currentCompanion = currentCompanionLabel()
-        val chatUsername = preferences?.getChatUsername()
-        val snapshot = messages
-            .filterNot {
-                it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
-                    it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
-            }
-            .map { message ->
-                val isCompanion = message["isBot"] == true ||
-                    message["isBot"]?.toString() == "true"
-                ChatExportMessage(
-                    isCompanion = isCompanion,
-                    name = if (isCompanion) {
-                        ChatSpeakerNames.companionName(this, message, currentCompanion)
-                    } else {
-                        ChatSpeakerNames.displayedUserName(this, message, chatUsername)
-                    },
-                    bookmarked = MessageBookmarks.isBookmarked(message),
-                    messageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
-                    content = message["message"]?.toString().orEmpty(),
-                    timestampMillis = message[ChatAdapter.KEY_MESSAGE_TIME]
-                        ?.toString()
-                        ?.toLongOrNull(),
-                    model = if (isCompanion) {
-                        message[ChatAdapter.KEY_MESSAGE_MODEL]?.toString()
-                    } else {
-                        null
-                    },
-                    thinking = if (isCompanion) {
-                        message[ChatAdapter.KEY_MESSAGE_REASONING]?.toString()
-                    } else {
-                        null
-                    }
-                )
-            }
+        val snapshot = ChatExportBuilder.snapshot(
+            this,
+            source,
+            currentCompanionLabel(),
+            preferences?.getChatUsername()
+        )
 
         lifecycleScope.launch {
             val folderNames = if (options.format == ChatExportFormat.JSON && snapshot.isNotEmpty()) withContext(Dispatchers.IO) {
@@ -5525,45 +5428,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             val folderName = folderNames[chatId]
             val bytes = withContext(Dispatchers.Default) {
-                val tokenized = if (
-                    options.includeUserTokenCount || options.includeCompanionTokenCount
-                ) {
-                    val tokenizer = Tokenizer.of(Encoding.CL100K_BASE)
-                    snapshot.map { message ->
-                        val includeTokens = if (message.isCompanion) {
-                            options.includeCompanionTokenCount
-                        } else {
-                            options.includeUserTokenCount
-                        }
-                        if (!includeTokens) {
-                            message
-                        } else {
-                            message.copy(
-                                tokenCount = runCatching {
-                                    tokenizer.encode(message.content).size
-                                }.getOrNull()
-                            )
-                        }
-                    }
-                } else {
-                    snapshot
-                }
-
-                when (options.format) {
-                    ChatExportFormat.JSON ->
-                        ChatExportFormatter.formatJson(tokenized, options, folderName = folderName)
-                            .toByteArray(Charsets.UTF_8)
-                    ChatExportFormat.TEXT,
-                    ChatExportFormat.MARKDOWN ->
-                        ChatExportFormatter.formatText(tokenized, options)
-                            .toByteArray(Charsets.UTF_8)
-                    ChatExportFormat.PDF ->
-                        ChatExportPdfWriter.toBytes(
-                            this@ChatActivity,
-                            tokenized,
-                            options
-                        )
-                }
+                ChatExportBuilder.bytes(this@ChatActivity, snapshot, options, folderName)
             }
 
             if (isFinishing || isDestroyed || deletingChat) return@launch
@@ -9123,7 +8988,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 messages.add(first)
                 adapter?.notifyItemInserted(messages.size - 1)
-                updateMessagesSelectionProjection()
+                selectionMode.rebuild(messages)
                 scroll(true)
                 conversationMode = ConversationMode.CHAT
                 finishPendingCommit()
@@ -9391,7 +9256,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         card[ChatAdapter.KEY_IMAGE_PROGRESS] = true
         messages.add(card)
         adapter?.notifyItemInserted(messages.size - 1)
-        updateMessagesSelectionProjection()
+        selectionMode.rebuild(messages)
         scroll(true)
     }
 
@@ -9400,7 +9265,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (index >= 0) {
             messages.removeAt(index)
             adapter?.notifyItemRemoved(index)
-            updateMessagesSelectionProjection()
+            selectionMode.rebuild(messages)
         }
     }
 
@@ -9587,7 +9452,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         runOnUiThread {
             if (TokenUsageAccounting.removeEmptyAssistantForToolRetry(messages)) {
                 adapter?.notifyItemRemoved(messages.size)
-                updateMessagesSelectionProjection()
+                selectionMode.rebuild(messages)
             }
             putMessage(getString(R.string.image_gen_tools_unsupported_notice), true)
             saveSettings()
@@ -9642,7 +9507,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             currentCompanionLabel().ifBlank { getString(R.string.chat_role_assistant) }
         messages.add(card)
         adapter?.notifyItemInserted(messages.size - 1)
-        updateMessagesSelectionProjection()
+        selectionMode.rebuild(messages)
         scroll(true)
     }
 
@@ -9651,7 +9516,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (index >= 0) {
             messages.removeAt(index)
             adapter?.notifyItemRemoved(index)
-            updateMessagesSelectionProjection()
+            selectionMode.rebuild(messages)
         }
     }
 
@@ -9706,7 +9571,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (messages.isNotEmpty() && messages.last()["isBot"] == true) {
                 messages.removeAt(messages.size - 1)
                 adapter?.notifyItemRemoved(messages.size)
-                updateMessagesSelectionProjection()
+                selectionMode.rebuild(messages)
             }
         } else {
             markLastAssistantDone()
@@ -11449,7 +11314,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         adapter?.notifyItemInserted(messages.size - 1)
         refreshPersistentIncludeControls()
 
-        updateMessagesSelectionProjection()
+        selectionMode.rebuild(messages)
 
         commitPendingConversationIfNeeded()
 
@@ -15086,7 +14951,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun syncChatProjection() {
         rebuildModelProjection()
-        updateMessagesSelectionProjection()
+        selectionMode.rebuild(messages)
         calculateCost()
         refreshPersistentIncludeControls()
         refreshManualCompactionMarker()
@@ -15312,7 +15177,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 realignCondensedBoundaries(currentPosition, end)
             }
             syncChatProjection()
-            deselectAll()
+            selectionMode.exit()
             // Resume summarizing from the corrected bookmark.
             summarizerCycle()
             askToRecompactAfterDelete(compactedBefore)
@@ -15419,25 +15284,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         findIncludeById(includeId)?.let(::condenseInclude)
     }
 
-    @SuppressLint("SetTextI18n")
     override fun onBulkSelectionChanged(position: Int, selected: Boolean) {
-        messagesSelectionProjection[position]["selected"] = selected
-        selectedCount?.text = messagesSelectionProjection.count { it["selected"] == true }.toString()
-    }
-
-    @Suppress("deprecation")
-    override fun onChangeBulkActionMode(mode: Boolean) {
-        bulkSelectionMode = mode
-
-        if (mode) {
-            if (Build.VERSION.SDK_INT < 30) {
-                window.statusBarColor = ResourcesCompat.getColor(resources, R.color.accent_250, theme)
-            }
-            bulkContainer?.visibility = View.VISIBLE
-        } else {
-            reloadAmoled()
-            bulkContainer?.visibility = View.GONE
-        }
+        selectionMode.onSelectionChanged(position, selected)
     }
 
     private fun openAIMissing(feature: String, prompt: String) {
@@ -15533,58 +15381,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    private fun updateMessagesSelectionProjection() {
-        bulkSelectionMode = false
-        adapter?.setBulkActionMode(false)
-
-        messagesSelectionProjection.clear()
-
-        for (m in messages) {
-            messagesSelectionProjection.add(
-                java.util.HashMap(
-                    mapOf(
-                        "message" to m["message"],
-                        "isBot" to m["isBot"],
-                        "selected" to false
-                    )
-                )
-            )
-        }
-    }
-
-    @SuppressLint("SetTextI18n", "NotifyDataSetChanged")
-    private fun selectAll() {
-        adapter?.selectAll()
-
-        for (i in messagesSelectionProjection.indices) {
-            messagesSelectionProjection[i]["selected"] = true
-        }
-
-        selectedCount?.text = messagesSelectionProjection.size.toString()
-        bulkSelectionMode = true
-        bulkContainer?.visibility = View.VISIBLE
-        adapter?.notifyDataSetChanged()
-    }
-
-    @SuppressLint("NotifyDataSetChanged")
-    private fun deselectAll() {
-        adapter?.unselectAll()
-
-        for (i in messagesSelectionProjection.indices) {
-            messagesSelectionProjection[i]["selected"] = false
-        }
-
-        selectedCount?.text = "0"
-        bulkSelectionMode = false
-        bulkContainer?.visibility = View.GONE
-        adapter?.notifyDataSetChanged()
-    }
-
     @SuppressLint("NotifyDataSetChanged")
     private fun deleteSelectedMessages() {
-        val selected = messagesSelectionProjection.indices.filter {
-            messagesSelectionProjection[it]["selected"] == true
-        }
+        val selected = selectionMode.entries.indices.filter { selectionMode.isSelected(it) }
+        if (selected.isEmpty()) return
         if (selected.size == 1) {
             onMessageDeleteRequested(selected.first())
             return
@@ -15619,8 +15419,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // messages reference before they are removed.
         val deletedImageHashes = GeneratedImageFiles.referencedHashes(
             messages.filterIndexed { index, _ ->
-                index < messagesSelectionProjection.size &&
-                    messagesSelectionProjection[index]["selected"].toString() == "true"
+                selectionMode.isSelected(index)
             }
         )
         var removedBeforeBookmark = 0
@@ -15630,8 +15429,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val removedPositions = ArrayList<Int>()
         var pos = 0
         var p = 0
-        while (pos < messagesSelectionProjection.size) {
-            if (messagesSelectionProjection[pos]["selected"].toString() == "true") {
+        while (pos < selectionMode.entries.size) {
+            if (selectionMode.isSelected(pos)) {
                 // Bulk delete bypasses ChatPreferences.deleteMessage,
                 // so the fold-in bookmark is realigned here the same
                 // way: one step per removed already-folded message.
@@ -15674,42 +15473,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             GeneratedImageFiles.deleteIfUnreferenced(this, deletedImageHashes)
         }
         adapter?.notifyDataSetChanged()
-        updateMessagesSelectionProjection()
-        deselectAll()
+        selectionMode.rebuild(messages)
+        selectionMode.exit()
         calculateCost()
         askToRecompactAfterDelete(manualBoundaryBefore)
-    }
-
-    private fun copySelectedMessages() {
-        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Copied messages", conversationToString())
-        clipboard.setPrimaryClip(clip)
-        Toast.makeText(this, "Messages copied to clipboard", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun shareSelectedMessages() {
-        val intent = Intent(Intent.ACTION_SEND)
-        intent.type = "text/plain"
-        intent.putExtra(Intent.EXTRA_TEXT, conversationToString())
-        startActivity(Intent.createChooser(intent, "Share messages"))
-    }
-
-    private fun conversationToString() : String {
-        val stringBuilder = StringBuilder()
-
-        for (m in messagesSelectionProjection) {
-            if (m["selected"].toString() == "true") {
-                if (m["isBot"] == true) {
-                    stringBuilder.append("[Bot] >\n")
-                } else {
-                    stringBuilder.append("[User] >\n")
-                }
-                stringBuilder.append(m["message"])
-                stringBuilder.append("\n\n")
-            }
-        }
-
-        return stringBuilder.toString()
     }
 
     override fun onAttachedToWindow() {
@@ -15721,7 +15488,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun adjustPaddings() {
         WindowInsetsUtil.adjustPaddings(this, R.id.action_bar, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR))
-        WindowInsetsUtil.adjustPaddings(this, R.id.bulk_container, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR))
         WindowInsetsUtil.adjustPaddings(this, R.id.keyboard_frame, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR))
         WindowInsetsUtil.adjustPaddings(this, R.id.messages, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR))
 

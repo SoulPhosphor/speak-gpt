@@ -22,11 +22,16 @@ import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 object ChatExportDialog {
 
-    fun show(context: Context, onExport: (ChatExportOptions) -> Unit) {
+    /** [initialFormat] is the format preselected when the pop-up opens. */
+    fun show(
+        context: Context,
+        initialFormat: ChatExportFormat = ChatExportFormat.values().first(),
+        onExport: (ChatExportOptions) -> Unit
+    ) {
         val body = LayoutInflater.from(context).inflate(R.layout.dialog_chat_export, null)
         val formatValue = body.findViewById<TextView>(R.id.chat_export_format_value)
         val formats = ChatExportFormat.values()
-        var selectedFormat = formats.first()
+        var selectedFormat = initialFormat
 
         formatValue.text = selectedFormat.label
         formatValue.setOnClickListener {

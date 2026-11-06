@@ -1188,6 +1188,41 @@ chat adapter colors every action icon with the bubble's foreground in one
 place, so the icons contrast with any bubble. The row sits in the bottom corner
 opposite the speaker's name.
 
+### Chat Selection Mode
+
+`Widget.App.Chat.SelectionBar.*` is the Selection Mode area beneath the chat
+header (`view_chat_selection_bar.xml`): `SelectionBar` is the rounded surface
+in the header's own color (`bg_chat_header_rounded`), `Count` the bold
+"N Selected" line, `Hint` the small explanation beneath it (inherits
+`Widget.App.Row.Subtitle`), and `Action` the Copy, Share, Delete, Export
+(Material Symbols `file_save`) and more-options icons (borderless, inherits
+`Widget.App.QuickTile.EditButton`). `Action` tints through
+`chat_selection_action_tint`, which fades an icon while it is turned off;
+Copy, Share, Delete and Export are off while nothing is selected. Sizes live
+in `chat_selection_*` dimensions. The header itself does not change in
+Selection Mode.
+
+`bg_chat_selection_outline` is the dashed cut-line outline drawn around each
+selected message's bubble area, whether or not bubbles are shown. It replaces
+the old background highlight. Its color is `?attr/colorPrimary`; its width,
+dash, gap and corner live in `chat_selection_outline_*` dimensions, and
+`chat_selection_outline_offset` keeps it clear of the bubble's edge.
+
+### Chat message text highlighting
+
+Highlighting words inside chat message text (and the Thinking text) is drawn by
+the chat itself (`ui.chat.MessageTextHighlight`), so the chat can keep
+scrolling while a handle is held near its top or bottom edge. It takes every
+part of its look from Android's own highlighting, so it matches the rest of
+the app and follows the theme: the highlight color is the text view's
+`highlightColor` (`?android:attr/textColorHighlight`), the handles are the
+theme's `textSelectHandleLeft` / `textSelectHandleRight`, the magnifier is
+Android's `Magnifier`, and the pop-up is Android's floating text pop-up
+(Copy, Share, Select All and other apps' text actions). Behavior sizes live in
+`chat_text_highlight_*` dimensions: the edge area that starts scrolling, the
+fastest scrolling speed (per second), and the handles' minimum touch size.
+Nothing about its appearance is set in code.
+
 ### Manual compaction marker
 
 `Widget.App.Chat.CompactionMarker` is the centered **Compacted** title between message units. It inherits the shared section-title typography and owns its spacing and alignment. Both user and assistant row layouts carry the same normally hidden marker slot; the adapter shows exactly one slot at the persisted manual boundary without inserting a synthetic conversation message.

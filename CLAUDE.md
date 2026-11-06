@@ -558,6 +558,14 @@ Before adding a feature, check what it costs the screens it touches, such as
 reading data while scrolling or opening files per row, and build it so
 existing behavior stays as fast and correct as before.
 
+### Keep the chat screen from growing (owner ruling, November 6 2026)
+
+The chat screen's code files are too large to change safely. New chat-screen
+features go in their own file, and only the small hookup they need is added to
+the chat screen's existing files. This also applies to the code that draws the
+message bubbles. Moving existing code into a new file is done only when the
+owner approves it, and must not change anything the user sees.
+
 ### Never rewrite a test just to make it pass (owner ruling, October 30 2026)
 
 A failing test means the code may be wrong. Fix the code, not the test.
