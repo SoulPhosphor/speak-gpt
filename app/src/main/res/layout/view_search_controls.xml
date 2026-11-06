@@ -2,25 +2,41 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/search_controls"
-    style="@style/Widget.App.Page.Content">
+    style="@style/Widget.App.Page.Content"
+    android:paddingHorizontal="20dp"
+    android:paddingBottom="0dp">
 
+    <!-- Preserve the existing main-search field skin and geometry in one layout. -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/bg_search"
-        style="@style/Widget.App.Field.Box">
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/btn_accent_tonal">
         <EditText
             android:id="@+id/field_search"
-            style="@style/Widget.App.Bookmark.SearchField"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:autofillHints="Search"
+            android:background="@android:color/transparent"
             android:hint="@string/hint_search"
             android:imeOptions="actionSearch"
             android:inputType="text"
             android:singleLine="true"
+            android:paddingStart="16dp"
+            android:paddingEnd="8dp"
+            android:textColor="@color/text_field"
+            android:textColorHint="@color/text_hint"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toStartOf="@id/btn_search"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent" />
         <ImageButton
             android:id="@+id/btn_search"
-            style="@style/Widget.App.QuickTile.EditButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="4dp"
+            android:background="@android:color/transparent"
             android:src="@drawable/ic_search"
             android:contentDescription="@string/search_title"
             app:layout_constraintEnd_toEndOf="parent"

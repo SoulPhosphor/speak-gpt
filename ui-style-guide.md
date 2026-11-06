@@ -1613,9 +1613,10 @@ restores the full list. Glamour Studio no longer shows its always-visible
 Search memories field.
 
 `view_search_controls.xml` supplies the same input for those lists and app
-search. It composes existing `Page.Content`, `Field.Box`,
-`Bookmark.SearchField`, `QuickTile.EditButton` and `Row.Toggle` /
-`TextColumn` / `Title` / `Switch` styles; it adds no style definitions.
+search. It extracts the existing app-search field markup and assets into one shared
+layout, preserving its tonal background and geometry. The options use
+existing `Row.Toggle` / `TextColumn` / `Title` / `Switch` styles. It adds no
+style definitions.
 Select Whole Words Only is off by default. The individual lists search titles
 and prompt content (including every companion prompt variant), with the same
 Unicode word matching as app search. App search also retains Match Case.
