@@ -33,6 +33,7 @@ import androidx.core.view.marginBottom
 import androidx.core.view.marginRight
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import org.teslasoft.assistant.ui.util.PromptLibrarySearch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SystemPromptsPreferences
@@ -55,6 +56,8 @@ import org.teslasoft.assistant.ui.adapters.SystemPromptListItemAdapter
  * so no generation code changes.
  */
 class SystemPromptsListActivity : SettingsPageActivity() {
+
+    private var librarySearch: PromptLibrarySearch? = null
 
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var btnBack: ImageButton? = null
@@ -149,6 +152,7 @@ class SystemPromptsListActivity : SettingsPageActivity() {
             openEditor("")
         }
 
+        librarySearch = PromptLibrarySearch(this, savedInstanceState, ::reloadList)
         reloadList()
     }
 
@@ -164,7 +168,9 @@ class SystemPromptsListActivity : SettingsPageActivity() {
     }
 
     private fun reloadList() {
-        list = systemPromptsPreferences?.getSystemPrompts() ?: arrayListOf()
+        list = ArrayList(systemPromptsPreferences?.getSystemPrompts().orEmpty().filter {
+            librarySearch?.matches(it.title, it.body) != false
+        })
 
         val selectedId = if (pickMode) {
             (systemPromptsPreferences?.getEffectivePrompt()?.id ?: "")
@@ -187,6 +193,11 @@ class SystemPromptsListActivity : SettingsPageActivity() {
             Configuration.UI_MODE_NIGHT_YES -> true
             else -> false
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        librarySearch?.saveState(outState)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onAttachedToWindow() {

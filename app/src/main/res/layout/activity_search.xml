@@ -22,75 +22,14 @@
             app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/bg_search"
-        android:layout_width="0dp"
-        android:layout_height="56dp"
-        android:layout_marginStart="20dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="20dp"
-        android:background="@drawable/btn_accent_tonal"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/action_bar">
-
-        <EditText
-            android:id="@+id/field_search"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:autofillHints="Search"
-            android:background="@android:color/transparent"
-            android:hint="@string/hint_search"
-            android:imeOptions="actionSearch"
-            android:inputType="text"
-            android:paddingStart="16dp"
-            android:paddingEnd="8dp"
-            android:textColor="@color/text_field"
-            android:textColorHint="@color/text_hint"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/btn_search"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <ImageButton
-            android:id="@+id/btn_search"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="4dp"
-            android:background="@android:color/transparent"
-            android:contentDescription="@string/search_title"
-            android:src="@drawable/ic_search"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <LinearLayout
-        android:id="@+id/search_options"
+    <include
+        android:id="@+id/search_controls"
+        layout="@layout/view_search_controls"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="20dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="20dp"
-        android:orientation="vertical"
-        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/bg_search">
-
-        <com.google.android.material.checkbox.MaterialCheckBox
-            android:id="@+id/check_whole_words"
-            style="@style/Widget.App.CheckOption.CheckBox"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/search_whole_words" />
-
-        <com.google.android.material.checkbox.MaterialCheckBox
-            android:id="@+id/check_match_case"
-            style="@style/Widget.App.CheckOption.CheckBox"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/search_match_case" />
-    </LinearLayout>
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/action_bar" />
 
     <TextView
         android:id="@+id/search_status"
@@ -103,7 +42,7 @@
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/search_options" />
+        app:layout_constraintTop_toBottomOf="@id/search_controls" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/search_rebuild"

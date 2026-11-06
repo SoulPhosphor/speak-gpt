@@ -1601,3 +1601,25 @@ full-width actions inherit `AppButton.Primary` through `RestoreSelection` and
 
 BackUp Options and Restore Options use the simple screen header and
 `ScreenChrome.fitSystemBars` (see Screen headers).
+
+
+### Prompt library search
+
+Companions, Glamour Studio, Activation Prompts and System Prompts use the
+existing `ActionBar.Title.NearBack` and `ActionBar.SecondaryButton` styles,
+with a magnifying glass as the trailing action. The title text is unchanged.
+Search opens immediately beneath the header; closing it clears the query and
+restores the full list. Glamour Studio no longer shows its always-visible
+Search memories field.
+
+`view_search_controls.xml` supplies the same input for those lists and app
+search. It composes existing `Page.Content`, `Field.Box`,
+`Bookmark.SearchField`, `QuickTile.EditButton` and `Row.Toggle` /
+`TextColumn` / `Title` / `Switch` styles; it adds no style definitions.
+Select Whole Words Only is off by default. The individual lists search titles
+and prompt content (including every companion prompt variant), with the same
+Unicode word matching as app search. App search also retains Match Case.
+
+Glamour Studio opts into `activity_prompt_memory_list.xml` and
+`PromptLibrarySearch`; other memory-list screens keep their current layouts
+and search controls.

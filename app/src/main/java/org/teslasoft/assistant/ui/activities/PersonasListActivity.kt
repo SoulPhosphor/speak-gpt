@@ -33,6 +33,7 @@ import androidx.core.view.marginBottom
 import androidx.core.view.marginRight
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import org.teslasoft.assistant.ui.util.PromptLibrarySearch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -41,6 +42,8 @@ import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.PersonaListItemAdapter
 
 class PersonasListActivity : SettingsPageActivity() {
+
+    private var librarySearch: PromptLibrarySearch? = null
 
     private var btnAdd: ExtendedFloatingActionButton? = null
     private var btnBack: ImageButton? = null
@@ -169,6 +172,7 @@ class PersonasListActivity : SettingsPageActivity() {
         pickMode = intent.getBooleanExtra("pickMode", false)
 
         personaPreferences = PersonaPreferences.getPersonaPreferences(this)
+        librarySearch = PromptLibrarySearch(this, savedInstanceState, ::reloadList)
         initialize()
 
         // Launched to create the very first companion (from ChatActivity when a
@@ -195,6 +199,8 @@ class PersonasListActivity : SettingsPageActivity() {
         val personasList = personaPreferences!!.getPersonasList()
 
         for (i in personasList) {
+            val searchable = listOf(i.label, i.prompt) + i.promptVariants.flatMap { listOf(it.name, it.text) }
+            if (librarySearch?.matches(*searchable.toTypedArray()) == false) continue
             val map = HashMap<String, String>()
             map["id"] = i.id
             map["label"] = i.label
@@ -234,6 +240,11 @@ class PersonasListActivity : SettingsPageActivity() {
         btnAdd!!.setOnClickListener {
             openCreate()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        librarySearch?.saveState(outState)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onAttachedToWindow() {

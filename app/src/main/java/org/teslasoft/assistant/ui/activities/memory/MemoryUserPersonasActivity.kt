@@ -46,9 +46,10 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
 
     private val pickMode: Boolean by lazy { intent.getBooleanExtra(EXTRA_PICK_MODE, false) }
 
-    override fun contentLayoutRes(): Int = R.layout.activity_memory_list_simple
+    override fun contentLayoutRes(): Int = R.layout.activity_prompt_memory_list
     override fun screenTitle(): String = getString(R.string.mem_pers_title_user_personas)
     override fun showSearch(): Boolean = true
+    override fun promptLibrarySearch(): Boolean = true
     override fun addButtonText(): String = getString(R.string.mem_pers_fab_add_persona)
 
     /* ------------------------------ data ------------------------------ */
@@ -58,11 +59,8 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
         val store = MemoryStore.getInstance(this)
         val records = store.getAllUserPersonas()
 
-        val q = query.trim().lowercase()
-        val filtered = if (q.isEmpty()) records else records.filter {
-            it.name.lowercase().contains(q) ||
-                it.presentation.lowercase().contains(q) ||
-                (it.shortDescription?.lowercase()?.contains(q) == true)
+        val filtered = records.filter {
+            matchesPrompt(query, it.name, it.presentation, it.shortDescription.orEmpty())
         }
 
         return filtered.map { rowFor(it) }
