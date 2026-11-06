@@ -4233,4 +4233,53 @@
     <string name="backup_database_failed">Failed</string>
     <string name="backup_database_unavailable">Could Not Be Checked</string>
     <string name="restore_options_title">Restore Options</string>
+
+    <string name="memory_browser_title_label">Title</string>
+    <string name="memory_browser_title_hint">Optional. Mainly a way to help you identify your memories more clearly from the memory browser screen. Plays a low part in retrieving memories.</string>
+    <string name="memory_browser_settings_title">Memory Browser Settings</string>
+    <string name="memory_browser_image_hints">Use Memory Type Image Hints</string>
+    <string name="memory_browser_image_hints_hint">Allows a visual representation of each type of memory to show for easier scanning on the browser screen.</string>
+    <string name="memory_browser_show_text">Show Memory Text</string>
+    <string name="memory_browser_show_text_hint">Shows the memory text on cards in the memory browser.</string>
+    <string name="memory_browser_icon_legend">Icon Legend</string>
+    <string name="memory_browser_legend_real_life">Real Life</string>
+    <string name="memory_browser_legend_global">Global</string>
+    <string name="memory_browser_legend_companion">Companion</string>
+    <string name="memory_browser_legend_project">Project</string>
+    <string name="memory_browser_legend_rp">RP Character</string>
+    <string name="memory_browser_legend_world">World / Campaign</string>
+
+    <string name="memory_attachment_add">Add Memory</string>
+    <string name="memory_selection_instruction">Select up to 5 memories to add</string>
+    <string name="memory_selection_empty_title">No Memories Selected</string>
+    <string name="memory_selection_empty_body">None will be added to your chat message.</string>
+    <plurals name="memory_selection_attach_title">
+        <item quantity="one">Attach Memory?</item>
+        <item quantity="other">Attach Memories?</item>
+    </plurals>
+    <string name="memory_selection_attach">Attach</string>
+    <string name="memory_selection_discard">Discard</string>
+    <string name="memory_attachment_remove_body">Only memories chosen by the system will be attached if you continue.</string>
+    <plurals name="memory_attachment_remove_action">
+        <item quantity="one">Remove Selected Memory</item>
+        <item quantity="other">Remove Selected Memories</item>
+    </plurals>
+    <plurals name="memory_attachment_settings_action">
+        <item quantity="one">Change Selected Memory</item>
+        <item quantity="other">Change Selected Memories</item>
+    </plurals>
+    <plurals name="memory_selection_selected">
+        <item quantity="one">You have %1$d memory selected.</item>
+        <item quantity="other">You have %1$d memories selected.</item>
+    </plurals>
+    <plurals name="memory_attachment_count">
+        <item quantity="one">%1$d Memory Attached</item>
+        <item quantity="other">%1$d Memories Attached</item>
+    </plurals>
+    <plurals name="memory_attachment_remove_title">
+        <item quantity="one">Remove Selected Memory?</item>
+        <item quantity="other">Remove All Selected Memories?</item>
+    </plurals>
+    <string name="memory_embedding_warning">Embedding Model Not Installed</string>
+    <string name="memory_embedding_add">Add Embedding Model</string>
 </resources>

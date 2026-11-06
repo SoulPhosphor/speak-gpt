@@ -93,9 +93,20 @@ class MemorySeedCodecTest {
         val serialized = MemorySeedCodec.serialize(first)
         val second = MemorySeedCodec.parse(serialized)
 
-        // Titles and legacy kind no longer exist on the record (v25): both are
-        // consumed or discarded at parse, so the round trip is exactly lossless.
+        // Optional titles and all other fields survive a backup round trip.
         assertEquals(first, second)
+    }
+
+    @Test
+    fun optionalBrowserTitleCanBeEditedClearedAndMissingFromOlderBackups() {
+        val original = MemorySeedCodec.parse(fixtureJson()).memories.first()
+        for (title in listOf("A label\nwith two lines", "")) {
+            val edited = original.copy(title = title)
+            assertEquals(edited, MemorySeedCodec.decodeSingleMemory(MemorySeedCodec.encodeSingleMemory(edited)))
+        }
+        val oldBackup = JSONObject(MemorySeedCodec.encodeSingleMemory(original))
+        oldBackup.getJSONArray("memories").getJSONObject(0).remove("title")
+        assertEquals("", MemorySeedCodec.parse(oldBackup.toString()).memories.first().title)
     }
 
     @Test
@@ -142,8 +153,7 @@ class MemorySeedCodecTest {
         // Legacy single "campaign_id" key parses into the multi-select set (§2).
         assertEquals(listOf("camp-1"), data.memories.first().campaignIds)
 
-        // Round-trip preserving the new columns; the legacy kind/title JSON
-        // keys are consumed or discarded at parse, so the trip is lossless.
+        // Round-trip preserves titles and target links; legacy kind maps to Type.
         val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
         assertEquals(data, back)
         assertEquals(listOf("camp-1"), back.memories.first().campaignIds)
@@ -534,15 +544,15 @@ class MemorySeedCodecTest {
     }
 
     @Test
-    fun revisedExportOmitsTitlesAndCarriesTypeId() {
+    fun revisedExportPreservesOptionalTitlesAndCarriesTypeId() {
         val data = MemorySeedCodec.parse(legacyBackupJson())
         val out = JSONObject(MemorySeedCodec.serialize(data))
         val mems = out.getJSONArray("memories")
         var checkedFact = false
         for (i in 0 until mems.length()) {
             val m = mems.getJSONObject(i)
-            // No memory carries a title in a revised-model export (§3.1).
-            assertFalse("titles must not be exported", m.has("title"))
+            // Browser titles survive backups independently of the retrieval Type.
+            assertEquals(data.memories[i].title, m.getString("title"))
             if (m.getString("memory_id") == "m-fact") {
                 assertEquals("mtype-fact", m.getString("type_id"))
                 checkedFact = true

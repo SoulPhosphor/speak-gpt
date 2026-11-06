@@ -444,9 +444,8 @@ data class MemoryRecord(
     // link columns below (companion via memory_companions).
     val scope: String,
     // The user-owned Type id ([typeId], below) is the sole Type authority
-    // (§5). The retired legacy `kind` and `title` columns were dropped from
-    // storage (DB v25); old backups' values are translated at import
-    // (kind → Type via MemoryTypeMigration) and titles are discarded (§3.1).
+    // (§5). Legacy kind values are translated to Type at import. Optional
+    // user-owned browser titles are stored independently from retrieval.
     val content: String,
     val embeddingText: String?,
     val tagsJson: String,                 // JSON array of strings
@@ -474,7 +473,9 @@ data class MemoryRecord(
     val suggestedCardType: String? = null,
     val suggestedCardId: String? = null,
     val suggestedSection: String? = null,
-    val typeId: String? = null
+    val typeId: String? = null,
+    /** Optional user-written browser label; not part of retrieval. */
+    val title: String = ""
 )
 
 data class ModeRecord(

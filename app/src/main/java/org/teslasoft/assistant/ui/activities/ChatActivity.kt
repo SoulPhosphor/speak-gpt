@@ -244,6 +244,7 @@ import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.ui.util.ChatExportDialog
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
+import org.teslasoft.assistant.ui.chat.MemoryAttachmentController
 import org.teslasoft.assistant.ui.util.IncludeStripController
 import org.teslasoft.assistant.ui.util.IncludesPopupController
 import org.teslasoft.assistant.ui.util.LocalWhisperMissingDialog
@@ -608,6 +609,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // out these move into that message's own record (INCLUDES_KEY), so the
     // document text is saved atomically with the text it belongs to.
     private var includeStrip: LinearLayout? = null
+    private val memoryAttachments = MemoryAttachmentController(this) { scheduleComposerHeightUpdate() }
     private var includeStripController: IncludeStripController? = null
     private var pendingIncludes: ArrayList<ChatInclude> = arrayListOf()
     private val pendingDocumentImports: MutableSet<String> = HashSet()
@@ -770,6 +772,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val storedMessage: String,
         val modelFacingMessage: String,
         val pendingIncludes: List<ChatInclude>,
+        val manualMemoryIds: List<String>,
         val selectedModel: String,
         val selectedEndpointId: String,
         val request: ChatCompletionRequest,
@@ -3375,6 +3378,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnToolCreateImage = findViewById(R.id.action_create_image)
         includeStrip = findViewById(R.id.include_strip)
         initIncludeStrip()
+        memoryAttachments.bind(chatId)
 
         composerSurface?.setExpansionListener { expanded ->
             setComposerContainerExpanded(expanded)
@@ -8940,6 +8944,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val stillExact = message == preparedTurn.rawMessage &&
                 messageInput?.text?.toString() == preparedTurn.rawMessage &&
                 pendingIncludes.toList() == preparedTurn.pendingIncludes &&
+                memoryAttachments.ids() == preparedTurn.manualMemoryIds &&
                 model == preparedTurn.selectedModel &&
                 preferences?.getApiEndpointId().orEmpty() == preparedTurn.selectedEndpointId
             if (!stillExact) {
@@ -8964,6 +8969,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         stopReadback()
         if (message != "") {
             val m = preparedTurn?.storedMessage ?: (prefix + message + endSeparator)
+            val manualMemoryIdsForSend = if (
+                (preferences?.getImagineCommandGlobal() == true || explicitImagineDraft) &&
+                ImagineCommand.isImagineAttempt(message)
+            ) emptyList() else (preparedTurn?.manualMemoryIds ?: memoryAttachments.ids())
             var firstTurnCommitted = false
             if (pendingConversation && shouldAdd) {
                 val first = hashMapOf<String, Any>(
@@ -8972,6 +8981,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     ChatAdapter.KEY_MESSAGE_TIME to System.currentTimeMillis().toString()
                 )
                 stampUserIdentity(first)
+                memoryAttachments.attachTo(first, manualMemoryIdsForSend)
                 val firstIncludes = (preparedTurn?.pendingIncludes ?: pendingIncludes)
                     .map { it.forSentMessage() }
                 if (firstIncludes.isNotEmpty()) {
@@ -9014,6 +9024,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // in history that the provider's prefix cache can cover on every
             // later turn. Only on shouldAdd — a retry re-sends an existing
             // message that already carries its own attachments.
+            val sentManualMemoryIds = if (shouldAdd) {
+                manualMemoryIdsForSend.also { ids ->
+                    if (messages.isNotEmpty()) memoryAttachments.attachTo(messages.last(), ids)
+                }
+            } else emptyList()
             var transferredPendingIncludes = false
             if (shouldAdd) {
                 val attached = if (preparedTurn != null) {
@@ -9029,7 +9044,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 refreshIncludeStrip()
                 refreshPersistentIncludeControls()
             }
-            val saveOutcome = saveSettings(synchronous = transferredPendingIncludes)
+            val saveOutcome = saveSettings(synchronous = transferredPendingIncludes || sentManualMemoryIds.isNotEmpty())
+            if (shouldAdd && saveOutcome == ChatStorageHealth.WriteOutcome.OK) {
+                memoryAttachments.completeSend(sentManualMemoryIds)
+            }
             if (transferredPendingIncludes &&
                 saveOutcome == ChatStorageHealth.WriteOutcome.OK
             ) {
@@ -10409,6 +10427,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         requestPreparationInProgress = true
         val pendingSnapshot = pendingIncludes.toList()
+        val manualMemorySnapshot = memoryAttachments.ids()
         val selectedModel = model
         val endpointId = preferences?.getApiEndpointId().orEmpty()
         val maximumResponseTokens = preferences?.getMaxTokens() ?: 0
@@ -10447,7 +10466,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             conversationProjection = conversationProjection,
                             loreQuery = storedMessage,
                             selectedModel = selectedModel,
-                            maximumResponseTokens = maximumResponseTokens
+                            maximumResponseTokens = maximumResponseTokens,
+                            manualMemoryIds = manualMemorySnapshot
                         )
                         val measurement = RequestCapacity.measure(frozen.payload)
                         var canAssemble = RequestCapacity.canAssemble(
@@ -10500,6 +10520,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     storedMessage = storedMessage,
                     modelFacingMessage = modelFacingMessage,
                     pendingIncludes = pendingSnapshot,
+                    manualMemoryIds = manualMemorySnapshot,
                     selectedModel = selectedModel,
                     selectedEndpointId = endpointId,
                     request = frozen.request,
@@ -12275,7 +12296,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             var response = ""
 
             if (model.contains(":ft") || model.contains("ft:")) {
+                val manualIds = MemoryAttachmentController.fromMessage(
+                    messages.lastOrNull { it["isBot"] != true && !MessageVisibility.isHidden(it) }
+                )
+                val manualAttachment = if (manualIds.isEmpty()) null else withContext(Dispatchers.IO) {
+                    org.teslasoft.assistant.preferences.memory.enforcer.ManualMemoryPriority.render(
+                        manualIds, MemoryStore.getInstance(this@ChatActivity)::getMemory
+                    )
+                }
                 putMessage("", true)
+                manualAttachment?.let {
+                    attachActiveMemoryAttribution(ActiveMemoryAttribution.fromFinalSelection(it.memoryIds, emptyList()))
+                }
                 markLastAssistantStreaming()
                 startLifecycle(ResponseLifecycle.PHASE_PRIMARY, preferences?.getMaxTokens())
                 val completionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
@@ -12286,7 +12318,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
                         presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
-                        prompt = request,
+                        prompt = manualAttachment?.let { "${it.prompt}\n\n$request" } ?: request,
                         logitBias = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) null else logitBiasPreferences?.getLogitBiasesMap(),
                         echo = false
                     )
@@ -12298,7 +12330,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
                         presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
-                        prompt = request,
+                        prompt = manualAttachment?.let { "${it.prompt}\n\n$request" } ?: request,
                         echo = false
                     )
                 }
@@ -13289,7 +13321,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         conversationProjection: FrozenConversationProjection,
         loreQuery: String,
         selectedModel: String,
-        maximumResponseTokens: Int
+        maximumResponseTokens: Int,
+        manualMemoryIds: List<String> = emptyList()
     ): FrozenRegularRequest {
         val msgs = ArrayList<ChatMessage>()
 
@@ -13391,7 +13424,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         var memoryAssemblyResult:
             org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.AssemblyResult? = null
-        if (preferences?.getChatMemoryEnabled() == true && MemoryStore.isProvisioned(this)) {
+        if (manualMemoryIds.isNotEmpty() ||
+            (preferences?.getChatMemoryEnabled() == true && MemoryStore.isProvisioned(this))) {
             memoryAssemblyResult = try {
                 withContext(Dispatchers.IO) {
                     org.teslasoft.assistant.preferences.memory.enforcer.Enforcer
@@ -13415,11 +13449,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 roleplayCharacterId =
                                     preferences?.getChatRoleplayCharacterId(),
                                 userPersonaId = preferences?.getChatUserPersonaId(),
-                                projectId = preferences?.getChatProjectId()
+                                projectId = preferences?.getChatProjectId(),
+                                manualMemoryIds = manualMemoryIds,
+                                automaticMemoryEnabled = preferences?.getChatMemoryEnabled() == true
                             )
                         )
                 }
             } catch (e: Exception) {
+                if (manualMemoryIds.isNotEmpty()) throw e
                 org.teslasoft.assistant.preferences.memory.MemoryLog.log(
                     this,
                     "Enforcer",
@@ -13784,13 +13821,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // "Use memory" switch alone (Quick Settings is God; the engine tier is
         // only its default). With lore books off for the chat, dedupedLoreMatches
         // is empty, so the assembly contains no lore notes — the switches stay
-        // independent. ANY failure degrades to the classic lore path below:
-        // never block a turn.
+        // independent. Automatic-recall failures retain the classic lore fallback.
+        // An explicit attachment failure stops the request rather than silently omitting it.
+        val manualMemoryIds = MemoryAttachmentController.fromMessage(
+            messages.lastOrNull { it["isBot"] != true && !MessageVisibility.isHidden(it) }
+        )
         var memoryAssemblyResult:
             org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.AssemblyResult? = null
-        if (preferences?.getChatMemoryEnabled() == true &&
-            MemoryStore.isProvisioned(this)
-        ) {
+        if (manualMemoryIds.isNotEmpty() ||
+            (preferences?.getChatMemoryEnabled() == true && MemoryStore.isProvisioned(this))) {
             memoryAssemblyResult = try {
                 withContext(Dispatchers.IO) {
                     org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.getInstance(this@ChatActivity)
@@ -13806,11 +13845,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 campaignId = preferences?.getChatCampaignId(),
                                 roleplayCharacterId = preferences?.getChatRoleplayCharacterId(),
                                 userPersonaId = preferences?.getChatUserPersonaId(),
-                                projectId = preferences?.getChatProjectId()
+                                projectId = preferences?.getChatProjectId(),
+                                manualMemoryIds = manualMemoryIds,
+                                automaticMemoryEnabled = preferences?.getChatMemoryEnabled() == true
                             )
                         )
                 }
             } catch (e: Exception) {
+                if (manualMemoryIds.isNotEmpty()) throw e
                 org.teslasoft.assistant.preferences.memory.MemoryLog.log(
                     this, "Enforcer", "error", "Assembly failed, lore-books-only this turn: ${e.message}"
                 )

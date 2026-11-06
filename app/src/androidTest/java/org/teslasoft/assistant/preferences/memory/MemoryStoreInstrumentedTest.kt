@@ -862,17 +862,16 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
-    fun legacyTitleKindProvenanceColumnsDoNotEnterRetrieval() {
+    fun browserTitleAndRetiredFieldsDoNotEnterRetrieval() {
         // Item R4: populated legacy title/kind/provenance columns must not reach
         // the runtime retrieval object, ranking, matching, or embedding text.
         val store = open(freshDbName())
         // A distinctive title word ("Zephyrgloom") appears ONLY in the legacy
         // title column, never in the content; legacy kind/provenance are set too.
         store.writableDatabase.execSQL(
-            "INSERT INTO memories (memory_id, scope, kind, type_id, title, content, importance, created_at, status, " +
-                "provenance_source, provenance_confidence) " +
-                "VALUES ('m-leg', 'global', 'fact', 'mtype-fact', 'Zephyrgloom', 'the harvest festival', 0, " +
-                "'2026-08-05T00:00:00Z', 'active', 'user_stated', 'tentative')"
+            "INSERT INTO memories (memory_id, scope, type_id, title, content, importance, created_at, status) " +
+                "VALUES ('m-leg', 'global', 'mtype-fact', 'Zephyrgloom', 'the harvest festival', 0, " +
+                "'2026-08-05T00:00:00Z', 'active')"
         )
 
         val retrieved = store.activeMemoriesForScope(RetrievalScope.NONE).first { it.memoryId == "m-leg" }
@@ -1154,10 +1153,28 @@ class MemoryStoreInstrumentedTest {
     /* -- v24/v25 migrations: provenance, kind, and title columns removed --- */
 
     @Test
+    fun browserTitleCanBeSavedEditedAndClearedWithoutChangingMemoryContent() {
+        val store = open(freshDbName())
+        val memory = mem("browser-title", scope = "global").copy(
+            title = "A browser label", embeddingText = "A retrieval hint"
+        )
+        store.insertMemory(memory)
+        assertEquals(memory.title, store.getMemory(memory.memoryId)!!.title)
+        for (title in listOf("Updated label\nsecond line", "")) {
+            store.updateMemory(store.getMemory(memory.memoryId)!!.copy(title = title), "Edit title")
+            val saved = store.getMemory(memory.memoryId)!!
+            assertEquals(title, saved.title)
+            assertEquals(memory.content, saved.content)
+            assertEquals(memory.embeddingText, saved.embeddingText)
+            assertEquals(memory.createdAt, saved.createdAt)
+        }
+    }
+
+    @Test
     fun freshDatabaseHasNoLegacyColumns() {
         val store = open(freshDbName())
         assertFalse("kind must not exist", columnExists(store, "memories", "kind"))
-        assertFalse("title must not exist", columnExists(store, "memories", "title"))
+        assertTrue("optional browser title exists", columnExists(store, "memories", "title"))
         assertFalse("provenance_source must not exist",
             columnExists(store, "memories", "provenance_source"))
         assertFalse("provenance_confidence must not exist",
@@ -1203,9 +1220,10 @@ class MemoryStoreInstrumentedTest {
         assertFalse("source_chat_id dropped",
             columnExists(store, "memories", "source_chat_id"))
         assertFalse("kind dropped", columnExists(store, "memories", "kind"))
-        assertFalse("title dropped", columnExists(store, "memories", "title"))
+        assertTrue("optional browser title restored", columnExists(store, "memories", "title"))
 
         val m = store.getMemory("m-legacy")!!
+        assertEquals("new optional title defaults blank", "", m.title)
         assertEquals("content preserved", "important content", m.content)
         assertEquals("importance preserved", 4, m.importance)
         assertEquals("status preserved", "active", m.status)

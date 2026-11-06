@@ -44,6 +44,9 @@ class AppearanceActivity : SettingsPageActivity() {
     }
 
     private fun bindControls() {
+        findViewById<View>(R.id.row_memory_browser_settings).setOnClickListener {
+            startActivity(Intent(this, MemoryBrowserSettingsActivity::class.java))
+        }
         btnBack?.setOnClickListener { finish() }
         findViewById<View>(R.id.row_app_appearance)?.setOnClickListener {
             startActivity(Intent(this, AppAppearanceActivity::class.java))

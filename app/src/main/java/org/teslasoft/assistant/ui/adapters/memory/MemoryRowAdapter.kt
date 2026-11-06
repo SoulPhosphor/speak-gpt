@@ -78,7 +78,10 @@ data class MemoryRow(
      *  reads it; the default MemoryRowAdapter ignores it. */
     val imageRef: String? = null,
     /** Use the Memory pending-card warning/error treatment for [iconRes]. */
-    val iconTintError: Boolean = false
+    val iconTintError: Boolean = false,
+    /** Browser-specific arrangement; other memory-manager lists keep their layout. */
+    val browserCard: Boolean = false,
+    val selectable: Boolean = false
 )
 
 class MemoryRowAdapter(
@@ -87,6 +90,7 @@ class MemoryRowAdapter(
 ) : BaseAdapter() {
 
     interface OnRowListener {
+        fun onSelectionToggle(row: MemoryRow) {}
         fun onClick(row: MemoryRow)
         fun onAction(row: MemoryRow, anchor: View)
 
@@ -141,6 +145,12 @@ class MemoryRowAdapter(
         const val MATCH_FAILED = 3    // comparison failed — never read as "none"; offer Retry
     }
 
+    private var selectedMemoryIds: Set<String> = emptySet()
+    fun setSelectedMemoryIds(ids: List<String>) {
+        selectedMemoryIds = ids.toSet()
+        notifyDataSetChanged()
+    }
+
     private var listener: OnRowListener? = null
 
     fun setOnRowListener(l: OnRowListener) { listener = l }
@@ -150,11 +160,12 @@ class MemoryRowAdapter(
     override fun getItemId(position: Int): Long = position.toLong()
 
     // Distinct view types keep ListView recycling from handing one layout's
-    // view to a different bind: 0 normal row, 1 header, 2 pending card.
-    override fun getViewTypeCount(): Int = 3
+    // view to a different bind: 0 normal row, 1 header, 2 pending card, 3 browser row.
+    override fun getViewTypeCount(): Int = 4
     override fun getItemViewType(position: Int): Int = when {
         rows[position].isHeader -> 1
         rows[position].pendingCard -> 2
+        rows[position].browserCard -> 3
         else -> 0
     }
     override fun isEnabled(position: Int): Boolean = !rows[position].isHeader
@@ -171,7 +182,10 @@ class MemoryRowAdapter(
             return bindPendingCard(rows[position], convertView, parent)
         }
 
-        val view = convertView ?: LayoutInflater.from(context).inflate(R.layout.view_memory_row, parent, false)
+        val view = convertView ?: LayoutInflater.from(context).inflate(
+            if (rows[position].browserCard) R.layout.view_memory_browser_row else R.layout.view_memory_row,
+            parent, false
+        )
 
         val title = view.findViewById<TextView>(R.id.row_title)
         val tags = view.findViewById<TextView>(R.id.row_tags)
@@ -182,7 +196,18 @@ class MemoryRowAdapter(
         val ui = view.findViewById<View>(R.id.ui)
 
         val row = rows[position]
+        if (row.browserCard) {
+            view.findViewById<com.google.android.material.checkbox.MaterialCheckBox>(R.id.memory_selection_checkbox).apply {
+                setOnCheckedChangeListener(null)
+                visibility = if (row.selectable) View.VISIBLE else View.GONE
+                isChecked = row.id in selectedMemoryIds
+                isEnabled = isChecked || selectedMemoryIds.size < org.teslasoft.assistant.preferences.memory.ManualMemorySelection.MAX_COUNT
+                contentDescription = row.title.ifBlank { row.subtitle.orEmpty() }
+                setOnCheckedChangeListener { _, _ -> listener?.onSelectionToggle(row) }
+            }
+        }
         title.text = row.title
+        title.visibility = if (row.title.isBlank()) View.GONE else View.VISIBLE
 
         if (row.iconRes != null) {
             icon.visibility = View.VISIBLE
@@ -191,16 +216,18 @@ class MemoryRowAdapter(
                 if (row.iconTintError) R.string.model_cleanup_unavailable
                 else R.string.mem_row_icon
             )
-            icon.imageTintList = ColorStateList.valueOf(
-                MaterialColors.getColor(
-                    icon,
-                    if (row.iconTintError) androidx.appcompat.R.attr.colorError
-                    else androidx.appcompat.R.attr.colorPrimary
+            if (!row.browserCard) {
+                icon.imageTintList = ColorStateList.valueOf(
+                    MaterialColors.getColor(
+                        icon,
+                        if (row.iconTintError) androidx.appcompat.R.attr.colorError
+                        else androidx.appcompat.R.attr.colorPrimary
+                    )
                 )
-            )
+            }
         } else {
             icon.visibility = View.GONE
-            icon.imageTintList = null
+            if (!row.browserCard) icon.imageTintList = null
         }
 
         if (row.tagsLine.isNullOrBlank()) {
@@ -228,7 +255,7 @@ class MemoryRowAdapter(
             action.visibility = View.VISIBLE
             action.setOnClickListener { listener?.onAction(row, it) }
         } else {
-            action.visibility = View.GONE
+            action.visibility = if (row.browserCard) View.INVISIBLE else View.GONE
             action.setOnClickListener(null)
         }
 
@@ -292,7 +319,10 @@ class MemoryRowAdapter(
             if (row.iconRes != null) { visibility = View.VISIBLE; setImageResource(row.iconRes) }
             else visibility = View.GONE
         }
-        view.findViewById<TextView>(R.id.pending_title).text = row.title
+        view.findViewById<TextView>(R.id.pending_title).apply {
+            text = row.title
+            visibility = if (row.title.isBlank()) View.GONE else View.VISIBLE
+        }
         view.findViewById<TextView>(R.id.pending_tags).apply {
             if (row.tagsLine.isNullOrBlank()) visibility = View.GONE
             else { visibility = View.VISIBLE; text = row.tagsLine }

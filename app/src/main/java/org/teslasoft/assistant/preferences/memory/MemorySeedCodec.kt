@@ -184,12 +184,13 @@ object MemorySeedCodec {
         val memories = each(root, "memories").map { m ->
             // A pre-Phase-1 backup carries a legacy `kind` and possibly a
             // `title`. The kind is translated to the user-owned Type here and
-            // then discarded; titles are retired (§3.1) and never imported.
+            // then discarded; optional browser titles are preserved.
             MemoryRecord(
                 memoryId = m.reqStr("memory_id"),
                 scope = m.reqStr("scope"),
                 typeId = m.str("type_id") ?: MemoryTypeMigration.typeIdForLegacyKind(m.str("kind")),
                 content = m.reqStr("content"),
+                title = m.str("title") ?: "",
                 embeddingText = m.str("embedding_text"),
                 tagsJson = m.arrText("tags"),
                 importance = m.optInt("importance", 0),
@@ -592,10 +593,10 @@ object MemorySeedCodec {
                     if (m.campaignIds.isNotEmpty()) put("campaign_ids", JSONArray(m.campaignIds))
                     if (m.projectIds.isNotEmpty()) put("project_ids", JSONArray(m.projectIds))
                     // The user-owned type_id is the only Type representation.
-                    // Legacy kind and titles no longer exist in storage and are
-                    // never exported (§3.1/§5); old backups' values are
-                    // translated or discarded at import.
+                    // Legacy kind maps to Type at import. Optional browser
+                    // titles round-trip independently of retrieval.
                     putIfNotNull("type_id", m.typeId)
+                    put("title", m.title)
                     put("content", m.content)
                     putIfNotNull("embedding_text", m.embeddingText)
                     put("tags", jsonArrayOrEmpty(m.tagsJson))

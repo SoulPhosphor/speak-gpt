@@ -79,6 +79,10 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     private var presetWorldId: String? = null
     private var presetCampaignId: String? = null
     private var presetRoleplayCharacterId: String? = null
+    private lateinit var memorySelection: MemorySelectionController
+    private val pickingMemories: Boolean
+        get() = intent.getBooleanExtra(MemorySelectionContract.EXTRA_SELECT, false)
+
     private var titleOverride: String? = null
 
     /** Per-draft Possible Match state for the pending cards (Step 1.5), keyed by
@@ -127,7 +131,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     override fun showModeToggle(): Boolean = true
 
     override fun onModeSelected(mode: String) {
-        if (this.mode == mode) return
+        if (pickingMemories || this.mode == mode) return
         this.mode = mode
         // Keep the shared filter state coherent for the entry points that
         // read it (the Memory Assistant's View Pending Memories link writes
@@ -174,6 +178,9 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             presetCampaignId != null || presetRoleplayCharacterId != null
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        memorySelection = MemorySelectionController(this, savedInstanceState) {
+            currentAdapter?.setSelectedMemoryIds(memorySelection.ids())
+        }
         presetCompanionId = intent.getStringExtra("companionId")
         presetWorldId = intent.getStringExtra("worldId")
         presetCampaignId = intent.getStringExtra("campaignId")
@@ -181,16 +188,42 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         titleOverride = intent.getStringExtra("screenTitle")
         // An entry point that wrote status={draft} (the Memory Assistant's
         // View Pending Memories link) opens straight into Pending view.
-        mode = if (MemoryBrowserFilterState.status == setOf("draft")) "pending" else "memories"
+        mode = if (!pickingMemories && MemoryBrowserFilterState.status == setOf("draft")) "pending" else "memories"
         super.onCreate(savedInstanceState)
+        memorySelection.bind()
+        if (pickingMemories) {
+            findViewById<View>(R.id.btn_mode_pending).visibility = View.GONE
+            findViewById<View>(R.id.filtered_pending).visibility = View.GONE
+            findViewById<View>(R.id.mode_separator).visibility = View.GONE
+        }
+        findViewById<android.widget.ImageButton>(R.id.btn_icon_legend).apply {
+            visibility = View.VISIBLE
+            setOnClickListener { showIconLegend() }
+        }
     }
 
-    /** Step 1.7 (owner ruling, plan_one_page.md): each time the Memory Browser
-     *  opens without an embedding model installed, show a dismissible reminder
-     *  for that visit — never a permanent inline banner. It reappears on the
-     *  next visit while the model is still missing. Shown once per visit so
-     *  returning from a child screen does not re-prompt. */
-    private var noModelReminderShown = false
+    private fun showIconLegend() {
+        val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+        val content = layoutInflater.cloneInContext(builder.context)
+            .inflate(R.layout.dialog_memory_icon_legend, null)
+        val dialog = builder.setTitle(R.string.memory_browser_icon_legend)
+            .setView(content).create()
+        content.findViewById<View>(R.id.btn_legend_okay).setOnClickListener { dialog.dismiss() }
+        dialog.show()
+    }
+
+    private fun showEmbeddingWarning() {
+        val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+        val actions = layoutInflater.cloneInContext(builder.context)
+            .inflate(R.layout.dialog_memory_embedding_warning, null)
+        val dialog = builder.setMessage(R.string.lore_no_model_reminder).setView(actions).create()
+        actions.findViewById<View>(R.id.btn_embedding_add).setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, org.teslasoft.assistant.ui.activities.AdvancedMemorySettingsActivity::class.java))
+        }
+        actions.findViewById<View>(R.id.btn_embedding_okay).setOnClickListener { dialog.dismiss() }
+        dialog.show()
+    }
 
     override fun onResume() {
         // Refresh the match cache after a screen that may have changed the
@@ -200,13 +233,9 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             invalidateMatchesOnResume = false
         }
         super.onResume()
-        if (!noModelReminderShown &&
-            EmbeddingModelStorage.activeModel(this) == null) {
-            noModelReminderShown = true
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setMessage(R.string.lore_no_model_reminder)
-                .setPositiveButton(R.string.lore_no_model_reminder_ok) { d, _ -> d.dismiss() }
-                .show()
+        findViewById<android.widget.ImageButton>(R.id.btn_embedding_warning).apply {
+            visibility = if (EmbeddingModelStorage.activeModel(this@MemoryBrowserActivity) == null) View.VISIBLE else View.GONE
+            setOnClickListener { showEmbeddingWarning() }
         }
     }
 
@@ -239,8 +268,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         val f = MemoryBrowserFilterState
         val q = query.trim().lowercase()
         var list = base
-        // Titles are retired (§3.1): search the memory content only.
-        if (q.isNotEmpty()) list = list.filter { it.content.lowercase().contains(q) }
+        // Optional titles are browser labels; text search can find them too.
+        if (q.isNotEmpty()) list = list.filter { (it.content.lowercase().contains(q) || it.title.lowercase().contains(q)) }
         if (!isScoped() && f.scope.isNotEmpty()) list = list.filter { it.scope in f.scope }
         if (f.type.isNotEmpty()) list = list.filter { it.typeId in f.type }
         // Memory Importance filter: match the memory's stored importance,
@@ -278,14 +307,12 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         return list.map { rowFor(it, supersededDates[it.memoryId]) }
     }
 
-    // Row layout: title / tags line / first line of content, with a leading
-    // identity icon picked from the memory's scope (owner icon set, July 8
-    // 2026). Badge is intentionally suppressed for "active" — the Active
+    // Row layout: optional title / tags / full content, with the scope image
+    // above the trailing chevron. Browser settings control image/text visibility. Badge is intentionally suppressed for "active" — the Active
     // pill added visual noise on the row that meant nothing (the browser
     // filters to Active by default).
     private fun rowFor(m: MemoryRecord, supersededAt: String?): MemoryRow {
         val tags = parseTags(m.tagsJson)
-        val firstLine = m.content.substringBefore('\n').trim()
         val tagsLine = if (tags.isEmpty()) null else formatTagsLine(tags)
         val pending = mode == "pending"
         // In Pending view every row is a draft, so the "Pending" badge would
@@ -314,17 +341,14 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         val usePendingCard = pending && !roleplay
         return MemoryRow(
             id = m.memoryId,
-            // Titles are retired (§3.1): the row's primary line is a content
-            // preview, never a title. The pending card additionally shows the
-            // full memory text below.
-            title = firstLine.ifEmpty { m.content.trim() },
-            // The pending card shows the FULL proposed memory; the ordinary
-            // rows keep the one-line content preview.
-            subtitle = if (usePendingCard) m.content.trim().ifEmpty { null } else firstLine.ifEmpty { null },
+            title = m.title.trim(),
+            subtitle = if (preferences?.getShowMemoryText() != false) m.content.trim().ifEmpty { null } else null,
+            browserCard = true,
+            selectable = pickingMemories,
             tagsLine = tagsLine,
             badge = badge,
             hasAction = !pending,
-            iconRes = iconForScope(m.scope, isOnCard(m)),
+            iconRes = if (preferences?.getUseMemoryTypeImageHints() != false) iconForScope(m.scope, isOnCard(m)) else null,
             pendingActions = pending && roleplay,
             pendingCard = usePendingCard,
             importance = m.importance.coerceIn(-2, 3),
@@ -424,7 +448,15 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     /* ------------------------------ rows ------------------------------ */
 
     override fun onClick(row: MemoryRow) {
+        if (pickingMemories) { memorySelection.toggle(row.id); return }
         openEditor(row.id)
+    }
+
+    override fun onSelectionToggle(row: MemoryRow) { memorySelection.toggle(row.id) }
+
+    override fun onSaveInstanceState(outState: android.os.Bundle) {
+        memorySelection.save(outState)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onAction(row: MemoryRow, anchor: View) {
@@ -554,6 +586,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     // cards (notifyDataSetChanged re-binds from [matchState], keyed by draft id).
     override fun buildListAdapter(rows: List<MemoryRow>): android.widget.ListAdapter {
         val adapter = MemoryRowAdapter(rows, this)
+        if (pickingMemories) adapter.setSelectedMemoryIds(memorySelection.ids())
         adapter.setOnRowListener(this)
         currentAdapter = adapter
         return adapter

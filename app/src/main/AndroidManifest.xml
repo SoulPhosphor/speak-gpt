@@ -396,6 +396,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.MemoryBrowserSettingsActivity"
+            android:exported="false"
+            android:label="@string/memory_browser_settings_title" />
+
+        <activity
             android:name=".ui.activities.ChatBehaviorsActivity"
             android:exported="false"
             android:label="@string/chat_behaviors_title" />
