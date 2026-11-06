@@ -29,6 +29,7 @@ class MemoryAttachmentController(
     private val drafts by lazy { activity.getSharedPreferences("pending_memory_attachments", Context.MODE_PRIVATE) }
     private var chatId = ""
     private var bound = false
+    private var chatMode = false
     private var resultBeforeBind: List<String>? = null
     private var selectedIds: List<String> = emptyList()
     private var strip: View? = null
@@ -57,6 +58,12 @@ class MemoryAttachmentController(
         resultBeforeBind = null
         if (restoredResult != null) replace(restoredResult) else render()
     }
+    /** Playground keeps the draft but never displays chat-only attachment controls. */
+    fun setChatMode(enabled: Boolean) {
+        if (chatMode == enabled) return
+        chatMode = enabled
+        render()
+    }
     /** Measured attachment space, including stylesheet-defined margins. */
     fun occupiedHeight(): Int {
         val view = strip ?: return 0
@@ -81,7 +88,7 @@ class MemoryAttachmentController(
         if (selectedIds == sentIds) replace(emptyList())
     }
     private fun render() {
-        strip?.visibility = if (selectedIds.isEmpty()) View.GONE else View.VISIBLE
+        strip?.visibility = if (chatMode && selectedIds.isNotEmpty()) View.VISIBLE else View.GONE
         label?.text = activity.resources.getQuantityString(
             R.plurals.memory_attachment_count, selectedIds.size, selectedIds.size
         )

@@ -1709,6 +1709,7 @@ with automatic recall disabled. Explicit memories bypass automatic scope,
 relevance, cooldown and lore-overlap exclusions for that turn; the complete
 request still passes the existing capacity check. The normal memory count is
 shared with automatic recall, retaining its existing Essential-count exception.
+The pending strip is visible only in Chat; Playground preserves the draft for switching back.
 Sent ids use message metadata for retries, and final response attribution uses
 the same Active Memories indicator as automatically chosen memories. They never
 become persistent paperclip Includes. Unsent drafts clear only after successful

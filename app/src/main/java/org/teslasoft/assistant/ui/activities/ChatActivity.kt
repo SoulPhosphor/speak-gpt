@@ -8820,6 +8820,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         visionActions?.visibility = View.GONE
         includeStrip?.visibility = if (playground) View.GONE
             else if (pendingIncludes.isEmpty()) View.GONE else View.VISIBLE
+        memoryAttachments.setChatMode(!playground)
         if (playground) {
             healthBanner?.visibility = View.GONE
         } else {
