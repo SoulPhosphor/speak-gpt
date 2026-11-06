@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -400,11 +401,15 @@ class EditUserPersonaActivity : SettingsPageActivity() {
             textPresentationError?.visibility = View.VISIBLE
             hasError = true
         }
-        if (hasError) return
+        if (hasError) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
+            return
+        }
 
         // Never blocks typing, only Save (owner ruling) - a snackbar explains
         // why, the user trims the box, taps Save again.
         if (shortDescriptionOverLimit) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             Snackbar.make(findViewById<View>(R.id.root), getString(R.string.mem_pers_short_desc_snackbar), Snackbar.LENGTH_INDEFINITE)
                 .setAction(R.string.okay) { /* dismiss */ }
                 .show()
@@ -424,13 +429,9 @@ class EditUserPersonaActivity : SettingsPageActivity() {
         finish()
     }
 
-    /** This screen closes on save with no toast - a brief green flash on the
-     *  save icon's own background (owner ruling, July 21 2026) is the only
-     *  save confirmation the user sees, visible during the closing
-     *  slide-out transition since it's set synchronously right before
-     *  finish(). */
+    /** Shows shared save feedback on the disc during the closing transition. */
     private fun flashSaveButtonGreen() {
-        btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
+        btnSave?.let { SaveIconFlash.flash(it) }
     }
 
     /** Serialised form of the editable fields, used only for change detection
@@ -459,10 +460,10 @@ class EditUserPersonaActivity : SettingsPageActivity() {
     /** Delete confirmation (owner-specified wording, July 21 2026): title
      *  only, no body - "Delete this persona?" / Delete / Cancel. Same real
      *  Primary/Destructive two-button shape as the discard dialog
-     *  (dialog_two_actions); the App_MaterialAlertDialog theme centers the
+     *  (dialog_two_actions_cancel_first); the App_MaterialAlertDialog theme centers the
      *  title on its own. */
     private fun confirmDelete() {
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.mem_pers_delete_title_full)
@@ -509,7 +510,6 @@ class EditUserPersonaActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = amoledTint
-            btnSave?.backgroundTintList = amoledTint
             btnDelete?.backgroundTintList = amoledTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
@@ -520,7 +520,6 @@ class EditUserPersonaActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = barTint
-            btnSave?.backgroundTintList = barTint
             btnDelete?.backgroundTintList = barTint
         }
     }

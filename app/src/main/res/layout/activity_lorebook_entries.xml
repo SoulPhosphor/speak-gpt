@@ -49,7 +49,7 @@
         <TextView
             android:id="@+id/activity_title"
             style="@style/Widget.App.ActionBar.Title.NearBack"
-            android:text="@string/title_lorebook"
+            android:text="@string/title_edit_lorebook"
             app:layout_constraintEnd_toStartOf="@+id/btn_edit_book" />
 
         <!-- Chains off btn_debug (the edge-anchored icon), so it can't share

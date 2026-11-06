@@ -42,6 +42,7 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.radiobutton.MaterialRadioButton
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.imagegen.ToolCapability
 import org.teslasoft.assistant.imagegen.ToolCapabilityScope
 import org.teslasoft.assistant.imagegen.ToolCapabilityStore
@@ -283,7 +284,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             val amoledTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = amoledTint
-            btnSave?.backgroundTintList = amoledTint
+
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -293,7 +294,6 @@ class ChooseProviderActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = barTint
-            btnSave?.backgroundTintList = barTint
         }
     }
 
@@ -971,6 +971,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         if (selectedRoutingType == FavoriteModelObject.ROUTING_ONLY &&
             (selectedProvider.isBlank() || availableSlugs == null || isUnavailable(selectedProvider))
         ) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             showNoticeDialog(getString(R.string.provider_only_mode_error))
             return
         }
@@ -986,6 +987,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         ) {
             // Distinct from the Only-mode message: names the exact problem and
             // includes enabling fallbacks as a valid fix (owner wording).
+            btnSave?.let { SaveIconFlash.flashError(it) }
             MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                 .setTitle(R.string.provider_no_preferred_title)
                 .setMessage(R.string.provider_no_preferred_message)
@@ -1020,6 +1022,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
             // can switch the chat to it — the routing rode along on the favorite
             // just written above.
             setResult(RESULT_OK, Intent().putExtra(EXTRA_MODEL, selectedModel))
+            btnSave?.let { SaveIconFlash.flash(it) }
             finish()
             return
         }
@@ -1033,6 +1036,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         data.putStringArrayListExtra(EXTRA_IGNORED_PROVIDERS, ArrayList(ignored))
         data.putExtra(EXTRA_ROUTE_TOOL_CAPABILITY, selectedRouteToolCapability().key)
         setResult(RESULT_OK, data)
+        btnSave?.let { SaveIconFlash.flash(it) }
         finish()
     }
 

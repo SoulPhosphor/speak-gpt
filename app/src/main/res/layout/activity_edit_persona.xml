@@ -61,7 +61,7 @@
 
         <ImageButton
             android:id="@+id/btn_save"
-            style="@style/Widget.App.ActionBar.SecondaryButton"
+            style="@style/Widget.App.ActionBar.SaveButton"
             android:contentDescription="@string/btn_save"
             android:src="@drawable/ic_save"
             android:tooltipText="@string/btn_save"
@@ -101,11 +101,7 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <!-- Companion name (no hint line - none was ever owner-approved for
-                 this field). text_field_label_error is a persistent inline
-                 error (house rule: field errors set on the input itself, never
-                 a toast/dialog) shown by EditPersonaActivity.save() when the
-                 name is empty, in place of the old TextInputLayout.error. -->
+            <!-- Companion name and its inline validation message. -->
             <TextView
                 android:id="@+id/label_field_label"
                 style="@style/Widget.App.Field.Label"
@@ -131,13 +127,7 @@
 
             <TextView
                 android:id="@+id/text_field_label_error"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:layout_marginTop="4dp"
-                android:layout_marginEnd="24dp"
-                android:textColor="?attr/colorError"
-                android:textSize="13sp"
+                style="@style/Widget.App.Field.Error.PageInset"
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -177,6 +167,15 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/label_field_prompt" />
 
+            <TextView
+                android:id="@+id/text_field_prompt_error"
+                style="@style/Widget.App.Field.Error.PageInset"
+                android:text="@string/companion_editor_prompt_required_error"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_prompt" />
+
             <!-- Shared multiple-prompt editor: tab row + editor frame
                  (layout/view_prompt_variant_editor.xml). -->
             <include
@@ -189,7 +188,7 @@
                 android:layout_marginEnd="24dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/hint_field_prompt" />
+                app:layout_constraintTop_toBottomOf="@+id/text_field_prompt_error" />
 
             <TextView
                 android:id="@+id/label_field_activation_prompt"
@@ -214,18 +213,24 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/label_field_activation_prompt" />
 
-            <!-- Full-width stacked-field dropdown: the label/help remain above
-                 this form control, while its visuals and open behavior come
-                 entirely from the canonical dropdown family. -->
-            <TextView
-                android:id="@+id/field_activation_prompt"
-                style="@style/Widget.App.Dropdown.CanonicalValue"
-                android:layout_width="0dp"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                app:layout_constraintEnd_toEndOf="parent"
+            <!-- Canonical dropdown and the gear for its selected item. -->
+            <LinearLayout
+                android:id="@+id/row_activation_prompt"
+                style="@style/Widget.App.CompanionEditor.LinkedFieldRow"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/hint_field_activation_prompt" />
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_activation_prompt">
+
+                <TextView
+                    android:id="@+id/field_activation_prompt"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Fill" />
+
+                <ImageButton
+                    android:id="@+id/btn_edit_activation_prompt"
+                    style="@style/Widget.App.Row.Cog"
+                    android:contentDescription="@string/companion_editor_edit_activation_prompt"
+                    android:tooltipText="@string/companion_editor_edit_activation_prompt" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/label_field_core_lorebook"
@@ -237,7 +242,7 @@
                 android:text="@string/persona_core_lorebook_hint"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/field_activation_prompt" />
+                app:layout_constraintTop_toBottomOf="@+id/row_activation_prompt" />
 
             <TextView
                 android:id="@+id/hint_field_core_lorebook"
@@ -250,15 +255,23 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/label_field_core_lorebook" />
 
-            <TextView
-                android:id="@+id/field_core_lorebook"
-                style="@style/Widget.App.Dropdown.CanonicalValue"
-                android:layout_width="0dp"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                app:layout_constraintEnd_toEndOf="parent"
+            <LinearLayout
+                android:id="@+id/row_core_lorebook"
+                style="@style/Widget.App.CompanionEditor.LinkedFieldRow"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/hint_field_core_lorebook" />
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_core_lorebook">
+
+                <TextView
+                    android:id="@+id/field_core_lorebook"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Fill" />
+
+                <ImageButton
+                    android:id="@+id/btn_open_core_lorebook"
+                    style="@style/Widget.App.Row.Cog"
+                    android:contentDescription="@string/companion_editor_open_core_lorebook"
+                    android:tooltipText="@string/companion_editor_open_core_lorebook" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/text_additional_lorebooks"
@@ -270,7 +283,7 @@
                 android:text="@string/persona_additional_lorebooks"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/field_core_lorebook" />
+                app:layout_constraintTop_toBottomOf="@+id/row_core_lorebook" />
 
             <LinearLayout
                 android:id="@+id/additional_lorebooks_list"

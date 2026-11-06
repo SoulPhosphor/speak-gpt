@@ -48,13 +48,9 @@
             app:srcCompat="@drawable/ic_back" />
 
         <TextView
+            style="@style/Widget.App.ActionBar.Title.Compact"
             android:id="@+id/activity_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:text="@string/mem_world_campaign_detail_title"
-            android:textColor="@color/text_title"
-            android:textSize="20sp"
-            android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -62,7 +58,7 @@
 
         <ImageButton
             android:id="@+id/btn_campaign_save"
-            style="@style/Widget.App.ActionBar.SecondaryButton"
+            style="@style/Widget.App.ActionBar.SaveButton"
             android:contentDescription="@string/btn_save"
             android:src="@drawable/ic_save"
             android:tooltipText="@string/btn_save"

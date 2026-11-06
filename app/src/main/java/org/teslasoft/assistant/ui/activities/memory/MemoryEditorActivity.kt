@@ -634,6 +634,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
 
     private fun save(activate: Boolean) {
         if (!ready) {
+            btnHeaderSave?.let { SaveIconFlash.flashError(it) }
             Toast.makeText(this, R.string.mem_edit_still_loading, Toast.LENGTH_SHORT).show()
             return
         }
@@ -641,6 +642,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         // title is the inert empty placeholder.
         val content = activeContentField()?.text?.toString()?.trim().orEmpty()
         if (content.isEmpty()) {
+            btnHeaderSave?.let { SaveIconFlash.flashError(it) }
             Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
             return
         }
@@ -656,7 +658,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         val campaignIds = if (currentScope == "campaign") targets else emptyList()
         val rpIds = if (currentScope == "rp_character") targets else emptyList()
 
-        runOffThread {
+        runOffThread(onFailure = { btnHeaderSave?.let { SaveIconFlash.flashError(it) } }) {
             val store = MemoryStore.getInstance(this)
             val prior = existing ?: memoryId?.let { store.getMemory(it) }
             // Approving a roleplay draft with a Lore Card picked MOVES it onto
@@ -791,12 +793,13 @@ class MemoryEditorActivity : SettingsPageActivity() {
 
     /* ------------------------------ off-thread ------------------------------ */
 
-    private fun runOffThread(work: () -> Unit) {
+    private fun runOffThread(onFailure: (() -> Unit)? = null, work: () -> Unit) {
         Thread {
             try {
                 work()
             } catch (e: Exception) {
                 runOnUiThread {
+                    onFailure?.invoke()
                     Toast.makeText(
                         this,
                         getString(R.string.mem_edit_op_failed, e.message ?: e.javaClass.simpleName),

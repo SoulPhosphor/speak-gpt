@@ -25,14 +25,12 @@ import android.os.Bundle
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 
@@ -43,10 +41,8 @@ class CharactersActivity : SettingsPageActivity() {
 
     private var chatId: String = ""
     private var preferences: Preferences? = null
-    private var personaPreferences: PersonaPreferences? = null
 
     private var rowPersonas: LinearLayout? = null
-    private var textPersonasSubtitle: TextView? = null
     private var rowMyPersonas: LinearLayout? = null
     private var rowActivationPrompts: LinearLayout? = null
     // Lorebooks moved to the Memory Manager (owner ruling, July 8 2026): they
@@ -59,16 +55,8 @@ class CharactersActivity : SettingsPageActivity() {
                 preferences?.setPersonaId(personaId)
                 // This selection belongs to the current chat. It becomes the
                 // new-chat default only after an assistant response succeeds.
-                textPersonasSubtitle?.text = getActivePersonaLabel()
             }
         }
-    }
-
-    private fun getActivePersonaLabel(): String {
-        val personaId = preferences?.getPersonaId() ?: ""
-        if (personaId == "") return getString(R.string.label_tap_to_set)
-        val label = personaPreferences?.getPersona(personaId)?.label ?: ""
-        return if (label != "") label else getString(R.string.label_tap_to_set)
     }
 
     @Suppress("DEPRECATION")
@@ -80,12 +68,10 @@ class CharactersActivity : SettingsPageActivity() {
 
         chatId = intent.getStringExtra("chatId") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
-        personaPreferences = PersonaPreferences.getPersonaPreferences(this)
 
         btnBack = findViewById(R.id.btn_back)
         actionBar = findViewById(R.id.action_bar)
         rowPersonas = findViewById(R.id.row_personas)
-        textPersonasSubtitle = findViewById(R.id.text_personas_subtitle)
         rowMyPersonas = findViewById(R.id.row_my_personas)
         rowActivationPrompts = findViewById(R.id.row_activation_prompts)
 
@@ -120,8 +106,6 @@ class CharactersActivity : SettingsPageActivity() {
     }
 
     private fun initializeRows() {
-        textPersonasSubtitle?.text = getActivePersonaLabel()
-
         rowPersonas?.setOnClickListener {
             personasActivityResultLauncher.launch(Intent(this, PersonasListActivity::class.java))
         }
@@ -136,12 +120,6 @@ class CharactersActivity : SettingsPageActivity() {
         rowActivationPrompts?.setOnClickListener {
             startActivity(Intent(this, ActivationPromptsListActivity::class.java))
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // Persona may have been edited/renamed while away.
-        textPersonasSubtitle?.text = getActivePersonaLabel()
     }
 
     private fun isDarkThemeEnabled(): Boolean {

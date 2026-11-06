@@ -16,6 +16,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.google.android.material.elevation.SurfaceColors
+import org.teslasoft.assistant.R
 
 /**
  * The one place that colors a full-screen settings activity's window and
@@ -24,9 +25,13 @@ import com.google.android.material.elevation.SurfaceColors
  * is a change to this file only.
  */
 object ScreenChrome {
+    private val HEADER_SAVE_IDS = setOf(
+        R.id.btn_save, R.id.btn_header_save, R.id.btn_rule_save,
+        R.id.btn_world_save, R.id.btn_campaign_save, R.id.btn_card_save
+    )
 
-    /** [headerButtons] are trailing header icons (for example Save) that
-     *  share the back button's header-colored background. */
+    /** Trailing icons share the header surface, except save discs whose
+     *  neutral background is owned by Widget.App.ActionBar.SaveButton. */
     fun apply(activity: Activity, actionBar: View?, backButton: View?, vararg headerButtons: View?) {
         val windowColor = SurfaceColors.SURFACE_0.getColor(activity)
         val headerColor = SurfaceColors.SURFACE_4.getColor(activity)
@@ -39,7 +44,11 @@ object ScreenChrome {
         }
         actionBar?.setBackgroundColor(headerColor)
         backButton?.backgroundTintList = ColorStateList.valueOf(headerColor)
-        headerButtons.forEach { it?.backgroundTintList = ColorStateList.valueOf(headerColor) }
+        headerButtons.forEach { button ->
+            if (button != null && button.id !in HEADER_SAVE_IDS) {
+                button.backgroundTintList = ColorStateList.valueOf(headerColor)
+            }
+        }
     }
 
     /**

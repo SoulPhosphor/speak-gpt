@@ -42,7 +42,7 @@ object FavoriteRoutingActions {
      * second (proceed) per the owner's ordering; [onConfirm] runs only on Okay.
      */
     fun confirmRemove(context: Context, onConfirm: () -> Unit) {
-        val actionsView = LayoutInflater.from(context).inflate(R.layout.dialog_two_actions, null)
+        val actionsView = LayoutInflater.from(context).inflate(R.layout.dialog_two_actions_cancel_first, null)
 
         val dialog = MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.favorite_remove_title)
@@ -50,12 +50,12 @@ object FavoriteRoutingActions {
             .setView(actionsView)
             .create()
 
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
             setText(R.string.btn_cancel)
             setOnClickListener { dialog.dismiss() }
         }
 
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
             setText(R.string.okay)
             setOnClickListener {
                 dialog.dismiss()

@@ -42,6 +42,7 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
@@ -369,6 +370,7 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
 
     private fun save(activate: Boolean) {
         if (!ready) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             Toast.makeText(this, R.string.mem_edit_still_loading, Toast.LENGTH_SHORT).show()
             return
         }
@@ -383,13 +385,14 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
     private fun saveAfterTagFlush(activate: Boolean) {
         val text = fieldText?.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             Toast.makeText(this, R.string.model_rule_edit_required, Toast.LENGTH_SHORT).show()
             return
         }
         val targetsJson = ModelIdentityCodec.encode(targets)
         val tagIds = tagChips?.selectedTagIds() ?: emptyList()
 
-        runOffThread {
+        runOffThread(onFailure = { btnSave?.let { SaveIconFlash.flashError(it) } }) {
             val store = MemoryStore.getInstance(this)
             val prior = existing ?: ruleId?.let { store.getModelRule(it) }
             val willBeActive = prior == null || prior.status == "active" || activate
@@ -400,6 +403,7 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
                     } else {
                         R.string.model_rule_edit_model_required
                     }
+                    btnSave?.let { SaveIconFlash.flashError(it) }
                     showValidationSnackbar(message)
                 }
                 return@runOffThread
@@ -431,9 +435,7 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
             store.upsertModelRule(record)
             store.setTagsForRule(id, tagIds)
             runOnUiThread {
-                btnSave?.backgroundTintList = ColorStateList.valueOf(
-                    ResourcesCompat.getColor(resources, R.color.light_green, theme)
-                )
+                btnSave?.let { SaveIconFlash.flash(it) }
                 Toast.makeText(this, R.string.message_saved, Toast.LENGTH_SHORT).show()
                 finish()
             }
@@ -448,12 +450,13 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
             .show()
     }
 
-    private fun runOffThread(work: () -> Unit) {
+    private fun runOffThread(onFailure: (() -> Unit)? = null, work: () -> Unit) {
         Thread {
             try {
                 work()
             } catch (e: Exception) {
                 runOnUiThread {
+                    onFailure?.invoke()
                     Toast.makeText(
                         this,
                         getString(R.string.mem_edit_op_failed, e.message ?: e.javaClass.simpleName),
@@ -480,7 +483,6 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             val barTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = barTint
-            btnSave?.backgroundTintList = barTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -490,7 +492,6 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = barTint
-            btnSave?.backgroundTintList = barTint
         }
     }
 

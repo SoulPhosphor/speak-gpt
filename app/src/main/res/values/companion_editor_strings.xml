@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="companion_editor_saved_toast">Saved</string>
+    <string name="companion_editor_name_required_toast">Companion Name Required</string>
+    <string name="companion_editor_prompt_required_toast">Companion Prompt Required</string>
+    <string name="companion_editor_prompt_required_error">Companion prompt required to save profile.</string>
+    <string name="companion_editor_edit_activation_prompt">Edit Selected Activation Prompt</string>
+    <string name="companion_editor_open_core_lorebook">Open Selected Core Lorebook</string>
 </resources>

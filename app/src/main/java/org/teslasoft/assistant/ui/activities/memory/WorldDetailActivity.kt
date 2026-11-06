@@ -41,6 +41,7 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CardEntryRecord
 import org.teslasoft.assistant.preferences.memory.CardSections
@@ -232,9 +233,13 @@ class WorldDetailActivity : SettingsPageActivity() {
     /* ------------------------------ save ------------------------------ */
 
     private fun save() {
-        if (!ready) return
+        if (!ready) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
+            return
+        }
         val name = fieldName?.text?.toString()?.trim().orEmpty()
         if (name.isEmpty()) {
+            btnSave?.let { SaveIconFlash.flashError(it) }
             Toast.makeText(this, R.string.card_name_required, Toast.LENGTH_SHORT).show()
             return
         }
@@ -260,7 +265,7 @@ class WorldDetailActivity : SettingsPageActivity() {
             createdAt = prior?.createdAt ?: MemoryStore.nowIso()
         )
 
-        runOffThread {
+        runOffThread(onFailure = { btnSave?.let { SaveIconFlash.flashError(it) } }) {
             MemoryStore.getInstance(this).upsertWorld(record)
             runOnUiThread {
                 worldId = id
@@ -268,6 +273,7 @@ class WorldDetailActivity : SettingsPageActivity() {
                 titleView?.setText(R.string.mem_world_detail_title)
                 updateExtraButtons()
                 initialSnapshot = snapshot()
+                btnSave?.let { SaveIconFlash.flash(it) }
                 Toast.makeText(this, R.string.mem_world_saved, Toast.LENGTH_SHORT).show()
                 renderSections()
             }
@@ -500,12 +506,13 @@ class WorldDetailActivity : SettingsPageActivity() {
 
     /* ------------------------------ off-thread ------------------------------ */
 
-    private fun runOffThread(work: () -> Unit) {
+    private fun runOffThread(onFailure: (() -> Unit)? = null, work: () -> Unit) {
         Thread {
             try {
                 work()
             } catch (e: Exception) {
                 runOnUiThread {
+                    onFailure?.invoke()
                     Toast.makeText(
                         this,
                         getString(R.string.mem_world_op_failed, e.message ?: e.javaClass.simpleName),
@@ -531,7 +538,6 @@ class WorldDetailActivity : SettingsPageActivity() {
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
-            btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -540,7 +546,6 @@ class WorldDetailActivity : SettingsPageActivity() {
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
-            btnSave?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
         }
     }
 

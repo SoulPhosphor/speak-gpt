@@ -263,4 +263,21 @@
     <dimen name="chat_selection_outline_width">3dp</dimen>
     <dimen name="chat_selection_outline_dash_length">10dp</dimen>
     <dimen name="chat_selection_outline_dash_gap">6dp</dimen>
+    <dimen name="prompt_editor_action_size">36dp</dimen>
+    <dimen name="prompt_editor_action_top_gap">2dp</dimen>
+    <dimen name="prompt_editor_action_end_inset">4dp</dimen>
+    <dimen name="prompt_editor_action_no_inset">0dp</dimen>
+    <dimen name="field_error_page_inset">24dp</dimen>
+    <dimen name="companion_editor_field_inset">24dp</dimen>
+    <dimen name="companion_editor_linked_field_top_gap">0dp</dimen>
+    <!-- Screen/panel header typography; chat has its own independent family. -->
+    <dimen name="header_title_default_size">24sp</dimen>
+    <dimen name="header_title_compact_size">20sp</dimen>
+    <dimen name="section_title_text_size">18sp</dimen>
+    <dimen name="header_title_size_step">1sp</dimen>
+    <dimen name="header_title_text_height">64sp</dimen>
+    <dimen name="header_title_centered_inset">64dp</dimen>
+    <dimen name="header_title_back_gap">8dp</dimen>
+    <dimen name="header_title_panel_start_inset">20dp</dimen>
+    <dimen name="header_title_floating_top_gap">8dp</dimen>
 </resources>

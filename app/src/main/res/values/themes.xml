@@ -809,18 +809,66 @@
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
-    <!-- The centered title inside Widget.App.ActionBar. Only android:text
-         is left for the instance to set. -->
-    <style name="Widget.App.ActionBar.Title" parent="">
-        <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">wrap_content</item>
+    <!-- Android selects the largest size that fits the bounded two-line area.
+         All numbers live in shared dimensions. Chat never inherits this family. -->
+    <style name="Widget.App.HeaderTitle" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">@dimen/header_title_text_height</item>
+        <item name="android:gravity">center_vertical</item>
         <item name="android:textColor">?attr/appTitleTextColor</item>
-        <item name="android:textSize">24sp</item>
+        <item name="android:textSize">@dimen/header_title_default_size</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:singleLine">false</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:ellipsize">none</item>
+        <item name="android:autoSizeTextType">uniform</item>
+        <item name="android:autoSizeMinTextSize">@dimen/section_title_text_size</item>
+        <item name="android:autoSizeMaxTextSize">@dimen/header_title_default_size</item>
+        <item name="android:autoSizeStepGranularity">@dimen/header_title_size_step</item>
+    </style>
+
+    <style name="Widget.App.ActionBar.Title" parent="Widget.App.HeaderTitle">
+        <item name="android:layout_marginStart">@dimen/header_title_centered_inset</item>
+        <item name="android:layout_marginEnd">@dimen/header_title_centered_inset</item>
+        <item name="android:gravity">center</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
         <item name="layout_constraintStart_toStartOf">parent</item>
         <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <style name="Widget.App.ActionBar.Title.Compact" parent="Widget.App.ActionBar.Title">
+        <item name="android:textSize">@dimen/header_title_compact_size</item>
+        <item name="android:autoSizeMaxTextSize">@dimen/header_title_compact_size</item>
+    </style>
+
+    <style name="Widget.App.ActionBar.Title.BeforeAction" parent="Widget.App.HeaderTitle">
+        <item name="android:layout_marginStart">@dimen/header_title_centered_inset</item>
+        <item name="android:layout_marginEnd">@dimen/header_title_back_gap</item>
+        <item name="android:gravity">center</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintTop_toTopOf">parent</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+    </style>
+    <style name="Widget.App.ActionBar.Title.BeforeAction.Compact" parent="Widget.App.ActionBar.Title.BeforeAction">
+        <item name="android:textSize">@dimen/header_title_compact_size</item>
+        <item name="android:autoSizeMaxTextSize">@dimen/header_title_compact_size</item>
+    </style>
+
+    <!-- Standalone top headers without a containing action bar. -->
+    <style name="Widget.App.HeaderTitle.Floating" parent="Widget.App.HeaderTitle">
+        <item name="android:layout_marginStart">@dimen/header_title_centered_inset</item>
+        <item name="android:layout_marginEnd">@dimen/header_title_centered_inset</item>
+        <item name="android:layout_marginTop">@dimen/header_title_floating_top_gap</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <!-- A selection count already uses the minimum title size, so it wraps at
+         that size rather than shrinking below the approved section-heading floor. -->
+    <style name="Widget.App.HeaderTitle.Selection" parent="Widget.App.HeaderTitle">
+        <item name="android:autoSizeTextType">none</item>
+        <item name="android:textSize">@dimen/section_title_text_size</item>
+        <item name="android:gravity">center</item>
     </style>
 
     <!-- Left-aligned title for any Widget.App.ActionBar header that also has
@@ -836,15 +884,8 @@
          different id, so each instance sets its own
          app:layout_constraintEnd_toStartOf pointing at that icon (or, with
          two or more chained icons, the one nearest the title). -->
-    <style name="Widget.App.ActionBar.Title.NearBack" parent="">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginStart">8dp</item>
-        <item name="android:ellipsize">end</item>
-        <item name="android:maxLines">1</item>
-        <item name="android:textColor">?attr/appTitleTextColor</item>
-        <item name="android:textSize">24sp</item>
-        <item name="android:textStyle">bold</item>
+    <style name="Widget.App.ActionBar.Title.NearBack" parent="Widget.App.HeaderTitle">
+        <item name="android:layout_marginStart">@dimen/header_title_back_gap</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintHorizontal_bias">0.0</item>
         <item name="layout_constraintStart_toEndOf">@+id/btn_back</item>
@@ -880,6 +921,12 @@
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintEnd_toEndOf">parent</item>
         <item name="layout_constraintTop_toTopOf">parent</item>
+    </style>
+
+    <!-- Header save discs share neutral chrome and state-aware icon coloring. -->
+    <style name="Widget.App.ActionBar.SaveButton" parent="Widget.App.ActionBar.SecondaryButton">
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:tint">@color/save_icon_tint</item>
     </style>
 
     <!-- ADDITIONAL trailing header icons (owner approval, July 30 2026): any
@@ -933,7 +980,7 @@
          closing is more useful than a bare "Close" on an icon-only
          button).
          Widget.App.ActionBar.Title.LeftAligned is the title for this
-         family: left-aligned and ellipsized (it shares the row with the
+         family: left-aligned and bounded before the close button (it shares the row with the
          close button, so it can't center across the whole bar the way the
          plain Title does) at 20sp, not 24sp - a deliberate, smaller size
          for this variant, not a step of the size rollout the plain Title
@@ -963,16 +1010,11 @@
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
-    <style name="Widget.App.ActionBar.Title.LeftAligned" parent="">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginStart">20dp</item>
-        <item name="android:layout_marginEnd">8dp</item>
-        <item name="android:ellipsize">end</item>
-        <item name="android:maxLines">1</item>
-        <item name="android:textColor">?attr/appTitleTextColor</item>
-        <item name="android:textSize">20sp</item>
-        <item name="android:textStyle">bold</item>
+    <style name="Widget.App.ActionBar.Title.LeftAligned" parent="Widget.App.HeaderTitle">
+        <item name="android:layout_marginStart">@dimen/header_title_panel_start_inset</item>
+        <item name="android:layout_marginEnd">@dimen/header_title_back_gap</item>
+        <item name="android:textSize">@dimen/header_title_compact_size</item>
+        <item name="android:autoSizeMaxTextSize">@dimen/header_title_compact_size</item>
         <item name="layout_constraintBottom_toBottomOf">parent</item>
         <item name="layout_constraintEnd_toStartOf">@+id/btn_close</item>
         <item name="layout_constraintStart_toStartOf">parent</item>
@@ -1016,6 +1058,14 @@
         <item name="android:textSize">13sp</item>
     </style>
 
+    <!-- Temporary save feedback changes only the drawable tint, never the background. -->
+    <style name="Widget.App.SaveIcon.Success" parent="">
+        <item name="android:tint">@color/light_green</item>
+    </style>
+    <style name="Widget.App.SaveIcon.Error" parent="">
+        <item name="android:tint">?attr/colorError</item>
+    </style>
+
     <!-- Inline validation / warning line directly under a field's Box. Color
          and size come only from here so a theme or font change reaches every
          field error at once. Instances set only text, visibility and any
@@ -1026,6 +1076,12 @@
         <item name="android:layout_marginTop">4dp</item>
         <item name="android:textColor">?attr/colorError</item>
         <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="Widget.App.Field.Error.PageInset" parent="Widget.App.Field.Error">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginStart">@dimen/field_error_page_inset</item>
+        <item name="android:layout_marginEnd">@dimen/field_error_page_inset</item>
     </style>
 
     <!-- Name Style screen: the live, centered preview of the chosen name.
@@ -1115,6 +1171,17 @@
     <!-- Edit Companion: one linked (additional) lorebook card. The card uses the
          Quick Settings standalone segment surface and outline; the actions are
          bare borderless icons like the Quick Settings gear. -->
+    <style name="Widget.App.CompanionEditor.LinkedFieldRow" parent="Widget.App.Page.ControlRow">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginTop">@dimen/companion_editor_linked_field_top_gap</item>
+        <item name="android:layout_marginStart">@dimen/companion_editor_field_inset</item>
+        <item name="android:layout_marginEnd">@dimen/companion_editor_field_inset</item>
+    </style>
+    <style name="Widget.App.Dropdown.CanonicalValue.Fill" parent="Widget.App.Dropdown.CanonicalValue">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+
     <style name="Widget.App.CompanionEditor.LoreBookCard" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -1372,7 +1439,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:paddingTop">24dp</item>
         <item name="android:textColor">?attr/colorPrimary</item>
-        <item name="android:textSize">18sp</item>
+        <item name="android:textSize">@dimen/section_title_text_size</item>
         <item name="android:textStyle">bold</item>
     </style>
 
@@ -2954,6 +3021,16 @@
         <item name="android:gravity">top|start</item>
         <item name="android:inputType">textMultiLine|textCapSentences</item>
         <item name="android:minLines">10</item>
+    </style>
+
+    <!-- Prompt-frame actions retain their compact geometry and use the shared action color. -->
+    <style name="Widget.App.PromptEditor.Menu" parent="Widget.App.QuickTile.EditButton">
+        <item name="android:layout_width">@dimen/prompt_editor_action_size</item>
+        <item name="android:layout_height">@dimen/prompt_editor_action_size</item>
+        <item name="android:layout_marginTop">@dimen/prompt_editor_action_top_gap</item>
+        <item name="android:layout_marginEnd">@dimen/prompt_editor_action_end_inset</item>
+        <item name="android:padding">@dimen/prompt_editor_action_no_inset</item>
+        <item name="android:scaleType">centerInside</item>
     </style>
 
     <style name="Widget.App.PromptTab.Add" parent="">

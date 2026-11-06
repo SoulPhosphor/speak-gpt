@@ -76,31 +76,20 @@
 
         <!-- Normal modes: centered "Avatar Image Gallery" title. -->
         <TextView
+            style="@style/Widget.App.ActionBar.Title.BeforeAction.Compact"
             android:id="@+id/activity_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:text="@string/title_profile_images"
-            android:textColor="@color/text_title"
-            android:textSize="20sp"
-            android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btn_select"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
         <!-- Selection Mode: live count, e.g. "4 Selected". -->
         <TextView
+            style="@style/Widget.App.HeaderTitle.Selection"
             android:id="@+id/text_selection_count"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
             android:layout_marginEnd="4dp"
-            android:ellipsize="end"
-            android:gravity="center"
-            android:maxLines="1"
-            android:textColor="@color/text_title"
-            android:textSize="18sp"
-            android:textStyle="bold"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/select_all_container"
