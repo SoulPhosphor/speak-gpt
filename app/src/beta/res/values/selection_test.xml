@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Beta build only. Temporary highlight auto-scroll experiment; remove with
+     the experiment. -->
+<resources>
+    <string name="selection_test_title">Selection Test</string>
+    <string name="selection_test_switch_title">App Edge Scrolling</string>
+    <string name="selection_test_switch_hint">Off: Android alone. On: while a highlight handle is held near the top or bottom edge of the text box, the app scrolls the text.</string>
+    <string name="selection_test_line">Line %1$d. Sample text for testing how highlighting behaves while the text scrolls.</string>
+    <string name="selection_test_link_line">Line %1$d. Sample link: %2$s</string>
+    <string name="selection_test_link_url">https://example.com/line-%1$d</string>
+    <string name="selection_test_status_none">No Highlight · Scroll: %1$d px · Changes: %2$d</string>
+    <string name="selection_test_status">Start: Line %1$d · End: Line %2$d · Scroll: %3$d px\nChanges: %4$d · Last Change: %5$d ms Ago · Longest Gap: %6$d ms\nEdge Scrolling: %7$s</string>
+    <string name="selection_test_state_running">Running</string>
+    <string name="selection_test_state_stopped">Stopped</string>
+    <string name="selection_test_state_off">Off</string>
+
+    <!-- Behavior values for the experiment. -->
+    <dimen name="selection_test_edge_zone">48dp</dimen>
+    <dimen name="selection_test_scroll_speed_per_second">480dp</dimen>
+    <integer name="selection_test_no_movement_stop_ms">300</integer>
+
+    <!-- Appearance for the experiment screen. -->
+    <dimen name="selection_test_status_gap">12dp</dimen>
+    <dimen name="selection_test_box_gap">12dp</dimen>
+    <dimen name="selection_test_box_padding">12dp</dimen>
+    <dimen name="selection_test_text_size">16sp</dimen>
+
+    <style name="Widget.App.SelectionTest.Body" parent="Widget.App.Page.Content">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="layout_constraintTop_toBottomOf">@id/action_bar</item>
+        <item name="layout_constraintBottom_toBottomOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+    </style>
+
+    <style name="Widget.App.SelectionTest.Status" parent="Widget.App.Row.Subtitle">
+        <item name="android:layout_marginTop">@dimen/selection_test_status_gap</item>
+    </style>
+
+    <style name="Widget.App.SelectionTest.TextBox" parent="Widget.App.Field.Box">
+        <item name="android:layout_height">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginTop">@dimen/selection_test_box_gap</item>
+        <item name="android:padding">@dimen/selection_test_box_padding</item>
+        <item name="android:textColor">?attr/appRowTitleColor</item>
+        <item name="android:textSize">@dimen/selection_test_text_size</item>
+        <item name="android:scrollbars">vertical</item>
+        <item name="android:isScrollContainer">true</item>
+    </style>
+</resources>

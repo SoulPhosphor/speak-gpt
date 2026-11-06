@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Beta build only. Temporary highlight auto-scroll experiment; remove with
+     the experiment. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name="org.teslasoft.assistant.experiment.SelectionAutoScrollTestActivity"
+            android:exported="true"
+            android:label="@string/selection_test_title"
+            android:taskAffinity="org.teslasoft.assistant.selectiontest">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

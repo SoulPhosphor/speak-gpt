@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Beta build only. Temporary highlight auto-scroll experiment; remove with
+     the experiment. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/selection_test_title" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <LinearLayout
+        android:id="@+id/scroll"
+        style="@style/Widget.App.SelectionTest.Body">
+
+        <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+            <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                <TextView
+                    style="@style/Widget.App.Row.Title"
+                    android:text="@string/selection_test_switch_title" />
+
+                <TextView
+                    style="@style/Widget.App.Row.Subtitle"
+                    android:text="@string/selection_test_switch_hint" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switch_edge_scrolling"
+                style="@style/Widget.App.Row.Switch" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/status"
+            style="@style/Widget.App.SelectionTest.Status" />
+
+        <org.teslasoft.assistant.experiment.EdgeScrollTestTextView
+            android:id="@+id/test_text"
+            style="@style/Widget.App.SelectionTest.TextBox" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
