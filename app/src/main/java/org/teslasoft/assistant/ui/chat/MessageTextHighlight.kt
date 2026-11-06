@@ -264,8 +264,11 @@ internal class MessageTextHighlight(private val context: Context) {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (gestureStartedHighlight) {
+                        // The release belongs to the highlight alone: taking
+                        // it keeps Selection Mode from also toggling the
+                        // message, and the text view never needed it.
                         finishDrag()
-                        return false
+                        return true
                     }
                     if (!moved) {
                         if (isActive) {

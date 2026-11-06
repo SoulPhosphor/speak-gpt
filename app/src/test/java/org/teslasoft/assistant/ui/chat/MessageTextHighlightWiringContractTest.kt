@@ -34,6 +34,16 @@ class MessageTextHighlightWiringContractTest {
     }
 
     @Test
+    fun releasingAHighlightingPressIsNotAlsoASelectionModeToggle() {
+        val highlight = source("src/main/java/org/teslasoft/assistant/ui/chat/MessageTextHighlight.kt")
+
+        assertTrue(
+            Regex("""if \(gestureStartedHighlight\) \{(\s*//[^\n]*)*\s+finishDrag\(\)\s+return true""")
+                .containsMatchIn(highlight)
+        )
+    }
+
+    @Test
     fun backClearsAHighlightBeforeLeavingSelectionModeOrTheChat() {
         val activity = source(chatActivity)
 
