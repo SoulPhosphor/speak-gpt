@@ -61,26 +61,6 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
-            <!-- Titles are retired (canonical recovery plan §3.1): the field is
-                 hidden and never edited. The inert legacy column is preserved in
-                 the database but never shown or written with meaningful text. -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/layout_mem_title"
-                style="?attr/textInputOutlinedDenseStyle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:visibility="gone"
-                android:hint="@string/mem_edit_hint_title">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_mem_title"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="textCapSentences"
-                    android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
-
             <TextView
                 style="@style/Widget.App.Field.Label.PageTop"
                 android:labelFor="@+id/field_mem_content"
@@ -97,6 +77,21 @@
                     android:id="@+id/btn_expand_content"
                     style="@style/Widget.App.Field.ExpandableBox.Toggle" />
             </FrameLayout>
+
+            <TextView
+                style="@style/Widget.App.Field.Label.PageTop"
+                android:labelFor="@+id/field_mem_title"
+                android:text="@string/memory_browser_title_label" />
+
+            <TextView
+                style="@style/Widget.App.Field.Hint"
+                android:text="@string/memory_browser_title_hint" />
+
+            <EditText
+                android:id="@+id/field_mem_title"
+                style="@style/Widget.App.Field.Box.MemoryTitle"
+                android:inputType="textCapSentences|textMultiLine"
+                android:importantForAutofill="no" />
 
             <!-- Scope, Type and Importance (owner order, Nov 3 2026): each
                  label has its information icon right after it and the

@@ -117,7 +117,9 @@ class Enforcer private constructor(private val appContext: Context) {
         val userPersonaId: String?,
         /** Quick Settings Project selection — a ranking boost, never a gate
          *  (owner_approved_rules §4 rev 3). */
-        val projectId: String?
+        val projectId: String?,
+        val manualMemoryIds: List<String> = emptyList(),
+        val automaticMemoryEnabled: Boolean = true
     )
 
     /** The rendered prompt and the exact final entry selection behind it. */
@@ -142,6 +144,9 @@ class Enforcer private constructor(private val appContext: Context) {
     fun assembleTurnWithAttribution(input: TurnInput): AssemblyResult? {
         val store = MemoryStore.getInstance(appContext)
         val notes = ArrayList<String>()
+        val manualMemories = ManualMemoryPriority.resolve(input.manualMemoryIds, store::getMemory)
+            .map { toAssembled(it, 1f, 1f) }
+        if (!input.automaticMemoryEnabled) return manualOnlyAssembly(input, manualMemories)
 
         // Operating defaults: only the neutral retrieval_policy, and only into
         // an EMPTY policy row. No default modes are provisioned — the app
@@ -167,7 +172,9 @@ class Enforcer private constructor(private val appContext: Context) {
             MemoryCompanionSync.ensureCompanionForPersona(appContext, it)
         }
         if (companion?.status == "draft") companion = null
-        if (companion != null && companion.memoryParticipation == "none") return null
+        if (companion != null && companion.memoryParticipation == "none") {
+            return manualOnlyAssembly(input, manualMemories)
+        }
         val scopeCompanionId =
             if (companion != null && companion.memoryParticipation == "full") companion.companionId else null
 
@@ -243,7 +250,9 @@ class Enforcer private constructor(private val appContext: Context) {
             notes.add("retrieval failed: ${e.message}")
             emptyList()
         }
-        val pool = poolScored.map { toAssembled(it.memory, it.score, it.similarity) }
+        val manualIds = manualMemories.map { it.memoryId }.toSet()
+        val pool = poolScored.filterNot { it.memory.memoryId in manualIds }
+            .map { toAssembled(it.memory, it.score, it.similarity) }
 
         // Lore notes: the user's hand-written tier, same budget selection as
         // the classic path (core-book-first order is preserved from the
@@ -396,7 +405,8 @@ class Enforcer private constructor(private val appContext: Context) {
         val cardCut = ArrayList<Pair<String, String>>()
         val directKept = ArrayList<Pair<AssembledCardEntry, String>>()
         var directChars = 0
-        val directAvailable = (policy.charBudget - loreChars).coerceAtLeast(0)
+        val manualChars = manualMemories.sumOf(PromptAssembler::memoryCost)
+        val directAvailable = (policy.charBudget - loreChars - manualChars).coerceAtLeast(0)
         for (f in cardDirect) {
             val a = assembleCard(f)
             val cost = cardCost(a)
@@ -423,15 +433,18 @@ class Enforcer private constructor(private val appContext: Context) {
         val cooled = ArrayList<Pair<AssembledMemory, Long>>()
         val budgetCut = ArrayList<AssembledMemory>()
         val memoryAvailable = (policy.charBudget - loreChars - directChars).coerceAtLeast(0)
-        var memoryChars = 0
+        // Explicit attachments reserve both count and character room before auto-fill.
+        // They stay whole even above the retrieval budget; request-capacity checks
+        // still measure the complete final prompt before dispatch.
+        var memoryChars = manualChars
         val turnNow = turn
-        val selection = if (memoryAvailable == 0 && pool.isNotEmpty()) {
+        val selection = if (memoryChars >= memoryAvailable && pool.isNotEmpty()) {
             notes.add("no character budget remains for memories after lore and card entries")
             RetrievalBackfill.Selection(emptyList<AssembledMemory>(), 0, false)
         } else {
             RetrievalBackfill.select(
                 pool,
-                policy.topK,
+                ManualMemoryPriority.remainingSlots(policy.topK, manualMemories.size),
                 scanCap,
                 isMandatory = {
                     ImportanceRanking.isMandatory(it.importance.toDouble(), useImportanceRatings)
@@ -459,7 +472,7 @@ class Enforcer private constructor(private val appContext: Context) {
                 }
             }
         }
-        val kept = selection.kept
+        val kept = manualMemories + selection.kept
         if (selection.scanCapReached) {
             notes.add(
                 "candidate scan cap ($scanCap) reached before ${policy.topK} memories survived filtering"
@@ -606,6 +619,19 @@ class Enforcer private constructor(private val appContext: Context) {
         }
     }
 
+    /** An explicit attachment remains usable with automatic recall switched off. */
+    private fun manualOnlyAssembly(input: TurnInput, memories: List<AssembledMemory>): AssemblyResult? {
+        if (memories.isEmpty()) return null
+        val lore = LoreBookBudget.select(
+            input.loreMatches, LoreBookStore.MAX_INJECTED_ENTRIES, LoreBookStore.MAX_INJECTED_CHARS
+        )
+        val prompt = PromptAssembler.render(AssemblyComponents(
+            memories = memories,
+            loreNotes = lore.kept.map { LoreNote(it.entry.label, it.entry.content) }
+        ))
+        return AssemblyResult(prompt, memories.map { it.memoryId }, lore.injectedEntryIds)
+    }
+
     /* ------------------------------------------------------------------ */
     /* helpers                                                             */
     /* ------------------------------------------------------------------ */
@@ -729,44 +755,14 @@ class Enforcer private constructor(private val appContext: Context) {
         )
     }
 
-    private fun toAssembled(m: RetrievableMemory, score: Float, similarity: Float): AssembledMemory {
-        var handling: List<String> = emptyList()
-        var neverAssume: List<String> = emptyList()
-        m.protectionJson?.takeIf { it.isNotBlank() }?.let {
-            try {
-                val p = JSONObject(it)
-                if (p.optBoolean("is_protected", false) ||
-                    p.has("handling") || p.has("never_assume")
-                ) {
-                    handling = jsonToList(p.optJSONArray("handling"))
-                    neverAssume = jsonToList(p.optJSONArray("never_assume"))
-                }
-            } catch (_: Exception) { /* unparseable protection: memory still renders, unprotected fields empty */ }
-        }
-        return AssembledMemory(
-            memoryId = m.memoryId,
-            content = m.content,
-            handling = handling,
-            neverAssume = neverAssume,
-            score = score,
-            similarity = similarity,
-            importance = m.importance ?: 0,
-            typeId = m.typeId
-        )
-    }
+    private fun toAssembled(m: RetrievableMemory, score: Float, similarity: Float): AssembledMemory =
+        ManualMemoryPriority.assemble(m, score, similarity)
 
     /** A short label for a memory in the diagnostic assembly log. Titles are
      *  retired (§3.1), so the label is a first-line content preview — never a
      *  title; the full memory id is already appended to each line's detail. */
     private fun memLogLabel(m: AssembledMemory): String =
         m.content.substringBefore('\n').trim().take(48).ifEmpty { m.memoryId }
-
-    private fun jsonToList(arr: JSONArray?): List<String> {
-        if (arr == null) return emptyList()
-        val out = ArrayList<String>(arr.length())
-        for (i in 0 until arr.length()) arr.optString(i)?.takeIf { it.isNotBlank() }?.let { out.add(it) }
-        return out
-    }
 
     /** Persist suppressed memory↔lore pairs — a silent disagreement between the
      *  user's hand-written lore and a retrieved memory is the one thing the

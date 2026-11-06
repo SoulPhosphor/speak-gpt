@@ -55,14 +55,32 @@
             android:id="@+id/activity_title"
             style="@style/Widget.App.ActionBar.Title.NearBack"
             android:text="@string/title_memories"
-            app:layout_constraintEnd_toStartOf="@+id/btn_action_secondary" />
+            app:layout_constraintEnd_toStartOf="@+id/btn_embedding_warning" />
 
         <!-- Optional secondary action (e.g. the browser's Companions link). Sits
              left of the primary action; hidden unless the screen supplies an
              icon, in which case it collapses to a point next to btn_action. -->
         <ImageButton
+            android:id="@+id/btn_embedding_warning"
+            style="@style/Widget.App.ActionBar.ChainedButton.Primary"
+            android:src="@drawable/ic_warning"
+            android:contentDescription="@string/memory_embedding_warning"
+            android:tooltipText="@string/memory_embedding_warning"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@+id/btn_action_secondary" />
+
+        <ImageButton
             android:id="@+id/btn_action_secondary"
             style="@style/Widget.App.ActionBar.ChainedButton"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@+id/btn_icon_legend" />
+
+        <ImageButton
+            android:id="@+id/btn_icon_legend"
+            style="@style/Widget.App.ActionBar.ChainedButton.Primary"
+            android:src="@drawable/ic_map"
+            android:contentDescription="@string/memory_browser_icon_legend"
+            android:tooltipText="@string/memory_browser_icon_legend"
             android:visibility="gone"
             app:layout_constraintEnd_toStartOf="@+id/btn_action" />
 
@@ -77,7 +95,7 @@
 
     <!-- Tools line (owner design, Nov 3 2026; Memories | Pending words from
          the July 8 2026 two-mode design): the search toggle and filter menu
-         on the left, the mode words on the right with the filtered icon
+         on the right, the mode words on the left with the filtered icon
          after the current one, and the "N Memories Pending" count line under
          the words (hidden when none are pending). Only the memory browser
          opts in; other list screens keep this collapsed. -->
@@ -89,7 +107,31 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/action_bar">
 
+        <include layout="@layout/view_memory_selection_controls" />
+
         <LinearLayout style="@style/Widget.App.ListTools.Row">
+
+            <TextView
+                android:id="@+id/btn_mode_memories"
+                style="@style/Widget.App.ListTools.ModeWord"
+                android:text="@string/mem_mode_memories" />
+
+            <ImageView
+                android:id="@+id/filtered_memories"
+                style="@style/Widget.App.ListTools.FilteredIcon" />
+
+            <TextView android:id="@+id/mode_separator" style="@style/Widget.App.ListTools.ModeSeparator" />
+
+            <TextView
+                android:id="@+id/btn_mode_pending"
+                style="@style/Widget.App.ListTools.ModeWord"
+                android:text="@string/mem_mode_pending" />
+
+            <ImageView
+                android:id="@+id/filtered_pending"
+                style="@style/Widget.App.ListTools.FilteredIcon" />
+
+            <Space style="@style/Widget.App.ListTools.Spacer" />
 
             <ImageButton
                 android:id="@+id/btn_search_toggle"
@@ -107,28 +149,6 @@
                 android:src="@drawable/ic_more_vert"
                 android:tooltipText="@string/mem_filter_open"
                 android:visibility="gone" />
-
-            <Space style="@style/Widget.App.ListTools.Spacer" />
-
-            <TextView
-                android:id="@+id/btn_mode_memories"
-                style="@style/Widget.App.ListTools.ModeWord"
-                android:text="@string/mem_mode_memories" />
-
-            <ImageView
-                android:id="@+id/filtered_memories"
-                style="@style/Widget.App.ListTools.FilteredIcon" />
-
-            <TextView style="@style/Widget.App.ListTools.ModeSeparator" />
-
-            <TextView
-                android:id="@+id/btn_mode_pending"
-                style="@style/Widget.App.ListTools.ModeWord"
-                android:text="@string/mem_mode_pending" />
-
-            <ImageView
-                android:id="@+id/filtered_pending"
-                style="@style/Widget.App.ListTools.FilteredIcon" />
         </LinearLayout>
 
         <TextView

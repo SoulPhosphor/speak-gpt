@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.App.Dialog.Actions">
+    <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Dialog.Actions.EndRow">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_embedding_add"
+            style="@style/AppButton.Primary.DialogAction"
+            android:text="@string/memory_embedding_add" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_embedding_okay"
+            style="@style/AppButton.Primary.DialogAction"
+            android:text="@string/btn_ok" />
+        <androidx.constraintlayout.helper.widget.Flow
+            style="@style/Widget.App.Dialog.Actions.EndRowFlow"
+            app:constraint_referenced_ids="btn_embedding_add,btn_embedding_okay" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

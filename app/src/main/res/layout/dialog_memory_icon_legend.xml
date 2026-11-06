@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.App.MemoryBrowser.DialogContent">
+    <ScrollView style="@style/Widget.App.MemoryBrowser.LegendScroll">
+        <LinearLayout style="@style/Widget.App.Page.Content">
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+                <ImageView
+                    style="@style/Widget.App.Row.Icon.Primary"
+                    android:src="@drawable/ic_mem_person"
+                    android:contentDescription="@null" />
+                <TextView style="@style/Widget.App.Row.Title.Fill" android:text="@string/memory_browser_legend_real_life" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+                <ImageView
+                    style="@style/Widget.App.Row.Icon.Primary"
+                    android:src="@drawable/ic_mem_global"
+                    android:contentDescription="@null" />
+                <TextView style="@style/Widget.App.Row.Title.Fill" android:text="@string/memory_browser_legend_global" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+                <ImageView
+                    style="@style/Widget.App.Row.Icon.Primary"
+                    android:src="@drawable/ic_mem_companion"
+                    android:contentDescription="@null" />
+                <TextView style="@style/Widget.App.Row.Title.Fill" android:text="@string/memory_browser_legend_companion" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+                <ImageView
+                    style="@style/Widget.App.Row.Icon.Primary"
+                    android:src="@drawable/ic_mem_draft"
+                    android:contentDescription="@null" />
+                <TextView style="@style/Widget.App.Row.Title.Fill" android:text="@string/memory_browser_legend_project" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+                <ImageView
+                    style="@style/Widget.App.Row.Icon.Primary"
+                    android:src="@drawable/ic_mem_theater"
+                    android:contentDescription="@null" />
+                <TextView style="@style/Widget.App.Row.Title.Fill" android:text="@string/memory_browser_legend_rp" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+                <ImageView
+                    style="@style/Widget.App.Row.Icon.Primary"
+                    android:src="@drawable/ic_mem_public"
+                    android:contentDescription="@null" />
+                <TextView style="@style/Widget.App.Row.Title.Fill" android:text="@string/memory_browser_legend_world" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+    <LinearLayout style="@style/Widget.App.Dialog.Actions">
+        <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Dialog.Actions.EndRow">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_legend_okay"
+                style="@style/AppButton.Primary.DialogAction"
+                android:text="@string/btn_ok"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
+</LinearLayout>

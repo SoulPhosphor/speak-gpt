@@ -1307,13 +1307,13 @@
     </style>
 
     <!-- Memory browser tools line (owner design, Nov 3 2026): the search
-         and filter-menu icons on the left, the Memories | Pending words on
-         the right, and the pending count beneath the words. -->
+         and filter-menu icons on the right, the Memories | Pending words on
+         the left, and the pending count beneath the words. -->
     <style name="Widget.App.ListTools.Container" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">@dimen/list_tools_row_margin_top</item>
-        <item name="android:gravity">end</item>
+        <item name="android:gravity">start</item>
         <item name="android:orientation">vertical</item>
         <item name="android:paddingStart">@dimen/list_tools_row_padding_horizontal</item>
         <item name="android:paddingEnd">@dimen/list_tools_row_padding_horizontal</item>
@@ -1367,7 +1367,7 @@
     </style>
 
     <!-- Shown right after the current mode word while filters are on. Hidden
-         as gone, so it takes no room until it shows; the right-aligned line
+         as gone, so it takes no room until it shows; the mode group
          then grows to make room for it. Its color is set here only. -->
     <style name="Widget.App.ListTools.FilteredIcon" parent="">
         <item name="android:layout_width">@dimen/list_tools_filtered_icon_size</item>
@@ -3348,5 +3348,124 @@
         <item name="android:layout_marginStart">@dimen/restore_inline_gap</item>
         <item name="android:textSize">@dimen/restore_progress_text_size</item>
         <item name="android:paddingTop">0dp</item>
+    </style>
+    <!-- Memory browser only: quick-settings surface and outline, existing card corners. -->
+    <style name="Widget.App.MemoryBrowser.Card" parent="">
+        <item name="android:background">@drawable/bg_memory_browser_card</item>
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginHorizontal">@dimen/memory_browser_card_horizontal_margin</item>
+        <item name="android:layout_marginVertical">@dimen/memory_browser_card_vertical_margin</item>
+        <item name="android:minHeight">@dimen/memory_browser_card_min_height</item>
+    </style>
+
+    <style name="Widget.App.MemoryBrowser.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.SelectionCheckBox" parent="Widget.App.CheckOption.CheckBox">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.Body" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingTop">@dimen/memory_browser_content_vertical_padding</item>
+        <item name="android:paddingBottom">@dimen/memory_browser_content_vertical_padding</item>
+        <item name="android:layout_marginStart">@dimen/memory_browser_content_start</item>
+        <item name="android:layout_marginEnd">@dimen/memory_browser_content_end</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.Title" parent="Widget.App.Field.Label">
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:textSize">@dimen/memory_browser_title_text_size</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.Badge" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/memory_badge_bg</item>
+        <item name="android:paddingHorizontal">@dimen/memory_browser_badge_horizontal_padding</item>
+        <item name="android:paddingVertical">@dimen/memory_browser_badge_vertical_padding</item>
+        <item name="android:textColor">?attr/colorOnTertiaryContainer</item>
+        <item name="android:textSize">@dimen/memory_browser_metadata_text_size</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.Tags" parent="Widget.App.Field.Hint">
+        <item name="android:layout_marginTop">@dimen/memory_browser_tags_gap</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textSize">@dimen/memory_browser_metadata_text_size</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.Note" parent="Widget.App.Field.Hint">
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.PendingActions" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.PendingAction" parent="Widget.App.Field.Label">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:paddingVertical">@dimen/memory_browser_action_vertical_padding</item>
+        <item name="android:paddingEnd">@dimen/memory_browser_action_end_padding</item>
+        <item name="android:textSize">@dimen/memory_browser_action_text_size</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.PendingAction.Last" parent="Widget.App.MemoryBrowser.PendingAction">
+        <item name="android:paddingEnd">0dp</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.ImageHint" parent="Widget.App.Row.Icon">
+        <item name="android:layout_width">@dimen/memory_browser_hint_size</item>
+        <item name="android:layout_height">@dimen/memory_browser_hint_size</item>
+        <item name="android:layout_marginTop">@dimen/memory_browser_content_vertical_padding</item>
+        <item name="android:layout_marginEnd">@dimen/memory_browser_hint_margin_end</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.OpenButton" parent="Widget.App.QuickTile.EditButton">
+        <item name="android:layout_width">@dimen/memory_browser_open_size</item>
+        <item name="android:layout_height">@dimen/memory_browser_open_size</item>
+        <item name="android:padding">@dimen/memory_browser_open_padding</item>
+        <item name="android:layout_marginEnd">@dimen/memory_browser_open_margin_end</item>
+        <item name="android:tint">?attr/appRowSubtitleColor</item>
+        <item name="android:layout_marginTop">@dimen/memory_browser_hint_action_gap</item>
+        <item name="tint">?attr/appRowSubtitleColor</item>
+        <item name="layout_goneMarginTop">0dp</item>
+    </style>
+    <style name="Widget.App.Row.Title.Fill" parent="Widget.App.Row.Title">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+    <style name="Widget.App.Row.Icon.Primary" parent="Widget.App.Row.Icon">
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+    <style name="Widget.App.ActionBar.ChainedButton.Primary" parent="Widget.App.ActionBar.ChainedButton">
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+    <style name="Widget.App.Field.Box.MemoryTitle" parent="Widget.App.Field.Box">
+        <item name="android:gravity">top|start</item>
+        <item name="android:minLines">2</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:scrollbars">vertical</item>
+        <item name="android:isScrollContainer">true</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.DialogContent" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+    <style name="Widget.App.MemoryBrowser.LegendScroll" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:fillViewport">false</item>
+    </style>
+    <style name="Widget.App.Include.PendingMemoryStrip" parent="Widget.App.Include.Container">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginHorizontal">@dimen/memory_attachment_strip_horizontal_margin</item>
+        <item name="android:layout_marginBottom">@dimen/memory_attachment_strip_bottom_gap</item>
+        <item name="android:elevation">@dimen/memory_attachment_strip_elevation</item>
     </style>
 </resources>

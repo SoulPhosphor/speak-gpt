@@ -748,6 +748,18 @@ class Preferences internal constructor(
 
     /** Chat Behaviors: whether messages may be newly hidden from the AI.
      *  Off by default. Turning it off never changes messages already hidden. */
+    fun getUseMemoryTypeImageHints(): Boolean = getGlobalBoolean("memory_browser_image_hints", true)
+
+    fun setUseMemoryTypeImageHints(state: Boolean) {
+        putGlobalBoolean("memory_browser_image_hints", state, true)
+    }
+
+    fun getShowMemoryText(): Boolean = getGlobalBoolean("memory_browser_show_text", true)
+
+    fun setShowMemoryText(state: Boolean) {
+        putGlobalBoolean("memory_browser_show_text", state, true)
+    }
+
     fun getAllowMessageVisibility(): Boolean =
         getGlobalBoolean("chat_allow_message_visibility", false)
 

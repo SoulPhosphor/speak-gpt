@@ -56,7 +56,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * The full-screen memory add/edit form (Phase 5 Stage 2.2). Replaces the old
  * pop-up editor — the owner's device mishandles large dialogs, so anything with
  * this many fields opens as its own screen. Fields, per owner_approved_rules
- * §§2/5/6/8: title (required) + content, a Type dropdown (six types with their
+ * §§2/5/6/8: optional browser title + required content, a Type dropdown (six types with their
  * meanings shown as a hint line), an Importance dropdown (five steps), a primary
  * Scope category (seven), and — for the target-bearing scopes — a multi-select
  * target picker whose choices show as removable pills (§2). Protection/handling
@@ -79,7 +79,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var titleView: TextView? = null
-    private var fieldTitle: TextInputEditText? = null
+    private var fieldTitle: EditText? = null
     private var fieldContent: EditText? = null
     private var fieldContentExpanded: EditText? = null
     private var panelContentExpanded: View? = null
@@ -261,7 +261,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             runOnUiThread {
                 existing = record
                 if (record != null) {
-                    // Titles are retired (§3.1): never populate or edit them.
+                    fieldTitle?.setText(record.title)
                     fieldContent?.setText(record.content)
                     findViewById<TextInputEditText>(R.id.field_mem_tags)?.setText(tagsToText(record.tagsJson))
                     // Type is the user-owned type_id itself (source of truth),
@@ -638,8 +638,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             Toast.makeText(this, R.string.mem_edit_still_loading, Toast.LENGTH_SHORT).show()
             return
         }
-        // Titles are retired (§3.1): only content is required, and the stored
-        // title is the inert empty placeholder.
+        val title = fieldTitle?.text?.toString()?.trim().orEmpty()
         val content = activeContentField()?.text?.toString()?.trim().orEmpty()
         if (content.isEmpty()) {
             btnHeaderSave?.let { SaveIconFlash.flashError(it) }
@@ -669,7 +668,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             val section = linkSection
             if (activate && prior != null && cardType != null && cardId != null && section != null) {
                 store.updateMemory(
-                    prior.copy(content = content, typeId = typeId),
+                    prior.copy(content = content, typeId = typeId, title = title),
                     getString(R.string.memory_change_edited)
                 )
                 store.convertMemoryToCardEntry(prior.memoryId, cardType, cardId, section)
@@ -684,7 +683,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 val record = MemoryRecord(
                     memoryId = org.teslasoft.assistant.preferences.memory.MemoryId
                         .generate(org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
-                    scope = currentScope, typeId = typeId, content = content,
+                    scope = currentScope, typeId = typeId, content = content, title = title,
                     embeddingText = null, tagsJson = tagsJson, importance = currentImportance,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
                     projectIds = projectIds,
@@ -698,7 +697,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 savedId = record.memoryId
             } else {
                 val updated = prior.copy(
-                    scope = currentScope, typeId = typeId, content = content,
+                    scope = currentScope, typeId = typeId, content = content, title = title,
                     importance = currentImportance, tagsJson = tagsJson,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
                     projectIds = projectIds, companionIds = companionIds,

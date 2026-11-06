@@ -31,8 +31,7 @@
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="16dp"
     android:layout_marginVertical="8dp"
-    android:background="@drawable/btn_accent_tonal_selector_v3"
-    android:backgroundTint="?attr/colorSecondaryContainer"
+    style="@style/Widget.App.MemoryBrowser.Card"
     android:orientation="vertical"
     android:paddingHorizontal="14dp"
     android:paddingVertical="12dp">

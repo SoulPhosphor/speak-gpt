@@ -572,11 +572,13 @@
             </ScrollView>
         </LinearLayout>
 
+        <include layout="@layout/view_memory_attachment_strip" />
+
         <LinearLayout
             android:id="@+id/vision_action_selector"
             style="@style/Widget.App.Chat.ActionMenu.Popup"
             android:visibility="gone"
-            app:layout_constraintBottom_toTopOf="@+id/include_strip"
+            app:layout_constraintBottom_toTopOf="@+id/memory_attachment_strip"
             app:layout_constraintStart_toStartOf="parent"
             tools:visibility="visible">
 
@@ -633,6 +635,11 @@
                             <TextView
                                 style="@style/Widget.App.Chat.ActionMenu.Label"
                                 android:text="@string/btn_attach_document" />
+                        </LinearLayout>
+
+                        <LinearLayout android:id="@+id/action_add_memory" style="@style/Widget.App.Chat.ActionMenu.Row">
+                            <ImageView style="@style/Widget.App.Chat.ActionMenu.Icon" android:src="@drawable/ic_memory" />
+                            <TextView style="@style/Widget.App.Chat.ActionMenu.Label" android:text="@string/memory_attachment_add" />
                         </LinearLayout>
 
                         <!-- Create Image (owner ruling, Nov 2 2026): last in

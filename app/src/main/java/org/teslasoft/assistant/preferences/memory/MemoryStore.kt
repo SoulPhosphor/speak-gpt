@@ -75,7 +75,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 32
+        private const val DATABASE_VERSION = 33
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -449,9 +449,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "memory_id TEXT PRIMARY KEY, " +
                 "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
                 // User-owned Type (§5): nullable = No Type. The retired legacy
-                // kind/title columns are gone (v25); a legacy kind from an old
-                // backup is translated to a Type at import, titles are dropped.
+                // kind is gone; legacy values map to a Type at import.
+                // The optional browser title was restored in v33.
                 "type_id TEXT REFERENCES memory_types(type_id), " +
+                "title TEXT NOT NULL DEFAULT '', " +
                 "content TEXT NOT NULL, " +
                 "embedding_text TEXT, " +
                 "tags_json TEXT DEFAULT '[]', " +
@@ -2168,6 +2169,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "32")
             )
         }
+        if (oldVersion < 33) {
+            // Optional user-owned browser labels. Existing memories have no title.
+            db.execSQL("ALTER TABLE memories ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "33")
+            )
+        }
     }
 
     /**
@@ -2819,6 +2829,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("memory_id", finalId)
                     put("scope", m.scope)
                     put("type_id", resolvedTypeId)
+                    put("title", m.title)
                     put("content", m.content)
                     put("embedding_text", m.embeddingText)
                     put("tags_json", m.tagsJson)
@@ -3210,6 +3221,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         memoryId = id,
                         scope = it.getString(it.getColumnIndexOrThrow("scope")),
                         content = it.getString(it.getColumnIndexOrThrow("content")),
+                        title = it.getStringOrNull("title") ?: "",
                         embeddingText = it.getStringOrNull("embedding_text"),
                         tagsJson = it.getStringOrNull("tags_json") ?: "[]",
                         importance = it.getInt(it.getColumnIndexOrThrow("importance")),
@@ -7072,6 +7084,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             memoryId = id,
             scope = it.getString(it.getColumnIndexOrThrow("scope")),
             content = it.getString(it.getColumnIndexOrThrow("content")),
+            title = it.getStringOrNull("title") ?: "",
             embeddingText = it.getStringOrNull("embedding_text"),
             tagsJson = it.getStringOrNull("tags_json") ?: "[]",
             importance = it.getInt(it.getColumnIndexOrThrow("importance")),
@@ -7101,6 +7114,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         put("scope", m.scope)
         // User-owned Type (§5); null = No Type.
         put("type_id", m.typeId)
+        put("title", m.title)
         put("content", m.content)
         put("embedding_text", m.embeddingText)
         put("tags_json", m.tagsJson)
@@ -7699,6 +7713,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      *  prior_state (device-local; never exported). Enough for a field-level
      *  undo in Phase 6 and a "before" view in the change-log screen. */
     private fun snapshotMemoryJson(m: MemoryRecord): String = org.json.JSONObject().apply {
+        put("title", m.title)
         put("content", m.content)
         put("scope", m.scope)
         m.typeId?.let { put("type_id", it) }

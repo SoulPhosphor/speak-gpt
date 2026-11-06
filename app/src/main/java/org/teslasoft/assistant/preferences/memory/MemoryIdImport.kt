@@ -89,7 +89,8 @@ object MemoryIdImport {
         val worldIds: List<String>,
         val roleplayCharacterIds: List<String>,
         val campaignIds: List<String>,
-        val projectIds: List<String>
+        val projectIds: List<String>,
+        val title: String = ""
     )
 
     /** Build the comparable [Substance] of a memory record. The JSON-valued
@@ -110,7 +111,8 @@ object MemoryIdImport {
         worldIds = m.worldIds.sorted(),
         roleplayCharacterIds = m.roleplayCharacterIds.sorted(),
         campaignIds = m.campaignIds.sorted(),
-        projectIds = m.projectIds.sorted()
+        projectIds = m.projectIds.sorted(),
+        title = m.title
     )
 
     private fun normalizeJson(s: String): String = s.filterNot { it.isWhitespace() }

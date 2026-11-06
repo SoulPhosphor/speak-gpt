@@ -127,6 +127,15 @@
                     android:contentDescription="@string/chat_behaviors_title" />
             </LinearLayout>
 
+            <LinearLayout android:id="@+id/row_memory_browser_settings" style="@style/Widget.App.Row.TitleOnly">
+                <ImageView style="@style/Widget.App.Row.Icon.Primary"
+                    android:contentDescription="@null" android:src="@drawable/ic_home_storage_gear" />
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/memory_browser_settings_title" />
+                </LinearLayout>
+                <ImageView style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/memory_browser_settings_title" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

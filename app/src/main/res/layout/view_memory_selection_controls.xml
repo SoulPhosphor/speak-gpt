@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/memory_selection_controls"
+    style="@style/Widget.App.Page.ControlRow"
+    android:visibility="gone">
+    <TextView style="@style/Widget.App.Row.Title.Fill" android:text="@string/memory_selection_instruction" />
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/memory_selection_okay"
+        style="@style/AppButton.Primary.Inline"
+        android:text="@string/btn_ok" />
+</LinearLayout>

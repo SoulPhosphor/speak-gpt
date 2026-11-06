@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/memory_attachment_strip"
+    style="@style/Widget.App.Include.PendingMemoryStrip"
+    android:visibility="gone"
+    app:layout_constraintBottom_toTopOf="@+id/include_strip"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintEnd_toEndOf="parent">
+    <LinearLayout style="@style/Widget.App.Include.Row">
+        <TextView android:id="@+id/memory_attachment_label" style="@style/Widget.App.Include.Name" />
+        <ImageButton
+            android:id="@+id/memory_attachment_remove"
+            style="@style/Widget.App.Include.Action"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_close" />
+        <ImageButton
+            android:id="@+id/memory_attachment_settings"
+            style="@style/Widget.App.Include.Action"
+            android:src="@drawable/ic_settings"
+            android:contentDescription="@null" />
+    </LinearLayout>
+</LinearLayout>

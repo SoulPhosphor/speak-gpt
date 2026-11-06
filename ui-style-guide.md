@@ -1149,7 +1149,7 @@ Approved October 9 2026 for the Voice Input choice:
 
 ## List tools line
 
-`Widget.App.ListTools.*` is the memory browser's line under the header (owner design, Nov 3 2026): `Container` (the line plus the pending-count line beneath, aligned right), `Row`, `Action` (the search icon, which opens and closes the search field, and the filter-menu kebab; both on the borderless `Widget.App.QuickTile.EditButton` icon style), `Spacer` (pushes the mode words to the right), and `FilteredIcon` (the Material `filter_list` icon, shown directly after the current mode word only while a filter narrows that view). Sizes live in `list_tools_*` dimensions. `ModeWord` is each of the Memories / Pending words (its own style so the owner can later restyle it, or replace it with a toggle, in one place); code only marks the current word selected, and the colors come from `@color/list_tools_mode_word_text` (`colorPrimary` selected, `appSubtleTextColor` otherwise). `ModeSeparator` is the "|" between them and `PendingCount` the count line beneath.
+`Widget.App.ListTools.*` is the memory browser's line under the header (owner design, Nov 3 2026): `Container` (the line plus the pending-count line beneath, aligned left), `Row`, `Action` (the search icon, which opens and closes the search field, and the filter-menu kebab; both on the borderless `Widget.App.QuickTile.EditButton` icon style), `Spacer` (keeps the mode words on the left and the search/filter icons on the right), and `FilteredIcon` (the Material `filter_list` icon, shown directly after the current mode word only while a filter narrows that view). Sizes live in `list_tools_*` dimensions. `ModeWord` is each of the Memories / Pending words (its own style so the owner can later restyle it, or replace it with a toggle, in one place); code only marks the current word selected, and the colors come from `@color/list_tools_mode_word_text` (`colorPrimary` selected, `appSubtleTextColor` otherwise). `ModeSeparator` is the "|" between them and `PendingCount` the count line beneath.
 
 ## Chat composer host and surface
 
@@ -1659,3 +1659,74 @@ Unicode word matching as app search. App search also retains Match Case.
 Glamour Studio opts into `activity_prompt_memory_list.xml` and
 `PromptLibrarySearch`; other memory-list screens keep their current layouts
 and search controls.
+
+## Memory browser cards and settings
+
+`Widget.App.MemoryBrowser.Card` supplies the browser card background: the same
+`colorSurfaceContainerHigh` fill and `colorOutlineVariant` border (using
+`quick_settings_segment_stroke_width`) as chat Quick Settings sections. Its
+16dp corner radius preserves the previous memory-card shape. Ordinary manager
+lists retain `view_memory_row.xml`; browser rows use `view_memory_browser_row.xml`
+with a collapsible vertical body and a trailing memory-scope image above the
+chevron. With image hints off, the same chevron centers vertically. Pending
+review cards share the browser background and visibility settings while keeping
+their review controls.
+
+Memory Browser Settings uses the simple `Widget.App.ActionBar` header with back
+navigation and no action buttons, `Widget.App.Page.Content`, and the standard
+`Widget.App.Row.Toggle`/TextColumn/Title/Subtitle/Switch family. Both settings
+default on. The optional editor Title follows Memory, using Field.Label, Hint,
+and a two-line Field.Box. A blank title collapses its browser label entirely.
+
+The map action opens a read-only Icon Legend using `App.MaterialAlertDialog`,
+shared Row.Icon/Title typography, and a single right-aligned
+`AppButton.Primary.DialogAction` in `Widget.App.Dialog.Actions.EndRow`.
+
+### Manual memory attachments
+
+The chat Add menu's Add Memory row uses the existing Chat.ActionMenu row/icon/label
+styles and Google's Material Symbols `memory` icon. The unsent count row uses
+Include.Container/Row/Name/Action, stacked above the existing image/document strip;
+its right-hand actions are Remove then Settings. Expanded composer height reserves
+both attachment strips, including their measured margins, and updates when the
+memory strip is laid out. Keyboard and transcript anchoring rules are unchanged.
+
+Selection mode adds the existing Page.ControlRow with Row.Title and
+AppButton.Primary.Inline for the instruction/Okay row. Browser cards expose a
+CheckOption.CheckBox in their leading slot. Selection is capped at five and
+survives filtering and recreation. The approved Memories view is used, with
+Pending hidden. The missing-model warning is an optional header icon in this mode too; it never opens automatically.
+
+Cancel/Okay confirmations use `dialog_two_actions_cancel_first.xml`. The back
+confirmation deliberately uses `dialog_two_actions.xml` for Attach on the left
+and Discard on the right. Memory/memories labels use quantity resources.
+
+`MemorySelectionController` owns browser selection and its result contract.
+`MemoryAttachmentController` owns the pending chat draft and attachment row.
+`ManualMemoryPriority` resolves selected ids directly at Send and reserves their
+count/character room before automatic recall. It needs no embeddings and works
+with automatic recall disabled. Explicit memories bypass automatic scope,
+relevance, cooldown and lore-overlap exclusions for that turn; the complete
+request still passes the existing capacity check. The normal memory count is
+shared with automatic recall, retaining its existing Essential-count exception.
+The pending strip is visible only in Chat; Playground preserves the draft for switching back.
+Sent ids use message metadata for retries, and final response attribution uses
+the same Active Memories indicator as automatically chosen memories. They never
+become persistent paperclip Includes. Unsent drafts clear only after successful
+message storage; an image-generation command leaves them for the next chat turn.
+
+### Missing embedding model warning
+
+The browser header orders the conditional warning icon before Companions,
+then Icon Legend, then Add. Warning uses Google Material Symbols `warning` and
+the existing chained header-button family with theme tint. It is visible only
+while no complete embedding model is installed; returning from Advanced Memory
+Settings refreshes it. Opening the browser never opens this dialog automatically.
+The popup keeps its explanation and uses Dialog.Actions/EndRow/EndRowFlow with
+standard primary action buttons: Add Embedding Model on the left, Okay on the
+right. Add opens Advanced Memory Settings.
+
+MemoryBrowser card typography, spacing, checkbox and icon geometry are owned
+by the stylesheet, with dimensions in `dimens.xml`. The trailing icon/chevron
+uses a vertical spread-inside constraint chain: top/bottom with the hint shown,
+centered with the hint gone. Kotlin only changes content and visibility.
