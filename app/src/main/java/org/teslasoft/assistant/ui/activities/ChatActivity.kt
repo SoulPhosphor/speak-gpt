@@ -3903,7 +3903,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         val topBound = maxOf(chatView.top, actionBar?.bottom ?: 0)
         val targetHeight = rootView.height - topBound - keyboard.paddingBottom -
-            bottomMargin - pendingHeight
+            bottomMargin - pendingHeight - memoryAttachments.occupiedHeight()
         if (targetHeight <= 0 || surfaceParams.height == targetHeight) return
 
         surfaceParams.height = targetHeight

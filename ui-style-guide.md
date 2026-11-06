@@ -1687,8 +1687,9 @@ shared Row.Icon/Title typography, and a single right-aligned
 The chat Add menu's Add Memory row uses the existing Chat.ActionMenu row/icon/label
 styles and Google's Material Symbols `memory` icon. The unsent count row uses
 Include.Container/Row/Name/Action, stacked above the existing image/document strip;
-its right-hand actions are Remove then Settings. It does not change the composer,
-keyboard, or transcript sizing rules.
+its right-hand actions are Remove then Settings. Expanded composer height reserves
+both attachment strips, including their measured margins, and updates when the
+memory strip is laid out. Keyboard and transcript anchoring rules are unchanged.
 
 Selection mode adds the existing Page.ControlRow with Row.Title and
 AppButton.Primary.Inline for the instruction/Okay row. Browser cards expose a

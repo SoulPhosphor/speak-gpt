@@ -2,6 +2,7 @@ package org.teslasoft.assistant.ui.chat
 
 import android.content.Context
 import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
@@ -42,6 +43,9 @@ class MemoryAttachmentController(
         selectedIds = decode(drafts.getString(chatId, null))
         bound = true
         strip = activity.findViewById(R.id.memory_attachment_strip)
+        strip?.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) changed()
+        }
         label = activity.findViewById(R.id.memory_attachment_label)
         activity.findViewById<View>(R.id.action_add_memory).setOnClickListener {
             activity.findViewById<View>(R.id.vision_action_selector).visibility = View.GONE
@@ -52,6 +56,13 @@ class MemoryAttachmentController(
         val restoredResult = resultBeforeBind
         resultBeforeBind = null
         if (restoredResult != null) replace(restoredResult) else render()
+    }
+    /** Measured attachment space, including stylesheet-defined margins. */
+    fun occupiedHeight(): Int {
+        val view = strip ?: return 0
+        if (view.visibility != View.VISIBLE) return 0
+        val margins = view.layoutParams as? ViewGroup.MarginLayoutParams
+        return view.height + (margins?.topMargin ?: 0) + (margins?.bottomMargin ?: 0)
     }
     fun ids(): List<String> = selectedIds.toList()
     private fun open() { picker.launch(MemorySelectionRequest(chatId, ids())) }
