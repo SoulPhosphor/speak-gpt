@@ -294,6 +294,7 @@ import org.teslasoft.assistant.usage.UsageSection
 import org.teslasoft.assistant.usage.UsageLog
 import org.teslasoft.assistant.usage.UsageLogStore
 import org.teslasoft.assistant.ui.chat.ChatTranscriptLayoutManager
+import org.teslasoft.assistant.ui.chat.MessageTextHighlight
 import org.teslasoft.assistant.ui.chat.ChatComposerLayout
 import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportFormatter
@@ -645,6 +646,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         override fun exportSelected() = showSelectedExportDialog()
     })
+    private val textHighlight by lazy { MessageTextHighlight(this) }
     private var expandableWindowRoot: CoordinatorLayout? = null
     private var blurSelectorView: BlurView? = null
 
@@ -2893,6 +2895,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     drawerController?.close()
                 } else if (includeStripController?.collapseIfExpanded() == true) {
                     // The expanded Includes overlay consumes Back first.
+                } else if (textHighlight.isActive) {
+                    textHighlight.clear()
                 } else if (selectionMode.isActive) {
                     selectionMode.exit()
                 } else {
@@ -2906,6 +2910,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         drawerController?.close()
                     } else if (includeStripController?.collapseIfExpanded() == true) {
                         // The expanded Includes overlay consumes Back first.
+                    } else if (textHighlight.isActive) {
+                        textHighlight.clear()
                     } else if (selectionMode.isActive) {
                         selectionMode.exit()
                     } else {
@@ -2995,6 +3001,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_DOWN) {
+            textHighlight.onWindowTouchDown(event.rawX, event.rawY)
+
             if (includeStripController?.isExpanded() == true) {
                 val bounds = Rect()
                 val touchedInsideStrip =
@@ -3545,6 +3553,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         chat?.setLayoutManager(linearLayoutManager)
 
+        // Text highlighting first, so a tap that clears a highlight is not
+        // also taken as a Selection Mode toggle.
+        chat?.let { textHighlight.attach(it) }
         chat?.let { selectionMode.attach(findViewById(R.id.chat_selection_bar), it) }
         chat?.addItemDecoration(
             FirstMessagePortraitInset { preferences?.getShowChatProfileImages() == true }

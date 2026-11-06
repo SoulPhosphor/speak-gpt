@@ -54,6 +54,17 @@ class PortraitAwareMessageTextView @JvmOverloads constructor(
         private const val POP_DIRECTIONAL_ISOLATE = "\u2069"
     }
 
+    /**
+     * Set by [MessageTextHighlight] while this text holds the chat's own
+     * highlight; draws the highlight color behind the text.
+     */
+    var highlightPainter: ((Canvas) -> Unit)? = null
+
+    override fun onDraw(canvas: Canvas) {
+        highlightPainter?.invoke(canvas)
+        super.onDraw(canvas)
+    }
+
     private data class PortraitFlow(
         val geometry: PortraitExclusionGeometry.TextFlow,
         val portraitOnLeft: Boolean?

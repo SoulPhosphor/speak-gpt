@@ -280,4 +280,8 @@
     <dimen name="header_title_back_gap">8dp</dimen>
     <dimen name="header_title_panel_start_inset">20dp</dimen>
     <dimen name="header_title_floating_top_gap">8dp</dimen>
+    <!-- Chat message text highlighting (ui.chat.MessageTextHighlight). -->
+    <dimen name="chat_text_highlight_edge_zone">56dp</dimen>
+    <dimen name="chat_text_highlight_scroll_speed_max">1600dp</dimen>
+    <dimen name="chat_text_highlight_handle_min_touch">48dp</dimen>
 </resources>

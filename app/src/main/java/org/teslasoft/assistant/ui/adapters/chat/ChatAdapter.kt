@@ -118,6 +118,7 @@ import org.teslasoft.assistant.ui.chat.ChatMessagePlacement
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.MessageMetadataView
+import org.teslasoft.assistant.ui.chat.MessageTextHighlight
 import org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView
 import org.teslasoft.assistant.ui.chat.PortraitExclusionGeometry
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
@@ -804,6 +805,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val reasoningLabel: TextView? = itemView.findViewById(R.id.reasoning_label)
         private val reasoningText: PortraitAwareMessageTextView? = itemView.findViewById(R.id.reasoning_text)
         private val reasoningChevron: ImageView? = itemView.findViewById(R.id.reasoning_chevron)
+
+        init {
+            // Message text uses the chat's own highlighting, which keeps
+            // scrolling while a highlight handle is held at the chat's edge.
+            MessageTextHighlight.prepare(message)
+            reasoningText?.let(MessageTextHighlight::prepare)
+        }
         // Per-message reasoning indicator glyph in the action bar, right of the
         // info button (owner design, Aug 2026). Assistant layout only, so
         // nullable; informational, never clickable.
