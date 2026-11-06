@@ -248,4 +248,19 @@
     <dimen name="list_tools_mode_word_padding">8dp</dimen>
     <dimen name="list_tools_mode_word_text_size">17sp</dimen>
     <dimen name="list_tools_pending_count_text_size">13sp</dimen>
+    <!-- Chat Selection Mode: the area beneath the header and the dashed
+         outline around selected messages. -->
+    <dimen name="chat_selection_bar_margin_horizontal">12dp</dimen>
+    <dimen name="chat_selection_bar_margin_top">8dp</dimen>
+    <dimen name="chat_selection_bar_padding_start">16dp</dimen>
+    <dimen name="chat_selection_bar_padding_end">8dp</dimen>
+    <dimen name="chat_selection_bar_padding_vertical">12dp</dimen>
+    <dimen name="chat_selection_count_text_size">20sp</dimen>
+    <dimen name="chat_selection_hint_margin_top">2dp</dimen>
+    <dimen name="chat_selection_action_gap">4dp</dimen>
+    <dimen name="chat_selection_outline_offset">5dp</dimen>
+    <dimen name="chat_selection_outline_corner_radius">21dp</dimen>
+    <dimen name="chat_selection_outline_width">3dp</dimen>
+    <dimen name="chat_selection_outline_dash_length">10dp</dimen>
+    <dimen name="chat_selection_outline_dash_gap">6dp</dimen>
 </resources>

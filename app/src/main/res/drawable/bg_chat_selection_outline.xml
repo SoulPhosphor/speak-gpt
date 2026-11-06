@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Selection Mode: the dashed cut-line outline drawn around each selected
+     message's bubble area. One place to restyle or recolor it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/chat_selection_outline_corner_radius" />
+    <stroke
+        android:width="@dimen/chat_selection_outline_width"
+        android:color="?attr/colorPrimary"
+        android:dashWidth="@dimen/chat_selection_outline_dash_length"
+        android:dashGap="@dimen/chat_selection_outline_dash_gap" />
+</shape>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Selection Mode area beneath the chat header. The outer frame is only the
+     slot the chat layout places and shows; appearance comes from the
+     Widget.App.Chat.SelectionBar family. ChatSelectionBar binds it. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/chat_selection_bar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:visibility="gone"
+    tools:visibility="visible">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/chat_selection_surface"
+        style="@style/Widget.App.Chat.SelectionBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/chat_selection_count"
+            style="@style/Widget.App.Chat.SelectionBar.Count"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintBottom_toTopOf="@+id/chat_selection_hint"
+            app:layout_constraintEnd_toStartOf="@+id/chat_selection_copy"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintVertical_chainStyle="packed"
+            tools:text="0 Selected" />
+
+        <TextView
+            android:id="@+id/chat_selection_hint"
+            style="@style/Widget.App.Chat.SelectionBar.Hint"
+            android:layout_width="0dp"
+            android:text="@string/chat_selection_hint"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/chat_selection_copy"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/chat_selection_count" />
+
+        <ImageButton
+            android:id="@+id/chat_selection_copy"
+            style="@style/Widget.App.Chat.SelectionBar.Action"
+            android:contentDescription="@string/chat_selection_copy"
+            android:src="@drawable/ic_copy_normal"
+            android:tooltipText="@string/chat_selection_copy"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/chat_selection_share"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageButton
+            android:id="@+id/chat_selection_share"
+            style="@style/Widget.App.Chat.SelectionBar.Action"
+            android:contentDescription="@string/chat_selection_share"
+            android:src="@drawable/ic_share"
+            android:tooltipText="@string/chat_selection_share"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/chat_selection_delete"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageButton
+            android:id="@+id/chat_selection_delete"
+            style="@style/Widget.App.Chat.SelectionBar.Action"
+            android:contentDescription="@string/chat_selection_delete"
+            android:src="@drawable/ic_delete"
+            android:tooltipText="@string/chat_selection_delete"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/chat_selection_more"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageButton
+            android:id="@+id/chat_selection_more"
+            style="@style/Widget.App.Chat.SelectionBar.Action"
+            android:contentDescription="@string/chat_selection_more"
+            android:src="@drawable/ic_more_vert"
+            android:tooltipText="@string/chat_selection_more"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

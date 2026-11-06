@@ -1178,6 +1178,23 @@ chat adapter colors every action icon with the bubble's foreground in one
 place, so the icons contrast with any bubble. The row sits in the bottom corner
 opposite the speaker's name.
 
+### Chat Selection Mode
+
+`Widget.App.Chat.SelectionBar.*` is the Selection Mode area beneath the chat
+header (`view_chat_selection_bar.xml`): `SelectionBar` is the rounded surface
+in the header's own color (`bg_chat_header_rounded`), `Count` the bold
+"N Selected" line, `Hint` the small explanation beneath it (inherits
+`Widget.App.Row.Subtitle`), and `Action` the Copy, Share, Delete and
+more-options icons (borderless, inherits `Widget.App.QuickTile.EditButton`).
+Sizes live in `chat_selection_*` dimensions. The header itself does not change
+in Selection Mode.
+
+`bg_chat_selection_outline` is the dashed cut-line outline drawn around each
+selected message's bubble area, whether or not bubbles are shown. It replaces
+the old background highlight. Its color is `?attr/colorPrimary`; its width,
+dash, gap and corner live in `chat_selection_outline_*` dimensions, and
+`chat_selection_outline_offset` keeps it clear of the bubble's edge.
+
 ### Manual compaction marker
 
 `Widget.App.Chat.CompactionMarker` is the centered **Compacted** title between message units. It inherits the shared section-title typography and owns its spacing and alignment. Both user and assistant row layouts carry the same normally hidden marker slot; the adapter shows exactly one slot at the persisted manual boundary without inserting a synthetic conversation message.

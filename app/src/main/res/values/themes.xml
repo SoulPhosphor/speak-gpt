@@ -1901,6 +1901,37 @@
         <item name="android:layout_marginEnd">0dp</item>
     </style>
 
+    <!-- Selection Mode area beneath the chat header: the header's own color
+         on a rounded surface. -->
+    <style name="Widget.App.Chat.SelectionBar" parent="">
+        <item name="android:layout_marginStart">@dimen/chat_selection_bar_margin_horizontal</item>
+        <item name="android:layout_marginEnd">@dimen/chat_selection_bar_margin_horizontal</item>
+        <item name="android:layout_marginTop">@dimen/chat_selection_bar_margin_top</item>
+        <item name="android:paddingStart">@dimen/chat_selection_bar_padding_start</item>
+        <item name="android:paddingEnd">@dimen/chat_selection_bar_padding_end</item>
+        <item name="android:paddingTop">@dimen/chat_selection_bar_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/chat_selection_bar_padding_vertical</item>
+        <item name="android:background">@drawable/bg_chat_header_rounded</item>
+    </style>
+
+    <!-- "N Selected". -->
+    <style name="Widget.App.Chat.SelectionBar.Count" parent="">
+        <item name="android:textColor">?attr/appTitleTextColor</item>
+        <item name="android:textSize">@dimen/chat_selection_count_text_size</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- The hint under the count; shared row-subtitle text. -->
+    <style name="Widget.App.Chat.SelectionBar.Hint" parent="Widget.App.Row.Subtitle">
+        <item name="android:layout_marginTop">@dimen/chat_selection_hint_margin_top</item>
+    </style>
+
+    <!-- Copy, Share, Delete and more-options icons: borderless shared icon
+         buttons, spaced by chat_selection_action_gap. -->
+    <style name="Widget.App.Chat.SelectionBar.Action" parent="Widget.App.QuickTile.EditButton">
+        <item name="android:layout_marginEnd">@dimen/chat_selection_action_gap</item>
+    </style>
+
     <!-- Chat composer host: the space behind the floating composer stays transparent. -->
     <style name="Widget.App.Chat.ComposerHost" parent="">
         <item name="android:background">@color/transparent</item>

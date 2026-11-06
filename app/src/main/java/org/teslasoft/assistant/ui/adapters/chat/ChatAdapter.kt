@@ -85,7 +85,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.util.summarizer.SummarizerController
 import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
-import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.color.MaterialColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.core.spans.CodeBlockSpan
@@ -728,35 +727,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         this.bulkActionMode = bulkActionMode
     }
 
-    private fun checkSelectionIsEmpty(): Boolean {
-        var isEmpty = true
-
-        for (projection in selectorProjection) {
-            if (projection["selected"].toString() == "true") {
-                isEmpty = false
-                break
-            }
-        }
-
-        return isEmpty
-    }
-
-    fun unselectAll() {
-        for (projection in selectorProjection) {
-            projection["selected"] = "false"
-        }
-
-        bulkActionMode = false
-        listener?.onChangeBulkActionMode(false)
-    }
-
-    fun selectAll() {
-        for (projection in selectorProjection) {
-            projection["selected"] = "true"
-        }
-
-        bulkActionMode = true
-        listener?.onChangeBulkActionMode(true)
+    /** Selection Mode: select or deselect the message at [position]. The
+     *  host shows the count and draws the selection outline. */
+    fun toggleSelection(position: Int) {
+        val entry = selectorProjection.getOrNull(position) ?: return
+        val selected = entry["selected"].toString() != "true"
+        entry["selected"] = selected
+        listener?.onBulkSelectionChanged(position, selected)
     }
 
     open inner class ViewHolder(itemView: View, private val debugContext: Context) : RecyclerView.ViewHolder(itemView) {
@@ -939,11 +916,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 }
             }
 
-            if (selectorProjection[position]["selected"].toString() == "true") {
-                ui.setBackgroundColor(getSurface3Color(context))
-            } else {
-                updatePresentation(chatMessage)
-            }
             if (position == searchTargetPosition) {
                 ui.setBackgroundColor(
                     MaterialColors.getColor(ui, com.google.android.material.R.attr.colorSecondaryContainer)
@@ -951,22 +923,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             updatePortraitFlowGeometry()
 
-            ui.setOnLongClickListener {
-                switchBulkActionState(position)
-                return@setOnLongClickListener true
-            }
-
+            // Selection Mode toggles a message with a plain tap. Touch taps
+            // inside the bubble area are taken by MessageSelectionTapListener;
+            // these click paths keep the toggle reachable for accessibility
+            // services. Long-pressing the message text starts native text
+            // selection, so parts of a message can be highlighted and copied.
             ui.setOnClickListener {
                 if (bulkActionMode) {
                     switchBulkActionState(position)
                 }
             }
 
-            // Deliberately no long-click listener on the message text itself:
-            // long-pressing the text starts native text selection (so parts of
-            // a message can be highlighted and copied). Bulk message selection
-            // is still reachable by long-pressing the row/bubble around the
-            // text or the avatar.
             message.setOnClickListener {
                 if (bulkActionMode) {
                     switchBulkActionState(position)
@@ -3103,18 +3070,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun switchBulkActionState(position: Int) {
-            updatePresentation(dataArray[position])
-            if (selectorProjection[position]["selected"].toString() == "true") {
-                selectorProjection[position]["selected"] = "false"
-                if (checkSelectionIsEmpty()) bulkActionMode = false
-            } else {
-                ui.setBackgroundColor(getSurface3Color(context))
-                bulkActionMode = true
-                selectorProjection[position]["selected"] = "true"
-            }
-
-            listener?.onBulkSelectionChanged(position, (selectorProjection[position]["selected"] ?: "false") == "true")
-            listener?.onChangeBulkActionMode(bulkActionMode)
+            toggleSelection(position)
         }
 
         inner class BottomPaddingSpan(private val bottomPadding: Int) : LineHeightSpan {
@@ -3405,10 +3361,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 }
             }
 
-            generatedImage.setOnLongClickListener {
-                switchBulkActionState(bindingAdapterPosition)
-                return@setOnLongClickListener true
-            }
         }
 
         private fun showGeneratedImageLoadFailure() {
@@ -3553,18 +3505,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         return 16f * context.resources.displayMetrics.densityDpi.toFloat() / DisplayMetrics.DENSITY_DEFAULT
     }
 
-    private fun getSurface3Color(context: Context): Int {
-        return if (isDarkThemeEnabled() && preferences.getAmoledPitchBlack()) {
-            ResourcesCompat.getColor(context.resources, R.color.amoled_accent_100, null)
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                SurfaceColors.SURFACE_4.getColor(context)
-            } else {
-                context.getColor(R.color.accent_250)
-            }
-        }
-    }
-
     private fun isDarkThemeEnabled(): Boolean {
         return when (context.resources?.configuration?.uiMode?.and(Configuration.UI_MODE_NIGHT_MASK)) {
             Configuration.UI_MODE_NIGHT_YES -> true
@@ -3655,7 +3595,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onIncludeRemove(includeId: String, onRemoved: (() -> Unit)? = null)
         fun onIncludeCondense(includeId: String)
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
-        fun onChangeBulkActionMode(mode: Boolean)
         fun onSpeakClick(message: String, position: Int)
 
         /** The user paged to a different stored response version. Display-only:

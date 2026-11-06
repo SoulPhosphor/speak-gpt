@@ -3897,6 +3897,15 @@
     <string name="message_make_visible">Make Visible</string>
     <!-- Chat menu action and its confirmation (owner wording, Nov 2 2026). -->
     <string name="chat_menu_show_all">Show All</string>
+    <string name="chat_menu_selection_mode">Selection Mode</string>
+    <string name="chat_selection_count">%1$d Selected</string>
+    <string name="chat_selection_hint">Tap a message to toggle selection</string>
+    <string name="chat_selection_copy">Copy Selected</string>
+    <string name="chat_selection_share">Share Selected</string>
+    <string name="chat_selection_delete">Delete Selected</string>
+    <string name="chat_selection_more">More Options</string>
+    <string name="chat_selection_select_all">Select All</string>
+    <string name="chat_selection_deselect_all">Deselect All</string>
     <string name="unhide_all_messages_title">Unhide All Messages</string>
     <string name="unhide_all_messages_body">All %1$d messages that are currently hidden from the AI will be shown</string>
     <string name="chat_behavior_section_identity">Identity</string>
