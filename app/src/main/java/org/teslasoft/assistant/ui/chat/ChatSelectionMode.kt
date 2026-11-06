@@ -54,6 +54,8 @@ internal class ChatSelectionMode(
             override fun onDeleteSelected() = host.deleteSelected()
             override fun onSelectAll() = selectAll()
             override fun onDeselectAll() = deselectAll()
+            override fun onExportSelected() = Unit
+            override fun onExitMode() = exit()
         })
         if (alreadyOnTranscript) return
         transcript.addOnItemTouchListener(

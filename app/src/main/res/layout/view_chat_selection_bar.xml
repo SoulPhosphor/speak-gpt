@@ -66,6 +66,16 @@
             android:src="@drawable/ic_delete"
             android:tooltipText="@string/chat_selection_delete"
             app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/chat_selection_export"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageButton
+            android:id="@+id/chat_selection_export"
+            style="@style/Widget.App.Chat.SelectionBar.Action"
+            android:contentDescription="@string/chat_selection_export"
+            android:src="@drawable/ic_file_save"
+            android:tooltipText="@string/chat_selection_export"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/chat_selection_more"
             app:layout_constraintTop_toTopOf="parent" />
 

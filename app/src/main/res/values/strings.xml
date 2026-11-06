@@ -3904,6 +3904,8 @@
     <string name="chat_selection_share">Share Selected</string>
     <string name="chat_selection_delete">Delete Selected</string>
     <string name="chat_selection_more">More Options</string>
+    <string name="chat_selection_export">Export Selected</string>
+    <string name="chat_selection_exit">Exit Mode</string>
     <string name="chat_selection_select_all">Select All</string>
     <string name="chat_selection_deselect_all">Deselect All</string>
     <string name="unhide_all_messages_title">Unhide All Messages</string>
