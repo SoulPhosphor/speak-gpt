@@ -72,11 +72,38 @@ class ModelSettingsStorageTest {
         installEndpoint(state)
         val recents = RecentModelsPreferences(FakeSharedPreferences())
         recents.setSavedParameters(identity, FavoriteModelObject("model-a", "ep-1").apply { temperature = 0.3f })
-        val favorites = FavoriteModelsPreferences.createForTest(state, recentSavedParameters = recents::savedParameters)
+        val favorites = FavoriteModelsPreferences.createForTest(state, recentEntry = recents::entry)
 
         favorites.addFavoriteIfAbsent(FavoriteModelObject("model-a", "ep-1"))
 
         assertEquals(0.3f, favorites.getFavorite("model-a", "ep-1")?.temperature)
+    }
+
+    @Test
+    fun favoritingFromViewAllKeepsTheRecentEntrysProviders() {
+        val state = FakeSharedPreferences()
+        installEndpoint(state)
+        val recents = RecentModelsPreferences(FakeSharedPreferences())
+        recents.record(FavoriteModelObject("model-a", "ep-1", FavoriteModelObject.ROUTING_ONLY, "chutes"))
+        recents.setFavoriteProviders(identity, listOf("chutes"))
+        val favorites = FavoriteModelsPreferences.createForTest(state, recentEntry = recents::entry)
+
+        favorites.addFavoriteModel(FavoriteModelObject("model-a", "ep-1"))
+
+        val saved = favorites.getFavorite("model-a", "ep-1")!!
+        assertEquals("chutes", saved.selectedProvider)
+        assertEquals(FavoriteModelObject.ROUTING_ONLY, saved.routingType)
+        assertEquals(listOf("chutes"), saved.favoriteProviders)
+    }
+
+    @Test
+    fun loweringTheRecentLimitDropsSavedSettingsWithTheModels() {
+        val recents = RecentModelsPreferences(FakeSharedPreferences())
+        recents.setSavedParameters(identity, FavoriteModelObject("model-a", "ep-1").apply { temperature = 0.4f })
+        recents.setLimit(0)
+        recents.setLimit(20)
+        recents.record(FavoriteModelObject("model-a", "ep-1"))
+        assertNull(recents.savedParameters(identity))
     }
 
     @Test

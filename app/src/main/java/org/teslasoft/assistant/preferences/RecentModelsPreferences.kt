@@ -30,6 +30,12 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
             }
         }
 
+    /** This model's Recent entry (routing, favorite providers and saved
+     *  parameters), or null when it is not listed. */
+    fun entry(target: ModelIdentity): FavoriteModelObject? = synchronized(lock) {
+        models().firstOrNull { it.matches(target) }
+    }
+
     /** The parameters saved for this Recent entry, or null. */
     fun savedParameters(target: ModelIdentity): FavoriteModelObject? = synchronized(lock) {
         if (readModels().take(limit()).none { it.matches(target) }) return null
@@ -90,10 +96,9 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
         require(newLimit in 0..MAX_LIMIT)
         synchronized(lock) {
             val editor = preferences.edit().putInt("limit", newLimit)
-            if (newLimit < limit()) {
-                editor.putString("models", gson.toJson(readModels().take(newLimit)))
-            }
             editor.apply()
+            // Models that no longer fit leave with their saved settings.
+            if (newLimit < readModels().size) writeModels(readModels().take(newLimit))
         }
     }
 

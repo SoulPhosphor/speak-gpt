@@ -26,9 +26,9 @@ import com.google.gson.Gson
 class FavoriteModelsPreferences private constructor(
     private val state: ModelEndpointStateGenerationStore,
     private val recentOnlyProviders: RecentOnlyProvidersStore? = null,
-    /** The settings saved on a model's Recent entry, carried onto the model
-     *  when it becomes a favorite. */
-    private val recentSavedParameters: ((ModelIdentity) -> FavoriteModelObject?)? = null
+    /** A model's Recent entry, whose settings carry onto the model when it
+     *  becomes a favorite. */
+    private val recentEntry: ((ModelIdentity) -> FavoriteModelObject?)? = null
 ) {
     companion object {
         private val SAMPLING_KEYS = setOf("streaming", "temperature", "topP", "frequencyPenalty", "presencePenalty")
@@ -40,7 +40,7 @@ class FavoriteModelsPreferences private constructor(
                 instance = FavoriteModelsPreferences(
                     ModelEndpointStateGenerationStore.get(context),
                     RecentOnlyProvidersStore.get(context),
-                    recents::savedParameters
+                    recents::entry
                 )
             }
             return instance!!
@@ -49,13 +49,13 @@ class FavoriteModelsPreferences private constructor(
         internal fun createForTest(
             statePreferences: SharedPreferences,
             legacyFavoritePreferences: SharedPreferences = statePreferences,
-            recentSavedParameters: ((ModelIdentity) -> FavoriteModelObject?)? = null
+            recentEntry: ((ModelIdentity) -> FavoriteModelObject?)? = null
         ): FavoriteModelsPreferences = FavoriteModelsPreferences(
             ModelEndpointStateGenerationStore.createForTest(
                 statePreferences,
                 legacyFavoritePreferences
             ),
-            recentSavedParameters = recentSavedParameters
+            recentEntry = recentEntry
         )
     }
 
@@ -124,11 +124,15 @@ class FavoriteModelsPreferences private constructor(
                 return@update current.copy(favorites = models)
             }
 
-            // A model that becomes a favorite brings the settings saved on its
-            // Recent entry with it, unless the caller supplies its own.
-            if (existing == null && !model.hasSamplingParameters()) {
-                recentSavedParameters?.invoke(ModelIdentity(model.endpointId, model.modelId))
-                    ?.copySamplingTo(model)
+            // A model that becomes a favorite brings its Recent entry's settings
+            // with it (from any path, including View All), unless the caller
+            // supplies its own.
+            if (existing == null) {
+                recentEntry?.invoke(ModelIdentity(model.endpointId, model.modelId))?.let { recent ->
+                    if (!model.hasSamplingParameters()) recent.copySamplingTo(model)
+                    if (model.favoriteProviders.isEmpty()) model.favoriteProviders = recent.favoriteProviders
+                    if (isDefaultRouting(model)) recent.copyRoutingTo(model)
+                }
             }
             val entry = hashMapOf(
                 "modelId" to model.modelId,
@@ -240,6 +244,10 @@ class FavoriteModelsPreferences private constructor(
             presencePenalty = entry["presencePenalty"]?.toFloatOrNull(),
             favoriteProviders = parseStringList(entry["favoriteProviders"])
         )
+
+    private fun isDefaultRouting(model: FavoriteModelObject): Boolean =
+        model.routingType == FavoriteModelObject.ROUTING_AUTOMATIC && model.selectedProvider.isBlank() &&
+            model.allowFallbacks && model.providerOrder.isEmpty() && model.ignoredProviders.isEmpty()
 
     /** Replaces the favorite providers of an existing favorite. Does nothing
      *  when the model is not a favorite: nothing is ever favorited implicitly. */
