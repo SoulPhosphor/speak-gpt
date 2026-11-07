@@ -251,7 +251,7 @@ class ModelCleanupActivity : SettingsPageActivity() {
                         generatedAtMillis = System.currentTimeMillis()
                     )
                     reportStore.save(report)
-                    val textEndpointIds = (references.favorites + references.ruleTargets).map { it.endpointId }.toSet()
+                    val textEndpointIds = references.textTargets.map { it.endpointId }.toSet()
                     purgeStaleReasoningLearning(endpoints, checks.filterKeys { it in textEndpointIds })
                     ScreenData(references, report, labels)
                 }

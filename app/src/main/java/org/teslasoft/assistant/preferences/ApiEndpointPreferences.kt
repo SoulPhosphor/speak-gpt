@@ -98,6 +98,7 @@ class ApiEndpointPreferences private constructor(
         deleteApiEndpoint(id)
         // Its favorites go with it, so their recent Only-mode providers do too.
         RecentOnlyProvidersStore.get(context).clearEndpoint(id)
+        runCatching { RecentModelsPreferences(context).removeEndpoint(id) }
     }
 
     internal fun deleteApiEndpoint(id: String) = deleteApiEndpoint(id, deleteCredential = true)

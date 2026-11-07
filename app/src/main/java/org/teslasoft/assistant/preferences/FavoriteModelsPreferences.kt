@@ -79,49 +79,79 @@ class FavoriteModelsPreferences private constructor(
         return ArrayList(getFavoriteModels().filter { it["endpointId"] == endpointId })
     }
 
-    fun addFavoriteModel(model: FavoriteModelObject) {
-        var models = getFavoriteModels()
-
-        if (models == null) models = arrayListOf()
-
-        // Upsert: a model already favorited keeps its single entry, but its
-        // stored routing/provider memory is refreshed to the latest choice. A
-        // new model is appended. The provider memory lives on the favorite so
-        // removing the favorite removes it too (see removeFavoriteModel).
-        val existingIndex = models.indexOfFirst { m -> m["modelId"] == model.modelId && m["endpointId"] == model.endpointId }
-        val existing = if (existingIndex >= 0) models[existingIndex] else null
-        val entry = hashMapOf(
-            "modelId" to model.modelId,
-            "endpointId" to model.endpointId,
-            "routingType" to model.routingType,
-            "selectedProvider" to model.selectedProvider,
-            "allowFallbacks" to model.allowFallbacks.toString(),
-            "providerOrder" to Gson().toJson(model.providerOrder),
-            "ignoredProviders" to Gson().toJson(model.ignoredProviders),
-            // Reasoning defaults ride on the favorite, independent of routing
-            // (§7.4). Missing keys on an older entry read back as the §7.9
-            // defaults (Auto / Show Reasoning On) in getFavorite below.
-            "reasoningEffort" to model.reasoningEffort,
-            "showReasoning" to model.showReasoning.toString()
-        )
-        // Sampling parameters ride on the favorite (Model Parameters screen).
-        // A write that does not carry them (e.g. saving routing from the gear,
-        // or reasoning from its screen) preserves whatever was saved before, so
-        // those unrelated saves never erase a model's parameters. Only the
-        // Model Parameters screen supplies non-null values, which overwrite.
-        // A brand-new favorite has neither, so the keys stay absent and read
-        // back all-null (see getFavorite).
-        (model.streaming?.toString() ?: existing?.get("streaming"))?.let { entry["streaming"] = it }
-        (model.temperature?.toString() ?: existing?.get("temperature"))?.let { entry["temperature"] = it }
-        (model.topP?.toString() ?: existing?.get("topP"))?.let { entry["topP"] = it }
-        (model.frequencyPenalty?.toString() ?: existing?.get("frequencyPenalty"))?.let { entry["frequencyPenalty"] = it }
-        (model.presencePenalty?.toString() ?: existing?.get("presencePenalty"))?.let { entry["presencePenalty"] = it }
-        if (existingIndex >= 0) {
-            models[existingIndex] = entry
+    fun setPinned(model: FavoriteModelObject, pinned: Boolean) {
+        if (pinned) {
+            saveFavoriteModel(model, pin = true)
         } else {
-            models.add(entry)
+            state.update { current ->
+                current.copy(favorites = current.favorites.map { entry ->
+                    if (entry["modelId"] == model.modelId && entry["endpointId"] == model.endpointId) {
+                        entry - "pinned"
+                    } else entry
+                })
+            }
         }
-        setFavoriteModels(models)
+    }
+
+    fun addFavoriteModel(model: FavoriteModelObject) = saveFavoriteModel(model)
+
+    /** Saving from a picker menu must leave an existing model's settings and pin intact. */
+    fun addFavoriteIfAbsent(model: FavoriteModelObject) = saveFavoriteModel(model, preserveExisting = true)
+
+    private fun saveFavoriteModel(
+        model: FavoriteModelObject,
+        pin: Boolean = false,
+        preserveExisting: Boolean = false
+    ) {
+        var previous: Map<String, String>? = null
+        val saved = state.update { current ->
+            if (current.endpoints.none { it.id == model.endpointId }) return@update current
+            val models = current.favorites.toMutableList()
+            val existingIndex = models.indexOfFirst { it["modelId"] == model.modelId && it["endpointId"] == model.endpointId }
+            val existing = models.getOrNull(existingIndex)
+            previous = existing
+            if (existing != null && (pin || preserveExisting)) {
+                if (!pin) return@update current
+                models[existingIndex] = existing + ("pinned" to "true")
+                return@update current.copy(favorites = models)
+            }
+
+            val entry = hashMapOf(
+                "modelId" to model.modelId,
+                "endpointId" to model.endpointId,
+                "routingType" to model.routingType,
+                "selectedProvider" to model.selectedProvider,
+                "allowFallbacks" to model.allowFallbacks.toString(),
+                "providerOrder" to Gson().toJson(model.providerOrder),
+                "ignoredProviders" to Gson().toJson(model.ignoredProviders),
+                // Reasoning defaults ride on the favorite, independent of routing
+                // (§7.4). Missing keys on an older entry read back as the §7.9
+                // defaults (Auto / Show Reasoning On) in getFavorite below.
+                "reasoningEffort" to model.reasoningEffort,
+                "showReasoning" to model.showReasoning.toString()
+            )
+            // Sampling parameters ride on the favorite (Model Parameters screen).
+            // A write that does not carry them (e.g. saving routing from the gear,
+            // or reasoning from its screen) preserves whatever was saved before, so
+            // those unrelated saves never erase a model's parameters. Only the
+            // Model Parameters screen supplies non-null values, which overwrite.
+            // A brand-new favorite has neither, so the keys stay absent and read
+            // back all-null (see getFavorite).
+            (model.streaming?.toString() ?: existing?.get("streaming"))?.let { entry["streaming"] = it }
+            (model.temperature?.toString() ?: existing?.get("temperature"))?.let { entry["temperature"] = it }
+            (model.topP?.toString() ?: existing?.get("topP"))?.let { entry["topP"] = it }
+            (model.frequencyPenalty?.toString() ?: existing?.get("frequencyPenalty"))?.let { entry["frequencyPenalty"] = it }
+            (model.presencePenalty?.toString() ?: existing?.get("presencePenalty"))?.let { entry["presencePenalty"] = it }
+            if (pin || existing?.get("pinned") == "true") entry["pinned"] = "true"
+            if (existingIndex >= 0) {
+                models[existingIndex] = entry
+            } else {
+                models.add(entry)
+            }
+            current.copy(favorites = models)
+        }
+        if (!saved || ((pin || preserveExisting) && previous != null)) return
+        val existing = previous
         // Every Only-mode save, from any screen, records its provider for the
         // Quick Settings Provider row.
         // The provider being replaced was the one in use, so it is recorded
@@ -167,9 +197,13 @@ class FavoriteModelsPreferences private constructor(
         val entry = getFavoriteModels().firstOrNull {
             it["modelId"] == modelId && it["endpointId"] == endpointId
         } ?: return null
-        return FavoriteModelObject(
-            modelId = modelId,
-            endpointId = endpointId,
+        return decodeFavorite(entry)
+    }
+
+    internal fun decodeFavorite(entry: Map<String, String>): FavoriteModelObject =
+        FavoriteModelObject(
+            modelId = entry.getValue("modelId"),
+            endpointId = entry.getValue("endpointId"),
             routingType = entry["routingType"]?.takeIf { it.isNotBlank() }
                 ?: FavoriteModelObject.ROUTING_AUTOMATIC,
             selectedProvider = entry["selectedProvider"] ?: "",
@@ -191,7 +225,6 @@ class FavoriteModelsPreferences private constructor(
             frequencyPenalty = entry["frequencyPenalty"]?.toFloatOrNull(),
             presencePenalty = entry["presencePenalty"]?.toFloatOrNull()
         )
-    }
 
     private fun parseStringList(json: String?): List<String> {
         if (json.isNullOrBlank()) return emptyList()
@@ -208,23 +241,21 @@ class FavoriteModelsPreferences private constructor(
      * so unfavoriting one model can never wipe another profile's favorites.
      */
     fun removeFavoriteModel(modelId: String, endpointId: String) {
-        val models = getFavoriteModels()
-        val kept = ArrayList(models.filterNot { it["modelId"] == modelId && it["endpointId"] == endpointId })
-        if (kept.size != models.size) setFavoriteModels(kept)
-        // Removing a favorite removes its provider routing memory, recent
-        // Only-mode providers included.
-        recentOnlyProviders?.clear(endpointId, modelId)
+        removeFavoriteModels(setOf(ModelIdentity(endpointId, modelId)))
     }
 
     /** Remove a cleanup selection in one write while preserving every other favorite. */
     fun removeFavoriteModels(targets: Set<ModelIdentity>): Int {
         if (targets.isEmpty()) return 0
-        val models = getFavoriteModels()
-        val kept = ArrayList(models.filterNot { item ->
-            ModelIdentity(item["endpointId"].orEmpty(), item["modelId"].orEmpty()) in targets
-        })
-        val removed = models.size - kept.size
-        if (removed > 0) setFavoriteModels(kept)
+        var removed = 0
+        val saved = state.update { current ->
+            val kept = current.favorites.filterNot { item ->
+                ModelIdentity(item["endpointId"].orEmpty(), item["modelId"].orEmpty()) in targets
+            }
+            removed = current.favorites.size - kept.size
+            current.copy(favorites = kept)
+        }
+        if (!saved) return 0
         targets.forEach { recentOnlyProviders?.clear(it.endpointId, it.modelId) }
         return removed
     }

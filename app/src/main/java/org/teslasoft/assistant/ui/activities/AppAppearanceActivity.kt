@@ -7,15 +7,15 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.os.Build
 import android.os.Bundle
-import android.view.WindowInsets
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
 import android.widget.ImageButton
-import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.RecentModelsPreferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
@@ -23,6 +23,8 @@ import org.teslasoft.assistant.ui.util.ScreenChrome
 class AppAppearanceActivity : SettingsPageActivity() {
 
     private lateinit var preferences: Preferences
+    private lateinit var recentModels: RecentModelsPreferences
+    private lateinit var recentLimit: EditText
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,6 +36,27 @@ class AppAppearanceActivity : SettingsPageActivity() {
         bindViews()
         applyTheme()
         bindControls()
+        recentModels = RecentModelsPreferences(this)
+        recentLimit = findViewById(R.id.model_picker_recent_limit)
+        recentLimit.setText(recentModels.limit().toString())
+        recentLimit.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) saveRecentLimit()
+        }
+        recentLimit.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) recentLimit.clearFocus()
+            false
+        }
+    }
+
+    override fun onPause() {
+        saveRecentLimit()
+        super.onPause()
+    }
+
+    private fun saveRecentLimit() {
+        val limit = recentLimit.text.toString().toIntOrNull()
+        if (limit != null && limit != recentModels.limit()) recentModels.setLimit(limit)
+        recentLimit.setText(recentModels.limit().toString())
     }
 
     private fun bindViews() {
@@ -43,6 +66,7 @@ class AppAppearanceActivity : SettingsPageActivity() {
 
     private fun applyTheme() {
         ScreenChrome.apply(this, actionBar, btnBack)
+        ScreenChrome.fitSystemBarsAndKeyboard(findViewById(R.id.root), actionBar, findViewById(R.id.scroll))
     }
 
     private fun bindControls() {
@@ -82,20 +106,5 @@ class AppAppearanceActivity : SettingsPageActivity() {
             isChecked = checked
             setOnCheckedChangeListener { _, value -> save(value) }
         }
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        if (Build.VERSION.SDK_INT < 35) return
-        try {
-            val insets = window.decorView.rootWindowInsets
-            actionBar?.setPadding(0, insets.getInsets(WindowInsets.Type.statusBars()).top, 0, 0)
-            findViewById<ScrollView>(R.id.scroll)?.setPadding(
-                0,
-                0,
-                0,
-                insets.getInsets(WindowInsets.Type.navigationBars()).bottom
-            )
-        } catch (_: Exception) { /* Window insets are not available yet. */ }
     }
 }

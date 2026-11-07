@@ -284,6 +284,6 @@ object ModelEndpointPortableCodec {
     private val FAVORITE_KEYS = setOf(
         "modelId", "endpointId", "routingType", "selectedProvider", "allowFallbacks",
         "providerOrder", "ignoredProviders", "reasoningEffort", "showReasoning", "streaming",
-        "temperature", "topP", "frequencyPenalty", "presencePenalty"
+        "temperature", "topP", "frequencyPenalty", "presencePenalty", "pinned"
     )
 }

@@ -308,4 +308,14 @@
     <dimen name="memory_attachment_strip_horizontal_margin">12dp</dimen>
     <dimen name="memory_attachment_strip_bottom_gap">8dp</dimen>
     <dimen name="memory_attachment_strip_elevation">10dp</dimen>
+    <dimen name="model_picker_gutter">16dp</dimen>
+    <dimen name="model_picker_section_gap">12dp</dimen>
+    <dimen name="model_picker_tab_gap">4dp</dimen>
+    <dimen name="model_picker_search_padding_end">12dp</dimen>
+    <dimen name="model_picker_card_radius">16dp</dimen>
+    <dimen name="model_picker_card_height">72dp</dimen>
+    <dimen name="model_picker_card_padding">8dp</dimen>
+    <dimen name="model_picker_action_size">36dp</dimen>
+    <dimen name="model_picker_icon_size">20dp</dimen>
+    <dimen name="model_picker_progress_size">72dp</dimen>
 </resources>

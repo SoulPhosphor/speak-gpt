@@ -86,7 +86,8 @@ object FavoriteRoutingActions {
         /** When true, changing the model on the screen keeps the routing the user
          *  is on (instead of adopting the new model's saved routing). Only the
          *  Summoning Circle passes true; other callers keep per-model behavior. */
-        keepRoutingOnModelChange: Boolean = false
+        keepRoutingOnModelChange: Boolean = false,
+        returnOnBackAfterSave: Boolean = false
     ): Intent? {
         val endpoint = apiEndpointPreferences.getApiEndpoint(context, endpointId)
         if (!endpoint.isOpenRouterRouting()) return null
@@ -95,6 +96,7 @@ object FavoriteRoutingActions {
 
         return Intent(context, ChooseProviderActivity::class.java)
             .putExtra(ChooseProviderActivity.EXTRA_PERSIST_DIRECTLY, true)
+            .putExtra(ChooseProviderActivity.EXTRA_RETURN_ON_BACK_AFTER_SAVE, returnOnBackAfterSave)
             .putExtra(
                 ChooseProviderActivity.EXTRA_KEEP_ROUTING_ON_MODEL_CHANGE,
                 keepRoutingOnModelChange

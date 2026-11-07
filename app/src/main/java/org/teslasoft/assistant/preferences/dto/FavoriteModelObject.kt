@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.preferences.dto
 
+import com.google.gson.annotations.SerializedName
+
 /**
  * A favorited model, scoped to the endpoint profile it was starred under.
  *
@@ -28,25 +30,25 @@ package org.teslasoft.assistant.preferences.dto
  * positional callers stay valid.
  */
 class FavoriteModelObject(
-    var modelId: String,
-    var endpointId: String,
-    var routingType: String = ROUTING_AUTOMATIC,
+    @SerializedName("modelId") var modelId: String,
+    @SerializedName("endpointId") var endpointId: String,
+    @SerializedName("routingType") var routingType: String = ROUTING_AUTOMATIC,
     /** Provider slug chosen in Only mode (empty = none chosen). */
-    var selectedProvider: String = "",
+    @SerializedName("selectedProvider") var selectedProvider: String = "",
     /** Preferred mode: whether the API may fall back to other providers when
      *  the preferred ones fail. Defaults on. */
-    var allowFallbacks: Boolean = true,
+    @SerializedName("allowFallbacks") var allowFallbacks: Boolean = true,
     /** Preferred mode: provider slugs in priority order (first = most
      *  preferred; the owner's "lower is less preferred"). Slugs currently
      *  unavailable for the model STAY stored in position (they return when the
      *  provider does) but must be filtered out of the API order payload at
      *  request time. */
-    var providerOrder: List<String> = emptyList(),
+    @SerializedName("providerOrder") var providerOrder: List<String> = emptyList(),
     /** Provider slugs the user marked Ignore in the chart. Applies in
      *  automatic and preferred modes; not sent in Only mode. Unavailable
      *  slugs stay stored but must be filtered out of the API ignore payload
      *  at request time. */
-    var ignoredProviders: List<String> = emptyList(),
+    @SerializedName("ignoredProviders") var ignoredProviders: List<String> = emptyList(),
     /** This favorite's saved default reasoning effort (chat-redesign-plan.md
      *  §7.4/§7.9). Stored independently from provider routing — a model may
      *  support routing, reasoning, both, or neither. Default [REASONING_AUTO]:
@@ -54,11 +56,11 @@ class FavoriteModelObject(
      *  favorite saved before reasoning existed reads back as [REASONING_AUTO].
      *  Kept near the END of the constructor so existing positional callers stay
      *  valid. */
-    var reasoningEffort: String = REASONING_AUTO,
+    @SerializedName("reasoningEffort") var reasoningEffort: String = REASONING_AUTO,
     /** This favorite's saved Show Reasoning preference (§7.4/§7.9). Controls
      *  whether available provider-supplied reasoning is requested/returned for
      *  display; it never disables the model's reasoning. Default On (true). */
-    var showReasoning: Boolean = true,
+    @SerializedName("showReasoning") var showReasoning: Boolean = true,
     /** This favorite's saved sampling parameters (Model Parameters screen).
      *  They belong to the model, so selecting the model applies them to the
      *  chat regardless of provider routing. Each is null until the user saves
@@ -68,11 +70,11 @@ class FavoriteModelObject(
      *  chat's own values untouched on selection. All five are written together
      *  by a save, so in practice they are all set or all null. Kept at the END
      *  of the constructor so existing positional callers stay valid. */
-    var streaming: Boolean? = null,
-    var temperature: Float? = null,
-    var topP: Float? = null,
-    var frequencyPenalty: Float? = null,
-    var presencePenalty: Float? = null
+    @SerializedName("streaming") var streaming: Boolean? = null,
+    @SerializedName("temperature") var temperature: Float? = null,
+    @SerializedName("topP") var topP: Float? = null,
+    @SerializedName("frequencyPenalty") var frequencyPenalty: Float? = null,
+    @SerializedName("presencePenalty") var presencePenalty: Float? = null
 ) {
     /** True when this favorite carries user-saved sampling parameters. A save
      *  writes all five, so any one being present means the set is present. */

@@ -24,8 +24,85 @@ import org.junit.Test
 import org.teslasoft.assistant.preferences.backup.portable.ModelEndpointMergePlanner
 import org.teslasoft.assistant.preferences.backup.portable.ModelEndpointPortableCodec
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
+import org.teslasoft.assistant.preferences.models.ModelIdentity
 
 class ModelEndpointStateGenerationStoreTest {
+    @Test
+    fun recentFavoriteAndPinKeepHistoryWhileRecentDeleteKeepsTheFavorite() {
+        val preferences = FakeSharedPreferences()
+        val state = ModelEndpointStateGenerationStore.createForTest(preferences)
+        assertTrue(state.install(ModelEndpointPortableCodec.Data(
+            listOf(endpoint("ep-1", "One", "model-a")), emptyList()
+        )))
+        val favorites = FavoriteModelsPreferences.createForTest(preferences)
+        val recents = RecentModelsPreferences(FakeSharedPreferences())
+        val model = FavoriteModelObject("model-a", "ep-1", selectedProvider = "saved")
+        recents.record(model)
+
+        favorites.addFavoriteIfAbsent(model)
+        assertEquals(null, favorites.getFavoriteModels().single()["pinned"])
+        favorites.setPinned(model, true)
+        favorites.addFavoriteIfAbsent(FavoriteModelObject("model-a", "ep-1", selectedProvider = "different"))
+        assertEquals("true", favorites.getFavoriteModels().single()["pinned"])
+        assertEquals("saved", recents.models().single().selectedProvider)
+
+        recents.remove(ModelIdentity("ep-1", "model-a"))
+        assertTrue(recents.models().isEmpty())
+        assertEquals("saved", favorites.getFavorite("model-a", "ep-1")?.selectedProvider)
+        assertEquals("true", favorites.getFavoriteModels().single()["pinned"])
+    }
+
+    @Test
+    fun pinAndUnpinPreserveSettingsAndFavoriteDeletionPreservesRecentHistory() {
+        val preferences = FakeSharedPreferences()
+        val state = ModelEndpointStateGenerationStore.createForTest(preferences)
+        assertTrue(state.install(data(endpoint("ep-1", "One", "model-a"), favorite("ep-1", "model-a"))))
+        val favorites = FavoriteModelsPreferences.createForTest(preferences)
+        val recents = RecentModelsPreferences(FakeSharedPreferences())
+        val model = FavoriteModelObject("model-a", "ep-1").apply {
+            routingType = FavoriteModelObject.ROUTING_ONLY
+            selectedProvider = "test-provider"
+        }
+        favorites.addFavoriteModel(model)
+        recents.record(model)
+
+        favorites.setPinned(model, true)
+        model.temperature = 0.5f
+        favorites.addFavoriteModel(model)
+        assertEquals("true", favorites.getFavoriteModels().single()["pinned"])
+
+        favorites.setPinned(model, false)
+        assertEquals(null, favorites.getFavoriteModels().single()["pinned"])
+        assertEquals("test-provider", favorites.getFavorite(model.modelId, model.endpointId)?.selectedProvider)
+        assertEquals(0.5f, favorites.getFavorite(model.modelId, model.endpointId)?.temperature)
+
+        favorites.setPinned(model, true)
+        favorites.removeFavoriteModel(model.modelId, model.endpointId)
+        assertTrue(favorites.getFavoriteModels().isEmpty())
+        assertEquals("test-provider", recents.models().single().selectedProvider)
+    }
+
+    @Test
+    fun recentModelsKeepLatestSettingsAndApplyTheStoredLimit() {
+        val preferences = FakeSharedPreferences()
+        val recents = RecentModelsPreferences(preferences)
+        assertEquals(20, recents.limit())
+        val first = FavoriteModelObject("model-a", "ep-1")
+        val otherProfile = FavoriteModelObject("model-a", "ep-2")
+        recents.record(first)
+        recents.record(otherProfile)
+        recents.record(first.apply { routingType = FavoriteModelObject.ROUTING_PREFERRED })
+
+        val reopened = RecentModelsPreferences(preferences)
+        assertEquals(listOf("ep-1", "ep-2"), reopened.models().map { it.endpointId })
+        assertEquals(FavoriteModelObject.ROUTING_PREFERRED, reopened.models().first().routingType)
+        reopened.setLimit(1)
+        assertEquals(listOf("ep-1"), recents.models().map { it.endpointId })
+        reopened.setLimit(20)
+        assertEquals(listOf("ep-1"), recents.models().map { it.endpointId })
+    }
+
     @Test
     fun stagedWriteLeavesOldGenerationVisibleUntilThePointerSwitch() {
         val preferences = FakeSharedPreferences()
