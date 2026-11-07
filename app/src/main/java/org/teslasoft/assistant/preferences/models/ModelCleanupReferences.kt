@@ -18,7 +18,9 @@ package org.teslasoft.assistant.preferences.models
 
 import android.content.Context
 import org.json.JSONArray
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.RecentModelsPreferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.tts.SavedTtsSource
 import org.teslasoft.assistant.preferences.tts.SavedTtsSourcesPreferences
@@ -31,10 +33,12 @@ data class ModelCleanupReferences(
     /** False when local saved data could not be read conclusively. */
     val isComplete: Boolean = true,
     val ttsTargets: Set<ModelIdentity> = emptySet(),
-    val ttsReadable: Boolean = true
+    val ttsReadable: Boolean = true,
+    val recentTargets: Set<ModelIdentity> = emptySet()
 ) {
     val ruleTargets: Set<ModelIdentity> get() = ruleTargetsByRuleId.values.flatten().toSet()
-    val allTargets: Set<ModelIdentity> get() = favorites + ruleTargets + ttsTargets
+    val textTargets: Set<ModelIdentity> get() = favorites + ruleTargets + recentTargets
+    val allTargets: Set<ModelIdentity> get() = textTargets + ttsTargets
 
     internal fun withTtsSources(result: Result<List<SavedTtsSource>>): ModelCleanupReferences =
         result.fold(
@@ -62,6 +66,16 @@ object ModelCleanupReferencesLoader {
             emptySet()
         }
 
+        val recentTargets = try {
+            val endpointIds = ApiEndpointPreferences.getApiEndpointPreferences(context)
+                .getApiEndpointsList(context).map { it.id }.toSet()
+            RecentModelsPreferences(context).models().filter { it.endpointId in endpointIds }
+                .map { ModelIdentity(it.endpointId, it.modelId) }.toSet()
+        } catch (_: Exception) {
+            complete = false
+            emptySet()
+        }
+
         val byRule = LinkedHashMap<String, Set<ModelIdentity>>()
         var legacyCount = 0
         if (MemoryStore.isProvisioned(context)) {
@@ -80,7 +94,7 @@ object ModelCleanupReferencesLoader {
                 complete = false
             }
         }
-        return ModelCleanupReferences(favorites, byRule, legacyCount, complete)
+        return ModelCleanupReferences(favorites, byRule, legacyCount, complete, recentTargets = recentTargets)
             .withTtsSources(SavedTtsSourcesPreferences.getPreferences(context).load())
     }
 }

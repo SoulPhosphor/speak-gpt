@@ -182,6 +182,7 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.ResponseLifecycle
 import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.RecentModelsPreferences
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.providers.NewChatProviderRestore
 import org.teslasoft.assistant.providers.ProviderRoutingBlockedException
@@ -11837,6 +11838,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return TokenCounts(input, output, input + output)
     }
 
+    private fun recordRecentChatModel(modelId: String) {
+        val endpoint = apiEndpointObject ?: return
+        val chatPreferences = preferences ?: return
+        val settings = favoriteForActiveEndpoint(modelId)
+            ?: FavoriteModelObject(modelId, endpoint.id)
+        val reasoning = resolveReasoningForModel(modelId)
+        settings.reasoningEffort = reasoning.effort.serialized
+        settings.showReasoning = reasoning.showReasoning
+        settings.streaming = chatPreferences.getStreaming()
+        settings.temperature = chatPreferences.getTemperature()
+        settings.topP = chatPreferences.getTopP()
+        settings.frequencyPenalty = chatPreferences.getFrequencyPenalty()
+        settings.presencePenalty = chatPreferences.getPresencePenalty()
+        runCatching { RecentModelsPreferences(this).record(settings) }
+    }
+
     /** Remember the provider, model, routing, and companion that just produced
      *  a successful reply. All values must come from this same chat; an empty or
      *  deleted companion leaves the prior complete snapshot unchanged. */
@@ -12343,6 +12360,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // real provider/network end, not a pre-dispatch one.
                     startGenerationNetworkDiagnostics()
                     providerRequestDispatched = true
+                    recordRecentChatModel(completionRequest.model.id)
                     completions.flowOn(Dispatchers.IO).collect { v ->
                         run {
                             if (!currentCoroutineContext().isActive) throw CancellationException()
@@ -13998,6 +14016,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // pre-dispatch one.
                     startGenerationNetworkDiagnostics()
                     providerRequestDispatched = true
+                    recordRecentChatModel(chatCompletionRequest.model.id)
                     completions.flowOn(Dispatchers.IO).collect { v ->
                         run {
                             if (!currentCoroutineContext().isActive) throw CancellationException()
@@ -14052,6 +14071,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // full assistant message is only rendered after the call returns.
             startGenerationNetworkDiagnostics()
             providerRequestDispatched = true
+            recordRecentChatModel(chatCompletionRequest.model.id)
             val completion = try {
                 generationRequestActive = true
                 withGenerationRequestContext { ai!!.chatCompletion(chatCompletionRequest) }

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@id/root"
+    style="@style/Widget.App.ModelPicker.Screen">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@id/selector_title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/model_picker_title" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@id/field_search"
+        style="@style/Widget.App.ModelPicker.SearchBox"
+        app:layout_constraintTop_toBottomOf="@id/action_bar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/model_picker_search_icon"
+            style="@style/Widget.App.Bookmark.SearchIcon"
+            android:src="@drawable/ic_search"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@id/field_search_text"
+            style="@style/Widget.App.ModelPicker.SearchField"
+            android:hint="@string/model_picker_search"
+            android:inputType="text"
+            android:imeOptions="actionSearch"
+            app:layout_constraintStart_toEndOf="@id/model_picker_search_icon"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <LinearLayout
+        android:id="@+id/model_picker_tabs"
+        style="@style/Widget.App.ModelPicker.Tabs"
+        app:layout_constraintTop_toBottomOf="@id/field_search"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/model_picker_favorites"
+            style="@style/Widget.App.ModelPicker.Tab"
+            android:text="@string/label_favorite_models_section" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/model_picker_recent"
+            style="@style/Widget.App.ModelPicker.Tab.Spaced"
+            android:text="@string/model_picker_recent" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@id/btn_view_all"
+            style="@style/Widget.App.ModelPicker.Tab.Spaced"
+            android:text="@string/label_view_all" />
+    </LinearLayout>
+
+    <ListView
+        android:id="@id/voices_list"
+        style="@style/Widget.App.ModelPicker.List"
+        app:layout_constraintTop_toBottomOf="@id/model_picker_tabs"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.loadingindicator.LoadingIndicator
+        android:id="@id/progressBar"
+        style="@style/Widget.App.ModelPicker.Progress"
+        app:layout_constraintBottom_toBottomOf="@id/voices_list"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/voices_list" />
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -3468,4 +3468,81 @@
         <item name="android:layout_marginBottom">@dimen/memory_attachment_strip_bottom_gap</item>
         <item name="android:elevation">@dimen/memory_attachment_strip_elevation</item>
     </style>
+    <style name="Widget.App.ModelPicker.Screen" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:focusableInTouchMode">true</item>
+    </style>
+    <style name="Widget.App.ModelPicker.SearchBox" parent="Widget.App.Bookmark.SearchBox">
+        <item name="android:layout_marginHorizontal">@dimen/model_picker_gutter</item>
+        <item name="android:layout_marginTop">@dimen/model_picker_section_gap</item>
+    </style>
+    <style name="Widget.App.ModelPicker.SearchField" parent="Widget.App.Bookmark.SearchField">
+        <item name="android:paddingEnd">@dimen/model_picker_search_padding_end</item>
+        <item name="android:singleLine">true</item>
+    </style>
+    <style name="Widget.App.ModelPicker.Tabs" parent="Widget.App.ListTools.Container">
+        <item name="android:layout_marginHorizontal">@dimen/model_picker_gutter</item>
+        <item name="android:layout_marginTop">@dimen/model_picker_section_gap</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+    <style name="Widget.App.ModelPicker.Tab" parent="Widget.App.VoiceBrowser.Segment">
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingHorizontal">0dp</item>
+        <item name="android:checkable">true</item>
+    </style>
+    <style name="Widget.App.ModelPicker.Tab.Spaced">
+        <item name="android:layout_marginStart">@dimen/model_picker_tab_gap</item>
+    </style>
+    <style name="Widget.App.ModelPicker.List" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:layout_marginTop">@dimen/model_picker_section_gap</item>
+        <item name="android:clipToPadding">false</item>
+        <item name="android:divider">@android:color/transparent</item>
+        <item name="android:dividerHeight">@dimen/model_picker_section_gap</item>
+        <item name="android:listSelector">@android:color/transparent</item>
+        <item name="android:paddingBottom">@dimen/model_picker_gutter</item>
+    </style>
+    <style name="Widget.App.ModelPicker.Progress" parent="Widget.Material3.LoadingIndicator">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="indicatorSize">@dimen/model_picker_progress_size</item>
+    </style>
+    <style name="Widget.App.ModelPicker.CardInset" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingHorizontal">@dimen/model_picker_gutter</item>
+    </style>
+    <style name="Widget.App.ModelPicker.Card" parent="Widget.App.VoiceBrowser.Row">
+        <item name="android:background">@drawable/bg_saved_model_card</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">@dimen/model_picker_card_height</item>
+        <item name="android:padding">@dimen/model_picker_card_padding</item>
+    </style>
+    <style name="Widget.App.ModelPicker.ModelName" parent="Widget.App.Row.Title">
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Widget.App.ModelPicker.Action" parent="Widget.App.QuickTile.EditButton">
+        <item name="android:layout_width">@dimen/model_picker_action_size</item>
+        <item name="android:layout_height">@dimen/model_picker_action_size</item>
+        <item name="android:layout_marginEnd">0dp</item>
+        <item name="android:padding">@dimen/model_picker_card_padding</item>
+        <item name="android:tint">?attr/appRowSubtitleColor</item>
+    </style>
+    <style name="Widget.App.ModelPicker.Action.Pin">
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+    <style name="Widget.App.ModelPicker.Action.Indicator">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:alpha">0.55</item>
+        <item name="android:scaleX">0.82</item>
+        <item name="android:scaleY">0.82</item>
+    </style>
+    <style name="Widget.App.ModelPicker.CatalogControls" parent="Widget.App.ModelPicker.CardInset">
+        <item name="android:orientation">vertical</item>
+    </style>
+    <style name="Widget.App.ModelPicker.ControlRow" parent="Widget.App.Page.ControlRow">
+        <item name="android:layout_marginTop">@dimen/model_picker_section_gap</item>
+    </style>
 </resources>

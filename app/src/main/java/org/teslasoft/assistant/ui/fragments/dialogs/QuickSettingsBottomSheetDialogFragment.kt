@@ -28,6 +28,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.ImageView
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -820,32 +821,21 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }.start()
     }
 
-    private var modelSelectedListener: AdvancedModelSelectorDialogFragment.OnModelSelectedListener = AdvancedModelSelectorDialogFragment.OnModelSelectedListener { model ->
-        preferences?.setModel(model)
-        // The model's saved parameters (Model Parameters screen) come along with
-        // it. Applied against the chat's own endpoint here; the visible sliders
-        // are refreshed so they show — and cannot later clobber — the new values.
+    private fun applyPickerSelection(model: String, endpointId: String) {
+        val prefs = preferences ?: return
+        if (endpointId != prefs.getApiEndpointId()) {
+            val endpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId) ?: return
+            if (endpoint.host.isBlank()) return
+            prefs.setApiEndpointId(endpointId)
+            apiEndpoint = endpoint
+            textHost?.text = endpoint.label.ifBlank { endpoint.host }
+            Toast.makeText(requireContext(), R.string.msg_api_compatibility_change, Toast.LENGTH_SHORT).show()
+        }
+        prefs.setModel(model)
         applyFavoriteParametersForCurrentModel(model)
         updateListener?.onUpdate()
         shouldForceUpdate = true
         textModel?.text = model
-        // The Provider Mode dropdown reflects the active model's routing.
-        refreshProviderModeDisplay()
-        // Reasoning controls are keyed to the model/provider path (§7.9).
-        setupReasoningTile()
-    }
-
-    private var modelSelectedListenerV2: AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener = AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener { model, endpointId ->
-        preferences?.setApiEndpointId(endpointId)
-        android.widget.Toast.makeText(requireContext(), R.string.msg_api_compatibility_change, android.widget.Toast.LENGTH_SHORT).show()
-        preferences?.setModel(model)
-        // Endpoint is now this favorite's own endpoint, so apply against it.
-        preferences?.let { FavoriteModelParameters.applyToChat(requireContext(), it, model, endpointId) }
-        refreshSamplingControlsFromPreferences()
-        updateListener?.onUpdate()
-        shouldForceUpdate = true
-        textModel?.text = model
-        // Model and endpoint may both have changed; re-evaluate the tile.
         refreshProviderModeTile()
         setupReasoningTile()
     }
@@ -1255,16 +1245,19 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             textModel?.text = model
         }
 
+        parentFragmentManager.setFragmentResultListener(
+            AdvancedModelSelectorDialogFragment.CHAT_SELECTION_RESULT, viewLifecycleOwner
+        ) { _, result ->
+            val selectedModel = result.getString(AdvancedModelSelectorDialogFragment.SELECTED_MODEL).orEmpty()
+            val endpointId = result.getString(AdvancedModelSelectorDialogFragment.SELECTED_ENDPOINT).orEmpty()
+            if (selectedModel.isNotBlank() && endpointId.isNotBlank()) {
+                applyPickerSelection(selectedModel, endpointId)
+            }
+        }
         btnSelectModel?.setOnClickListener {
-            // One full-screen selector: it opens on this endpoint's favorites and
-            // offers "View all". Favorites are scoped to the chat's active
-            // endpoint, so a picked favorite always belongs to it.
-            val dialog = AdvancedModelSelectorDialogFragment.newInstance(
-                preferences?.getModel().orEmpty(),
-                chatId
-            )
-            dialog.setModelSelectedListener(modelSelectedListener)
-            dialog.show(parentFragmentManager, "AdvancedModelSelectorDialogFragment")
+            AdvancedModelSelectorDialogFragment.newChatModelPickerInstance(
+                preferences?.getModel().orEmpty(), chatId
+            ).show(parentFragmentManager, "AdvancedModelSelectorDialogFragment")
         }
 
         val openProviderRouting = View.OnClickListener {

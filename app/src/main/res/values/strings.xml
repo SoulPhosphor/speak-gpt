@@ -2062,8 +2062,8 @@
 
     <!-- User-triggered Model Cleanup. -->
     <string name="model_cleanup_title">Clean Up Models</string>
-    <string name="model_cleanup_settings_subtitle">Checks for unavailable models associated with Favorites or Rules</string>
-    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models, Model Rules, and TTS models to see whether their models are currently available from their saved API endpoints.\n\nA model marked unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
+    <string name="model_cleanup_settings_subtitle">Checks for unavailable models in Favorites, Recent, Model Rules, and saved voice models</string>
+    <string name="model_cleanup_explanation">This check looks at your Favorites, Recent models, Model Rules, and TTS models to see whether their models are currently available from their saved API endpoints.\n\nA model marked unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
     <string name="model_cleanup_check">Check Available Models</string>
     <string name="model_cleanup_check_failed">Couldn’t check saved models. Try again later.</string>
     <string name="model_cleanup_unavailable">Unavailable</string>
@@ -4282,4 +4282,20 @@
     </plurals>
     <string name="memory_embedding_warning">Embedding Model Not Installed</string>
     <string name="memory_embedding_add">Add Embedding Model</string>
+    <string name="model_picker_title">Select AI Model</string>
+    <string name="model_picker_search">Search models or providers</string>
+    <string name="model_picker_recent">Recent</string>
+    <string name="model_picker_favorite">Favorite</string>
+    <string name="model_picker_unfavorite">Unfavorite</string>
+    <string name="model_picker_actions">Model actions</string>
+    <string name="model_picker_routing_subtitle">%1$s · %2$s</string>
+    <string name="model_picker_recent_limit_title">Model Picker Recently Used</string>
+    <string name="model_picker_recent_limit_hint">Choose how many models are stored from your recently last used in the model picker.</string>
+    <string name="model_browser_api_provider">API Provider</string>
+    <string name="model_browser_ai_models">AI Models</string>
+    <string name="model_browser_search_providers">Search providers</string>
+    <string name="model_browser_new">New</string>
+    <string name="model_browser_free">Free</string>
+    <string name="model_browser_catalog_order">Catalog Order</string>
+    <string name="model_browser_alphabetical">A–Z</string>
 </resources>

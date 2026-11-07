@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.ModelPicker.CardInset">
+    <LinearLayout
+        android:id="@+id/model_picker_card"
+        style="@style/Widget.App.ModelPicker.Card">
+
+        <ImageButton
+            android:id="@+id/model_picker_pin"
+            style="@style/Widget.App.ModelPicker.Action.Pin"
+            android:src="@drawable/ic_kid_star"
+            android:contentDescription="@string/chat_menu_unpin" />
+
+        <LinearLayout style="@style/Widget.App.Row.TextColumn">
+            <TextView
+                android:id="@+id/model_picker_model_name"
+                style="@style/Widget.App.ModelPicker.ModelName" />
+
+            <TextView
+                android:id="@+id/model_picker_model_subtitle"
+                style="@style/Widget.App.Row.Subtitle" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/model_picker_unavailable"
+            style="@style/Widget.App.Row.Icon"
+            android:src="@drawable/ic_report"
+            android:contentDescription="@string/model_cleanup_unavailable" />
+
+        <ImageButton
+            android:id="@id/btn_parameters"
+            style="@style/Widget.App.ModelPicker.Action"
+            android:src="@drawable/ic_tune" />
+
+        <ImageView
+            android:id="@+id/model_picker_reasoning_indicator"
+            style="@style/Widget.App.ModelPicker.Action.Indicator"
+            android:src="@drawable/ic_lightbulb"
+            android:contentDescription="@string/reasoning_model_indicator_desc" />
+
+        <ImageButton
+            android:id="@id/btn_reasoning_settings"
+            style="@style/Widget.App.ModelPicker.Action"
+            android:src="@drawable/ic_lightbulb"
+            android:contentDescription="@string/reasoning_settings_bulb_desc" />
+
+        <ImageButton
+            android:id="@id/btn_routing_settings"
+            style="@style/Widget.App.ModelPicker.Action"
+            android:src="@drawable/ic_settings_outline" />
+
+        <ImageButton
+            android:id="@+id/model_picker_menu"
+            style="@style/Widget.App.ModelPicker.Action"
+            android:src="@drawable/ic_more_vert"
+            android:contentDescription="@string/model_picker_actions" />
+    </LinearLayout>
+</FrameLayout>

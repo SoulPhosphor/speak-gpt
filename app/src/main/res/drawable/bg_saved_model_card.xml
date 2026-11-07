@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorControlHighlight">
+    <item>
+        <selector>
+            <item android:state_activated="true">
+                <shape>
+                    <corners android:radius="@dimen/model_picker_card_radius" />
+                    <solid android:color="?attr/colorSecondaryContainer" />
+                </shape>
+            </item>
+            <item>
+                <shape>
+                    <corners android:radius="@dimen/model_picker_card_radius" />
+                    <solid android:color="?attr/colorSurfaceContainerHigh" />
+                </shape>
+            </item>
+        </selector>
+    </item>
+</ripple>

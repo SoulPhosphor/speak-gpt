@@ -10,6 +10,24 @@ class ModelCleanupPolicyTest {
     private val deepSeekModel = ModelIdentity("deepseek", "openai/gpt-5.1")
 
     @Test
+    fun recentOnlyModelRemainsInCleanupReportAfterFavoriteDeletion() {
+        val references = ModelCleanupReferences(
+            favorites = emptySet(),
+            ruleTargetsByRuleId = emptyMap(),
+            legacyRuleTargetCount = 0,
+            recentTargets = setOf(openRouterModel)
+        )
+        val report = ModelCleanupPolicy.update(
+            previous = ModelCleanupReport(),
+            currentTargets = references.allTargets,
+            checks = mapOf("openrouter" to EndpointCatalogCheck.Checked(emptySet())),
+            endpointLabels = emptyMap(),
+            generatedAtMillis = 10L
+        )
+        assertEquals(setOf(openRouterModel), ModelCleanupPolicy.prune(report, references).unavailable)
+    }
+
+    @Test
     fun sameModelIdIsEvaluatedSeparatelyForEachEndpoint() {
         val report = ModelCleanupPolicy.update(
             previous = ModelCleanupReport(),

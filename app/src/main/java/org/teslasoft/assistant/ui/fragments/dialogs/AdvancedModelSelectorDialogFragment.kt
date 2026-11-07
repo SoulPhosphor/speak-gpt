@@ -29,11 +29,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
+import android.view.WindowManager
+import android.widget.AbsListView
 import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.os.bundleOf
+import androidx.core.view.isVisible
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
 import com.aallam.openai.api.http.Timeout
@@ -56,31 +60,44 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.RecentModelsPreferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.providers.OnlyProviderAvailability
 import org.teslasoft.assistant.providers.OnlyProviderAvailabilityClient
 import org.teslasoft.assistant.ui.adapters.FavoriteModelListAdapter
 import org.teslasoft.assistant.ui.adapters.ModelListAdapter
+import org.teslasoft.assistant.ui.activities.ChooseProviderActivity
+import org.teslasoft.assistant.ui.adapters.SavedModelPickerAdapter
+import org.teslasoft.assistant.ui.util.ScreenChrome
+import org.teslasoft.assistant.preferences.models.ModelCleanupReportStore
+import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
+import org.teslasoft.assistant.reasoning.EndpointReasoningCapability
+import org.teslasoft.assistant.reasoning.EndpointReasoningCapabilityIndex
+import org.teslasoft.assistant.reasoning.ReasoningProviderPath
 import org.teslasoft.core.api.network.RequestNetwork
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * Full-screen model picker (owner redesign, July 31 2026). Replaces the old
- * pop-up: it fills the screen, has a header with a back button, and opens on a
- * favorites-first landing — the current endpoint's favorites, a search box that
- * searches the endpoint's whole catalog, and a "View All" button that swaps the
- * screen to the full model list. A separate provider-wide entry purpose opens
- * the same screen directly on every model advertised by that endpoint.
- * Favorites are per-endpoint (see [FavoriteModelsPreferences]); the
- * image-generator variant keeps its previous behavior of showing the full
- * (capability-narrowed) catalog directly.
- */
+/** Full-screen model picker for chat, endpoint catalogs, and feature-specific selection. */
 class AdvancedModelSelectorDialogFragment : DialogFragment() {
     companion object {
         private const val ARG_START_WITH_ALL_MODELS = "startWithAllModels"
         private const val ARG_RAW_MODEL_CATALOG = "rawModelCatalog"
         private const val ARG_CURRENT_CHAT_MODEL = "currentChatModel"
+        private const val ARG_CHAT_MODEL_PICKER = "chatModelPicker"
+        private const val STATE_PICKER_TAB = "pickerTab"
+        private const val STATE_CATALOG_PROFILE = "catalogProfile"
+        private const val STATE_ROUTING_MODEL = "routingModel"
+        private const val STATE_ROUTING_ENDPOINT = "routingEndpoint"
+        const val CHAT_SELECTION_RESULT = "chatModelPickerSelection"
+        const val SELECTED_MODEL = "modelId"
+        const val SELECTED_ENDPOINT = "endpointId"
+
+        fun newChatModelPickerInstance(name: String, chatId: String) =
+            newInstance(name, chatId).apply {
+                requireArguments().putBoolean(ARG_CHAT_MODEL_PICKER, true)
+            }
 
         /** [endpointId], when non-blank, fetches models for that specific saved
          *  endpoint instead of the chat's own active endpoint (Preferences'
@@ -146,6 +163,22 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private var btnBack: ImageButton? = null
     private var btnViewAll: MaterialButton? = null
     private var btnUseCurrentModel: MaterialButton? = null
+    private var btnFavorites: MaterialButton? = null
+    private var btnRecent: MaterialButton? = null
+
+    private enum class PickerTab { FAVORITES, RECENT, VIEW_ALL }
+
+    private val chatPicker: Boolean
+        get() = requireArguments().getBoolean(ARG_CHAT_MODEL_PICKER)
+    private var pickerTab = PickerTab.FAVORITES
+    private var savedModelAdapter: SavedModelPickerAdapter? = null
+    private var catalog: ModelPickerCatalog? = null
+    private var catalogHeaderAttached = false
+    private var catalogReasoningIndex: EndpointReasoningCapabilityIndex? = null
+    private var catalogReasoningProfile: String? = null
+    private var savedModels = emptyMap<ModelIdentity, Map<String, String>>()
+    private var favoriteRows = emptyList<SavedModelPickerAdapter.Row>()
+    private var recentRows = emptyList<SavedModelPickerAdapter.Row>()
 
     private var preferences: Preferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
@@ -163,6 +196,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     /** The endpoint's full catalog, populated once the fetch completes. */
     private var availableModels: ArrayList<String> = arrayListOf()
     private var catalogLoaded = false
+    private var checkingProvider = false
 
     /** This endpoint's favorites (landing list). */
     private var favorites: ArrayList<Map<String, String>> = arrayListOf()
@@ -189,8 +223,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
      */
     private var checkOnlyProviderOnSelection = false
     private var providerAvailabilityGeneration = 0
-    /** Non-null only while Change Provider was launched from the forced warning. */
-    private var pendingProviderRecoveryModel: String? = null
+    /** A successful routing result completes the model pick for this target. */
+    private var pendingRoutingTarget: ModelIdentity? = null
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -210,6 +244,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         // a floating window with dialog insets. Use the app's normal screen
         // theme so the shared action bar and content genuinely fill the screen.
         setStyle(STYLE_NORMAL, R.style.UI_Material)
+        pickerTab = PickerTab.entries.firstOrNull {
+            it.name == savedInstanceState?.getString(STATE_PICKER_TAB)
+        } ?: PickerTab.FAVORITES
+        val routingEndpoint = savedInstanceState?.getString(STATE_ROUTING_ENDPOINT)
+        val routingModel = savedInstanceState?.getString(STATE_ROUTING_MODEL)
+        if (routingEndpoint != null && routingModel != null) {
+            pendingRoutingTarget = ModelIdentity(routingEndpoint, routingModel)
+        }
     }
 
     private var modelSelectedListener: ModelListAdapter.OnItemClickListener = object : ModelListAdapter.OnItemClickListener {
@@ -226,24 +268,19 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
     }
 
-    /** Return from the Choose Provider screen opened by a favorite's routing
-     *  gear (it persists the favorite itself); refresh so the gear can flip
-     *  outline → filled once routing is set up. When the provider screen was
-     *  launched by the forced unavailable-provider warning, a successful Save
-     *  also completes the model selection that was waiting behind it. */
     private val chooseProviderLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         reloadFavorites()
         render()
 
-        val pendingModel = pendingProviderRecoveryModel ?: return@registerForActivityResult
-        pendingProviderRecoveryModel = null
+        val pendingModel = pendingRoutingTarget ?: return@registerForActivityResult
+        pendingRoutingTarget = null
         if (result.resultCode == Activity.RESULT_OK) {
-            val savedModel = result.data?.getStringExtra(org.teslasoft.assistant.ui.activities.ChooseProviderActivity.EXTRA_MODEL)
+            val savedModel = result.data?.getStringExtra(ChooseProviderActivity.EXTRA_MODEL)
                 ?.takeIf { it.isNotBlank() }
-                ?: pendingModel
-            finishModelSelection(savedModel)
+                ?: pendingModel.modelId
+            finishModelSelection(savedModel, pendingModel.endpointId)
         }
         // Cancel/back leaves the selector open on purpose. The not-yet-applied
         // bad model never reached the chat, so choosing another model is a valid
@@ -267,10 +304,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
 
         override fun onSettingsClick(model: String, endpointId: String) {
-            val prefs = apiEndpointPreferences ?: return
-            val favPrefs = favoriteModelsPreferences ?: return
-            FavoriteRoutingActions.buildRoutingIntent(requireActivity(), prefs, favPrefs, model, endpointId)
-                ?.let { chooseProviderLauncher.launch(it) }
+            openRoutingSettings(ModelIdentity(endpointId, model))
         }
 
         override fun onParametersClick(model: String, endpointId: String) {
@@ -285,8 +319,15 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     /** Finalize a normal model pick. Kept in one place so every resolution path
      *  (available provider, Automatic rescue, provider-screen Save) behaves the
      *  same and dismisses the selector exactly once. */
-    private fun finishModelSelection(model: String) {
-        listener?.onModelSelected(model)
+    private fun finishModelSelection(model: String, endpointId: String = resolvedEndpointId) {
+        if (chatPicker) {
+            parentFragmentManager.setFragmentResult(
+                CHAT_SELECTION_RESULT,
+                bundleOf(SELECTED_MODEL to model, SELECTED_ENDPOINT to endpointId)
+            )
+        } else {
+            listener?.onModelSelected(model)
+        }
         dismiss()
     }
 
@@ -298,9 +339,11 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
      * fail-closed, but a transient lookup failure must not falsely accuse the
      * provider of being unavailable.
      */
-    private fun handleModelSelection(model: String) {
-        val endpoint = apiEndpointObject
-        val favorite = favoriteModelsPreferences?.getFavorite(model, resolvedEndpointId)
+    private fun handleModelSelection(model: String, endpointId: String = resolvedEndpointId) {
+        if (checkingProvider) return
+        val endpoint = if (endpointId == resolvedEndpointId) apiEndpointObject
+            else apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
+        val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
 
         if (!checkOnlyProviderOnSelection ||
             endpoint == null ||
@@ -308,12 +351,13 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             favorite?.routingType != FavoriteModelObject.ROUTING_ONLY ||
             favorite.selectedProvider.isBlank()
         ) {
-            finishModelSelection(model)
+            finishModelSelection(model, endpointId)
             return
         }
 
         val selectedProvider = favorite.selectedProvider
         val generation = ++providerAvailabilityGeneration
+        checkingProvider = true
         modelList?.isEnabled = false
         progressBar?.visibility = View.VISIBLE
 
@@ -325,13 +369,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             )
             if (!isAdded || generation != providerAvailabilityGeneration) return@launch
 
+            checkingProvider = false
             modelList?.isEnabled = true
             progressBar?.visibility = View.GONE
 
             if (availability == OnlyProviderAvailability.UNAVAILABLE) {
-                showProviderUnavailableDialog(model, selectedProvider)
+                showProviderUnavailableDialog(model, endpointId, selectedProvider)
             } else {
-                finishModelSelection(model)
+                finishModelSelection(model, endpointId)
             }
         }
     }
@@ -342,7 +387,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
      * Change Model simply uncovers this already-open picker, so the user does
      * not have to return to Quick Settings and tap the model tile again.
      */
-    private fun showProviderUnavailableDialog(model: String, providerSlug: String) {
+    private fun showProviderUnavailableDialog(model: String, endpointId: String, providerSlug: String) {
         if (!isAdded) return
         val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
             .setTitle(R.string.provider_unavailable_dialog_title)
@@ -355,25 +400,25 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                     prefs,
                     favPrefs,
                     model,
-                    resolvedEndpointId,
+                    endpointId,
                     FavoriteModelObject.ROUTING_ONLY,
                     keepRoutingOnModelChange = true
                 )?.let { intent ->
-                    pendingProviderRecoveryModel = model
+                    pendingRoutingTarget = ModelIdentity(endpointId, model)
                     chooseProviderLauncher.launch(intent)
                 }
             }
             .setNegativeButton(R.string.provider_unavailable_use_automatic) { _, _ ->
                 val favPrefs = favoriteModelsPreferences ?: return@setNegativeButton
-                val favorite = favPrefs.getFavorite(model, resolvedEndpointId)
-                    ?: FavoriteModelObject(model, resolvedEndpointId)
+                val favorite = favPrefs.getFavorite(model, endpointId)
+                    ?: FavoriteModelObject(model, endpointId)
                 // Preserve the remembered selected provider. Existing Provider
                 // Mode storage is favorite-scoped; changing only routingType is
                 // exactly what the normal Automatic dropdown action does.
                 favorite.routingType = FavoriteModelObject.ROUTING_AUTOMATIC
                 favPrefs.addFavoriteModel(favorite)
                 reloadFavorites()
-                finishModelSelection(model)
+                finishModelSelection(model, endpointId)
             }
             .setNeutralButton(R.string.provider_unavailable_change_model) { _, _ ->
                 // The selector is already underneath this dialog. Closing the
@@ -508,8 +553,12 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
     }
 
-    private fun showProviderError(responseBody: String?, e: Exception? = null) {
-        if (context == null) return
+    private fun showProviderError(
+        responseBody: String?,
+        e: Exception? = null,
+        endpointLabel: String? = apiEndpointObject?.label
+    ) {
+        if (context == null || view == null || (chatPicker && pickerTab != PickerTab.VIEW_ALL)) return
         val excerpt = (responseBody ?: "").take(400)
         val msg = buildString {
             // Plain-language cause first, so a human sees what to do before the
@@ -517,7 +566,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             append(plainLanguageCause(responseBody))
             append("\n\n")
             append("Couldn't read the models list from ")
-            append(apiEndpointObject?.label ?: "this profile")
+            append(endpointLabel ?: "this profile")
             append(".\n\nProvider returned:\n")
             append(if (excerpt.isBlank()) "(empty response)" else excerpt)
             if (e != null) {
@@ -588,14 +637,22 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        return inflater.inflate(R.layout.fragment_model_selector, container, false)
+        val layout = if (chatPicker) R.layout.fragment_chat_model_picker else R.layout.fragment_model_selector
+        return inflater.inflate(layout, container, false)
     }
 
     override fun onStart() {
         super.onStart()
         // Fill the screen: this is a full-screen selector, not a floating pop-up.
         dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        applySystemBarInsets()
+        if (chatPicker) {
+            @Suppress("DEPRECATION")
+            dialog?.window?.setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+            )
+        } else {
+            applySystemBarInsets()
+        }
     }
 
     /** Match the app's full-screen activity treatment on Android 15+. */
@@ -624,13 +681,19 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         modelList = view.findViewById(R.id.voices_list)
-        modelList?.divider = null
+        if (chatPicker) {
+            ScreenChrome.fitSystemBarsAndKeyboard(view, view.findViewById(R.id.action_bar), modelList)
+        } else {
+            modelList?.divider = null
+        }
         selectorTitle = view.findViewById(R.id.selector_title)
         progressBar = view.findViewById(R.id.progressBar)
         fieldSearch = view.findViewById(R.id.field_search_text)
         btnBack = view.findViewById(R.id.btn_back)
         btnViewAll = view.findViewById(R.id.btn_view_all)
         btnUseCurrentModel = view.findViewById(R.id.btn_use_current_model)
+        btnFavorites = view.findViewById(R.id.model_picker_favorites)
+        btnRecent = view.findViewById(R.id.model_picker_recent)
 
         val ctx = mContext ?: requireContext()
 
@@ -639,7 +702,11 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         rawModelCatalog = requireArguments().getBoolean(ARG_RAW_MODEL_CATALOG, false)
         currentChatModel = requireArguments().getString(ARG_CURRENT_CHAT_MODEL).orEmpty()
         selectorTitle?.text = getString(
-            if (imageMode) R.string.label_select_image_model else R.string.label_select_ai_model
+            when {
+                chatPicker -> R.string.model_picker_title
+                imageMode -> R.string.label_select_image_model
+                else -> R.string.label_select_ai_model
+            }
         )
 
         val chatId = requireArguments().getString("chatId").orEmpty()
@@ -653,7 +720,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         checkOnlyProviderOnSelection =
             chatId.isNotBlank() && endpointIdOverride.isBlank() && !imageMode && !startsWithAllModels && !rawModelCatalog
 
-        reloadFavorites()
+        if (!chatPicker) reloadFavorites()
 
         btnBack?.setOnClickListener { handleBack() }
 
@@ -664,11 +731,21 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             }
         }
 
+        btnFavorites?.setOnClickListener { showPickerTab(PickerTab.FAVORITES) }
+        btnRecent?.setOnClickListener { showPickerTab(PickerTab.RECENT) }
         btnViewAll?.setOnClickListener {
-            showingAll = true
-            fieldSearch?.setText("")
-            query = ""
-            render()
+            if (chatPicker) {
+                showPickerTab(PickerTab.VIEW_ALL)
+            } else {
+                showingAll = true
+                fieldSearch?.setText("")
+                query = ""
+                render()
+            }
+        }
+        if (chatPicker) {
+            configureSavedModelAdapter(ctx, chatId)
+            configureCatalog(savedInstanceState?.getString(STATE_CATALOG_PROFILE))
         }
 
         fieldSearch?.addTextChangedListener(object : TextWatcher {
@@ -676,6 +753,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 query = s.toString().trim()
                 render()
+                if (chatPicker) modelList?.setSelection(0)
             }
             override fun afterTextChanged(s: Editable?) { /* unused */ }
         })
@@ -685,13 +763,252 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         if (imageMode || startsWithAllModels) showingAll = true
 
         render()
-        startCatalogFetch()
+        if (!chatPicker) startCatalogFetch()
+        else if (pickerTab == PickerTab.VIEW_ALL) catalog?.restart()
     }
 
-    /** System/hardware back: from the full list return to the favorites
-     *  landing; from the landing, close the picker. */
+    override fun onResume() {
+        super.onResume()
+        if (chatPicker) {
+            reloadSavedModelRows()
+            render()
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_PICKER_TAB, pickerTab.name)
+        outState.putString(STATE_CATALOG_PROFILE, catalog?.profile?.id)
+        pendingRoutingTarget?.let {
+            outState.putString(STATE_ROUTING_ENDPOINT, it.endpointId)
+            outState.putString(STATE_ROUTING_MODEL, it.modelId)
+        }
+    }
+
+    override fun onDestroyView() {
+        checkingProvider = false
+        catalog?.stop()
+        catalog = null
+        catalogHeaderAttached = false
+        catalogReasoningIndex = null
+        catalogReasoningProfile = null
+        modelList?.adapter = null
+        modelList = null
+        progressBar = null
+        selectorTitle = null
+        fieldSearch = null
+        btnBack = null
+        btnViewAll = null
+        btnUseCurrentModel = null
+        btnFavorites = null
+        btnRecent = null
+        savedModelAdapter = null
+        super.onDestroyView()
+    }
+
+    private fun showPickerTab(tab: PickerTab) {
+        if (checkingProvider) {
+            render()
+            return
+        }
+        if (tab == pickerTab) {
+            render()
+            return
+        }
+        val switchingCatalog = tab == PickerTab.VIEW_ALL || pickerTab == PickerTab.VIEW_ALL
+        pickerTab = tab
+        if (switchingCatalog) fieldSearch?.setText("")
+        if (tab == PickerTab.VIEW_ALL) {
+            catalog?.restart()
+        } else {
+            catalog?.stop()
+            reloadSavedModelRows()
+        }
+        render()
+        modelList?.setSelection(0)
+    }
+
+    private fun configureSavedModelAdapter(context: Context, chatId: String) {
+        savedModelAdapter = SavedModelPickerAdapter(
+            context,
+            chatId,
+            ModelIdentity(resolvedEndpointId, preferences?.getModel().orEmpty()),
+            ModelCleanupReportStore.get(context).load().unavailable,
+            onSelect = { target, source ->
+                if (source == SavedModelPickerAdapter.Source.CATALOG) {
+                    finishModelSelection(target.modelId, target.endpointId)
+                } else {
+                    handleModelSelection(target.modelId, target.endpointId)
+                }
+            },
+            onRoute = ::openRoutingSettings,
+            onPin = { settings, pinned ->
+                favoriteModelsPreferences?.setPinned(settings, pinned)
+                reloadSavedModelRows()
+                render()
+            },
+            onFavorite = { settings ->
+                favoriteModelsPreferences?.addFavoriteIfAbsent(settings)
+                reloadSavedModelRows()
+                render()
+            },
+            onDelete = { target, source ->
+                if (source == SavedModelPickerAdapter.Source.RECENT) {
+                    RecentModelsPreferences(requireContext()).remove(target)
+                    reloadSavedModelRows()
+                    render()
+                } else {
+                    FavoriteRoutingActions.confirmRemove(requireContext()) {
+                        favoriteModelsPreferences?.removeFavoriteModel(target.modelId, target.endpointId)
+                        reloadSavedModelRows()
+                        render()
+                    }
+                }
+            }
+        )
+        modelList?.adapter = savedModelAdapter
+        reloadSavedModelRows()
+    }
+
+    private fun configureCatalog(savedProfileId: String?) {
+        val list = modelList ?: return
+        val context = requireContext()
+        val profiles = apiEndpointPreferences?.getApiEndpointsList(context).orEmpty()
+        catalog = ModelPickerCatalog(
+            LayoutInflater.from(context).inflate(R.layout.view_model_browser_controls, list, false),
+            profiles,
+            savedProfileId ?: resolvedEndpointId,
+            viewLifecycleOwner.lifecycleScope,
+            onChanged = ::render,
+            onFailure = { endpoint, error ->
+                showProviderError(error.message, endpointLabel = endpoint.label.ifBlank { endpoint.host })
+            },
+            onCatalogReceived = ::refreshChatCatalogCapabilities
+        )
+        list.setItemsCanFocus(true)
+        list.setOnScrollListener(object : AbsListView.OnScrollListener {
+            override fun onScrollStateChanged(view: AbsListView, scrollState: Int) = Unit
+
+            override fun onScroll(view: AbsListView, first: Int, visible: Int, total: Int) {
+                if (pickerTab == PickerTab.VIEW_ALL && visible > 0 && first + visible >= total - 5) {
+                    list.post { if (pickerTab == PickerTab.VIEW_ALL) catalog?.loadMore() }
+                }
+            }
+        })
+    }
+
+    private fun refreshChatCatalogCapabilities(endpoint: ApiEndpointObject, body: String) {
+        val context = context ?: return
+        val profiles = apiEndpointPreferences ?: return
+        val current = profiles.getApiEndpoint(context, endpoint.id)
+        if (current.host != endpoint.host || current.apiKey != endpoint.apiKey ||
+            current.authType != endpoint.authType
+        ) return
+        val refresh = EndpointReasoningCapability.refreshFromOpenRouterCatalog(
+            current.reasoningCapabilityByModel, body
+        ) ?: return
+        val imageMetadata = org.teslasoft.assistant.preferences.includes.ImageCapabilityMetadata
+            .capabilitiesFromResponse(body, org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider.OPENROUTER)
+        val imageJson = imageMetadata?.let {
+            org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.refreshMetadata(
+                current.imageCapabilityByModel, it
+            )
+        } ?: current.imageCapabilityByModel
+        if (refresh.capabilityJson != current.reasoningCapabilityByModel ||
+            imageJson != current.imageCapabilityByModel
+        ) {
+            current.reasoningCapabilityByModel = refresh.capabilityJson
+            current.imageCapabilityByModel = imageJson
+            profiles.setApiEndpoint(context, current)
+        }
+        endpoint.reasoningCapabilityByModel = current.reasoningCapabilityByModel
+        catalogReasoningIndex = null
+        if (endpoint.id == resolvedEndpointId) apiEndpointObject = current
+        reloadSavedModelRows()
+    }
+
+    private fun showCatalogRows(adapter: SavedModelPickerAdapter) {
+        val browser = catalog ?: return
+        val endpoint = browser.profile
+        val rows = if (endpoint == null) emptyList() else {
+            val reasoning = catalogReasoningIndex.takeIf { catalogReasoningProfile == endpoint.id }
+                ?: EndpointReasoningCapability.index(
+                    endpoint.reasoningCapabilityByModel,
+                    ReasoningProviderPath.forEndpoint(endpoint.host, endpoint.hasOpenRouterCatalogAuthority())
+                ).also {
+                    catalogReasoningProfile = endpoint.id
+                    catalogReasoningIndex = it
+                }
+            browser.visibleEntries().map { entry ->
+                val saved = savedModels[ModelIdentity(endpoint.id, entry.id)]
+                val settings = saved?.let { favoriteModelsPreferences?.decodeFavorite(it) }
+                    ?: FavoriteModelObject(entry.id, endpoint.id)
+                SavedModelPickerAdapter.Row(
+                    settings, "", "", endpoint.isOpenRouterRouting(),
+                    reasoning, saved != null, saved?.get("pinned") == "true", entry.advertisesReasoning
+                )
+            }
+        }
+        adapter.submit(rows, "", SavedModelPickerAdapter.Source.CATALOG)
+    }
+
+    private fun openRoutingSettings(target: ModelIdentity) {
+        if (checkingProvider) return
+        val prefs = apiEndpointPreferences ?: return
+        val favorites = favoriteModelsPreferences ?: return
+        FavoriteRoutingActions.buildRoutingIntent(
+            requireContext(), prefs, favorites, target.modelId, target.endpointId,
+            returnOnBackAfterSave = chatPicker
+        )?.let {
+            if (chatPicker) pendingRoutingTarget = target
+            chooseProviderLauncher.launch(it)
+        }
+    }
+
+    private fun reloadSavedModelRows() {
+        val context = context ?: return
+        val store = favoriteModelsPreferences ?: return
+        val endpoints = apiEndpointPreferences?.getApiEndpointsList(context).orEmpty().associateBy { it.id }
+        val saved = store.getFavoriteModels().associateBy {
+            ModelIdentity(it["endpointId"].orEmpty(), it["modelId"].orEmpty())
+        }
+        savedModels = saved
+        val providerNames = RecentOnlyProvidersStore.get(context)
+        val reasoningByEndpoint = mutableMapOf<String, EndpointReasoningCapabilityIndex>()
+
+        fun row(settings: FavoriteModelObject): SavedModelPickerAdapter.Row? {
+            val endpoint = endpoints[settings.endpointId] ?: return null
+            val entry = saved[ModelIdentity(settings.endpointId, settings.modelId)]
+            val route = when (settings.routingType) {
+                FavoriteModelObject.ROUTING_ONLY -> providerNames.displayName(settings.selectedProvider)
+                    .ifBlank { getString(R.string.choose_provider_routing_only) }
+                FavoriteModelObject.ROUTING_PREFERRED -> getString(R.string.choose_provider_routing_preferred)
+                else -> getString(R.string.provider_filter_quant_any)
+            }
+            val reasoning = reasoningByEndpoint.getOrPut(endpoint.id) {
+                EndpointReasoningCapability.index(
+                    endpoint.reasoningCapabilityByModel,
+                    ReasoningProviderPath.forEndpoint(endpoint.host, endpoint.hasOpenRouterCatalogAuthority())
+                )
+            }
+            return SavedModelPickerAdapter.Row(
+                settings, endpoint.label.ifBlank { endpoint.host }, route, endpoint.isOpenRouterRouting(),
+                reasoning,
+                saved = entry != null, pinned = entry?.get("pinned") == "true"
+            )
+        }
+
+        favoriteRows = saved.values.mapNotNull { row(store.decodeFavorite(it)) }
+            .sortedByDescending { it.pinned }
+        recentRows = runCatching { RecentModelsPreferences(context).models() }.getOrDefault(emptyList())
+            .mapNotNull(::row)
+    }
+
+    /** The header Back returns to Favorites from the other tabs. */
     private fun handleBack() {
-        if (showingAll && !imageMode && !startsWithAllModels) {
+        if (chatPicker) {
+            if (pickerTab == PickerTab.FAVORITES) dismiss() else showPickerTab(PickerTab.FAVORITES)
+        } else if (showingAll && !imageMode && !startsWithAllModels) {
             showingAll = false
             fieldSearch?.setText("")
             query = ""
@@ -702,14 +1019,40 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     }
 
     private fun reloadFavorites() {
-        favorites = favoriteModelsPreferences?.getFavoriteModels(resolvedEndpointId) ?: arrayListOf()
+        if (chatPicker) {
+            reloadSavedModelRows()
+        } else {
+            favorites = favoriteModelsPreferences?.getFavoriteModels(resolvedEndpointId) ?: arrayListOf()
+        }
     }
 
     /** Decide, from the current mode/search/catalog state, which list to show
      *  and whether the "View all" button and spinner belong on screen. */
     private fun render() {
-        if (!isAdded) return
-        val allMode = imageMode || showingAll || query.isNotEmpty()
+        if (!isAdded || modelList == null) return
+        val allMode = if (chatPicker) pickerTab == PickerTab.VIEW_ALL
+            else imageMode || showingAll || query.isNotEmpty()
+
+        if (chatPicker) {
+            btnFavorites?.isChecked = pickerTab == PickerTab.FAVORITES
+            btnRecent?.isChecked = pickerTab == PickerTab.RECENT
+            btnViewAll?.isChecked = allMode
+            view?.findViewById<View>(R.id.field_search)?.isVisible = !allMode
+            progressBar?.isVisible = checkingProvider || (allMode && catalog?.loading == true)
+            val adapter = savedModelAdapter ?: return
+            val header = catalog?.header
+            if (header != null && catalogHeaderAttached != allMode) {
+                catalogHeaderAttached = allMode
+                if (allMode) modelList?.addHeaderView(header, null, false)
+                else modelList?.removeHeaderView(header)
+            }
+            when (pickerTab) {
+                PickerTab.FAVORITES -> adapter.submit(favoriteRows, query, SavedModelPickerAdapter.Source.FAVORITES)
+                PickerTab.RECENT -> adapter.submit(recentRows, query, SavedModelPickerAdapter.Source.RECENT)
+                PickerTab.VIEW_ALL -> showCatalogRows(adapter)
+            }
+            return
+        }
 
         btnViewAll?.visibility = if (!imageMode && !showingAll && query.isEmpty()) View.VISIBLE else View.GONE
         progressBar?.visibility = if (allMode && !catalogLoaded) View.VISIBLE else View.GONE
@@ -763,10 +1106,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         )
     }
 
-    /** Fetch the endpoint's catalog. The provider-wide purpose uses the raw
-     *  endpoint response so "all models" really means every model id the
-     *  endpoint advertises. The ordinary chat picker keeps its established SDK
-     *  filtering, and image mode keeps the raw capability-aware path. */
+    /** Catalog fetch for the feature-specific pickers. The chat browser uses
+     * [ModelPickerCatalog] for profile switching, filtering and pagination. */
     private fun startCatalogFetch() {
         val endpoint = apiEndpointObject ?: return
         if (imageMode) {
@@ -817,6 +1158,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         CoroutineScope(Dispatchers.Main).launch {
             try {
                 val models: List<Model> = ai.models()
+                availableModels.clear()
                 for (model in models) {
                     if (!model.id.id.contains("tts") && !model.id.id.contains("dall") && !model.id.id.contains("whisper") && !model.id.id.contains("embedding") && !model.id.id.contains("vision")) {
                         availableModels.add(model.id.id)
@@ -824,7 +1166,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                         availableModels.add(model.id.id)
                     }
                 }
-                catalogLoaded = true
+                    catalogLoaded = true
                 render()
             } catch (_: Exception) {
                 startRawModelsRequest()

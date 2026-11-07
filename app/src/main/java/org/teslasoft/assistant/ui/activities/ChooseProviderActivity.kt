@@ -106,6 +106,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
          *  to ride on). When absent/false the choices are returned to the
          *  caller, which applies them on its own save. */
         const val EXTRA_PERSIST_DIRECTLY = "persistDirectly"
+        const val EXTRA_RETURN_ON_BACK_AFTER_SAVE = "returnOnBackAfterSave"
+        private const val STATE_SAVED_PICKER_MODEL = "savedPickerModel"
 
         /** When true, changing the model on this screen KEEPS the routing type
          *  the user is currently on instead of adopting the newly-chosen model's
@@ -163,6 +165,9 @@ class ChooseProviderActivity : SettingsPageActivity() {
     private var chartRows: LinearLayout? = null
 
     private var endpointId: String = ""
+    private var returnOnBackAfterSave = false
+    private var savedPickerModel: String? = null
+
     private var persistDirectly: Boolean = false
     private var keepRoutingOnModelChange: Boolean = false
     private var host: String = ""
@@ -218,15 +223,18 @@ class ChooseProviderActivity : SettingsPageActivity() {
 
         endpointId = intent.getStringExtra(EXTRA_ENDPOINT_ID) ?: ""
         persistDirectly = intent.getBooleanExtra(EXTRA_PERSIST_DIRECTLY, false)
+        returnOnBackAfterSave = intent.getBooleanExtra(EXTRA_RETURN_ON_BACK_AFTER_SAVE, false)
+        savedPickerModel = savedInstanceState?.getString(STATE_SAVED_PICKER_MODEL)
         keepRoutingOnModelChange = intent.getBooleanExtra(EXTRA_KEEP_ROUTING_ON_MODEL_CHANGE, false)
         host = intent.getStringExtra(EXTRA_HOST) ?: ""
         apiKey = intent.getStringExtra(EXTRA_API_KEY) ?: ""
         authType = intent.getStringExtra(EXTRA_AUTH_TYPE) ?: ApiEndpointObject.AUTH_BEARER
         discoveryPath = (intent.getStringExtra(EXTRA_DISCOVERY_PATH) ?: "")
             .ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH }
-        selectedModel = intent.getStringExtra(EXTRA_MODEL) ?: ""
-        selectedRoutingType = (intent.getStringExtra(EXTRA_ROUTING_TYPE) ?: FavoriteModelObject.ROUTING_AUTOMATIC)
-            .takeIf { it in routingTypes } ?: FavoriteModelObject.ROUTING_AUTOMATIC
+        selectedModel = savedPickerModel ?: intent.getStringExtra(EXTRA_MODEL).orEmpty()
+        val restoredRouting = savedPickerModel?.let { favoriteModelsPreferences?.getRoutingType(it, endpointId) }
+        selectedRoutingType = (restoredRouting ?: intent.getStringExtra(EXTRA_ROUTING_TYPE))
+            ?.takeIf { it in routingTypes } ?: FavoriteModelObject.ROUTING_AUTOMATIC
 
         // Filters always start from the default view for a fresh screen.
         ProviderFilterState.reset()
@@ -242,6 +250,11 @@ class ChooseProviderActivity : SettingsPageActivity() {
         // keeps that mode or adopts the new model's own is decided per entry
         // point by keepRoutingOnModelChange (see onModelChanged).
         seedProviderStateFromFavorite(adoptFavoriteRoutingType = false)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_SAVED_PICKER_MODEL, savedPickerModel)
     }
 
     override fun onResume() {
@@ -306,7 +319,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
     }
 
     private fun initLogic() {
-        btnBack?.setOnClickListener { cancelAndFinish() }
+        btnBack?.setOnClickListener { finishFromBack() }
         btnSave?.setOnClickListener { saveAndFinish() }
 
         setupDropdowns()
@@ -314,7 +327,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         btnProviderFilters?.setOnClickListener { openFilterPanel() }
 
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() { cancelAndFinish() }
+            override fun handleOnBackPressed() { finishFromBack() }
         })
     }
 
@@ -1009,20 +1022,22 @@ class ChooseProviderActivity : SettingsPageActivity() {
         // are handed back to the caller, which favorites the model on its save.
         if (persistDirectly) {
             if (selectedModel.isNotBlank()) {
-                favoriteModelsPreferences?.addFavoriteModel(
-                    FavoriteModelObject(
-                        selectedModel, endpointId, selectedRoutingType,
-                        selectedProvider, switchAllowFallbacks?.isChecked != false,
-                        ArrayList(orderList), ArrayList(ignored)
-                    )
-                )
+                val existing = favoriteModelsPreferences?.getFavorite(selectedModel, endpointId)
+                val settings = existing ?: FavoriteModelObject(selectedModel, endpointId)
+                settings.routingType = selectedRoutingType
+                settings.selectedProvider = selectedProvider
+                settings.allowFallbacks = switchAllowFallbacks?.isChecked != false
+                settings.providerOrder = ArrayList(orderList)
+                settings.ignoredProviders = ArrayList(ignored)
+                favoriteModelsPreferences?.addFavoriteModel(settings)
                 persistSelectedRouteToolCapability(selectedRouteToolCapability())
             }
-            // Return the model saved here so the caller (the Summoning Circle)
-            // can switch the chat to it — the routing rode along on the favorite
-            // just written above.
-            setResult(RESULT_OK, Intent().putExtra(EXTRA_MODEL, selectedModel))
             btnSave?.let { SaveIconFlash.flash(it) }
+            if (returnOnBackAfterSave) {
+                savedPickerModel = selectedModel.takeIf { it.isNotBlank() }
+                return
+            }
+            setResult(RESULT_OK, Intent().putExtra(EXTRA_MODEL, selectedModel))
             finish()
             return
         }
@@ -1082,8 +1097,10 @@ class ChooseProviderActivity : SettingsPageActivity() {
         } catch (_: Exception) { /* capability seeding must never block Save */ }
     }
 
-    private fun cancelAndFinish() {
-        setResult(RESULT_CANCELED)
+    private fun finishFromBack() {
+        val saved = savedPickerModel
+        if (saved == null) setResult(RESULT_CANCELED)
+        else setResult(RESULT_OK, Intent().putExtra(EXTRA_MODEL, saved))
         finish()
     }
 

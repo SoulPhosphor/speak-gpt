@@ -2,6 +2,7 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
+    android:focusableInTouchMode="true"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -108,6 +109,21 @@
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_open_last_used_chat" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Number">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title"
+                        android:labelFor="@id/model_picker_recent_limit"
+                        android:text="@string/model_picker_recent_limit_title" />
+                    <TextView style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/model_picker_recent_limit_hint" />
+                </LinearLayout>
+                <EditText
+                    android:id="@+id/model_picker_recent_limit"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:ems="2"
+                    android:maxLength="2"
+                    android:imeOptions="actionDone" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
