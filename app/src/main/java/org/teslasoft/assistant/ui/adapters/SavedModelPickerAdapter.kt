@@ -21,7 +21,7 @@ internal class SavedModelPickerAdapter(
     private val chatId: String,
     private val selected: ModelIdentity,
     private val unavailable: Set<ModelIdentity>,
-    private val onSelect: (ModelIdentity, Source) -> Unit,
+    private val onSelect: (ModelIdentity) -> Unit,
     private val onRoute: (ModelIdentity) -> Unit,
     private val onPin: (FavoriteModelObject, Boolean) -> Unit,
     private val onFavorite: (FavoriteModelObject) -> Unit,
@@ -77,7 +77,7 @@ internal class SavedModelPickerAdapter(
             settings.ignoredProviders.isNotEmpty()
 
         holder.card.isActivated = target == selected
-        holder.card.setOnClickListener { onSelect(target, source) }
+        holder.card.setOnClickListener { onSelect(target) }
         holder.name.text = target.modelId
         holder.subtitle.isVisible = !catalog
         holder.subtitle.text = if (catalog) null else subtitle(row)

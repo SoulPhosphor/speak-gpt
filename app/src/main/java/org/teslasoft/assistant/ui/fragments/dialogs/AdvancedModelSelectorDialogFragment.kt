@@ -834,13 +834,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             chatId,
             ModelIdentity(resolvedEndpointId, preferences?.getModel().orEmpty()),
             ModelCleanupReportStore.get(context).load().unavailable,
-            onSelect = { target, source ->
-                if (source == SavedModelPickerAdapter.Source.CATALOG) {
-                    finishModelSelection(target.modelId, target.endpointId)
-                } else {
-                    handleModelSelection(target.modelId, target.endpointId)
-                }
-            },
+            onSelect = { target -> handleModelSelection(target.modelId, target.endpointId) },
             onRoute = ::openRoutingSettings,
             onPin = { settings, pinned ->
                 favoriteModelsPreferences?.setPinned(settings, pinned)
