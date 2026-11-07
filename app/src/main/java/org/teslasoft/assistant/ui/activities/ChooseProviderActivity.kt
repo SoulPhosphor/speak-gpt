@@ -249,7 +249,12 @@ class ChooseProviderActivity : SettingsPageActivity() {
         discoveryPath = (intent.getStringExtra(EXTRA_DISCOVERY_PATH) ?: "")
             .ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH }
         selectedModel = savedPickerModel ?: intent.getStringExtra(EXTRA_MODEL).orEmpty()
-        val restoredRouting = savedPickerModel?.let { favoriteModelsPreferences?.getRoutingType(it, endpointId) }
+        // After recreation, show the routing this chat actually uses (it may be
+        // the chat's own trial), not only the favorite's.
+        val restoredRouting = savedPickerModel?.let { model ->
+            chatPreferences?.let { ChatModelRouting.effective(this, it, endpointId, model)?.routingType }
+                ?: favoriteModelsPreferences?.getRoutingType(model, endpointId)
+        }
         selectedRoutingType = (restoredRouting ?: intent.getStringExtra(EXTRA_ROUTING_TYPE))
             ?.takeIf { it in routingTypes } ?: FavoriteModelObject.ROUTING_AUTOMATIC
 
