@@ -56,6 +56,8 @@ class FavoriteModelListAdapter(
     // (see ModelListAdapter for rationale).
     private val loggedReasoningRows = HashSet<String>()
     private val unavailableTargets = ModelCleanupReportStore.get(context).load().unavailable
+    private val modelSettingsEnabled =
+        org.teslasoft.assistant.preferences.Preferences.getPreferences(context, "").getModelSettingsEnabled()
     private val endpointCache = HashMap<String, ApiEndpointObject>()
     private val reasoningIndexCache = HashMap(reasoningCapabilityIndexes)
 
@@ -153,7 +155,8 @@ class FavoriteModelListAdapter(
      * shown without those controls, so those displays stay unchanged.
      */
     private fun bindParametersButton(viewHolder: ViewHolder, modelId: String, endpointId: String, tintColor: Int) {
-        if (!showRoutingGear) {
+        // Hidden while Enable Model Settings is off: nothing is saved per model.
+        if (!showRoutingGear || !modelSettingsEnabled) {
             viewHolder.parametersButton.visibility = View.GONE
             viewHolder.parametersButton.setOnClickListener(null)
             return

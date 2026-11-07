@@ -42,6 +42,7 @@ import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.ChatModelRouting
 import org.teslasoft.assistant.preferences.FavoriteModelParameters
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.LogitBiasConfigPreferences
@@ -145,7 +146,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var frequencyPenaltySeekbar: SamplingParameterControl? = null
     private var presencePenaltySeekbar: SamplingParameterControl? = null
     private var fieldSeed: TextInputEditText? = null
-    private var btnSaveToProfile: MaterialButton? = null
+    private var saveParametersLink: ModelParametersSaveLink? = null
     private var switchChatMemory: MaterialSwitch? = null
     private var switchChatAlwaysSpeak: MaterialSwitch? = null
     private var switchChatExcluded: MaterialSwitch? = null
@@ -311,6 +312,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             applyFavoriteParametersForCurrentModel(savedModel)
             textModel?.text = savedModel
         }
+        saveParametersLink?.refresh()
         updateListener?.onUpdate()
         shouldForceUpdate = true
         refreshProviderModeDisplay()
@@ -823,6 +825,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     private fun applyPickerSelection(model: String, endpointId: String) {
         val prefs = preferences ?: return
+        val changed = model != prefs.getModel() || endpointId != prefs.getApiEndpointId()
         if (endpointId != prefs.getApiEndpointId()) {
             val endpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId) ?: return
             if (endpoint.host.isBlank()) return
@@ -832,7 +835,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             Toast.makeText(requireContext(), R.string.msg_api_compatibility_change, Toast.LENGTH_SHORT).show()
         }
         prefs.setModel(model)
-        applyFavoriteParametersForCurrentModel(model)
+        if (changed) applyFavoriteParametersForCurrentModel(model)
+        saveParametersLink?.refresh()
         updateListener?.onUpdate()
         shouldForceUpdate = true
         textModel?.text = model
@@ -884,7 +888,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private fun refreshProviderModeDisplay() {
         val endpointId = preferences?.getApiEndpointId() ?: return
         val model = preferences?.getModel() ?: return
-        val mode = favoriteModelsPreferences?.getRoutingType(model, endpointId)
+        val mode = chatRouting(model, endpointId)?.routingType
             ?: FavoriteModelObject.ROUTING_AUTOMATIC
         dropdownProviderMode?.text = providerModeLabel(mode)
         refreshProviderRow(model, endpointId, mode)
@@ -895,7 +899,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     /** The Provider row shows only while the mode is Only, naming the provider
      *  in use so it can be recognized at a glance. */
     private fun refreshProviderRow(model: String, endpointId: String, mode: String) {
-        val provider = favoriteModelsPreferences?.getFavorite(model, endpointId)?.selectedProvider.orEmpty()
+        val provider = chatRouting(model, endpointId)?.selectedProvider.orEmpty()
         val show = providerModeTile?.visibility == View.VISIBLE &&
             mode == FavoriteModelObject.ROUTING_ONLY && provider.isNotBlank()
         providerTile?.visibility = if (show) View.VISIBLE else View.GONE
@@ -920,35 +924,49 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             val available = OnlyProviderAvailabilityClient.availableSlugs(endpoint, model) ?: return@launch
             // The provider may have changed while the lookup ran; keep the one
             // in use now, not the one from before.
-            val current = favoriteModelsPreferences?.getFavorite(model, endpointId)?.selectedProvider ?: provider
+            val current = chatRouting(model, endpointId)?.selectedProvider ?: provider
             store.dropUnavailable(endpointId, model, current, available)
         }
     }
 
-    /** Lists the provider in use and the other recent Only-mode providers for
-     *  this model (at most three). New providers are chosen through the gear. */
+    /** The routing this chat uses for the model: its own, else the favorite's. */
+    private fun chatRouting(model: String, endpointId: String): FavoriteModelObject? =
+        ChatModelRouting.effective(requireContext(), preferences, endpointId, model)
+
+    /** Lists the model's favorite providers (starred) and then the last five
+     *  used. New providers are chosen through the gear. */
     private fun setupProviderDropdown() {
         val dropdown = dropdownProvider ?: return
         dropdown.setOnClickListener {
             val endpointId = preferences?.getApiEndpointId() ?: return@setOnClickListener
             val model = preferences?.getModel() ?: return@setOnClickListener
-            val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId) ?: return@setOnClickListener
+            val routing = chatRouting(model, endpointId) ?: return@setOnClickListener
+            val favorites = favoriteModelsPreferences?.getFavorite(model, endpointId)?.favoriteProviders.orEmpty()
             val recents = RecentOnlyProvidersStore.get(requireContext())
-            val options = RecentOnlyProviders.options(
-                favorite.selectedProvider,
+            val options = RecentOnlyProviders.quickSettingsOptions(
+                routing.selectedProvider,
+                favorites,
                 recents.recents(endpointId, model)
             )
             if (options.isEmpty()) return@setOnClickListener
-            AppDropdown.show(dropdown, options.map { recents.displayName(it) }, 0) { position ->
-                applyOnlyProvider(favorite, options[position])
+            val labels = options.map { slug ->
+                val name = recents.displayName(slug)
+                if (favorites.any { it.equals(slug, ignoreCase = true) }) {
+                    getString(R.string.provider_favorite_option, name)
+                } else name
+            }
+            val current = options.indexOfFirst { it.equals(routing.selectedProvider, ignoreCase = true) }
+            AppDropdown.show(dropdown, labels, current) { position ->
+                applyOnlyProvider(routing, options[position])
             }
         }
     }
 
-    private fun applyOnlyProvider(favorite: FavoriteModelObject, slug: String) {
-        if (slug.equals(favorite.selectedProvider, ignoreCase = true)) return
-        favorite.selectedProvider = slug
-        favoriteModelsPreferences?.addFavoriteModel(favorite)
+    private fun applyOnlyProvider(routing: FavoriteModelObject, slug: String) {
+        if (slug.equals(routing.selectedProvider, ignoreCase = true)) return
+        routing.selectedProvider = slug
+        // A favorite provider goes on the favorite; any other stays with this chat.
+        ChatModelRouting.save(requireContext(), preferences, routing)
         updateListener?.onUpdate()
         shouldForceUpdate = true
         refreshProviderModeDisplay()
@@ -958,7 +976,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val endpointId = preferences?.getApiEndpointId() ?: return
         val model = preferences?.getModel() ?: return
         if (model.isBlank()) return
-        val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
+        val favorite = chatRouting(model, endpointId)
         val needsSetup = when (mode) {
             FavoriteModelObject.ROUTING_PREFERRED -> favorite == null || favorite.providerOrder.isEmpty()
             FavoriteModelObject.ROUTING_ONLY -> favorite == null || favorite.selectedProvider.isBlank()
@@ -992,6 +1010,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             preferences?.setModel(endpointModel)
             textModel?.text = endpointModel
         }
+        preferences?.getModel()?.takeIf { it.isNotBlank() }?.let(::applyFavoriteParametersForCurrentModel)
+        saveParametersLink?.refresh()
         shouldForceUpdate = true
         updateListener?.onUpdate()
         refreshProviderModeTile()
@@ -1018,11 +1038,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val endpointId = preferences?.getApiEndpointId() ?: return
         val model = preferences?.getModel() ?: return
         if (model.isBlank()) return
-        val existing = favoriteModelsPreferences?.getFavorite(model, endpointId)
-        if (!(mode == FavoriteModelObject.ROUTING_AUTOMATIC && existing == null)) {
-            val favorite = existing ?: FavoriteModelObject(model, endpointId)
-            favorite.routingType = mode
-            favoriteModelsPreferences?.addFavoriteModel(favorite)
+        val routing = chatRouting(model, endpointId) ?: FavoriteModelObject(model, endpointId)
+        if (routing.routingType != mode) {
+            routing.routingType = mode
+            ChatModelRouting.save(requireContext(), preferences, routing)
         }
         updateListener?.onUpdate()
         shouldForceUpdate = true
@@ -1043,7 +1062,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 val model = preferences?.getModel() ?: return@setPositiveButton
                 val prefs = apiEndpointPreferences ?: return@setPositiveButton
                 val favPrefs = favoriteModelsPreferences ?: return@setPositiveButton
-                FavoriteRoutingActions.buildRoutingIntent(requireContext(), prefs, favPrefs, model, endpointId, mode, keepRoutingOnModelChange = true)?.let {
+                FavoriteRoutingActions.buildRoutingIntent(requireContext(), prefs, favPrefs, model, endpointId, mode, keepRoutingOnModelChange = true, chatId = chatId)?.let {
                     launched = true
                     chooseProviderLauncher.launch(it)
                 }
@@ -1194,7 +1213,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             }.start()
         }
         setupMemorySceneRows()
-        btnSaveToProfile = view.findViewById(R.id.btn_save_to_profile)
+        saveParametersLink = ModelParametersSaveLink(view.findViewById(R.id.btn_save_model_parameters)) { preferences }
         textModel = view.findViewById(R.id.text_model)
         textHost = view.findViewById(R.id.text_host)
         textLogitBiasesConfig = view.findViewById(R.id.text_logit_biases_config)
@@ -1271,7 +1290,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 endpointPrefs,
                 favoritePrefs,
                 selectedModel,
-                endpointId
+                endpointId,
+                chatId = chatId
             )?.let { chooseProviderLauncher.launch(it) }
         }
         btnEditProviderRouting?.setOnClickListener(openProviderRouting)
@@ -1333,9 +1353,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             managerRefreshLauncher.launch(Intent(requireContext(), ActivationPromptsListActivity::class.java))
         }
 
-        btnSaveToProfile?.setOnClickListener {
-            saveCurrentSettingsToProfile()
-        }
+        saveParametersLink?.refresh()
     }
 
     /* ------------------------------ memory scene (Phase 4) ------------------------------ */
@@ -1787,49 +1805,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             SamplingParameterSpec.PRESENCE_PENALTY, prefs.getPresencePenalty()
         ) { prefs.setPresencePenalty(it) }
         switchStreaming?.isChecked = prefs.getStreaming()
-    }
-
-    private fun saveCurrentSettingsToProfile() {
-        val endpointId = preferences?.getApiEndpointId().orEmpty()
-        if (endpointId.isEmpty()) {
-            android.widget.Toast.makeText(requireContext(), R.string.msg_no_active_profile, android.widget.Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val currentProfile = apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId) ?: return
-        val updated = ApiEndpointObject(
-            label = currentProfile.label,
-            host = currentProfile.host,
-            apiKey = currentProfile.apiKey,
-            chatEndpoint = currentProfile.chatEndpoint,
-            speechEndpoint = currentProfile.speechEndpoint,
-            authType = currentProfile.authType,
-            model = preferences?.getModel() ?: currentProfile.model,
-            temperature = preferences?.getTemperature() ?: currentProfile.temperature,
-            topP = preferences?.getTopP() ?: currentProfile.topP,
-            frequencyPenalty = preferences?.getFrequencyPenalty() ?: currentProfile.frequencyPenalty,
-            presencePenalty = preferences?.getPresencePenalty() ?: currentProfile.presencePenalty,
-            maxTokens = preferences?.getMaxTokens() ?: currentProfile.maxTokens,
-            endSeparator = preferences?.getEndSeparator() ?: currentProfile.endSeparator,
-            prefix = preferences?.getPrefix() ?: currentProfile.prefix,
-            provider = currentProfile.provider,
-            connectTimeoutSeconds = currentProfile.connectTimeoutSeconds,
-            responseTimeoutSeconds = currentProfile.responseTimeoutSeconds,
-            providerDiscoveryPath = currentProfile.providerDiscoveryPath,
-            contextWindowTokens = currentProfile.contextWindowTokens,
-            contextWindowModelId = currentProfile.contextWindowModelId,
-            imageCapabilityByModel = currentProfile.imageCapabilityByModel,
-            pdfCapabilityByModel = currentProfile.pdfCapabilityByModel,
-            toolCapabilityByModel = currentProfile.toolCapabilityByModel,
-            identity = currentProfile.identity,
-            reasoningCapabilityByModel = currentProfile.reasoningCapabilityByModel,
-            reasoningRejectedLevelsByModel = currentProfile.reasoningRejectedLevelsByModel,
-            // Carry the stable id so this UPDATES the same profile in place;
-            // without it setApiEndpoint would mint a new id and duplicate it.
-            id = currentProfile.id
-        )
-        apiEndpointPreferences?.setApiEndpoint(requireContext(), updated)
-        android.widget.Toast.makeText(requireContext(), R.string.msg_saved_to_profile, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {

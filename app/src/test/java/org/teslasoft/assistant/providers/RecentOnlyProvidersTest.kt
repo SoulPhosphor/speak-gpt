@@ -6,10 +6,22 @@ import org.junit.Test
 class RecentOnlyProvidersTest {
 
     @Test
-    fun aNewChoiceGoesFirstAndTheOldestDropsOffAfterThree() {
+    fun aNewChoiceGoesFirstAndTheOldestDropsOffAfterFive() {
         var recents = emptyList<String>()
-        for (slug in listOf("a", "b", "c", "d")) recents = RecentOnlyProviders.bump(recents, slug)
-        assertEquals(listOf("d", "c", "b"), recents)
+        for (slug in listOf("a", "b", "c", "d", "e", "f")) recents = RecentOnlyProviders.bump(recents, slug)
+        assertEquals(listOf("f", "e", "d", "c", "b"), recents)
+    }
+
+    @Test
+    fun quickSettingsListsFavoritesFirstThenRecentOnes() {
+        assertEquals(
+            listOf("fav1", "fav2", "r1", "r2"),
+            RecentOnlyProviders.quickSettingsOptions("r1", listOf("fav1", "fav2"), listOf("r1", "FAV2", "r2"))
+        )
+        assertEquals(
+            listOf("other", "fav1"),
+            RecentOnlyProviders.quickSettingsOptions("other", listOf("fav1"), emptyList())
+        )
     }
 
     @Test
@@ -27,7 +39,7 @@ class RecentOnlyProvidersTest {
     fun theProviderInUseIsAlwaysListedFirst() {
         assertEquals(listOf("x"), RecentOnlyProviders.options("x", emptyList()))
         assertEquals(listOf("b", "a", "c"), RecentOnlyProviders.options("b", listOf("a", "b", "c")))
-        assertEquals(listOf("z", "a", "b"), RecentOnlyProviders.options("z", listOf("a", "b", "c")))
+        assertEquals(listOf("z", "a", "b", "c"), RecentOnlyProviders.options("z", listOf("a", "b", "c")))
     }
 
     @Test

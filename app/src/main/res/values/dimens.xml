@@ -318,4 +318,11 @@
     <dimen name="model_picker_action_size">36dp</dimen>
     <dimen name="model_picker_icon_size">20dp</dimen>
     <dimen name="model_picker_progress_size">72dp</dimen>
+    <dimen name="header_icon_size">24dp</dimen>
+    <dimen name="provider_chart_menu_width">32dp</dimen>
+    <dimen name="provider_chart_menu_height">32dp</dimen>
+    <dimen name="provider_chart_menu_padding">6dp</dimen>
+    <dimen name="model_picker_provider_chevron_size">16dp</dimen>
+    <dimen name="model_picker_provider_chevron_gap">2dp</dimen>
+    <dimen name="quick_settings_text_link_min_height">40dp</dimen>
 </resources>

@@ -94,6 +94,7 @@ class Preferences internal constructor(
         private const val LAST_SUCCESS_MODEL = "last_success_model"
         private const val LAST_SUCCESS_ROUTING = "last_success_routing"
         private const val LAST_SUCCESS_PERSONA_ID = "last_success_persona_id"
+        private const val LAST_SUCCESS_ROUTING_OVERRIDE = "last_success_routing_override"
         private const val LAST_CHAT_ARCHIVE_ENABLED = "last_chat_archive_enabled"
 
         /** Clamp a max-entries value to [1, LOG_MAX_ENTRIES_LIMIT]. Pure, unit-tested. */
@@ -610,6 +611,29 @@ class Preferences internal constructor(
     fun setOpenLastUsedChatAtLaunch(state: Boolean) {
         putGlobalBoolean("open_last_used_chat_at_launch", state, false)
     }
+
+    /** Enable Model Settings (App Appearance). Off by default: no settings are
+     *  saved per model and every chat starts from the API profile's defaults. */
+    fun getModelSettingsEnabled(): Boolean =
+        getGlobalBoolean("model_settings_enabled", false)
+
+    fun setModelSettingsEnabled(state: Boolean) {
+        putGlobalBoolean("model_settings_enabled", state, false)
+    }
+
+    /** This chat's own provider routing, set when the chat uses a provider or
+     *  routing that is not the model's saved favorite (a trial, or a model that
+     *  is not a favorite). JSON from [ChatModelRouting]; empty = none. */
+    fun getChatRoutingOverride(): String = getString("chat_routing_override", "")
+
+    fun setChatRoutingOverride(json: String) {
+        putString("chat_routing_override", json)
+    }
+
+    /** The routing override of the last chat that got a successful reply, so a
+     *  new chat starts with exactly the same provider. Empty = none. */
+    fun getLastSuccessfulRoutingOverride(): String =
+        getGlobalString(LAST_SUCCESS_ROUTING_OVERRIDE, "")
 
     /** The saved chat last open on the chat screen; blank when the last one
      *  was a new chat not yet sent. */
@@ -1762,7 +1786,8 @@ class Preferences internal constructor(
         endpointId: String,
         model: String,
         routing: String,
-        personaId: String
+        personaId: String,
+        routingOverride: String = ""
     ): Boolean {
         if (endpointId.isBlank() || model.isBlank() || personaId.isBlank()) return false
         return gp.edit()
@@ -1770,6 +1795,7 @@ class Preferences internal constructor(
             .putString(LAST_SUCCESS_MODEL, model)
             .putString(LAST_SUCCESS_ROUTING, routing)
             .putString(LAST_SUCCESS_PERSONA_ID, personaId)
+            .putString(LAST_SUCCESS_ROUTING_OVERRIDE, routingOverride)
             .commit()
     }
 

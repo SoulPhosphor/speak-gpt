@@ -2,6 +2,13 @@
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <!-- Shown only while Enable Model Settings is on. Its text names where
+         the parameters are saved: the favorite, or the Recent entry. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_save_model_parameters"
+        style="@style/Widget.App.QuickSettings.TextLink"
+        android:text="@string/quick_save_parameters_recent" />
+
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/section_streaming"
         style="@style/Widget.App.QuickSettings.Segment.Top">

@@ -239,7 +239,7 @@ object ModelEndpointPortableCodec {
                 return "invalid or duplicate favorite identity"
             }
             if (endpointId !in endpointIds) return "favorite refers to an omitted endpoint"
-            for (key in listOf("providerOrder", "ignoredProviders")) {
+            for (key in listOf("providerOrder", "ignoredProviders", "favoriteProviders")) {
                 favorite[key]?.let { value ->
                     if (runCatching { strings(JSONArray(value)) }.isFailure) {
                         return "invalid favorite provider list"
@@ -284,6 +284,6 @@ object ModelEndpointPortableCodec {
     private val FAVORITE_KEYS = setOf(
         "modelId", "endpointId", "routingType", "selectedProvider", "allowFallbacks",
         "providerOrder", "ignoredProviders", "reasoningEffort", "showReasoning", "streaming",
-        "temperature", "topP", "frequencyPenalty", "presencePenalty", "pinned"
+        "temperature", "topP", "frequencyPenalty", "presencePenalty", "pinned", "favoriteProviders"
     )
 }

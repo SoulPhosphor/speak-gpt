@@ -267,7 +267,7 @@ internal class ModelEndpointStateGenerationStore private constructor(
         private val FAVORITE_KEYS = setOf(
             "modelId", "endpointId", "routingType", "selectedProvider", "allowFallbacks",
             "providerOrder", "ignoredProviders", "reasoningEffort", "showReasoning", "streaming",
-            "temperature", "topP", "frequencyPenalty", "presencePenalty", "pinned"
+            "temperature", "topP", "frequencyPenalty", "presencePenalty", "pinned", "favoriteProviders"
         )
 
         fun get(context: Context): ModelEndpointStateGenerationStore {

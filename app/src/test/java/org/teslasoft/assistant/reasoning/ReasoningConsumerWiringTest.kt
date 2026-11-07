@@ -38,15 +38,6 @@ class ReasoningConsumerWiringTest {
     }
 
     @Test
-    fun quickSettingsSavePreservesEndpointCapabilityCaches() {
-        val quickSettings = source("ui/fragments/dialogs/QuickSettingsBottomSheetDialogFragment.kt")
-        assertTrue(quickSettings.contains("imageCapabilityByModel = currentProfile.imageCapabilityByModel"))
-        assertTrue(quickSettings.contains("toolCapabilityByModel = currentProfile.toolCapabilityByModel"))
-        assertTrue(quickSettings.contains("reasoningCapabilityByModel = currentProfile.reasoningCapabilityByModel"))
-        assertTrue(quickSettings.contains("reasoningRejectedLevelsByModel = currentProfile.reasoningRejectedLevelsByModel"))
-    }
-
-    @Test
     fun endpointEditorInvalidatesCachesOnlyThroughSharedPathPolicy() {
         val editor = source("ui/activities/ApiEndpointEditorActivity.kt")
         assertTrue(editor.contains("EndpointCapabilityCachePolicy.effectivePathChanged("))

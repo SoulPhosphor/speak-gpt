@@ -18,6 +18,7 @@ package org.teslasoft.assistant.ui.util
 
 import android.content.res.ColorStateList
 import android.widget.ImageButton
+import android.widget.TextView
 import org.teslasoft.assistant.R
 
 /**
@@ -40,6 +41,26 @@ object SaveIconFlash {
 
     /** Persistent saved state for screens that clear feedback on the next edit. */
     fun markSaved(button: ImageButton) = flash(button, R.style.Widget_App_SaveIcon_Success, null)
+
+    /** The success green on a text link's words, for the same time as the
+     *  Save disc's success flash. */
+    fun flashText(view: TextView) {
+        (view.getTag(R.id.tag_save_icon_flash) as? Runnable)?.let { view.removeCallbacks(it) }
+        val normal = (view.getTag(R.id.tag_save_text_normal_color) as? ColorStateList) ?: view.textColors
+        view.setTag(R.id.tag_save_text_normal_color, normal)
+        val attributes = view.context.obtainStyledAttributes(R.style.Widget_App_SaveIcon_Success, intArrayOf(android.R.attr.tint))
+        try {
+            view.setTextColor(attributes.getColorStateList(0))
+        } finally {
+            attributes.recycle()
+        }
+        val revert = Runnable {
+            view.setTextColor(normal)
+            view.setTag(R.id.tag_save_icon_flash, null)
+        }
+        view.setTag(R.id.tag_save_icon_flash, revert)
+        view.postDelayed(revert, view.resources.getInteger(R.integer.save_icon_success_duration_ms).toLong())
+    }
 
     fun reset(button: ImageButton) {
         val pending = button.getTag(R.id.tag_save_icon_flash) as? Pending ?: return

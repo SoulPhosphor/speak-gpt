@@ -956,6 +956,14 @@
         <item name="layout_constraintTop_toTopOf">parent</item>
     </style>
 
+    <!-- A plain (no background) chained header icon whose idle and green
+         saved colors match the Save disc, for an action that confirms the way
+         Save does. -->
+    <style name="Widget.App.ActionBar.ChainedButton.Plain">
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:tint">@color/save_icon_tint</item>
+    </style>
+
     <!-- THE "close panel" PATTERN (owner ruling, July 19 2026): use this,
          not raw XML, for any slide-out/slide-in panel whose header closes
          with an X instead of navigating back with an arrow - the shape
@@ -1064,6 +1072,21 @@
     </style>
     <style name="Widget.App.SaveIcon.Error" parent="">
         <item name="android:tint">?attr/colorError</item>
+    </style>
+
+    <!-- Text-link button (owner request, Nov 7 2026): a full-width line of
+         primary-colored text with no button box. Its words turn green for the
+         shared success time after a save (SaveIconFlash.flashText). -->
+    <style name="Widget.App.TextLink" parent="Widget.Material3.Button.TextButton">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:minHeight">@dimen/quick_settings_text_link_min_height</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">14sp</item>
     </style>
 
     <!-- Inline validation / warning line directly under a field's Box. Color
@@ -2236,6 +2259,15 @@
         <item name="android:background">@drawable/bg_quick_settings_segment_middle</item>
     </style>
 
+    <!-- Save Parameters link above Streaming: the shared text link, aligned
+         with the card segments. -->
+    <style name="Widget.App.QuickSettings.TextLink" parent="Widget.App.TextLink">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_marginStart">@dimen/quick_settings_horizontal_margin</item>
+        <item name="android:layout_marginEnd">@dimen/quick_settings_horizontal_margin</item>
+        <item name="android:layout_marginTop">@dimen/quick_settings_section_gap</item>
+    </style>
+
     <style name="Widget.App.QuickSettings.Segment.Top" parent="Widget.App.QuickSettings.Segment">
         <item name="android:layout_marginTop">@dimen/quick_settings_section_gap</item>
         <item name="android:background">@drawable/bg_quick_settings_segment_top</item>
@@ -2549,6 +2581,22 @@
         <item name="android:paddingEnd">8dp</item>
         <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- A provider the user marked Favorite: the whole chart line uses the
+         title color, so it stands out without changing the line's height. -->
+    <style name="Widget.App.Chart.Cell.Favorite">
+        <item name="android:textColor">?attr/appTitleTextColor</item>
+    </style>
+
+    <!-- The ⋮ menu just left of a provider's name on Choose Provider. The
+         activity sizes it from provider_chart_menu_width/height. -->
+    <style name="Widget.App.Chart.RowMenu" parent="">
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:padding">@dimen/provider_chart_menu_padding</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:src">@drawable/ic_more_vert</item>
+        <item name="android:tint">?attr/appRowSubtitleColor</item>
     </style>
 
     <!-- Plain full-row checkbox option (owner spec, Aug 2 2026 — the provider
@@ -3538,6 +3586,30 @@
         <item name="android:alpha">0.55</item>
         <item name="android:scaleX">0.82</item>
         <item name="android:scaleY">0.82</item>
+    </style>
+
+    <!-- Subtitle line of a saved model card: "API profile · provider", where
+         the provider part is a compact dropdown when there is a choice. -->
+    <style name="Widget.App.ModelPicker.SubtitleLine" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+    <style name="Widget.App.ModelPicker.SubtitleText" parent="Widget.App.Row.Subtitle">
+        <item name="android:layout_width">wrap_content</item>
+    </style>
+    <!-- Compact provider dropdown (owner request, Nov 7 2026): the subtitle's
+         own text size and color with a small V chevron, no border or box, so
+         the card keeps its height. Opens the shared AppDropdown menu. -->
+    <style name="Widget.App.ModelPicker.ProviderDropdown" parent="Widget.App.ModelPicker.SubtitleText">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:drawableEnd">@drawable/ic_chevron_down_compact</item>
+        <item name="android:drawablePadding">@dimen/model_picker_provider_chevron_gap</item>
+        <item name="android:drawableTint">?attr/appRowSubtitleColor</item>
     </style>
     <style name="Widget.App.ModelPicker.CatalogControls" parent="Widget.App.ModelPicker.CardInset">
         <item name="android:orientation">vertical</item>

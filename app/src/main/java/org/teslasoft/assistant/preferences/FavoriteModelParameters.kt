@@ -18,28 +18,98 @@ package org.teslasoft.assistant.preferences
 
 import android.content.Context
 
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
+import org.teslasoft.assistant.preferences.models.ModelIdentity
+
 /**
- * Applies a favorite model's saved sampling parameters (streaming + the four
- * sliders) to a chat's live settings.
+ * A model's AI parameters (streaming + the four sampling sliders).
  *
- * The parameters belong to the model, so this runs whenever that model becomes
- * a chat's active model — regardless of the provider routing in effect. A
- * favorite with no saved parameters (never opened in Model Parameters, or saved
- * before the feature existed) reads back all-null and is left completely alone:
- * selecting such a model never overwrites whatever the chat already had. Only
- * fields the user actually saved are written, so this can never silently reset
- * a value the user did not choose.
+ * With Enable Model Settings on, a model starts with the parameters saved for
+ * it: on its favorite when it is a favorite, otherwise on its Recent entry.
+ * A model with none saved starts from its API profile's defaults, never from
+ * whatever another model last used. With the feature off nothing is saved per
+ * model and selecting a model leaves the chat's parameters as they are.
+ * Changes made in Quick Settings stay in that chat unless the user saves them.
  */
 object FavoriteModelParameters {
-    fun applyToChat(context: Context, preferences: Preferences, modelId: String, endpointId: String) {
-        if (modelId.isBlank() || endpointId.isBlank()) return
-        val favorite = FavoriteModelsPreferences.getPreferences(context)
-            .getFavorite(modelId, endpointId) ?: return
-        if (!favorite.hasSamplingParameters()) return
-        favorite.streaming?.let { preferences.setStreaming(it) }
-        favorite.temperature?.let { preferences.setTemperature(it) }
-        favorite.topP?.let { preferences.setTopP(it) }
-        favorite.frequencyPenalty?.let { preferences.setFrequencyPenalty(it) }
-        favorite.presencePenalty?.let { preferences.setPresencePenalty(it) }
+
+    fun isEnabled(context: Context): Boolean =
+        Preferences.getPreferences(context, "").getModelSettingsEnabled()
+
+    /** True when this model's parameters are saved on a favorite (otherwise
+     *  they belong to its Recent entry). */
+    fun savesToFavorite(context: Context, modelId: String, endpointId: String): Boolean =
+        FavoriteModelsPreferences.getPreferences(context).isFavorite(modelId, endpointId)
+
+    /** The parameters saved for this model, or null when none are. */
+    fun saved(context: Context, modelId: String, endpointId: String): FavoriteModelObject? {
+        val favorite = FavoriteModelsPreferences.getPreferences(context).getFavorite(modelId, endpointId)
+        val saved = if (favorite != null) favorite
+            else RecentModelsPreferences(context).savedParameters(ModelIdentity(endpointId, modelId))
+        return saved?.takeIf { it.hasSamplingParameters() }
     }
+
+    /** The API profile's default parameters for [endpointId]. Streaming has no
+     *  per-profile value, so it comes from the app's new-chat default. */
+    fun apiDefaults(context: Context, modelId: String, endpointId: String): FavoriteModelObject {
+        val profile = ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
+        return FavoriteModelObject(modelId, endpointId).apply {
+            streaming = Preferences.getPreferences(context, "").getStreaming()
+            temperature = profile.temperature
+            topP = profile.topP
+            frequencyPenalty = profile.frequencyPenalty
+            presencePenalty = profile.presencePenalty
+        }
+    }
+
+    /** What the model starts with: its saved parameters, else API defaults. */
+    fun startingParameters(context: Context, modelId: String, endpointId: String): FavoriteModelObject =
+        saved(context, modelId, endpointId) ?: apiDefaults(context, modelId, endpointId)
+
+    /** Gives the chat the parameters this model starts with. Does nothing
+     *  while Enable Model Settings is off. */
+    fun applyToChat(context: Context, preferences: Preferences, modelId: String, endpointId: String) {
+        if (modelId.isBlank() || endpointId.isBlank() || !isEnabled(context)) return
+        val parameters = startingParameters(context, modelId, endpointId)
+        val defaults = apiDefaults(context, modelId, endpointId)
+        preferences.setStreaming(parameters.streaming ?: defaults.streaming ?: true)
+        preferences.setTemperature(parameters.temperature ?: defaults.temperature!!)
+        preferences.setTopP(parameters.topP ?: defaults.topP!!)
+        preferences.setFrequencyPenalty(parameters.frequencyPenalty ?: defaults.frequencyPenalty!!)
+        preferences.setPresencePenalty(parameters.presencePenalty ?: defaults.presencePenalty!!)
+    }
+
+    /** Saves [values]' five parameters for this model: on its favorite when it
+     *  is one, otherwise on its Recent entry. */
+    fun save(context: Context, modelId: String, endpointId: String, values: FavoriteModelObject) {
+        val favorites = FavoriteModelsPreferences.getPreferences(context)
+        val favorite = favorites.getFavorite(modelId, endpointId)
+        if (favorite != null) {
+            values.copySamplingTo(favorite)
+            favorites.addFavoriteModel(favorite)
+        } else {
+            RecentModelsPreferences(context).setSavedParameters(ModelIdentity(endpointId, modelId), values)
+        }
+    }
+
+    /** Removes this model's saved parameters, so it returns to its API
+     *  profile's defaults. */
+    fun restoreDefaults(context: Context, modelId: String, endpointId: String) {
+        val favorites = FavoriteModelsPreferences.getPreferences(context)
+        if (favorites.isFavorite(modelId, endpointId)) {
+            favorites.clearSamplingParameters(modelId, endpointId)
+        } else {
+            RecentModelsPreferences(context).setSavedParameters(ModelIdentity(endpointId, modelId), null)
+        }
+    }
+
+    /** The chat's current five parameters. */
+    fun fromChat(preferences: Preferences, modelId: String, endpointId: String): FavoriteModelObject =
+        FavoriteModelObject(modelId, endpointId).apply {
+            streaming = preferences.getStreaming()
+            temperature = preferences.getTemperature()
+            topP = preferences.getTopP()
+            frequencyPenalty = preferences.getFrequencyPenalty()
+            presencePenalty = preferences.getPresencePenalty()
+        }
 }

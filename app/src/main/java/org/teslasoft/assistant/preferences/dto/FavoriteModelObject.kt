@@ -74,8 +74,44 @@ class FavoriteModelObject(
     @SerializedName("temperature") var temperature: Float? = null,
     @SerializedName("topP") var topP: Float? = null,
     @SerializedName("frequencyPenalty") var frequencyPenalty: Float? = null,
-    @SerializedName("presencePenalty") var presencePenalty: Float? = null
+    @SerializedName("presencePenalty") var presencePenalty: Float? = null,
+    /** Providers the user marked Favorite for this model on Choose Provider
+     *  (in the order they were marked). They fill the provider dropdown on the
+     *  model's Favorites row and are starred in Quick Settings. Never filled in
+     *  automatically. Kept at the END of the constructor so existing positional
+     *  callers stay valid. */
+    @SerializedName("favoriteProviders") var favoriteProviders: List<String> = emptyList()
 ) {
+    /** An independent copy, so a caller can change routing for one use
+     *  without touching the stored favorite. */
+    fun copy(): FavoriteModelObject = FavoriteModelObject(
+        modelId, endpointId, routingType, selectedProvider, allowFallbacks,
+        providerOrder.toList(), ignoredProviders.toList(), reasoningEffort, showReasoning,
+        streaming, temperature, topP, frequencyPenalty, presencePenalty, favoriteProviders.toList()
+    )
+
+    /** True when [slug] is one of this model's favorite providers. */
+    fun isFavoriteProvider(slug: String): Boolean =
+        slug.isNotBlank() && favoriteProviders.any { it.equals(slug, ignoreCase = true) }
+
+    /** Copies this object's routing choices onto [target]. */
+    fun copyRoutingTo(target: FavoriteModelObject) {
+        target.routingType = routingType
+        target.selectedProvider = selectedProvider
+        target.allowFallbacks = allowFallbacks
+        target.providerOrder = providerOrder.toList()
+        target.ignoredProviders = ignoredProviders.toList()
+    }
+
+    /** Copies the five sampling parameters (null = none saved) onto [target]. */
+    fun copySamplingTo(target: FavoriteModelObject) {
+        target.streaming = streaming
+        target.temperature = temperature
+        target.topP = topP
+        target.frequencyPenalty = frequencyPenalty
+        target.presencePenalty = presencePenalty
+    }
+
     /** True when this favorite carries user-saved sampling parameters. A save
      *  writes all five, so any one being present means the set is present. */
     fun hasSamplingParameters(): Boolean =

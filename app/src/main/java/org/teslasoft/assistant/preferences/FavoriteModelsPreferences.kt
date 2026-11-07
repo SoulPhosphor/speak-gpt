@@ -25,16 +25,22 @@ import com.google.gson.Gson
 
 class FavoriteModelsPreferences private constructor(
     private val state: ModelEndpointStateGenerationStore,
-    private val recentOnlyProviders: RecentOnlyProvidersStore? = null
+    private val recentOnlyProviders: RecentOnlyProvidersStore? = null,
+    /** The settings saved on a model's Recent entry, carried onto the model
+     *  when it becomes a favorite. */
+    private val recentSavedParameters: ((ModelIdentity) -> FavoriteModelObject?)? = null
 ) {
     companion object {
+        private val SAMPLING_KEYS = setOf("streaming", "temperature", "topP", "frequencyPenalty", "presencePenalty")
         private var instance: FavoriteModelsPreferences? = null
 
         fun getPreferences(context: Context): FavoriteModelsPreferences {
             if (instance == null) {
+                val recents = RecentModelsPreferences(context)
                 instance = FavoriteModelsPreferences(
                     ModelEndpointStateGenerationStore.get(context),
-                    RecentOnlyProvidersStore.get(context)
+                    RecentOnlyProvidersStore.get(context),
+                    recents::savedParameters
                 )
             }
             return instance!!
@@ -42,12 +48,14 @@ class FavoriteModelsPreferences private constructor(
 
         internal fun createForTest(
             statePreferences: SharedPreferences,
-            legacyFavoritePreferences: SharedPreferences = statePreferences
+            legacyFavoritePreferences: SharedPreferences = statePreferences,
+            recentSavedParameters: ((ModelIdentity) -> FavoriteModelObject?)? = null
         ): FavoriteModelsPreferences = FavoriteModelsPreferences(
             ModelEndpointStateGenerationStore.createForTest(
                 statePreferences,
                 legacyFavoritePreferences
-            )
+            ),
+            recentSavedParameters = recentSavedParameters
         )
     }
 
@@ -116,6 +124,12 @@ class FavoriteModelsPreferences private constructor(
                 return@update current.copy(favorites = models)
             }
 
+            // A model that becomes a favorite brings the settings saved on its
+            // Recent entry with it, unless the caller supplies its own.
+            if (existing == null && !model.hasSamplingParameters()) {
+                recentSavedParameters?.invoke(ModelIdentity(model.endpointId, model.modelId))
+                    ?.copySamplingTo(model)
+            }
             val entry = hashMapOf(
                 "modelId" to model.modelId,
                 "endpointId" to model.endpointId,
@@ -142,6 +156,12 @@ class FavoriteModelsPreferences private constructor(
             (model.topP?.toString() ?: existing?.get("topP"))?.let { entry["topP"] = it }
             (model.frequencyPenalty?.toString() ?: existing?.get("frequencyPenalty"))?.let { entry["frequencyPenalty"] = it }
             (model.presencePenalty?.toString() ?: existing?.get("presencePenalty"))?.let { entry["presencePenalty"] = it }
+            // Favorite providers change only through setFavoriteProviders, so a
+            // routing or settings save never drops them. A brand-new favorite
+            // takes whatever the caller carries (normally none).
+            val providers = existing?.get("favoriteProviders")
+                ?: model.favoriteProviders.takeIf { it.isNotEmpty() }?.let { Gson().toJson(it) }
+            providers?.let { entry["favoriteProviders"] = it }
             if (pin || existing?.get("pinned") == "true") entry["pinned"] = "true"
             if (existingIndex >= 0) {
                 models[existingIndex] = entry
@@ -156,12 +176,6 @@ class FavoriteModelsPreferences private constructor(
         // Quick Settings Provider row.
         // The provider being replaced was the one in use, so it is recorded
         // first; this also captures a provider chosen before this list existed.
-        // A new favorite starts with no recents, whatever path removed an
-        // earlier favorite for the same model (unfavorite, endpoint deletion,
-        // or a restore that replaced the favorites list).
-        if (existing == null) {
-            recentOnlyProviders?.clear(model.endpointId, model.modelId)
-        }
         if (model.routingType == FavoriteModelObject.ROUTING_ONLY) {
             if (existing?.get("routingType") == FavoriteModelObject.ROUTING_ONLY) {
                 recentOnlyProviders?.record(model.endpointId, model.modelId, existing?.get("selectedProvider").orEmpty())
@@ -223,8 +237,39 @@ class FavoriteModelsPreferences private constructor(
             temperature = entry["temperature"]?.toFloatOrNull(),
             topP = entry["topP"]?.toFloatOrNull(),
             frequencyPenalty = entry["frequencyPenalty"]?.toFloatOrNull(),
-            presencePenalty = entry["presencePenalty"]?.toFloatOrNull()
+            presencePenalty = entry["presencePenalty"]?.toFloatOrNull(),
+            favoriteProviders = parseStringList(entry["favoriteProviders"])
         )
+
+    /** Replaces the favorite providers of an existing favorite. Does nothing
+     *  when the model is not a favorite: nothing is ever favorited implicitly. */
+    fun setFavoriteProviders(modelId: String, endpointId: String, providers: List<String>): Boolean {
+        val cleaned = providers.filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+        var found = false
+        val saved = state.update { current ->
+            val updated = current.favorites.map { entry ->
+                if (entry["modelId"] == modelId && entry["endpointId"] == endpointId) {
+                    found = true
+                    if (cleaned.isEmpty()) entry - "favoriteProviders"
+                    else entry + ("favoriteProviders" to Gson().toJson(cleaned))
+                } else entry
+            }
+            if (found) current.copy(favorites = updated) else current
+        }
+        return saved && found
+    }
+
+    /** Removes a favorite's saved sampling parameters, so the model goes back
+     *  to its API profile's defaults. */
+    fun clearSamplingParameters(modelId: String, endpointId: String): Boolean =
+        state.update { current ->
+            current.copy(favorites = current.favorites.map { entry ->
+                if (entry["modelId"] == modelId && entry["endpointId"] == endpointId) {
+                    entry - SAMPLING_KEYS
+                } else entry
+            })
+        }
 
     private fun parseStringList(json: String?): List<String> {
         if (json.isNullOrBlank()) return emptyList()
@@ -256,7 +301,6 @@ class FavoriteModelsPreferences private constructor(
             current.copy(favorites = kept)
         }
         if (!saved) return 0
-        targets.forEach { recentOnlyProviders?.clear(it.endpointId, it.modelId) }
         return removed
     }
 }

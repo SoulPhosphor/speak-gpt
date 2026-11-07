@@ -6,7 +6,13 @@ import com.google.gson.Gson
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.models.ModelIdentity
 
-/** Device-local chat model history. Each entry retains the settings from its latest use. */
+/**
+ * Device-local chat model history: the trial area of the model picker. Each
+ * entry keeps the provider routing from its latest use. Its AI parameters are
+ * kept separately and change only when the user saves them (Quick Settings'
+ * Save Parameters to Recent Model Settings, or Model Settings); an entry that
+ * leaves the list takes its saved parameters with it.
+ */
 class RecentModelsPreferences internal constructor(private val preferences: SharedPreferences) {
     constructor(context: Context) : this(
         context.applicationContext.getSharedPreferences("model_picker_recents", Context.MODE_PRIVATE)
@@ -14,8 +20,47 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
 
     fun limit(): Int = preferences.getInt("limit", DEFAULT_LIMIT)
 
+    /** The entries, newest first, each carrying its saved parameters (all
+     *  null when none were saved). */
     fun models(): List<FavoriteModelObject> =
-        synchronized(lock) { readModels().take(limit()) }
+        synchronized(lock) {
+            val saved = readSavedParameters()
+            readModels().take(limit()).map { model ->
+                model.also { saved[key(it)]?.copySamplingTo(it) ?: clearSampling(it) }
+            }
+        }
+
+    /** The parameters saved for this Recent entry, or null. */
+    fun savedParameters(target: ModelIdentity): FavoriteModelObject? = synchronized(lock) {
+        if (readModels().take(limit()).none { it.matches(target) }) return null
+        readSavedParameters()[key(target.endpointId, target.modelId)]
+    }
+
+    /** Saves [parameters]' five sampling values on the Recent entry for
+     *  [target], adding the entry when the model is not listed yet. Null
+     *  removes them, so the model returns to its API profile's defaults. */
+    fun setSavedParameters(target: ModelIdentity, parameters: FavoriteModelObject?) {
+        synchronized(lock) {
+            if (limit() == 0 || target.modelId.isBlank() || target.endpointId.isBlank()) return
+            val models = readModels()
+            if (models.none { it.matches(target) }) {
+                writeModels((listOf(FavoriteModelObject(target.modelId, target.endpointId)) + models).take(limit()))
+            }
+            val saved = readSavedParameters().toMutableMap()
+            val id = key(target.endpointId, target.modelId)
+            if (parameters == null || !parameters.hasSamplingParameters()) {
+                saved.remove(id)
+            } else {
+                saved[id] = FavoriteModelObject(target.modelId, target.endpointId)
+                    .also { parameters.copySamplingTo(it) }
+            }
+            writeSavedParameters(saved)
+        }
+    }
+
+    /** Updates the provider routing of [model]'s entry and moves it first,
+     *  keeping its saved parameters. */
+    fun recordRouting(model: FavoriteModelObject) = record(model)
 
     fun setLimit(newLimit: Int) {
         require(newLimit in 0..MAX_LIMIT)
@@ -35,7 +80,9 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
             val previous = readModels().filterNot {
                 it.modelId == model.modelId && it.endpointId == model.endpointId
             }
-            writeModels((listOf(model) + previous).take(limit))
+            // Only the routing is history; parameters are saved separately.
+            val entry = model.copy().also(::clearSampling)
+            writeModels((listOf(entry) + previous).take(limit))
         }
     }
 
@@ -55,10 +102,57 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
 
     private fun readModels(): List<FavoriteModelObject> =
         gson.fromJson(preferences.getString("models", null), Array<FavoriteModelObject>::class.java)
-            ?.toList().orEmpty()
+            ?.toList().orEmpty().onEach(::fillMissingLists)
+
+    /** Gson skips constructor defaults, so a list field that an older entry
+     *  never stored reads back as null. */
+    @Suppress("SENSELESS_COMPARISON", "USELESS_CAST")
+    private fun fillMissingLists(model: FavoriteModelObject) {
+        if ((model.providerOrder as List<String>?) == null) model.providerOrder = emptyList()
+        if ((model.ignoredProviders as List<String>?) == null) model.ignoredProviders = emptyList()
+        if ((model.favoriteProviders as List<String>?) == null) model.favoriteProviders = emptyList()
+        if ((model.routingType as String?) == null) model.routingType = FavoriteModelObject.ROUTING_AUTOMATIC
+        if ((model.selectedProvider as String?) == null) model.selectedProvider = ""
+        if ((model.reasoningEffort as String?) == null) model.reasoningEffort = FavoriteModelObject.REASONING_AUTO
+    }
 
     private fun writeModels(models: List<FavoriteModelObject>) {
-        preferences.edit().putString("models", gson.toJson(models)).apply()
+        // Saved parameters leave with their entry.
+        val kept = models.mapTo(HashSet()) { key(it) }
+        val saved = readSavedParameters()
+        val editor = preferences.edit().putString("models", gson.toJson(models))
+        if (saved.keys.any { it !in kept }) {
+            editor.putString("saved_parameters", gson.toJson(saved.filterKeys { it in kept }))
+        }
+        editor.apply()
+    }
+
+    private fun readSavedParameters(): Map<String, FavoriteModelObject> = try {
+        val json = preferences.getString("saved_parameters", null)
+        if (json.isNullOrBlank()) emptyMap() else {
+            val type = object : com.google.gson.reflect.TypeToken<Map<String, FavoriteModelObject>>() {}.type
+            gson.fromJson<Map<String, FavoriteModelObject>>(json, type).orEmpty()
+        }
+    } catch (_: Exception) {
+        emptyMap()
+    }
+
+    private fun writeSavedParameters(saved: Map<String, FavoriteModelObject>) {
+        preferences.edit().putString("saved_parameters", gson.toJson(saved)).apply()
+    }
+
+    private fun FavoriteModelObject.matches(target: ModelIdentity) =
+        modelId == target.modelId && endpointId == target.endpointId
+
+    private fun key(model: FavoriteModelObject) = key(model.endpointId, model.modelId)
+    private fun key(endpointId: String, modelId: String) = endpointId + "\u0000" + modelId
+
+    private fun clearSampling(model: FavoriteModelObject) {
+        model.streaming = null
+        model.temperature = null
+        model.topP = null
+        model.frequencyPenalty = null
+        model.presencePenalty = null
     }
 
     companion object {

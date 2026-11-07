@@ -125,6 +125,14 @@
                     android:maxLength="2"
                     android:imeOptions="actionDone" />
             </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/model_settings_enabled_title" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/model_settings_enabled_hint" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_model_settings_enabled" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

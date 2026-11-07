@@ -524,9 +524,6 @@
     <string name="unit_tokens">tokens</string>
     <string name="label_end_separator">End separator</string>
     <string name="label_prefix">Prefix</string>
-    <string name="btn_save_to_profile">Save to profile</string>
-    <string name="msg_saved_to_profile">Saved to profile</string>
-    <string name="msg_no_active_profile">No active profile to save to</string>
 
 
     <string name="api_key_blank_note">Leave API key field blank if you don\'t want to change API key.</string>
@@ -4289,6 +4286,7 @@
     <string name="model_picker_unfavorite">Unfavorite</string>
     <string name="model_picker_actions">Model actions</string>
     <string name="model_picker_routing_subtitle">%1$s · %2$s</string>
+    <string name="model_picker_profile_prefix">%1$s ·\u0020</string>
     <string name="model_picker_recent_limit_title">Model Picker Recently Used</string>
     <string name="model_picker_recent_limit_hint">Choose how many models are stored from your recently last used in the model picker.</string>
     <string name="model_browser_api_provider">API Provider</string>
@@ -4298,4 +4296,19 @@
     <string name="model_browser_free">Free</string>
     <string name="model_browser_catalog_order">Catalog Order</string>
     <string name="model_browser_alphabetical">A–Z</string>
+    <string name="model_settings_enabled_title">Enable Model Settings</string>
+    <string name="model_settings_enabled_hint">Allows custom AI settings be saved per model instead of API wide. When off all AI parameters will come from your default saved settings automatically. You will still be able to edit them on the quick settings screen per conversation.</string>
+    <string name="model_picker_model_settings">Model Settings</string>
+    <string name="model_picker_provider_desc">Provider for %1$s</string>
+    <string name="quick_save_parameters_favorite">Save Parameters to Favorite Model Settings</string>
+    <string name="quick_save_parameters_recent">Save Parameters to Recent Model Settings</string>
+    <string name="quick_save_parameters_saved">Saved %1$s New Parameters</string>
+    <string name="model_parameters_restore_desc">Restore Default Settings</string>
+    <string name="model_parameters_restore_title">Restore Default Settings?</string>
+    <string name="model_parameters_restore_message">This will restore all of this model\'s settings to the default ones for the API provider.</string>
+    <string name="model_parameters_restore_done">Successfully Reverted</string>
+    <string name="provider_make_favorite">Make Favorite</string>
+    <string name="provider_unfavorite">Unfavorite</string>
+    <string name="provider_actions_desc">Provider actions for %1$s</string>
+    <string name="provider_favorite_option">★ %1$s</string>
 </resources>
