@@ -51,6 +51,21 @@ class QuickSettingsEndpointModelSyncTest {
         )
     }
 
+    @Test
+    fun settingsReplacementRestoresTheComposerAfterItsViewsAreBound() {
+        val source = source("src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+        val handoff = source.substringAfter("override fun onForceUpdate() {")
+            .substringBefore("finishActivity()")
+        assertTrue(handoff.contains("composer.saveHierarchyState(hierarchy)"))
+        assertTrue(handoff.contains("replacement.putExtra(EXTRA_QUICK_SETTINGS_COMPOSER_TOKEN, token)"))
+        assertTrue(handoff.indexOf("composer.saveHierarchyState") < handoff.indexOf("startActivity(replacement)"))
+        val initialize = source.substringAfter("private fun initializeChatUi(")
+            .substringBefore("override fun dispatchTouchEvent(")
+        val restore = "composerSurface?.restoreHierarchyState(state.hierarchy)"
+        assertTrue(initialize.contains(restore))
+        assertTrue(initialize.indexOf("initSettings(prepared.historyResult)") < initialize.indexOf(restore))
+    }
+
     private fun source(relative: String): String {
         val candidates = listOf(File(relative), File("app/$relative"), File("../$relative"))
         return candidates.firstOrNull { it.exists() }?.readText()

@@ -94,6 +94,28 @@ class ChatComposerLayoutTest {
     }
 
     @Test
+    fun replacementRestoresMultilineDraftAndSelectionWithoutFocusingTheEditor() = withActivity { activity ->
+        val original = Fixture(activity)
+        val draft = "First line\nSecond line"
+        original.editor.setText(draft)
+        original.editor.setSelection(2, 9)
+        original.expand.performClick()
+        val hierarchy = SparseArray<Parcelable>()
+        original.composer.saveHierarchyState(hierarchy)
+
+        val replacement = Fixture(activity)
+        replacement.composer.restoreHierarchyState(hierarchy)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        replacement.assertEditorIn(replacement.content)
+        assertEquals(draft, replacement.editor.text.toString())
+        assertEquals(2, replacement.editor.selectionStart)
+        assertEquals(9, replacement.editor.selectionEnd)
+        assertTrue(replacement.composer.isExpanded())
+        assertFalse(replacement.editor.hasFocus())
+    }
+
+    @Test
     fun resetMovesFocusedBlankEditorBackToControls() = withActivity { activity ->
         val fixture = Fixture(activity)
         assertTrue(fixture.editor.requestFocus())

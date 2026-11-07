@@ -51,6 +51,7 @@ import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Parcelable
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
@@ -65,6 +66,7 @@ import android.speech.tts.Voice
 import android.text.Editable
 import android.text.TextWatcher
 import android.transition.TransitionInflater
+import android.util.SparseArray
 import android.util.Base64
 import android.util.Log
 import android.view.KeyEvent
@@ -458,6 +460,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         private const val STATE_EXPLICIT_IMAGINE_DRAFT =
             "state_explicit_imagine_draft"
+        private const val EXTRA_QUICK_SETTINGS_COMPOSER_TOKEN = "quickSettingsComposerToken"
+
+        // Quick Settings replaces the activity in the same process. Keep the
+        // draft in memory and pass only its one-time token through the intent,
+        // so even a large pasted draft fits the activity launch.
+        private val quickSettingsComposerHandoffs = mutableMapOf<String, QuickSettingsComposerState>()
 
         /** How much of a document the bookmark-writing request sees. Enough
          *  to say what the file IS, without paying to send it all again. */
@@ -603,6 +611,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var btnVisionActionGallery: View? = null
     private var btnVisionActionDocument: View? = null
     private var btnToolCreateImage: View? = null
+    private data class QuickSettingsComposerState(
+        val hierarchy: SparseArray<Parcelable>,
+        val explicitImagineDraft: Boolean
+    )
+
+    private var quickSettingsComposerState: QuickSettingsComposerState? = null
     private var explicitImagineDraft = false
 
     // ---- Document includes (document-includes-plan.md) --------------------
@@ -2710,6 +2724,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         window.sharedElementExitTransition = transition2
 
         super.onCreate(savedInstanceState)
+        quickSettingsComposerState = intent.getStringExtra(EXTRA_QUICK_SETTINGS_COMPOSER_TOKEN)
+            ?.let(quickSettingsComposerHandoffs::remove)
+        intent.removeExtra(EXTRA_QUICK_SETTINGS_COMPOSER_TOKEN)
         ThemeManager.getThemeManager().applyPalette(this)
 
         // At app start nothing sits behind this translucent window but the home
@@ -2983,6 +3000,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (savedInstanceState != null) {
             onRestoredState(savedInstanceState)
         }
+        quickSettingsComposerState?.let { state ->
+            explicitImagineDraft = state.explicitImagineDraft
+            composerSurface?.restoreHierarchyState(state.hierarchy)
+        }
+        quickSettingsComposerState = null
 
         // §5 recovery: reattach to a generation that is still running for
         // this chat and re-show its Creating Image row. Skipped while the
@@ -7729,14 +7751,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // run the abandon path against the chat the replacement
                     // screen is about to open.
                     recreatingForSettings = true
-                    startActivity(
-                        Intent(this@ChatActivity, ChatActivity::class.java)
-                            .putExtra("chatId", chatId)
-                            .putExtra("name", chatName)
-                            .putExtra("pendingConversation", pendingConversation)
-                            .putExtra(SummarizerPromptSession.EXTRA_KEEP_CHOICES, true)
-                            .setAction(Intent.ACTION_VIEW)
-                    )
+                    val replacement = Intent(this@ChatActivity, ChatActivity::class.java)
+                        .putExtra("chatId", chatId)
+                        .putExtra("name", chatName)
+                        .putExtra("pendingConversation", pendingConversation)
+                        .putExtra(SummarizerPromptSession.EXTRA_KEEP_CHOICES, true)
+                        .setAction(Intent.ACTION_VIEW)
+                    val composer = composerSurface
+                    if (composer != null && messageInput?.text?.isNotEmpty() == true) {
+                        val hierarchy = SparseArray<Parcelable>()
+                        composer.saveHierarchyState(hierarchy)
+                        val token = java.util.UUID.randomUUID().toString()
+                        quickSettingsComposerHandoffs[token] =
+                            QuickSettingsComposerState(hierarchy, explicitImagineDraft)
+                        replacement.putExtra(EXTRA_QUICK_SETTINGS_COMPOSER_TOKEN, token)
+                    }
+                    startActivity(replacement)
                     finishActivity()
                 }
             })
