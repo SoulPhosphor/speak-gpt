@@ -154,9 +154,12 @@ class ChooseProviderActivity : SettingsPageActivity() {
     private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
     private var chatPreferences: Preferences? = null
 
-    /** The selected model's favorite providers; empty when it is not a favorite. */
+    /** The selected model's favorite providers (on its favorite, or on its
+     *  Recent entry when it is not a favorite). */
     private var favoriteProviders: List<String> = emptyList()
-    private var modelIsFavorite = false
+    /** Whether each provider line has its ⋮ Make Favorite menu: for a chat's
+     *  model, or a favorite opened from the Favorite AI Models list. */
+    private var showProviderMenu = false
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
@@ -431,8 +434,9 @@ class ChooseProviderActivity : SettingsPageActivity() {
     private fun seedProviderStateFromFavorite(adoptFavoriteRoutingType: Boolean) {
         val stored = if (selectedModel.isBlank()) null
         else favoriteModelsPreferences?.getFavorite(selectedModel, endpointId)
-        modelIsFavorite = stored != null
-        favoriteProviders = stored?.favoriteProviders.orEmpty()
+        showProviderMenu = selectedModel.isNotBlank() && (stored != null || chatPreferences != null)
+        favoriteProviders = if (selectedModel.isBlank()) emptyList()
+            else ChatModelRouting.favoriteProviders(this, endpointId, selectedModel)
         // A chat shows the routing it actually uses, which may be its own.
         val favorite = if (selectedModel.isBlank() || chatPreferences == null) stored
         else ChatModelRouting.effective(this, chatPreferences, endpointId, selectedModel)
@@ -777,7 +781,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         val header = chartHeader ?: return
         header.removeAllViews()
         if (hasLeadColumn()) header.addView(spacerCell())
-        if (modelIsFavorite) header.addView(menuSpacerCell())
+        if (showProviderMenu) header.addView(menuSpacerCell())
         for ((labelRes, widthDp) in CHART_COLUMNS) {
             val cell = TextView(this, null, 0, R.style.Widget_App_Chart_HeaderCell)
             cell.text = getString(labelRes)
@@ -796,7 +800,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         }
 
         if (hasLeadColumn()) row.addView(buildLeadControl(endpoint.slug))
-        if (modelIsFavorite) row.addView(buildProviderMenu(endpoint.slug, endpoint.providerName))
+        if (showProviderMenu) row.addView(buildProviderMenu(endpoint.slug, endpoint.providerName))
         val cellStyle = cellStyle(endpoint.slug)
 
         val values = listOf(
@@ -839,7 +843,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         }
         if (hasLeadColumn()) row.addView(buildLeadControl(slug, available = false))
         val name = displayNames[slug] ?: slug
-        if (modelIsFavorite) row.addView(buildProviderMenu(slug, name))
+        if (showProviderMenu) row.addView(buildProviderMenu(slug, name))
 
         val nameCell = TextView(this, null, 0, cellStyle(slug))
         nameCell.text = name
@@ -887,7 +891,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
     }
 
     /** The provider's ⋮ menu, just left of its name: Make Favorite, or
-     *  Unfavorite once it is one. Applies immediately to the favorite. */
+     *  Unfavorite once it is one. Applies immediately, on the model's favorite
+     *  or, when it is not one, on its Recent entry. */
     private fun buildProviderMenu(slug: String, providerName: String): View {
         val button = ImageButton(this, null, 0, R.style.Widget_App_Chart_RowMenu)
         button.layoutParams = LinearLayout.LayoutParams(
@@ -907,9 +912,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
                         else favoriteProviders + slug
                     // Dropdowns show the provider by name, also when offline.
                     RecentOnlyProvidersStore.get(this).rememberName(slug, providerName)
-                    if (favoriteModelsPreferences?.setFavoriteProviders(selectedModel, endpointId, updated) == true) {
-                        favoriteProviders = favoriteModelsPreferences
-                            ?.getFavorite(selectedModel, endpointId)?.favoriteProviders.orEmpty()
+                    if (ChatModelRouting.setFavoriteProviders(this, endpointId, selectedModel, updated)) {
+                        favoriteProviders = ChatModelRouting.favoriteProviders(this, endpointId, selectedModel)
                         renderChart()
                     }
                     true

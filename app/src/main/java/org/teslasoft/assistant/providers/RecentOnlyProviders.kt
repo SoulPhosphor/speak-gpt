@@ -121,6 +121,35 @@ class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPre
     fun displayName(slug: String): String =
         prefs.getString(NAME_PREFIX + encode(slug.lowercase()), null) ?: slug
 
+    /** Every model's recent providers, for backups: (endpointId, modelId, slugs). */
+    fun exportRecents(): List<Triple<String, String, List<String>>> =
+        prefs.all.keys.filter { it.startsWith(RECENTS_PREFIX) }.mapNotNull { key ->
+            val parts = key.removePrefix(RECENTS_PREFIX).split("/")
+            if (parts.size != 2) return@mapNotNull null
+            val endpointId = java.net.URLDecoder.decode(parts[0], "UTF-8")
+            val modelId = java.net.URLDecoder.decode(parts[1], "UTF-8")
+            Triple(endpointId, modelId, recents(endpointId, modelId))
+        }
+
+    /** Every remembered provider display name, for backups (slug to name). */
+    fun exportNames(): Map<String, String> =
+        prefs.all.entries.filter { it.key.startsWith(NAME_PREFIX) && it.value is String }
+            .associate { java.net.URLDecoder.decode(it.key.removePrefix(NAME_PREFIX), "UTF-8") to it.value as String }
+
+    /** Replaces every model's recent providers and the remembered names. */
+    fun replaceAll(recents: List<Triple<String, String, List<String>>>, names: Map<String, String>) {
+        val editor = prefs.edit()
+        prefs.all.keys.forEach { editor.remove(it) }
+        recents.forEach { (endpointId, modelId, slugs) ->
+            val kept = slugs.filter { it.isNotBlank() }.take(RecentOnlyProviders.LIMIT)
+            if (kept.isNotEmpty()) editor.putString(key(endpointId, modelId), gson.toJson(kept))
+        }
+        names.forEach { (slug, name) ->
+            if (slug.isNotBlank() && name.isNotBlank()) editor.putString(NAME_PREFIX + encode(slug.lowercase()), name)
+        }
+        editor.commit()
+    }
+
     // Preference keys are written as XML attributes, so every part is
     // URL-encoded: no control characters reach the file, and "/" stays an
     // unambiguous separator.

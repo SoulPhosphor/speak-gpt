@@ -73,6 +73,7 @@ import org.teslasoft.assistant.ui.adapters.SavedModelPickerAdapter
 import org.teslasoft.assistant.ui.util.ScreenChrome
 import org.teslasoft.assistant.preferences.models.ModelCleanupReportStore
 import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.providers.RecentOnlyProviders
 import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 import org.teslasoft.assistant.reasoning.EndpointReasoningCapability
 import org.teslasoft.assistant.reasoning.EndpointReasoningCapabilityIndex
@@ -1079,12 +1080,24 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         recentRows = runCatching { RecentModelsPreferences(context).models() }.getOrDefault(emptyList())
             .mapNotNull { recent ->
                 row(recent)?.let { row ->
-                    // The last five providers used with this model; a single one
-                    // that is already in use leaves nothing to pick.
-                    val used = providerNames.recents(recent.endpointId, recent.modelId)
+                    // Its favorite providers (starred), then the last five used;
+                    // a single one that is already in use leaves nothing to pick.
+                    val favorites = recent.favoriteProviders
+                    val options = RecentOnlyProviders.quickSettingsOptions(
+                        "", favorites, providerNames.recents(recent.endpointId, recent.modelId)
+                    )
                     val inUse = recent.routingType == FavoriteModelObject.ROUTING_ONLY &&
-                        used.size == 1 && used.single().equals(recent.selectedProvider, ignoreCase = true)
-                    withProviders(row, if (inUse) emptyList() else used)
+                        options.size == 1 && options.single().equals(recent.selectedProvider, ignoreCase = true)
+                    if (!row.supportsRouting || inUse || options.isEmpty()) row
+                    else row.copy(
+                        providerOptions = options,
+                        providerNames = options.map { slug ->
+                            val name = providerNames.displayName(slug)
+                            if (favorites.any { it.equals(slug, ignoreCase = true) }) {
+                                getString(R.string.provider_favorite_option, name)
+                            } else name
+                        }
+                    )
                 }
             }
     }

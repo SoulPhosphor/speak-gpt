@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences
 import android.content.Context
 import com.google.gson.Gson
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
+import org.teslasoft.assistant.preferences.models.ModelIdentity
 import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 
 /**
@@ -54,6 +55,24 @@ object ChatModelRouting {
         val result = favorite?.copy() ?: FavoriteModelObject(modelId, endpointId)
         own.copyRoutingTo(result)
         return result
+    }
+
+    /** The providers the user marked Favorite for this model: on its favorite
+     *  when it is one, otherwise on its Recent entry. */
+    fun favoriteProviders(context: Context, endpointId: String, modelId: String): List<String> {
+        val favorite = FavoriteModelsPreferences.getPreferences(context).getFavorite(modelId, endpointId)
+        return favorite?.favoriteProviders
+            ?: RecentModelsPreferences(context).favoriteProviders(ModelIdentity(endpointId, modelId))
+    }
+
+    /** Saves this model's favorite providers where [favoriteProviders] reads them. */
+    fun setFavoriteProviders(context: Context, endpointId: String, modelId: String, providers: List<String>): Boolean {
+        val favorites = FavoriteModelsPreferences.getPreferences(context)
+        return if (favorites.isFavorite(modelId, endpointId)) {
+            favorites.setFavoriteProviders(modelId, endpointId, providers)
+        } else {
+            RecentModelsPreferences(context).setFavoriteProviders(ModelIdentity(endpointId, modelId), providers)
+        }
     }
 
     /** The chat goes back to the favorite's routing (or Automatic). */

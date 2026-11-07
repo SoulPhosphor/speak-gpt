@@ -941,7 +941,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             val endpointId = preferences?.getApiEndpointId() ?: return@setOnClickListener
             val model = preferences?.getModel() ?: return@setOnClickListener
             val routing = chatRouting(model, endpointId) ?: return@setOnClickListener
-            val favorites = favoriteModelsPreferences?.getFavorite(model, endpointId)?.favoriteProviders.orEmpty()
+            val favorites = ChatModelRouting.favoriteProviders(requireContext(), endpointId, model)
             val recents = RecentOnlyProvidersStore.get(requireContext())
             val options = RecentOnlyProviders.quickSettingsOptions(
                 routing.selectedProvider,

@@ -62,7 +62,10 @@ object ModelEndpointPortableCodec {
 
     data class Data(
         val endpoints: List<Endpoint>,
-        val favorites: List<Map<String, String>>
+        val favorites: List<Map<String, String>>,
+        /** The model picker's Recent list. Only backups carry it; the live
+         *  settings generations never do, and older backups have none. */
+        val recents: RecentModelsBackup.Snapshot? = null
     )
 
     sealed class Result {
@@ -117,6 +120,7 @@ object ModelEndpointPortableCodec {
             .put("complete", true)
             .put("endpoints", endpoints)
             .put("favorites", favorites)
+            .apply { data.recents?.let { put("recents", RecentModelsBackup.encode(it)) } }
             .toString(2)
     }
 
@@ -126,7 +130,9 @@ object ModelEndpointPortableCodec {
                 return Result.Rejected("artifact is too large")
             }
             val root = JSONObject(json)
-            if (!hasExactKeys(root, ROOT_KEYS)) return Result.Rejected("unknown or missing top-level field")
+            if (!hasExactKeys(root, ROOT_KEYS) && !hasExactKeys(root, ROOT_KEYS + "recents")) {
+                return Result.Rejected("unknown or missing top-level field")
+            }
             if (root.getString("format") != FORMAT) return Result.Rejected("unsupported format")
             if (!root.getBoolean("complete")) return Result.Rejected("artifact is incomplete")
 
@@ -182,7 +188,11 @@ object ModelEndpointPortableCodec {
                 item.keys().forEach { key -> favorite[key] = item.getString(key) }
                 favorites.add(favorite)
             }
-            val data = Data(endpoints, favorites)
+            val recents = if (root.has("recents")) {
+                RecentModelsBackup.parse(root.getJSONObject("recents"))
+                    ?: return Result.Rejected("recent models are malformed")
+            } else null
+            val data = Data(endpoints, favorites, recents?.let { RecentModelsBackup.forEndpoints(it, endpoints.mapTo(HashSet()) { e -> e.id }) })
             validate(data)?.let { Result.Rejected(it) } ?: Result.Ok(data)
         } catch (_: Exception) {
             Result.Rejected("artifact is malformed")

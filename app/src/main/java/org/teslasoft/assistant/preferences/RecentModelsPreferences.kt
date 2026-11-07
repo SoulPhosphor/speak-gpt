@@ -58,6 +58,30 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
         }
     }
 
+    /** The providers the user marked Favorite for this Recent model. */
+    fun favoriteProviders(target: ModelIdentity): List<String> = synchronized(lock) {
+        readModels().take(limit()).firstOrNull { it.matches(target) }?.favoriteProviders.orEmpty()
+    }
+
+    /** Replaces this Recent model's favorite providers, adding the entry when
+     *  the model is not listed yet. */
+    fun setFavoriteProviders(target: ModelIdentity, providers: List<String>): Boolean {
+        synchronized(lock) {
+            if (limit() == 0 || target.modelId.isBlank() || target.endpointId.isBlank()) return false
+            val cleaned = providers.filter { it.isNotBlank() }.distinctBy { it.lowercase() }
+            val models = readModels()
+            val existing = models.firstOrNull { it.matches(target) }
+            val updated = if (existing != null) {
+                models.map { if (it === existing) it.also { e -> e.favoriteProviders = cleaned } else it }
+            } else {
+                (listOf(FavoriteModelObject(target.modelId, target.endpointId, favoriteProviders = cleaned)) + models)
+                    .take(limit())
+            }
+            writeModels(updated)
+            return true
+        }
+    }
+
     /** Updates the provider routing of [model]'s entry and moves it first,
      *  keeping its saved parameters. */
     fun recordRouting(model: FavoriteModelObject) = record(model)
@@ -77,12 +101,32 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
         synchronized(lock) {
             val limit = limit()
             if (limit == 0 || model.modelId.isBlank() || model.endpointId.isBlank()) return
-            val previous = readModels().filterNot {
-                it.modelId == model.modelId && it.endpointId == model.endpointId
-            }
-            // Only the routing is history; parameters are saved separately.
+            val all = readModels()
+            val earlier = all.firstOrNull { it.modelId == model.modelId && it.endpointId == model.endpointId }
+            val previous = all.filterNot { it === earlier }
+            // Only the routing is history; parameters are saved separately and
+            // favorite providers change only through setFavoriteProviders.
             val entry = model.copy().also(::clearSampling)
+            entry.favoriteProviders = earlier?.favoriteProviders.orEmpty()
             writeModels((listOf(entry) + previous).take(limit))
+        }
+    }
+
+    /** Replaces the whole list (newest first) and the limit, as a restore
+     *  does. Each model's sampling fields are its saved parameters. */
+    fun replaceAll(limit: Int, models: List<FavoriteModelObject>) {
+        synchronized(lock) {
+            val kept = limit.coerceIn(0, MAX_LIMIT)
+            val list = models.filter { it.modelId.isNotBlank() && it.endpointId.isNotBlank() }
+                .distinctBy { key(it) }.take(kept)
+            val saved = list.filter { it.hasSamplingParameters() }.associate { model ->
+                key(model) to FavoriteModelObject(model.modelId, model.endpointId).also { model.copySamplingTo(it) }
+            }
+            preferences.edit()
+                .putInt("limit", kept)
+                .putString("models", gson.toJson(list.map { it.copy().also(::clearSampling) }))
+                .putString("saved_parameters", gson.toJson(saved))
+                .commit()
         }
     }
 

@@ -249,6 +249,8 @@ internal class ModelEndpointStateGenerationStore private constructor(
     private fun canonical(
         data: ModelEndpointPortableCodec.Data
     ): ModelEndpointPortableCodec.Data = data.copy(
+        // The Recent list lives in its own store, never in a generation.
+        recents = null,
         endpoints = data.endpoints
             .map { it.copy(rejectedTtsVoices = it.rejectedTtsVoices.distinct().sorted()) }
             .sortedBy { it.id },

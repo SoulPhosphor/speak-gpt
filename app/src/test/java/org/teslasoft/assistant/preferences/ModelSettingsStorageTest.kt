@@ -136,6 +136,47 @@ class ModelSettingsStorageTest {
     }
 
     @Test
+    fun recentModelsTravelInBackupsWithTheirSettings() {
+        val recent = FavoriteModelObject("model-a", "ep-1", FavoriteModelObject.ROUTING_ONLY, "chutes").apply {
+            temperature = 0.2f
+            favoriteProviders = listOf("chutes")
+        }
+        val gone = FavoriteModelObject("model-b", "ep-gone")
+        val snapshot = org.teslasoft.assistant.preferences.backup.portable.RecentModelsBackup.Snapshot(
+            12, listOf(recent, gone), listOf(Triple("ep-1", "model-a", listOf("chutes", "novita"))), mapOf("chutes" to "Chutes")
+        )
+        val data = ModelEndpointPortableCodec.Data(listOf(endpoint()), emptyList(), snapshot)
+
+        val parsed = (ModelEndpointPortableCodec.parse(ModelEndpointPortableCodec.encode(data))
+            as ModelEndpointPortableCodec.Result.Ok).data.recents!!
+
+        assertEquals(12, parsed.limit)
+        assertEquals(listOf("model-a"), parsed.models.map { it.modelId })
+        assertEquals(0.2f, parsed.models.single().temperature)
+        assertEquals(listOf("chutes"), parsed.models.single().favoriteProviders)
+        assertEquals("chutes", parsed.models.single().selectedProvider)
+        assertEquals(listOf("chutes", "novita"), parsed.providers.single().third)
+        assertEquals("Chutes", parsed.names["chutes"])
+    }
+
+    @Test
+    fun backupsWithoutRecentModelsStillRestore() {
+        val data = ModelEndpointPortableCodec.Data(listOf(endpoint()), emptyList())
+        val parsed = ModelEndpointPortableCodec.parse(ModelEndpointPortableCodec.encode(data))
+        assertTrue(parsed is ModelEndpointPortableCodec.Result.Ok)
+        assertNull((parsed as ModelEndpointPortableCodec.Result.Ok).data.recents)
+    }
+
+    @Test
+    fun recentFavoriteProvidersAreKeptAcrossUse() {
+        val recents = RecentModelsPreferences(FakeSharedPreferences())
+        recents.setFavoriteProviders(identity, listOf("chutes"))
+        recents.record(FavoriteModelObject("model-a", "ep-1", FavoriteModelObject.ROUTING_ONLY, "novita"))
+        assertEquals(listOf("chutes"), recents.favoriteProviders(identity))
+        assertEquals("novita", recents.models().single().selectedProvider)
+    }
+
+    @Test
     fun aProviderTheFavoriteDoesNotHoldIsATrial() {
         val favorite = FavoriteModelObject("model-a", "ep-1", FavoriteModelObject.ROUTING_ONLY, "deepinfra").apply {
             favoriteProviders = listOf("chutes")
