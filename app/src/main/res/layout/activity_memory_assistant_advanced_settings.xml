@@ -249,46 +249,16 @@
                     android:text="@string/choose_provider_routing_automatic" />
             </LinearLayout>
 
-            <!-- ============ Temperature ============ -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/memory_assistant_adv_temperature" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical|end"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/text_temperature_value"
-                    style="@style/Widget.App.Row.Title"
-                    android:layout_width="wrap_content" />
-            </LinearLayout>
-
-            <com.google.android.material.slider.Slider
-                android:id="@+id/slider_temperature"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:stepSize="0.1"
-                android:valueFrom="0.0"
-                android:valueTo="2.0" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:text="@string/memory_assistant_adv_temperature_recommended" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:text="@string/memory_assistant_adv_temperature_hint" />
+            <!-- ============ Memory Scanner parameters ============
+                 What memory scans send (owner ruling, Nov 8 2026); like Quick
+                 Settings, selecting a model loads its own saved settings.
+                 Shared block, see view_dedicated_model_parameters.xml. Saved
+                 with this screen's Save. -->
+            <include layout="@layout/view_dedicated_model_parameters" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_reset_temperature"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:id="@+id/btn_reset_model_parameters"
+                style="@style/Widget.App.PlainParameter.TextLink"
                 android:text="@string/memory_assistant_adv_reset_temperature" />
 
             <!-- ============ Minimum Importance ============ -->

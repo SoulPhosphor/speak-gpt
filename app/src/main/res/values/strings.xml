@@ -2840,6 +2840,11 @@
     <string name="memory_assistant_adv_temperature">Temperature</string>
     <string name="memory_assistant_adv_temperature_hint">Controls how literal or creative the AI is when analyzing conversations. Lower values are stricter; higher values may find more but can be less reliable.</string>
     <string name="memory_assistant_adv_temperature_recommended">Recommended: 0.3</string>
+    <!-- Leaving Advanced Memory Settings with unsaved Memory Scanner
+         parameters (owner wording, Nov 8 2026). -->
+    <string name="memory_parameters_discard_title">Discard Changes?</string>
+    <string name="memory_parameters_discard_message">You have unsaved parameter changes.</string>
+    <string name="btn_save_and_exit">Save &amp; Exit</string>
     <string name="memory_assistant_adv_reset_temperature">Reset to Recommended</string>
     <string name="memory_assistant_adv_min_importance">Minimum Importance</string>
     <string name="memory_assistant_adv_min_importance_hint">Only create memory drafts at or above this importance level.</string>
@@ -4280,6 +4285,8 @@
     <string name="memory_embedding_warning">Embedding Model Not Installed</string>
     <string name="memory_embedding_add">Add Embedding Model</string>
     <string name="model_picker_title">Select AI Model</string>
+    <string name="summarizer_model_picker_title">Select Summarizer Model</string>
+    <string name="memory_scanner_model_picker_title">Select Memory Scanner Model</string>
     <string name="model_picker_search">Search models or providers</string>
     <string name="model_picker_recent">Recent</string>
     <string name="model_picker_favorite">Favorite</string>
@@ -4306,6 +4313,7 @@
     <string name="model_parameters_restore_desc">Restore Default Settings</string>
     <string name="model_parameters_restore_title">Restore Default Settings?</string>
     <string name="model_parameters_restore_message">This will restore all of this model\'s settings to the default ones for the API provider.</string>
+    <string name="model_parameters_restore_message_recommended">This will restore all of this model\'s settings to the recommended ones.</string>
     <string name="model_parameters_restore_done">Successfully Reverted</string>
     <string name="provider_make_favorite">Make Favorite</string>
     <string name="provider_unfavorite">Unfavorite</string>

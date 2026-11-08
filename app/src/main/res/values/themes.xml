@@ -124,22 +124,6 @@
         <item name="layout_constraintWidth_percent">0.42</item>
     </style>
 
-    <!-- Readable shared vertical-dialog actions. Width lives in this family;
-         dialog_three_actions_cancel_first owns only the three-button order. -->
-    <style name="AppButton.Primary.DialogStacked" parent="AppButton.Primary">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="layout_constraintWidth_default">percent</item>
-        <item name="layout_constraintWidth_percent">0.72</item>
-    </style>
-
-    <style name="AppButton.Destructive.DialogStacked" parent="AppButton.Destructive">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="layout_constraintWidth_default">percent</item>
-        <item name="layout_constraintWidth_percent">0.72</item>
-    </style>
-
     <!-- Inline action button (owner ruling, July 24 2026): a primary button
          that sizes to its OWN text (wrap_content width) so a pair can sit
          side by side, each only as wide as its label — deliberately NOT equal
@@ -2773,17 +2757,42 @@
     <!-- One parameter's card on the Model Parameters screen: a fully rounded
          surface tinted like the Quick Settings parameter tiles, so the two
          screens read as the same design. -->
-    <style name="Widget.App.ParameterCard" parent="">
+    <!-- Plain parameter list (owner ruling, Nov 8 2026): model parameters
+         shown as plain title-and-control pairs on the screen background, no
+         card boxes. Used by Model Settings and the Summarizer's default
+         parameters. The inset matches the sampling slider's own inset so
+         titles, checkbox and link line up with the slider. -->
+    <style name="Widget.App.PlainParameter.Header" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">12dp</item>
-        <item name="android:orientation">vertical</item>
-        <item name="android:background">@drawable/btn_accent_24</item>
-        <item name="android:backgroundTint">?attr/colorSecondaryContainer</item>
-        <item name="android:paddingHorizontal">16dp</item>
-        <item name="android:paddingTop">8dp</item>
-        <item name="android:paddingBottom">16dp</item>
+        <item name="android:paddingTop">@dimen/plain_parameter_gap</item>
+        <item name="android:paddingStart">@dimen/plain_parameter_inset</item>
+        <item name="android:paddingEnd">@dimen/plain_parameter_inset</item>
     </style>
+
+    <style name="Widget.App.PlainParameter.CheckRow" parent="Widget.App.CheckOption.Row">
+        <item name="android:paddingStart">@dimen/plain_parameter_inset</item>
+        <item name="android:paddingEnd">@dimen/plain_parameter_inset</item>
+    </style>
+
+    <style name="Widget.App.PlainParameter.TextLink" parent="Widget.App.TextLink">
+        <item name="android:layout_marginStart">@dimen/plain_parameter_inset</item>
+        <item name="android:layout_marginEnd">@dimen/plain_parameter_inset</item>
+        <item name="android:layout_marginTop">@dimen/plain_parameter_link_gap</item>
+    </style>
+
+    <!-- The model name at the top of Model Settings. -->
+    <style name="Widget.App.ModelParameters.ModelName" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingTop">@dimen/model_parameters_model_name_padding_top</item>
+        <item name="android:paddingStart">@dimen/plain_parameter_inset</item>
+        <item name="android:paddingEnd">@dimen/plain_parameter_inset</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
+        <item name="android:textSize">@dimen/model_parameters_model_name_text_size</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
 
     <!-- A field label that is the first thing on a page body, below the
          header: the same label with a gap above it. -->

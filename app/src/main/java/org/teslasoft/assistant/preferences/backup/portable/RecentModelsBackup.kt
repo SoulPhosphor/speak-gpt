@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.preferences.RecentModelsPreferences
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.providers.RecentOnlyProviders
@@ -41,15 +42,15 @@ object RecentModelsBackup {
 
     private const val MAX_LIMIT = 99
 
-    fun capture(context: Context): Snapshot {
-        val recents = RecentModelsPreferences(context)
-        val providerStore = RecentOnlyProvidersStore.get(context)
+    fun capture(context: Context, scope: ModelPickerScope = ModelPickerScope.CHAT): Snapshot {
+        val recents = RecentModelsPreferences(context, scope)
+        val providerStore = RecentOnlyProvidersStore.get(context, scope)
         return Snapshot(recents.limit(), recents.models(), providerStore.exportRecents(), providerStore.exportNames())
     }
 
-    fun apply(context: Context, snapshot: Snapshot) {
-        RecentModelsPreferences(context).replaceAll(snapshot.limit, snapshot.models)
-        RecentOnlyProvidersStore.get(context).replaceAll(snapshot.providers, snapshot.names)
+    fun apply(context: Context, snapshot: Snapshot, scope: ModelPickerScope = ModelPickerScope.CHAT) {
+        RecentModelsPreferences(context, scope).replaceAll(snapshot.limit, snapshot.models)
+        RecentOnlyProvidersStore.get(context, scope).replaceAll(snapshot.providers, snapshot.names)
     }
 
     /** Only entries whose API profile is part of the same data. */

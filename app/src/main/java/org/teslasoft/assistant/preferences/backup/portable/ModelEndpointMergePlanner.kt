@@ -71,7 +71,9 @@ object ModelEndpointMergePlanner {
             ModelEndpointPortableCodec.Data(
                 endpoints.values.toList(),
                 favorites.values.toList(),
-                RecentModelsBackup.merge(current.recents, backup.recents)
+                RecentModelsBackup.merge(current.recents, backup.recents),
+                DedicatedModelsBackup.merge(current.summarizer, backup.summarizer),
+                DedicatedModelsBackup.merge(current.memoryScanner, backup.memoryScanner)
             ),
             Report(addedEndpoints, addedFavorites, identicalSkipped, conflicts)
         )

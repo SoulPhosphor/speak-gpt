@@ -30,6 +30,11 @@ import org.teslasoft.assistant.preferences.models.ModelIdentity
  * whatever another model last used. With the feature off nothing is saved per
  * model and selecting a model leaves the chat's parameters as they are.
  * Changes made in Quick Settings stay in that chat unless the user saves them.
+ *
+ * The Summarizer and the Memory Scanner work the same way with their own
+ * favorites and Recent lists. Their settings screens act as their Quick
+ * Settings, and a model with nothing saved starts from the recommended
+ * parameters (RecommendedModelParameters), never an API profile's.
  */
 object FavoriteModelParameters {
 
@@ -38,14 +43,19 @@ object FavoriteModelParameters {
 
     /** True when this model's parameters are saved on a favorite (otherwise
      *  they belong to its Recent entry). */
-    fun savesToFavorite(context: Context, modelId: String, endpointId: String): Boolean =
-        FavoriteModelsPreferences.getPreferences(context).isFavorite(modelId, endpointId)
+    fun savesToFavorite(
+        context: Context, modelId: String, endpointId: String,
+        scope: ModelPickerScope = ModelPickerScope.CHAT
+    ): Boolean = FavoriteModelsPreferences.getPreferences(context, scope).isFavorite(modelId, endpointId)
 
     /** The parameters saved for this model, or null when none are. */
-    fun saved(context: Context, modelId: String, endpointId: String): FavoriteModelObject? {
-        val favorite = FavoriteModelsPreferences.getPreferences(context).getFavorite(modelId, endpointId)
+    fun saved(
+        context: Context, modelId: String, endpointId: String,
+        scope: ModelPickerScope = ModelPickerScope.CHAT
+    ): FavoriteModelObject? {
+        val favorite = FavoriteModelsPreferences.getPreferences(context, scope).getFavorite(modelId, endpointId)
         val saved = if (favorite != null) favorite
-            else RecentModelsPreferences(context).savedParameters(ModelIdentity(endpointId, modelId))
+            else RecentModelsPreferences(context, scope).savedParameters(ModelIdentity(endpointId, modelId))
         return saved?.takeIf { it.hasSamplingParameters() }
     }
 
@@ -62,9 +72,73 @@ object FavoriteModelParameters {
         }
     }
 
-    /** What the model starts with: its saved parameters, else API defaults. */
-    fun startingParameters(context: Context, modelId: String, endpointId: String): FavoriteModelObject =
-        saved(context, modelId, endpointId) ?: apiDefaults(context, modelId, endpointId)
+    /** The defaults a model without saved parameters uses in [scope]. */
+    fun defaults(context: Context, modelId: String, endpointId: String, scope: ModelPickerScope): FavoriteModelObject =
+        if (scope == ModelPickerScope.CHAT) apiDefaults(context, modelId, endpointId)
+        else RecommendedModelParameters.forScope(scope, modelId, endpointId)
+
+    /** What the model starts with: its saved parameters, else the defaults. */
+    fun startingParameters(
+        context: Context, modelId: String, endpointId: String,
+        scope: ModelPickerScope = ModelPickerScope.CHAT
+    ): FavoriteModelObject =
+        saved(context, modelId, endpointId, scope) ?: defaults(context, modelId, endpointId, scope)
+
+    /** A background job's current parameters: what its requests send, as
+     *  shown on its settings screen. */
+    fun live(context: Context, scope: ModelPickerScope): FavoriteModelObject {
+        val prefs = Preferences.getPreferences(context, "")
+        return FavoriteModelObject("", "").apply {
+            if (scope == ModelPickerScope.SUMMARIZER) {
+                streaming = prefs.getSummarizerStreaming()
+                temperature = prefs.getSummarizerTemperature()
+                topP = prefs.getSummarizerTopP()
+                frequencyPenalty = prefs.getSummarizerFrequencyPenalty()
+                presencePenalty = prefs.getSummarizerPresencePenalty()
+            } else {
+                streaming = prefs.getMemoryScannerStreaming()
+                temperature = prefs.getArchivistTemperature()
+                topP = prefs.getMemoryScannerTopP()
+                frequencyPenalty = prefs.getMemoryScannerFrequencyPenalty()
+                presencePenalty = prefs.getMemoryScannerPresencePenalty()
+            }
+        }
+    }
+
+    /** Replaces a background job's current parameters with [values]' five. */
+    fun setLive(context: Context, scope: ModelPickerScope, values: FavoriteModelObject) {
+        val prefs = Preferences.getPreferences(context, "")
+        val recommended = RecommendedModelParameters.forScope(scope)
+        val streaming = values.streaming ?: recommended.streaming!!
+        val temperature = values.temperature ?: recommended.temperature!!
+        val topP = values.topP ?: recommended.topP!!
+        val frequency = values.frequencyPenalty ?: recommended.frequencyPenalty!!
+        val presence = values.presencePenalty ?: recommended.presencePenalty!!
+        if (scope == ModelPickerScope.SUMMARIZER) {
+            prefs.setSummarizerStreaming(streaming)
+            prefs.setSummarizerTemperature(temperature)
+            prefs.setSummarizerTopP(topP)
+            prefs.setSummarizerFrequencyPenalty(frequency)
+            prefs.setSummarizerPresencePenalty(presence)
+        } else {
+            prefs.setMemoryScannerStreaming(streaming)
+            prefs.setArchivistTemperature(temperature)
+            prefs.setMemoryScannerTopP(topP)
+            prefs.setMemoryScannerFrequencyPenalty(frequency)
+            prefs.setMemoryScannerPresencePenalty(presence)
+        }
+    }
+
+    /**
+     * Like a chat's Quick Settings: selecting a model for a background job
+     * gives the job that model's saved parameters, or the recommended ones
+     * when it has none. Does nothing while Enable Model Settings is off, so
+     * the job keeps the parameters it has.
+     */
+    fun applyToDedicated(context: Context, scope: ModelPickerScope, modelId: String, endpointId: String) {
+        if (modelId.isBlank() || endpointId.isBlank() || !isEnabled(context)) return
+        setLive(context, scope, startingParameters(context, modelId, endpointId, scope))
+    }
 
     /** Gives the chat the parameters this model starts with. Does nothing
      *  while Enable Model Settings is off. */
@@ -81,33 +155,41 @@ object FavoriteModelParameters {
 
     /** True when this model's parameters have somewhere to be saved: its
      *  favorite, or a Recent list that keeps at least one model. */
-    fun canSave(context: Context, modelId: String, endpointId: String): Boolean =
-        savesToFavorite(context, modelId, endpointId) || RecentModelsPreferences(context).limit() > 0
+    fun canSave(
+        context: Context, modelId: String, endpointId: String,
+        scope: ModelPickerScope = ModelPickerScope.CHAT
+    ): Boolean =
+        savesToFavorite(context, modelId, endpointId, scope) || RecentModelsPreferences(context, scope).limit() > 0
 
     /** Saves [values]' five parameters for this model: on its favorite when it
      *  is one, otherwise on its Recent entry. False when nothing was saved. */
-    fun save(context: Context, modelId: String, endpointId: String, values: FavoriteModelObject): Boolean {
-        val favorites = FavoriteModelsPreferences.getPreferences(context)
+    fun save(
+        context: Context, modelId: String, endpointId: String, values: FavoriteModelObject,
+        scope: ModelPickerScope = ModelPickerScope.CHAT
+    ): Boolean {
+        val favorites = FavoriteModelsPreferences.getPreferences(context, scope)
         val favorite = favorites.getFavorite(modelId, endpointId)
         if (favorite != null) {
             values.copySamplingTo(favorite)
             favorites.addFavoriteModel(favorite)
             return true
         }
-        val recents = RecentModelsPreferences(context)
+        val recents = RecentModelsPreferences(context, scope)
         val target = ModelIdentity(endpointId, modelId)
         recents.setSavedParameters(target, values)
         return recents.savedParameters(target) != null
     }
 
-    /** Removes this model's saved parameters, so it returns to its API
-     *  profile's defaults. */
-    fun restoreDefaults(context: Context, modelId: String, endpointId: String) {
-        val favorites = FavoriteModelsPreferences.getPreferences(context)
+    /** Removes this model's saved parameters, so it returns to its defaults. */
+    fun restoreDefaults(
+        context: Context, modelId: String, endpointId: String,
+        scope: ModelPickerScope = ModelPickerScope.CHAT
+    ) {
+        val favorites = FavoriteModelsPreferences.getPreferences(context, scope)
         if (favorites.isFavorite(modelId, endpointId)) {
             favorites.clearSamplingParameters(modelId, endpointId)
         } else {
-            RecentModelsPreferences(context).setSavedParameters(ModelIdentity(endpointId, modelId), null)
+            RecentModelsPreferences(context, scope).setSavedParameters(ModelIdentity(endpointId, modelId), null)
         }
     }
 

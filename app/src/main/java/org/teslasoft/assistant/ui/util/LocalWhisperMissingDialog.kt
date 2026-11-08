@@ -12,8 +12,9 @@ import org.teslasoft.assistant.R
 
 /**
  * Shown when the selected voice input cannot run yet, instead of silently
- * using another (possibly paid) engine. Actions are stacked top to bottom
- * from least to most likely wanted (owner ruling, Oct 9 2026).
+ * using another (possibly paid) engine. Actions sit side by side, left to
+ * right from least to most likely wanted (owner rulings, Oct 9 and Nov 8
+ * 2026).
  */
 object LocalWhisperMissingDialog {
 
@@ -27,7 +28,7 @@ object LocalWhisperMissingDialog {
         onUseGoogle: () -> Unit,
         onDownload: () -> Unit
     ) {
-        stacked(activity, R.string.local_whisper_missing_title, R.string.local_whisper_missing_message,
+        threeChoices(activity, R.string.local_whisper_missing_title, R.string.local_whisper_missing_message,
             Action(if (apiConfigured) R.string.local_whisper_missing_api else R.string.api_stt_set_up_button,
                 if (apiConfigured) onUseApi else onSetUpApi),
             Action(R.string.voice_engine_google, onUseGoogle),
@@ -43,7 +44,7 @@ object LocalWhisperMissingDialog {
         onUseGoogle: () -> Unit,
         onSetUpApi: () -> Unit
     ) {
-        stacked(activity, R.string.api_stt_missing_title, R.string.api_stt_missing_message,
+        threeChoices(activity, R.string.api_stt_missing_title, R.string.api_stt_missing_message,
             if (whisperSupported) Action(R.string.local_whisper_missing_download, onDownload) else null,
             Action(R.string.voice_engine_google, onUseGoogle),
             Action(R.string.api_stt_set_up_button, onSetUpApi))
@@ -51,8 +52,8 @@ object LocalWhisperMissingDialog {
 
     private class Action(val label: Int, val run: () -> Unit)
 
-    private fun stacked(activity: Activity, title: Int, message: Int, first: Action?, second: Action, third: Action) {
-        val actions = activity.layoutInflater.inflate(R.layout.dialog_three_actions_stacked, null)
+    private fun threeChoices(activity: Activity, title: Int, message: Int, first: Action?, second: Action, third: Action) {
+        val actions = activity.layoutInflater.inflate(R.layout.dialog_three_choices_row, null)
         val dialog = MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
             .setTitle(title)
             .setMessage(message)

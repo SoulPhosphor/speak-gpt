@@ -10,6 +10,7 @@ package org.teslasoft.assistant.providers
 import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import java.net.URLEncoder
 
 /**
@@ -56,7 +57,12 @@ object RecentOnlyProviders {
     }
 }
 
-class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPreferences) {
+class RecentOnlyProvidersStore internal constructor(
+    private val prefs: SharedPreferences,
+    /** Where providers' display names are kept. Names describe a provider,
+     *  not a picker, so the other jobs' stores share the chat's. */
+    private val namePrefs: SharedPreferences = prefs
+) {
 
     companion object {
         private const val FILE = "recent_only_providers"
@@ -64,12 +70,24 @@ class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPre
         private const val RECENTS_PREFIX = "recents:"
 
         @Volatile private var instance: RecentOnlyProvidersStore? = null
+        private val dedicatedInstances = HashMap<ModelPickerScope, RecentOnlyProvidersStore>()
 
         fun get(context: Context): RecentOnlyProvidersStore =
             instance ?: synchronized(this) {
                 instance ?: RecentOnlyProvidersStore(
                     context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
                 ).also { instance = it }
+            }
+
+        /** The last providers used for [scope]'s models. */
+        fun get(context: Context, scope: ModelPickerScope): RecentOnlyProvidersStore =
+            if (scope == ModelPickerScope.CHAT) get(context) else synchronized(this) {
+                dedicatedInstances.getOrPut(scope) {
+                    RecentOnlyProvidersStore(
+                        context.applicationContext.getSharedPreferences(scope.filePrefix + FILE, Context.MODE_PRIVATE),
+                        context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+                    )
+                }
             }
     }
 
@@ -114,12 +132,12 @@ class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPre
     /** The provider's display name as OpenRouter last reported it. */
     fun rememberName(slug: String, name: String?) {
         if (slug.isBlank() || name.isNullOrBlank()) return
-        prefs.edit().putString(NAME_PREFIX + encode(slug.lowercase()), name).apply()
+        namePrefs.edit().putString(NAME_PREFIX + encode(slug.lowercase()), name).apply()
     }
 
     /** The remembered display name, or the slug when none was ever reported. */
     fun displayName(slug: String): String =
-        prefs.getString(NAME_PREFIX + encode(slug.lowercase()), null) ?: slug
+        namePrefs.getString(NAME_PREFIX + encode(slug.lowercase()), null) ?: slug
 
     /** Every model's recent providers, for backups: (endpointId, modelId, slugs). */
     fun exportRecents(): List<Triple<String, String, List<String>>> =
@@ -133,21 +151,25 @@ class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPre
 
     /** Every remembered provider display name, for backups (slug to name). */
     fun exportNames(): Map<String, String> =
-        prefs.all.entries.filter { it.key.startsWith(NAME_PREFIX) && it.value is String }
+        namePrefs.all.entries.filter { it.key.startsWith(NAME_PREFIX) && it.value is String }
             .associate { java.net.URLDecoder.decode(it.key.removePrefix(NAME_PREFIX), "UTF-8") to it.value as String }
 
     /** Replaces every model's recent providers and the remembered names. */
     fun replaceAll(recents: List<Triple<String, String, List<String>>>, names: Map<String, String>) {
         val editor = prefs.edit()
-        prefs.all.keys.forEach { editor.remove(it) }
+        prefs.all.keys.filter { it.startsWith(RECENTS_PREFIX) || namePrefs === prefs }.forEach { editor.remove(it) }
         recents.forEach { (endpointId, modelId, slugs) ->
             val kept = slugs.filter { it.isNotBlank() }.take(RecentOnlyProviders.LIMIT)
             if (kept.isNotEmpty()) editor.putString(key(endpointId, modelId), gson.toJson(kept))
         }
+        // A store that shares another's names (the Summarizer's) adds to them
+        // and never clears them.
+        val nameEditor = if (namePrefs === prefs) editor else namePrefs.edit()
         names.forEach { (slug, name) ->
-            if (slug.isNotBlank() && name.isNotBlank()) editor.putString(NAME_PREFIX + encode(slug.lowercase()), name)
+            if (slug.isNotBlank() && name.isNotBlank()) nameEditor.putString(NAME_PREFIX + encode(slug.lowercase()), name)
         }
         editor.commit()
+        if (nameEditor !== editor) nameEditor.commit()
     }
 
     // Preference keys are written as XML attributes, so every part is

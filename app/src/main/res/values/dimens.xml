@@ -43,6 +43,11 @@
     <dimen name="dialog_actions_padding_top">8dp</dimen>
     <dimen name="dialog_actions_padding_bottom">16dp</dimen>
     <dimen name="dialog_action_gap">12dp</dimen>
+    <!-- The chat's message information text (the small line on a reply). -->
+    <dimen name="chat_message_metadata_text_size">12sp</dimen>
+    <!-- Pop-up buttons shrink their text to stay on one line, never below this
+         (DialogActionRow, owner ruling, Nov 8 2026). -->
+    <dimen name="dialog_action_min_text_size">@dimen/chat_message_metadata_text_size</dimen>
     <dimen name="dialog_action_line_gap">8dp</dimen>
 
     <!-- Companion prompt tab file-tab shape (PromptTabBackground): the fixed
@@ -127,6 +132,15 @@
     <dimen name="quick_settings_segment_gap">2dp</dimen>
     <dimen name="quick_settings_segment_padding_vertical">8dp</dimen>
     <dimen name="quick_settings_segment_padding_horizontal">16dp</dimen>
+    <!-- How faint a control is while it cannot be used (a row with nothing
+         selected yet). -->
+    <item name="disabled_control_alpha" format="float" type="dimen">0.38</item>
+    <!-- Plain parameter list (Widget.App.PlainParameter.*). -->
+    <dimen name="plain_parameter_inset">@dimen/quick_settings_segment_padding_horizontal</dimen>
+    <dimen name="plain_parameter_gap">24dp</dimen>
+    <dimen name="plain_parameter_link_gap">12dp</dimen>
+    <dimen name="model_parameters_model_name_padding_top">20dp</dimen>
+    <dimen name="model_parameters_model_name_text_size">20sp</dimen>
     <dimen name="quick_settings_segment_outer_radius">24dp</dimen>
     <dimen name="quick_settings_segment_inner_radius">4dp</dimen>
     <dimen name="quick_settings_segment_stroke_width">1dp</dimen>

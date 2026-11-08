@@ -22,9 +22,10 @@ import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.models.ModelIdentity
 import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 class FavoriteModelsPreferences private constructor(
-    private val state: ModelEndpointStateGenerationStore,
+    private val state: FavoriteListBackend,
     private val recentOnlyProviders: RecentOnlyProvidersStore? = null,
     /** A model's Recent entry, whose settings carry onto the model when it
      *  becomes a favorite. */
@@ -33,12 +34,15 @@ class FavoriteModelsPreferences private constructor(
     companion object {
         private val SAMPLING_KEYS = setOf("streaming", "temperature", "topP", "frequencyPenalty", "presencePenalty")
         private var instance: FavoriteModelsPreferences? = null
+        private val dedicatedInstances = HashMap<ModelPickerScope, FavoriteModelsPreferences>()
 
+        /** The chat's favorites (also used by every screen that is not the
+         *  Summarizer). */
         fun getPreferences(context: Context): FavoriteModelsPreferences {
             if (instance == null) {
                 val recents = RecentModelsPreferences(context)
                 instance = FavoriteModelsPreferences(
-                    ModelEndpointStateGenerationStore.get(context),
+                    GenerationFavoriteBackend(ModelEndpointStateGenerationStore.get(context)),
                     RecentOnlyProvidersStore.get(context),
                     recents::entry
                 )
@@ -46,33 +50,64 @@ class FavoriteModelsPreferences private constructor(
             return instance!!
         }
 
+        /** The favorites of [scope]'s model picker. */
+        fun getPreferences(context: Context, scope: ModelPickerScope): FavoriteModelsPreferences =
+            if (scope == ModelPickerScope.CHAT) getPreferences(context) else dedicated(context, scope)
+
+        /** A background job's own favorites (the Summarizer's or the Memory
+         *  Scanner's), kept apart from the chat's. */
+        @Synchronized
+        private fun dedicated(context: Context, scope: ModelPickerScope): FavoriteModelsPreferences =
+            dedicatedInstances.getOrPut(scope) {
+                val app = context.applicationContext
+                val recents = RecentModelsPreferences(app, scope)
+                val state = ModelEndpointStateGenerationStore.get(app)
+                FavoriteModelsPreferences(
+                    SeparateFavoriteBackend(
+                        app.getSharedPreferences(scope.filePrefix + "favorite_models", Context.MODE_PRIVATE)
+                    ) { state.read()?.endpoints?.mapTo(HashSet()) { it.id } },
+                    RecentOnlyProvidersStore.get(app, scope),
+                    recents::entry
+                )
+            }
+
         internal fun createForTest(
             statePreferences: SharedPreferences,
             legacyFavoritePreferences: SharedPreferences = statePreferences,
             recentEntry: ((ModelIdentity) -> FavoriteModelObject?)? = null
         ): FavoriteModelsPreferences = FavoriteModelsPreferences(
-            ModelEndpointStateGenerationStore.createForTest(
-                statePreferences,
-                legacyFavoritePreferences
+            GenerationFavoriteBackend(
+                ModelEndpointStateGenerationStore.createForTest(
+                    statePreferences,
+                    legacyFavoritePreferences
+                )
             ),
+            recentEntry = recentEntry
+        )
+
+        /** A store kept in its own file, like the Summarizer's and Memory
+         *  Scanner's. */
+        internal fun createSeparateForTest(
+            preferences: SharedPreferences,
+            endpointIds: () -> Set<String>?,
+            recentEntry: ((ModelIdentity) -> FavoriteModelObject?)? = null
+        ): FavoriteModelsPreferences = FavoriteModelsPreferences(
+            SeparateFavoriteBackend(preferences, endpointIds),
             recentEntry = recentEntry
         )
     }
 
     fun setFavoriteModels(models: ArrayList<Map<String, String>>) {
-        state.update { current ->
-            val endpointIds = current.endpoints.mapTo(HashSet()) { it.id }
-            current.copy(
-                favorites = models
-                    .filter { it["endpointId"].orEmpty() in endpointIds }
-                    .distinctBy { it["endpointId"].orEmpty() + "\u0000" + it["modelId"].orEmpty() }
-                    .map { LinkedHashMap(it) }
-            )
+        state.edit { endpointIds, _ ->
+            models
+                .filter { it["endpointId"].orEmpty() in endpointIds }
+                .distinctBy { it["endpointId"].orEmpty() + "\u0000" + it["modelId"].orEmpty() }
+                .map { LinkedHashMap(it) }
         }
     }
 
     fun getFavoriteModels(): ArrayList<Map<String, String>> {
-        return ArrayList(state.read()?.favorites.orEmpty().map { LinkedHashMap(it) })
+        return ArrayList(state.favorites().map { LinkedHashMap(it) })
     }
 
     /**
@@ -91,12 +126,12 @@ class FavoriteModelsPreferences private constructor(
         if (pinned) {
             saveFavoriteModel(model, pin = true)
         } else {
-            state.update { current ->
-                current.copy(favorites = current.favorites.map { entry ->
+            state.edit { _, favorites ->
+                favorites.map { entry ->
                     if (entry["modelId"] == model.modelId && entry["endpointId"] == model.endpointId) {
                         entry - "pinned"
                     } else entry
-                })
+                }
             }
         }
     }
@@ -116,16 +151,16 @@ class FavoriteModelsPreferences private constructor(
         carryRecentRouting: Boolean = true
     ) {
         var previous: Map<String, String>? = null
-        val saved = state.update { current ->
-            if (current.endpoints.none { it.id == model.endpointId }) return@update current
-            val models = current.favorites.toMutableList()
+        val saved = state.edit { endpointIds, current ->
+            if (model.endpointId !in endpointIds) return@edit current
+            val models = current.toMutableList()
             val existingIndex = models.indexOfFirst { it["modelId"] == model.modelId && it["endpointId"] == model.endpointId }
             val existing = models.getOrNull(existingIndex)
             previous = existing
             if (existing != null && (pin || preserveExisting)) {
-                if (!pin) return@update current
+                if (!pin) return@edit current
                 models[existingIndex] = existing + ("pinned" to "true")
-                return@update current.copy(favorites = models)
+                return@edit models
             }
 
             // A model that becomes a favorite brings its Recent entry's settings
@@ -176,7 +211,7 @@ class FavoriteModelsPreferences private constructor(
             } else {
                 models.add(entry)
             }
-            current.copy(favorites = models)
+            models
         }
         if (!saved || ((pin || preserveExisting) && previous != null)) return
         val existing = previous
@@ -259,15 +294,15 @@ class FavoriteModelsPreferences private constructor(
         val cleaned = providers.filter { it.isNotBlank() }
             .distinctBy { it.lowercase() }
         var found = false
-        val saved = state.update { current ->
-            val updated = current.favorites.map { entry ->
+        val saved = state.edit { _, current ->
+            val updated = current.map { entry ->
                 if (entry["modelId"] == modelId && entry["endpointId"] == endpointId) {
                     found = true
                     if (cleaned.isEmpty()) entry - "favoriteProviders"
                     else entry + ("favoriteProviders" to Gson().toJson(cleaned))
                 } else entry
             }
-            if (found) current.copy(favorites = updated) else current
+            if (found) updated else current
         }
         return saved && found
     }
@@ -275,12 +310,12 @@ class FavoriteModelsPreferences private constructor(
     /** Removes a favorite's saved sampling parameters, so the model goes back
      *  to its API profile's defaults. */
     fun clearSamplingParameters(modelId: String, endpointId: String): Boolean =
-        state.update { current ->
-            current.copy(favorites = current.favorites.map { entry ->
+        state.edit { _, favorites ->
+            favorites.map { entry ->
                 if (entry["modelId"] == modelId && entry["endpointId"] == endpointId) {
                     entry - SAMPLING_KEYS
                 } else entry
-            })
+            }
         }
 
     private fun parseStringList(json: String?): List<String> {
@@ -305,14 +340,83 @@ class FavoriteModelsPreferences private constructor(
     fun removeFavoriteModels(targets: Set<ModelIdentity>): Int {
         if (targets.isEmpty()) return 0
         var removed = 0
-        val saved = state.update { current ->
-            val kept = current.favorites.filterNot { item ->
+        val saved = state.edit { _, current ->
+            val kept = current.filterNot { item ->
                 ModelIdentity(item["endpointId"].orEmpty(), item["modelId"].orEmpty()) in targets
             }
-            removed = current.favorites.size - kept.size
-            current.copy(favorites = kept)
+            removed = current.size - kept.size
+            kept
         }
         if (!saved) return 0
         return removed
+    }
+}
+
+/** Where a favorites list is kept. */
+internal interface FavoriteListBackend {
+    fun favorites(): List<Map<String, String>>
+
+    /** Replaces the list with [transform]'s result, which receives the ids of
+     *  the API profiles that exist and the current list. False when nothing
+     *  could be saved. */
+    fun edit(transform: (Set<String>, List<Map<String, String>>) -> List<Map<String, String>>): Boolean
+}
+
+/** The chat's favorites, kept inside the model endpoint settings generation. */
+internal class GenerationFavoriteBackend(
+    private val state: ModelEndpointStateGenerationStore
+) : FavoriteListBackend {
+    override fun favorites(): List<Map<String, String>> = state.read()?.favorites.orEmpty()
+
+    override fun edit(
+        transform: (Set<String>, List<Map<String, String>>) -> List<Map<String, String>>
+    ): Boolean = state.update { current ->
+        current.copy(favorites = transform(current.endpoints.mapTo(HashSet()) { it.id }, current.favorites))
+    }
+}
+
+/**
+ * A favorites list in its own file (the Summarizer's). Entries whose API
+ * profile no longer exists are left out when read and dropped on the next
+ * write, as the chat's are.
+ */
+internal class SeparateFavoriteBackend(
+    private val preferences: SharedPreferences,
+    private val endpointIds: () -> Set<String>?
+) : FavoriteListBackend {
+    private val gson = Gson()
+    private val type = object : TypeToken<List<Map<String, String>>>() {}.type
+
+    override fun favorites(): List<Map<String, String>> = synchronized(this) {
+        val ids = endpointIds() ?: return emptyList()
+        stored().filter { it["endpointId"].orEmpty() in ids }
+    }
+
+    override fun edit(
+        transform: (Set<String>, List<Map<String, String>>) -> List<Map<String, String>>
+    ): Boolean = synchronized(this) {
+        val ids = endpointIds() ?: return false
+        val updated = try {
+            transform(ids, stored().filter { it["endpointId"].orEmpty() in ids })
+        } catch (_: Exception) {
+            return false
+        }
+        val canonical = updated
+            .filter { it["endpointId"].orEmpty() in ids && it["modelId"].orEmpty().isNotBlank() }
+            .distinctBy { it["endpointId"].orEmpty() + "\u0000" + it["modelId"].orEmpty() }
+            .map { LinkedHashMap(it) }
+            .sortedWith(compareBy({ it["endpointId"].orEmpty() }, { it["modelId"].orEmpty() }))
+        preferences.edit().putString(KEY, gson.toJson(canonical)).commit()
+    }
+
+    private fun stored(): List<Map<String, String>> = try {
+        gson.fromJson<List<Map<String, String>>>(preferences.getString(KEY, null), type).orEmpty()
+            .filter { it["endpointId"] != null && it["modelId"] != null }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    private companion object {
+        const val KEY = "favorites"
     }
 }

@@ -1100,6 +1100,11 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // Coming back from the gear (entries editor) or the persona screen may
         // have changed books, links, or names — rebuild the checklist.
         if (lorebookCheckList != null) renderLoreBookList()
+        // Model Settings (opened from the model picker) may have saved new
+        // parameters for this chat's model and applied them to the chat; show
+        // what the chat now uses rather than the sheet's earlier values.
+        refreshSamplingControlsFromPreferences()
+        saveParametersLink?.refresh()
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {

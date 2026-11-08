@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 import android.content.Context
 import java.io.File
 import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
+import org.teslasoft.assistant.preferences.ModelPickerScope
 
 /** Creates the credential-free Model & Endpoint Settings artifact. */
 object ModelEndpointPortableBackup {
@@ -33,6 +34,14 @@ object ModelEndpointPortableBackup {
         val data = stored.copy(
             recents = RecentModelsBackup.forEndpoints(
                 RecentModelsBackup.capture(appContext), stored.endpoints.mapTo(HashSet()) { it.id }
+            ),
+            summarizer = DedicatedModelsBackup.forEndpoints(
+                DedicatedModelsBackup.capture(appContext, ModelPickerScope.SUMMARIZER),
+                stored.endpoints.mapTo(HashSet()) { it.id }
+            ),
+            memoryScanner = DedicatedModelsBackup.forEndpoints(
+                DedicatedModelsBackup.capture(appContext, ModelPickerScope.MEMORY_SCANNER),
+                stored.endpoints.mapTo(HashSet()) { it.id }
             )
         )
         val json = ModelEndpointPortableCodec.encode(data)

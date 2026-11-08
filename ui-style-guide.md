@@ -216,25 +216,28 @@ prompt editor's Rename, Copy From, Clear, and Delete confirmations.
 
 ### Three dialog actions
 
-`AppButton.Primary.DialogStacked`
+Pop-up buttons sit side by side, never stacked on top of each other (owner
+ruling, Nov 8 2026). Three actions use one right-aligned row of
+`AppButton.*.Inline` buttons built on `Widget.App.Dialog.Actions.EndRow` /
+`EndRowFlow`; an action that does not fit moves to the next line, still on
+the right.
 
-`AppButton.Destructive.DialogStacked`
+- `layout/dialog_three_actions_row.xml`: cancel/back-out first
+  (`AppButton.Destructive.Inline`), then the alternate commitment
+  (`AppButton.Primary.Inline`), then the final commitment
+  (`AppButton.Destructive.Inline`), in the caller's approved order. Users:
+  the chat/image deletion choice (**Cancel**, **Delete Chat Only**,
+  **Delete All**), and leaving Advanced Memory Settings with unsaved Memory
+  Scanner parameters (**Discard Changes?** / "You have unsaved parameter
+  changes." with **Cancel** (stay), **Save & Exit**, **Okay** (leave without
+  saving)).
+- `layout/dialog_three_choices_row.xml`: three equal, non-destructive choices
+  with no Cancel, all `AppButton.Primary.Inline`. User: the on-device Whisper
+  missing-model pop-up (**Download Whisper**, **Google Dictation**, **API**).
 
-Use `layout/dialog_three_actions_cancel_first.xml` when three complete action
-labels would be cramped in one horizontal row. The shared layout stacks the
-actions in their approved top-to-bottom order: cancel/back-out first, alternate
-commitment second, final commitment third. It owns spacing and constraints;
-the shared styles own width, shape, typography, and theme color roles.
-
-The chat/image deletion choice is the first consumer: **Cancel**, **Delete Chat
-Only**, **Delete All**. Do not reorder those actions or reproduce the stacked
-geometry in a feature-local layout.
-
-For three equal, non-destructive choices with no cancel action, use
-`layout/dialog_three_actions_stacked.xml`: the same stacked geometry with every
-action on `AppButton.Primary.DialogStacked`, in the caller's approved
-top-to-bottom order. First consumer: the on-device Whisper missing-model dialog
-(**API**, **Google Dictation**, **Download Whisper**).
+An owner-approved single action centered beneath a row
+(`AppButton.Primary.Inline.Centered.BelowDialogRow`) is the only exception to
+side-by-side actions.
 
 ### Inline actions
 
@@ -283,9 +286,14 @@ right-aligned unless an approved design says otherwise. Every action is a real
 button (an `AppButton.*` style), never a bare text link.
 
 A row of label-sized actions that may not fit on one line uses a
-`ConstraintLayout` `Flow` (`flow_wrapMode="chain"`, all horizontal biases `1`)
-of `AppButton.*.Inline` buttons, so the last action drops to the next line,
-still on the right. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`)
+`DialogActionRow` (`org.teslasoft.assistant.ui.widgets`, styled
+`Widget.App.Dialog.Actions.EndRow`) holding a `Flow` (`flow_wrapMode="chain"`,
+all horizontal biases `1`) of `AppButton.*.Inline` buttons. When the buttons do
+not fit at their normal text size, the row shrinks every button's text by the
+same amount until they fit, never below `dialog_action_min_text_size` (the
+chat's message information text size, `chat_message_metadata_text_size`);
+past that, the last action drops to the next line, still on the right (owner
+ruling, Nov 8 2026). Every pop-up button row uses `DialogActionRow`. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`)
 the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
 Summarizer Settings centered beneath as an approved exception), and Backup
 Attempts Failed (`dialog_backup_failed_actions.xml`, Cancel then Retry, with
@@ -1435,8 +1443,33 @@ mode, visibility, and a selection listener.
 button box, for an action that should read as a link. After a successful save,
 `SaveIconFlash.flashText` turns its words green for the shared success time.
 `Widget.App.QuickSettings.TextLink` aligns it with the Quick Settings card
-segments. Current user: Save Parameters to Favorite / Recent Model Settings
-above Streaming in Quick Settings.
+segments. Current users: Save Parameters to Favorite / Recent Model Settings
+above Streaming in Quick Settings, the same link above the parameters on
+Summarizer Settings and Advanced Memory Settings, and Reset to Recommended
+below them on Advanced Memory Settings (`Widget.App.PlainParameter.TextLink`).
+
+## Plain parameter list
+
+Model parameters shown on an ordinary settings screen are plain: each
+`ParameterSectionHeader` title and its control sit on the screen background,
+with no card box around them (owner ruling, Nov 8 2026).
+
+- `Widget.App.PlainParameter.Header` on each `ParameterSectionHeader`;
+- `Widget.App.PlainParameter.CheckRow` for the Streaming checkbox line (a
+  `Widget.App.CheckOption.Row` with the list's inset);
+- `SamplingParameterControl` with `Widget.App.SamplingSlider.Container` for
+  each sampling value;
+- `Widget.App.PlainParameter.TextLink` for a link above the list.
+
+`plain_parameter_inset` matches the slider's own inset, so titles, checkbox
+and link line up with the slider. Spacing lives in `plain_parameter_*`.
+Current users: Model Settings (the model name uses
+`Widget.App.ModelParameters.ModelName`), and the Summarizer's and Memory
+Scanner's parameters, which share `layout/view_dedicated_model_parameters.xml`
+on Summarizer Settings and Advanced Memory Settings. Quick Settings keeps its
+card segments.
+
+A control that cannot be used yet is faded to `disabled_control_alpha`.
 
 ## Compact action popup
 

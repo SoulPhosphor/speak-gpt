@@ -37,6 +37,8 @@ class SummarizerRoutingWiringTest {
         "src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt"
     private val settingsPath =
         "src/main/java/org/teslasoft/assistant/ui/activities/SummarizerSettingsActivity.kt"
+    private val rowsPath =
+        "src/main/java/org/teslasoft/assistant/ui/dedicated/DedicatedModelRows.kt"
 
     @Test
     fun summaryModelIsExplicitAndNeverFallsBackToEndpointChatModel() {
@@ -48,22 +50,32 @@ class SummarizerRoutingWiringTest {
     @Test
     fun everySummaryRequestUsesTheResolvedDedicatedRoutingPayload() {
         val controller = source(controllerPath)
-        assertTrue(controller.contains("DedicatedModelRoutingPolicy.favoriteForRequest"))
+        // The Summarizer's own routing (its favorites and its own routing),
+        // never the chat's favorites.
+        assertTrue(controller.contains("DedicatedModelRouting.SUMMARIZER.effective"))
+        assertFalse(controller.contains("FavoriteModelsPreferences"))
         assertTrue(controller.contains("ProviderRoutingResolver.resolve"))
         assertTrue(controller.contains("ProviderRoutingSerializer.augmentBody"))
         // Image summaries and backup titles both carry dedicated routing and
-        // request-local response evidence. Sections and compaction do likewise.
+        // request-local response evidence. Sections and compaction do likewise,
+        // all through the one request helper that builds the client.
         fun calls(text: String) = Regex(Regex.escape(text)).findAll(controller).count()
-        assertEquals(2, calls("buildClient(endpoint, routingResolution.providerJson, evidence, attempt)"))
-        assertEquals(2, calls("buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)"))
+        assertEquals(2, calls("routingResolution.providerJson, UsageFunction."))
+        assertEquals(2, calls("runtime.providerJson, UsageFunction."))
+        assertEquals(1, calls("buildClient(endpoint, providerJson, evidence, attempt)"))
     }
 
     @Test
-    fun settingsUseFavoritesThenDirectEndpointCatalog() {
+    fun settingsUseTheSummarizersOwnFavoritesThenItsPicker() {
         val settings = source(settingsPath)
-        assertTrue(settings.contains("getFavoriteModels(endpointId)"))
-        assertTrue(settings.contains("AdvancedModelSelectorDialogFragment.newAllModelsInstance"))
-        assertTrue(settings.contains("setSummarizerModel(\"\")"))
-        assertTrue(settings.contains("setSummarizerRoutingType(FavoriteModelObject.ROUTING_AUTOMATIC)"))
+        assertTrue(settings.contains("DedicatedModelRows("))
+        assertTrue(settings.contains("ModelPickerScope.SUMMARIZER"))
+        val rows = source(rowsPath)
+        assertTrue(rows.contains("FavoriteModelsPreferences.getPreferences(activity, scope)"))
+        assertTrue(rows.contains("getFavoriteModels(endpointId)"))
+        assertTrue(rows.contains("newDedicatedModelPickerInstance(scope, endpointId, startOnViewAll = true)"))
+        // A profile change clears the model and the job's own routing.
+        assertTrue(rows.contains("routing.select(activity, pickedId, \"\")"))
+        assertTrue(rows.contains("routing.clear(activity)"))
     }
 }

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared three-action pop-up row (owner ruling, Nov 8 2026): the actions side
+  by side in one right-aligned row, in the caller's order (cancel/back-out
+  first). When they do not fit on one line, the last ones move to the next
+  line, still on the right. Structure only; every appearance value comes from
+  the Widget.App.Dialog.Actions styles and the AppButton.*.Inline styles.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.App.Dialog.Actions">
+
+    <org.teslasoft.assistant.ui.widgets.DialogActionRow style="@style/Widget.App.Dialog.Actions.EndRow">
+
+        <androidx.constraintlayout.helper.widget.Flow
+            style="@style/Widget.App.Dialog.Actions.EndRowFlow"
+            app:constraint_referenced_ids="btn_dialog_cancel_action,btn_dialog_middle_action,btn_dialog_final_action" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_dialog_cancel_action"
+            style="@style/AppButton.Destructive.Inline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_dialog_middle_action"
+            style="@style/AppButton.Primary.Inline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_dialog_final_action"
+            style="@style/AppButton.Destructive.Inline" />
+    </org.teslasoft.assistant.ui.widgets.DialogActionRow>
+</LinearLayout>

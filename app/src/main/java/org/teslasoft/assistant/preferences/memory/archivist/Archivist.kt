@@ -32,7 +32,9 @@ import com.aallam.openai.client.RetryStrategy
 import org.json.JSONArray
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
-import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.DedicatedModelRouting
+import org.teslasoft.assistant.preferences.FavoriteModelParameters
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
@@ -54,6 +56,9 @@ import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
+import org.teslasoft.assistant.providers.ModelParameterRejection
+import org.teslasoft.assistant.providers.ModelRequestParameters
+import org.teslasoft.assistant.providers.ModelSupportedParametersStore
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.RoutingBlock
@@ -323,22 +328,19 @@ object Archivist {
             return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
         }
 
-        val routingMode = prefs.getArchivistRoutingType()
-        val savedFavorite = FavoriteModelsPreferences.getPreferences(context)
-            .getFavorite(model, endpointId)
-        if (endpoint.isOpenRouterRouting() &&
-            DedicatedModelRoutingPolicy.needsSetup(routingMode, savedFavorite)
+        // The Memory Scanner's own routing (its favorites, or its own routing
+        // for the selected model), never the chat's.
+        val requestFavorite = if (endpoint.isOpenRouterRouting()) {
+            DedicatedModelRouting.MEMORY_SCANNER.effective(context, endpointId, model)
+        } else {
+            null
+        }
+        if (requestFavorite != null &&
+            DedicatedModelRoutingPolicy.needsSetup(requestFavorite.routingType, requestFavorite)
         ) {
             MemoryLog.logAlways(context, "Archivist", "warn",
                 "Archivist Not Ready — selected provider routing is not configured for the Memory Assistant model")
             return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
-        }
-        val requestFavorite = if (endpoint.isOpenRouterRouting()) {
-            DedicatedModelRoutingPolicy.favoriteForRequest(
-                model, endpointId, routingMode, savedFavorite
-            )
-        } else {
-            null
         }
         val routingResolution = ProviderRoutingResolver.resolve(
             endpoint.isOpenRouterRouting(), requestFavorite
@@ -432,22 +434,59 @@ object Archivist {
         }
 
         val ai = buildClient(endpoint, providerRouting)
+        // The Memory Scanner's parameters (Advanced Memory Settings; never an
+        // API profile's), less any the service reports this model does not
+        // accept. A parameter a provider explicitly refuses is left out of the
+        // retry and of the rest of this run; saved values are never changed.
+        var scanParameters = ModelRequestParameters.from(
+            FavoriteModelParameters.live(context, ModelPickerScope.MEMORY_SCANNER),
+            ModelSupportedParametersStore.get(context).supported(endpoint.id, model)
+        )
         val modelTransport = ArchivistModelTransport { request ->
             // Fresh capture window per attempt: the observer writes only on an
             // error response. Tests replace this transport and exercise the
             // same Stage-E request shape without a provider credential.
-            capturedErrorBody = null
-            val response = try {
-                ai.chatCompletion(
-                    ChatCompletionRequest(
-                        model = ModelId(request.model),
-                        messages = listOf(
-                            ChatMessage(role = ChatRole.System, content = request.systemPrompt),
-                            ChatMessage(role = ChatRole.User, content = request.conversationData)
-                        ),
-                        temperature = request.temperature
-                    )
+            suspend fun send(parameters: ModelRequestParameters): Pair<String, String?> {
+                capturedErrorBody = null
+                val chatRequest = ChatCompletionRequest(
+                    model = ModelId(request.model),
+                    messages = listOf(
+                        ChatMessage(role = ChatRole.System, content = request.systemPrompt),
+                        ChatMessage(role = ChatRole.User, content = request.conversationData)
+                    ),
+                    // The temperature rides on the request (the scanner's own).
+                    temperature = request.temperature.takeIf { parameters.temperature != null },
+                    topP = parameters.topP,
+                    frequencyPenalty = parameters.frequencyPenalty,
+                    presencePenalty = parameters.presencePenalty
                 )
+                if (!parameters.stream) {
+                    val choice = ai.chatCompletion(chatRequest).choices.firstOrNull()
+                    return choice?.message?.content.orEmpty() to choice?.finishReason?.value
+                }
+                val text = StringBuilder()
+                var finish: String? = null
+                ai.chatCompletions(chatRequest).collect { chunk ->
+                    val choice = chunk.choices.firstOrNull()
+                    choice?.delta?.content?.takeIf { it != "null" }?.let(text::append)
+                    choice?.finishReason?.value?.let { finish = it }
+                }
+                return text.toString() to finish
+            }
+            val (raw, finishReason) = try {
+                try {
+                    send(scanParameters)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    val refused = ModelParameterRejection.rejected(
+                        ModelParameterRejection.statusOf(e), capturedErrorBody, e.message,
+                        scanParameters.sentNames()
+                    )
+                    if (refused.isEmpty()) throw e
+                    scanParameters = scanParameters.without(refused)
+                    send(scanParameters)
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -455,12 +494,8 @@ object Archivist {
                     capturedErrorBody, listOf(request.systemPrompt, request.conversationData))
                 throw e
             }
-            val responseChoice = response.choices.firstOrNull()
-            val raw = responseChoice?.message?.content.orEmpty()
-            if (ArchivistRetryPolicy.looksClearlyTruncated(
-                    raw, responseChoice?.finishReason?.value
-                )
-            ) {
+            DedicatedModelRouting.MEMORY_SCANNER.recordUse(context, endpoint.id, request.model)
+            if (ArchivistRetryPolicy.looksClearlyTruncated(raw, finishReason)) {
                 throw ArchivistClearlyTruncatedException()
             }
             raw

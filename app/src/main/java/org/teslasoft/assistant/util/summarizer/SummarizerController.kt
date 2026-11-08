@@ -21,6 +21,7 @@ import android.content.Context
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
+import com.aallam.openai.api.chat.StreamOptions
 import com.aallam.openai.api.http.Timeout
 import com.aallam.openai.api.logging.LogLevel
 import com.aallam.openai.api.model.ModelId
@@ -43,10 +44,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
-import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.FavoriteModelParameters
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.DedicatedModelRouting
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
+import org.teslasoft.assistant.providers.ModelParameterRejection
+import org.teslasoft.assistant.providers.ModelRequestParameters
+import org.teslasoft.assistant.providers.ModelSupportedParametersStore
 import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
@@ -199,11 +205,9 @@ class SummarizerController(
                     .getApiEndpoint(context, endpointId)
                 val model = prefs.getSummarizerModel()
                 val routingReady = if (endpoint.isOpenRouterRouting() && model.isNotBlank()) {
-                    val favorite = FavoriteModelsPreferences.getPreferences(context)
-                        .getFavorite(model, endpointId)
-                    !DedicatedModelRoutingPolicy.needsSetup(
-                        prefs.getSummarizerRoutingType(), favorite
-                    )
+                    ProviderRoutingResolver.resolve(
+                        true, DedicatedModelRouting.SUMMARIZER.effective(context, endpointId, model)
+                    ).block == RoutingBlock.NONE
                 } else {
                     true
                 }
@@ -435,20 +439,13 @@ class SummarizerController(
         val privateValues = listOf(body, imagePrompt, endpoint.apiKey)
         val text = try {
             withContext(Dispatchers.IO) {
-                val request = ChatCompletionRequest(
-                    model = ModelId(model),
-                    maxTokens = 200,
-                    messages = listOf(ChatMessage(role = ChatRole.User, content = body))
-                )
-                withSummarizerUsage(
+                summarizerCompletion(
                     Preferences.getPreferences(appContext, chatIdProvider()),
                     endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
-                    UsageFunction.IMAGE_DESCRIPTION
-                ) { attempt ->
-                    val client = buildClient(endpoint, routingResolution.providerJson, evidence, attempt)
-                    evidence.dispatched = true
-                    client.chatCompletion(request)
-                }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
+                    routingResolution.providerJson, UsageFunction.IMAGE_DESCRIPTION, evidence,
+                    listOf(ChatMessage(role = ChatRole.User, content = body)),
+                    maxTokens = 200
+                )
             }.trim()
         } catch (e: CancellationException) {
             throw e
@@ -549,19 +546,12 @@ class SummarizerController(
         val privateValues = messages.mapNotNull { it.content } + endpoint.apiKey
         val text = try {
             withContext(Dispatchers.IO) {
-                val request = ChatCompletionRequest(
-                    model = ModelId(model),
-                    messages = messages
-                )
-                withSummarizerUsage(
+                summarizerCompletion(
                     Preferences.getPreferences(appContext, chatIdProvider()),
                     endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
-                    UsageFunction.SUMMARIZING
-                ) { attempt ->
-                    val client = buildClient(endpoint, routingResolution.providerJson, evidence, attempt)
-                    evidence.dispatched = true
-                    client.chatCompletion(request)
-                }.choices.firstOrNull()?.message?.content?.toString()
+                    routingResolution.providerJson, UsageFunction.SUMMARIZING, evidence,
+                    messages
+                )
             }
         } catch (e: CancellationException) {
             throw e
@@ -604,18 +594,8 @@ class SummarizerController(
         val model = prefs.getSummarizerModel()
         if (endpoint.host.isBlank() || model.isBlank()) return null
 
-        val routingMode = prefs.getSummarizerRoutingType()
-        val savedFavorite = FavoriteModelsPreferences.getPreferences(appContext)
-            .getFavorite(model, endpointId)
-        if (endpoint.isOpenRouterRouting() &&
-            DedicatedModelRoutingPolicy.needsSetup(routingMode, savedFavorite)
-        ) {
-            return null
-        }
         val requestFavorite = if (endpoint.isOpenRouterRouting()) {
-            DedicatedModelRoutingPolicy.favoriteForRequest(
-                model, endpointId, routingMode, savedFavorite
-            )
+            DedicatedModelRouting.SUMMARIZER.effective(appContext, endpointId, model)
         } else {
             null
         }
@@ -915,21 +895,13 @@ class SummarizerController(
         )
         val evidence = SummarizerDiagnostics.RequestEvidence()
         val privateValues = (owned + context).map { it.text } + listOf(body, runtime.endpoint.apiKey)
-        val choice = try {
+        val reply = try {
             withContext(Dispatchers.IO) {
-                withSummarizerUsage(
+                summarizerCompletion(
                     runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider,
-                    UsageFunction.SUMMARIZING
-                ) { attempt ->
-                    val client = buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)
-                    evidence.dispatched = true
-                    client.chatCompletion(
-                        ChatCompletionRequest(
-                            model = ModelId(runtime.model),
-                            messages = listOf(ChatMessage(role = ChatRole.User, content = body))
-                        )
-                    )
-                }.choices.firstOrNull()
+                    runtime.providerJson, UsageFunction.SUMMARIZING, evidence,
+                    listOf(ChatMessage(role = ChatRole.User, content = body))
+                )
             }
         } catch (e: CancellationException) {
             throw e
@@ -956,7 +928,7 @@ class SummarizerController(
             )
             return null
         }
-        val text = choice?.message?.content?.toString().orEmpty().trim()
+        val text = reply.trim()
         if (text.isBlank()) {
             recordFailure(
                 runtime.prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE,
@@ -1004,11 +976,13 @@ class SummarizerController(
             return null
         }
 
-        val routingMode = prefs.getSummarizerRoutingType()
-        val savedFavorite = FavoriteModelsPreferences.getPreferences(appContext)
-            .getFavorite(model, endpointId)
-        if (endpoint.isOpenRouterRouting() &&
-            DedicatedModelRoutingPolicy.needsSetup(routingMode, savedFavorite)
+        val requestFavorite = if (endpoint.isOpenRouterRouting()) {
+            DedicatedModelRouting.SUMMARIZER.effective(appContext, endpointId, model)
+        } else {
+            null
+        }
+        if (requestFavorite != null &&
+            DedicatedModelRoutingPolicy.needsSetup(requestFavorite.routingType, requestFavorite)
         ) {
             recordFailure(
                 prefs, SummarizerErrorCategory.MODEL_MISSING, endpoint.label, model,
@@ -1016,13 +990,6 @@ class SummarizerController(
                 detail = appContext.getString(R.string.summarizer_routing_not_configured_detail)
             )
             return null
-        }
-        val requestFavorite = if (endpoint.isOpenRouterRouting()) {
-            DedicatedModelRoutingPolicy.favoriteForRequest(
-                model, endpointId, routingMode, savedFavorite
-            )
-        } else {
-            null
         }
         val routingResolution = ProviderRoutingResolver.resolve(
             endpoint.isOpenRouterRouting(), requestFavorite
@@ -1041,9 +1008,9 @@ class SummarizerController(
             endpoint = endpoint,
             model = model,
             providerJson = routingResolution.providerJson,
-            requestedProvider = when (routingMode) {
-                org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_ONLY -> savedFavorite?.selectedProvider.orEmpty().ifBlank { "Not Reported" }
-                org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_PREFERRED -> savedFavorite?.providerOrder?.joinToString(", ").orEmpty().ifBlank { "Automatic" }
+            requestedProvider = when (requestFavorite?.routingType) {
+                org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_ONLY -> requestFavorite.selectedProvider.ifBlank { "Not Reported" }
+                org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_PREFERRED -> requestFavorite.providerOrder.joinToString(", ").ifBlank { "Automatic" }
                 else -> "Automatic"
             },
             prompt = SummarizerPrompts.render(
@@ -1141,18 +1108,11 @@ class SummarizerController(
             val text: String
             try {
                 text = withContext(Dispatchers.IO) {
-                    val request = ChatCompletionRequest(
-                        model = ModelId(runtime.model),
-                        messages = listOf(ChatMessage(role = ChatRole.User, content = body))
-                    )
-                    withSummarizerUsage(
+                    summarizerCompletion(
                         runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider,
-                        UsageFunction.COMPACTING
-                    ) { attempt ->
-                        val client = buildClient(runtime.endpoint, runtime.providerJson, evidence, attempt)
-                        evidence.dispatched = true
-                        client.chatCompletion(request)
-                    }.choices.firstOrNull()?.message?.content?.toString().orEmpty()
+                        runtime.providerJson, UsageFunction.COMPACTING, evidence,
+                        listOf(ChatMessage(role = ChatRole.User, content = body))
+                    )
                 }.trim()
             } catch (e: CancellationException) {
                 throw e
@@ -1424,6 +1384,94 @@ class SummarizerController(
     }
 
     /**
+     * Sends one Summarizer request with the Summarizer's parameters (those on
+     * Summarizer Settings; never an API profile's) and returns the reply text,
+     * empty when the reply had none.
+     *
+     * Parameters the service reports the model does not accept are left out.
+     * When the provider explicitly refuses a parameter that was sent, the
+     * request is sent once more without it; any other failure is thrown as
+     * is. The saved values are never changed. A success is recorded on the
+     * model's Summarizer Recent entry.
+     */
+    private suspend fun summarizerCompletion(
+        prefs: Preferences,
+        endpoint: ApiEndpointObject,
+        model: String,
+        requestedProvider: String,
+        providerJson: com.google.gson.JsonObject?,
+        function: UsageFunction,
+        evidence: SummarizerDiagnostics.RequestEvidence,
+        messages: List<ChatMessage>,
+        maxTokens: Int? = null
+    ): String {
+        val values = FavoriteModelParameters.live(appContext, ModelPickerScope.SUMMARIZER)
+        val supported = ModelSupportedParametersStore.get(appContext).supported(endpoint.id, model)
+        val parameters = ModelRequestParameters.from(values, supported)
+        return try {
+            sendSummarizerRequest(
+                prefs, endpoint, model, requestedProvider, providerJson, function, evidence,
+                messages, maxTokens, parameters
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val refused = ModelParameterRejection.rejected(
+                evidence.status, evidence.body, e.message, parameters.sentNames()
+            )
+            if (refused.isEmpty()) throw e
+            // The retry's evidence is its own.
+            evidence.status = null
+            evidence.body = null
+            sendSummarizerRequest(
+                prefs, endpoint, model, requestedProvider, providerJson, function, evidence,
+                messages, maxTokens, parameters.without(refused)
+            )
+        }
+    }
+
+    private suspend fun sendSummarizerRequest(
+        prefs: Preferences,
+        endpoint: ApiEndpointObject,
+        model: String,
+        requestedProvider: String,
+        providerJson: com.google.gson.JsonObject?,
+        function: UsageFunction,
+        evidence: SummarizerDiagnostics.RequestEvidence,
+        messages: List<ChatMessage>,
+        maxTokens: Int?,
+        parameters: ModelRequestParameters
+    ): String {
+        val text = withSummarizerUsage(prefs, endpoint, model, requestedProvider, function) { attempt ->
+            val client = buildClient(endpoint, providerJson, evidence, attempt)
+            evidence.dispatched = true
+            val request = ChatCompletionRequest(
+                model = ModelId(model),
+                messages = messages,
+                maxTokens = maxTokens,
+                temperature = parameters.temperature,
+                topP = parameters.topP,
+                frequencyPenalty = parameters.frequencyPenalty,
+                presencePenalty = parameters.presencePenalty,
+                // A streamed reply reports its usage only when asked.
+                streamOptions = if (parameters.stream) StreamOptions(includeUsage = true) else null
+            )
+            if (parameters.stream) {
+                val reply = StringBuilder()
+                client.chatCompletions(request).collect { chunk ->
+                    chunk.choices.firstOrNull()?.delta?.content
+                        ?.takeIf { it != "null" }?.let(reply::append)
+                }
+                reply.toString()
+            } else {
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.toString().orEmpty()
+            }
+        }
+        DedicatedModelRouting.SUMMARIZER.recordUse(appContext, endpoint.id, model)
+        return text
+    }
+
+    /**
      * Runs one Summarizer or Compact request and logs what it cost to the
      * chat's usage log under summarization. Counts and charges come only from
      * the provider's response; a failed request is logged only when the
@@ -1521,7 +1569,9 @@ class SummarizerController(
                                     rawResponseSink?.body = body
                                     if (usageAttempt != null) {
                                         if (response.status.value in 200..299) {
-                                            ReportedProviderParser.observeCompletedBody(body)
+                                            // A streamed reply arrives as event lines.
+                                            (ReportedProviderParser.observeCompletedBody(body)
+                                                ?: ReportedProviderParser.observeStreamedBody(body))
                                                 ?.let(usageAttempt::noteRawObservation)
                                         } else {
                                             usageAttempt.noteHttpResponse(response.status.value, body)

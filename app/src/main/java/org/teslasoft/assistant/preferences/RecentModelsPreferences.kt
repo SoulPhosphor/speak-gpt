@@ -13,12 +13,21 @@ import org.teslasoft.assistant.preferences.models.ModelIdentity
  * Save Parameters to Recent Model Settings, or Model Settings); an entry that
  * leaves the list takes its saved parameters with it.
  */
-class RecentModelsPreferences internal constructor(private val preferences: SharedPreferences) {
-    constructor(context: Context) : this(
-        context.applicationContext.getSharedPreferences("model_picker_recents", Context.MODE_PRIVATE)
+class RecentModelsPreferences internal constructor(
+    private val preferences: SharedPreferences,
+    /** Where the list size is kept. The Summarizer's and Memory Scanner's
+     *  lists follow the one Model Picker Recently Used setting, stored with the
+     *  chat's list. */
+    private val limitPreferences: SharedPreferences = preferences
+) {
+    constructor(context: Context) : this(context, ModelPickerScope.CHAT)
+
+    constructor(context: Context, scope: ModelPickerScope) : this(
+        context.applicationContext.getSharedPreferences(fileFor(scope), Context.MODE_PRIVATE),
+        context.applicationContext.getSharedPreferences(fileFor(ModelPickerScope.CHAT), Context.MODE_PRIVATE)
     )
 
-    fun limit(): Int = preferences.getInt("limit", DEFAULT_LIMIT)
+    fun limit(): Int = limitPreferences.getInt("limit", DEFAULT_LIMIT)
 
     /** The entries, newest first, each carrying its saved parameters (all
      *  null when none were saved). */
@@ -95,10 +104,17 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
     fun setLimit(newLimit: Int) {
         require(newLimit in 0..MAX_LIMIT)
         synchronized(lock) {
-            val editor = preferences.edit().putInt("limit", newLimit)
-            editor.apply()
-            // Models that no longer fit leave with their saved settings.
-            if (newLimit < readModels().size) writeModels(readModels().take(newLimit))
+            limitPreferences.edit().putInt("limit", newLimit).apply()
+            trimToLimit()
+        }
+    }
+
+    /** Drops the models that no longer fit the list size, with their saved
+     *  settings. */
+    fun trimToLimit() {
+        synchronized(lock) {
+            val limit = limit()
+            if (limit < readModels().size) writeModels(readModels().take(limit))
         }
     }
 
@@ -118,7 +134,9 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
     }
 
     /** Replaces the whole list (newest first) and the limit, as a restore
-     *  does. Each model's sampling fields are its saved parameters. */
+     *  does. Each model's sampling fields are its saved parameters. A list
+     *  whose size follows another list's setting (the Summarizer's) leaves
+     *  that setting alone. */
     fun replaceAll(limit: Int, models: List<FavoriteModelObject>) {
         synchronized(lock) {
             val kept = limit.coerceIn(0, MAX_LIMIT)
@@ -205,6 +223,8 @@ class RecentModelsPreferences internal constructor(private val preferences: Shar
     }
 
     companion object {
+        private fun fileFor(scope: ModelPickerScope): String = scope.filePrefix + "model_picker_recents"
+
         private const val DEFAULT_LIMIT = 20
         private const val MAX_LIMIT = 99
         private val gson = Gson()

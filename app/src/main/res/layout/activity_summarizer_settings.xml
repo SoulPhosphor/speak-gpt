@@ -16,11 +16,11 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- Summarizer Settings (conversation-summary-plan.md decision 2): Summary
-     Model endpoint/model pickers, the Complete Messages default, the
-     new-chats toggle and the Customize Prompt Summaries row
-     that opens Summarizer Prompts. Composed from the shared style families
-     only. -->
+<!-- Summarizer Settings (conversation-summary-plan.md decision 2): the
+     new-chats and resummarize toggles, the Complete Messages and compaction
+     defaults, the Customize Prompt Summaries row that opens Summarizer
+     Prompts, the Summary Model pickers, and the Summarizer's default
+     parameters. Composed from the shared style families only. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -171,6 +171,28 @@
                     android:imeOptions="actionDone" />
             </LinearLayout>
 
+            <!-- ============ Customize Prompt Summaries ============
+                 Opens Summarizer Prompts (owner ruling, Oct 3 2026). -->
+            <LinearLayout
+                android:id="@+id/row_summarizer_prompts"
+                style="@style/Widget.App.Row.WithSubtitle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_prompts_row_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/summarizer_prompts_row_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/summarizer_prompts_row_title" />
+            </LinearLayout>
+
             <!-- ============ Summary Model ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"
@@ -284,27 +306,12 @@
                     android:text="@string/choose_provider_routing_automatic" />
             </LinearLayout>
 
-            <!-- ============ Customize Prompt Summaries ============
-                 Opens Summarizer Prompts (owner ruling, Oct 3 2026). -->
-            <LinearLayout
-                android:id="@+id/row_summarizer_prompts"
-                style="@style/Widget.App.Row.WithSubtitle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/summarizer_prompts_row_title" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:text="@string/summarizer_prompts_row_subtitle" />
-                </LinearLayout>
-
-                <ImageView
-                    style="@style/Widget.App.Row.Chevron"
-                    android:contentDescription="@string/summarizer_prompts_row_title" />
-            </LinearLayout>
+            <!-- ============ Summarizer parameters ============
+                 What Summarizer requests send; like Quick Settings, selecting
+                 a model loads its own saved
+                 settings (owner ruling, Nov 8 2026). Shared block, see
+                 view_dedicated_model_parameters.xml. -->
+            <include layout="@layout/view_dedicated_model_parameters" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

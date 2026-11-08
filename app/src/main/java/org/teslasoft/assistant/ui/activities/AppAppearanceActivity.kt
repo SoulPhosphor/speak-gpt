@@ -55,7 +55,16 @@ class AppAppearanceActivity : SettingsPageActivity() {
 
     private fun saveRecentLimit() {
         val limit = recentLimit.text.toString().toIntOrNull()
-        if (limit != null && limit != recentModels.limit()) recentModels.setLimit(limit)
+        if (limit != null && limit != recentModels.limit()) {
+            recentModels.setLimit(limit)
+            // One setting for every picker: the Summarizer's and Memory
+            // Scanner's lists follow it.
+            org.teslasoft.assistant.preferences.ModelPickerScope.entries.filter { it.isDedicated }.forEach { scope ->
+                runCatching {
+                    org.teslasoft.assistant.preferences.RecentModelsPreferences(this, scope).trimToLimit()
+                }
+            }
+        }
         recentLimit.setText(recentModels.limit().toString())
     }
 

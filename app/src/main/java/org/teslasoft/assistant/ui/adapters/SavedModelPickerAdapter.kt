@@ -13,6 +13,7 @@ import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.models.ModelIdentity
 import org.teslasoft.assistant.reasoning.EndpointReasoningCapabilityIndex
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.ui.activities.ModelParametersActivity
 import org.teslasoft.assistant.ui.activities.ReasoningSettingsActivity
 import org.teslasoft.assistant.ui.util.CompactActionPopup
@@ -29,7 +30,9 @@ internal class SavedModelPickerAdapter(
     private val onRoute: (ModelIdentity) -> Unit,
     private val onPin: (FavoriteModelObject, Boolean) -> Unit,
     private val onFavorite: (FavoriteModelObject) -> Unit,
-    private val onDelete: (ModelIdentity, Source) -> Unit
+    private val onDelete: (ModelIdentity, Source) -> Unit,
+    /** Whose saved models these are: Model Settings opens in the same lists. */
+    private val scope: ModelPickerScope = ModelPickerScope.CHAT
 ) : BaseAdapter() {
 
     enum class Source { FAVORITES, RECENT, CATALOG }
@@ -115,7 +118,9 @@ internal class SavedModelPickerAdapter(
         holder.pin.setOnClickListener { onPin(settings, false) }
 
         val showsReasoning = capability.isReasoningCapable || row.advertisesReasoning
-        val canConfigure = !catalog && capability.hasConfigurableSetting
+        // Reasoning settings belong to chat models; the Summarizer does not
+        // send them, so its rows only show whether a model reasons.
+        val canConfigure = !catalog && capability.hasConfigurableSetting && scope == ModelPickerScope.CHAT
         holder.reasoningIndicator.isVisible = showsReasoning && !canConfigure
         holder.reasoning.isVisible = showsReasoning && canConfigure
         holder.reasoning.setOnClickListener {
@@ -147,7 +152,7 @@ internal class SavedModelPickerAdapter(
                     PIN -> onPin(settings, !row.pinned)
                     FAVORITE -> onFavorite(settings)
                     MODEL_SETTINGS -> context.startActivity(
-                        ModelParametersActivity.createIntent(context, target.modelId, target.endpointId, chatId)
+                        ModelParametersActivity.createIntent(context, target.modelId, target.endpointId, chatId, scope)
                     )
                     DELETE -> onDelete(target, source)
                 }

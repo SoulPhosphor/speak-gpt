@@ -1,0 +1,45 @@
+/**************************************************************************
+ * Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ **************************************************************************/
+
+package org.teslasoft.assistant.preferences
+
+/**
+ * Which job a model picker's saved models belong to. Chat, the Summarizer and
+ * the Memory Scanner (the Memory Assistant's analysis model) keep separate
+ * Favorites, Recent lists, favorite providers and per-model settings: they are
+ * different duties, so nothing chosen for one appears in or changes another.
+ */
+enum class ModelPickerScope {
+    CHAT,
+    SUMMARIZER,
+    MEMORY_SCANNER;
+
+    /** True for a background job with one selected model of its own. */
+    val isDedicated: Boolean get() = this != CHAT
+
+    /** The part of each storage file name that belongs to this job. */
+    internal val filePrefix: String
+        get() = when (this) {
+            CHAT -> ""
+            SUMMARIZER -> "summarizer_"
+            MEMORY_SCANNER -> "memory_scanner_"
+        }
+
+    companion object {
+        /** Reads a scope passed by name (an Intent extra or argument). */
+        fun from(name: String?): ModelPickerScope = entries.firstOrNull { it.name == name } ?: CHAT
+    }
+}

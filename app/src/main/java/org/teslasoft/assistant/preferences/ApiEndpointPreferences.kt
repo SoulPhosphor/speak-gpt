@@ -99,6 +99,18 @@ class ApiEndpointPreferences private constructor(
         // Its favorites go with it, so their recent Only-mode providers do too.
         RecentOnlyProvidersStore.get(context).clearEndpoint(id)
         runCatching { RecentModelsPreferences(context).removeEndpoint(id) }
+        // The Summarizer's and Memory Scanner's own lists, too. Their
+        // favorites hide the profile's models at once; this also removes them
+        // from storage.
+        for (scope in ModelPickerScope.entries.filter { it.isDedicated }) {
+            RecentOnlyProvidersStore.get(context, scope).clearEndpoint(id)
+            runCatching { RecentModelsPreferences(context, scope).removeEndpoint(id) }
+            runCatching {
+                val favorites = FavoriteModelsPreferences.getPreferences(context, scope)
+                favorites.setFavoriteModels(favorites.getFavoriteModels())
+            }
+        }
+        org.teslasoft.assistant.providers.ModelSupportedParametersStore.get(context).clearEndpoint(id)
     }
 
     internal fun deleteApiEndpoint(id: String) = deleteApiEndpoint(id, deleteCredential = true)
