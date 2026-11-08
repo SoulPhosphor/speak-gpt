@@ -413,6 +413,8 @@ class ModelCleanupActivity : SettingsPageActivity() {
 
     /** Removes every listed unavailable model from every job's Recent list. */
     private fun confirmDeleteRecents() {
+        // Never against an old report while a new check is running.
+        if (scanning || ttsCleanup.ui.value.busy) return
         val data = screenData ?: return
         val targets = data.references.recentTargets.intersect(data.report.unavailable)
         if (targets.isEmpty()) return
@@ -420,6 +422,7 @@ class ModelCleanupActivity : SettingsPageActivity() {
             .setTitle(R.string.model_cleanup_delete_recents_confirm_title)
             .setMessage(R.string.model_cleanup_delete_recents_confirm_message)
             .setPositiveButton(R.string.model_cleanup_delete_all) { _, _ ->
+                if (scanning) return@setPositiveButton
                 lifecycleScope.launch {
                     val removed = withContext(Dispatchers.IO) {
                         ModelPickerScope.entries.forEach { scope ->
@@ -505,6 +508,7 @@ class ModelCleanupActivity : SettingsPageActivity() {
         btnCheck?.isEnabled = !active
         btnDeleteFavorites?.isEnabled = !active
         btnDeleteRules?.isEnabled = !active
+        btnDeleteRecents?.isEnabled = !active
         btnDeleteTts?.isEnabled = !active && screenData?.references?.isComplete == true
         progress?.visibility = if (active) View.VISIBLE else View.GONE
     }
