@@ -4,6 +4,111 @@
 step-by-step plan, after a full review for ideas carried over from older
 documents.**
 
+## Where things stand (read this first)
+
+**Last updated 2026-11-08.** The owner relies on the agent to lead this
+work step by step. A new session should read this section, then continue
+from "Next steps". Do not re-diagnose what Part A already measured.
+
+### Built
+
+All of this is on branch `ccr-985655d1-x68k8w`, in one pull request into
+`beta/new-client`.
+
+1. **Search fixes** (Phase 1, steps 1.5–1.11):
+   - meaning and keyword search together;
+   - common words ignored;
+   - search uses the user's message alone;
+   - a fixed-minimum-plus-stand-out gate, where sending nothing is allowed;
+   - relevance-first ranking with a capped importance nudge;
+   - +3 orders like +2 and is guaranteed a place when it matches;
+   - no memory cooldown.
+
+   Code: `librarian/LiveRetrieval.kt`, `librarian/KeywordText.kt`, the live
+   branch in `Librarian.searchInternal`, and the query and cooldown changes
+   in `enforcer/Enforcer.kt`. The Memory Assistant's own search
+   (`searchCore`, `searchForReconciliation`) is unchanged.
+2. **No cooldown for roleplay card entries** (owner decision D26).
+   Lorebooks never had one and were not touched.
+3. **Approved memory assembly log wording** (D27). The card-cooldown log line
+   is still in the code but no longer fires. Removing it needs owner
+   approval.
+4. **Memory Search Test screen** (step 1.4), opened from Advanced Memory
+   Settings → Debug:
+   - test a message as an ordinary chat or as a companion;
+   - see which memories would be sent and why, with every number;
+   - adjust the numbers, then Use in Chats or Reset to Defaults.
+
+   Code: `ui/activities/MemorySearchTestActivity.kt`,
+   `librarian/SearchTestReport.kt`, `librarian/SearchTuning.kt`, and
+   `MemoryStore.setRetrievalPolicyJson`. Tuned values are stored in the
+   `retrieval_policy` record under `live_search`, `top_k`, and
+   `memory_char_budget`. The old Debug search box was removed.
+5. **Tests:** `LiveRetrievalTest` and `SearchTestReportTest`. No existing
+   test was changed.
+6. **Instructions:** the `CLAUDE.md` rulings of 2026-11-08 (old documents
+   are not approvals, the owner decides the work, diagnose from the code
+   first).
+
+### Starting numbers
+
+Chosen from the measurements in Part A, on the default q4 model with
+256-number vectors:
+
+| Number | Value |
+|---|---|
+| Minimum Match | 0.35 |
+| Stand-Out Strength | 2.5 |
+| Keyword Match Needed | 0.6 |
+| Importance Influence | 0.1 |
+| Small Library Size | 8 |
+| Small Library Minimum Match | 0.40 |
+| Full-Strength Match | 0.55 |
+| Agreement Bonus | 0.1 |
+| Minimum Spread | 0.02 |
+| Maximum Memories | 8 (unchanged) |
+| Memory Space | 6,000 characters (unchanged) |
+
+They are educated guesses, tunable on the test screen.
+
+### Not built yet
+
+- **Carry-over** (step 1.12), and the lorebook repeat check on both send
+  paths (step 1.13).
+- **Test screen extras:** saved test cases from real use, and a
+  previous-exchange field for testing carry-over.
+- **The full fair test set** (step 1.2).
+- **Vector size and int8 checks** on the owner's Pixel 8 (step 1.14).
+- **The tag test** (step 1.15).
+- **Variety, MMR** (step 1.16).
+- **Phases 2–6:** today's date, dates and fading on memories, fading, the
+  standing briefing, and Memory Assistant proposals. Each needs owner
+  decisions from Part E first, asked one at a time.
+
+### Next steps, in order
+
+1. **Agent:** take the open pull request through Codex review and Android
+   Checks, then merge it into `beta/new-client`, following `CLAUDE.md`
+   section 0.
+2. **Owner:**
+   - install the new beta and chat normally;
+   - if a chat gets wrong or missing memories, open Memory Search Test, type
+     the same message, and see why;
+   - adjust the numbers there if needed;
+   - report to the agent what looked wrong.
+
+   Nothing else is needed from the owner for this step.
+3. **Agent:** build carry-over and the both-send-paths check (steps
+   1.12–1.13) as the next pull request. Add the test screen's
+   previous-exchange field with it.
+4. **Agent with owner:** check int8 on the Pixel 8 (step 1.14).
+   - The owner installs int8 from Advanced Memory Settings.
+   - The owner reads the timing on the test screen.
+   - The agent decides the default from that, as approved in D29.
+5. **Agent:** offer the remaining Phase 1 items (the fair test set, the tag
+   test, variety). Then, only when the owner wants, start Phase 2 by asking
+   the first open decision.
+
 ## How to use this document
 
 - **Part A** explains what is wrong with memory search today, measured
