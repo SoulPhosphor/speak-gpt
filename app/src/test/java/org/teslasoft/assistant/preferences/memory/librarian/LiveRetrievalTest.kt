@@ -100,7 +100,38 @@ class LiveRetrievalTest {
             cand("n", content = "Lives two hours away.", aliases = listOf("Dana"))
         ) + noise()
         assertEquals(listOf("t"), ids(LiveRetrieval.search("am I an introvert", null, corpus, params, 8)))
-        assertEquals(listOf("n"), ids(LiveRetrieval.search("did Dana call", null, corpus, params, 8)))
+        assertEquals(listOf("n"), ids(LiveRetrieval.search("what about Dana", null, corpus, params, 8)))
+    }
+
+    @Test
+    fun anAccidentalWordInALongerMessageDoesNotPassOnKeywordsAlone() {
+        // One shared word ("spring") used to give a perfect keyword score.
+        val corpus = listOf(cand("move", content = "The user is planning to move to a new apartment in the spring.")) + noise()
+        val r = LiveRetrieval.search("I watched a show about spring cleaning", null, corpus, params, limit = 8)
+        assertTrue(ids(r).isEmpty())
+        assertTrue(r.explanations.first { it.memory.memoryId == "move" }.keywordStrength < params.keywordMin)
+    }
+
+    @Test
+    fun keywordStrengthIsTheShareOfTheMessageCovered() {
+        val corpus = listOf(cand("cat", content = "The user has a black cat named Pepper.")) + noise()
+        val whole = LiveRetrieval.search("tell me about Pepper", null, corpus, params, 8)
+        val half = LiveRetrieval.search("Pepper and the dentist", null, corpus, params, 8)
+        assertEquals(1.0, whole.explanations.first { it.memory.memoryId == "cat" }.keywordStrength, 1e-9)
+        assertEquals(0.5, half.explanations.first { it.memory.memoryId == "cat" }.keywordStrength, 1e-9)
+    }
+
+    @Test
+    fun aMultiSubjectMessageStillSendsEachStrongMeaningMatch() {
+        // Each subject covers only part of the message, so keywords alone do
+        // not pass; meaning search still sends each clearly matching memory.
+        val corpus = listOf(
+            cand("sister", 0.50, content = "The user's sister Dana lives in Chicago."),
+            cand("cat", 0.48, content = "The user has a black cat named Pepper.")
+        ) + noise()
+        val r = LiveRetrieval.search("Dana called and Pepper is sick", q, corpus, params, limit = 8)
+        assertEquals(setOf("sister", "cat"), ids(r).toSet())
+        assertTrue(r.explanations.filter { it.memory.memoryId in setOf("sister", "cat") }.all { it.keywordStrength < 1.0 })
     }
 
     // ---- meaning search and the gate -------------------------------------
@@ -152,7 +183,7 @@ class LiveRetrievalTest {
             cand("meaning", 0.48),
             cand("keyword", similarity = null, content = "The user drives a Honda Civic.")
         ) + noise()
-        val r = LiveRetrieval.search("my Honda needs brakes", q, corpus, params, limit = 8)
+        val r = LiveRetrieval.search("how is my Honda Civic", q, corpus, params, limit = 8)
         assertEquals(setOf("meaning", "keyword"), ids(r).toSet())
         assertEquals(corpus.size, r.diagnostics.eligible)
         assertEquals(corpus.size - 1, r.diagnostics.withVector)

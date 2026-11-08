@@ -4353,7 +4353,7 @@
     <string name="memory_search_test_failed">The test could not run: %1$s</string>
     <string name="memory_search_test_sent_header">Would Be Sent</string>
     <string name="memory_search_test_not_sent_header">Closest Memories Not Sent</string>
-    <string name="memory_search_test_preview_header">What the AI Would Receive</string>
+    <string name="memory_search_test_preview_header">Memory Text the AI Would Receive</string>
     <string name="memory_search_test_preview_empty">Nothing. No memory text would be sent with this message.</string>
     <string name="memory_search_test_outcome_sent">Would be sent.</string>
     <string name="memory_search_test_outcome_sent_past_limit">Would be sent past Maximum Memories, because it is rated +3 and matches.</string>
@@ -4376,7 +4376,7 @@
     <string name="memory_search_stand_out">Stand-Out Strength</string>
     <string name="memory_search_stand_out_info">How far a memory\'s match must stand above your other memories. This keeps loosely related memories out, such as every personal memory when you are upset about something else. Higher sends fewer memories.</string>
     <string name="memory_search_keyword_match">Keyword Match Needed</string>
-    <string name="memory_search_keyword_match_info">How strong a keyword match must be to send a memory on keywords alone. Rare words such as names count the most, and common words never count. Higher sends fewer memories.</string>
+    <string name="memory_search_keyword_match_info">How much of your message a memory\'s keywords must cover to send it on keywords alone. Rare words such as names count the most, and common words never count. Higher sends fewer memories.</string>
     <string name="memory_search_importance">Importance Influence</string>
     <string name="memory_search_importance_info">How much a memory\'s importance rating can move it up or down among memories that already match. It never lets an unrelated memory in.</string>
     <string name="memory_search_max_memories">Maximum Memories</string>

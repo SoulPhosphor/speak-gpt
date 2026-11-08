@@ -34,7 +34,8 @@ import kotlin.math.min
  *  - its similarity clears a fixed floor AND stands out from this message's
  *    other similarities (median / median-absolute-deviation, so a topic with
  *    many relevant memories does not raise the bar for all of them); or
- *  - its keyword strength clears a minimum.
+ *  - its keyword strength (how much of the message's informative wording
+ *    it covers, weighted by rarity) clears a minimum.
  * Passing nothing is a valid result. Relevance orders the result; importance
  * is a capped nudge that can never overturn a clear relevance lead. Scope only
  * decides which memories are in [search]'s corpus — it adds nothing to the
@@ -57,8 +58,10 @@ object LiveRetrieval {
         /** Meaning search: how far above this message's typical similarity a
          *  memory must stand, in robust spreads (median absolute deviation). */
         val standoutMin: Double = 2.5,
-        /** Keyword search: strength (0..1) needed to pass on keywords alone. */
-        val keywordMin: Double = 0.6,
+        /** Keyword search: share (0..1) of the message's informative words,
+         *  weighted by rarity, that a memory must contain to pass on keywords
+         *  alone. */
+        val keywordMin: Double = 0.5,
         /** Smallest spread used for the stand-out measure, so a small or
          *  uniform library cannot make tiny differences look large. */
         val minSpread: Double = 0.02,
@@ -213,7 +216,13 @@ object LiveRetrieval {
         val docs = corpus.associate { c -> c.memory.memoryId to documentTerms(c) }
         val idf = inverseDocumentFrequency(docs.values)
         val queryTerms = KeywordText.terms(query).filter { it.length >= 3 }.toSet()
-        val idfMax = ln(1.0 + (docs.size - 0.5) / 1.5).coerceAtLeast(1e-9)
+        // Keyword strength is coverage: the rarity-weighted share of the
+        // message's informative words that a memory contains. A word no
+        // memory contains weighs as much as the rarest library word, so one
+        // accidental match in a longer message cannot reach full strength,
+        // while a short message about one name ("tell me about Pepper") can.
+        val unseenWeight = ln(1.0 + (docs.size - 0.5) / 1.5)
+        val queryWeight = queryTerms.sumOf { idf[it] ?: unseenWeight }.coerceAtLeast(1e-9)
 
         val explanations = corpus.map { c ->
             val id = c.memory.memoryId
@@ -226,7 +235,7 @@ object LiveRetrieval {
             }
             val doc = docs.getValue(id)
             val matched = queryTerms.filter { it in doc }
-            val kw = (matched.sumOf { idf[it] ?: 0.0 } / idfMax).coerceIn(0.0, 1.0)
+            val kw = (matched.sumOf { idf[it] ?: 0.0 } / queryWeight).coerceIn(0.0, 1.0)
             val passedKeyword = kw >= params.keywordMin
 
             val strengthRange = (params.fullStrengthSimilarity - params.similarityFloor).coerceAtLeast(1e-6)
