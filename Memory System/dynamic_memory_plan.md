@@ -1419,8 +1419,8 @@ habits.
   leaves Always (D49);
 - **fading:** retires after the fade time without being discussed, using
   the app-wide speed or custom days (D45, D49);
-- **how it may be brought up** (D48, D53): a dropdown on every memory, not
-  only Always ones. The options:
+- **how it may be brought up** (D48, D53): one setting on every memory, not
+  only Always ones. Recommended as a dropdown. The options:
   - **Only if I bring it up:** the AI never raises it on its own;
   - **When it fits:** the default. The AI uses judgment, guided by the
     memory-use instruction (D41);
@@ -1540,12 +1540,12 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D45 | How fast do May Bring Up memories fade, and can the user choose? | One app-wide choice in Memory Handling Preferences. Suggested options: 2 weeks, 1 month, 3 months, 6 months. Default 1 month |
 | D46 | What is the always-sent tab called, and what does it mean? | **Decided, 2026-11-08:** the dropdown entry is "Always". Always memories are sent with every message |
 | D47 | Should an auto mode let the embedding model pick which always-sent memories to include? | No. Ordinary search already does this every message; checkboxes only |
-| D48 | How does the user say how a memory may be brought up? | **Decided, 2026-11-08:** a dropdown on every memory: Only if I bring it up, When it fits (the default), Ask me first, or Custom (a written condition). Weaker models are handled through Model Rules (owner ruling) |
+| D48 | How does the user say how a memory may be brought up? | **Partly decided, 2026-11-08:** the owner wants the three choices (Only if I bring it up, When it fits, Ask me first) plus Custom, a written condition. Recommended, awaiting the owner: one dropdown on every memory, with When it fits as the default. Weaker models are handled through Model Rules (owner ruling) |
 | D49 | Fade timing, and an optional "past after" date per memory? | The owner wants custom fade timing, and a per-memory date after which the memory becomes a past event. Recommended: preset choices plus a custom number of days, and an optional "past after" date on any memory |
 | D50 | How are expiring and passed memories reviewed without overwhelming the user? | One review place: Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, the sensible default happens (a fading memory retires; a passed event is kept as past). Reviewing is optional, and one tap renews |
 | D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | Later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
 | D52 | How does the Always tab handle more checked memories than the limit? | **Owner's design, 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
-| D53 | Should a custom condition also make the memory findable by search? | Yes. The condition is searched by meaning alongside the memory text, as measured on the app's model. The AI is told the condition, and the test screen shows when a memory matched by its condition |
+| D53 | Should a custom condition also make the memory findable by search? | Recommended, awaiting the owner: yes, because the owner's example needs it. The condition is searched by meaning alongside the memory text, as measured on the app's model. The AI is told the condition, and the test screen shows when a memory matched by its condition |
 | D33 | What does the Memory Assistant propose beyond the memory text? | Dates only, at first. Always Know and May Bring Up stay the user's choices until their behavior is established |
 
 ---
