@@ -99,7 +99,7 @@ object FavoriteRoutingActions {
 
         val chat = chatId.takeIf { it.isNotBlank() }?.let { Preferences.getPreferences(context, it) }
         val routingType = routingTypeOverride
-            ?: chat?.let { ChatModelRouting.effective(context, it, endpointId, modelId)?.routingType }
+            ?: chat?.let { ChatModelRouting.forEditing(context, it, endpointId, modelId)?.routingType }
             ?: favoriteModelsPreferences.getRoutingType(modelId, endpointId)
 
         return Intent(context, ChooseProviderActivity::class.java)

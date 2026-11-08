@@ -252,7 +252,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         // After recreation, show the routing this chat actually uses (it may be
         // the chat's own trial), not only the favorite's.
         val restoredRouting = savedPickerModel?.let { model ->
-            chatPreferences?.let { ChatModelRouting.effective(this, it, endpointId, model)?.routingType }
+            chatPreferences?.let { ChatModelRouting.forEditing(this, it, endpointId, model)?.routingType }
                 ?: favoriteModelsPreferences?.getRoutingType(model, endpointId)
         }
         selectedRoutingType = (restoredRouting ?: intent.getStringExtra(EXTRA_ROUTING_TYPE))
@@ -444,7 +444,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
             else ChatModelRouting.favoriteProviders(this, endpointId, selectedModel)
         // A chat shows the routing it actually uses, which may be its own.
         val favorite = if (selectedModel.isBlank() || chatPreferences == null) stored
-        else ChatModelRouting.effective(this, chatPreferences, endpointId, selectedModel)
+        else ChatModelRouting.forEditing(this, chatPreferences, endpointId, selectedModel)
 
         selectedProvider = favorite?.selectedProvider ?: ""
         orderList.clear()

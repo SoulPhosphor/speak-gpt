@@ -57,6 +57,16 @@ object ChatModelRouting {
         return result
     }
 
+    /** The routing to show when editing this model's providers: what the
+     *  chat uses (its own, else the favorite's), else what the model last used
+     *  from its Recent entry. Only for editing; requests use [effective]. */
+    fun forEditing(context: Context, chat: Preferences?, endpointId: String, modelId: String): FavoriteModelObject? {
+        effective(context, chat, endpointId, modelId)?.let { return it }
+        if (endpointId.isBlank() || modelId.isBlank()) return null
+        val recent = RecentModelsPreferences(context).entry(ModelIdentity(endpointId, modelId)) ?: return null
+        return FavoriteModelObject(modelId, endpointId).also { recent.copyRoutingTo(it) }
+    }
+
     /** The providers the user marked Favorite for this model: on its favorite
      *  when it is one, otherwise on its Recent entry. */
     fun favoriteProviders(context: Context, endpointId: String, modelId: String): List<String> {
