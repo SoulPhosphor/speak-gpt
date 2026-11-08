@@ -589,7 +589,7 @@ proposal only.
 | D20 | Which browser filters and sorts are added? | Upcoming dates, briefing members, sort by strength |
 | D21 | Should a local re-ranker be added? | Decide after the test set shows a need |
 | D22 | Does date sharing ship on its own, before the rest? | Yes, if the owner wants it sooner; it doesn't depend on the rest |
-| D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | Before; dated and fading memories are only as good as the search beneath them |
+| D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | **Decided by the owner, 2026-11-08: search quality is fixed first.** When it starts is still set by `project-plan.md` |
 
 ## 16. Relationship to other documents
 
