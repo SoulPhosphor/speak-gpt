@@ -74,29 +74,56 @@
                 android:layout_marginTop="8dp"
                 android:visibility="gone" />
 
+            <!-- Background jobs' selected models a check found unavailable
+                 and cleared (owner ruling, Nov 8 2026). -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/model_cleanup_cleared_heading" />
+
+            <LinearLayout
+                android:id="@+id/container_cleared_selected"
+                style="@style/Widget.App.ModelCleanup.Results" />
+
+            <TextView
+                android:id="@+id/text_no_cleared_selected"
+                style="@style/Widget.App.ModelCleanup.None"
+                android:text="@string/model_cleanup_none" />
+
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/model_cleanup_favorites_heading" />
 
             <LinearLayout
                 android:id="@+id/container_unavailable_favorites"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                style="@style/Widget.App.ModelCleanup.Results" />
 
             <TextView
                 android:id="@+id/text_no_unavailable_favorites"
-                style="@style/Widget.App.Row.Subtitle"
-                android:layout_marginTop="8dp"
+                style="@style/Widget.App.ModelCleanup.None"
                 android:text="@string/model_cleanup_none" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_delete_all_favorites"
-                style="@style/AppButton.Destructive"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="end"
-                android:layout_marginTop="12dp"
+                style="@style/Widget.App.ModelCleanup.DeleteAll"
+                android:text="@string/model_cleanup_delete_all"
+                android:visibility="gone" />
+
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/model_cleanup_recents_heading" />
+
+            <LinearLayout
+                android:id="@+id/container_unavailable_recents"
+                style="@style/Widget.App.ModelCleanup.Results" />
+
+            <TextView
+                android:id="@+id/text_no_unavailable_recents"
+                style="@style/Widget.App.ModelCleanup.None"
+                android:text="@string/model_cleanup_none" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_delete_all_recents"
+                style="@style/Widget.App.ModelCleanup.DeleteAll"
                 android:text="@string/model_cleanup_delete_all"
                 android:visibility="gone" />
 
@@ -106,23 +133,16 @@
 
             <LinearLayout
                 android:id="@+id/container_unavailable_rules"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                style="@style/Widget.App.ModelCleanup.Results" />
 
             <TextView
                 android:id="@+id/text_no_unavailable_rules"
-                style="@style/Widget.App.Row.Subtitle"
-                android:layout_marginTop="8dp"
+                style="@style/Widget.App.ModelCleanup.None"
                 android:text="@string/model_cleanup_none" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_delete_all_rules"
-                style="@style/AppButton.Destructive"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="end"
-                android:layout_marginTop="12dp"
+                style="@style/Widget.App.ModelCleanup.DeleteAll"
                 android:text="@string/model_cleanup_delete_all"
                 android:visibility="gone" />
 
@@ -132,23 +152,16 @@
 
             <LinearLayout
                 android:id="@+id/container_unavailable_tts"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                style="@style/Widget.App.ModelCleanup.Results" />
 
             <TextView
                 android:id="@+id/text_no_unavailable_tts"
-                style="@style/Widget.App.Row.Subtitle"
-                android:layout_marginTop="8dp"
+                style="@style/Widget.App.ModelCleanup.None"
                 android:text="@string/model_cleanup_none" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_delete_all_tts"
-                style="@style/AppButton.Destructive"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="end"
-                android:layout_marginTop="12dp"
+                style="@style/Widget.App.ModelCleanup.DeleteAll"
                 android:text="@string/model_cleanup_delete_all"
                 android:visibility="gone" />
         </LinearLayout>

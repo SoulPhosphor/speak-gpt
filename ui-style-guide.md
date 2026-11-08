@@ -1448,6 +1448,14 @@ above Streaming in Quick Settings, the same link above the parameters on
 Summarizer Settings and Advanced Memory Settings, and Reset to Recommended
 below them on Advanced Memory Settings (`Widget.App.PlainParameter.TextLink`).
 
+## Clean Up Models result sections
+
+Each result section on Clean Up Models is a `Widget.App.Section.Title` heading,
+a `Widget.App.ModelCleanup.Results` list, a `Widget.App.ModelCleanup.None`
+"None" line, and (where items can be deleted) a `Widget.App.ModelCleanup.DeleteAll`
+button. Cleared Selected Models lists one `Widget.App.ModelCleanup.ClearedLine`
+per cleared job model. Spacing lives in `model_cleanup_*`.
+
 ## Plain parameter list
 
 Model parameters shown on an ordinary settings screen are plain: each

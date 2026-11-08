@@ -2757,6 +2757,29 @@
     <!-- One parameter's card on the Model Parameters screen: a fully rounded
          surface tinted like the Quick Settings parameter tiles, so the two
          screens read as the same design. -->
+    <!-- Clean Up Models result sections: each section's list, its "None"
+         line, its Delete All button, and a cleared-model notice line. -->
+    <style name="Widget.App.ModelCleanup.Results" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.ModelCleanup.None" parent="Widget.App.Row.Subtitle">
+        <item name="android:layout_marginTop">@dimen/model_cleanup_none_gap</item>
+    </style>
+
+    <style name="Widget.App.ModelCleanup.DeleteAll" parent="AppButton.Destructive">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">end</item>
+        <item name="android:layout_marginTop">@dimen/model_cleanup_delete_gap</item>
+    </style>
+
+    <style name="Widget.App.ModelCleanup.ClearedLine" parent="Widget.App.Row.Subtitle">
+        <item name="android:paddingTop">@dimen/model_cleanup_cleared_line_gap</item>
+    </style>
+
     <!-- Plain parameter list (owner ruling, Nov 8 2026): model parameters
          shown as plain title-and-control pairs on the screen background, no
          card boxes. Used by Model Settings and the Summarizer's default

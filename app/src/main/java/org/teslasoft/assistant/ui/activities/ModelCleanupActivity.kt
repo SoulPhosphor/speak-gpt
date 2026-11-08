@@ -44,6 +44,8 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.ModelPickerScope
+import org.teslasoft.assistant.preferences.RecentModelsPreferences
+import org.teslasoft.assistant.preferences.models.ClearedSelectedModels
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.models.EndpointCatalogCheck
@@ -60,13 +62,16 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Saved, user-triggered availability report for Favorites, Model Rules and saved TTS models. */
+/** Saved, user-triggered availability report for Favorites, Recent models,
+ *  Model Rules, saved TTS models and the background jobs' selected models. */
 class ModelCleanupActivity : SettingsPageActivity() {
 
     private data class ScreenData(
         val references: ModelCleanupReferences,
         val report: ModelCleanupReport,
-        val endpointLabels: Map<String, String>
+        val endpointLabels: Map<String, String>,
+        /** Jobs' selected models the latest check found unavailable and cleared. */
+        val cleared: List<ClearedSelectedModels.Entry> = emptyList()
     )
 
     private var actionBar: ConstraintLayout? = null
@@ -81,6 +86,11 @@ class ModelCleanupActivity : SettingsPageActivity() {
     private var noRules: TextView? = null
     private var btnDeleteFavorites: MaterialButton? = null
     private var btnDeleteRules: MaterialButton? = null
+    private var recentsContainer: LinearLayout? = null
+    private var noRecents: TextView? = null
+    private var btnDeleteRecents: MaterialButton? = null
+    private var clearedContainer: LinearLayout? = null
+    private var noCleared: TextView? = null
 
     private var ttsContainer: LinearLayout? = null
     private var noTts: TextView? = null
@@ -125,6 +135,7 @@ class ModelCleanupActivity : SettingsPageActivity() {
         btnCheck?.setOnClickListener { runScan() }
         btnDeleteFavorites?.setOnClickListener { confirmDeleteFavorites() }
         btnDeleteRules?.setOnClickListener { confirmDeleteRuleTargets() }
+        btnDeleteRecents?.setOnClickListener { confirmDeleteRecents() }
         btnDeleteTts?.setOnClickListener { confirmDeleteTts() }
 
         // Local-only reconciliation. This is intentionally not a scan.
@@ -144,6 +155,11 @@ class ModelCleanupActivity : SettingsPageActivity() {
         noRules = findViewById(R.id.text_no_unavailable_rules)
         btnDeleteFavorites = findViewById(R.id.btn_delete_all_favorites)
         btnDeleteRules = findViewById(R.id.btn_delete_all_rules)
+        recentsContainer = findViewById(R.id.container_unavailable_recents)
+        noRecents = findViewById(R.id.text_no_unavailable_recents)
+        btnDeleteRecents = findViewById(R.id.btn_delete_all_recents)
+        clearedContainer = findViewById(R.id.container_cleared_selected)
+        noCleared = findViewById(R.id.text_no_cleared_selected)
         ttsContainer = findViewById(R.id.container_unavailable_tts)
         noTts = findViewById(R.id.text_no_unavailable_tts)
         btnDeleteTts = findViewById(R.id.btn_delete_all_tts)
@@ -158,7 +174,10 @@ class ModelCleanupActivity : SettingsPageActivity() {
                     val saved = reportStore.load()
                     val pruned = ModelCleanupPolicy.prune(saved, references)
                     if (references.isComplete) reportStore.save(pruned)
-                    ScreenData(references, pruned, currentEndpointLabels())
+                    ScreenData(
+                        references, pruned, currentEndpointLabels(),
+                        ClearedSelectedModels.get(this@ModelCleanupActivity).load()
+                    )
                 }
                 if (generation != refreshGeneration || ttsCleanup.ui.value.busy) return@launch
                 screenData = data
@@ -252,9 +271,14 @@ class ModelCleanupActivity : SettingsPageActivity() {
                         generatedAtMillis = System.currentTimeMillis()
                     )
                     reportStore.save(report)
+                    // A job's selected model that is unavailable is cleared,
+                    // so the user chooses a new one (owner ruling, Nov 8 2026).
+                    val cleared = ClearedSelectedModels.findUnavailable(references.selectedTargets, report.unavailable)
+                    ClearedSelectedModels.get(this@ModelCleanupActivity)
+                        .clearAndRemember(this@ModelCleanupActivity, cleared)
                     val textEndpointIds = references.textTargets.map { it.endpointId }.toSet()
                     purgeStaleReasoningLearning(endpoints, checks.filterKeys { it in textEndpointIds })
-                    ScreenData(references, report, labels)
+                    ScreenData(references, report, labels, cleared)
                 }
                 screenData = data
                 render(data)
@@ -293,6 +317,11 @@ class ModelCleanupActivity : SettingsPageActivity() {
             visibility = if (uncheckedNotes.isEmpty()) View.GONE else View.VISIBLE
             text = uncheckedNotes.joinToString("\n\n")
         }
+        renderCleared(data)
+        val unavailableRecents = data.references.recentTargets.intersect(report.unavailable)
+        renderGroups(recentsContainer, unavailableRecents, data)
+        noRecents?.visibility = if (unavailableRecents.isEmpty()) View.VISIBLE else View.GONE
+        btnDeleteRecents?.visibility = if (unavailableRecents.isEmpty()) View.GONE else View.VISIBLE
         val unavailableFavorites = data.references.favorites.intersect(report.unavailable)
         val unavailableRules = data.references.ruleTargets.intersect(report.unavailable)
         val unavailableTts = data.references.ttsTargets.intersect(report.unavailable)
@@ -357,6 +386,51 @@ class ModelCleanupActivity : SettingsPageActivity() {
                             removed,
                             removed
                         ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    refreshFromLocal()
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun renderCleared(data: ScreenData) {
+        val container = clearedContainer ?: return
+        container.removeAllViews()
+        data.cleared.forEach { entry ->
+            val text = getString(
+                if (entry.scope == ModelPickerScope.SUMMARIZER) R.string.model_cleanup_cleared_summarizer
+                else R.string.model_cleanup_cleared_memory_scanner,
+                entry.target.modelId, displayLabel(entry.target.endpointId, data)
+            )
+            container.addView(TextView(this, null, 0, R.style.Widget_App_ModelCleanup_ClearedLine).apply {
+                this.text = text
+            })
+        }
+        noCleared?.visibility = if (data.cleared.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    /** Removes every listed unavailable model from every job's Recent list. */
+    private fun confirmDeleteRecents() {
+        val data = screenData ?: return
+        val targets = data.references.recentTargets.intersect(data.report.unavailable)
+        if (targets.isEmpty()) return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.model_cleanup_delete_recents_confirm_title)
+            .setMessage(R.string.model_cleanup_delete_recents_confirm_message)
+            .setPositiveButton(R.string.model_cleanup_delete_all) { _, _ ->
+                lifecycleScope.launch {
+                    val removed = withContext(Dispatchers.IO) {
+                        ModelPickerScope.entries.forEach { scope ->
+                            val recents = RecentModelsPreferences(this@ModelCleanupActivity, scope)
+                            targets.forEach(recents::remove)
+                        }
+                        targets.size
+                    }
+                    Toast.makeText(
+                        this@ModelCleanupActivity,
+                        resources.getQuantityString(R.plurals.model_cleanup_removed_recents, removed, removed),
                         Toast.LENGTH_SHORT
                     ).show()
                     refreshFromLocal()
