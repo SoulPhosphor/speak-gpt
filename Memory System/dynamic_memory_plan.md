@@ -147,8 +147,8 @@ The specific corrections:
   them.
 - **Fading stays, as the owner decided** (D34, D43): optional on each
   memory, with markers and the Retired area.
-- **The May Bring Up switch is dropped.** Always memories carry a bring-up
-  setting instead (D48).
+- **The May Bring Up switch is dropped.** Always memories, and memories with
+  an important date, carry a bring-up setting instead (D48).
 - **Carry-over must not refresh itself** from the AI's own replies (B.5).
 - **Inside jokes and "vibe"** have a first proposal (D.9).
 - **Published research** is summarized in Part F.
@@ -218,8 +218,10 @@ The specific corrections:
     manageable testable stages, and add no complexity or scope without a
     concrete reason.
 - **Recommendations the owner has seen and not objected to count as
-  approved** (owner ruling, 2026-11-08). Part E records each one. Exact
-  wording and AI-facing text still need the owner to see the actual text.
+  approved** (owner ruling, 2026-11-08). Part E records each one. This
+  applies to design choices discussed for this plan only. It is not standing
+  permission for unreviewed changes or for building anything. Exact wording
+  and AI-facing text still need the owner to see the actual text.
 - **Stress-tested (2026-11-08):** the design was tested against the real
   model before being recommended, and changed where the test showed a
   weakness (A.10).
@@ -1052,22 +1054,28 @@ guidance text to the AI (D13) is shown to the owner first.**
 3. **Time since the last chat** with a companion, in days (D39), under the
    same sharing setting.
 4. **Database migration** adds, for each memory:
-   - an event date: day and month, an optional year, one-time or yearly;
+   - an important date: day and month, an optional year, one-time or
+     yearly, and its range of days (D.5);
    - a "past after" date;
    - the event state: upcoming, happened, or settled (D42);
    - an internal last-discussed date, used by fading in Phase 5.
-5. **Sending (D.5):** a dated memory is sent with every message while it is
-   due, with timing worked out by the app. Once it has come up in the chat,
-   it is marked "already discussed" (D32). After its event, or after its
-   "past after" date, the AI is told it is in the past, and it leaves
+5. **Sending (D.5):** a memory whose date is near is sent with every
+   message, past every limit, with timing worked out by the app, while the
+   Memory Handling Preferences toggle is on. Once it has come up in the
+   chat, it is marked "already discussed" (D32). After its event, or after
+   its "past after" date, the AI is told it is in the past, and it leaves
    Always.
-6. **Pending review:** an "Event passed" label (D50). If the user does
+6. **The bring-up dropdown** also appears on memories with an important
+   date (D48).
+7. **The toggle** is added to Memory Handling Preferences, default on.
+8. **Pending review:** an "Event passed" label (D50). If the user does
    nothing, the passed event is kept as a past event.
-7. **Memory editor:** the optional dates. **Card:** an upcoming-date marker.
-8. **Possible Match:** a different date on a matching memory counts as a
-   change to review, not a duplicate.
-9. **Backup:** every new field and the date-sharing setting, with round-trip
-   tests.
+9. **Memory editor:** the optional dates and the range. **Card:** an
+   upcoming-date marker.
+10. **Possible Match:** a different date on a matching memory counts as a
+    change to review, not a duplicate.
+11. **Backup:** every new field, the toggle, and the date-sharing setting,
+    with round-trip tests.
 
 ## Phase 5: Fading
 
@@ -1096,9 +1104,9 @@ guidance text to the AI (D13) is shown to the owner first.**
 
 1. Proposals can carry a date and whether it is one-time or yearly. The user
    sees and edits it in Pending before saving.
-2. **A date the user does not want raised** is declined in Pending. A
-   dated memory may be raised while due, so accepting the date is the
-   permission (D.2).
+2. **The bring-up setting is shown beside a proposed date,** so the user
+   chooses how it may come up when they accept the date. An anniversary of a
+   loss, for example, can be set to Only if I bring it up (D33).
 3. **Not proposed:** Always, the bring-up setting, and fading stay the
    user's own choices (D33).
 4. Relative dates ("tomorrow") are worked out from the day the message was
@@ -1148,16 +1156,20 @@ gone.
 - **Always:** memories the user checks on the Always tab are sent with
   every message, so the AI always knows them. Examples: the user's name,
   pets, the people in their life, or a concern that matters right now.
-- **Dates:** an optional date decides when a memory is sent even though the
-  conversation is not about it:
+- **Important dates** (owner's design, 2026-11-08): a birthday,
+  anniversary, or event, kept in its own field. While the date is near, the
+  memory is handed to the AI even when every memory limit is full:
   - before an interview: "Are you nervous about tomorrow?";
-  - around a birthday;
+  - around a birthday, every year;
   - after an event: "How did Tuesday go?".
 
   Once it has come up in a chat, the AI keeps knowing it but is told it has
-  already been discussed.
-- **The bring-up setting:** each Always memory says whether the AI may
-  raise it unprompted. Painful or private things can be set to Only if I
+  already been discussed. A toggle in Memory Handling Preferences turns this
+  on or off.
+- **The bring-up setting:** each Always memory, and each memory with an
+  important date, says whether the AI may raise it unprompted. A date alone
+  is not permission: the user may want the AI to know an anniversary without
+  mentioning it. Painful or private things can be set to Only if I
   bring it up. A painful topic is never volunteered just because it was
   discussed a lot.
 - **Fading (optional):** a memory can be set to fade, so a concern that
@@ -1176,17 +1188,18 @@ For each memory:
 | Choice | Meaning | Default |
 |---|---|---|
 | Always | A checkbox on the Always tab. Checked memories are sent with every message (D.12) | Not in the tab |
-| Bring-up setting | Always memories only: whether the AI may raise it unprompted. The four options are listed below | When it fits |
-| Event date (optional) | One-time or yearly. The memory is sent while it is due (D.5) | None |
+| Bring-up setting | Always memories and memories with an important date: whether the AI may raise it unprompted. The four options are listed below | When it fits |
+| Important date (optional) | A birthday, anniversary, or event: yearly or one-time, with a range of days before it that counts as near. While near, the memory is handed to the AI past every limit (D.5) | None. The range is prefilled |
 | "Past after" date (optional) | After this date the memory is treated as past and leaves Always (D49) | None |
 | Fading (optional) | Retires after the fade time without being discussed: the app-wide time or custom days (D.4) | Off |
 
 **How the choices work together:**
 - **What the AI receives:** search results, as now; checked Always
-  memories, every message; and dated memories while due. Nothing else.
-- **Whether the AI may raise a memory unprompted:** for an Always memory,
-  its bring-up setting. A dated memory may be raised while due. A searched
-  memory is already about what the user said.
+  memories, every message; and memories whose important date is near.
+  Nothing else.
+- **Whether the AI may raise a memory unprompted:** for an Always memory or
+  a dated one, its bring-up setting. A searched memory is already about what
+  the user said.
 - **How long a memory stays in use:** the "past after" date and fading
   decide that. A memory that retires goes to Retired (D.11).
 - **Internal, never a user choice:** the date windows and the last-discussed
@@ -1197,22 +1210,23 @@ For each memory:
   else.
 
 **The bring-up setting** (D48, D53; owner ruling, 2026-11-08) is a dropdown
-on Always memories only:
+on Always memories and on memories with an important date:
 - **Only if I bring it up:** the AI never raises it on its own;
 - **When it fits:** the default. The AI uses its own judgment;
 - **Ask me first:** the AI may offer, in a way that is easy to decline;
 - **Custom:** a written condition, for example "when I express low
   self-esteem" for a memory about winning an award.
 
-**Why only Always memories:** they are the only memories the AI has when
-the user has not brought the subject up.
+**Why only those:** they are the only memories the AI has when the user has
+not brought the subject up.
 - **A searched memory** reaches the AI because the user's message is about
   it, so it needs no setting. If the user wants a condition on one, they
   write it into the memory's own text, for example "Mention this only if
   the user brings up their mom."
-- **A dated memory** is sent while due because the user gave it a date. The
-  date is the permission to raise it. A date the user does not want raised
-  is simply not added, or is declined in Pending.
+- **A dated memory** is handed over while its date is near, so it is in
+  the same position as an Always memory for that time. Having a date is not
+  permission to raise it: for an anniversary of a loss, the user can choose
+  Only if I bring it up, and the AI still knows the date.
 
 **Custom is guidance, not search (D53).** An Always memory is already sent
 with every message, so its condition only tells the AI when to raise it, and
@@ -1266,13 +1280,25 @@ owner's choice, and the Retired area makes it easy to undo.
 
 ## D.5 Dates
 
-- **Stored:** day and month, plus year for one-time dates (optional for
-  yearly), and one-time or yearly. No time of day.
+- **Stored in its own field** (owner's design, 2026-11-08): day and month,
+  plus year for one-time dates (optional for yearly), and one-time or
+  yearly. No time of day.
+- **The Memory Handling Preferences toggle** (owner's design): memories with
+  important dates are handed to the AI while the date is near. Default on
+  (presented 2026-11-08), so a date the user adds works without hunting for a
+  setting. With it off, dates are still saved and shown, and those memories
+  are found by search as usual.
+- **Past every limit** (owner's design): a memory whose date is near is sent
+  even when the Always and search limits are full. Usually only one or two
+  are near at once, so there is no cap. The Debug test screen shows them.
 - **"Past after" date (D49):** optional, on any memory. After it, the AI is
   told the memory is in the past, and it leaves Always.
-- **Windows:** yearly dates are due for some days before through the day.
-  One-time dates are due some days before, on the day, and briefly after
-  (D10, D11).
+- **Range** (owner's design, D10, D11): each important date has a field for
+  how many days before it counts as near, prefilled so the user does not
+  have to set it (presented 2026-11-08):
+  - yearly dates: 7 days before, through the day;
+  - one-time dates: 3 days before, through 2 days after, so the AI can ask
+    how it went.
 - **Year boundary:** a 2 January birthday seen from 30 December is 3 days
   away.
 - **29 February** in other years: D12.
@@ -1285,8 +1311,8 @@ owner's choice, and the Retired area makes it easy to undo.
     keeps the information and can use it when the user returns to it.
 - **"Come up" is decided from the user's messages,** or a short user
   continuation of an exchange about it, not from the AI's replies alone.
-- **What the AI is told:** the memory text, the app-worked-out timing, and
-  guidance text the owner approves (D13).
+- **What the AI is told:** the memory text, the app-worked-out timing, the
+  memory's bring-up setting, and guidance text the owner approves (D13).
 - **Set by hand** in the editor, or **proposed by the Memory Assistant**
   (Phase 6). Relative dates count from the day the message was sent. Vague
   timing gets no date (D14).
@@ -1307,26 +1333,26 @@ owner's choice, and the Retired area makes it easy to undo.
 is not about them:
 
 - **Always:** checked memories, sent every message as background.
-- **Due dates:** dated memories while they are due. Each is marked "already
-  discussed" once it has come up in the chat, and the AI is told not to
-  raise it again (D.5).
+- **Important dates:** memories whose date is near, when the toggle is on.
+  Each is marked "already discussed" once it has come up in the chat, and
+  the AI is told not to raise it again (D.5).
 
 **Permission rule (D30, D48):**
-- whether the AI may raise an Always memory unprompted follows its bring-up
-  setting;
-- a due dated memory may be raised, because the user gave it a date;
+- whether the AI may raise an Always or dated memory unprompted follows its
+  bring-up setting. A date alone is not permission;
 - a subject is never volunteered just because it was discussed recently.
 
 **Size and cost (D16, owner):** Always memories have their own limit, the
 count set in Memory Handling Preferences (default 10, with the exception at
 Save, D52). They do not count against search's Maximum Memories or Memory
-Space, so they can never crowd out a relevant search result.
+Space, so they can never crowd out a relevant search result. Memories whose
+date is near count against no limit at all (owner's design).
 
 **Priority, in order:**
 1. memories the user picked before sending, never displaced;
 2. search results, within their own limits;
 3. Always memories, within their own limit;
-4. due dated memories.
+4. memories whose date is near, never held back by a limit.
 
 If the whole request is still too large for the model, the trimming order is
 D37.
@@ -1343,21 +1369,21 @@ prompt starts, on providers that offer it) works.
 - **Scope:** the same eligibility check the current search uses. Roleplay
   per D17.
 - **Off** whenever memory is off for the chat.
-- **No separate on/off switch** (D18): the user opts in by checking Always
-  memories or giving a memory a date.
+- **Switches** (D18): Always has none; checking memories is the opt-in.
+  Important dates have the toggle in Memory Handling Preferences.
 - **Visible:** the Debug test screen shows what the briefing sent and why.
 
 ## D.7 Memory screens
 
-- **Editor:** the optional event date and "past after" date, and the
-  fading choice. For an Always memory, the bring-up dropdown (Custom opens a
-  write-in field). Always membership is set from the Always tab and the row
+- **Editor:** the optional important date with its range, the optional
+  "past after" date, and the fading choice. For an Always memory or one with
+  an important date, the bring-up dropdown (Custom opens a write-in field). Always membership is set from the Always tab and the row
   menu.
 - **Card:** small markers only: Always, an upcoming date, fading with its
   retire date, or faded. No scores or technical numbers.
 - **Browser:** the view dropdown: Memories, Pending, Retired, Always (D.11).
-- **Pending:** review labels (D50), and proposed dates (Phase 6), editable
-  before saving.
+- **Pending:** review labels (D50), and proposed dates with their bring-up
+  setting (Phase 6), editable before saving.
 - **Memory Handling Preferences:** D.12.
 - **Advanced numbers** stay on the Debug test screen, not in ordinary
   settings.
@@ -1457,6 +1483,8 @@ current memory settings screen, which is crowded. It holds:
 - **the most always-sent memories allowed per message.** The default is 10,
   and more is allowed;
 - **the fade time** for memories set to fade (D45);
+- **whether memories with important dates are handed to the AI** while the
+  date is near (D18, D.5);
 - **whether deleting sends a memory to Retired first** (D44).
 
 **The Always tab** (owner's design, 2026-11-08; D46, D52):
@@ -1519,8 +1547,8 @@ habits.
   Rules may later gain per-model memory limits. That is an extension to
   propose when it is needed.
 
-**What the user sets on each memory:** D.2 (Always, the bring-up setting
-for Always memories, dates, and fading).
+**What the user sets on each memory:** D.2 (Always, important dates, the
+bring-up setting for Always and dated memories, and fading).
 
 **All the time:** the memory-use instruction (D.10, D41) teaches the AI to
 use what it is given naturally.
@@ -1580,15 +1608,15 @@ per model, once the full system works.
 | D7 | How fast does fading go? | **Superseded** by D45 and D49 |
 | D8 | Does editing a fading memory count as it being discussed? | **Approved:** yes; editing is deliberate attention |
 | D9 | Does fading affect search ranking? | **Approved:** no. A fading memory stays fully searchable. Once retired, it is out of use (D43) |
-| D10 | How long are the date windows? | **Approved:** yearly, about a week before through the day. One-time, a few days before through two days after |
-| D11 | Can windows be changed per memory? | **Approved:** not at first |
+| D10 | How long are the date windows? | **Decided (owner), 2026-11-08:** each important date has its own range field. **Presented 2026-11-08:** prefilled with 7 days before for yearly dates (through the day), and 3 days before through 2 days after for one-time dates |
+| D11 | Can windows be changed per memory? | **Decided (owner), 2026-11-08:** yes, through the range field (D10) |
 | D12 | How is a 29 February date handled in other years? | **Approved:** 28 February |
 | D13 | What does the guidance to the AI about dated memories say? | **Open until drafted:** the owner sees the exact text before it is built |
 | D14 | Does vague timing get a date? | **Approved:** no; the user can add one in Pending |
 | D15 | Should memories be sent outside search (Always and due dates)? | **Decided, 2026-11-08:** yes. The owner designed the Always tab and dates (D46, D49, D52) |
-| D16 | How is the size of what is sent outside search limited? | **Decided (owner), 2026-11-08:** Always memories have their own limit, set in Memory Handling Preferences. It does not count against search's Maximum Memories or Memory Space |
+| D16 | How is the size of what is sent outside search limited? | **Decided (owner), 2026-11-08:** Always memories have their own limit, set in Memory Handling Preferences. It does not count against search's Maximum Memories or Memory Space. Memories whose important date is near count against no limit |
 | D17 | Are Always and dated memories sent in roleplay chats? | **Approved:** not by default |
-| D18 | Is there an on/off switch for sending memories outside search? | **Presented 2026-11-08:** no separate switch. Checking Always memories or adding a date is the opt-in, and a second switch could hide what the user checked |
+| D18 | Is there an on/off switch for sending memories outside search? | **Always:** no switch; checking memories is the opt-in (presented 2026-11-08). **Important dates (owner's design, 2026-11-08):** a toggle in Memory Handling Preferences. **Presented:** default on |
 | D19 | What does a memory card show about fading? | **Approved:** no numbers. A fading memory shows when it was last discussed and the date it will retire (D.4) |
 | D20 | Which browser filters are added? | **Superseded** by the view dropdown (D.11) and the card markers (D.7) |
 | D21 | Should a local re-ranker be added? | **Approved:** no; tested and it did not work (A.10). Reconsider only if a suitable small model appears |
@@ -1600,14 +1628,14 @@ per model, once the full system works.
 | D27 | Which memory assembly log lines change when the cooldown and old search are removed? | **Decided, 2026-11-08:** the summary line, the memory cooldown line, the project wording, and the chat-search missing-vector line. The card-cooldown log line stays in the code (it no longer fires) until its removal is approved |
 | D28 | Should the Memory Assistant always add topic tags? | **Decided, 2026-11-08:** not mandatory now. Test independently generated tags first (step 1.15) |
 | D29 | Should the int8 model become the default? | **Decided, 2026-11-08 (revised):** no change to the default. The user already picks q4 or int8 in Advanced Memory Settings |
-| D30 | Which memories may the AI raise unprompted? | **Decided (owner), 2026-11-08:** an Always memory as its bring-up setting allows (D48), and a dated memory while due. A searched memory is already about what the user said. A topic is never volunteered just because it was discussed a lot |
-| D31 | What does the user decide per memory? | **Approved:** Always (with the bring-up setting for Always memories), an optional event date and "past after" date, and optional fading (D.2). Date windows and last-discussed tracking stay internal |
-| D32 | How is repetition of a due dated memory controlled? | **Decided (corrected), 2026-11-08:** never by withholding it. It is sent every message while due, marked "already discussed" once it comes up, and the AI is told not to raise it again |
-| D33 | What does the Memory Assistant propose beyond the memory text? | **Approved:** dates only, at first. Always, the bring-up setting, and fading stay the user's choices. A date the user does not want raised is declined in Pending |
+| D30 | Which memories may the AI raise unprompted? | **Decided (owner), 2026-11-08:** an Always memory, or a memory whose date is near, as its bring-up setting allows (D48). A date alone is not permission. A searched memory is already about what the user said. A topic is never volunteered just because it was discussed a lot |
+| D31 | What does the user decide per memory? | **Approved:** Always, an optional important date with its range, an optional "past after" date, optional fading, and the bring-up setting for Always and dated memories (D.2). Last-discussed tracking stays internal |
+| D32 | How is repetition of a memory whose date is near controlled? | **Decided (corrected), 2026-11-08:** never by withholding it. It is sent every message while near, marked "already discussed" once it comes up, and the AI is told not to raise it again |
+| D33 | What does the Memory Assistant propose beyond the memory text? | **Approved:** dates only, at first. Always, the bring-up setting, and fading stay the user's choices. **Presented 2026-11-08:** Pending shows the bring-up setting beside a proposed date |
 | D34 | Should memories fade? | **Decided, 2026-11-08: yes,** with Memory Browser markers for fading, not fading, and faded, and with faded memories reinstatable from Retired. **Approved:** fading is an optional choice on each memory, off unless the user turns it on (D.2) |
 | D35 | Should the type name be sent with memories of a "playful" type, such as Inside Joke? | **Approved:** yes, for types the user marks playful, so the AI knows to use them lightly |
 | D36 | Should each companion have a short, editable "vibe" note that is always sent? | **Approved:** yes, using the existing unused relationship-notes field. Memory Assistant suggestions only through Pending |
-| D37 | If a whole request is too large for the model, what is trimmed first? | **Approved:** due dated memories, then Always memories, then the lowest-ranked search results. Picked memories are never trimmed |
+| D37 | If a whole request is too large for the model, what is trimmed first? | **Presented 2026-11-08 (revised, because the owner treats important dates as important):** the lowest-ranked search results first, then Always memories, then memories whose date is near. Picked memories are never trimmed |
 | D38 | Should a companion know what happened in your last few chats with it, through short summaries built from the existing per-chat conversation summaries? | **Approved for design:** it is the main thing ChatGPT does that this app lacks for continuity ("how did the dentist go yesterday?"). It is background knowledge, and the bring-up rules apply |
 | D39 | Should the AI know how long it has been since the last chat with this companion (in days, not times)? | **Approved:** yes, as part of Phase 4, under the date-sharing setting |
 | D40 | Should a companion keep its own short reflections or journal about the relationship? | **Approved:** later and optional, after the vibe note, and visible and editable |
@@ -1618,7 +1646,7 @@ per model, once the full system works.
 | D45 | How fast do memories fade? | **Approved:** one app-wide fade time in Memory Handling Preferences: 2 weeks, 1 month, 3 months, or 6 months. Default 1 month |
 | D46 | What is the always-sent tab called, and what does it mean? | **Decided, 2026-11-08:** the dropdown entry is "Always". Checked Always memories are sent with every message |
 | D47 | Should an auto mode let the embedding model pick which Always memories to include? | **Approved:** no. Ordinary search already does this every message; checkboxes only |
-| D48 | How does the user say how a memory may be brought up? | **Decided (owner), 2026-11-08:** a dropdown on Always memories only: Only if I bring it up, When it fits (the default), Ask me first, or Custom, a written condition. For a searched memory, a condition goes into the memory's own text. Weaker models are handled through Model Rules (owner ruling) |
+| D48 | How does the user say how a memory may be brought up? | **Decided (owner), 2026-11-08:** a dropdown on Always memories: Only if I bring it up, When it fits (the default), Ask me first, or Custom, a written condition. For a searched memory, a condition goes into the memory's own text. **Presented 2026-11-08:** the same dropdown on memories with an important date, because a date alone is not permission. Weaker models are handled through Model Rules (owner ruling) |
 | D49 | Fade timing, and an optional "past after" date per memory? | **Decided (owner):** custom fade timing, and a per-memory date after which the memory is a past event. **Approved:** the preset times plus a custom number of days, and an optional "past after" date on any memory |
 | D50 | How are expiring and passed memories reviewed without overwhelming the user? | **Approved:** one review place, Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, a fading memory retires and a passed event is kept as past. One tap renews |
 | D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | **Approved:** later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
