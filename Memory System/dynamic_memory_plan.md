@@ -294,12 +294,11 @@ the app already has, that part holds up on its own.
    their room first, and are excluded from everything below.
 3. **Search two ways at once**, using the user's latest message:
    - meaning search with the on-phone embedding model;
-   - keyword search with BM25, through SQLite's built-in full-text search
-     (FTS5). The app already uses FTS5 for chat search with the encrypted
-     database. Tags and the names of linked companions, worlds, characters,
-     campaigns, and projects are part of the searchable text.
+   - keyword search that weights rare words (the IDF part of BM25),
+     computed in the app (B.5). The memory's content, its tags, and the
+     names of its linked companions, worlds, characters, campaigns, and
+     projects are the searchable text.
 
-   Tags, where the user has added them, are part of the searchable text.
    The model and vector size are chosen by testing (step 1.14).
 4. **Combine both searches into one relevance score per memory** (B.5), so
    a memory found both ways ranks highest.
@@ -363,8 +362,8 @@ is tested in the step named, and the numbers are tunable on the test screen.
   small or uniform library cannot make tiny differences look large.
 - **Keyword strength,** from 0 to 1: the share of the message's informative
   words that the memory contains, weighted by how rare each word is in the
-  library. This can be compared across messages, unlike raw FTS5 `bm25()`
-  values. FTS5 finds the candidate memories and supplies word counts.
+  library (the IDF part of BM25). Unlike raw BM25 totals, it can be
+  compared across messages.
 - **Relevance:** the stronger of the two, plus a small bonus when both
   agree. This replaces rank-position merging (reciprocal rank fusion),
   because a rank-based merge cannot support the importance cap or the +3
@@ -383,21 +382,21 @@ or two through. Below a minimum library size, only the fixed minimum is
 used.
 
 **Keyword handling (step 1.5).**
-- FTS5 with the `porter unicode61` tokenizer, so "crashing" matches "crash".
+- **Computed in the app** over the memories this chat may use, which
+  search already loads every message (`activeMemoriesForScope`). For a
+  personal library of hundreds or a few thousand memories this takes
+  milliseconds. It needs no new database index, no migration, and nothing
+  that can fall out of step.
+- An FTS5 index is added only if a library ever grows large enough for this
+  to be slow. The test screen's timing shows that.
+- Simple word-form matching ("crashing" matches "crash", "cats" matches
+  "cat").
 - A built-in list of common words ("the", "how", "doing") that never count
   as informative. With a small library, a common word that appears in one
   memory would otherwise look rare.
-- The user's text is never passed as FTS5 query syntax. Each word is quoted
-  as a plain term, so words like "AND" or "NEAR" and symbols like `*` or `-`
-  are ordinary text.
-- Memory content and tags are indexed with SQLite triggers on the memory
-  tables, in the same transaction as each change, as `ChatSearchStore`
-  already does. No code path can forget to update it. On opening, the
-  database checks that the index matches the memories and rebuilds it if
-  not.
-- The names of linked companions, worlds, characters, campaigns, and
-  projects change on their own tables. They are matched in the app, as
-  today, rather than copied into the index.
+- Searchable text is the memory's content, its tags, and the names of its
+  linked companions, worlds, characters, campaigns, and projects, as the
+  current keyword search already uses.
 
 **Carry-over (step 1.12).**
 - Candidates are the memories sent with the previous message only.
@@ -583,17 +582,11 @@ Steps run in this order.
 ### Step 1.5: Keyword search with BM25
 
 - **Change:**
-  - Add an FTS5 full-text index for memories in the memory database
-    (`MemoryStore`). It holds each memory's content, tags, and linked
-    target names. It is kept in step with every way a memory is added,
-    edited, deleted, archived, restored, or imported, and it is built for
-    existing memories on first open.
-  - Keyword search finds candidates through FTS5 and scores them with the
-    keyword strength in B.5. Common words count for nothing, and names and
+  - Keyword search scores every memory this chat may use with the keyword
+    strength in B.5, computed in the app. Common words count for nothing, and names and
     rare words count for a lot. A memory needs a minimum keyword strength,
     not just one shared word.
-  - Tokenizer, common-word list, safe quoting, triggers, and the index check
-    on opening are as specified in B.5.
+  - Word-form matching and the common-word list are as specified in B.5.
   - Replaces word-overlap counting in `Librarian.rankLexical`.
 - **Tunable on the test screen:** the minimum keyword score.
 - **Done when:** in the test set, common-word matches no longer bring in
@@ -774,18 +767,32 @@ test set and the owner's saved cases first (D21).
 
 ### Phase 1 in pull requests
 
-Each pull request can be tested on its own, and none leaves search worse
-than before.
+**Order changed by the owner (2026-11-08): fix the confirmed bugs first.**
+The starting numbers are educated guesses from the measurements in Part A.
+Every number is read from the stored `retrieval_policy` record from the
+start, so the test screen can change it later without new code. The owner
+is not asked to test before fixes ship.
 
-1. **Steps 1.1–1.3:** safety tests, the fair test set, and explanations.
-   Nothing the user sees changes.
-2. **Step 1.4:** the test screen, after its wording is approved.
-3. **Steps 1.5–1.6:** keyword search and the combined score.
-4. **Steps 1.7–1.10:** the message-only search, the gate, relevance-first
-   ranking, and +3.
-5. **Steps 1.11–1.13:** cooldown removal, carry-over, and both send paths.
-6. **Steps 1.14–1.16:** vector size, model, the tag test, variety, and
-   default values.
+1. **Fix the confirmed bugs.**
+   - Step 1.1 safety tests come first, because they protect the lorebook and
+     picked memories.
+   - Then steps 1.5–1.11: keyword search, meaning and keyword together,
+     message-only search, the new gate, relevance-first ranking, +3, and
+     cooldown removal.
+   - A small fixed test set, built from the Part A samples, checks each fix.
+2. **The test screen with adjustable numbers** (step 1.4), after its wording
+   is approved. Changing a number takes effect in real chats as soon as it
+   is applied.
+3. **Carry-over and both send paths** (steps 1.12–1.13).
+4. **Later, when wanted:**
+   - the full fair test set (step 1.2);
+   - the vector size and int8 checks on the Pixel 8 (step 1.14), which use
+     the test screen's timing;
+   - the tag test (step 1.15);
+   - variety (step 1.16).
+
+The explanations from step 1.3 are built with the test screen, because
+that is the only thing that uses them.
 
 ### Phase 1 is complete when
 
