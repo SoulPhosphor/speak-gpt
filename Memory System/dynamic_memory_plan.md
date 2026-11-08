@@ -1126,6 +1126,14 @@ Each memory gets two independent properties.
   (companion memories only for that companion, and the code's existing
   roleplay eligibility). Roleplay per D17.
 - **Off** whenever memory is off for the chat.
+- **Trauma-sensitive gap found on review (2026-11-08), decision D30.** As
+  first written, the "current" part would volunteer whatever the user talked
+  about most recently. If that topic is painful, the AI would raise it
+  unprompted, even on a good day. The same applies to a yearly date that
+  marks a loss. The recommended fix: nothing is volunteered unless the user
+  has marked that memory as okay to bring up. Fading then decides how long
+  such a memory stays current. Painful topics are still found by search when
+  the user raises them. Phase 5 is not built until D30 is decided.
 
 ## D.7 Memory screens
 
@@ -1185,4 +1193,5 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D26 | Should roleplay card entries also lose their 10-message cooldown? | **Decided, 2026-11-08: yes.** Card entries ride the same rebuilt message, so the cooldown hid them from the AI. Lorebooks were checked and have no cooldown |
 | D27 | Which memory assembly log lines change when the cooldown and old search are removed? | **Decided, 2026-11-08:** the summary line, the memory cooldown line, the project wording, and the chat-search missing-vector line, as proposed. The card-cooldown log line stays in the code (it no longer fires) until its removal is approved |
 | D28 | Should the Memory Assistant always add topic tags? | **Decided, 2026-11-08:** not mandatory now. Test independently generated tags first (step 1.15) |
+| D30 | Which memories may the standing briefing bring up unprompted? | Only memories the user has marked as okay to bring up. Fading and dates then decide when. Never automatically volunteer a topic just because it was discussed a lot, since that topic may be painful |
 | D29 | Should the int8 model become the default? | **Decided, 2026-11-08:** yes, once verified to install and run reliably on the owner's Pixel 8 (step 1.14) |
