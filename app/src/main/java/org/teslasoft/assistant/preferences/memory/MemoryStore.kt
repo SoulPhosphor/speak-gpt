@@ -4670,6 +4670,16 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
+    /** Replaces the stored retrieval policy (the Memory Search Test screen's
+     *  Use in Chats). The record travels with memory exports and restores. */
+    fun setRetrievalPolicyJson(policyJson: String) {
+        val values = ContentValues().apply {
+            put("id", 1)
+            put("policy_json", policyJson)
+        }
+        writableDatabase.insertWithOnConflict("retrieval_policy", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
     fun getWorld(worldId: String): WorldRecord? =
         readWorlds("world_id = ?", arrayOf(worldId)).firstOrNull()
 

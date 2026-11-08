@@ -1736,6 +1736,33 @@ Glamour Studio opts into `activity_prompt_memory_list.xml` and
 `PromptLibrarySearch`; other memory-list screens keep their current layouts
 and search controls.
 
+## Memory Search Test
+
+The Memory Search Test screen (owner request, Nov 8 2026) is built from
+existing families: the simple screen header, `Page.Content`,
+`Section.Title`/`Section.Hint`, a canonical dropdown row, a `Field.Box`
+message field, the plain parameter list for its decimal numbers, and
+`Row.Number` for its whole numbers. Its own family, `Widget.App.SearchTest.*`,
+covers only what had no shared style:
+
+- `SearchTest.Card`: one memory's result. It inherits
+  `Widget.App.MemoryBrowser.Card`, because it shows a memory, and changes only
+  its margins and inner padding to sit inside the page gutter.
+- `SearchTest.MemoryText` (inherits `Row.Title`), `SearchTest.Outcome`
+  (bold, inherits `Row.Subtitle`) and `SearchTest.Detail` (inherits
+  `Row.Subtitle`): the memory text, whether it would be sent, and the numbers
+  behind that.
+- `SearchTest.GroupTitle` (inherits `Field.Label`): the Would Be Sent,
+  Closest Memories Not Sent, and What the AI Would Receive headings.
+- `SearchTest.Preview` (inherits `Field.Box`): the read-only, selectable
+  memory text the AI would receive.
+- `SearchTest.ActionRow`, `AppButton.Primary.Inline.SearchTest` (Test, with a
+  gap above) and `AppButton.Destructive.Inline.SearchTestPair` (Reset to
+  Defaults, with a gap after Use in Chats).
+
+Sizes live in `search_test_*` dimensions. The memory-search number ranges are
+`SamplingParameterSpec` entries named `MEMORY_*`.
+
 ## Memory browser cards and settings
 
 `Widget.App.MemoryBrowser.Card` supplies the browser card background: the same

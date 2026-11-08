@@ -3649,4 +3649,42 @@
     <style name="Widget.App.ModelPicker.ControlRow" parent="Widget.App.Page.ControlRow">
         <item name="android:layout_marginTop">@dimen/model_picker_section_gap</item>
     </style>
+
+    <!-- Memory Search Test screen (owner request, Nov 8 2026). Result cards
+         show memories, so they inherit the memory browser card's look and
+         change only placement inside the page gutter. -->
+    <style name="AppButton.Primary.Inline.SearchTest" parent="AppButton.Primary.Inline">
+        <item name="android:layout_marginTop">@dimen/search_test_action_gap</item>
+    </style>
+    <style name="AppButton.Destructive.Inline.SearchTestPair" parent="AppButton.Destructive.Inline">
+        <item name="android:layout_marginStart">@dimen/search_test_action_pair_gap</item>
+    </style>
+    <style name="Widget.App.SearchTest.ActionRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/search_test_action_gap</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+    <style name="Widget.App.SearchTest.GroupTitle" parent="Widget.App.Field.Label">
+        <item name="android:paddingTop">@dimen/search_test_group_gap</item>
+    </style>
+    <style name="Widget.App.SearchTest.Card" parent="Widget.App.MemoryBrowser.Card">
+        <item name="android:layout_marginHorizontal">@dimen/search_test_card_margin_horizontal</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">@dimen/search_test_card_padding</item>
+    </style>
+    <style name="Widget.App.SearchTest.MemoryText" parent="Widget.App.Row.Title" />
+    <style name="Widget.App.SearchTest.Outcome" parent="Widget.App.Row.Subtitle">
+        <item name="android:paddingTop">@dimen/search_test_card_line_gap</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Widget.App.SearchTest.Detail" parent="Widget.App.Row.Subtitle">
+        <item name="android:paddingTop">@dimen/search_test_card_line_gap</item>
+    </style>
+    <style name="Widget.App.SearchTest.Preview" parent="Widget.App.Field.Box">
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textIsSelectable">true</item>
+        <item name="android:textSize">@dimen/search_test_preview_text_size</item>
+    </style>
 </resources>

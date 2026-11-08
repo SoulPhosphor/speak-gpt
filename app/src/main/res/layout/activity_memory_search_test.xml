@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/title_memory_search_test" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout style="@style/Widget.App.Page.Content">
+
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/memory_search_test_section_message" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/memory_search_test_intro" />
+
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/memory_search_test_test_as" />
+
+                <TextView
+                    android:id="@+id/dropdown_test_as"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill"
+                    android:contentDescription="@string/memory_search_test_test_as" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/Widget.App.SearchTest.GroupTitle"
+                android:labelFor="@+id/field_message"
+                android:text="@string/memory_search_test_message_label" />
+
+            <EditText
+                android:id="@+id/field_message"
+                style="@style/Widget.App.Field.Box"
+                android:importantForAutofill="no"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="2" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_run"
+                style="@style/AppButton.Primary.Inline.SearchTest"
+                android:text="@string/memory_search_test_run" />
+
+            <!-- Result: hidden until a test has run. -->
+            <LinearLayout
+                android:id="@+id/section_result"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.Section.Title"
+                    android:text="@string/memory_search_test_section_result" />
+
+                <TextView
+                    android:id="@+id/text_summary"
+                    style="@style/Widget.App.Section.Hint" />
+
+                <TextView
+                    android:id="@+id/text_mode"
+                    style="@style/Widget.App.Section.Hint" />
+
+                <TextView
+                    android:id="@+id/text_timing"
+                    style="@style/Widget.App.Section.Hint" />
+
+                <TextView
+                    style="@style/Widget.App.Section.Hint"
+                    android:text="@string/memory_search_test_scope_note" />
+
+                <TextView
+                    android:id="@+id/header_sent"
+                    style="@style/Widget.App.SearchTest.GroupTitle"
+                    android:text="@string/memory_search_test_sent_header" />
+
+                <LinearLayout
+                    android:id="@+id/list_sent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/header_not_sent"
+                    style="@style/Widget.App.SearchTest.GroupTitle"
+                    android:text="@string/memory_search_test_not_sent_header" />
+
+                <LinearLayout
+                    android:id="@+id/list_not_sent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <TextView
+                    style="@style/Widget.App.SearchTest.GroupTitle"
+                    android:text="@string/memory_search_test_preview_header" />
+
+                <TextView
+                    android:id="@+id/text_preview"
+                    style="@style/Widget.App.SearchTest.Preview" />
+            </LinearLayout>
+
+            <!-- Search settings -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/memory_search_test_section_settings" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/memory_search_test_settings_hint" />
+
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterInfo="@string/memory_search_minimum_match_info"
+                app:parameterTitle="@string/memory_search_minimum_match" />
+
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/slider_minimum_match"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/memory_search_minimum_match" />
+
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterInfo="@string/memory_search_stand_out_info"
+                app:parameterTitle="@string/memory_search_stand_out" />
+
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/slider_stand_out"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/memory_search_stand_out" />
+
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterInfo="@string/memory_search_keyword_match_info"
+                app:parameterTitle="@string/memory_search_keyword_match" />
+
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/slider_keyword_match"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/memory_search_keyword_match" />
+
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterInfo="@string/memory_search_importance_info"
+                app:parameterTitle="@string/memory_search_importance" />
+
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/slider_importance"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/memory_search_importance" />
+
+            <LinearLayout style="@style/Widget.App.Row.Number">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:labelFor="@+id/field_max_memories"
+                        android:text="@string/memory_search_max_memories" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/memory_search_max_memories_subtitle" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/field_max_memories"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:ems="2"
+                    android:importantForAutofill="no"
+                    android:maxLength="2" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Row.Number">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:labelFor="@+id/field_memory_space"
+                        android:text="@string/memory_search_memory_space" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/memory_search_memory_space_subtitle" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/field_memory_space"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:ems="4"
+                    android:importantForAutofill="no"
+                    android:maxLength="5" />
+            </LinearLayout>
+
+            <!-- Advanced -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/memory_search_section_advanced" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/memory_search_advanced_hint" />
+
+            <LinearLayout style="@style/Widget.App.Row.Number">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:labelFor="@+id/field_small_library"
+                        android:text="@string/memory_search_small_library" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/memory_search_small_library_subtitle" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/field_small_library"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:ems="3"
+                    android:importantForAutofill="no"
+                    android:maxLength="4" />
+            </LinearLayout>
+
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterInfo="@string/memory_search_small_library_match_info"
+                app:parameterTitle="@string/memory_search_small_library_match" />
+
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/slider_small_library_match"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/memory_search_small_library_match" />
+
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterInfo="@string/memory_search_full_strength_info"
+                app:parameterTitle="@string/memory_search_full_strength" />
+
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/slider_full_strength"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/memory_search_full_strength" />
+
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterInfo="@string/memory_search_agreement_info"
+                app:parameterTitle="@string/memory_search_agreement" />
+
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/slider_agreement"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/memory_search_agreement" />
+
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterInfo="@string/memory_search_min_spread_info"
+                app:parameterTitle="@string/memory_search_min_spread" />
+
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/slider_min_spread"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/memory_search_min_spread" />
+
+            <TextView
+                android:id="@+id/text_settings_status"
+                style="@style/Widget.App.Section.Hint" />
+
+            <LinearLayout style="@style/Widget.App.SearchTest.ActionRow">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_use_in_chats"
+                    style="@style/AppButton.Primary.Inline"
+                    android:text="@string/memory_search_use_in_chats" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_reset"
+                    style="@style/AppButton.Destructive.Inline.SearchTestPair"
+                    android:text="@string/memory_search_reset" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

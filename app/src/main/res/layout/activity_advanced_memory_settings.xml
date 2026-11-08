@@ -173,37 +173,25 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="@string/memory_debug_search_hint">
+            <LinearLayout
+                android:id="@+id/row_memory_search_test"
+                style="@style/Widget.App.Row.WithSubtitle">
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_debug_search"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:imeOptions="actionSearch"
-                    android:inputType="text"
-                    android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_debug_search"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/memory_debug_search_button" />
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_memory_search_test" />
 
-            <TextView
-                android:id="@+id/text_debug_search_results"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="12dp"
-                android:textColor="@color/text"
-                android:textIsSelectable="true"
-                android:textSize="14sp" />
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/memory_search_test_row_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:importantForAccessibility="no" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

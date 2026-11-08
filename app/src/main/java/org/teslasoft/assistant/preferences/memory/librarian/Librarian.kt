@@ -587,8 +587,9 @@ class Librarian private constructor(private val appContext: Context) {
      * [scope] carries the seven-category eligibility context; the gates live
      * in the store query (active status, scope categories, the fiction wall,
      * no draft-companion memories) — Phase 4 injection consumes this same
-     * method, so it inherits them. [selectedProjectId] only boosts ranking
-     * (§4 rev 3), it never gates eligibility.
+     * method, so it inherits them. Live search ranks by relevance only
+     * ([LiveRetrieval]); [selectedProjectId] no longer changes live ranking
+     * and never gates eligibility.
      */
     fun search(
         scope: RetrievalScope,
@@ -681,9 +682,14 @@ class Librarian private constructor(private val appContext: Context) {
                 )
                 val missing = candidates.count { !vectors.containsKey(it.memoryId) }
                 if (missing > 0) {
+                    val consequence = if (reconciliation) {
+                        "lexical retrieval over the complete set this turn"
+                    } else {
+                        "those memories use keyword search only this turn"
+                    }
                     MemoryLog.log(
                         appContext, "Librarian", "info",
-                        "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} vector; lexical retrieval over the complete set this turn"
+                        "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} vector; $consequence"
                     )
                     // Self-repairing search: fill the gaps in the background so
                     // later turns can use semantic ranking again.
@@ -720,6 +726,31 @@ class Librarian private constructor(private val appContext: Context) {
         val useImportanceRatings = try {
             Preferences.getPreferences(appContext, "").getUseImportanceRatings()
         } catch (_: Exception) { true }
+        if (!reconciliation) {
+            // Live chat retrieval: meaning and keyword search together, with
+            // the relevance gate and relevance-first ranking (LiveRetrieval).
+            // A missing vector removes only that memory from meaning search.
+            // Scope, project, tag, and freshness boosts play no part here.
+            val queryVector = if (withVector > 0) embedQuery() else null
+            val live = LiveRetrieval.search(
+                query = query,
+                queryVector = queryVector,
+                corpus = corpus.map { LiveRetrieval.Candidate(it.memory, it.vector, it.tags, it.aliases) },
+                params = liveParams(store),
+                limit = topK,
+                useImportanceRatings = useImportanceRatings,
+                includeMandatoryImportance = useImportanceRatings
+            )
+            diag?.invoke(
+                RetrievalDiagnostics(
+                    eligible = candidates.size,
+                    withVector = withVector,
+                    semantic = live.diagnostics.meaningRan,
+                    hasModel = m != null
+                )
+            )
+            return live.ranked
+        }
         val result = searchCore(
             query = query,
             embedQuery = embedQuery,
@@ -741,6 +772,64 @@ class Librarian private constructor(private val appContext: Context) {
             )
         }
         return result
+    }
+
+    /** Live search tuning from the stored policy's `live_search` object.
+     *  Missing or unreadable values keep LiveRetrieval's defaults; stored
+     *  values are clamped to safe ranges by [LiveRetrieval.Params.bounded]. */
+    private fun liveParams(store: MemoryStore): LiveRetrieval.Params =
+        try {
+            SearchTuning.fromPolicyJson(store.getRetrievalPolicyJson()).params
+        } catch (_: Exception) {
+            LiveRetrieval.Params()
+        }
+
+    /** One test message, prepared once so the Memory Search Test screen can
+     *  re-score it instantly while numbers are adjusted. */
+    data class PreparedSearchTest(
+        val query: String,
+        val queryVector: FloatArray?,
+        val corpus: List<LiveRetrieval.Candidate>,
+        val hasModel: Boolean,
+        val embedMillis: Long,
+        val loadMillis: Long
+    )
+
+    /**
+     * Loads the memories [scope] may use and embeds [query], exactly as live
+     * chat search does, without writing anything: no log lines, no vector
+     * repair, no cooldown or mention records. Returns null when the memory
+     * store is not set up yet.
+     */
+    fun prepareSearchTest(scope: RetrievalScope, query: String): PreparedSearchTest? {
+        if (!MemoryStore.isProvisioned(appContext)) return null
+        val started = System.nanoTime()
+        val store = MemoryStore.getInstance(appContext)
+        val candidates = store.activeMemoriesForScope(scope)
+        val aliasesById: Map<String, List<String>> = try {
+            store.activeMemoryTargetNames()
+        } catch (_: Exception) { emptyMap() }
+        val m = ensureModel()
+        val vectors: Map<String, ByteArray> = if (m == null || candidates.isEmpty()) emptyMap() else try {
+            store.embeddingsForMemories(candidates.map { it.memoryId }, RetrievalDocument.effectiveKey(m.tag))
+        } catch (_: Throwable) { emptyMap() }
+        val corpus = candidates.map { mem ->
+            LiveRetrieval.Candidate(
+                mem,
+                vectors[mem.memoryId]?.let { VectorMath.fromBlob(it) },
+                parseTags(mem.tagsJson),
+                aliasesById[mem.memoryId].orEmpty()
+            )
+        }
+        val loadMillis = (System.nanoTime() - started) / 1_000_000
+        var embedMillis = 0L
+        val queryVector = if (m != null && vectors.isNotEmpty()) {
+            val embedStarted = System.nanoTime()
+            val v = try { embedLocked(m, query, isQuery = true) } catch (_: Throwable) { null }
+            embedMillis = (System.nanoTime() - embedStarted) / 1_000_000
+            v
+        } else null
+        return PreparedSearchTest(query, queryVector, corpus, m != null, embedMillis, loadMillis)
     }
 
     /** tags_json -> list; a garbled column degrades to "no tags", never an error. */

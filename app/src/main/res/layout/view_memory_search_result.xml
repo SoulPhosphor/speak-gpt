@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One memory on the Memory Search Test screen: its text, whether it would
+     be sent and why, and the numbers behind that. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.SearchTest.Card">
+
+    <TextView
+        android:id="@+id/text_memory"
+        style="@style/Widget.App.SearchTest.MemoryText" />
+
+    <TextView
+        android:id="@+id/text_outcome"
+        style="@style/Widget.App.SearchTest.Outcome" />
+
+    <TextView
+        android:id="@+id/text_meaning"
+        style="@style/Widget.App.SearchTest.Detail" />
+
+    <TextView
+        android:id="@+id/text_keyword"
+        style="@style/Widget.App.SearchTest.Detail" />
+
+    <TextView
+        android:id="@+id/text_score"
+        style="@style/Widget.App.SearchTest.Detail" />
+</LinearLayout>

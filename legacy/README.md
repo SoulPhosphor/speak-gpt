@@ -34,10 +34,6 @@ not by reading the whole folder.
   detail than is inlined there.
 - **`phase5_rework_work_order.md`** — completed work order for the Phase 5
   memory-structure/browser/pending rework. Built; historical only.
-- **`rag_engine_work_order.md`** — completed work order for the retrieval
-  engine, priority ladder, cooldown, campaign wiring, and the roleplay
-  card + tag system (Stage 3.6). Built; historical only. Still cited by
-  path from a few technical specs describing what was built and why.
 - **`memory_health_round5_phase1_design.md`** — an earlier design pass for
   the same area. Superseded by the build; historical only.
 - **`memory_settings_reorg_spec.md`** — design for a Memory Settings

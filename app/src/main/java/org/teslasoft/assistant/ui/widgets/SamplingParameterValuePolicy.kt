@@ -12,7 +12,18 @@ enum class SamplingParameterSpec(val minimum: Float, val maximum: Float) {
     TEMPERATURE(0f, 2f),
     TOP_P(0f, 1f),
     FREQUENCY_PENALTY(-2f, 2f),
-    PRESENCE_PENALTY(-2f, 2f);
+    PRESENCE_PENALTY(-2f, 2f),
+
+    // Memory search tuning (Memory Search Test screen). Ranges match the
+    // bounds LiveRetrieval.Params.bounded applies to stored values.
+    MEMORY_MINIMUM_MATCH(0f, 0.95f),
+    MEMORY_STAND_OUT(0f, 10f),
+    MEMORY_KEYWORD_MATCH(0.05f, 1f),
+    MEMORY_IMPORTANCE_INFLUENCE(0f, 0.5f),
+    MEMORY_SMALL_LIBRARY_MATCH(0f, 0.95f),
+    MEMORY_FULL_STRENGTH_MATCH(0.01f, 1f),
+    MEMORY_AGREEMENT_BONUS(0f, 1f),
+    MEMORY_MINIMUM_SPREAD(0.01f, 0.5f);
 
     val step: Float get() = SamplingParameterValuePolicy.STEP
 }

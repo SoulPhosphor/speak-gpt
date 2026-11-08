@@ -64,6 +64,27 @@ If the owner says a document is wrong, stale, insulting, misunderstood, or no lo
 
 Never cite `CLAUDE.md`, a plan, a test, existing code, or an earlier AI summary to overrule the owner.
 
+### Old documents are not approvals (owner ruling, November 8 2026)
+
+Many planning documents in this repository were written by AI agents, and
+some record choices the owner never made. A document calling something
+"approved", "binding", "decided", or an "owner ruling" does not prove the
+owner decided it. The rulings in this file are the exception.
+
+- Do not treat a choice in an older document as the owner's decision, and
+  never hold it against the owner.
+- When the owner asks for a fresh look, work from the current code and real
+  evidence, and give your own recommendation. Keep an older idea only when
+  it holds up on its own merits, and say that is why.
+- When an older document's choice matters to the work, present it to the
+  owner as an open question, with your recommendation.
+
+### The owner decides what is worked on (owner ruling, November 8 2026)
+
+Work on what the owner asks for. No roadmap or plan file decides the active
+work or blocks a request. `project-plan.md` is a record of earlier plans,
+not a gate.
+
 ## 3. Approval must come before code
 
 Do not implement a product decision and ask for approval afterward.
@@ -506,6 +527,20 @@ Update `ui-style-adoption.md` in the same approved change that converts, partial
 
 ## 10. Current evidence, not troubleshooting archaeology
 
+### Look at the code yourself (owner ruling, November 8 2026)
+
+When something is reported broken, read the code and measure before asking
+the owner anything.
+
+- Do not ask the owner to diagnose a problem, find a screen, or collect
+  evidence that the code, a test, or a measurement can provide.
+- Audit the whole path involved, not just the first suspicious line. For
+  memory search, that means the search text, the cut-off, the scoring
+  weights and bonuses, the limits, and every filter.
+- Never give the owner directions to a screen or control until you have
+  confirmed in the code and layout exactly where it is and what it is
+  called.
+
 Treat current code and current tests as the source of truth for current implementation.
 
 Use Git history only when it is relevant to understanding a regression, fragile behavior, or the reason for a current constraint.
@@ -719,32 +754,18 @@ Read only the documents relevant to the current task.
 
 Examples:
 
-- **current roadmap and remaining work, any feature: `project-plan.md`**
-  at the repository root — the only active app-wide scheduling plan. Built
-  features are closed unless the owner reports a specific defect.
-- **active Associative Memory / API Memory Assistant repair:** after confirming
-  Feature 1 is active in `project-plan.md`, read
-  `Memory System/ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`. This is the binding
-  technical implementation contract for that repair. Do not substitute an
-  older memory plan, audit, work order, or design package.
-- **approved Memory/Pending UI wording and layout:**
-  `Memory System/memory_controls_and_pending_ui_copy.md`.
-- **approved Associative Memory retrieval and analysis controls:**
-  `Memory System/memory_retrieval_and_analysis_ui_copy.md`.
-- **still-applicable memory behavior rulings:**
-  `Memory System/owner_approved_rules.md`, except where a later approved
-  contract explicitly supersedes an older ruling.
-- **historical Revision 25 decisions:**
-  `Memory System/revision_25_binding_clarifications.md`; use it only where the
-  active Revision 26 contract points to the decision record, never as a
-  competing implementation order.
-- **built roleplay-card/tag reference, when relevant:**
-  `Memory System/reference/roleplay_cards_and_tags_spec.md`.
-- **memory-system history and retired designs:** under
-  `legacy/memory-system-v1.11/`, `legacy/memory-system-repair-history/`, and
-  other `legacy/` memory files. Historical reference only. Never use them as
-  planning input or browse them to enlarge the active repair unless a current
-  regression specifically requires historical context.
+- **memory search and dynamic memory:**
+  `Memory System/dynamic_memory_plan.md`. Written from a fresh look at the
+  code and measurements. Only its dated owner decisions are approvals.
+- **older memory documents, background only, not approvals** (section 2):
+  `project-plan.md`, `Memory System/ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`,
+  `Memory System/memory_controls_and_pending_ui_copy.md`,
+  `Memory System/memory_retrieval_and_analysis_ui_copy.md`,
+  `Memory System/owner_approved_rules.md`,
+  `Memory System/revision_25_binding_clarifications.md`,
+  `Memory System/reference/roleplay_cards_and_tags_spec.md`, and everything
+  under `legacy/`. Use them to understand why something was built a certain
+  way, never to decide for the owner.
 - UI style definitions and composition: `ui-style-guide.md`
 - current UI conversion and legacy status: `ui-style-adoption.md`
 - broad UI redesign work: `ui-redesign-plan.md`
@@ -752,9 +773,8 @@ Examples:
 - local speech work: `whisper-local-plan.md`
 - API speech-to-text (API Voice Service): `api-voice-service-plan.md`
 
-For active memory work, do **not** treat the whole `Memory System/` directory
-as a cumulative specification. Follow the named active contract and only the
-supporting files it explicitly requires.
+The feature plans above describe earlier designs. Confirm with the owner
+before treating any choice in them as decided (section 2).
 
 These documents support the owner's current direction. They do not overrule it.
 
