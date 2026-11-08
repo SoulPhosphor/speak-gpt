@@ -101,6 +101,14 @@ object ModelCleanupPolicy {
         )
     }
 
+    /** True only when this check conclusively found [target] missing: its
+     *  profile's catalog was read and the model is neither listed nor
+     *  undetermined. A warning kept from an earlier check never counts. */
+    fun confirmedMissing(target: ModelIdentity, checks: Map<String, EndpointCatalogCheck>): Boolean {
+        val check = checks[target.endpointId] as? EndpointCatalogCheck.Checked ?: return false
+        return target.modelId !in check.modelIds && target.modelId !in check.indeterminateModelIds
+    }
+
     /** Remove status for identities no longer referenced anywhere locally. */
     fun prune(
         report: ModelCleanupReport,

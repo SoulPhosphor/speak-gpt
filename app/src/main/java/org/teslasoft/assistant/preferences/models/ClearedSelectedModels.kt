@@ -41,11 +41,14 @@ class ClearedSelectedModels internal constructor(private val prefs: SharedPrefer
             context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         )
 
-        /** The jobs whose selected model is in [unavailable]. */
+        /** The jobs whose selected model this check conclusively found
+         *  missing. A profile that could not be checked, or a model whose
+         *  availability could not be established, clears nothing. */
         fun findUnavailable(
             selected: Map<ModelPickerScope, ModelIdentity>,
-            unavailable: Set<ModelIdentity>
-        ): List<Entry> = selected.filter { it.value in unavailable }.map { Entry(it.key, it.value) }
+            checks: Map<String, EndpointCatalogCheck>
+        ): List<Entry> = selected.filter { ModelCleanupPolicy.confirmedMissing(it.value, checks) }
+            .map { Entry(it.key, it.value) }
     }
 
     /** Clears each listed job's model (and its own routing) and remembers the

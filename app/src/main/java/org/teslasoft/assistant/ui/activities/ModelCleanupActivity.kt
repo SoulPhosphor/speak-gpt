@@ -273,7 +273,7 @@ class ModelCleanupActivity : SettingsPageActivity() {
                     reportStore.save(report)
                     // A job's selected model that is unavailable is cleared,
                     // so the user chooses a new one (owner ruling, Nov 8 2026).
-                    val cleared = ClearedSelectedModels.findUnavailable(references.selectedTargets, report.unavailable)
+                    val cleared = ClearedSelectedModels.findUnavailable(references.selectedTargets, checks)
                     ClearedSelectedModels.get(this@ModelCleanupActivity)
                         .clearAndRemember(this@ModelCleanupActivity, cleared)
                     val textEndpointIds = references.textTargets.map { it.endpointId }.toSet()

@@ -27,18 +27,36 @@ class ClearedSelectedModelsTest {
     private val summary = ModelIdentity("ep-1", "model-s")
     private val scanner = ModelIdentity("ep-1", "model-m")
 
+    private val selected = mapOf(ModelPickerScope.SUMMARIZER to summary, ModelPickerScope.MEMORY_SCANNER to scanner)
+
     @Test
-    fun onlyAJobWhoseSelectedModelIsUnavailableIsCleared() {
+    fun onlyAJobWhoseSelectedModelThisCheckFoundMissingIsCleared() {
         val found = ClearedSelectedModels.findUnavailable(
-            mapOf(ModelPickerScope.SUMMARIZER to summary, ModelPickerScope.MEMORY_SCANNER to scanner),
-            setOf(scanner, ModelIdentity("ep-1", "other"))
+            selected, mapOf("ep-1" to EndpointCatalogCheck.Checked(setOf("model-s")))
         )
         assertEquals(listOf(ClearedSelectedModels.Entry(ModelPickerScope.MEMORY_SCANNER, scanner)), found)
     }
 
     @Test
     fun nothingIsClearedWhenEveryModelIsAvailable() {
-        assertTrue(ClearedSelectedModels.findUnavailable(mapOf(ModelPickerScope.SUMMARIZER to summary), emptySet()).isEmpty())
+        assertTrue(ClearedSelectedModels.findUnavailable(
+            selected, mapOf("ep-1" to EndpointCatalogCheck.Checked(setOf("model-s", "model-m")))
+        ).isEmpty())
+    }
+
+    @Test
+    fun aProfileThatCouldNotBeCheckedClearsNothing() {
+        assertTrue(ClearedSelectedModels.findUnavailable(selected, mapOf("ep-1" to EndpointCatalogCheck.Unchecked)).isEmpty())
+        assertTrue(ClearedSelectedModels.findUnavailable(selected, emptyMap()).isEmpty())
+    }
+
+    @Test
+    fun aModelWhoseAvailabilityIsUndeterminedIsNotCleared() {
+        val found = ClearedSelectedModels.findUnavailable(
+            selected,
+            mapOf("ep-1" to EndpointCatalogCheck.Checked(setOf("model-s"), indeterminateModelIds = setOf("model-m")))
+        )
+        assertTrue(found.isEmpty())
     }
 
     @Test
