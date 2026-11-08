@@ -1372,30 +1372,35 @@ include (owner question, D47):**
 - If more memories are checked than the limit allows, the screen says so and
   asks the user to uncheck some, instead of the app silently choosing.
 
-## D.13 Simplified direction for the later phases (2026-11-08, recommendation)
+## D.13 Direction for the later phases (owner ruling, 2026-11-08)
 
-Following the owner's concerns about complexity, keeping track, and models
-that over-mention memories.
+**Design principle (owner):** build the memory system the owner wants,
+designed for capable models. Do not simplify it around a weaker model's
+habits.
 
-**For each memory, the user decides at most:**
+- Per-model adjustments go through the existing **Model Rules**, which are
+  sent only for a chosen model and removed when the model is gone. For a
+  model that recaps history or cannot handle many memories, a rule changes
+  its behavior behind the scenes. The system itself stays the same for
+  everyone else.
+- If a model needs fewer memories, not just different instructions, Model
+  Rules may later gain per-model memory limits. That is an extension to
+  propose when it is needed.
+
+**For each memory, the user can set:**
 - **Always:** sent with every message, chosen with the checkboxes on the
   Always tab, up to the limit;
 - **an optional date:** an event date, shown to the AI as upcoming or past,
   and/or a "past after" date, after which the memory is treated as past and
   leaves Always (D49);
-- **whether it fades:** retires after the fade time without being
-  discussed, using the app-wide speed or custom days (D45, D49).
+- **fading:** retires after the fade time without being discussed, using
+  the app-wide speed or custom days (D45, D49);
+- **how it may be brought up** (D48, open). The owner noted this is not a
+  yes-or-no matter: it depends on the conversation, the relationship, and
+  the fact itself.
 
-**No per-memory May Bring Up switch (D48).** Whether to raise something
-depends on the conversation, and models follow such switches unreliably.
-Some models recap the user's whole history every turn even when told not
-to. The reliable controls are:
-
-- **send less:** only relevant search results plus the small Always set;
-- **teach how to use what is sent:** the four ways in D.10 (D41);
-- **per-model instructions:** this app already has Model Rules, which are
-  sent only for a chosen model. A rule such as "do not recap the user's
-  history" can be set for the specific models that misbehave.
+**All the time:** the memory-use instruction (D.10, D41) teaches the AI to
+use what it is given naturally.
 
 **Keeping track without extra work (D50):**
 - one review place, Pending, with labelled reasons;
@@ -1415,7 +1420,8 @@ to. The reliable controls are:
 6. Later: the background reviewer (D51), with its own prompt.
 
 **After these are in place,** revisit how search picks memories, using the
-test screen and the test conversations.
+test screen and the test conversations. Model Rules adjustments come last,
+per model, once the full system works.
 
 ## D.8 Data, backup, privacy
 
@@ -1482,7 +1488,7 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D45 | How fast do May Bring Up memories fade, and can the user choose? | One app-wide choice in Memory Handling Preferences. Suggested options: 2 weeks, 1 month, 3 months, 6 months. Default 1 month |
 | D46 | What is the always-sent tab called, and what does it mean? | **Decided, 2026-11-08:** the dropdown entry is "Always". Always memories are sent with every message |
 | D47 | Should an auto mode let the embedding model pick which always-sent memories to include? | No. Ordinary search already does this every message; checkboxes only |
-| D48 | Should each memory have a May Bring Up switch? | **Recommended: no** (owner concern, 2026-11-08). Whether to raise something depends on the conversation, and models follow such switches unreliably. Instead: control what is sent (search plus the small Always set), teach how to use memories (D41), and use the existing Model Rules for models with specific habits |
+| D48 | How does the user say how a memory may be brought up? | Open. Not a yes-or-no switch (owner). Recommended: a per-memory choice of "Only if I bring it up", "When it fits" (the default), or "Ask me first". It sits on top of the memory-use instruction (D41). Weaker models are handled through Model Rules, not by removing the choice (owner ruling) |
 | D49 | Fade timing, and an optional "past after" date per memory? | The owner wants custom fade timing, and a per-memory date after which the memory becomes a past event. Recommended: preset choices plus a custom number of days, and an optional "past after" date on any memory |
 | D50 | How are expiring and passed memories reviewed without overwhelming the user? | One review place: Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, the sensible default happens (a fading memory retires; a passed event is kept as past). Reviewing is optional, and one tap renews |
 | D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | Later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
