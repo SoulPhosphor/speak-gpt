@@ -416,9 +416,55 @@ review, not a duplicate.
 ## 10. Search repair: why it hands over almost everything
 
 The owner reports that search hands the AI nearly every memory instead of
-the relevant ones. The code and a measurement confirm it. There are four
+the relevant ones. The code and a measurement confirm it. There are five
 causes, and they add up. Cause 4 is the main reason +3 memories are sent
 with nearly every message.
+
+### 10.0 Recommended design
+
+This is the design recommended from a fresh look at the code and the
+measurements, not a repair of the old design. Where it keeps something the
+app already has, it is because that part holds up, not because an older
+document asked for it.
+
+**How search should work for each message:**
+
+1. **Decide which memories are allowed** in this chat (companion, project,
+   roleplay). This is the only job scope does. Scope no longer changes
+   ranking.
+2. **Search two ways at once**, using the user's latest message:
+   - meaning search with the on-phone embedding model;
+   - keyword search with BM25, through SQLite's built-in full-text search
+     (FTS5). The app already uses FTS5 for chat search, so it works with the
+     encrypted database. Tags and the names of linked companions, worlds,
+     and characters are part of the searchable text.
+3. **Merge the two result lists**, so a memory found both ways ranks
+   highest.
+4. **Keep only memories that clearly stand out** from the rest for this
+   message. When nothing stands out, nothing is sent.
+5. **Order by relevance.** Importance is the only bonus (with fading
+   strength added later, section 6), and it is capped so it can never beat
+   a clearly more relevant memory. A relevant +3 is always included.
+6. **Send up to the memory limit and size budget.** Never fill slots just
+   because they are empty.
+7. **Send every relevant memory each time it is relevant.** No cooldown
+   (cause 5).
+
+**What is removed and why:**
+
+| Removed | Why |
+|---|---|
+| Fixed 0.30 cut-off | Sits inside the noise for this model (cause 2) |
+| Keyword search as an all-or-nothing backup | It matched every memory, and one missing embedding switched the whole message to it (cause 1) |
+| Recent turns glued onto the search | Raised every memory's score (cause 3) |
+| Scope, freshness, project, and tag bonuses | Outweighed relevance (cause 4). Scope still decides which memories are allowed. Tags and names are found by keyword search instead. "Recently edited" does not mean "matters now"; fading (section 6) measures that properly |
+| The 10-message memory cooldown | Hid relevant memories from the AI (cause 5) |
+| A separate Strict / Balanced / Broad setting | The test screen tunes the real number. A second control for the same thing adds confusion (decision D25) |
+
+**What is kept:** the on-phone embedding model, scope rules for which
+memories each chat may use, the importance scale with the owner's +3 rule,
+the memory limit and size budget, and lorebook duplicate removal. All of
+these are tunable on the test screen.
 
 ### 10.1 How this was measured (2026-11-08)
 
@@ -498,6 +544,20 @@ with nearly every message.
   straight to the top, and +3 is also added beyond the 8. This is the
   "+3 is just handed over" behavior.
 
+### 10.5a Cause 5: the cooldown hides relevant memories from the AI
+
+- **Where:** `Enforcer.kt`, `COOLDOWN_TURNS = 10`, using the
+  `injection_cooldowns` table. Card entries have the same cooldown.
+- **What happens:** after a memory is sent, it is blocked for the next 10
+  messages in that chat.
+- **Why that is wrong:** the memory text is not kept in the chat history.
+  `ChatActivity` places the memory block just before the newest message
+  and rebuilds it every message, so on the next message the AI no longer
+  sees it. The cooldown assumes "the conversation still carries it", but
+  it doesn't. While the user keeps talking about the same topic, the AI
+  loses the fact for 9 messages, unless its own earlier reply happened to
+  repeat it.
+
 ### 10.6 The combined effect
 
 The default limit is 8 memories (`DefaultOperatingData.kt`, `top_k`) and
@@ -535,14 +595,13 @@ effectively everything.
    - meaning-search similarity;
    - keyword score, and which words matched;
    - relevance relative to this message (the step 6 scale);
-   - every bonus separately: importance, freshness, scope, selected
-     project, tags;
+   - the importance bonus (and fading strength, once section 6 is built);
    - the final score and its rank;
    - whether it passed the relevance gate, and if not, by how much it
      missed;
    - whether it would be sent, and if not, why: below the gate, over the
-     memory limit, over the character budget, cooldown, or duplicate of a
-     lorebook entry;
+     memory limit, over the character budget, not allowed in this chat's
+     scope, or duplicate of a lorebook entry;
    - whether it was added as a relevant +3 beyond the limit.
 
    **For the whole search, it shows:**
@@ -561,7 +620,7 @@ effectively everything.
    being guessed by whoever writes the code.
    - **Every tuning number is adjustable:**
      - the relevance gate's strength;
-     - each bonus cap: importance, freshness, scope, selected project, tags;
+     - the importance bonus and its cap;
      - the +3 boost;
      - the balance between meaning and keyword search;
      - the weight given to recent turns;
@@ -584,7 +643,7 @@ effectively everything.
      alongside each result, and both the chat and this screen use the same
      functions. The screen never recalculates scores on its own, so what it
      shows is what the chat actually does.
-   - **Read-only.** Testing never records cooldown, never counts as a
+   - **Read-only.** Testing never counts as a
      mention for fading (section 6.3), and never changes a memory.
    - It opens from Advanced Memory Settings, in the Debug section (owner
      decision D24). The old Debug search box
@@ -599,6 +658,11 @@ effectively everything.
    memory ("the", "user") score close to nothing, and rare, specific words
    (names, places, "Kotlin") score high. A memory then needs a minimum
    keyword score, not just one shared word.
+   - Use SQLite FTS5 and its built-in `bm25()` ranking in the memory
+     database, rather than hand-written scoring. `ChatSearchStore` already
+     uses FTS5 with the encrypted database.
+   - Index each memory's content, tags, and linked target names
+     (companions, worlds, characters, campaigns, projects).
 
 4. **End the all-or-nothing fallback.** In `searchCore`, run meaning search
    over every memory that has a current vector, and keyword search over all
@@ -608,8 +672,10 @@ effectively everything.
 
 5. **Search with the user's message on its own.**
    - The main search uses only the user's latest message.
-   - Recent turns get their own separate search with a lower weight. The
-     two result lists are merged by each memory's best score.
+   - Recent turns get their own separate search with a lower weight, and
+     only when the latest message is short or refers back ("what about
+     that?", "yes", "tell me more"). The two result lists are merged by each
+     memory's best score.
    - `Librarian.searchForReconciliation` already searches several text
      windows separately and merges them, for the Memory Assistant. Live
      search can use the same approach.
@@ -637,15 +703,18 @@ effectively everything.
 7. **Make relevance decide, and bonuses only nudge.**
    - Measure each memory's relevance on the same relative scale as the
      gate in step 6: how far it stands above this message's average score.
-   - Express importance, freshness, scope, selected-project, and tag bonuses
-     as fractions of that scale, capped so that all bonuses together are
-     smaller than a clear relevance lead.
+   - Remove the scope, freshness, selected-project, and tag bonuses from
+     ranking (`Librarian.retrievalBoost`, `SCOPE_BOOSTS`,
+     `PROJECT_SELECTED_BOOST`, the tag bonus, and the recency weight).
+     Scope stays only as the filter that decides which memories a chat may
+     use.
+   - Importance is the only bonus. It is expressed as a fraction of the
+     relevance scale and capped, so it is smaller than a clear relevance
+     lead.
    - **Property to test:** if memory A is more relevant than memory B by
-     more than the cap, A ranks above B, whatever their ratings, freshness,
-     or scope. The Memory Assistant's search uses the same ranking code,
-     so it gets the same guarantee.
-   - Tune the cap values on the test set, and correct the `SCOPE_BOOSTS`
-     comment.
+     more than the cap, A ranks above B, whatever their ratings. The Memory
+     Assistant's search uses the same ranking code, so it gets the same
+     guarantee.
 
 8. **Merge meaning and keyword results** with reciprocal rank fusion, a
    simple, standard way to combine two rankings. A memory found by both
@@ -669,15 +738,21 @@ effectively everything.
      example "hey how are you"). A relevant +3 memory is sent even when 8
      more relevant memories fill the slots.
 
-11. **Variety.** Stop near-identical memories from filling several slots,
+11. **Remove the memory cooldown** (cause 5). A relevant memory is sent
+    every message it is relevant. The only skip is when the same memory is
+    already in this request, for example in the briefing (section 8.5).
+    Card entries have the same cooldown and the same flaw; the same fix is
+    recommended for them.
+
+12. **Variety.** Stop near-identical memories from filling several slots,
    using MMR (maximal marginal relevance, the standard method).
 
-12. **Optional local re-ranker:** a small second model on the phone that
+13. **Optional local re-ranker:** a small second model on the phone that
     reorders the top results. It costs no tokens, but it is another
     download and adds a short delay per message. Decide only after the test
-    set shows whether steps 3–11 are enough (decision D21).
+    set shows whether steps 3–12 are enough (decision D21).
 
-13. **Model quality check.** The int8 model is already in the app's model
+14. **Model quality check.** The int8 model is already in the app's model
     list. Run it against the test set too. If it scores clearly better than
     q4, raise that with the owner.
 
