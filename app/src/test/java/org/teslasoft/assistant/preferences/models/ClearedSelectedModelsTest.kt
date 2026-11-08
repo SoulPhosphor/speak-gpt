@@ -60,6 +60,14 @@ class ClearedSelectedModelsTest {
     }
 
     @Test
+    fun aPartialCatalogClearsNothing() {
+        val found = ClearedSelectedModels.findUnavailable(
+            selected, mapOf("ep-1" to EndpointCatalogCheck.Checked(setOf("model-s"), complete = false))
+        )
+        assertTrue(found.isEmpty())
+    }
+
+    @Test
     fun anUnreadableListReadsAsNothingCleared() {
         val prefs = FakeSharedPreferences()
         prefs.edit().putString("entries", "not json").apply()

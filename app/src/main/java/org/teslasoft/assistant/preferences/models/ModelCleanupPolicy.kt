@@ -22,7 +22,10 @@ sealed class EndpointCatalogCheck {
         val modelIds: Set<String>,
         /** Individual saved ids whose availability could not be established.
          *  Used for OpenRouter alias lookups after a conclusive catalog. */
-        val indeterminateModelIds: Set<String> = emptySet()
+        val indeterminateModelIds: Set<String> = emptySet(),
+        /** False when the catalog said more pages follow. Warnings still use
+         *  it, but nothing is cleared automatically from a partial list. */
+        val complete: Boolean = true
     ) : EndpointCatalogCheck()
     data object Unchecked : EndpointCatalogCheck()
 }
@@ -102,10 +105,11 @@ object ModelCleanupPolicy {
     }
 
     /** True only when this check conclusively found [target] missing: its
-     *  profile's catalog was read and the model is neither listed nor
+     *  profile's whole catalog was read and the model is neither listed nor
      *  undetermined. A warning kept from an earlier check never counts. */
     fun confirmedMissing(target: ModelIdentity, checks: Map<String, EndpointCatalogCheck>): Boolean {
         val check = checks[target.endpointId] as? EndpointCatalogCheck.Checked ?: return false
+        if (!check.complete) return false
         return target.modelId !in check.modelIds && target.modelId !in check.indeterminateModelIds
     }
 

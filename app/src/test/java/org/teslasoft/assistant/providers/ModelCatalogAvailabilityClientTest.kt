@@ -67,6 +67,16 @@ class ModelCatalogAvailabilityClientTest {
         }
     }
 
+    @Test fun aPartialTextOnlyCatalogStillWarnsButIsMarkedIncomplete() {
+        val catalog = "\"data\":[{\"id\":\"text/other\"}]"
+        for (body in listOf("{$catalog,\"has_more\":true}", "{$catalog,\"next_cursor\":\"next\"}")) {
+            val result = check(speech = emptySet()) { 200 to body } as EndpointCatalogCheck.Checked
+            assertFalse(result.complete)
+        }
+        val whole = check(speech = emptySet()) { 200 to "{$catalog}" } as EndpointCatalogCheck.Checked
+        assertTrue(whole.complete)
+    }
+
     @Test fun failedEmptyMalformedAndPartialCatalogsCannotEstablishAbsence() {
         val catalog = "\"data\":[{\"id\":\"text/other\"}]"
         val bodies = listOf("", "bad", "[]", "{\"data\":[]}", "{$catalog,\"has_more\":true}",
