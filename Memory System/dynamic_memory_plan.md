@@ -1147,20 +1147,22 @@ For each memory, at most three things:
   wording must say so.
 - **This is awareness inside a chat, not a notification.**
 
-## D.4 Fading (proposed for removal, D34)
+## D.4 Fading (owner decision D34, 2026-11-08)
 
-The second review found that automatic fading of undated May Bring Up
-memories would drop exactly the follow-ups people want. For example, "did
-you hear back about the job?" matters most after a long silence.
+**Decided:** an undated May Bring Up memory fades on its own over time, with
+these controls:
 
-**Recommendation:** no automatic fading. An undated May Bring Up memory stays
-due until the user turns permission off or the matter is settled (the user
-edits or supersedes it). Repetition is handled by "already discussed in this
-chat" (D.5), not by withholding.
-
-If fading is ever wanted, it is a per-memory choice the owner approves.
-"Discussed" would then follow the conversation, through carry-over, and
-never the AI's own replies alone. Search is never affected either way (D9).
+- **Fading is visible.** The Memory Browser marks which memories are
+  fading, which are not, and which have already faded, so the user can
+  look them up. That visibility is part of the user's control over memory.
+- **Faded memories can be reinstated** from the archive area (D.11).
+- **"Discussed" follows the conversation:** carry-over keeps a memory on
+  topic, not single messages, and never the AI's replies alone (B.5). The
+  briefing sending a memory never counts.
+- **Search is unaffected** (D9).
+- **Still open (D43):** exactly what "faded" does. It either only stops
+  being brought up unprompted, while staying findable by search, or it
+  moves the memory to Archived, out of use until reinstated.
 
 ## D.5 Dates
 
@@ -1188,6 +1190,14 @@ never the AI's own replies alone. Search is never affected either way (D9).
   timing gets no date (D14).
 - **Changed plans** go through the existing edit, supersede, and Possible
   Match paths.
+- **Event state, rather than more fading rules** (research, F.2): a one-time
+  event moves through three states:
+  - **upcoming:** "Are you nervous about Tuesday?";
+  - **happened, with the outcome unknown:** "How did Tuesday go?";
+  - **settled:** the outcome is saved, and the memory stops being raised.
+
+  The date moves an event from upcoming to happened. Settling it is the
+  user's edit, or a Memory Assistant suggestion through Pending (D42).
 
 ## D.6 The standing briefing
 
@@ -1267,6 +1277,58 @@ Inside jokes need both: the joke itself, and the relationship it lives in.
 - **The trauma rule still holds:** a painful subject never becomes a joke or
   a vibe line unless the user writes it that way.
 
+## D.10 How the AI uses what it is given (research, F.2)
+
+The most useful published guidance is about behavior, not search: people
+value natural continuity and dislike announcements of remembering, stale
+details, and badly timed or overly broad references. Published research
+also found that filtering memories after retrieval does not reliably stop
+irrelevant references, repetition, or the AI agreeing too readily with the
+user.
+
+**Proposal (D41):** the instructions sent with memories teach four ways to
+use a memory:
+
+1. **ignore it** when it does not help right now;
+2. **use it silently** to shape the reply, without narrating the past;
+3. **mention it** only when it is the answer, or continuity the user would
+   expect;
+4. **ask first**, with one easy-to-decline question, when it might help but
+   permission is unclear.
+
+It should also never announce "I remember…", and never raise a sensitive
+memory the user did not bring up.
+
+- **Could help soon:** this instruction applies to ordinary searched
+  memories too, so it could improve current chats before any later phase.
+- **The exact text is model-facing behavior** and needs the owner's approval
+  before it is written.
+- **Testing:** check the final replies for irrelevant references,
+  repetition, and over-agreement, not only which memories were retrieved.
+  Judging replies with an AI costs tokens, so it is a small, occasional set.
+
+## D.11 The archive area (owner request, 2026-11-08)
+
+**Already built:**
+- Archive and Restore on each memory's menu;
+- archived memories are not used in chats;
+- Delete is permanent.
+
+**Proposed (D44):**
+- **One archive area in the Memory Browser,** where the user can find and
+  reinstate anything taken out of use:
+  - memories they archived;
+  - faded memories (D.4);
+  - memories they deleted, if the setting below is on.
+- **Deleted memories go to the archive first:** a setting, which applies to
+  the user's own deletes. With it on, deleting moves a memory to the archive,
+  and "Delete Permanently" is available from there. With it off, deleting
+  stays permanent, as today. The default is decision D44.
+- **Reinstating** returns a memory to normal use, and for a faded memory,
+  restores its May Bring Up eligibility.
+- **Nothing in the archive is sent to the AI** unless D43 decides that faded
+  memories stay searchable.
+
 ## D.8 Data, backup, privacy
 
 - New columns are added. The retired `always_load` column and
@@ -1318,13 +1380,17 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D30 | Which memories may the standing briefing bring up unprompted? | Only memories the user has marked May Bring Up. Dates and fading then decide when. Never volunteer a topic just because it was discussed a lot. The independent review strongly supports this |
 | D31 | What does the user decide per memory? | Only Always Know, May Bring Up, and an optional date. Fading, windows, and scores stay internal (review, 2026-11-08) |
 | D32 | How is repetition of a due May Bring Up memory controlled? | **Corrected (2026-11-08):** never by withholding it. It is sent every message while due, marked "already discussed" once it comes up, and the AI is told not to raise it again |
-| D34 | Should undated May Bring Up memories fade automatically? | No. They stay due until the user turns permission off or settles the matter. Fading, if ever wanted, becomes a per-memory choice |
+| D34 | Should undated May Bring Up memories fade automatically? | **Decided, 2026-11-08: yes,** with Memory Browser markers for fading, not fading, and faded, and with faded memories reinstatable from the archive area (D.4, D.11) |
 | D35 | Should the type name be sent with memories of a "playful" type, such as Inside Joke? | Yes, for types the user marks playful, so the AI knows to use them lightly |
 | D36 | Should each companion have a short, editable "vibe" note that is always sent? | Yes, using the existing unused relationship-notes field. Memory Assistant suggestions only through Pending |
 | D37 | If a whole request is too large for the model, what is trimmed first? | May-mention items, then background, then the lowest-ranked search results. Picked memories are never trimmed |
 | D38 | Should a companion know what happened in your last few chats with it, through short summaries built from the existing per-chat conversation summaries? | Worth designing. It is the main thing ChatGPT does that this app lacks for continuity ("how did the dentist go yesterday?"). The same permission rules apply: it is background knowledge, not something to raise unprompted |
 | D39 | Should the AI know how long it has been since the last chat with this companion (in days, not times)? | Yes, as part of Phase 2's date awareness, under the same sharing setting |
 | D40 | Should a companion keep its own short reflections or journal about the relationship? | Later and optional. It makes a companion feel alive, but it should come only after the vibe note, and be visible and editable |
+| D41 | Should the instructions sent with memories teach the four ways of using them (ignore, use silently, mention, ask first)? | Yes. It is the cheapest, highest-value improvement and could help current chats. The owner approves the exact text first |
+| D42 | Should one-time events track upcoming, happened, and settled? | Yes, instead of more fading rules. Settling is a user edit or a Memory Assistant suggestion through Pending |
+| D43 | When a May Bring Up memory fades, does it stay searchable (it only stops being brought up), or move to Archived (out of use until reinstated)? | Stay searchable; it only stops being brought up, and is listed as faded in the archive area so it can be reinstated. Archiving it would also hide it when the user raises the subject |
+| D44 | Should deleting a memory move it to the archive first, with Delete Permanently from there? What is the default? | Yes, as a setting. Default on, so a mistaken delete can be undone |
 | D33 | What does the Memory Assistant propose beyond the memory text? | Dates only, at first. Always Know and May Bring Up stay the user's choices until their behavior is established |
 
 ---
@@ -1378,6 +1444,55 @@ the owner or another reviewer can check them.
 - **Inside jokes:** no published research addresses them directly. The
   closest ideas are relationship-event memory and summaries of the
   relationship, as in D.9.
+
+## F.2 Frontier-lab and academic research (supplied by the owner's second reviewer, verified 2026-11-08)
+
+- **Anthropic, "The components of agent memory"** (6 November 2026):
+  - **Layers:** a searchable transcript log, memory notes, organized
+    knowledge such as wikis, and a small injected context loaded every
+    session.
+  - **"Dreaming":** an offline process that checks the notes against the
+    original transcripts and corrects them.
+  - **The top, always-present layer has to stay small.** In one test, 10
+    focused files did far better than 413 stale ones, and bigger memory was
+    not automatically better.
+  - Source: [anthropic.com/research/components-of-agent-memory](https://www.anthropic.com/research/components-of-agent-memory).
+  - **Lesson:** keep Always Know small, and let a Memory Assistant pass
+    correct and update memories through Pending.
+- **OpenAI, "Dreaming"** (4 June 2026, confirmed through news coverage
+  because OpenAI's page could not be read directly):
+  - a background process synthesizes past conversations and keeps memory
+    current as circumstances change, for example a planned trip becoming a
+    completed one;
+  - OpenAI notes its memory summary page may not show everything it
+    remembers.
+  - Sources: [PCWorld](https://www.pcworld.com/article/3158111/chatgpt-new-dreaming-feature-makes-it-way-better-at-remembering-you.html);
+    [Tom's Guide](https://www.tomsguide.com/ai/chatgpts-new-memory-builds-a-profile-of-you-on-its-own-and-openai-admits-you-cant-see-all-of-it).
+  - **Lessons:**
+    - track an event's state (D.5) rather than adding more fading rules;
+    - unlike ChatGPT, keep everything the app remembers visible.
+- **"Before Bringing It Up: When and How AI Companions Should Use Memory"**
+  (University of Toronto, arXiv 2610.09470, October 2026):
+  - interviews with 14 companion users: they valued continuity but objected
+    to stale, mistimed, or overly broad uses;
+  - it proposes four modes for using a memory: ignore, use silently,
+    mention explicitly, or ask first;
+  - **caveat:** results were judged by AI models, not people, and were
+    inconclusive for GPT and Claude.
+  - Source: [arXiv 2610.09470](https://arxiv.org/html/2610.09470v2).
+  - **Lesson:** D.10.
+- **"OP-Bench: Benchmarking Over-Personalization"** (EMNLP 2026):
+  - three failures: irrelevant references, repetition, and sycophancy
+    (agreeing too readily);
+  - agents over-attend to memories even when they are not needed;
+  - the post-processing fixes tested gave only limited improvement.
+  - Source: [ACL Anthology 2026.emnlp-main.1168](https://aclanthology.org/2026.emnlp-main.1168/).
+  - **Lesson:** good retrieval is not enough. Instruct how to use memories
+    (D.10), and test the final replies.
+
+**Design goal these support:** the AI carries shared experiences forward,
+recognizes when circumstances change, and uses what it knows naturally,
+without announcing what it remembers or dragging in unrelated memories.
 
 ## F.1 Companion apps and open-source tools people like (2026-11-08)
 
