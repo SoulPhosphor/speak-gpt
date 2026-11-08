@@ -23,6 +23,10 @@ If you are a coding agent assigned the current memory work, read `project-plan.m
 5. **`reference/`** — built-system specifications that may be consulted only when the active repair actually touches that subsystem.
 6. **`legacy/` at repository root** — historical plans, audits, old schemas, old prompts, and retired design packages. They are not implementation instructions.
 
+## Proposed, not scheduled
+
+**`dynamic_memory_plan.md`** — proposed design for dated memories, fading memories, an optional today's-date setting, a standing briefing, and search-quality repairs. It is **not approved and not scheduled**. Do not build from it until the owner approves its decisions and `project-plan.md` makes it active.
+
 ## Active repair in one line
 
 ```text
