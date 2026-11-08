@@ -2,6 +2,8 @@
 
 **Current authority map — 2026-08-07**
 
+> **Superseded on 2026-11-08 by the owner's rulings in `CLAUDE.md` (sections 2 and 14).** The documents in this folder are background only, not approvals, and do not decide what is worked on. The current memory search and dynamic memory plan is `dynamic_memory_plan.md`. The authority map below is kept only as a record of how the folder was organized.
+
 ## ACTIVE WORK
 
 The one active Associative Memory implementation contract is:
