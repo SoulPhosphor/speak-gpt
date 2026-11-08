@@ -1419,9 +1419,37 @@ habits.
   leaves Always (D49);
 - **fading:** retires after the fade time without being discussed, using
   the app-wide speed or custom days (D45, D49);
-- **how it may be brought up** (D48, open). The owner noted this is not a
-  yes-or-no matter: it depends on the conversation, the relationship, and
-  the fact itself.
+- **how it may be brought up** (D48, D53): a dropdown on every memory, not
+  only Always ones. The options:
+  - **Only if I bring it up:** the AI never raises it on its own;
+  - **When it fits:** the default. The AI uses judgment, guided by the
+    memory-use instruction (D41);
+  - **Ask me first:** the AI may offer, in a way that is easy to decline;
+  - **Custom:** a written condition, for example "when I express low
+    self-esteem" for a memory about winning an award.
+
+**Custom conditions also make a memory findable (D53).** The condition is
+searched by meaning, alongside the memory's own text. So the award memory is
+found when the user says "I'm such a failure", even though the award has
+nothing in common with that message's words. The AI receives the memory with
+its condition, so it knows why it was given. The test screen shows "matched
+by its condition".
+
+- **Measured with the app's model (2026-11-08):**
+  - "I'm such a failure, I can't do anything right" and "I bombed the
+    presentation and I feel stupid" matched a low-self-esteem condition;
+  - "My grandma passed away" matched a grief condition;
+  - "My driving test is tomorrow" matched a nervous-before-a-test condition;
+  - "hey how are you", a cooking question, and the cat message matched no
+    condition.
+- **Caution 1, overlap:** emotional conditions overlap. The failure message
+  matched the grief condition too, so related conditions can fire together.
+  Specific wording works best, and the test screen shows what fires.
+- **Caution 2, serious distress:** a message showing serious distress ("nobody
+  would miss me") also matched the low-self-esteem condition. A
+  condition-triggered memory supplies context, not a substitute for the AI's
+  own care in a crisis. The memory-use instruction (D41) should say so, with
+  the exact text approved by the owner.
 
 **All the time:** the memory-use instruction (D.10, D41) teaches the AI to
 use what it is given naturally.
@@ -1512,11 +1540,12 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D45 | How fast do May Bring Up memories fade, and can the user choose? | One app-wide choice in Memory Handling Preferences. Suggested options: 2 weeks, 1 month, 3 months, 6 months. Default 1 month |
 | D46 | What is the always-sent tab called, and what does it mean? | **Decided, 2026-11-08:** the dropdown entry is "Always". Always memories are sent with every message |
 | D47 | Should an auto mode let the embedding model pick which always-sent memories to include? | No. Ordinary search already does this every message; checkboxes only |
-| D48 | How does the user say how a memory may be brought up? | Open. Not a yes-or-no switch (owner). Recommended: a per-memory choice of "Only if I bring it up", "When it fits" (the default), or "Ask me first". It sits on top of the memory-use instruction (D41). Weaker models are handled through Model Rules, not by removing the choice (owner ruling) |
+| D48 | How does the user say how a memory may be brought up? | **Decided, 2026-11-08:** a dropdown on every memory: Only if I bring it up, When it fits (the default), Ask me first, or Custom (a written condition). Weaker models are handled through Model Rules (owner ruling) |
 | D49 | Fade timing, and an optional "past after" date per memory? | The owner wants custom fade timing, and a per-memory date after which the memory becomes a past event. Recommended: preset choices plus a custom number of days, and an optional "past after" date on any memory |
 | D50 | How are expiring and passed memories reviewed without overwhelming the user? | One review place: Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, the sensible default happens (a fading memory retires; a passed event is kept as past). Reviewing is optional, and one tap renews |
 | D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | Later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
 | D52 | How does the Always tab handle more checked memories than the limit? | **Owner's design, 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
+| D53 | Should a custom condition also make the memory findable by search? | Yes. The condition is searched by meaning alongside the memory text, as measured on the app's model. The AI is told the condition, and the test screen shows when a memory matched by its condition |
 | D33 | What does the Memory Assistant propose beyond the memory text? | Dates only, at first. Always Know and May Bring Up stay the user's choices until their behavior is established |
 
 ---
