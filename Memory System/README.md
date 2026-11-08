@@ -25,7 +25,7 @@ If you are a coding agent assigned the current memory work, read `project-plan.m
 
 ## Proposed, not scheduled
 
-**`dynamic_memory_plan.md`** — proposed design for dated memories, fading memories, an optional today's-date setting, a standing briefing, and search-quality repairs. It is **not approved and not scheduled**. Do not build from it until the owner approves its decisions and `project-plan.md` makes it active.
+**`dynamic_memory_plan.md`** — proposed design for dated memories, fading memories, an optional today's-date setting, a standing briefing, and search-quality repairs. Section 10 (search repair) is the measured diagnosis of why search sends nearly every memory, with the exact code changes; the owner has ordered it first. The rest is **proposed, not approved**. Build only the part the owner tells you to build.
 
 ## Active repair in one line
 

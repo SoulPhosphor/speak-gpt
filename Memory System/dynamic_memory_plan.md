@@ -2,17 +2,18 @@
 
 **Written 2026-11-08 at the owner's request.**
 
-## Status: proposed, not approved, not scheduled
+## Status
 
-- **Nothing in this plan is approved for implementation.** Every choice in
-  section 15 needs the owner's decision first. Recommendations are proposals
-  only.
-- **Scheduling belongs to `project-plan.md`.** This plan becomes buildable
-  only when the owner adds it there. Until then, do not prepare, refactor
-  toward, or partially build anything in it.
+- **The owner decides what is built and when.** Build only the part of this
+  plan the owner tells you to build. No roadmap file overrides that.
+- **Search repair (section 10) comes first** (owner decision D23,
+  2026-11-08). It is written as concrete changes to the current code.
+- **Everything else is proposed, not approved.** Every choice in section 15
+  needs the owner's decision first. Recommendations are proposals only.
 - **It does not change `ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md` (Revision 26).**
-  The parts that change the Memory Assistant come after that repair
-  (Feature 1) is complete.
+  The parts of this plan that change the Memory Assistant must be built on
+  top of that repair, not alongside it, because both change the same
+  Memory Assistant code.
 - **Names in this plan are planning names, not on-screen wording.** Terms
   such as "lasting", "fading", "dated", "strength" and "briefing" identify
   ideas in this document. Every label, explanation, and message the user
@@ -269,7 +270,7 @@ is model-facing behavior and needs approval (decision D13).
 ### 7.4 How dates get set
 
 - **By hand:** a date control in the memory editor (section 9).
-- **By the Memory Assistant** (after Feature 1 is complete):
+- **By the Memory Assistant** (built on top of the Revision 26 repair):
   - When a conversation states a date, or says something like "tomorrow",
     the Memory Assistant includes the date in its proposal. The user sees it
     in Pending and can change or remove it before saving, like any other
@@ -406,73 +407,158 @@ review, not a duplicate.
 - All new labels, explanations, and messages need owner-approved wording,
   recorded in a copy specification before they are built.
 
-## 10. Making search find the right memories
+## 10. Search repair: why it hands over almost everything
 
-The owner reports that the built search does not find what it should. This
-part addresses that, in this order.
+The owner reports that search hands the AI nearly every memory instead of
+the relevant ones. The code and a measurement confirm it. There are three
+causes, and they add up.
 
-### 10.1 First, check what the phone is actually doing
+### 10.1 How this was measured (2026-11-08)
 
-If the embedding model is not installed, or **any single** memory lacks a
-current vector, every message falls back to the weak keyword matching
-(section 3). The existing assembly view reports which kind of search ran. This is
-checked on the device before anything else, because it may be the real
-cause.
+- The app's default embedding model (EmbeddingGemma 300M, q4) was run off
+  the phone with the same prompt prefixes, the same 256-dimension
+  truncation, and the same normalization as `OnnxEmbeddingModel.kt`.
+- 20 sample personal memories, written the way the Memory Assistant writes
+  them ("The user ..."), and 6 sample messages, each with its expected
+  memories.
+- This is a small sample. It shows the direction and size of the problem.
+  Final numbers are tuned on the test set (10.6, step 1).
 
-### 10.2 A test set
+### 10.2 Cause 1: the keyword backup matches every memory
 
-A list of sample messages, each paired with the memories that should come
-back. It is run whenever search changes. It is the only way to know whether
-a change helped and what the match cut-off should be. It is built before
-any tuning.
+- **Where:** `Librarian.rankLexical` and `lexicalTokens`, with
+  `MIN_TERM_LENGTH = 3`.
+- **What happens:** one shared word of three or more letters makes a memory
+  eligible. "the", "and", "you", "was", "had" all count. Memories are
+  written "The user ...", so any message that contains "the" matches every
+  memory.
+- **Measured:** 20 of 20 memories matched for 3 of the 6 messages on their
+  own, and 20 of 20 matched for all 6 messages once recent turns were added.
+- **When the backup runs:** whenever the embedding model is missing, and
+  also whenever **any single** memory lacks a current vector, because
+  `Librarian.searchCore` only uses meaning search when every memory has
+  one. That happens after adding or editing a memory, until the background
+  repair finishes, and after a model change.
+- **Result:** the 8 slots are filled by importance and recency, not
+  relevance, and every +3 memory is added on top.
 
-### 10.3 Hybrid search
+### 10.3 Cause 2: the meaning-search cut-off sits inside the noise
 
-Run meaning search and keyword search on every message, and merge the two
-ranked lists with reciprocal rank fusion (a simple, standard way to combine
-rankings). Meaning search misses exact names, numbers, and invented words.
-Keyword search catches them. This also ends the all-or-nothing fallback in
-10.1. No tokens.
+- **Where:** `Librarian.MIN_SIMILARITY = 0.30`. Its own code comment calls
+  it a conservative guess to be tuned on the device. It was never tuned.
+- **Measured, message alone:**
+  - unrelated memories scored 0.10 to 0.39 (middle value 0.25);
+  - relevant memories scored 0.28 to 0.49 (middle value 0.39);
+  - at 0.30, 6 memories were right and 22 were wrong;
+  - "hey how are you", which should bring back nothing, passed 4
+    memories.
 
-### 10.4 Better keyword scoring (BM25)
+### 10.4 Cause 3: recent turns glued onto the search raise every score
 
-BM25 is the standard formula that gives rare, specific words more weight
-than common ones. It replaces plain word counting. No tokens.
+- **Where:** `Enforcer.kt` builds the search text as the user's message
+  plus the last 4 turns (up to 200 characters each), from
+  `ChatActivity.recentTurnsContext`, all turned into one vector.
+- **Measured:** adding one short recent-turn passage about the user's week
+  raised unrelated scores as high as 0.43. 9 to 14 of the 20 memories then
+  passed 0.30 for every message, including "hey how are you" (9 of 20).
+  Recent turns that talk about the user's life pull every personal memory
+  upward.
 
-### 10.5 Separate searches
+### 10.5 The combined effect
 
-Search with the user's latest message and with the recent turns separately,
-then merge. Today they are glued into one vector, so long recent turns can
-drown out what the user just asked. The Memory Assistant path already has a
-merge helper for this. No tokens.
+The default limit is 8 memories (`DefaultOperatingData.kt`, `top_k`) and
+6,000 characters. The limit is a maximum, but because most of the library
+passes the gate, all 8 slots are filled every message, mostly with
+unrelated memories. +3 memories are added beyond the 8
+(`ImportanceRanking.includeMandatory`). With a small library, that is
+effectively everything.
 
-### 10.6 Variety
+### 10.6 Required changes, in order
 
-Stop near-identical memories from filling every slot. The standard method is
-MMR (maximal marginal relevance). No tokens.
+1. **Build the test set first.**
+   - Sample messages, each paired with the memories that should come back,
+     including messages that should bring back nothing.
+   - Store the real model's vectors for these as test fixtures. The model
+     cannot run inside the unit tests, but the ranking functions
+     (`searchCore`, `rank`, `rankLexical`) are pure and can be tested with
+     stored vectors.
+   - Every later step must improve the test set's results, or it is not
+     kept.
 
-### 10.7 Match Strictness
+2. **Fix keyword search.** Replace word-overlap counting in `rankLexical`
+   with BM25, the standard keyword formula. Words found in nearly every
+   memory ("the", "user") score close to nothing, and rare, specific words
+   (names, places, "Kotlin") score high. A memory then needs a minimum
+   keyword score, not just one shared word.
 
-The approved `Memory Match Strictness` control (`Strict`, `Balanced`,
-`Broad`) replaces the fixed 0.30 cut-off. Its levels are tuned against the
-test set. Confirm with the owner whether this is built in Feature 1 or here,
-so the two plans don't both build it.
+3. **End the all-or-nothing fallback.** In `searchCore`, run meaning search
+   over every memory that has a current vector, and keyword search over all
+   memories, then merge the two ranked lists (hybrid search, step 6). A
+   missing vector removes only that one memory from meaning search, not the
+   whole turn.
 
-### 10.8 Optional local re-ranker
+4. **Search with the user's message on its own.**
+   - The main search uses only the user's latest message.
+   - Recent turns get their own separate search with a lower weight. The
+     two result lists are merged by each memory's best score.
+   - `Librarian.searchForReconciliation` already searches several text
+     windows separately and merges them, for the Memory Assistant. Live
+     search can use the same approach.
 
-A small second model on the phone re-orders the top results more carefully.
-No tokens, but it is another download and adds a short delay per message.
-Decide only after the test set shows whether it helps (decision D21).
+5. **Replace the fixed 0.30 cut-off with a rule relative to each message's
+   own scores.** A memory must stand clearly above the other memories'
+   scores for this message, not just above a fixed number. Measured on the
+   same sample:
 
-### 10.9 Excluded: techniques that cost tokens
+   | Rule | Right | Wrong | Missed |
+   |---|---|---|---|
+   | Today: fixed 0.30 | 6 | 22 | 2 |
+   | Fixed 0.38 | 4 | 1 | 4 |
+   | At least 2 standard deviations above this message's average score | 4 | 0 | 4 |
 
-Rewriting the query with an AI, writing a "pretend answer" to search with
-(HyDE), and paid AI re-ranking all add a paid call to every message. They
-are not part of this plan.
+   - The relative rule sent nothing for "hey how are you", which is
+     correct.
+   - The memories it missed (the garden for cooking, the job for an
+     interview, the "Android chat app" for an app crash) are the ones
+     keyword and hybrid search recover. For example, "app" appears in both
+     the crash message and the chat-app memory.
+   - The approved `Memory Match Strictness` levels (`Strict`, `Balanced`,
+     `Broad`) become three strengths of this rule. Final values are tuned on
+     the test set. Raw numbers are never shown to the user, as the approved
+     copy requires.
 
-### 10.10 Relationship to Revision 26
+6. **Merge meaning and keyword results** with reciprocal rank fusion, a
+   simple, standard way to combine two rankings. A memory found by both
+   ranks highest.
 
-The Memory Assistant repair reuses the Librarian's ranking. Every change
+7. **Sending nothing is a valid result.** When nothing passes, no memories
+   are sent. The memory limit stays a maximum, never a quota to fill.
+
+8. **Keep the +3 rule as it is.** A +3 memory is still added only after it
+   passes the relevance gate. Once the gate works, +3 stops flooding the
+   prompt.
+
+9. **Variety.** Stop near-identical memories from filling several slots,
+   using MMR (maximal marginal relevance, the standard method).
+
+10. **Optional local re-ranker:** a small second model on the phone that
+    reorders the top results. It costs no tokens, but it is another
+    download and adds a short delay per message. Decide only after the test
+    set shows whether steps 2–9 are enough (decision D21).
+
+11. **Model quality check.** The int8 model is already in the app's model
+    list. Run it against the test set too. If it scores clearly better than
+    q4, raise that with the owner.
+
+### 10.7 Excluded: techniques that cost tokens
+
+Rewriting the message with an AI before searching, writing a "pretend
+answer" to search with (HyDE), and paid AI re-ranking all add a paid call
+to every message. They are not part of this plan.
+
+### 10.8 Relationship to Revision 26
+
+The Memory Assistant repair uses the same Librarian ranking. Every change
 here must keep Revision 26's tests passing, including its "relevance comes
 first" property.
 
@@ -522,11 +608,10 @@ steps counts as done on its own.
 4. **Fading:** the strength math, mention detection, and last-mentioned
    tracking.
 5. **Briefing:** assembly, limits, settings, and the assembly view.
-6. **Memory Assistant proposals** for dates, aging, and core. Only after
-   Feature 1 is complete.
+6. **Memory Assistant proposals** for dates, aging, and core. Built on top
+   of the Revision 26 repair.
 
-Search quality (section 10) is its own sequence, test set first. When it is
-scheduled is decision D23.
+Search repair (section 10) comes before all of the above (decision D23).
 
 New code goes in its own files (for example a new folder under
 `preferences/memory/`), with only small hookups in the chat screen, per
@@ -547,7 +632,8 @@ New code goes in its own files (for example a new folder under
 - **Backup round-trip:** every new field survives.
 - **Briefing:** scope rules, limits, no double sending with search, and
   stable ordering.
-- **Search:** the test set (section 10) runs as automated tests.
+- **Search:** the test set (section 10.6) runs as automated tests,
+  including messages that must bring back nothing.
 
 ### 14.2 On-device proof
 
@@ -589,11 +675,11 @@ proposal only.
 | D20 | Which browser filters and sorts are added? | Upcoming dates, briefing members, sort by strength |
 | D21 | Should a local re-ranker be added? | Decide after the test set shows a need |
 | D22 | Does date sharing ship on its own, before the rest? | Yes, if the owner wants it sooner; it doesn't depend on the rest |
-| D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | **Decided by the owner, 2026-11-08: search quality is fixed first.** When it starts is still set by `project-plan.md` |
+| D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | **Decided by the owner, 2026-11-08: search is fixed first.** |
 
 ## 16. Relationship to other documents
 
-- **`project-plan.md`** controls whether and when this is built.
+- **The owner** directs what is built and when.
 - **`ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`** (Revision 26) is unchanged.
   Memory Assistant changes in this plan wait for it.
 - **`owner_approved_rules.md`** keeps controlling scope, importance, and
