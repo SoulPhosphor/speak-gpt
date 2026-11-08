@@ -18,6 +18,7 @@ package org.teslasoft.assistant.ui.activities
 
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -37,7 +38,6 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
@@ -75,9 +75,7 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
     private var librarianModels: LinearLayout? = null
     private var btnRebuildIndex: MaterialButton? = null
     private var textIndexStatus: TextView? = null
-    private var fieldDebugSearch: TextInputEditText? = null
-    private var btnDebugSearch: MaterialButton? = null
-    private var textDebugSearchResults: TextView? = null
+    private var rowMemorySearchTest: View? = null
 
     // Per-model download jobs so a second tap cancels an in-flight download.
     private val downloadJobs = HashMap<String, Job>()
@@ -108,9 +106,7 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
         librarianModels = findViewById(R.id.librarian_models)
         btnRebuildIndex = findViewById(R.id.btn_rebuild_index)
         textIndexStatus = findViewById(R.id.text_index_status)
-        fieldDebugSearch = findViewById(R.id.field_debug_search)
-        btnDebugSearch = findViewById(R.id.btn_debug_search)
-        textDebugSearchResults = findViewById(R.id.text_debug_search_results)
+        rowMemorySearchTest = findViewById(R.id.row_memory_search_test)
     }
 
     @Suppress("DEPRECATION")
@@ -151,7 +147,9 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
 
         buildLibrarianRows()
         btnRebuildIndex?.setOnClickListener { rebuildIndex() }
-        btnDebugSearch?.setOnClickListener { runDebugSearch() }
+        rowMemorySearchTest?.setOnClickListener {
+            startActivity(Intent(this, MemorySearchTestActivity::class.java))
+        }
     }
 
     /* ------------------------------ status ------------------------------ */
@@ -330,56 +328,6 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
                 }
             } catch (_: Exception) { getString(R.string.memory_index_none) }
             runOnUiThread { textIndexStatus?.text = text }
-        }.start()
-    }
-
-    private fun runDebugSearch() {
-        val query = fieldDebugSearch?.text?.toString()?.trim().orEmpty()
-        if (query.isEmpty()) return
-        textDebugSearchResults?.text = ""
-        Thread {
-            val rendered = try {
-                if (!MemoryStore.isProvisioned(this)) getString(R.string.memory_debug_search_empty)
-                else {
-                    val store = MemoryStore.getInstance(this)
-                    val sb = StringBuilder()
-
-                    // Semantic memory ranking when a model is installed — this is
-                    // what the enforcer will actually inject. Keyword-only until
-                    // then, so it may be empty; the broad inspector below always
-                    // runs so the user can still find anything they stored.
-                    val librarian = Librarian.getInstance(this)
-                    if (librarian.hasUsableModel()) {
-                        val hits = librarian.search(
-                            org.teslasoft.assistant.preferences.memory.RetrievalScope.NONE, query, 10
-                        )
-                        if (hits.isNotEmpty()) {
-                            sb.append(getString(R.string.memory_debug_semantic_header)).append("\n")
-                            hits.forEach {
-                                sb.append(getString(
-                                    R.string.memory_debug_search_result_fmt, it.score, it.memory.content
-                                )).append("\n\n")
-                            }
-                        }
-                    }
-
-                    // Broad inspector across every record type (not just
-                    // memories) — finds companions like "Storyteller", entities,
-                    // characters and worlds too.
-                    val all = store.debugSearchAll(query, 20)
-                    if (all.isNotEmpty()) {
-                        sb.append(getString(R.string.memory_debug_all_header)).append("\n")
-                        all.forEach { (label, snippet) ->
-                            sb.append(label).append("\n").append(snippet).append("\n\n")
-                        }
-                    }
-
-                    if (sb.isBlank()) getString(R.string.memory_debug_search_empty) else sb.toString().trim()
-                }
-            } catch (e: Exception) {
-                getString(R.string.memory_operation_failed, e.message ?: e.javaClass.simpleName)
-            }
-            runOnUiThread { textDebugSearchResults?.text = rendered }
         }.start()
     }
 

@@ -537,8 +537,11 @@ Steps run in this order.
 
 ### Step 1.4: The search test screen
 
-- **Stop point first:** the screen's labels, explanations, and layout need
-  owner approval before the screen is built (D24). Present them, then wait.
+- **Built (2026-11-08).** The owner said to build it directly and asked
+  that it be easy to use and understand, so its wording was written to that
+  standard rather than approved line by line. Saved test cases from real use
+  and the previous-exchange field (for carry-over) are not built yet; they
+  follow with carry-over (step 1.12).
 - **Change:**
   - A new screen, opened from Advanced Memory Settings in the Debug
     section. The old Debug search box (`runDebugSearch`, its field, button,

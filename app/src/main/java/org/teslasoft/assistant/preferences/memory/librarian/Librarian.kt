@@ -777,19 +777,59 @@ class Librarian private constructor(private val appContext: Context) {
     /** Live search tuning from the stored policy's `live_search` object.
      *  Missing or unreadable values keep LiveRetrieval's defaults; stored
      *  values are clamped to safe ranges by [LiveRetrieval.Params.bounded]. */
-    private fun liveParams(store: MemoryStore): LiveRetrieval.Params {
-        val raw = HashMap<String, Double?>()
+    private fun liveParams(store: MemoryStore): LiveRetrieval.Params =
         try {
-            val obj = store.getRetrievalPolicyJson()?.let { JSONObject(it).optJSONObject("live_search") }
-            if (obj != null) {
-                val keys = obj.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    raw[key] = (obj.opt(key) as? Number)?.toDouble()
-                }
-            }
-        } catch (_: Exception) { /* unreadable policy: defaults */ }
-        return LiveRetrieval.Params.bounded(raw).first
+            SearchTuning.fromPolicyJson(store.getRetrievalPolicyJson()).params
+        } catch (_: Exception) {
+            LiveRetrieval.Params()
+        }
+
+    /** One test message, prepared once so the Memory Search Test screen can
+     *  re-score it instantly while numbers are adjusted. */
+    data class PreparedSearchTest(
+        val query: String,
+        val queryVector: FloatArray?,
+        val corpus: List<LiveRetrieval.Candidate>,
+        val hasModel: Boolean,
+        val embedMillis: Long,
+        val loadMillis: Long
+    )
+
+    /**
+     * Loads the memories [scope] may use and embeds [query], exactly as live
+     * chat search does, without writing anything: no log lines, no vector
+     * repair, no cooldown or mention records. Returns null when the memory
+     * store is not set up yet.
+     */
+    fun prepareSearchTest(scope: RetrievalScope, query: String): PreparedSearchTest? {
+        if (!MemoryStore.isProvisioned(appContext)) return null
+        val started = System.nanoTime()
+        val store = MemoryStore.getInstance(appContext)
+        val candidates = store.activeMemoriesForScope(scope)
+        val aliasesById: Map<String, List<String>> = try {
+            store.activeMemoryTargetNames()
+        } catch (_: Exception) { emptyMap() }
+        val m = ensureModel()
+        val vectors: Map<String, ByteArray> = if (m == null || candidates.isEmpty()) emptyMap() else try {
+            store.embeddingsForMemories(candidates.map { it.memoryId }, RetrievalDocument.effectiveKey(m.tag))
+        } catch (_: Throwable) { emptyMap() }
+        val corpus = candidates.map { mem ->
+            LiveRetrieval.Candidate(
+                mem,
+                vectors[mem.memoryId]?.let { VectorMath.fromBlob(it) },
+                parseTags(mem.tagsJson),
+                aliasesById[mem.memoryId].orEmpty()
+            )
+        }
+        val loadMillis = (System.nanoTime() - started) / 1_000_000
+        var embedMillis = 0L
+        val queryVector = if (m != null && vectors.isNotEmpty()) {
+            val embedStarted = System.nanoTime()
+            val v = try { embedLocked(m, query, isQuery = true) } catch (_: Throwable) { null }
+            embedMillis = (System.nanoTime() - embedStarted) / 1_000_000
+            v
+        } else null
+        return PreparedSearchTest(query, queryVector, corpus, m != null, embedMillis, loadMillis)
     }
 
     /** tags_json -> list; a garbled column degrades to "no tags", never an error. */

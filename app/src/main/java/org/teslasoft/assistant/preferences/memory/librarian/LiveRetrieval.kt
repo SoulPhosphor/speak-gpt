@@ -156,6 +156,8 @@ object LiveRetrieval {
         val similarity: Double?,
         val standout: Double?,
         val keywordStrength: Double,
+        /** The message's informative words found in this memory. */
+        val matchedTerms: List<String>,
         val passedMeaning: Boolean,
         val passedKeyword: Boolean,
         val relevance: Double,
@@ -223,7 +225,8 @@ object LiveRetrieval {
                 sim >= params.similarityFloor && standout!! >= params.standoutMin
             }
             val doc = docs.getValue(id)
-            val kw = (queryTerms.filter { it in doc }.sumOf { idf[it] ?: 0.0 } / idfMax).coerceIn(0.0, 1.0)
+            val matched = queryTerms.filter { it in doc }
+            val kw = (matched.sumOf { idf[it] ?: 0.0 } / idfMax).coerceIn(0.0, 1.0)
             val passedKeyword = kw >= params.keywordMin
 
             val strengthRange = (params.fullStrengthSimilarity - params.similarityFloor).coerceAtLeast(1e-6)
@@ -241,6 +244,7 @@ object LiveRetrieval {
                 similarity = sim,
                 standout = standout,
                 keywordStrength = kw,
+                matchedTerms = matched.sorted(),
                 passedMeaning = passedMeaning,
                 passedKeyword = passedKeyword,
                 relevance = relevance,

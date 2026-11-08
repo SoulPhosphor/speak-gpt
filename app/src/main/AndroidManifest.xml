@@ -477,6 +477,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.MemorySearchTestActivity"
+            android:exported="false"
+            android:label="@string/title_memory_search_test" />
+
+        <activity
             android:name=".ui.activities.AdvancedMemorySettingsActivity"
             android:exported="false"
             android:label="@string/title_advanced_memory_settings"

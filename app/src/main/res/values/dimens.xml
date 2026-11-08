@@ -343,4 +343,13 @@
     <dimen name="model_picker_provider_chevron_size">16dp</dimen>
     <dimen name="model_picker_provider_chevron_gap">2dp</dimen>
     <dimen name="quick_settings_text_link_min_height">40dp</dimen>
+
+    <!-- Memory Search Test screen -->
+    <dimen name="search_test_action_gap">16dp</dimen>
+    <dimen name="search_test_action_pair_gap">12dp</dimen>
+    <dimen name="search_test_group_gap">16dp</dimen>
+    <dimen name="search_test_card_margin_horizontal">0dp</dimen>
+    <dimen name="search_test_card_padding">12dp</dimen>
+    <dimen name="search_test_card_line_gap">4dp</dimen>
+    <dimen name="search_test_preview_text_size">14sp</dimen>
 </resources>
