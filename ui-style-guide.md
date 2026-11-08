@@ -1436,8 +1436,9 @@ button box, for an action that should read as a link. After a successful save,
 `SaveIconFlash.flashText` turns its words green for the shared success time.
 `Widget.App.QuickSettings.TextLink` aligns it with the Quick Settings card
 segments. Current users: Save Parameters to Favorite / Recent Model Settings
-above Streaming in Quick Settings, and the same link above the default
-parameters on Summarizer Settings (`Widget.App.PlainParameter.TextLink`).
+above Streaming in Quick Settings, the same link above the parameters on
+Summarizer Settings and Advanced Memory Settings, and Reset to Recommended
+below them on Advanced Memory Settings (`Widget.App.PlainParameter.TextLink`).
 
 ## Plain parameter list
 
@@ -1455,8 +1456,12 @@ with no card box around them (owner ruling, Nov 8 2026).
 `plain_parameter_inset` matches the slider's own inset, so titles, checkbox
 and link line up with the slider. Spacing lives in `plain_parameter_*`.
 Current users: Model Settings (the model name uses
-`Widget.App.ModelParameters.ModelName`) and the Summarizer's default
-parameters on Summarizer Settings. Quick Settings keeps its card segments.
+`Widget.App.ModelParameters.ModelName`), and the Summarizer's and Memory
+Scanner's parameters, which share `layout/view_dedicated_model_parameters.xml`
+on Summarizer Settings and Advanced Memory Settings. Quick Settings keeps its
+card segments.
+
+A control that cannot be used yet is faded to `disabled_control_alpha`.
 
 ## Compact action popup
 

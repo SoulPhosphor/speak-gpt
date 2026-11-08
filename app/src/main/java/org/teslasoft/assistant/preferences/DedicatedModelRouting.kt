@@ -24,37 +24,90 @@ import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 
 /**
- * The Summarizer's provider routing, kept apart from the chat's.
+ * A background job's selected model and its provider routing (the Summarizer
+ * or the Memory Scanner), kept apart from the chat's and from each other.
  *
- * It follows the chat's rules with the Summarizer's own lists: a Summarizer
- * favorite keeps its routing on the favorite; a model that is not a Summarizer
- * favorite, or a provider tried that is not one of the favorite's favorite
- * providers, is kept as the Summarizer's own routing for its selected model
- * and on that model's Summarizer Recent entry. Nothing here ever makes a
- * model a favorite, and nothing here reads or changes a chat favorite.
+ * It follows the chat's rules with the job's own lists: a favorite keeps its
+ * routing on the favorite; a model that is not one of the job's favorites, or
+ * a provider tried that is not one of the favorite's favorite providers, is
+ * kept as the job's own routing for its selected model and on that model's
+ * Recent entry. Nothing here ever makes a model a favorite, and nothing here
+ * reads or changes a chat favorite.
  */
-object SummarizerModelRouting {
+class DedicatedModelRouting private constructor(val scope: ModelPickerScope) {
 
-    private val gson = Gson()
+    companion object {
+        val SUMMARIZER = DedicatedModelRouting(ModelPickerScope.SUMMARIZER)
+        val MEMORY_SCANNER = DedicatedModelRouting(ModelPickerScope.MEMORY_SCANNER)
 
-    private fun favorites(context: Context) =
-        FavoriteModelsPreferences.getPreferences(context, ModelPickerScope.SUMMARIZER)
+        fun of(scope: ModelPickerScope): DedicatedModelRouting = when (scope) {
+            ModelPickerScope.SUMMARIZER -> SUMMARIZER
+            ModelPickerScope.MEMORY_SCANNER -> MEMORY_SCANNER
+            ModelPickerScope.CHAT -> throw IllegalArgumentException("Chat routing belongs to ChatModelRouting")
+        }
 
-    private fun recents(context: Context) = RecentModelsPreferences(context, ModelPickerScope.SUMMARIZER)
+        private val gson = Gson()
+    }
 
     private fun prefs(context: Context) = Preferences.getPreferences(context, "")
 
-    /** The Summarizer's own routing for this exact model, or null. */
+    private fun favorites(context: Context) = FavoriteModelsPreferences.getPreferences(context, scope)
+
+    private fun recents(context: Context) = RecentModelsPreferences(context, scope)
+
+    /* ---------------------------- The selected model ---------------------------- */
+
+    fun endpointId(context: Context): String = prefs(context).let {
+        if (scope == ModelPickerScope.SUMMARIZER) it.getSummarizerEndpointId() else it.getArchivistEndpointId()
+    }
+
+    fun modelId(context: Context): String = prefs(context).let {
+        if (scope == ModelPickerScope.SUMMARIZER) it.getSummarizerModel() else it.getArchivistModel()
+    }
+
+    /** Makes [modelId] on [endpointId] the job's model. Routing is set
+     *  separately (see [clear], [use]). */
+    fun select(context: Context, endpointId: String, modelId: String) {
+        val prefs = prefs(context)
+        if (scope == ModelPickerScope.SUMMARIZER) {
+            prefs.setSummarizerEndpointId(endpointId)
+            prefs.setSummarizerModel(modelId)
+        } else {
+            prefs.setArchivistEndpointId(endpointId)
+            prefs.setArchivistModel(modelId)
+        }
+    }
+
+    private fun storedOverride(prefs: Preferences): String =
+        if (scope == ModelPickerScope.SUMMARIZER) prefs.getSummarizerRoutingOverride()
+        else prefs.getMemoryScannerRoutingOverride()
+
+    private fun hasStoredOverride(prefs: Preferences): Boolean =
+        if (scope == ModelPickerScope.SUMMARIZER) prefs.hasSummarizerRoutingOverride()
+        else prefs.hasMemoryScannerRoutingOverride()
+
+    private fun storeOverride(prefs: Preferences, json: String) {
+        if (scope == ModelPickerScope.SUMMARIZER) prefs.setSummarizerRoutingOverride(json)
+        else prefs.setMemoryScannerRoutingOverride(json)
+    }
+
+    private fun legacyRoutingType(prefs: Preferences): String =
+        if (scope == ModelPickerScope.SUMMARIZER) prefs.getSummarizerRoutingType()
+        else prefs.getArchivistRoutingType()
+
+    /* ---------------------------- Routing ---------------------------- */
+
+    /** The job's own routing for this exact model, or null. */
     fun overrideFor(context: Context, endpointId: String, modelId: String): FavoriteModelObject? {
         migrate(context)
-        val json = prefs(context).getSummarizerRoutingOverride()
+        val json = storedOverride(prefs(context))
         if (json.isBlank()) return null
         return decode(json)?.takeIf { it.endpointId == endpointId && it.modelId == modelId }
     }
 
-    /** The routing the Summarizer uses for this model: its own routing when
-     *  it has one, otherwise the Summarizer favorite's. Null when neither
-     *  exists (the provider chooses automatically). */
+    /** The routing the job uses for this model: its own routing when it has
+     *  one, otherwise its favorite's. Null when neither exists (the provider
+     *  chooses automatically). */
     fun effective(context: Context, endpointId: String, modelId: String): FavoriteModelObject? {
         if (endpointId.isBlank() || modelId.isBlank()) return null
         val favorite = favorites(context).getFavorite(modelId, endpointId)
@@ -64,8 +117,8 @@ object SummarizerModelRouting {
         return result
     }
 
-    /** The routing to show when editing this model's providers: what the
-     *  Summarizer uses, else what the model last used from its Recent entry. */
+    /** The routing to show when editing this model's providers: what the job
+     *  uses, else what the model last used from its Recent entry. */
     fun forEditing(context: Context, endpointId: String, modelId: String): FavoriteModelObject? {
         effective(context, endpointId, modelId)?.let { return it }
         if (endpointId.isBlank() || modelId.isBlank()) return null
@@ -73,8 +126,8 @@ object SummarizerModelRouting {
         return FavoriteModelObject(modelId, endpointId).also { recent.copyRoutingTo(it) }
     }
 
-    /** The providers the user marked Favorite for this model: on its
-     *  Summarizer favorite when it is one, otherwise on its Recent entry. */
+    /** The providers the user marked Favorite for this model: on the job's
+     *  favorite when it is one, otherwise on its Recent entry. */
     fun favoriteProviders(context: Context, endpointId: String, modelId: String): List<String> {
         val favorite = favorites(context).getFavorite(modelId, endpointId)
         return favorite?.favoriteProviders
@@ -90,21 +143,20 @@ object SummarizerModelRouting {
         }
     }
 
-    /** The Summarizer goes back to the favorite's routing (or Automatic). */
+    /** The job goes back to the favorite's routing (or Automatic). */
     fun clear(context: Context) {
         migrate(context)
-        prefs(context).setSummarizerRoutingOverride("")
+        storeOverride(prefs(context), "")
     }
 
-    /** The Summarizer uses [routing] without changing any favorite. */
+    /** The job uses [routing] without changing any favorite. */
     fun use(context: Context, routing: FavoriteModelObject) {
         migrate(context)
-        prefs(context).setSummarizerRoutingOverride(encode(routing))
+        storeOverride(prefs(context), encode(routing))
     }
 
-    /** Saves a routing choice: on the Summarizer favorite unless it is a
-     *  trial; otherwise as the Summarizer's own routing and on the Recent
-     *  entry. */
+    /** Saves a routing choice: on the job's favorite unless it is a trial;
+     *  otherwise as the job's own routing and on the Recent entry. */
     fun save(context: Context, routing: FavoriteModelObject) {
         val favorites = favorites(context)
         val favorite = favorites.getFavorite(routing.modelId, routing.endpointId)
@@ -115,21 +167,21 @@ object SummarizerModelRouting {
         } else {
             use(context, routing)
             if (routing.routingType == FavoriteModelObject.ROUTING_ONLY) {
-                RecentOnlyProvidersStore.get(context, ModelPickerScope.SUMMARIZER)
+                RecentOnlyProvidersStore.get(context, scope)
                     .record(routing.endpointId, routing.modelId, routing.selectedProvider)
             }
         }
         recordRecent(context, routing)
     }
 
-    /** Records the routing a model was used with on its Summarizer Recent entry. */
+    /** Records the routing a model was used with on the job's Recent entry. */
     fun recordRecent(context: Context, routing: FavoriteModelObject) {
         val entry = FavoriteModelObject(routing.modelId, routing.endpointId)
         routing.copyRoutingTo(entry)
         runCatching { recents(context).recordRouting(entry) }
     }
 
-    /** Records a successful Summarizer request with the routing it used. */
+    /** Records a successful request with the routing it used. */
     fun recordUse(context: Context, endpointId: String, modelId: String) {
         if (endpointId.isBlank() || modelId.isBlank()) return
         val routing = effective(context, endpointId, modelId) ?: FavoriteModelObject(modelId, endpointId)
@@ -137,32 +189,32 @@ object SummarizerModelRouting {
     }
 
     /**
-     * One-time carry-over from the older Summarizer setting, which kept only
-     * a routing type and borrowed provider details from the chat's favorite.
-     * The selected model keeps exactly the routing it was using, now as the
-     * Summarizer's own, and becomes its first Recent entry. Runs whenever the
-     * own-routing setting has never been written, so an older backup restored
-     * later is carried over too.
+     * One-time carry-over from the older setting, which kept only a routing
+     * type and borrowed provider details from the chat's favorite. The
+     * selected model keeps exactly the routing it was using, now as the job's
+     * own, and becomes its first Recent entry. Runs whenever the own-routing
+     * setting has never been written, so an older backup restored later is
+     * carried over too.
      */
     fun migrate(context: Context) {
         val prefs = prefs(context)
-        if (prefs.hasSummarizerRoutingOverride()) return
+        if (hasStoredOverride(prefs)) return
         synchronized(this) {
-            if (prefs.hasSummarizerRoutingOverride()) return
-            val endpointId = prefs.getSummarizerEndpointId()
-            val modelId = prefs.getSummarizerModel()
+            if (hasStoredOverride(prefs)) return
+            val endpointId = endpointId(context)
+            val modelId = modelId(context)
             if (endpointId.isBlank() || modelId.isBlank()) {
-                prefs.setSummarizerRoutingOverride("")
+                storeOverride(prefs, "")
                 return
             }
             val chatFavorite = runCatching {
                 FavoriteModelsPreferences.getPreferences(context).getFavorite(modelId, endpointId)
             }.getOrNull()
             val routing = DedicatedModelRoutingPolicy.favoriteForRequest(
-                modelId, endpointId, prefs.getSummarizerRoutingType(), chatFavorite
+                modelId, endpointId, legacyRoutingType(prefs), chatFavorite
             )
             // Plain Automatic needs no routing of its own.
-            prefs.setSummarizerRoutingOverride(routing?.let(::encode).orEmpty())
+            storeOverride(prefs, routing?.let(::encode).orEmpty())
             recordRecent(context, routing ?: FavoriteModelObject(modelId, endpointId))
         }
     }

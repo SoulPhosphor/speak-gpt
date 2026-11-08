@@ -18,7 +18,6 @@ package org.teslasoft.assistant.ui.activities
 
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -40,30 +39,25 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.ApiEndpointPreferences
-import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
-import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
-import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.ui.fragments.dialogs.FavoriteRoutingActions
-import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.dedicated.DedicatedModelRows
+import org.teslasoft.assistant.ui.dedicated.DedicatedParametersSection
 import org.teslasoft.assistant.ui.widgets.AppDropdown
-import java.util.Locale
 
 /**
  * "Advanced Memory Assistant Settings" — suggestion cap, endpoint/model
  * selection, and AI extraction tuning. Reached from the Memory Manager hub.
  *
- * Temperature, Minimum Importance, and the two analysis-type prompts (the
- * Associative Memory Prompt and the Lorebook Memory Prompt) are persisted only
- * on Save (spec §2). Maximum Suggestions, endpoint, and model save immediately
- * on change (consistent with their prior behavior in Memory Controls).
+ * The Memory Scanner's parameters (DedicatedParametersSection), Minimum
+ * Importance, and the two analysis-type prompts (the Associative Memory Prompt
+ * and the Lorebook Memory Prompt) are persisted only on Save (spec §2).
+ * Maximum Suggestions, endpoint, model and routing save immediately on change
+ * (DedicatedModelRows: the Memory Scanner's own lists and routing).
  *
  * User-facing name is "Memory Assistant"; the `Preferences.getArchivist*`
  * accessors keep the internal code name.
@@ -71,8 +65,6 @@ import java.util.Locale
 class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
-    private var apiEndpointPreferences: ApiEndpointPreferences? = null
-    private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
     private var chatId = ""
 
     private var actionBar: ConstraintLayout? = null
@@ -90,9 +82,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
     private var sectionArchivistRouting: View? = null
     private var textArchivistRoutingValue: TextView? = null
 
-    private var sliderTemperature: Slider? = null
-    private var textTemperatureValue: TextView? = null
-    private var btnResetTemperature: MaterialButton? = null
+    private var btnResetParameters: MaterialButton? = null
     private var textMinImportanceValue: TextView? = null
     private var fieldExtractionPrompt: TextInputEditText? = null
     private var btnResetPrompt: MaterialButton? = null
@@ -106,35 +96,16 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
     /** Held until Save (spec §2 has an explicit Save button). 0 = No Minimum. */
     private var selectedImportance = 0
 
-    // The endpoint gear edits only the currently selected stable-id profile.
-    // Selection itself stays in this screen's dropdown and never opens a new
-    // activity. A deleted selected profile clears its now-invalid model too.
-    private val archivistEndpointEditorLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK && result.data?.getBooleanExtra("deleted", false) == true) {
-            preferences?.setArchivistEndpointId("")
-            preferences?.setArchivistModel("")
-            preferences?.setArchivistRoutingType(FavoriteModelObject.ROUTING_AUTOMATIC)
-        }
-        refreshArchivistRows()
-    }
+    private var modelRows: DedicatedModelRows? = null
+    private var parametersSection: DedicatedParametersSection? = null
 
-    /** Provider setup writes to the favorite only after Choose Provider saves.
-     * On return, adopt the saved mode when the currently selected Memory
-     * Assistant model now has complete setup; cancelling changes nothing. */
+    private val archivistEndpointEditorLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result -> modelRows?.onEndpointEditorResult(result) }
+
     private val archivistRoutingSetupLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-            val model = preferences?.getArchivistModel().orEmpty()
-            val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
-            val mode = favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC
-            if (!DedicatedModelRoutingPolicy.needsSetup(mode, favorite)) {
-                preferences?.setArchivistRoutingType(mode)
-            }
-        }
-        refreshArchivistRows()
-    }
+    ) { result -> modelRows?.onRoutingSetupResult(result) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -143,8 +114,6 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
-        apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
-        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(this)
 
         bindViews()
         applyTheme()
@@ -153,7 +122,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshArchivistRows()
+        modelRows?.refresh()
     }
 
     private fun bindViews() {
@@ -169,9 +138,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
         btnViewAllArchivistModels = findViewById(R.id.btn_view_all_archivist_models)
         sectionArchivistRouting = findViewById(R.id.section_archivist_routing)
         textArchivistRoutingValue = findViewById(R.id.text_archivist_routing_value)
-        sliderTemperature = findViewById(R.id.slider_temperature)
-        textTemperatureValue = findViewById(R.id.text_temperature_value)
-        btnResetTemperature = findViewById(R.id.btn_reset_temperature)
+        btnResetParameters = findViewById(R.id.btn_reset_model_parameters)
         textMinImportanceValue = findViewById(R.id.text_min_importance_value)
         fieldExtractionPrompt = findViewById(R.id.field_extraction_prompt)
         btnResetPrompt = findViewById(R.id.btn_reset_prompt)
@@ -212,24 +179,20 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
         fieldScannerAverageTokens?.setText(preferences?.getMemoryScannerAverageTokens()?.toString())
         fieldScannerMaximumTokens?.setText(preferences?.getMemoryScannerMaximumTokens()?.toString())
 
-        /* ---- Memory Assistant Endpoint & Model ---- */
-        refreshArchivistRows()
-        textArchivistEndpointValue?.setOnClickListener { showArchivistEndpointDropdown() }
-        btnEditArchivistEndpoint?.setOnClickListener { openSelectedArchivistEndpointEditor() }
-        textArchivistModelValue?.setOnClickListener { showArchivistModelDropdown() }
-        btnViewAllArchivistModels?.setOnClickListener { openAllArchivistModels() }
-        textArchivistRoutingValue?.setOnClickListener { showArchivistRoutingDropdown() }
-
-        /* ---- Temperature ---- */
-        val temperature = (preferences?.getArchivistTemperature() ?: RECOMMENDED_TEMPERATURE)
-            .coerceIn(0.0f, 2.0f)
-        sliderTemperature?.value = roundToStep(temperature)
-        updateTemperatureLabel(sliderTemperature?.value ?: temperature)
-        sliderTemperature?.addOnChangeListener { _, value, _ -> updateTemperatureLabel(value) }
-        btnResetTemperature?.setOnClickListener {
-            sliderTemperature?.value = RECOMMENDED_TEMPERATURE
-            updateTemperatureLabel(RECOMMENDED_TEMPERATURE)
-        }
+        /* ---- Memory Scanner model and parameters ---- */
+        // The parameters are saved with this screen's Save; choosing a model
+        // (which saves at once, like Quick Settings) shows its parameters.
+        val section = DedicatedParametersSection(
+            findViewById(R.id.root), ModelPickerScope.MEMORY_SCANNER, autoSave = false
+        )
+        parametersSection = section
+        modelRows = DedicatedModelRows(
+            this, ModelPickerScope.MEMORY_SCANNER,
+            textArchivistEndpointValue!!, btnEditArchivistEndpoint!!, textArchivistModelValue!!,
+            btnViewAllArchivistModels!!, sectionArchivistRouting!!, textArchivistRoutingValue!!,
+            archivistEndpointEditorLauncher, archivistRoutingSetupLauncher
+        ) { section.reload() }
+        btnResetParameters?.setOnClickListener { section.showRecommended() }
 
         /* ---- Minimum Importance ---- */
         selectedImportance = (preferences?.getArchivistMinImportance() ?: 0).coerceIn(0, 5)
@@ -292,175 +255,6 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
         fieldMaxSuggestions?.setSelection(text.length)
         suppressSuggestionWatcher = false
     }
-
-    /* ------------------------------ Memory Assistant Endpoint & Model ------------------------------ */
-
-    private fun endpointProfiles(): List<ApiEndpointObject> =
-        (apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf())
-            .filter { it.id.isNotBlank() && it.label.isNotBlank() }
-            .distinctBy { it.id }
-            .sortedBy { it.label.lowercase(Locale.getDefault()) }
-
-    private fun endpointFavoriteModels(endpointId: String): List<String> =
-        favoriteModelsPreferences?.getFavoriteModels(endpointId)
-            ?.mapNotNull { it["modelId"]?.takeIf { modelId -> modelId.isNotBlank() } }
-            ?.distinct()
-            ?: emptyList()
-
-    private fun refreshArchivistRows() {
-        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-        val endpoint = endpointProfiles().firstOrNull { it.id == endpointId }
-        textArchivistEndpointValue?.text = endpoint?.label ?: getString(R.string.dropdown_select)
-        btnEditArchivistEndpoint?.isEnabled = endpoint != null
-        btnEditArchivistEndpoint?.alpha = if (endpoint != null) 1f else 0.38f
-
-        val model = preferences?.getArchivistModel().orEmpty()
-        textArchivistModelValue?.text = model.ifEmpty { getString(R.string.dropdown_select) }
-        btnViewAllArchivistModels?.isEnabled = endpoint != null
-        btnViewAllArchivistModels?.alpha = if (endpoint != null) 1f else 0.38f
-
-        val supportsRouting = endpoint?.isOpenRouterRouting() == true
-        sectionArchivistRouting?.visibility = if (supportsRouting) View.VISIBLE else View.GONE
-        val routingEnabled = supportsRouting && model.isNotBlank()
-        textArchivistRoutingValue?.isEnabled = routingEnabled
-        textArchivistRoutingValue?.alpha = if (routingEnabled) 1f else 0.38f
-        val selectedRouting = if (routingEnabled) {
-            DedicatedModelRoutingPolicy.normalize(preferences?.getArchivistRoutingType().orEmpty())
-        } else {
-            FavoriteModelObject.ROUTING_AUTOMATIC
-        }
-        if (!routingEnabled && preferences?.getArchivistRoutingType() != FavoriteModelObject.ROUTING_AUTOMATIC) {
-            preferences?.setArchivistRoutingType(FavoriteModelObject.ROUTING_AUTOMATIC)
-        }
-        textArchivistRoutingValue?.text = routingLabel(selectedRouting)
-    }
-
-    /** Select a saved user-defined endpoint in place; no navigation. */
-    private fun showArchivistEndpointDropdown() {
-        val dropdown = textArchivistEndpointValue ?: return
-        val endpoints = endpointProfiles()
-        val labels = endpoints.map { it.label }
-        val currentId = preferences?.getArchivistEndpointId().orEmpty()
-        AppDropdown.show(dropdown, labels, endpoints.indexOfFirst { it.id == currentId }) { position ->
-            val pickedId = endpoints[position].id
-            if (pickedId != currentId) {
-                preferences?.setArchivistEndpointId(pickedId)
-                // A model override belongs to its endpoint. Do not silently
-                // carry a prior endpoint's model into the newly selected one.
-                preferences?.setArchivistModel("")
-                preferences?.setArchivistRoutingType(FavoriteModelObject.ROUTING_AUTOMATIC)
-            }
-            refreshArchivistRows()
-        }
-    }
-
-    /** The gear is management, not selection: edit the selected profile. */
-    private fun openSelectedArchivistEndpointEditor() {
-        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-        val endpoints = endpointProfiles()
-        val position = endpoints.indexOfFirst { it.id == endpointId }
-        if (position < 0) return
-        archivistEndpointEditorLauncher.launch(
-            Intent(this, ApiEndpointEditorActivity::class.java)
-                .putExtra("position", position)
-                .putExtra("id", endpointId)
-        )
-    }
-
-    /** Quick model selection is limited to favorites for the selected endpoint. */
-    private fun showArchivistModelDropdown() {
-        val dropdown = textArchivistModelValue ?: return
-        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-        if (endpointId.isEmpty()) return
-        val models = endpointFavoriteModels(endpointId)
-        val current = preferences?.getArchivistModel().orEmpty()
-        AppDropdown.show(dropdown, models, models.indexOf(current)) { position ->
-            selectArchivistModel(models[position])
-        }
-    }
-
-    /** The visible dropdown is the endpoint's favorites quick-pick. This
-     * explicit View All path opens directly on the endpoint's live catalog,
-     * matching Choose Provider rather than repeating a favorites landing. */
-    private fun openAllArchivistModels() {
-        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-        if (endpointId.isEmpty()) return
-
-        val current = preferences?.getArchivistModel().orEmpty()
-        val dialog = AdvancedModelSelectorDialogFragment.newAllModelsInstance(current, chatId, endpointId)
-        dialog.setModelSelectedListener { model -> selectArchivistModel(model) }
-        dialog.show(supportFragmentManager, "ArchivistModelSelector")
-    }
-
-    /** A favorite contributes its saved routing default; a catalog-only model
-     * has no provider memory and therefore resets this feature to Automatic. */
-    private fun selectArchivistModel(model: String) {
-        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-        val endpoint = endpointProfiles().firstOrNull { it.id == endpointId }
-        val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
-        val routing = DedicatedModelRoutingPolicy.modeForSelectedModel(
-            endpoint?.isOpenRouterRouting() == true,
-            favorite
-        )
-        preferences?.setArchivistModel(model)
-        preferences?.setArchivistRoutingType(routing)
-        refreshArchivistRows()
-    }
-
-    private fun routingLabel(type: String): String = when (type) {
-        FavoriteModelObject.ROUTING_PREFERRED -> getString(R.string.choose_provider_routing_preferred)
-        FavoriteModelObject.ROUTING_ONLY -> getString(R.string.choose_provider_routing_only)
-        else -> getString(R.string.choose_provider_routing_automatic)
-    }
-
-    private fun showArchivistRoutingDropdown() {
-        val dropdown = textArchivistRoutingValue ?: return
-        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-        val model = preferences?.getArchivistModel().orEmpty()
-        if (endpointId.isBlank() || model.isBlank()) return
-        val labels = DedicatedModelRoutingPolicy.routingTypes.map { routingLabel(it) }
-        val current = DedicatedModelRoutingPolicy.routingTypes
-            .indexOf(preferences?.getArchivistRoutingType().orEmpty())
-            .coerceAtLeast(0)
-        AppDropdown.show(dropdown, labels, current) { position ->
-            val picked = DedicatedModelRoutingPolicy.routingTypes[position]
-            val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
-            if (DedicatedModelRoutingPolicy.needsSetup(picked, favorite)) {
-                showArchivistRoutingSetupDialog(picked)
-            } else {
-                preferences?.setArchivistRoutingType(picked)
-                refreshArchivistRows()
-            }
-        }
-    }
-
-    /** Preferred/Only without provider details uses the same explicit setup
-     * flow as Quick Settings. The prior Memory Assistant choice remains in
-     * place unless Choose Provider completes a valid save. */
-    private fun showArchivistRoutingSetupDialog(mode: String) {
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.provider_mode_setup_title)
-            .setMessage(R.string.provider_mode_setup_message)
-            .setPositiveButton(R.string.provider_mode_setup_confirm) { _, _ ->
-                val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-                val model = preferences?.getArchivistModel().orEmpty()
-                val endpointPrefs = apiEndpointPreferences ?: return@setPositiveButton
-                val favoritePrefs = favoriteModelsPreferences ?: return@setPositiveButton
-                FavoriteRoutingActions.buildRoutingIntent(
-                    this, endpointPrefs, favoritePrefs, model, endpointId, mode
-                )?.let { archivistRoutingSetupLauncher.launch(it) }
-            }
-            .setNegativeButton(R.string.btn_cancel, null)
-            .show()
-    }
-
-    /* ------------------------------ Temperature ------------------------------ */
-
-    private fun updateTemperatureLabel(value: Float) {
-        textTemperatureValue?.text = String.format(Locale.getDefault(), "%.1f", value)
-    }
-
-    private fun roundToStep(value: Float): Float = (Math.round(value * 10f) / 10f).coerceIn(0.0f, 2.0f)
 
     /* ------------------------------ Minimum Importance ------------------------------ */
 
@@ -550,7 +344,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
         }
         preferences?.setMemoryScannerTokenAmounts(average, maximum)
 
-        preferences?.setArchivistTemperature(sliderTemperature?.value ?: RECOMMENDED_TEMPERATURE)
+        parametersSection?.commit()
         preferences?.setArchivistMinImportance(selectedImportance)
 
         // Each prompt saves independently. Storing "" when the field still holds
@@ -587,7 +381,6 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
     }
 
     companion object {
-        private const val RECOMMENDED_TEMPERATURE = 0.3f
         private const val DEFAULT_MAX_SUGGESTIONS = 10
     }
 }

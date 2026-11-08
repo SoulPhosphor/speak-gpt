@@ -63,7 +63,8 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.ChatModelRouting
 import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.preferences.RecentModelsPreferences
-import org.teslasoft.assistant.preferences.SummarizerModelRouting
+import org.teslasoft.assistant.preferences.DedicatedModelRouting
+import org.teslasoft.assistant.preferences.FavoriteModelParameters
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.providers.OnlyProviderAvailability
@@ -99,9 +100,10 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         const val CHAT_SELECTION_RESULT = "chatModelPickerSelection"
         const val SELECTED_MODEL = "modelId"
         const val SELECTED_ENDPOINT = "endpointId"
-        /** Fragment result of the Summarizer's picker after a model is chosen
-         *  (already saved as the Summarizer's model). */
-        const val SUMMARIZER_SELECTION_RESULT = "summarizerModelPickerSelection"
+        /** Fragment result of a background job's picker after a model is
+         *  chosen (already saved as that job's model). */
+        const val DEDICATED_SELECTION_RESULT = "dedicatedModelPickerSelection"
+        private const val ARG_START_TAB = "startTab"
 
         fun newChatModelPickerInstance(name: String, chatId: String) =
             newInstance(name, chatId).apply {
@@ -109,14 +111,16 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             }
 
         /**
-         * Select Summarizer Model: the chat picker's Favorites, Recent and View
-         * All, but with the Summarizer's own lists. Picking a model saves it
-         * (with its routing) as the Summarizer's model.
+         * Select Summarizer Model / Select Memory Scanner Model: the chat
+         * picker's Favorites, Recent and View All, but with [scope]'s own
+         * lists. Picking a model saves it (with its routing) as that job's
+         * model. [startOnViewAll] opens on View All.
          */
-        fun newSummarizerModelPickerInstance(endpointId: String) =
+        fun newDedicatedModelPickerInstance(scope: ModelPickerScope, endpointId: String, startOnViewAll: Boolean) =
             newInstance("", "", endpointId).apply {
                 requireArguments().putBoolean(ARG_CHAT_MODEL_PICKER, true)
-                requireArguments().putString(ARG_SCOPE, ModelPickerScope.SUMMARIZER.name)
+                requireArguments().putString(ARG_SCOPE, scope.name)
+                if (startOnViewAll) requireArguments().putString(ARG_START_TAB, PickerTab.VIEW_ALL.name)
             }
 
         /** [endpointId], when non-blank, fetches models for that specific saved
@@ -196,10 +200,10 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         get() = requireArguments().getBoolean(ARG_CHAT_MODEL_PICKER)
     private val scope: ModelPickerScope
         get() = ModelPickerScope.from(requireArguments().getString(ARG_SCOPE))
-    /** Select Summarizer Model (the Favorites / Recent / View All picker in
-     *  the Summarizer's scope). */
-    private val summarizerPicker: Boolean
-        get() = chatPicker && scope == ModelPickerScope.SUMMARIZER
+    /** Select Summarizer / Memory Scanner Model (the Favorites / Recent /
+     *  View All picker in a background job's scope). */
+    private val dedicatedPicker: Boolean
+        get() = chatPicker && scope.isDedicated
     private var pickerTab = PickerTab.FAVORITES
     private var savedModelAdapter: SavedModelPickerAdapter? = null
     private var catalog: ModelPickerCatalog? = null
@@ -285,7 +289,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         // theme so the shared action bar and content genuinely fill the screen.
         setStyle(STYLE_NORMAL, R.style.UI_Material)
         pickerTab = PickerTab.entries.firstOrNull {
-            it.name == savedInstanceState?.getString(STATE_PICKER_TAB)
+            it.name == (savedInstanceState?.getString(STATE_PICKER_TAB) ?: arguments?.getString(ARG_START_TAB))
         } ?: PickerTab.FAVORITES
         val routingEndpoint = savedInstanceState?.getString(STATE_ROUTING_ENDPOINT)
         val routingModel = savedInstanceState?.getString(STATE_ROUTING_MODEL)
@@ -364,10 +368,10 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         endpointId: String = resolvedEndpointId,
         choice: RoutingChoice = RoutingChoice.Saved
     ) {
-        if (summarizerPicker) {
-            applySummarizerSelection(model, endpointId, choice)
+        if (dedicatedPicker) {
+            applyDedicatedSelection(model, endpointId, choice)
             parentFragmentManager.setFragmentResult(
-                SUMMARIZER_SELECTION_RESULT,
+                DEDICATED_SELECTION_RESULT,
                 bundleOf(SELECTED_MODEL to model, SELECTED_ENDPOINT to endpointId)
             )
         } else if (chatPicker) {
@@ -382,25 +386,26 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         dismiss()
     }
 
-    /** Saves the picked model as the Summarizer's, with the routing it was
-     *  picked with, by the same rules as a chat. */
-    private fun applySummarizerSelection(model: String, endpointId: String, choice: RoutingChoice) {
+    /** Saves the picked model as the background job's, with the routing it
+     *  was picked with, by the same rules as a chat, and (like Quick
+     *  Settings) gives the job that model's parameters. */
+    private fun applyDedicatedSelection(model: String, endpointId: String, choice: RoutingChoice) {
         val context = context ?: return
+        val routing = DedicatedModelRouting.of(scope)
         when (choice) {
             RoutingChoice.Keep -> Unit
-            RoutingChoice.Saved -> SummarizerModelRouting.clear(context)
+            RoutingChoice.Saved -> routing.clear(context)
             is RoutingChoice.Use -> {
                 val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
                 if (favorite != null && ChatModelRouting.sameRouting(favorite, choice.routing)) {
-                    SummarizerModelRouting.clear(context)
+                    routing.clear(context)
                 } else {
-                    SummarizerModelRouting.use(context, choice.routing)
+                    routing.use(context, choice.routing)
                 }
             }
         }
-        val summarizer = Preferences.getPreferences(context, "")
-        summarizer.setSummarizerEndpointId(endpointId)
-        summarizer.setSummarizerModel(model)
+        routing.select(context, endpointId, model)
+        FavoriteModelParameters.applyToDedicated(context, scope, model, endpointId)
     }
 
     /** Sets the chat's own routing for the picked model. */
@@ -512,7 +517,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 // Preserve the remembered selected provider; only the routing
                 // type changes, saved by the same rules as every routing choice.
                 routing.routingType = FavoriteModelObject.ROUTING_AUTOMATIC
-                if (summarizerPicker) SummarizerModelRouting.save(requireContext(), routing)
+                if (dedicatedPicker) DedicatedModelRouting.of(scope).save(requireContext(), routing)
                 else ChatModelRouting.save(requireContext(), preferences.takeIf { chatPicker }, routing)
                 reloadFavorites()
                 finishModelSelection(model, endpointId, RoutingChoice.Keep)
@@ -801,7 +806,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         currentChatModel = requireArguments().getString(ARG_CURRENT_CHAT_MODEL).orEmpty()
         selectorTitle?.text = getString(
             when {
-                summarizerPicker -> R.string.summarizer_model_picker_title
+                dedicatedPicker && scope == ModelPickerScope.SUMMARIZER -> R.string.summarizer_model_picker_title
+                dedicatedPicker -> R.string.memory_scanner_model_picker_title
                 chatPicker -> R.string.model_picker_title
                 imageMode -> R.string.label_select_image_model
                 else -> R.string.label_select_ai_model
@@ -816,7 +822,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(ctx, resolvedEndpointId)
         refreshReasoningCapabilityIndex()
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(ctx, scope)
-        checkOnlyProviderOnSelection = summarizerPicker ||
+        checkOnlyProviderOnSelection = dedicatedPicker ||
             (chatId.isNotBlank() && endpointIdOverride.isBlank() && !imageMode && !startsWithAllModels && !rawModelCatalog)
 
         if (!chatPicker) reloadFavorites()
@@ -928,8 +934,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     }
 
     private fun configureSavedModelAdapter(context: Context, chatId: String) {
-        val selectedModel = if (summarizerPicker) {
-            Preferences.getPreferences(context, "").getSummarizerModel()
+        val selectedModel = if (dedicatedPicker) {
+            DedicatedModelRouting.of(scope).modelId(context)
         } else preferences?.getModel().orEmpty()
         savedModelAdapter = SavedModelPickerAdapter(
             context,
@@ -1098,7 +1104,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 selectedProvider = slug
             }
             RecentOnlyProvidersStore.get(requireContext(), scope).record(target.endpointId, target.modelId, slug)
-            if (summarizerPicker) SummarizerModelRouting.recordRecent(requireContext(), routing)
+            if (dedicatedPicker) DedicatedModelRouting.of(scope).recordRecent(requireContext(), routing)
             else ChatModelRouting.recordRecent(requireContext(), routing)
             handleModelSelection(target.modelId, target.endpointId, RoutingChoice.Use(routing))
         }

@@ -127,6 +127,9 @@
     <dimen name="quick_settings_segment_gap">2dp</dimen>
     <dimen name="quick_settings_segment_padding_vertical">8dp</dimen>
     <dimen name="quick_settings_segment_padding_horizontal">16dp</dimen>
+    <!-- How faint a control is while it cannot be used (a row with nothing
+         selected yet). -->
+    <item name="disabled_control_alpha" format="float" type="dimen">0.38</item>
     <!-- Plain parameter list (Widget.App.PlainParameter.*). -->
     <dimen name="plain_parameter_inset">@dimen/quick_settings_segment_padding_horizontal</dimen>
     <dimen name="plain_parameter_gap">24dp</dimen>

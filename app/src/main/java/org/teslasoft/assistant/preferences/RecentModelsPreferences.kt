@@ -15,8 +15,9 @@ import org.teslasoft.assistant.preferences.models.ModelIdentity
  */
 class RecentModelsPreferences internal constructor(
     private val preferences: SharedPreferences,
-    /** Where the list size is kept. The Summarizer's list follows the one
-     *  Model Picker Recently Used setting, stored with the chat's list. */
+    /** Where the list size is kept. The Summarizer's and Memory Scanner's
+     *  lists follow the one Model Picker Recently Used setting, stored with the
+     *  chat's list. */
     private val limitPreferences: SharedPreferences = preferences
 ) {
     constructor(context: Context) : this(context, ModelPickerScope.CHAT)
@@ -222,10 +223,7 @@ class RecentModelsPreferences internal constructor(
     }
 
     companion object {
-        private fun fileFor(scope: ModelPickerScope): String = when (scope) {
-            ModelPickerScope.CHAT -> "model_picker_recents"
-            ModelPickerScope.SUMMARIZER -> "summarizer_model_picker_recents"
-        }
+        private fun fileFor(scope: ModelPickerScope): String = scope.filePrefix + "model_picker_recents"
 
         private const val DEFAULT_LIMIT = 20
         private const val MAX_LIMIT = 99

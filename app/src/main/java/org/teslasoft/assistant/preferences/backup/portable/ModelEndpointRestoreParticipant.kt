@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.preferences.backup.portable
 
 import android.content.Context
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import java.io.File
 import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
 import org.teslasoft.assistant.util.AtomicFileWriter
@@ -149,7 +150,8 @@ class ModelEndpointRestoreParticipant internal constructor(
             ModelEndpointPortableCodec.Result.Ok)?.data ?: return note.fail("staged_copy_rejected_by_codec: ${file.name}")
         return try {
             data.recents?.let { RecentModelsBackup.apply(appContext, it) }
-            data.summarizer?.let { SummarizerModelsBackup.apply(appContext, it) }
+            data.summarizer?.let { DedicatedModelsBackup.apply(appContext, it, ModelPickerScope.SUMMARIZER) }
+            data.memoryScanner?.let { DedicatedModelsBackup.apply(appContext, it, ModelPickerScope.MEMORY_SCANNER) }
             true
         } catch (_: Exception) {
             note.fail("recent_models_not_saved")

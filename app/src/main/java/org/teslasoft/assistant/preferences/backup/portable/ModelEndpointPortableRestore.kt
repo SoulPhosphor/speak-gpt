@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 
 import android.content.Context
 import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
+import org.teslasoft.assistant.preferences.ModelPickerScope
 
 /** Applies an already validated credential-free model settings plan. */
 object ModelEndpointPortableRestore {
@@ -25,7 +26,12 @@ object ModelEndpointPortableRestore {
         ModelEndpointStateGenerationStore.get(context.applicationContext).install(data).also { installed ->
             if (installed) {
                 data.recents?.let { RecentModelsBackup.apply(context.applicationContext, it) }
-                data.summarizer?.let { SummarizerModelsBackup.apply(context.applicationContext, it) }
+                data.summarizer?.let {
+                    DedicatedModelsBackup.apply(context.applicationContext, it, ModelPickerScope.SUMMARIZER)
+                }
+                data.memoryScanner?.let {
+                    DedicatedModelsBackup.apply(context.applicationContext, it, ModelPickerScope.MEMORY_SCANNER)
+                }
             }
         }
     } catch (_: Exception) {

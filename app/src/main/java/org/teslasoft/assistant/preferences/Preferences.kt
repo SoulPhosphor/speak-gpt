@@ -2521,6 +2521,50 @@ class Preferences internal constructor(
         putGlobalString("memory_scanner_maximum_tokens", maximum.toString())
     }
 
+    /** The Memory Scanner's own provider routing for its selected model (see
+     *  getSummarizerRoutingOverride). "" = never written. */
+    fun getMemoryScannerRoutingOverride(): String =
+        getGlobalString("memory_scanner_routing_override", "")
+
+    fun hasMemoryScannerRoutingOverride(): Boolean = gp.contains("memory_scanner_routing_override")
+
+    fun setMemoryScannerRoutingOverride(json: String) {
+        gp.edit { putString("memory_scanner_routing_override", json) }
+    }
+
+    /* The Memory Scanner's parameters besides Temperature (which keeps its
+     * existing setting below), shown on Advanced Memory Settings. */
+
+    fun getMemoryScannerStreaming(): Boolean =
+        getGlobalString("memory_scanner_streaming", "").toBooleanStrictOrNull() ?: RecommendedModelParameters.STREAMING
+
+    fun setMemoryScannerStreaming(value: Boolean) {
+        gp.edit { putString("memory_scanner_streaming", value.toString()) }
+    }
+
+    fun getMemoryScannerTopP(): Float =
+        getGlobalString("memory_scanner_top_p", "").toFloatOrNull() ?: RecommendedModelParameters.TOP_P
+
+    fun setMemoryScannerTopP(value: Float) {
+        gp.edit { putString("memory_scanner_top_p", value.toString()) }
+    }
+
+    fun getMemoryScannerFrequencyPenalty(): Float =
+        getGlobalString("memory_scanner_frequency_penalty", "").toFloatOrNull()
+            ?: RecommendedModelParameters.FREQUENCY_PENALTY
+
+    fun setMemoryScannerFrequencyPenalty(value: Float) {
+        gp.edit { putString("memory_scanner_frequency_penalty", value.toString()) }
+    }
+
+    fun getMemoryScannerPresencePenalty(): Float =
+        getGlobalString("memory_scanner_presence_penalty", "").toFloatOrNull()
+            ?: RecommendedModelParameters.PRESENCE_PENALTY
+
+    fun setMemoryScannerPresencePenalty(value: Float) {
+        gp.edit { putString("memory_scanner_presence_penalty", value.toString()) }
+    }
+
     /** Analysis temperature, 0.0–2.0. Recommended/default 0.3. */
     fun getArchivistTemperature(): Float =
         getGlobalString("archivist_temperature", "0.3").toFloatOrNull()?.coerceIn(0.0f, 2.0f) ?: 0.3f
@@ -2983,7 +3027,7 @@ class Preferences internal constructor(
      *  that routing is not the one saved on a Summarizer favorite (a model that
      *  is not a favorite, or a provider tried that is not one of its favorite
      *  providers). "" = never written: the older routing setting is carried
-     *  over once (SummarizerModelRouting). */
+     *  over once (DedicatedModelRouting). */
     fun getSummarizerRoutingOverride(): String =
         getGlobalString("summarizer_routing_override", "")
 
@@ -2993,25 +3037,27 @@ class Preferences internal constructor(
         gp.edit { putString("summarizer_routing_override", json) }
     }
 
-    /* Summarizer default parameters: what every Summarizer model uses unless it
-     * has its own saved settings. Never read from an API profile. */
+    /* The Summarizer's parameters, shown on Summarizer Settings: what every
+     * Summarizer request sends. Like Quick Settings, selecting a model loads
+     * its own saved settings (or the recommended ones) here while Enable Model
+     * Settings is on. Never read from an API profile. */
 
     fun getSummarizerStreaming(): Boolean =
-        getGlobalString("summarizer_streaming", "").toBooleanStrictOrNull() ?: SummarizerParameterDefaults.STREAMING
+        getGlobalString("summarizer_streaming", "").toBooleanStrictOrNull() ?: RecommendedModelParameters.STREAMING
 
     fun setSummarizerStreaming(value: Boolean) {
         gp.edit { putString("summarizer_streaming", value.toString()) }
     }
 
     fun getSummarizerTemperature(): Float =
-        getGlobalString("summarizer_temperature", "").toFloatOrNull() ?: SummarizerParameterDefaults.TEMPERATURE
+        getGlobalString("summarizer_temperature", "").toFloatOrNull() ?: RecommendedModelParameters.TEMPERATURE
 
     fun setSummarizerTemperature(value: Float) {
         gp.edit { putString("summarizer_temperature", value.toString()) }
     }
 
     fun getSummarizerTopP(): Float =
-        getGlobalString("summarizer_top_p", "").toFloatOrNull() ?: SummarizerParameterDefaults.TOP_P
+        getGlobalString("summarizer_top_p", "").toFloatOrNull() ?: RecommendedModelParameters.TOP_P
 
     fun setSummarizerTopP(value: Float) {
         gp.edit { putString("summarizer_top_p", value.toString()) }
@@ -3019,7 +3065,7 @@ class Preferences internal constructor(
 
     fun getSummarizerFrequencyPenalty(): Float =
         getGlobalString("summarizer_frequency_penalty", "").toFloatOrNull()
-            ?: SummarizerParameterDefaults.FREQUENCY_PENALTY
+            ?: RecommendedModelParameters.FREQUENCY_PENALTY
 
     fun setSummarizerFrequencyPenalty(value: Float) {
         gp.edit { putString("summarizer_frequency_penalty", value.toString()) }
@@ -3027,7 +3073,7 @@ class Preferences internal constructor(
 
     fun getSummarizerPresencePenalty(): Float =
         getGlobalString("summarizer_presence_penalty", "").toFloatOrNull()
-            ?: SummarizerParameterDefaults.PRESENCE_PENALTY
+            ?: RecommendedModelParameters.PRESENCE_PENALTY
 
     fun setSummarizerPresencePenalty(value: Float) {
         gp.edit { putString("summarizer_presence_penalty", value.toString()) }

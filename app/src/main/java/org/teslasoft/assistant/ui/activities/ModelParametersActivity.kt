@@ -61,9 +61,9 @@ import org.teslasoft.assistant.ui.widgets.SamplingParameterSpec
  * "Saved" toast, and clears the dirty state so Back exits normally. Leaving with
  * unsaved changes uses the app's standard unsaved-changes confirmation.
  *
- * Opened for a Summarizer model, it edits that model's settings in the
- * Summarizer's own lists, and Restore Default Settings returns it to the
- * defaults on Summarizer Settings.
+ * Opened for a Summarizer or Memory Scanner model, it edits that model's
+ * settings in that job's own lists, and Restore Default Settings returns it to
+ * the recommended settings.
  */
 class ModelParametersActivity : FragmentActivity() {
 
@@ -143,6 +143,13 @@ class ModelParametersActivity : FragmentActivity() {
         btnRestoreDefaults?.setOnClickListener { confirmRestoreDefaults() }
     }
 
+    /** True when this is a background job's selected model. */
+    private fun isDedicatedJobsModel(): Boolean {
+        if (!scope.isDedicated) return false
+        val routing = org.teslasoft.assistant.preferences.DedicatedModelRouting.of(scope)
+        return routing.modelId(this) == modelId && routing.endpointId(this) == endpointId
+    }
+
     /** The chat this screen was opened from, when it is the model being edited. */
     private fun currentChatPreferencesIfActiveModel(): Preferences? {
         if (chatId.isEmpty() || scope != ModelPickerScope.CHAT) return null
@@ -206,10 +213,12 @@ class ModelParametersActivity : FragmentActivity() {
         FavoriteModelParameters.save(this, modelId, endpointId, values, scope)
 
         // When this is the chat's active model, the saved parameters take effect
-        // in that chat right away rather than waiting for a re-selection.
+        // in that chat right away rather than waiting for a re-selection. The
+        // same holds for a background job's selected model.
         currentChatPreferencesIfActiveModel()?.let {
             FavoriteModelParameters.applyToChat(this, it, modelId, endpointId)
         }
+        if (isDedicatedJobsModel()) FavoriteModelParameters.setLive(this, scope, values)
 
         initialSnapshot = snapshot()
         markSaveButtonGreen()
@@ -224,7 +233,7 @@ class ModelParametersActivity : FragmentActivity() {
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.model_parameters_restore_title)
             .setMessage(
-                if (scope == ModelPickerScope.SUMMARIZER) R.string.model_parameters_restore_message_summarizer
+                if (scope.isDedicated) R.string.model_parameters_restore_message_recommended
                 else R.string.model_parameters_restore_message
             )
             .setView(actionsView)
@@ -244,11 +253,12 @@ class ModelParametersActivity : FragmentActivity() {
     }
 
     private fun restoreDefaults() {
-        if (scope == ModelPickerScope.SUMMARIZER) {
-            // A Summarizer model goes back to the recommended settings, never
-            // to an API profile's.
-            val recommended = FavoriteModelParameters.summarizerRecommended(modelId, endpointId)
-            FavoriteModelParameters.save(this, modelId, endpointId, recommended, scope)
+        if (scope.isDedicated) {
+            // A Summarizer or Memory Scanner model goes back to the
+            // recommended settings, never to an API profile's.
+            FavoriteModelParameters.restoreDefaults(this, modelId, endpointId, scope)
+            val recommended = FavoriteModelParameters.defaults(this, modelId, endpointId, scope)
+            if (isDedicatedJobsModel()) FavoriteModelParameters.setLive(this, scope, recommended)
             seedControls(recommended)
         } else {
             FavoriteModelParameters.restoreDefaults(this, modelId, endpointId, scope)

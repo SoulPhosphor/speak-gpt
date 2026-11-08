@@ -23,26 +23,27 @@ import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.ModelPickerScope
 
 /**
- * The Summarizer's own model lists inside the model settings backup: its
- * favorites (with their routing, favorite providers and saved parameters)
- * and its Recent list. The Summarizer's selected model, its own routing and
- * its default parameters are app settings and travel with those.
+ * A background job's own model lists (the Summarizer's or the Memory
+ * Scanner's) inside the model settings backup: its favorites (with their
+ * routing, favorite providers and saved parameters) and its Recent list. The
+ * job's selected model, its own routing and its parameters are app settings
+ * and travel with those.
  */
-object SummarizerModelsBackup {
+object DedicatedModelsBackup {
 
     data class Snapshot(
         val favorites: List<Map<String, String>>,
         val recents: RecentModelsBackup.Snapshot
     )
 
-    fun capture(context: Context): Snapshot = Snapshot(
-        FavoriteModelsPreferences.getSummarizerPreferences(context).getFavoriteModels().map { LinkedHashMap(it) },
-        RecentModelsBackup.capture(context, ModelPickerScope.SUMMARIZER)
+    fun capture(context: Context, scope: ModelPickerScope): Snapshot = Snapshot(
+        FavoriteModelsPreferences.getPreferences(context, scope).getFavoriteModels().map { LinkedHashMap(it) },
+        RecentModelsBackup.capture(context, scope)
     )
 
-    fun apply(context: Context, snapshot: Snapshot) {
-        FavoriteModelsPreferences.getSummarizerPreferences(context).setFavoriteModels(ArrayList(snapshot.favorites))
-        RecentModelsBackup.apply(context, snapshot.recents, ModelPickerScope.SUMMARIZER)
+    fun apply(context: Context, snapshot: Snapshot, scope: ModelPickerScope) {
+        FavoriteModelsPreferences.getPreferences(context, scope).setFavoriteModels(ArrayList(snapshot.favorites))
+        RecentModelsBackup.apply(context, snapshot.recents, scope)
     }
 
     /** Only entries whose API profile is part of the same data. */

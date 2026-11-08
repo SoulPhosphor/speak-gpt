@@ -49,7 +49,7 @@ import org.teslasoft.assistant.imagegen.ToolCapabilityStore
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatModelRouting
 import org.teslasoft.assistant.preferences.ModelPickerScope
-import org.teslasoft.assistant.preferences.SummarizerModelRouting
+import org.teslasoft.assistant.preferences.DedicatedModelRouting
 import org.teslasoft.assistant.ui.util.CompactActionPopup
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -127,8 +127,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
          *  favorite, is saved on that chat rather than on a favorite. */
         const val EXTRA_CHAT_ID = "chatId"
 
-        /** Opened from the Summarizer's picker: routing, favorites and
-         *  favorite providers are the Summarizer's own (ModelPickerScope). */
+        /** Opened for a background job (ModelPickerScope): routing, favorites
+         *  and favorite providers are that job's own. */
         const val EXTRA_SCOPE = "scope"
 
         private val routingTypes = arrayOf(
@@ -159,7 +159,9 @@ class ChooseProviderActivity : SettingsPageActivity() {
     private var preferences: Preferences? = null
     private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
     private var chatPreferences: Preferences? = null
-    private var summarizerScope = false
+    /** Chat, or the background job (Summarizer / Memory Scanner) whose own
+     *  lists and routing this screen edits. */
+    private var scope = ModelPickerScope.CHAT
 
     /** The selected model's favorite providers (on its favorite, or on its
      *  Recent entry when it is not a favorite). */
@@ -241,11 +243,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
         setContentView(R.layout.activity_choose_provider)
 
         preferences = Preferences.getPreferences(this, "")
-        summarizerScope =
-            ModelPickerScope.from(intent.getStringExtra(EXTRA_SCOPE)) == ModelPickerScope.SUMMARIZER
-        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(
-            this, if (summarizerScope) ModelPickerScope.SUMMARIZER else ModelPickerScope.CHAT
-        )
+        scope = ModelPickerScope.from(intent.getStringExtra(EXTRA_SCOPE))
+        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(this, scope)
 
         endpointId = intent.getStringExtra(EXTRA_ENDPOINT_ID) ?: ""
         chatPreferences = intent.getStringExtra(EXTRA_CHAT_ID)?.takeIf { it.isNotBlank() }
@@ -403,11 +402,11 @@ class ChooseProviderActivity : SettingsPageActivity() {
     /** The routing [model] uses where this screen was opened from: the
      *  Summarizer's own, or the chat's (null without a chat). */
     private fun routingForEditing(model: String): FavoriteModelObject? =
-        if (summarizerScope) SummarizerModelRouting.forEditing(this, endpointId, model)
+        if (scope.isDedicated) DedicatedModelRouting.of(scope).forEditing(this, endpointId, model)
         else chatPreferences?.let { ChatModelRouting.forEditing(this, it, endpointId, model) }
 
     private fun favoriteProvidersFor(model: String): List<String> =
-        if (summarizerScope) SummarizerModelRouting.favoriteProviders(this, endpointId, model)
+        if (scope.isDedicated) DedicatedModelRouting.of(scope).favoriteProviders(this, endpointId, model)
         else ChatModelRouting.favoriteProviders(this, endpointId, model)
 
     /** Every valid, distinct favorite belonging to this exact API endpoint. */
@@ -422,7 +421,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
             selectedModel,
             "",
             endpointId,
-            if (summarizerScope) ModelPickerScope.SUMMARIZER else ModelPickerScope.CHAT
+            scope
         )
         modelDialog.setModelSelectedListener { model -> onModelChanged(model) }
         modelDialog.show(supportFragmentManager, "ChooseProviderModelSelector")
@@ -462,12 +461,12 @@ class ChooseProviderActivity : SettingsPageActivity() {
         val stored = if (selectedModel.isBlank()) null
         else favoriteModelsPreferences?.getFavorite(selectedModel, endpointId)
         showProviderMenu = selectedModel.isNotBlank() &&
-            (stored != null || chatPreferences != null || summarizerScope)
+            (stored != null || chatPreferences != null || scope.isDedicated)
         favoriteProviders = if (selectedModel.isBlank()) emptyList()
             else favoriteProvidersFor(selectedModel)
         // A chat (or the Summarizer) shows the routing it actually uses, which
         // may be its own.
-        val favorite = if (selectedModel.isBlank() || (chatPreferences == null && !summarizerScope)) stored
+        val favorite = if (selectedModel.isBlank() || (chatPreferences == null && !scope.isDedicated)) stored
         else routingForEditing(selectedModel)
 
         selectedProvider = favorite?.selectedProvider ?: ""
@@ -941,8 +940,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
                         else favoriteProviders + slug
                     // Dropdowns show the provider by name, also when offline.
                     RecentOnlyProvidersStore.get(this).rememberName(slug, providerName)
-                    val changed = if (summarizerScope) {
-                        SummarizerModelRouting.setFavoriteProviders(this, endpointId, selectedModel, updated)
+                    val changed = if (scope.isDedicated) {
+                        DedicatedModelRouting.of(scope).setFavoriteProviders(this, endpointId, selectedModel, updated)
                     } else {
                         ChatModelRouting.setFavoriteProviders(this, endpointId, selectedModel, updated)
                     }
@@ -1136,7 +1135,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
                     providerOrder = ArrayList(orderList)
                     ignoredProviders = ArrayList(ignored)
                 }
-                if (summarizerScope) SummarizerModelRouting.save(this, routing)
+                if (scope.isDedicated) DedicatedModelRouting.of(scope).save(this, routing)
                 else ChatModelRouting.save(this, chatPreferences, routing)
                 persistSelectedRouteToolCapability(selectedRouteToolCapability())
             }

@@ -41,7 +41,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
-import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
@@ -50,7 +49,6 @@ import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.archivist.Archivist
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailure
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailureCategory
-import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.service.MemoryAnalysisForegroundService
 import org.teslasoft.assistant.service.MemoryAnalysisState
@@ -280,11 +278,11 @@ class MemoryAssistantActivity : SettingsPageActivity() {
                 .getApiEndpoint(this, endpointId)
             val model = prefs.getArchivistModel()
             val routingReady = if (endpoint.isOpenRouterRouting() && model.isNotBlank()) {
-                val favorite = FavoriteModelsPreferences.getPreferences(this)
-                    .getFavorite(model, endpointId)
-                !DedicatedModelRoutingPolicy.needsSetup(
-                    prefs.getArchivistRoutingType(), favorite
-                )
+                org.teslasoft.assistant.providers.ProviderRoutingResolver.resolve(
+                    true,
+                    org.teslasoft.assistant.preferences.DedicatedModelRouting.MEMORY_SCANNER
+                        .effective(this, endpointId, model)
+                ).block == org.teslasoft.assistant.providers.RoutingBlock.NONE
             } else {
                 true
             }

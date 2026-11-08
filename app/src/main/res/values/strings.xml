@@ -4281,6 +4281,7 @@
     <string name="memory_embedding_add">Add Embedding Model</string>
     <string name="model_picker_title">Select AI Model</string>
     <string name="summarizer_model_picker_title">Select Summarizer Model</string>
+    <string name="memory_scanner_model_picker_title">Select Memory Scanner Model</string>
     <string name="model_picker_search">Search models or providers</string>
     <string name="model_picker_recent">Recent</string>
     <string name="model_picker_favorite">Favorite</string>
@@ -4307,7 +4308,7 @@
     <string name="model_parameters_restore_desc">Restore Default Settings</string>
     <string name="model_parameters_restore_title">Restore Default Settings?</string>
     <string name="model_parameters_restore_message">This will restore all of this model\'s settings to the default ones for the API provider.</string>
-    <string name="model_parameters_restore_message_summarizer">This will restore all of this model\'s settings to the recommended ones.</string>
+    <string name="model_parameters_restore_message_recommended">This will restore all of this model\'s settings to the recommended ones.</string>
     <string name="model_parameters_restore_done">Successfully Reverted</string>
     <string name="provider_make_favorite">Make Favorite</string>
     <string name="provider_unfavorite">Unfavorite</string>

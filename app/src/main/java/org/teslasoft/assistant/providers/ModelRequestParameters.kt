@@ -14,23 +14,24 @@
  * limitations under the License.
  **************************************************************************/
 
-package org.teslasoft.assistant.util.summarizer
+package org.teslasoft.assistant.providers
 
 import com.google.gson.JsonParser
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 
 /**
- * The generation parameters one Summarizer request sends. Built from the
- * Summarizer's settings for the model, never from an API profile.
+ * The generation parameters one background-job request sends (the Summarizer
+ * or the Memory Scanner). Built from the job's own settings, never from an API
+ * profile.
  *
  * Compatibility (owner ruling, Nov 8 2026): a parameter the service reports
  * the model does not accept is left out; when the service has not reported,
  * everything configured is sent. A request the provider refuses because of a
- * named parameter is sent once more without it ([SummarizerParameterRejection]).
+ * named parameter is sent once more without it ([ModelParameterRejection]).
  * The user's saved values are never changed by any of this, and no model
  * names are assumed.
  */
-data class SummarizerRequestParameters(
+data class ModelRequestParameters(
     val stream: Boolean,
     val temperature: Double?,
     val topP: Double?,
@@ -47,7 +48,7 @@ data class SummarizerRequestParameters(
     }
 
     /** The same request without [names]. A refused stream is sent unstreamed. */
-    fun without(names: Set<String>): SummarizerRequestParameters = copy(
+    fun without(names: Set<String>): ModelRequestParameters = copy(
         stream = stream && STREAM !in names,
         temperature = temperature.takeUnless { TEMPERATURE in names },
         topP = topP.takeUnless { TOP_P in names },
@@ -66,9 +67,9 @@ data class SummarizerRequestParameters(
          *  does not accept ([supported] null = not reported). Streaming is a
          *  way of delivering the reply, not a catalog parameter, so only a
          *  refusal removes it. */
-        fun from(values: FavoriteModelObject, supported: Set<String>?): SummarizerRequestParameters {
+        fun from(values: FavoriteModelObject, supported: Set<String>?): ModelRequestParameters {
             fun allowed(name: String) = supported == null || name in supported
-            return SummarizerRequestParameters(
+            return ModelRequestParameters(
                 stream = values.streaming == true,
                 temperature = values.temperature?.toDouble()?.takeIf { allowed(TEMPERATURE) },
                 topP = values.topP?.toDouble()?.takeIf { allowed(TOP_P) },
@@ -85,13 +86,18 @@ data class SummarizerRequestParameters(
  * rate limit, a refusal that names no sent parameter) is not a parameter
  * refusal, so the request is not retried.
  */
-object SummarizerParameterRejection {
+object ModelParameterRejection {
 
     private val REFUSAL_STATUSES = setOf(400, 422)
     private val REFUSAL_WORDS = Regex(
         "unsupported|not supported|does not support|is not allowed|not permitted|unrecognized|unknown parameter",
         RegexOption.IGNORE_CASE
     )
+
+    /** The HTTP status a failed request's exception carries, or null. */
+    fun statusOf(error: Throwable): Int? = generateSequence(error) { it.cause }.take(16)
+        .filterIsInstance<com.aallam.openai.api.exception.OpenAIAPIException>()
+        .firstOrNull()?.statusCode
 
     /** The sent parameters the provider refused, or empty. */
     fun rejected(status: Int?, body: String?, message: String?, sent: Set<String>): Set<String> {

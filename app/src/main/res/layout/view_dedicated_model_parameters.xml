@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- A background job's model parameters (Summarizer, Memory Scanner) as a
+     plain parameter list (Widget.App.PlainParameter.*, ui-style-guide.md):
+     the Save Parameters link, Streaming, then the four sampling values.
+     Driven by DedicatedParametersSection. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:parentTag="android.widget.LinearLayout"
+    tools:orientation="vertical">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_save_model_parameters"
+        style="@style/Widget.App.PlainParameter.TextLink"
+        android:visibility="gone" />
+
+    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+        style="@style/Widget.App.PlainParameter.Header"
+        app:parameterTitle="@string/streaming_title"
+        app:parameterInfo="@string/streaming_description" />
+
+    <LinearLayout
+        android:id="@+id/row_model_streaming"
+        style="@style/Widget.App.PlainParameter.CheckRow">
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/check_model_streaming"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clickable="false" />
+
+        <TextView
+            style="@style/Widget.App.CheckOption.Label"
+            android:text="@string/streaming_title" />
+    </LinearLayout>
+
+    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+        style="@style/Widget.App.PlainParameter.Header"
+        app:parameterTitle="@string/sampling_label_temperature"
+        app:parameterInfo="@string/sampling_hint_temperature" />
+
+    <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+        android:id="@+id/model_temperature_slider"
+        style="@style/Widget.App.SamplingSlider.Container"
+        android:contentDescription="@string/set_temperature" />
+
+    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+        style="@style/Widget.App.PlainParameter.Header"
+        app:parameterTitle="@string/sampling_label_top_p"
+        app:parameterInfo="@string/sampling_hint_top_p" />
+
+    <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+        android:id="@+id/model_top_p_slider"
+        style="@style/Widget.App.SamplingSlider.Container"
+        android:contentDescription="@string/set_top_p" />
+
+    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+        style="@style/Widget.App.PlainParameter.Header"
+        app:parameterTitle="@string/sampling_label_frequency_penalty"
+        app:parameterInfo="@string/sampling_hint_frequency_penalty" />
+
+    <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+        android:id="@+id/model_frequency_penalty_slider"
+        style="@style/Widget.App.SamplingSlider.Container"
+        android:contentDescription="@string/set_frequency_penalty" />
+
+    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+        style="@style/Widget.App.PlainParameter.Header"
+        app:parameterTitle="@string/sampling_label_presence_penalty"
+        app:parameterInfo="@string/sampling_hint_presence_penalty" />
+
+    <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+        android:id="@+id/model_presence_penalty_slider"
+        style="@style/Widget.App.SamplingSlider.Container"
+        android:contentDescription="@string/set_presence_penalty" />
+</merge>

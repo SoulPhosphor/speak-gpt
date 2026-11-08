@@ -34,7 +34,7 @@ class FavoriteModelsPreferences private constructor(
     companion object {
         private val SAMPLING_KEYS = setOf("streaming", "temperature", "topP", "frequencyPenalty", "presencePenalty")
         private var instance: FavoriteModelsPreferences? = null
-        private var summarizerInstance: FavoriteModelsPreferences? = null
+        private val dedicatedInstances = HashMap<ModelPickerScope, FavoriteModelsPreferences>()
 
         /** The chat's favorites (also used by every screen that is not the
          *  Summarizer). */
@@ -52,30 +52,24 @@ class FavoriteModelsPreferences private constructor(
 
         /** The favorites of [scope]'s model picker. */
         fun getPreferences(context: Context, scope: ModelPickerScope): FavoriteModelsPreferences =
-            when (scope) {
-                ModelPickerScope.CHAT -> getPreferences(context)
-                ModelPickerScope.SUMMARIZER -> getSummarizerPreferences(context)
-            }
+            if (scope == ModelPickerScope.CHAT) getPreferences(context) else dedicated(context, scope)
 
-        /** The Summarizer's own favorites, kept apart from the chat's. */
+        /** A background job's own favorites (the Summarizer's or the Memory
+         *  Scanner's), kept apart from the chat's. */
         @Synchronized
-        fun getSummarizerPreferences(context: Context): FavoriteModelsPreferences {
-            if (summarizerInstance == null) {
+        private fun dedicated(context: Context, scope: ModelPickerScope): FavoriteModelsPreferences =
+            dedicatedInstances.getOrPut(scope) {
                 val app = context.applicationContext
-                val recents = RecentModelsPreferences(app, ModelPickerScope.SUMMARIZER)
+                val recents = RecentModelsPreferences(app, scope)
                 val state = ModelEndpointStateGenerationStore.get(app)
-                summarizerInstance = FavoriteModelsPreferences(
+                FavoriteModelsPreferences(
                     SeparateFavoriteBackend(
-                        app.getSharedPreferences(SUMMARIZER_FILE, Context.MODE_PRIVATE)
+                        app.getSharedPreferences(scope.filePrefix + "favorite_models", Context.MODE_PRIVATE)
                     ) { state.read()?.endpoints?.mapTo(HashSet()) { it.id } },
-                    RecentOnlyProvidersStore.get(app, ModelPickerScope.SUMMARIZER),
+                    RecentOnlyProvidersStore.get(app, scope),
                     recents::entry
                 )
             }
-            return summarizerInstance!!
-        }
-
-        private const val SUMMARIZER_FILE = "summarizer_favorite_models"
 
         internal fun createForTest(
             statePreferences: SharedPreferences,
@@ -91,7 +85,8 @@ class FavoriteModelsPreferences private constructor(
             recentEntry = recentEntry
         )
 
-        /** A store kept in its own file, like the Summarizer's. */
+        /** A store kept in its own file, like the Summarizer's and Memory
+         *  Scanner's. */
         internal fun createSeparateForTest(
             preferences: SharedPreferences,
             endpointIds: () -> Set<String>?,

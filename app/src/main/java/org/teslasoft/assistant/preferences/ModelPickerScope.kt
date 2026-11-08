@@ -17,14 +17,26 @@
 package org.teslasoft.assistant.preferences
 
 /**
- * Which job a model picker's saved models belong to. Chat and the Summarizer
- * keep separate Favorites, Recent lists, favorite providers and per-model
- * settings: they are different duties, so nothing chosen for one appears in
- * or changes the other.
+ * Which job a model picker's saved models belong to. Chat, the Summarizer and
+ * the Memory Scanner (the Memory Assistant's analysis model) keep separate
+ * Favorites, Recent lists, favorite providers and per-model settings: they are
+ * different duties, so nothing chosen for one appears in or changes another.
  */
 enum class ModelPickerScope {
     CHAT,
-    SUMMARIZER;
+    SUMMARIZER,
+    MEMORY_SCANNER;
+
+    /** True for a background job with one selected model of its own. */
+    val isDedicated: Boolean get() = this != CHAT
+
+    /** The part of each storage file name that belongs to this job. */
+    internal val filePrefix: String
+        get() = when (this) {
+            CHAT -> ""
+            SUMMARIZER -> "summarizer_"
+            MEMORY_SCANNER -> "memory_scanner_"
+        }
 
     companion object {
         /** Reads a scope passed by name (an Intent extra or argument). */

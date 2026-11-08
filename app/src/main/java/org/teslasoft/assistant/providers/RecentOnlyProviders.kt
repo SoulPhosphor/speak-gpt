@@ -60,18 +60,17 @@ object RecentOnlyProviders {
 class RecentOnlyProvidersStore internal constructor(
     private val prefs: SharedPreferences,
     /** Where providers' display names are kept. Names describe a provider,
-     *  not a picker, so the Summarizer's store shares the chat's. */
+     *  not a picker, so the other jobs' stores share the chat's. */
     private val namePrefs: SharedPreferences = prefs
 ) {
 
     companion object {
         private const val FILE = "recent_only_providers"
-        private const val SUMMARIZER_FILE = "summarizer_recent_only_providers"
         private const val NAME_PREFIX = "name:"
         private const val RECENTS_PREFIX = "recents:"
 
         @Volatile private var instance: RecentOnlyProvidersStore? = null
-        @Volatile private var summarizerInstance: RecentOnlyProvidersStore? = null
+        private val dedicatedInstances = HashMap<ModelPickerScope, RecentOnlyProvidersStore>()
 
         fun get(context: Context): RecentOnlyProvidersStore =
             instance ?: synchronized(this) {
@@ -81,15 +80,15 @@ class RecentOnlyProvidersStore internal constructor(
             }
 
         /** The last providers used for [scope]'s models. */
-        fun get(context: Context, scope: ModelPickerScope): RecentOnlyProvidersStore = when (scope) {
-            ModelPickerScope.CHAT -> get(context)
-            ModelPickerScope.SUMMARIZER -> summarizerInstance ?: synchronized(this) {
-                summarizerInstance ?: RecentOnlyProvidersStore(
-                    context.applicationContext.getSharedPreferences(SUMMARIZER_FILE, Context.MODE_PRIVATE),
-                    context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-                ).also { summarizerInstance = it }
+        fun get(context: Context, scope: ModelPickerScope): RecentOnlyProvidersStore =
+            if (scope == ModelPickerScope.CHAT) get(context) else synchronized(this) {
+                dedicatedInstances.getOrPut(scope) {
+                    RecentOnlyProvidersStore(
+                        context.applicationContext.getSharedPreferences(scope.filePrefix + FILE, Context.MODE_PRIVATE),
+                        context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+                    )
+                }
             }
-        }
     }
 
     private val gson = Gson()

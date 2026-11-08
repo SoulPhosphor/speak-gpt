@@ -306,75 +306,12 @@
                     android:text="@string/choose_provider_routing_automatic" />
             </LinearLayout>
 
-            <!-- ============ Summarizer default parameters ============
-                 What every Summarizer model uses unless it has its own saved
-                 settings (owner ruling, Nov 8 2026). Plain parameter list
-                 (Widget.App.PlainParameter.*); the link saves these values to
-                 the selected model's own settings. -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_save_summarizer_parameters"
-                style="@style/Widget.App.PlainParameter.TextLink"
-                android:visibility="gone" />
-
-            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                style="@style/Widget.App.PlainParameter.Header"
-                app:parameterTitle="@string/streaming_title"
-                app:parameterInfo="@string/streaming_description" />
-
-            <LinearLayout
-                android:id="@+id/row_summarizer_streaming"
-                style="@style/Widget.App.PlainParameter.CheckRow">
-
-                <com.google.android.material.checkbox.MaterialCheckBox
-                    android:id="@+id/check_summarizer_streaming"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:clickable="false" />
-
-                <TextView
-                    style="@style/Widget.App.CheckOption.Label"
-                    android:text="@string/streaming_title" />
-            </LinearLayout>
-
-            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                style="@style/Widget.App.PlainParameter.Header"
-                app:parameterTitle="@string/sampling_label_temperature"
-                app:parameterInfo="@string/sampling_hint_temperature" />
-
-            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
-                android:id="@+id/summarizer_temperature_slider"
-                style="@style/Widget.App.SamplingSlider.Container"
-                android:contentDescription="@string/set_temperature" />
-
-            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                style="@style/Widget.App.PlainParameter.Header"
-                app:parameterTitle="@string/sampling_label_top_p"
-                app:parameterInfo="@string/sampling_hint_top_p" />
-
-            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
-                android:id="@+id/summarizer_top_p_slider"
-                style="@style/Widget.App.SamplingSlider.Container"
-                android:contentDescription="@string/set_top_p" />
-
-            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                style="@style/Widget.App.PlainParameter.Header"
-                app:parameterTitle="@string/sampling_label_frequency_penalty"
-                app:parameterInfo="@string/sampling_hint_frequency_penalty" />
-
-            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
-                android:id="@+id/summarizer_frequency_penalty_slider"
-                style="@style/Widget.App.SamplingSlider.Container"
-                android:contentDescription="@string/set_frequency_penalty" />
-
-            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                style="@style/Widget.App.PlainParameter.Header"
-                app:parameterTitle="@string/sampling_label_presence_penalty"
-                app:parameterInfo="@string/sampling_hint_presence_penalty" />
-
-            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
-                android:id="@+id/summarizer_presence_penalty_slider"
-                style="@style/Widget.App.SamplingSlider.Container"
-                android:contentDescription="@string/set_presence_penalty" />
+            <!-- ============ Summarizer parameters ============
+                 What Summarizer requests send; like Quick Settings, selecting
+                 a model loads its own saved
+                 settings (owner ruling, Nov 8 2026). Shared block, see
+                 view_dedicated_model_parameters.xml. -->
+            <include layout="@layout/view_dedicated_model_parameters" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

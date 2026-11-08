@@ -26,7 +26,7 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatModelRouting
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.ModelPickerScope
-import org.teslasoft.assistant.preferences.SummarizerModelRouting
+import org.teslasoft.assistant.preferences.DedicatedModelRouting
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.activities.ChooseProviderActivity
@@ -95,7 +95,7 @@ object FavoriteRoutingActions {
         /** The chat the screen is opened for, so a trial provider or a
          *  non-favorite model's routing is saved on that chat. */
         chatId: String = "",
-        /** The Summarizer's picker edits the Summarizer's own routing. */
+        /** A background job's picker edits that job's own routing. */
         scope: ModelPickerScope = ModelPickerScope.CHAT
     ): Intent? {
         val endpoint = apiEndpointPreferences.getApiEndpoint(context, endpointId)
@@ -103,8 +103,8 @@ object FavoriteRoutingActions {
 
         val chat = chatId.takeIf { it.isNotBlank() }?.let { Preferences.getPreferences(context, it) }
         val routingType = routingTypeOverride
-            ?: (if (scope == ModelPickerScope.SUMMARIZER) {
-                SummarizerModelRouting.forEditing(context, endpointId, modelId)?.routingType
+            ?: (if (scope.isDedicated) {
+                DedicatedModelRouting.of(scope).forEditing(context, endpointId, modelId)?.routingType
             } else {
                 chat?.let { ChatModelRouting.forEditing(context, it, endpointId, modelId)?.routingType }
             })

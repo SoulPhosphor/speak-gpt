@@ -14,7 +14,7 @@
  * limitations under the License.
  **************************************************************************/
 
-package org.teslasoft.assistant.util.summarizer
+package org.teslasoft.assistant.providers
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -22,13 +22,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
-import org.teslasoft.assistant.util.summarizer.SummarizerRequestParameters.Companion.FREQUENCY_PENALTY
-import org.teslasoft.assistant.util.summarizer.SummarizerRequestParameters.Companion.PRESENCE_PENALTY
-import org.teslasoft.assistant.util.summarizer.SummarizerRequestParameters.Companion.STREAM
-import org.teslasoft.assistant.util.summarizer.SummarizerRequestParameters.Companion.TEMPERATURE
-import org.teslasoft.assistant.util.summarizer.SummarizerRequestParameters.Companion.TOP_P
+import org.teslasoft.assistant.providers.ModelRequestParameters.Companion.FREQUENCY_PENALTY
+import org.teslasoft.assistant.providers.ModelRequestParameters.Companion.PRESENCE_PENALTY
+import org.teslasoft.assistant.providers.ModelRequestParameters.Companion.STREAM
+import org.teslasoft.assistant.providers.ModelRequestParameters.Companion.TEMPERATURE
+import org.teslasoft.assistant.providers.ModelRequestParameters.Companion.TOP_P
 
-class SummarizerRequestParametersTest {
+class ModelRequestParametersTest {
 
     private val values = FavoriteModelObject("model-a", "ep-1").apply {
         streaming = true
@@ -40,14 +40,14 @@ class SummarizerRequestParametersTest {
 
     @Test
     fun everythingConfiguredIsSentWhenTheServiceHasNotReported() {
-        val sent = SummarizerRequestParameters.from(values, null)
+        val sent = ModelRequestParameters.from(values, null)
         assertEquals(setOf(STREAM, TEMPERATURE, TOP_P, FREQUENCY_PENALTY, PRESENCE_PENALTY), sent.sentNames())
         assertEquals(0.5, sent.presencePenalty!!, 0.0001)
     }
 
     @Test
     fun parametersTheServiceSaysTheModelDoesNotAcceptAreLeftOut() {
-        val sent = SummarizerRequestParameters.from(values, setOf("max_tokens", "top_p", "presence_penalty"))
+        val sent = ModelRequestParameters.from(values, setOf("max_tokens", "top_p", "presence_penalty"))
         assertNull(sent.temperature)
         assertNull(sent.frequencyPenalty)
         assertEquals(1.0, sent.topP!!, 0.0001)
@@ -57,13 +57,13 @@ class SummarizerRequestParametersTest {
 
     @Test
     fun streamingOffSendsNoStreamField() {
-        val sent = SummarizerRequestParameters.from(values.copy().apply { streaming = false }, null)
+        val sent = ModelRequestParameters.from(values.copy().apply { streaming = false }, null)
         assertFalse(STREAM in sent.sentNames())
     }
 
     @Test
     fun aRefusedParameterIsLeftOutAndTheRestAreKept() {
-        val retry = SummarizerRequestParameters.from(values, null).without(setOf(TEMPERATURE, STREAM))
+        val retry = ModelRequestParameters.from(values, null).without(setOf(TEMPERATURE, STREAM))
         assertNull(retry.temperature)
         assertFalse(retry.stream)
         assertEquals(1.0, retry.topP!!, 0.0001)
@@ -116,10 +116,10 @@ class SummarizerRequestParametersTest {
     fun aParameterThatWasNotSentIsNeverNamed() {
         val sent = setOf(TEMPERATURE)
         val body = """{"error":{"param":"top_p","message":"top_p is not supported"}}"""
-        assertTrue(SummarizerParameterRejection.rejected(400, body, null, sent).isEmpty())
+        assertTrue(ModelParameterRejection.rejected(400, body, null, sent).isEmpty())
     }
 
-    private fun reject(status: Int?, body: String) = SummarizerParameterRejection.rejected(
+    private fun reject(status: Int?, body: String) = ModelParameterRejection.rejected(
         status, body, null, setOf(STREAM, TEMPERATURE, TOP_P, FREQUENCY_PENALTY, PRESENCE_PENALTY)
     )
 }

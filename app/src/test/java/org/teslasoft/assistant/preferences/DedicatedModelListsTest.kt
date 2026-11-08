@@ -23,11 +23,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.backup.portable.ModelEndpointPortableCodec
 import org.teslasoft.assistant.preferences.backup.portable.RecentModelsBackup
-import org.teslasoft.assistant.preferences.backup.portable.SummarizerModelsBackup
+import org.teslasoft.assistant.preferences.backup.portable.DedicatedModelsBackup
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 
-/** The Summarizer keeps its own favorites and Recent list, apart from chat. */
-class SummarizerModelListsTest {
+/** The Summarizer and Memory Scanner keep their own favorites and Recent
+ *  lists, apart from chat and from each other. */
+class DedicatedModelListsTest {
 
     @Test
     fun summarizerFavoritesAreKeptApartFromChatFavorites() {
@@ -123,7 +124,7 @@ class SummarizerModelListsTest {
         )
         val data = ModelEndpointPortableCodec.Data(
             listOf(endpoint("ep-1")), emptyList(), null,
-            SummarizerModelsBackup.Snapshot(listOf(favorite, gone), recents)
+            DedicatedModelsBackup.Snapshot(listOf(favorite, gone), recents)
         )
 
         val parsed = (ModelEndpointPortableCodec.parse(ModelEndpointPortableCodec.encode(data))
@@ -165,9 +166,9 @@ class SummarizerModelListsTest {
         val mine = mapOf("modelId" to "model-a", "endpointId" to "ep-1", "selectedProvider" to "mine")
         val theirs = mapOf("modelId" to "model-a", "endpointId" to "ep-1", "selectedProvider" to "theirs")
         val other = mapOf("modelId" to "model-b", "endpointId" to "ep-1")
-        val merged = SummarizerModelsBackup.merge(
-            SummarizerModelsBackup.Snapshot(listOf(mine), empty),
-            SummarizerModelsBackup.Snapshot(listOf(theirs, other), empty)
+        val merged = DedicatedModelsBackup.merge(
+            DedicatedModelsBackup.Snapshot(listOf(mine), empty),
+            DedicatedModelsBackup.Snapshot(listOf(theirs, other), empty)
         )!!
         assertEquals(listOf(mine, other), merged.favorites)
     }
@@ -175,20 +176,44 @@ class SummarizerModelListsTest {
     @Test
     fun theRestoreFingerprintIgnoresTheSummarizersRecentHistory() {
         val favorite = mapOf("modelId" to "model-a", "endpointId" to "ep-1")
-        val a = SummarizerModelsBackup.Snapshot(
+        val a = DedicatedModelsBackup.Snapshot(
             listOf(favorite), RecentModelsBackup.Snapshot(20, listOf(FavoriteModelObject("m", "ep-1")), emptyList(), emptyMap())
         )
         val b = a.copy(recents = RecentModelsBackup.Snapshot(20, emptyList(), emptyList(), emptyMap()))
-        assertEquals(SummarizerModelsBackup.withoutHistory(a), SummarizerModelsBackup.withoutHistory(b))
+        assertEquals(DedicatedModelsBackup.withoutHistory(a), DedicatedModelsBackup.withoutHistory(b))
     }
 
     @Test
-    fun theSummarizerDefaultsSuitSummarizing() {
-        assertFalse(SummarizerParameterDefaults.STREAMING)
-        assertEquals(0.3f, SummarizerParameterDefaults.TEMPERATURE)
-        assertEquals(1.0f, SummarizerParameterDefaults.TOP_P)
-        assertEquals(0.0f, SummarizerParameterDefaults.FREQUENCY_PENALTY)
-        assertEquals(0.0f, SummarizerParameterDefaults.PRESENCE_PENALTY)
+    fun theRecommendedParametersSuitSummarizingAndScanning() {
+        for (scope in listOf(ModelPickerScope.SUMMARIZER, ModelPickerScope.MEMORY_SCANNER)) {
+            val recommended = RecommendedModelParameters.forScope(scope)
+            assertEquals(false, recommended.streaming)
+            assertEquals(0.3f, recommended.temperature)
+            assertEquals(1.0f, recommended.topP)
+            assertEquals(0.0f, recommended.frequencyPenalty)
+            assertEquals(0.0f, recommended.presencePenalty)
+        }
+    }
+
+    @Test
+    fun eachJobKeepsItsOwnFiles() {
+        assertEquals(setOf("", "summarizer_", "memory_scanner_"), ModelPickerScope.entries.map { it.filePrefix }.toSet())
+        assertFalse(ModelPickerScope.CHAT.isDedicated)
+        assertTrue(ModelPickerScope.SUMMARIZER.isDedicated && ModelPickerScope.MEMORY_SCANNER.isDedicated)
+    }
+
+    @Test
+    fun theMemoryScannersListsTravelInBackupsApartFromTheSummarizers() {
+        val empty = RecentModelsBackup.Snapshot(20, emptyList(), emptyList(), emptyMap())
+        val summarizer = DedicatedModelsBackup.Snapshot(listOf(mapOf("modelId" to "model-s", "endpointId" to "ep-1")), empty)
+        val scanner = DedicatedModelsBackup.Snapshot(listOf(mapOf("modelId" to "model-m", "endpointId" to "ep-1")), empty)
+        val data = ModelEndpointPortableCodec.Data(listOf(endpoint("ep-1")), emptyList(), null, summarizer, scanner)
+
+        val parsed = (ModelEndpointPortableCodec.parse(ModelEndpointPortableCodec.encode(data))
+            as ModelEndpointPortableCodec.Result.Ok).data
+
+        assertEquals(listOf("model-s"), parsed.summarizer!!.favorites.map { it["modelId"] })
+        assertEquals(listOf("model-m"), parsed.memoryScanner!!.favorites.map { it["modelId"] })
     }
 
     private fun installEndpoints(state: FakeSharedPreferences, vararg ids: String) {

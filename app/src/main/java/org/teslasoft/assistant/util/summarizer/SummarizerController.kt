@@ -45,8 +45,11 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelParameters
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.SummarizerModelRouting
+import org.teslasoft.assistant.preferences.DedicatedModelRouting
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.providers.ModelParameterRejection
+import org.teslasoft.assistant.providers.ModelRequestParameters
 import org.teslasoft.assistant.providers.ModelSupportedParametersStore
 import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
@@ -201,7 +204,7 @@ class SummarizerController(
                 val model = prefs.getSummarizerModel()
                 val routingReady = if (endpoint.isOpenRouterRouting() && model.isNotBlank()) {
                     ProviderRoutingResolver.resolve(
-                        true, SummarizerModelRouting.effective(context, endpointId, model)
+                        true, DedicatedModelRouting.SUMMARIZER.effective(context, endpointId, model)
                     ).block == RoutingBlock.NONE
                 } else {
                     true
@@ -590,7 +593,7 @@ class SummarizerController(
         if (endpoint.host.isBlank() || model.isBlank()) return null
 
         val requestFavorite = if (endpoint.isOpenRouterRouting()) {
-            SummarizerModelRouting.effective(appContext, endpointId, model)
+            DedicatedModelRouting.SUMMARIZER.effective(appContext, endpointId, model)
         } else {
             null
         }
@@ -972,7 +975,7 @@ class SummarizerController(
         }
 
         val requestFavorite = if (endpoint.isOpenRouterRouting()) {
-            SummarizerModelRouting.effective(appContext, endpointId, model)
+            DedicatedModelRouting.SUMMARIZER.effective(appContext, endpointId, model)
         } else {
             null
         }
@@ -1369,10 +1372,9 @@ class SummarizerController(
     }
 
     /**
-     * Sends one Summarizer request with the Summarizer's parameters for this
-     * model (its own saved settings while Enable Model Settings is on,
-     * otherwise the defaults on Summarizer Settings; never an API profile's)
-     * and returns the reply text, empty when the reply had none.
+     * Sends one Summarizer request with the Summarizer's parameters (those on
+     * Summarizer Settings; never an API profile's) and returns the reply text,
+     * empty when the reply had none.
      *
      * Parameters the service reports the model does not accept are left out.
      * When the provider explicitly refuses a parameter that was sent, the
@@ -1391,9 +1393,9 @@ class SummarizerController(
         messages: List<ChatMessage>,
         maxTokens: Int? = null
     ): String {
-        val values = FavoriteModelParameters.forSummarizerRequest(appContext, model, endpoint.id)
+        val values = FavoriteModelParameters.live(appContext, ModelPickerScope.SUMMARIZER)
         val supported = ModelSupportedParametersStore.get(appContext).supported(endpoint.id, model)
-        val parameters = SummarizerRequestParameters.from(values, supported)
+        val parameters = ModelRequestParameters.from(values, supported)
         return try {
             sendSummarizerRequest(
                 prefs, endpoint, model, requestedProvider, providerJson, function, evidence,
@@ -1402,7 +1404,7 @@ class SummarizerController(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            val refused = SummarizerParameterRejection.rejected(
+            val refused = ModelParameterRejection.rejected(
                 evidence.status, evidence.body, e.message, parameters.sentNames()
             )
             if (refused.isEmpty()) throw e
@@ -1426,7 +1428,7 @@ class SummarizerController(
         evidence: SummarizerDiagnostics.RequestEvidence,
         messages: List<ChatMessage>,
         maxTokens: Int?,
-        parameters: SummarizerRequestParameters
+        parameters: ModelRequestParameters
     ): String {
         val text = withSummarizerUsage(prefs, endpoint, model, requestedProvider, function) { attempt ->
             val client = buildClient(endpoint, providerJson, evidence, attempt)
@@ -1451,7 +1453,7 @@ class SummarizerController(
                 client.chatCompletion(request).choices.firstOrNull()?.message?.content?.toString().orEmpty()
             }
         }
-        SummarizerModelRouting.recordUse(appContext, endpoint.id, model)
+        DedicatedModelRouting.SUMMARIZER.recordUse(appContext, endpoint.id, model)
         return text
     }
 
