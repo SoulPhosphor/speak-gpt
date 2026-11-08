@@ -1147,22 +1147,34 @@ For each memory, at most three things:
   wording must say so.
 - **This is awareness inside a chat, not a notification.**
 
-## D.4 Fading (owner decision D34, 2026-11-08)
+## D.4 Fading and retiring (owner decisions D34, D43, 2026-11-08)
 
-**Decided:** an undated May Bring Up memory fades on its own over time, with
-these controls:
+**Decided:**
+- an undated May Bring Up memory fades over time;
+- when it has fully faded it is **retired**: it moves to the Retired area
+  (D.11) and is out of use until the user reinstates it;
+- a reinstated memory starts fresh.
 
-- **Fading is visible.** The Memory Browser marks which memories are
-  fading, which are not, and which have already faded, so the user can
-  look them up. That visibility is part of the user's control over memory.
-- **Faded memories can be reinstated** from the archive area (D.11).
-- **"Discussed" follows the conversation:** carry-over keeps a memory on
-  topic, not single messages, and never the AI's replies alone (B.5). The
-  briefing sending a memory never counts.
-- **Search is unaffected** (D9).
-- **Still open (D43):** exactly what "faded" does. It either only stops
-  being brought up unprompted, while staying findable by search, or it
-  moves the memory to Archived, out of use until reinstated.
+**How fast, in plain terms (D45):**
+- a memory retires after a set time without being discussed;
+- the time is one app-wide choice in Memory Handling Preferences (D.12);
+- the exponential "strength" from earlier drafts is dropped, because "last
+  discussed plus the fade time" is easier to understand and to show.
+
+**What the user sees on a fading memory's card:** when it was last
+discussed, and the date it will retire if it is not discussed again.
+Memories that are not fading show nothing extra. Retired memories are listed
+under Retired.
+
+**What counts as "discussed":**
+- the conversation stays on the topic, through carry-over (B.5), which is
+  never refreshed by the AI's replies alone;
+- the user edits the memory;
+- the briefing sending it never counts.
+
+**Note on the trade-off:** a retired memory is not found by search either,
+even when the user raises the subject, until it is reinstated. That is the
+owner's choice, and the Retired area makes it easy to undo.
 
 ## D.5 Dates
 
@@ -1307,27 +1319,58 @@ memory the user did not bring up.
   repetition, and over-agreement, not only which memories were retrieved.
   Judging replies with an AI costs tokens, so it is a small, occasional set.
 
-## D.11 The archive area (owner request, 2026-11-08)
+## D.11 Retired area and the browser's views (owner request, 2026-11-08)
 
-**Already built:**
-- Archive and Restore on each memory's menu;
-- archived memories are not used in chats;
-- Delete is permanent.
+**Found in the code:** archived memories exist, but the Memory Browser shows
+only active memories by default. Archived ones appear only if the user
+changes the Status filter, which is why they seemed impossible to find.
 
-**Proposed (D44):**
-- **One archive area in the Memory Browser,** where the user can find and
-  reinstate anything taken out of use:
-  - memories they archived;
-  - faded memories (D.4);
-  - memories they deleted, if the setting below is on.
-- **Deleted memories go to the archive first:** a setting, which applies to
-  the user's own deletes. With it on, deleting moves a memory to the archive,
-  and "Delete Permanently" is available from there. With it off, deleting
-  stays permanent, as today. The default is decision D44.
-- **Reinstating** returns a memory to normal use, and for a faded memory,
-  restores its May Bring Up eligibility.
-- **Nothing in the archive is sent to the AI** unless D43 decides that faded
-  memories stay searchable.
+**Owner's design:**
+- **A dropdown for the view.** The browser's "Memories | Pending" words
+  become one dropdown with Memories, Pending, Retired, and the always-sent
+  tab (D.12; its name is D46). It uses the canonical dropdown style.
+- **Retired** lists everything taken out of use, so it can be seen
+  immediately:
+  - memories the user archived;
+  - memories retired by fading;
+  - deleted memories, if the setting below is on.
+
+  Each can be reinstated, and permanently deleted from there.
+- **Deleted memories go to Retired first:** a setting in Memory Handling
+  Preferences (D44). With it on, Delete moves a memory to Retired. With it
+  off, Delete stays permanent, as today.
+- **Nothing in Retired is sent to the AI.**
+
+## D.12 Memory Handling Preferences and the always-sent tab (owner request, 2026-11-08)
+
+**A new settings screen, "Memory Handling Preferences",** separate from the
+current memory settings screen, which is crowded. It holds:
+
+- **the most always-sent memories allowed per message.** The default is 10,
+  and more is allowed;
+- **the fade time** for May Bring Up memories (D45);
+- **whether deleting sends a memory to Retired first** (D44).
+
+**The always-sent tab** (owner's design; its name is D46):
+- each memory in the tab has a checkbox, and only checked memories are sent
+  every message, up to the limit above;
+- unchecking keeps a memory in the tab without sending it, so the user can
+  swap which ones are sent;
+- the row's menu has an action that makes it a normal memory again: out of
+  the tab, still remembered, and found by search when relevant;
+- the always-sent memories have their own cap and do not count against
+  search's limits (D16).
+
+**Auto mode, where the embedding model picks which always-sent memories to
+include (owner question, D47):**
+- **Recommendation: no auto mode, checkboxes only.** Ordinary search already
+  is that auto mode. Every message, any memory that matches the
+  conversation, checked or not, is found and sent.
+- So the checkboxes only need to cover what should be present even when the
+  conversation is not about it, and that is better decided by the user than
+  guessed. It also keeps the behavior predictable and the screen simple.
+- If more memories are checked than the limit allows, the screen says so and
+  asks the user to uncheck some, instead of the app silently choosing.
 
 ## D.8 Data, backup, privacy
 
@@ -1389,8 +1432,11 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D40 | Should a companion keep its own short reflections or journal about the relationship? | Later and optional. It makes a companion feel alive, but it should come only after the vibe note, and be visible and editable |
 | D41 | Should the instructions sent with memories teach the four ways of using them (ignore, use silently, mention, ask first)? | Yes. It is the cheapest, highest-value improvement and could help current chats. The owner approves the exact text first |
 | D42 | Should one-time events track upcoming, happened, and settled? | Yes, instead of more fading rules. Settling is a user edit or a Memory Assistant suggestion through Pending |
-| D43 | When a May Bring Up memory fades, does it stay searchable (it only stops being brought up), or move to Archived (out of use until reinstated)? | Stay searchable; it only stops being brought up, and is listed as faded in the archive area so it can be reinstated. Archiving it would also hide it when the user raises the subject |
-| D44 | Should deleting a memory move it to the archive first, with Delete Permanently from there? What is the default? | Yes, as a setting. Default on, so a mistaken delete can be undone |
+| D43 | When a May Bring Up memory fades fully, what happens? | **Decided, 2026-11-08:** it is retired: it moves to the Retired area, out of use until the user reinstates it |
+| D44 | Should deleting a memory move it to Retired first, with Delete Permanently from there? What is the default? | **Owner wants the setting** (in Memory Handling Preferences). Recommended default: on, so a mistaken delete can be undone |
+| D45 | How fast do May Bring Up memories fade, and can the user choose? | One app-wide choice in Memory Handling Preferences. Suggested options: 2 weeks, 1 month, 3 months, 6 months. Default 1 month |
+| D46 | What is the always-sent tab called, and does "always" mean the AI always knows it, or always raises it? | Open: the owner's working name is "Always Bring Up". In this plan "always sent" means always known, which is not the same as permission to raise it unprompted (May Bring Up) |
+| D47 | Should an auto mode let the embedding model pick which always-sent memories to include? | No. Ordinary search already does this every message; checkboxes only |
 | D33 | What does the Memory Assistant propose beyond the memory text? | Dates only, at first. Always Know and May Bring Up stay the user's choices until their behavior is established |
 
 ---
