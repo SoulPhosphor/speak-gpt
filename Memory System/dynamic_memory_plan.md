@@ -551,7 +551,7 @@ effectively everything.
 
    **Adjustable numbers** (owner request, 2026-11-08). The owner can
    change the search numbers on this screen and immediately see what each
-   change does, so the values can be tuned on her own memories instead of
+   change does, so the values can be tuned on the owner's real memories instead of
    being guessed by whoever writes the code.
    - **Every tuning number is adjustable:**
      - the relevance gate's strength;
