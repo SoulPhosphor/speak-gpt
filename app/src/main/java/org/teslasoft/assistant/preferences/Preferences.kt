@@ -2979,6 +2979,60 @@ class Preferences internal constructor(
         )
     }
 
+    /** The Summarizer's own provider routing for its selected model, used when
+     *  that routing is not the one saved on a Summarizer favorite (a model that
+     *  is not a favorite, or a provider tried that is not one of its favorite
+     *  providers). "" = never written: the older routing setting is carried
+     *  over once (SummarizerModelRouting). */
+    fun getSummarizerRoutingOverride(): String =
+        getGlobalString("summarizer_routing_override", "")
+
+    fun hasSummarizerRoutingOverride(): Boolean = gp.contains("summarizer_routing_override")
+
+    fun setSummarizerRoutingOverride(json: String) {
+        gp.edit { putString("summarizer_routing_override", json) }
+    }
+
+    /* Summarizer default parameters: what every Summarizer model uses unless it
+     * has its own saved settings. Never read from an API profile. */
+
+    fun getSummarizerStreaming(): Boolean =
+        getGlobalString("summarizer_streaming", "").toBooleanStrictOrNull() ?: SummarizerParameterDefaults.STREAMING
+
+    fun setSummarizerStreaming(value: Boolean) {
+        gp.edit { putString("summarizer_streaming", value.toString()) }
+    }
+
+    fun getSummarizerTemperature(): Float =
+        getGlobalString("summarizer_temperature", "").toFloatOrNull() ?: SummarizerParameterDefaults.TEMPERATURE
+
+    fun setSummarizerTemperature(value: Float) {
+        gp.edit { putString("summarizer_temperature", value.toString()) }
+    }
+
+    fun getSummarizerTopP(): Float =
+        getGlobalString("summarizer_top_p", "").toFloatOrNull() ?: SummarizerParameterDefaults.TOP_P
+
+    fun setSummarizerTopP(value: Float) {
+        gp.edit { putString("summarizer_top_p", value.toString()) }
+    }
+
+    fun getSummarizerFrequencyPenalty(): Float =
+        getGlobalString("summarizer_frequency_penalty", "").toFloatOrNull()
+            ?: SummarizerParameterDefaults.FREQUENCY_PENALTY
+
+    fun setSummarizerFrequencyPenalty(value: Float) {
+        gp.edit { putString("summarizer_frequency_penalty", value.toString()) }
+    }
+
+    fun getSummarizerPresencePenalty(): Float =
+        getGlobalString("summarizer_presence_penalty", "").toFloatOrNull()
+            ?: SummarizerParameterDefaults.PRESENCE_PENALTY
+
+    fun setSummarizerPresencePenalty(value: Float) {
+        gp.edit { putString("summarizer_presence_penalty", value.toString()) }
+    }
+
     /** Complete Messages default (owner-approved default: 20) — the
      *  recent-window count new chats start with. */
     fun getSummarizerDefaultWindow(): Int =

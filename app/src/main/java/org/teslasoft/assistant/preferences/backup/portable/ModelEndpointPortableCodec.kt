@@ -65,7 +65,10 @@ object ModelEndpointPortableCodec {
         val favorites: List<Map<String, String>>,
         /** The model picker's Recent list. Only backups carry it; the live
          *  settings generations never do, and older backups have none. */
-        val recents: RecentModelsBackup.Snapshot? = null
+        val recents: RecentModelsBackup.Snapshot? = null,
+        /** The Summarizer's own favorites and Recent list. Only backups carry
+         *  it; older backups have none. */
+        val summarizer: SummarizerModelsBackup.Snapshot? = null
     )
 
     sealed class Result {
@@ -121,6 +124,7 @@ object ModelEndpointPortableCodec {
             .put("endpoints", endpoints)
             .put("favorites", favorites)
             .apply { data.recents?.let { put("recents", RecentModelsBackup.encode(it)) } }
+            .apply { data.summarizer?.let { put(SUMMARIZER_KEY, SummarizerModelsBackup.encode(it)) } }
             .toString(2)
     }
 
@@ -130,7 +134,8 @@ object ModelEndpointPortableCodec {
                 return Result.Rejected("artifact is too large")
             }
             val root = JSONObject(json)
-            if (!hasExactKeys(root, ROOT_KEYS) && !hasExactKeys(root, ROOT_KEYS + "recents")) {
+            val rootKeys = root.keys().asSequence().toSet()
+            if (!rootKeys.containsAll(ROOT_KEYS) || !(ROOT_KEYS + OPTIONAL_ROOT_KEYS).containsAll(rootKeys)) {
                 return Result.Rejected("unknown or missing top-level field")
             }
             if (root.getString("format") != FORMAT) return Result.Rejected("unsupported format")
@@ -192,7 +197,16 @@ object ModelEndpointPortableCodec {
                 RecentModelsBackup.parse(root.getJSONObject("recents"))
                     ?: return Result.Rejected("recent models are malformed")
             } else null
-            val data = Data(endpoints, favorites, recents?.let { RecentModelsBackup.forEndpoints(it, endpoints.mapTo(HashSet()) { e -> e.id }) })
+            val summarizer = if (root.has(SUMMARIZER_KEY)) {
+                SummarizerModelsBackup.parse(root.getJSONObject(SUMMARIZER_KEY))
+                    ?: return Result.Rejected("summarizer models are malformed")
+            } else null
+            val endpointIds = endpoints.mapTo(HashSet()) { e -> e.id }
+            val data = Data(
+                endpoints, favorites,
+                recents?.let { RecentModelsBackup.forEndpoints(it, endpointIds) },
+                summarizer?.let { SummarizerModelsBackup.forEndpoints(it, endpointIds) }
+            )
             validate(data)?.let { Result.Rejected(it) } ?: Result.Ok(data)
         } catch (_: Exception) {
             Result.Rejected("artifact is malformed")
@@ -280,6 +294,8 @@ object ModelEndpointPortableCodec {
     }
 
     private val ROOT_KEYS = setOf("format", "complete", "endpoints", "favorites")
+    private const val SUMMARIZER_KEY = "summarizer_models"
+    private val OPTIONAL_ROOT_KEYS = setOf("recents", SUMMARIZER_KEY)
     private val ENDPOINT_KEYS = setOf(
         "id", "label", "host", "chat_endpoint", "speech_endpoint", "auth_type", "model",
         "temperature", "top_p", "frequency_penalty", "presence_penalty", "max_tokens",
@@ -291,7 +307,7 @@ object ModelEndpointPortableCodec {
         "pdf_capability_by_model"
     )
     private val LEGACY_ENDPOINT_KEYS = ENDPOINT_KEYS - "pdf_capability_by_model"
-    private val FAVORITE_KEYS = setOf(
+    internal val FAVORITE_KEYS = setOf(
         "modelId", "endpointId", "routingType", "selectedProvider", "allowFallbacks",
         "providerOrder", "ignoredProviders", "reasoningEffort", "showReasoning", "streaming",
         "temperature", "topP", "frequencyPenalty", "presencePenalty", "pinned", "favoriteProviders"

@@ -33,6 +33,9 @@ object ModelEndpointPortableBackup {
         val data = stored.copy(
             recents = RecentModelsBackup.forEndpoints(
                 RecentModelsBackup.capture(appContext), stored.endpoints.mapTo(HashSet()) { it.id }
+            ),
+            summarizer = SummarizerModelsBackup.forEndpoints(
+                SummarizerModelsBackup.capture(appContext), stored.endpoints.mapTo(HashSet()) { it.id }
             )
         )
         val json = ModelEndpointPortableCodec.encode(data)

@@ -23,7 +23,10 @@ import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
 object ModelEndpointPortableRestore {
     fun apply(context: Context, data: ModelEndpointPortableCodec.Data): Boolean = try {
         ModelEndpointStateGenerationStore.get(context.applicationContext).install(data).also { installed ->
-            if (installed) data.recents?.let { RecentModelsBackup.apply(context.applicationContext, it) }
+            if (installed) {
+                data.recents?.let { RecentModelsBackup.apply(context.applicationContext, it) }
+                data.summarizer?.let { SummarizerModelsBackup.apply(context.applicationContext, it) }
+            }
         }
     } catch (_: Exception) {
         false

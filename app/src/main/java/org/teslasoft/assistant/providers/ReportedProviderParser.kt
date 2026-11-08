@@ -109,6 +109,20 @@ object ReportedProviderParser {
         return inspector.finishNormally()
     }
 
+    /**
+     * Usage, cost and serving provider from one complete streamed response
+     * body (its event lines), read the same way as a live stream. Null when
+     * the body holds no event lines.
+     */
+    fun observeStreamedBody(body: String?): RawStreamObservation? {
+        if (body.isNullOrBlank()) return null
+        val lines = body.lineSequence().filter { payloadFromLine(it) != null }.toList()
+        if (lines.isEmpty()) return null
+        val inspector = RawSseInspector()
+        lines.forEach { inspector.acceptLine(it) }
+        return inspector.finishNormally()
+    }
+
     fun fromResponseLine(line: String): String? {
         val payload = payloadFromLine(line) ?: return null
         if (payload == "[DONE]") return null

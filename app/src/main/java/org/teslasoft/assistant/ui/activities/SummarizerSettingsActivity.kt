@@ -47,6 +47,7 @@ import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.FavoriteRoutingActions
+import org.teslasoft.assistant.ui.summarizer.SummarizerParametersSection
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import java.util.Locale
 
@@ -76,6 +77,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
     private var fieldCompactionMaximumTokens: TextInputEditText? = null
     private var compactionFieldsReady = false
     private var switchNewChats: MaterialSwitch? = null
+    private var parametersSection: SummarizerParametersSection? = null
 
     private var suppressWatchers = false
 
@@ -169,6 +171,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
         findViewById<View>(R.id.row_summarizer_prompts)?.setOnClickListener {
             startActivity(Intent(this, SummarizerPromptsActivity::class.java))
         }
+        parametersSection = SummarizerParametersSection(findViewById(R.id.root))
 
         suppressWatchers = true
         fieldCompleteMessages?.setText(preferences?.getSummarizerDefaultWindow()?.toString() ?: "20")
@@ -308,6 +311,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
             preferences?.setSummarizerRoutingType(FavoriteModelObject.ROUTING_AUTOMATIC)
         }
         textRoutingValue?.text = routingLabel(selectedRouting)
+        parametersSection?.refresh()
     }
 
     private fun showEndpointDropdown() {

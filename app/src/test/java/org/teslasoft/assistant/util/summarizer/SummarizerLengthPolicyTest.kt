@@ -14,7 +14,11 @@ class SummarizerLengthPolicyTest {
         assertFalse(controller.contains("getSummarizerOverLength()"))
         assertFalse(controller.contains("SummarizerLengthPolicy"))
         assertFalse(controller.contains("priorOverLength"))
-        assertEquals(1, Regex("maxTokens =").findAll(controller).count())
+        // Only the image summary caps its reply; the shared request helper
+        // forwards whatever cap its caller gives (none for the others).
+        assertEquals(1, Regex("maxTokens = 200").findAll(controller).count())
+        assertEquals(2, Regex("maxTokens =").findAll(controller).count())
+        assertTrue(controller.contains("maxTokens = maxTokens"))
         val image = controller.substring(controller.indexOf("suspend fun summarizeImagePrompt"),
             controller.indexOf("private suspend fun compactSnapshot"))
         assertTrue(image.contains("maxTokens = 200"))

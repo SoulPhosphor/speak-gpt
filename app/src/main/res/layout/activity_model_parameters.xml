@@ -60,127 +60,74 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/action_bar">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingBottom="24dp">
+        <LinearLayout style="@style/Widget.App.Page.Content">
 
             <!-- The model these parameters belong to. -->
             <TextView
                 android:id="@+id/text_model"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="20dp"
-                android:textColor="?attr/appTitleTextColor"
-                android:textSize="20sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.ModelParameters.ModelName" />
 
-            <!-- Streaming -->
-            <LinearLayout style="@style/Widget.App.ParameterCard">
+            <!-- Plain parameter list (Widget.App.PlainParameter.*): each
+                 title and its control on the screen background. -->
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterTitle="@string/streaming_title"
+                app:parameterInfo="@string/streaming_description" />
 
-                <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                    android:layout_width="match_parent"
+            <LinearLayout
+                android:id="@+id/row_streaming"
+                style="@style/Widget.App.PlainParameter.CheckRow">
+
+                <com.google.android.material.checkbox.MaterialCheckBox
+                    android:id="@+id/check_streaming"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    app:parameterTitle="@string/streaming_title"
-                    app:parameterInfo="@string/streaming_description" />
+                    android:clickable="false" />
 
-                <LinearLayout
-                    android:id="@+id/row_streaming"
-                    style="@style/Widget.App.CheckOption.Row"
-                    android:layout_width="match_parent">
-
-                    <com.google.android.material.checkbox.MaterialCheckBox
-                        android:id="@+id/check_streaming"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:clickable="false" />
-
-                    <TextView
-                        style="@style/Widget.App.CheckOption.Label"
-                        android:text="@string/streaming_title" />
-                </LinearLayout>
+                <TextView
+                    style="@style/Widget.App.CheckOption.Label"
+                    android:text="@string/streaming_title" />
             </LinearLayout>
 
-            <!-- Temperature -->
-            <LinearLayout style="@style/Widget.App.ParameterCard">
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterTitle="@string/sampling_label_temperature"
+                app:parameterInfo="@string/sampling_hint_temperature" />
 
-                <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:parameterTitle="@string/sampling_label_temperature"
-                    app:parameterInfo="@string/sampling_hint_temperature" />
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/temperature_slider"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/set_temperature" />
 
-                <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
-                    android:id="@+id/temperature_slider"
-                    style="@style/Widget.App.SamplingSlider.Container"
-                    android:contentDescription="@string/set_temperature" />
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterTitle="@string/sampling_label_top_p"
+                app:parameterInfo="@string/sampling_hint_top_p" />
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/top_p_slider"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/set_top_p" />
 
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/label_deterministic"
-                        android:textColor="?attr/appTextColor" />
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterTitle="@string/sampling_label_frequency_penalty"
+                app:parameterInfo="@string/sampling_hint_frequency_penalty" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/label_creative"
-                        android:textColor="?attr/appTextColor" />
-                </LinearLayout>
-            </LinearLayout>
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/frequency_penalty_slider"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/set_frequency_penalty" />
 
-            <!-- Top P -->
-            <LinearLayout style="@style/Widget.App.ParameterCard">
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                style="@style/Widget.App.PlainParameter.Header"
+                app:parameterTitle="@string/sampling_label_presence_penalty"
+                app:parameterInfo="@string/sampling_hint_presence_penalty" />
 
-                <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:parameterTitle="@string/sampling_label_top_p"
-                    app:parameterInfo="@string/sampling_hint_top_p" />
-
-                <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
-                    android:id="@+id/top_p_slider"
-                    style="@style/Widget.App.SamplingSlider.Container"
-                    android:contentDescription="@string/set_top_p" />
-            </LinearLayout>
-
-            <!-- Frequency penalty -->
-            <LinearLayout style="@style/Widget.App.ParameterCard">
-
-                <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:parameterTitle="@string/sampling_label_frequency_penalty"
-                    app:parameterInfo="@string/sampling_hint_frequency_penalty" />
-
-                <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
-                    android:id="@+id/frequency_penalty_slider"
-                    style="@style/Widget.App.SamplingSlider.Container"
-                    android:contentDescription="@string/set_frequency_penalty" />
-            </LinearLayout>
-
-            <!-- Presence penalty -->
-            <LinearLayout style="@style/Widget.App.ParameterCard">
-
-                <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:parameterTitle="@string/sampling_label_presence_penalty"
-                    app:parameterInfo="@string/sampling_hint_presence_penalty" />
-
-                <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
-                    android:id="@+id/presence_penalty_slider"
-                    style="@style/Widget.App.SamplingSlider.Container"
-                    android:contentDescription="@string/set_presence_penalty" />
-            </LinearLayout>
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+                android:id="@+id/presence_penalty_slider"
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/set_presence_penalty" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

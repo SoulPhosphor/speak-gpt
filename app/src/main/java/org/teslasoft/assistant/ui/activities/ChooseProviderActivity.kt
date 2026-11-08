@@ -48,6 +48,8 @@ import org.teslasoft.assistant.imagegen.ToolCapabilityScope
 import org.teslasoft.assistant.imagegen.ToolCapabilityStore
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatModelRouting
+import org.teslasoft.assistant.preferences.ModelPickerScope
+import org.teslasoft.assistant.preferences.SummarizerModelRouting
 import org.teslasoft.assistant.ui.util.CompactActionPopup
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -125,6 +127,10 @@ class ChooseProviderActivity : SettingsPageActivity() {
          *  favorite, is saved on that chat rather than on a favorite. */
         const val EXTRA_CHAT_ID = "chatId"
 
+        /** Opened from the Summarizer's picker: routing, favorites and
+         *  favorite providers are the Summarizer's own (ModelPickerScope). */
+        const val EXTRA_SCOPE = "scope"
+
         private val routingTypes = arrayOf(
             FavoriteModelObject.ROUTING_AUTOMATIC,
             FavoriteModelObject.ROUTING_PREFERRED,
@@ -153,6 +159,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
     private var preferences: Preferences? = null
     private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
     private var chatPreferences: Preferences? = null
+    private var summarizerScope = false
 
     /** The selected model's favorite providers (on its favorite, or on its
      *  Recent entry when it is not a favorite). */
@@ -234,7 +241,11 @@ class ChooseProviderActivity : SettingsPageActivity() {
         setContentView(R.layout.activity_choose_provider)
 
         preferences = Preferences.getPreferences(this, "")
-        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(this)
+        summarizerScope =
+            ModelPickerScope.from(intent.getStringExtra(EXTRA_SCOPE)) == ModelPickerScope.SUMMARIZER
+        favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(
+            this, if (summarizerScope) ModelPickerScope.SUMMARIZER else ModelPickerScope.CHAT
+        )
 
         endpointId = intent.getStringExtra(EXTRA_ENDPOINT_ID) ?: ""
         chatPreferences = intent.getStringExtra(EXTRA_CHAT_ID)?.takeIf { it.isNotBlank() }
@@ -252,7 +263,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         // After recreation, show the routing this chat actually uses (it may be
         // the chat's own trial), not only the favorite's.
         val restoredRouting = savedPickerModel?.let { model ->
-            chatPreferences?.let { ChatModelRouting.forEditing(this, it, endpointId, model)?.routingType }
+            routingForEditing(model)?.routingType
                 ?: favoriteModelsPreferences?.getRoutingType(model, endpointId)
         }
         selectedRoutingType = (restoredRouting ?: intent.getStringExtra(EXTRA_ROUTING_TYPE))
@@ -389,6 +400,16 @@ class ChooseProviderActivity : SettingsPageActivity() {
         }
     }
 
+    /** The routing [model] uses where this screen was opened from: the
+     *  Summarizer's own, or the chat's (null without a chat). */
+    private fun routingForEditing(model: String): FavoriteModelObject? =
+        if (summarizerScope) SummarizerModelRouting.forEditing(this, endpointId, model)
+        else chatPreferences?.let { ChatModelRouting.forEditing(this, it, endpointId, model) }
+
+    private fun favoriteProvidersFor(model: String): List<String> =
+        if (summarizerScope) SummarizerModelRouting.favoriteProviders(this, endpointId, model)
+        else ChatModelRouting.favoriteProviders(this, endpointId, model)
+
     /** Every valid, distinct favorite belonging to this exact API endpoint. */
     private fun endpointFavoriteModels(): List<String> =
         favoriteModelsPreferences?.getFavoriteModels(endpointId)
@@ -400,7 +421,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
         val modelDialog = AdvancedModelSelectorDialogFragment.newAllModelsInstance(
             selectedModel,
             "",
-            endpointId
+            endpointId,
+            if (summarizerScope) ModelPickerScope.SUMMARIZER else ModelPickerScope.CHAT
         )
         modelDialog.setModelSelectedListener { model -> onModelChanged(model) }
         modelDialog.show(supportFragmentManager, "ChooseProviderModelSelector")
@@ -439,12 +461,14 @@ class ChooseProviderActivity : SettingsPageActivity() {
     private fun seedProviderStateFromFavorite(adoptFavoriteRoutingType: Boolean) {
         val stored = if (selectedModel.isBlank()) null
         else favoriteModelsPreferences?.getFavorite(selectedModel, endpointId)
-        showProviderMenu = selectedModel.isNotBlank() && (stored != null || chatPreferences != null)
+        showProviderMenu = selectedModel.isNotBlank() &&
+            (stored != null || chatPreferences != null || summarizerScope)
         favoriteProviders = if (selectedModel.isBlank()) emptyList()
-            else ChatModelRouting.favoriteProviders(this, endpointId, selectedModel)
-        // A chat shows the routing it actually uses, which may be its own.
-        val favorite = if (selectedModel.isBlank() || chatPreferences == null) stored
-        else ChatModelRouting.forEditing(this, chatPreferences, endpointId, selectedModel)
+            else favoriteProvidersFor(selectedModel)
+        // A chat (or the Summarizer) shows the routing it actually uses, which
+        // may be its own.
+        val favorite = if (selectedModel.isBlank() || (chatPreferences == null && !summarizerScope)) stored
+        else routingForEditing(selectedModel)
 
         selectedProvider = favorite?.selectedProvider ?: ""
         orderList.clear()
@@ -917,8 +941,13 @@ class ChooseProviderActivity : SettingsPageActivity() {
                         else favoriteProviders + slug
                     // Dropdowns show the provider by name, also when offline.
                     RecentOnlyProvidersStore.get(this).rememberName(slug, providerName)
-                    if (ChatModelRouting.setFavoriteProviders(this, endpointId, selectedModel, updated)) {
-                        favoriteProviders = ChatModelRouting.favoriteProviders(this, endpointId, selectedModel)
+                    val changed = if (summarizerScope) {
+                        SummarizerModelRouting.setFavoriteProviders(this, endpointId, selectedModel, updated)
+                    } else {
+                        ChatModelRouting.setFavoriteProviders(this, endpointId, selectedModel, updated)
+                    }
+                    if (changed) {
+                        favoriteProviders = favoriteProvidersFor(selectedModel)
                         renderChart()
                     }
                     true
@@ -1107,7 +1136,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
                     providerOrder = ArrayList(orderList)
                     ignoredProviders = ArrayList(ignored)
                 }
-                ChatModelRouting.save(this, chatPreferences, routing)
+                if (summarizerScope) SummarizerModelRouting.save(this, routing)
+                else ChatModelRouting.save(this, chatPreferences, routing)
                 persistSelectedRouteToolCapability(selectedRouteToolCapability())
             }
             btnSave?.let { SaveIconFlash.flash(it) }

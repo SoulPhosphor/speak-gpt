@@ -1435,8 +1435,28 @@ mode, visibility, and a selection listener.
 button box, for an action that should read as a link. After a successful save,
 `SaveIconFlash.flashText` turns its words green for the shared success time.
 `Widget.App.QuickSettings.TextLink` aligns it with the Quick Settings card
-segments. Current user: Save Parameters to Favorite / Recent Model Settings
-above Streaming in Quick Settings.
+segments. Current users: Save Parameters to Favorite / Recent Model Settings
+above Streaming in Quick Settings, and the same link above the default
+parameters on Summarizer Settings (`Widget.App.PlainParameter.TextLink`).
+
+## Plain parameter list
+
+Model parameters shown on an ordinary settings screen are plain: each
+`ParameterSectionHeader` title and its control sit on the screen background,
+with no card box around them (owner ruling, Nov 8 2026).
+
+- `Widget.App.PlainParameter.Header` on each `ParameterSectionHeader`;
+- `Widget.App.PlainParameter.CheckRow` for the Streaming checkbox line (a
+  `Widget.App.CheckOption.Row` with the list's inset);
+- `SamplingParameterControl` with `Widget.App.SamplingSlider.Container` for
+  each sampling value;
+- `Widget.App.PlainParameter.TextLink` for a link above the list.
+
+`plain_parameter_inset` matches the slider's own inset, so titles, checkbox
+and link line up with the slider. Spacing lives in `plain_parameter_*`.
+Current users: Model Settings (the model name uses
+`Widget.App.ModelParameters.ModelName`) and the Summarizer's default
+parameters on Summarizer Settings. Quick Settings keeps its card segments.
 
 ## Compact action popup
 

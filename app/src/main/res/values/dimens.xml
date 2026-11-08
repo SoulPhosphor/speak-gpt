@@ -127,6 +127,12 @@
     <dimen name="quick_settings_segment_gap">2dp</dimen>
     <dimen name="quick_settings_segment_padding_vertical">8dp</dimen>
     <dimen name="quick_settings_segment_padding_horizontal">16dp</dimen>
+    <!-- Plain parameter list (Widget.App.PlainParameter.*). -->
+    <dimen name="plain_parameter_inset">@dimen/quick_settings_segment_padding_horizontal</dimen>
+    <dimen name="plain_parameter_gap">24dp</dimen>
+    <dimen name="plain_parameter_link_gap">12dp</dimen>
+    <dimen name="model_parameters_model_name_padding_top">20dp</dimen>
+    <dimen name="model_parameters_model_name_text_size">20sp</dimen>
     <dimen name="quick_settings_segment_outer_radius">24dp</dimen>
     <dimen name="quick_settings_segment_inner_radius">4dp</dimen>
     <dimen name="quick_settings_segment_stroke_width">1dp</dimen>

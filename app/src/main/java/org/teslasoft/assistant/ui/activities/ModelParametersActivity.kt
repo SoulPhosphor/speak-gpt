@@ -37,6 +37,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.preferences.FavoriteModelParameters
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
@@ -59,6 +60,10 @@ import org.teslasoft.assistant.ui.widgets.SamplingParameterSpec
  * explicit and in-place: it persists, briefly greens the Save icon and shows a
  * "Saved" toast, and clears the dirty state so Back exits normally. Leaving with
  * unsaved changes uses the app's standard unsaved-changes confirmation.
+ *
+ * Opened for a Summarizer model, it edits that model's settings in the
+ * Summarizer's own lists, and Restore Default Settings returns it to the
+ * defaults on Summarizer Settings.
  */
 class ModelParametersActivity : FragmentActivity() {
 
@@ -66,12 +71,17 @@ class ModelParametersActivity : FragmentActivity() {
         const val EXTRA_MODEL_ID = "modelId"
         const val EXTRA_ENDPOINT_ID = "endpointId"
         const val EXTRA_CHAT_ID = "chatId"
+        const val EXTRA_SCOPE = "scope"
 
-        fun createIntent(context: Context, modelId: String, endpointId: String, chatId: String): Intent =
+        fun createIntent(
+            context: Context, modelId: String, endpointId: String, chatId: String,
+            scope: ModelPickerScope = ModelPickerScope.CHAT
+        ): Intent =
             Intent(context, ModelParametersActivity::class.java)
                 .putExtra(EXTRA_MODEL_ID, modelId)
                 .putExtra(EXTRA_ENDPOINT_ID, endpointId)
                 .putExtra(EXTRA_CHAT_ID, chatId)
+                .putExtra(EXTRA_SCOPE, scope.name)
     }
 
     private var actionBar: ConstraintLayout? = null
@@ -89,6 +99,9 @@ class ModelParametersActivity : FragmentActivity() {
     private var modelId: String = ""
     private var endpointId: String = ""
     private var chatId: String = ""
+    /** Chat models, or the Summarizer's (whose defaults come from Summarizer
+     *  Settings and which never touch a chat). */
+    private var scope = ModelPickerScope.CHAT
 
     private var streaming: Boolean = true
     private var initialSnapshot: String = ""
@@ -115,10 +128,11 @@ class ModelParametersActivity : FragmentActivity() {
         modelId = intent.getStringExtra(EXTRA_MODEL_ID).orEmpty()
         endpointId = intent.getStringExtra(EXTRA_ENDPOINT_ID).orEmpty()
         chatId = intent.getStringExtra(EXTRA_CHAT_ID).orEmpty()
+        scope = ModelPickerScope.from(intent.getStringExtra(EXTRA_SCOPE))
 
         textModel?.text = modelId
 
-        seedControls(FavoriteModelParameters.startingParameters(this, modelId, endpointId))
+        seedControls(FavoriteModelParameters.startingParameters(this, modelId, endpointId, scope))
         initialSnapshot = snapshot()
 
         btnBack?.setOnClickListener { attemptExit() }
@@ -131,7 +145,7 @@ class ModelParametersActivity : FragmentActivity() {
 
     /** The chat this screen was opened from, when it is the model being edited. */
     private fun currentChatPreferencesIfActiveModel(): Preferences? {
-        if (chatId.isEmpty()) return null
+        if (chatId.isEmpty() || scope != ModelPickerScope.CHAT) return null
         val prefs = Preferences.getPreferences(this, chatId)
         return if (prefs.getModel() == modelId && prefs.getApiEndpointId() == endpointId) prefs else null
     }
@@ -142,7 +156,7 @@ class ModelParametersActivity : FragmentActivity() {
      * favorite), otherwise its API profile's defaults.
      */
     private fun seedControls(values: FavoriteModelObject) {
-        val defaults = FavoriteModelParameters.apiDefaults(this, modelId, endpointId)
+        val defaults = FavoriteModelParameters.defaults(this, modelId, endpointId, scope)
 
         streaming = values.streaming ?: defaults.streaming ?: true
         checkStreaming?.isChecked = streaming
@@ -189,7 +203,7 @@ class ModelParametersActivity : FragmentActivity() {
             presencePenalty = presencePenaltyControl?.value
         }
         // On the favorite when the model is one, otherwise on its Recent entry.
-        FavoriteModelParameters.save(this, modelId, endpointId, values)
+        FavoriteModelParameters.save(this, modelId, endpointId, values, scope)
 
         // When this is the chat's active model, the saved parameters take effect
         // in that chat right away rather than waiting for a re-selection.
@@ -227,11 +241,11 @@ class ModelParametersActivity : FragmentActivity() {
     }
 
     private fun restoreDefaults() {
-        FavoriteModelParameters.restoreDefaults(this, modelId, endpointId)
+        FavoriteModelParameters.restoreDefaults(this, modelId, endpointId, scope)
         currentChatPreferencesIfActiveModel()?.let {
             FavoriteModelParameters.applyToChat(this, it, modelId, endpointId)
         }
-        seedControls(FavoriteModelParameters.apiDefaults(this, modelId, endpointId))
+        seedControls(FavoriteModelParameters.defaults(this, modelId, endpointId, scope))
         initialSnapshot = snapshot()
         resetSaveButtonTint()
         btnRestoreDefaults?.let { SaveIconFlash.flash(it) }
