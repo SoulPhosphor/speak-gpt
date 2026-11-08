@@ -1372,6 +1372,51 @@ include (owner question, D47):**
 - If more memories are checked than the limit allows, the screen says so and
   asks the user to uncheck some, instead of the app silently choosing.
 
+## D.13 Simplified direction for the later phases (2026-11-08, recommendation)
+
+Following the owner's concerns about complexity, keeping track, and models
+that over-mention memories.
+
+**For each memory, the user decides at most:**
+- **Always:** sent with every message, chosen with the checkboxes on the
+  Always tab, up to the limit;
+- **an optional date:** an event date, shown to the AI as upcoming or past,
+  and/or a "past after" date, after which the memory is treated as past and
+  leaves Always (D49);
+- **whether it fades:** retires after the fade time without being
+  discussed, using the app-wide speed or custom days (D45, D49).
+
+**No per-memory May Bring Up switch (D48).** Whether to raise something
+depends on the conversation, and models follow such switches unreliably.
+Some models recap the user's whole history every turn even when told not
+to. The reliable controls are:
+
+- **send less:** only relevant search results plus the small Always set;
+- **teach how to use what is sent:** the four ways in D.10 (D41);
+- **per-model instructions:** this app already has Model Rules, which are
+  sent only for a chosen model. A rule such as "do not recap the user's
+  history" can be set for the specific models that misbehave.
+
+**Keeping track without extra work (D50):**
+- one review place, Pending, with labelled reasons;
+- nothing requires action; doing nothing leads to the sensible default;
+- renewing is one tap.
+
+**Order, each a separate pull request, foundations first:**
+1. Carry-over, both send paths, and the memory-use instruction (D41). These
+   are the next pull request.
+2. Data control: the browser dropdown (Memories, Pending, Retired, Always),
+   the Retired area, Memory Handling Preferences, and delete-to-Retired.
+   This changes no AI behavior.
+3. The Always tab and its cap.
+4. Dates: event dates, "past after" dates, and "Event passed" review.
+5. Fading: markers on cards, retiring, "Retiring soon" review, and
+   reinstating.
+6. Later: the background reviewer (D51), with its own prompt.
+
+**After these are in place,** revisit how search picks memories, using the
+test screen and the test conversations.
+
 ## D.8 Data, backup, privacy
 
 - New columns are added. The retired `always_load` column and
@@ -1435,8 +1480,12 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D43 | When a May Bring Up memory fades fully, what happens? | **Decided, 2026-11-08:** it is retired: it moves to the Retired area, out of use until the user reinstates it |
 | D44 | Should deleting a memory move it to Retired first, with Delete Permanently from there? What is the default? | **Owner wants the setting** (in Memory Handling Preferences). Recommended default: on, so a mistaken delete can be undone |
 | D45 | How fast do May Bring Up memories fade, and can the user choose? | One app-wide choice in Memory Handling Preferences. Suggested options: 2 weeks, 1 month, 3 months, 6 months. Default 1 month |
-| D46 | What is the always-sent tab called, and does "always" mean the AI always knows it, or always raises it? | Open: the owner's working name is "Always Bring Up". In this plan "always sent" means always known, which is not the same as permission to raise it unprompted (May Bring Up) |
+| D46 | What is the always-sent tab called, and what does it mean? | **Decided, 2026-11-08:** the dropdown entry is "Always". Always memories are sent with every message |
 | D47 | Should an auto mode let the embedding model pick which always-sent memories to include? | No. Ordinary search already does this every message; checkboxes only |
+| D48 | Should each memory have a May Bring Up switch? | **Recommended: no** (owner concern, 2026-11-08). Whether to raise something depends on the conversation, and models follow such switches unreliably. Instead: control what is sent (search plus the small Always set), teach how to use memories (D41), and use the existing Model Rules for models with specific habits |
+| D49 | Fade timing, and an optional "past after" date per memory? | The owner wants custom fade timing, and a per-memory date after which the memory becomes a past event. Recommended: preset choices plus a custom number of days, and an optional "past after" date on any memory |
+| D50 | How are expiring and passed memories reviewed without overwhelming the user? | One review place: Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, the sensible default happens (a fading memory retires; a passed event is kept as past). Reviewing is optional, and one tap renews |
+| D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | Later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
 | D33 | What does the Memory Assistant propose beyond the memory text? | Dates only, at first. Always Know and May Bring Up stay the user's choices until their behavior is established |
 
 ---
