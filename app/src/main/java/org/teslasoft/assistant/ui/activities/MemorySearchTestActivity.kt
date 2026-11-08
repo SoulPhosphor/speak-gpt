@@ -90,6 +90,9 @@ class MemorySearchTestActivity : SettingsPageActivity() {
     private var prepared: Librarian.PreparedSearchTest? = null
     private var useImportanceRatings = true
     private var populating = false
+    /** Increases with every test request; a result from an older request is
+     *  discarded, so a slow earlier test can never replace a newer one. */
+    private var testGeneration = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -114,7 +117,7 @@ class MemorySearchTestActivity : SettingsPageActivity() {
         btnRun.setOnClickListener { runTest() }
         findViewById<MaterialButton>(R.id.btn_use_in_chats).setOnClickListener { useInChats() }
         findViewById<MaterialButton>(R.id.btn_reset).setOnClickListener {
-            trial = SearchTuning()
+            trial = SearchTuning().normalized()
             populateControls(trial)
             textSettingsStatus.text = getString(R.string.memory_search_reset_done)
             rescore()
@@ -186,13 +189,13 @@ class MemorySearchTestActivity : SettingsPageActivity() {
         )
 
         bindWholeNumber(fieldMaxMemories, SearchTuning.MAX_MEMORIES_RANGE, { trial.maxMemories }) { v ->
-            trial = trial.copy(maxMemories = v)
+            applyTrial(trial.copy(maxMemories = v))
         }
         bindWholeNumber(fieldMemorySpace, SearchTuning.MEMORY_SPACE_RANGE, { trial.memorySpace }) { v ->
-            trial = trial.copy(memorySpace = v)
+            applyTrial(trial.copy(memorySpace = v))
         }
         bindWholeNumber(fieldSmallLibrary, 0..SearchTuning.SMALL_LIBRARY_SIZE_MAX, { trial.params.smallLibrarySize }) { v ->
-            trial = trial.copy(params = trial.params.copy(smallLibrarySize = v))
+            applyTrial(trial.copy(params = trial.params.copy(smallLibrarySize = v)))
         }
     }
 
@@ -203,15 +206,23 @@ class MemorySearchTestActivity : SettingsPageActivity() {
         for ((control, slot) in sliders) {
             control.configure(slot.spec, slot.read(t.params).toFloat()) { value ->
                 if (populating) return@configure
-                trial = trial.copy(params = slot.write(trial.params, value.toDouble()))
-                markUnsaved()
-                rescore()
+                applyTrial(trial.copy(params = slot.write(trial.params, value.toDouble())))
             }
         }
         fieldMaxMemories.setText(t.maxMemories.toString())
         fieldMemorySpace.setText(t.memorySpace.toString())
         fieldSmallLibrary.setText(t.params.smallLibrarySize.toString())
         populating = false
+    }
+
+    /** Applies a changed number using the same bounds chats apply, shows any
+     *  corrected value in the controls, and re-scores the test. */
+    private fun applyTrial(requested: SearchTuning) {
+        val normalized = requested.normalized()
+        trial = normalized
+        if (normalized != requested) populateControls(normalized)
+        markUnsaved()
+        rescore()
     }
 
     /** A whole-number field: valid typing applies at once; anything else is
@@ -230,8 +241,6 @@ class MemorySearchTestActivity : SettingsPageActivity() {
                 val v = s?.toString()?.trim()?.toIntOrNull() ?: return
                 if (v !in range || v == current()) return
                 apply(v)
-                markUnsaved()
-                rescore()
             }
         })
         field.setOnFocusChangeListener { _, hasFocus ->
@@ -311,6 +320,7 @@ class MemorySearchTestActivity : SettingsPageActivity() {
         btnRun.isEnabled = false
         btnRun.text = getString(R.string.memory_search_test_running)
         val scope = currentScope()
+        val generation = ++testGeneration
         lifecycleScope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 try {
@@ -319,6 +329,7 @@ class MemorySearchTestActivity : SettingsPageActivity() {
                     Result.failure(e)
                 }
             }
+            if (generation != testGeneration) return@launch
             btnRun.isEnabled = true
             btnRun.text = getString(R.string.memory_search_test_run)
             outcome.onSuccess { p ->

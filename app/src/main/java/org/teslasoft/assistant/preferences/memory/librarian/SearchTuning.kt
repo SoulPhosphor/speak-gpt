@@ -74,6 +74,15 @@ data class SearchTuning(
         }
     }
 
+    /** The same bounds chats apply when they read the stored policy, so a
+     *  value shown or tested on the Memory Search Test screen is always the
+     *  value chats will use. */
+    fun normalized(): SearchTuning = SearchTuning(
+        params = LiveRetrieval.Params.bounded(liveSearchValues()).first,
+        maxMemories = maxMemories.coerceIn(MAX_MEMORIES_RANGE),
+        memorySpace = memorySpace.coerceIn(MEMORY_SPACE_RANGE)
+    )
+
     /** The `live_search` values, keyed as [LiveRetrieval.Params.bounded] reads them. */
     fun liveSearchValues(): Map<String, Double> = mapOf(
         LiveRetrieval.Params.KEY_SIMILARITY_FLOOR to params.similarityFloor,
