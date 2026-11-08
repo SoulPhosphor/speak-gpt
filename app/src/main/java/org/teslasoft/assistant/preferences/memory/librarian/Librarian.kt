@@ -682,9 +682,14 @@ class Librarian private constructor(private val appContext: Context) {
                 )
                 val missing = candidates.count { !vectors.containsKey(it.memoryId) }
                 if (missing > 0) {
+                    val consequence = if (reconciliation) {
+                        "lexical retrieval over the complete set this turn"
+                    } else {
+                        "those memories use keyword search only this turn"
+                    }
                     MemoryLog.log(
                         appContext, "Librarian", "info",
-                        "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} vector; lexical retrieval over the complete set this turn"
+                        "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} vector; $consequence"
                     )
                     // Self-repairing search: fill the gaps in the background so
                     // later turns can use semantic ranking again.

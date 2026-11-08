@@ -80,10 +80,11 @@ class Enforcer private constructor(private val appContext: Context) {
         const val RECENT_CONTEXT_CHARS_PER_TURN = 200
 
         /**
-         * Card-entry cooldown: a roleplay card entry that reached the prompt is
-         * not re-injected until this many turns pass. Memories no longer have a
-         * cooldown (dynamic_memory_plan.md A.6 and step 1.11); whether card
-         * entries keep theirs is a separate owner decision (plan D26).
+         * Former cooldown length. Neither memories nor card entries have a
+         * cooldown any more (dynamic_memory_plan.md A.6, steps 1.11 and D26):
+         * the memory block is rebuilt every message and not kept in the chat
+         * history, so holding an entry back hid it from the AI. Kept only for
+         * the existing card-cooldown assembly-log line, which no longer fires.
          */
         const val COOLDOWN_TURNS = 10
 
@@ -220,9 +221,9 @@ class Enforcer private constructor(private val appContext: Context) {
         // store query. The per-memory always-load flag is retired
         // (owner_approved_rules §10): nothing is force-injected every turn.
         // Over-fetch (counterplan §10 A.2): a ranked candidate POOL, not a
-        // final list — the cooldown, lore-overlap, and character-budget
-        // removals below backfill from it, so a filtered candidate does not
-        // silently shrink the prompt.
+        // final list — the lore-overlap and character-budget removals below
+        // backfill from it, so a filtered candidate does not silently shrink
+        // the prompt.
         // Search with the user's latest message alone. Recent turns glued onto
         // the search text raised every memory's similarity and pulled in
         // unrelated memories (dynamic_memory_plan.md A.4).
@@ -258,10 +259,10 @@ class Enforcer private constructor(private val appContext: Context) {
         val loreNotes = loreKept.map { LoreNote(it.entry.label, it.entry.content) }
         val loreChars = loreKept.sumOf { it.entry.content.length }
 
-        // The turn clock, used by the card-entry cooldown and to record which
-        // memories reached the prompt. Memories themselves have no cooldown:
-        // the memory block is rebuilt every message and is not kept in the
-        // chat history, so suppressing a relevant memory hid it from the AI
+        // The turn clock, used to record which memories and card entries
+        // reached the prompt. Neither has a cooldown: the memory block is
+        // rebuilt every message and is not kept in the chat history, so
+        // suppressing a relevant entry hid it from the AI
         // (dynamic_memory_plan.md A.6). A clock failure is noted in the log.
         var turn: Long? = null
         try {
@@ -330,6 +331,9 @@ class Enforcer private constructor(private val appContext: Context) {
         var cardPull: List<CardRetrieval.Fired> = emptyList()
         var cardEntriesById: Map<String, CardEntryRecord> = emptyMap()
         var entryTags: Map<String, List<String>> = emptyMap()
+        // Card entries no longer have a cooldown; this stays empty. It still
+        // feeds the existing card-cooldown assembly-log line, which is left in
+        // place until the owner approves removing it.
         val cardCooled = ArrayList<Pair<String, Long>>()
         try {
             val activeCards = ArrayList<Pair<String, String>>()
@@ -345,27 +349,11 @@ class Enforcer private constructor(private val appContext: Context) {
                     entryTags = entries.associate { it.entryId to (allLinks[it.entryId] ?: emptyList()) }
                     val tagsById = store.getAllRpTags().associateBy { it.tagId }
                     val fired = CardRetrieval.fire(input.userMessage, entries, tagsById, entryTags)
+                    // No cooldown: card entries ride the same per-message
+                    // memory block, which is not kept in the chat history, so
+                    // holding back a fired entry hid it from the AI.
                     cardDirect = fired.direct
                     cardPull = fired.pullAlong
-                    // Freshness cooldown, per source_type (§10): fired entries
-                    // whose last injection is still fresh sit this turn out.
-                    val thisTurn = turn
-                    if (thisTurn != null && (cardDirect.isNotEmpty() || cardPull.isNotEmpty())) {
-                        val lastTurns = store.lastInjectedTurns(
-                            input.chatId, MemoryStore.COOLDOWN_SOURCE_CARD_ENTRY,
-                            (cardDirect + cardPull).map { it.entry.entryId }
-                        )
-                        fun fresh(f: CardRetrieval.Fired): Boolean {
-                            val last = lastTurns[f.entry.entryId] ?: return true
-                            val ago = thisTurn - last
-                            return if (ago < COOLDOWN_TURNS) {
-                                cardCooled.add(f.entry.name to ago)
-                                false
-                            } else true
-                        }
-                        cardDirect = cardDirect.filter { fresh(it) }
-                        cardPull = cardPull.filter { fresh(it) }
-                    }
                 }
             }
         } catch (e: Exception) {
@@ -417,9 +405,6 @@ class Enforcer private constructor(private val appContext: Context) {
         // skipped in favour of smaller lower-ranked ones instead of ending
         // the list (never truncated — atomic or absent).
         val suppressed = ArrayList<Pair<AssembledMemory, LoreNote>>()
-        // Memories have no cooldown any more; this stays empty and only
-        // feeds the existing assembly-log lines until those are revised.
-        val cooled = ArrayList<Pair<AssembledMemory, Long>>()
         val budgetCut = ArrayList<AssembledMemory>()
         val memoryAvailable = (policy.charBudget - loreChars - directChars).coerceAtLeast(0)
         // Explicit attachments reserve both count and character room before auto-fill.
@@ -469,13 +454,13 @@ class Enforcer private constructor(private val appContext: Context) {
         // the injected/cut lines below.
         retrievalDiag?.let { d ->
             val mode = when {
-                !d.hasModel -> "keyword — no model"
-                d.semantic -> "semantic"
-                else -> "keyword — partial index (${d.withVector}/${d.eligible} vectored)"
+                !d.hasModel || (!d.semantic && d.withVector > 0) -> "keyword only — no model"
+                d.withVector < d.eligible -> "meaning + keyword, ${d.withVector} of ${d.eligible} have vectors"
+                else -> "meaning + keyword"
             }
             notes.add(
-                "saved memories: eligible ${d.eligible}, ranked ${pool.size} ($mode), " +
-                    "injected ${kept.size}, omitted budget ${budgetCut.size} / cooldown ${cooled.size} / lore-overlap ${suppressed.size}"
+                "saved memories: eligible ${d.eligible}, passed ${pool.size} ($mode), " +
+                    "injected ${kept.size}, omitted budget ${budgetCut.size} / lore-overlap ${suppressed.size}"
             )
         }
 
@@ -548,7 +533,7 @@ class Enforcer private constructor(private val appContext: Context) {
         } else {
             "ordinary chat" +
                 (if (scopeCompanionId != null) ", companion" else "") +
-                (input.projectId?.takeIf { it.isNotBlank() }?.let { ", project boost" } ?: "")
+                (input.projectId?.takeIf { it.isNotBlank() }?.let { ", project" } ?: "")
         }
 
         AssemblyLog.record(
@@ -572,9 +557,6 @@ class Enforcer private constructor(private val appContext: Context) {
                 },
                 cut = budgetCut.map { AssemblyLog.Line(memLogLabel(it), "over budget (score %.3f) · %s".format(it.score, it.memoryId)) } +
                     suppressed.map { (m, l) -> AssemblyLog.Line(memLogLabel(m), "near-duplicate of lore \"${l.label}\" — flagged · ${m.memoryId}") } +
-                    cooled.map { (m, ago) ->
-                        AssemblyLog.Line(memLogLabel(m), "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS · ${m.memoryId}")
-                    } +
                     cardCooled.map { (name, ago) ->
                         AssemblyLog.Line("card: $name", "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS")
                     } +

@@ -675,8 +675,9 @@ Steps run in this order.
   memories. A relevant memory is sent every message it is relevant. The
   only skips are items already in this request: picked memories, briefing
   items, and lorebook repeats. Existing rows in `injection_cooldowns` are
-  left in place (no data is deleted). Roleplay card entries are **not**
-  changed in this step (D26).
+  left in place (no data is deleted). Roleplay card entries lose their
+  cooldown too (owner decision D26). Lorebooks have no cooldown and are not
+  changed.
 - **Log stop point:** the memory assembly log has cooldown lines for
   memories. Changing or removing them needs owner approval first (D27).
 - **Done when:** in a chat that keeps talking about one topic, the relevant
@@ -1070,7 +1071,7 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D23 | When is search fixed? | **Decided, 2026-11-08: first** |
 | D24 | Where does the search test screen open from? | **Decided, 2026-11-08:** its own screen, from Advanced Memory Settings in the Debug section, with adjustable numbers; the old Debug search box is removed. Still open: its wording and layout |
 | D25 | Should the ordinary memory settings also have a Strict / Balanced / Broad match choice? | No; the test screen's tuned numbers are the setting, and a second control adds confusion |
-| D26 | Should roleplay card entries also lose their 10-message cooldown? | Probably yes, since it has the same amnesia flaw, but cards are keyword-based and working, so leave them until the owner decides |
-| D27 | Which memory assembly log lines change when the cooldown and old search are removed? | Present the exact lines at step 1.11 and wait for approval |
+| D26 | Should roleplay card entries also lose their 10-message cooldown? | **Decided, 2026-11-08: yes.** Card entries ride the same rebuilt message, so the cooldown hid them from the AI. Lorebooks were checked and have no cooldown |
+| D27 | Which memory assembly log lines change when the cooldown and old search are removed? | **Decided, 2026-11-08:** the summary line, the memory cooldown line, the project wording, and the chat-search missing-vector line, as proposed. The card-cooldown log line stays in the code (it no longer fires) until its removal is approved |
 | D28 | Should the Memory Assistant always add topic tags? | **Decided, 2026-11-08:** not mandatory now. Test independently generated tags first (step 1.15) |
 | D29 | Should the int8 model become the default? | **Decided, 2026-11-08:** yes, once verified to install and run reliably on the owner's Pixel 8 (step 1.14) |
