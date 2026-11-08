@@ -80,19 +80,10 @@ class Enforcer private constructor(private val appContext: Context) {
         const val RECENT_CONTEXT_CHARS_PER_TURN = 200
 
         /**
-         * Freshness cooldown (rules §10 / Stage 3.3): an entry that reached the
-         * prompt is not re-injected until this many turns pass — the
-         * conversation carries it in the meantime. A tuned constant, NOT a user
-         * setting (§10). First-time entries always inject; an edit resets the
-         * entry's clock (hooked in MemoryStore's edit paths); every suppression
-         * shows in the AssemblyLog debug view.
-         *
-         * The approved rule's second refresh trigger — "when the conversation
-         * outgrows the old mention", i.e. the old injection falling out of the
-         * actually-sent history window — is DEFERRED: TurnInput only carries a
-         * short recent-context digest (~4 turns / 200 chars), never the real
-         * sent window, and widening TurnInput for it is out of scope for this
-         * stage. Only the after-N-turns half ships here.
+         * Card-entry cooldown: a roleplay card entry that reached the prompt is
+         * not re-injected until this many turns pass. Memories no longer have a
+         * cooldown (dynamic_memory_plan.md A.6 and step 1.11); whether card
+         * entries keep theirs is a separate owner decision (plan D26).
          */
         const val COOLDOWN_TURNS = 10
 
@@ -232,8 +223,10 @@ class Enforcer private constructor(private val appContext: Context) {
         // final list — the cooldown, lore-overlap, and character-budget
         // removals below backfill from it, so a filtered candidate does not
         // silently shrink the prompt.
-        val query = listOf(input.userMessage, input.recentContext)
-            .filter { it.isNotBlank() }.joinToString("\n")
+        // Search with the user's latest message alone. Recent turns glued onto
+        // the search text raised every memory's similarity and pulled in
+        // unrelated memories (dynamic_memory_plan.md A.4).
+        val query = input.userMessage
         if (!librarian.hasUsableModel()) notes.add("no embedding model — keyword retrieval")
         // Fetch one candidate MORE than the walk below may examine: the walk
         // never looks past its scan cap, and the extra row is what lets the
@@ -265,19 +258,14 @@ class Enforcer private constructor(private val appContext: Context) {
         val loreNotes = loreKept.map { LoreNote(it.entry.label, it.entry.content) }
         val loreChars = loreKept.sumOf { it.entry.content.length }
 
-        // Freshness cooldown state (§10 / Stage 3.3): the turn clock and the
-        // pool's last-injection turns, fetched once. A clock/store failure
-        // skips cooldown suppression for the turn (inject rather than
-        // silently starve) and is noted in the log.
+        // The turn clock, used by the card-entry cooldown and to record which
+        // memories reached the prompt. Memories themselves have no cooldown:
+        // the memory block is rebuilt every message and is not kept in the
+        // chat history, so suppressing a relevant memory hid it from the AI
+        // (dynamic_memory_plan.md A.6). A clock failure is noted in the log.
         var turn: Long? = null
-        var lastTurns: Map<String, Long> = emptyMap()
         try {
             turn = store.nextTurnNumber(input.chatId)
-            if (pool.isNotEmpty()) {
-                lastTurns = store.lastInjectedTurns(
-                    input.chatId, MemoryStore.COOLDOWN_SOURCE_MEMORY, pool.map { it.memoryId }
-                )
-            }
         } catch (e: Exception) {
             notes.add("cooldown unavailable this turn: ${e.message}")
         }
@@ -421,15 +409,16 @@ class Enforcer private constructor(private val appContext: Context) {
         }
 
         // Memory selection with backfill (counterplan §10 A.2): consume the
-        // ranked pool until top-K memories survive cooldown, lore overlap,
-        // AND the character budget — a removal of ANY of the three kinds
-        // frees its slot for the next ranked candidate — or relevance is
-        // exhausted, or the scan cap is reached. Filter order per candidate:
-        // cooldown first (cheap map lookup), then the lore near-duplicate
+        // ranked pool until top-K memories survive lore overlap AND the
+        // character budget — a removal of either kind frees its slot for the
+        // next ranked candidate — or relevance is exhausted, or the scan cap
+        // is reached. Filter order per candidate: the lore near-duplicate
         // check (may embed), then the budget fit, so an oversized memory is
         // skipped in favour of smaller lower-ranked ones instead of ending
         // the list (never truncated — atomic or absent).
         val suppressed = ArrayList<Pair<AssembledMemory, LoreNote>>()
+        // Memories have no cooldown any more; this stays empty and only
+        // feeds the existing assembly-log lines until those are revised.
         val cooled = ArrayList<Pair<AssembledMemory, Long>>()
         val budgetCut = ArrayList<AssembledMemory>()
         val memoryAvailable = (policy.charBudget - loreChars - directChars).coerceAtLeast(0)
@@ -437,7 +426,6 @@ class Enforcer private constructor(private val appContext: Context) {
         // They stay whole even above the retrieval budget; request-capacity checks
         // still measure the complete final prompt before dispatch.
         var memoryChars = manualChars
-        val turnNow = turn
         val selection = if (memoryChars >= memoryAvailable && pool.isNotEmpty()) {
             notes.add("no character budget remains for memories after lore and card entries")
             RetrievalBackfill.Selection(emptyList<AssembledMemory>(), 0, false)
@@ -450,24 +438,18 @@ class Enforcer private constructor(private val appContext: Context) {
                     ImportanceRanking.isMandatory(it.importance.toDouble(), useImportanceRatings)
                 }
             ) { mem ->
-                val last = lastTurns[mem.memoryId]
-                if (turnNow != null && last != null && turnNow - last < COOLDOWN_TURNS) {
-                    cooled.add(mem to (turnNow - last))
+                val dup = loreDupOf(mem)
+                if (dup != null) {
+                    suppressed.add(mem to dup)
                     false
                 } else {
-                    val dup = loreDupOf(mem)
-                    if (dup != null) {
-                        suppressed.add(mem to dup)
+                    val cost = PromptAssembler.memoryCost(mem)
+                    if (memoryChars + cost > memoryAvailable) {
+                        budgetCut.add(mem)
                         false
                     } else {
-                        val cost = PromptAssembler.memoryCost(mem)
-                        if (memoryChars + cost > memoryAvailable) {
-                            budgetCut.add(mem)
-                            false
-                        } else {
-                            memoryChars += cost
-                            true
-                        }
+                        memoryChars += cost
+                        true
                     }
                 }
             }
