@@ -43,7 +43,10 @@ class ModelParametersSaveLink(
         val prefs = chat()
         val model = prefs?.getModel().orEmpty()
         val endpointId = prefs?.getApiEndpointId().orEmpty()
-        val show = FavoriteModelParameters.isEnabled(context) && model.isNotBlank() && endpointId.isNotBlank()
+        // Hidden when there is nowhere to save: not a favorite, and the
+        // Recent list is set to keep no models.
+        val show = FavoriteModelParameters.isEnabled(context) && model.isNotBlank() && endpointId.isNotBlank() &&
+            FavoriteModelParameters.canSave(context, model, endpointId)
         button.visibility = if (show) View.VISIBLE else View.GONE
         if (!show) return
         button.setText(
@@ -58,10 +61,11 @@ class ModelParametersSaveLink(
         val model = prefs.getModel()
         val endpointId = prefs.getApiEndpointId()
         if (model.isBlank() || endpointId.isBlank() || !FavoriteModelParameters.isEnabled(context)) return
-        FavoriteModelParameters.save(
+        val saved = FavoriteModelParameters.save(
             context, model, endpointId, FavoriteModelParameters.fromChat(prefs, model, endpointId)
         )
         refresh()
+        if (!saved) return
         SaveIconFlash.flashText(button)
         Toast.makeText(context, context.getString(R.string.quick_save_parameters_saved, model), Toast.LENGTH_SHORT).show()
     }

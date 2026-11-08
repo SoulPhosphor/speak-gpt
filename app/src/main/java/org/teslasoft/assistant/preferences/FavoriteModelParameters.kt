@@ -79,17 +79,25 @@ object FavoriteModelParameters {
         preferences.setPresencePenalty(parameters.presencePenalty ?: defaults.presencePenalty!!)
     }
 
+    /** True when this model's parameters have somewhere to be saved: its
+     *  favorite, or a Recent list that keeps at least one model. */
+    fun canSave(context: Context, modelId: String, endpointId: String): Boolean =
+        savesToFavorite(context, modelId, endpointId) || RecentModelsPreferences(context).limit() > 0
+
     /** Saves [values]' five parameters for this model: on its favorite when it
-     *  is one, otherwise on its Recent entry. */
-    fun save(context: Context, modelId: String, endpointId: String, values: FavoriteModelObject) {
+     *  is one, otherwise on its Recent entry. False when nothing was saved. */
+    fun save(context: Context, modelId: String, endpointId: String, values: FavoriteModelObject): Boolean {
         val favorites = FavoriteModelsPreferences.getPreferences(context)
         val favorite = favorites.getFavorite(modelId, endpointId)
         if (favorite != null) {
             values.copySamplingTo(favorite)
             favorites.addFavoriteModel(favorite)
-        } else {
-            RecentModelsPreferences(context).setSavedParameters(ModelIdentity(endpointId, modelId), values)
+            return true
         }
+        val recents = RecentModelsPreferences(context)
+        val target = ModelIdentity(endpointId, modelId)
+        recents.setSavedParameters(target, values)
+        return recents.savedParameters(target) != null
     }
 
     /** Removes this model's saved parameters, so it returns to its API
