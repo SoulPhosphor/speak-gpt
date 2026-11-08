@@ -32,6 +32,9 @@ documents.**
     search box (step 1.4).
 - **Everything else is a recommendation** waiting for the owner's decision
   (Part E).
+- **Stress-tested (2026-11-08):** the design was tested against the real
+  model before being recommended, and changed where the test showed a
+  weakness (A.10).
 - **Old documents are not approvals.** This plan was written from the
   current code and real measurements. Older planning documents were often
   written by AI agents and contain choices the owner never made. None of
@@ -185,6 +188,57 @@ the AI can receive the same fact twice, once from the lorebook and once from
 memory. The lorebook side is correct in both paths. Only the memory side
 differs.
 
+## A.10 Stress test of the recommended design
+
+The design in Part B was tested with the real model before being
+recommended. Four more sample messages were added, including messages where
+several memories are relevant at once ("How is my family doing?", "What do I
+like to do for fun?"), for 10 messages and 17 expected memories in total.
+
+**Meaning search alone is not enough.** Even with the best gate rule, it
+missed 6 of the 17 relevant memories. In half the messages, at least one
+unrelated memory scored higher than a relevant one.
+
+**Tags and the stored vector size matter most.** "Clean" means every
+relevant memory scored above every unrelated one for that message.
+
+| Setup | Clean messages (of 9 with relevant memories) |
+|---|---|
+| Today: q4 model, 256-number vectors, no tags | 4 |
+| q4, full 768-number vectors | 5 |
+| q4, 256, with short topic tags on each memory | 7 |
+| int8 model, 768, no tags | 6 |
+| int8 model, 768, with topic tags | 8 |
+
+- Topic tags are short words such as "family", "health", "money", "pets",
+  "food", "hobbies". The memory's searchable text already includes its tags
+  (`RetrievalDocument.semanticDocument`), so tags help meaning search and
+  keyword search at the same time.
+- The Memory Assistant's instructions make tags optional
+  (`ArchivistPrompt.kt`), so many memories may have none.
+- The app stores only the first 256 of the model's 768 numbers
+  (`EmbeddingModels`, `dimensions = 256`). Keeping all 768 costs about 3 KB
+  per memory instead of 1 KB.
+- Removing the repeated "The user ..." wording from memories did not help.
+
+**A small on-phone re-ranker did not work.** A 23 MB English re-ranker
+(MiniLM, trained on web search) separated cleanly in only 4 of 9 messages,
+and no cut-off worked. It does not understand short personal statements.
+Re-rankers that might are several hundred megabytes, too large to add on
+top of the embedding model.
+
+**Combined result.** int8 model, 768 numbers, topic tags, meaning search
+with a relative gate, plus keyword search with BM25:
+
+| Search | Messages | Right | Wrong | Missed |
+|---|---|---|---|---|
+| Today's search (fixed 0.30 cut-off) | first 6 | 6 | 22 | 2 |
+| Recommended design | all 10 | 13 | 2 | 4 |
+
+The 4 misses were judgment calls, for example the job memory for "How
+should I prep for the interview?". The remaining tuning is done on the
+owner's real memories with the test screen (step 1.4).
+
 ---
 
 # Part B: Recommended design
@@ -206,6 +260,9 @@ the app already has, that part holds up on its own.
      (FTS5). The app already uses FTS5 for chat search with the encrypted
      database. Tags and the names of linked companions, worlds, characters,
      campaigns, and projects are part of the searchable text.
+
+   Every memory carries short topic tags, and vectors keep all 768 numbers
+   (A.10).
 4. **Merge the two result lists**, so a memory found both ways ranks
    highest.
 5. **Keep only memories that clearly stand out** from the rest for this
@@ -214,10 +271,14 @@ the app already has, that part holds up on its own.
    added later, in Phase 4). It is capped so it can never beat a clearly
    more relevant memory. A relevant +3 is always included, even past the
    limit.
-7. **Skip anything already in this request:** picked memories, briefing
+7. **Carry the conversation forward.** Memories sent with the previous
+   message stay candidates for this one, with a lower bar. While the
+   conversation stays on the topic they are sent again, and once it moves
+   on they drop. This is what the cooldown should have done.
+8. **Skip anything already in this request:** picked memories, briefing
    items (Phase 5), and memories that repeat a lorebook entry.
-8. **Send up to the memory limit and size budget.** Empty slots stay empty.
-9. **Send every relevant memory every time it is relevant.** No cooldown.
+9. **Send up to the memory limit and size budget.** Empty slots stay empty.
+10. **Send every relevant memory every time it is relevant.** No cooldown.
 
 ## B.2 What is removed and why
 
@@ -229,6 +290,8 @@ the app already has, that part holds up on its own.
 | Scope, freshness, project, and tag bonuses | They outweighed relevance (A.5). Scope still decides which memories are allowed. Tags and names are found by keyword search instead. "Recently edited" does not mean "matters now"; fading (Phase 4) measures that properly |
 | The 10-message memory cooldown | It hid relevant memories from the AI (A.6) |
 | A separate Strict / Balanced / Broad setting | The test screen tunes the real number. A second control for the same thing adds confusion (D25) |
+| Storing only 256 of the model's 768 numbers | Measurably worse separation; the space saved is about 2 KB per memory (A.10) |
+| An on-phone re-ranker | Tested; it did not understand personal memories (A.10) |
 
 ## B.3 What is kept
 
@@ -358,10 +421,18 @@ Steps run in this order.
   - **Adjustable numbers:** every tuning number used by the search can be
     changed here. Changes first apply only to the result on screen, and
     the search re-runs at once. **Apply** makes them the real values for
-    every chat. **Reset** restores the defaults from step 1.13. Applied
+    every chat. **Reset** restores the defaults from step 1.16. Applied
     values are stored in the existing `retrieval_policy` record. Confirm
     every memory backup and restore path carries that record, so tuning is
     never lost.
+  - **Saved test cases from real use.** On the screen, the owner can mark
+    a memory as "should come up" or "should not come up" for a message.
+    Each mark is saved as a test case. A run-all action re-checks every
+    saved case with the current or trial numbers and shows how many are
+    right, wrong, and missed, so tuning never quietly breaks an earlier
+    fix. Saved cases contain the owner's private memories, so they stay
+    in the phone's encrypted memory database and go into memory backups.
+    They are never placed in the repository or sent anywhere.
   - The screen is read-only: it never changes a memory, never counts as a
     mention for fading (Phase 4), and sends nothing to any AI service.
   - Appearance follows `ui-style-guide.md`. Update `ui-style-adoption.md`.
@@ -482,7 +553,22 @@ Steps run in this order.
 - **Done when:** in a chat that keeps talking about one topic, the relevant
   memory is sent on every message.
 
-### Step 1.12: The same memory rules on both send paths
+### Step 1.12: Carry the conversation forward
+
+- **Change:** memories sent with the previous message stay candidates for
+  the next message. They are re-checked against the new message (and the
+  recent turns) with a lower bar than new memories. While the conversation
+  stays on the topic they are sent again. Once it moves on, they fail the
+  lower bar and drop.
+- **Why:** the memory block is rebuilt every message and is not kept in the
+  history (A.6). Without this, a short reply such as "yes" or "and then
+  what?" can lose the memory that the conversation is about.
+- **Tunable:** the lower bar, and how many messages back carry-over reaches.
+- **Done when:** in a test conversation, a memory stays while the topic
+  continues, including through short replies, and drops within a message or
+  two after the topic changes.
+
+### Step 1.13: The same memory rules on both send paths
 
 - **Change:** make the memory-side lorebook repeat check (`NearDuplicate`)
   run on both send paths (A.9). Hand the matched lorebook entries to the
@@ -493,29 +579,58 @@ Steps run in this order.
 - **Done when:** on both paths, a memory that repeats a lorebook entry is
   not also sent, and the lorebook tests are unchanged.
 
-### Step 1.13: Variety and starting values
+### Step 1.14: Keep all 768 numbers, and choose the model
+
+- **Change:**
+  - In `EmbeddingModels`, store the model's full 768 numbers instead of
+    the first 256. The model's tag changes with the size, so the existing
+    rebuild repairs every memory's vector automatically. During the
+    rebuild, keyword search (step 1.5) keeps search working, because a
+    missing vector no longer switches the whole message over (step 1.6).
+  - Re-run the test set with the q4 and int8 models. In the stress test,
+    int8 was better (A.10). It is a larger download (about 340 MB instead
+    of 225 MB), so making it the default is the owner's decision (D29).
+- **Done when:** every memory has a 768-number vector, and the test set
+  improves or holds.
+
+### Step 1.15: Topic tags on every memory
+
+- **Change:**
+  - The Memory Assistant's instructions (`ArchivistPrompt.kt`) ask for 2 to
+    4 broad topic tags on every proposed memory, such as "family",
+    "health", "money", "work", "pets", "food", "hobbies". The exact
+    instruction text is model-facing behavior and needs owner approval
+    first (D28). The user sees and edits the tags in Pending, as today.
+  - The test screen shows how many memories have no tags.
+  - Optionally, a one-time pass suggests tags for existing untagged
+    memories. It is started by the user, its suggestions go through
+    Pending, and it uses tokens once (D28).
+- **Done when:** new memories arrive with topic tags, and the test set
+  shows the gain measured in A.10.
+
+### Step 1.16: Variety and starting values
 
 - **Change:**
   - Stop near-identical memories from filling several places, using MMR
     (maximal marginal relevance, the standard method).
   - Choose default values for every tunable number from the test set.
     These are what **Reset** restores on the test screen.
-  - Run the int8 model (already in the app's model list) against the test
-    set. If it is clearly better than q4, raise it with the owner.
-- **Done when:** the test set passes with the defaults, and the owner has
-  checked the owner's own messages on the test screen.
+- **Done when:** the test set passes with the defaults, and the owner's own
+  saved test cases (step 1.4) pass on the phone.
 
-### Step 1.14: Optional local re-ranker
+### Not included: an on-phone re-ranker
 
-A small second model on the phone that re-orders the top results more
-carefully. It costs no tokens, but it is another download and adds a short
-delay per message. Build it only if the test set and the owner's testing
-show steps 1.5–1.13 are not enough (D21).
+Tested and rejected (A.10). Reconsider only if a small re-ranker made for
+short personal text becomes available. Any candidate is tested against the
+test set and the owner's saved cases first (D21).
 
 ### Phase 1 is complete when
 
 - the test set passes;
+- the owner's saved test cases pass on the phone;
 - the lorebook and picked-memory tests from step 1.1 pass unchanged;
+- a memory stays with the conversation while the topic continues (step
+  1.12);
 - on the phone, the owner can see on the test screen that unrelated
   messages send nothing, relevant memories are sent every time they are
   relevant, and +3 memories are sent only when relevant;
@@ -780,10 +895,12 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D18 | Is the briefing on or off by default? | Off; it adds a cost to every message |
 | D19 | How is strength shown on the card? | A simple level plus the last-mentioned date, not a raw number |
 | D20 | Which browser filters and sorts are added? | Upcoming dates, core members, sort by strength |
-| D21 | Should a local re-ranker be added? | Only if testing shows Phase 1 is not enough |
+| D21 | Should a local re-ranker be added? | No; tested and it did not work (A.10). Reconsider only if a suitable small model appears |
 | D22 | Does date sharing ship on its own, before the rest? | Yes, if wanted sooner; it doesn't depend on the rest |
 | D23 | When is search fixed? | **Decided, 2026-11-08: first** |
 | D24 | Where does the search test screen open from? | **Decided, 2026-11-08:** its own screen, from Advanced Memory Settings in the Debug section, with adjustable numbers; the old Debug search box is removed. Still open: its wording and layout |
 | D25 | Should the ordinary memory settings also have a Strict / Balanced / Broad match choice? | No; the test screen's tuned numbers are the setting, and a second control adds confusion |
 | D26 | Should roleplay card entries also lose their 10-message cooldown? | Probably yes, since it has the same amnesia flaw, but cards are keyword-based and working, so leave them until the owner decides |
 | D27 | Which memory assembly log lines change when the cooldown and old search are removed? | Present the exact lines at step 1.11 and wait for approval |
+| D28 | Should the Memory Assistant always add broad topic tags, and should existing untagged memories get a one-time tagging pass? | Yes to both; the owner approves the instruction text first, and the pass is started by the user and goes through Pending |
+| D29 | Should the int8 model become the default? | Yes, if the test set confirms A.10; it is a larger download, so the owner decides |
