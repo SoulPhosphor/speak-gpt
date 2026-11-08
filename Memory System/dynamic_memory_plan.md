@@ -584,7 +584,9 @@ effectively everything.
    - **Read-only.** Testing never records cooldown, never counts as a
      mention for fading (section 6.3), and never changes a memory.
    - It opens from Advanced Memory Settings, in the Debug section (owner
-     decision D24). Its wording and layout need owner approval. Appearance follows `ui-style-guide.md`.
+     decision D24). The old Debug search box
+     (`runDebugSearch` and its field, button, and results text) is removed
+     in the same change. Its wording and layout need owner approval. Appearance follows `ui-style-guide.md`.
 
    Build this before tuning, so every later step can be checked on the
    phone with the owner's real memories, not only in the test set.
@@ -804,7 +806,7 @@ proposal only.
 | D21 | Should a local re-ranker be added? | Decide after the test set shows a need |
 | D22 | Does date sharing ship on its own, before the rest? | Yes, if the owner wants it sooner; it doesn't depend on the rest |
 | D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | **Decided by the owner, 2026-11-08: search is fixed first.** |
-| D24 | Where is the search test screen reached from? | **Decided by the owner, 2026-11-08: its own screen, opened from Advanced Memory Settings, in the Debug section.** It is its own screen, not part of the Debug box. Still open: whether the old search box is removed, and the screen's labels |
+| D24 | Where is the search test screen reached from? | **Decided by the owner, 2026-11-08: its own screen, opened from Advanced Memory Settings, in the Debug section.** It is its own screen, not part of the Debug box. **The old Debug search box is removed when the test screen is added** (owner decision, 2026-11-08). Still open: the screen's labels |
 | D25 | How does the ordinary Strict / Balanced / Broad choice combine with a gate strength tuned on the test screen? | The tuned value becomes Balanced; Strict and Broad sit a fixed step either side of it |
 
 ## 16. Relationship to other documents
