@@ -549,6 +549,33 @@ effectively everything.
    project, roleplay, campaign), because scope changes what is eligible.
    Recent turns can be included or left out, to see their effect.
 
+   **Adjustable numbers** (owner request, 2026-11-08). The owner can
+   change the search numbers on this screen and immediately see what each
+   change does, so the values can be tuned on her own memories instead of
+   being guessed by whoever writes the code.
+   - **Every tuning number is adjustable:**
+     - the relevance gate's strength;
+     - each bonus cap: importance, freshness, scope, selected project, tags;
+     - the +3 boost;
+     - the balance between meaning and keyword search;
+     - the weight given to recent turns;
+     - the memory limit (today 8) and the character budget (today 6,000).
+   - **Try, then apply.** Changed values first apply only to the test
+     result on screen, and the search re-runs at once. Nothing in real chats
+     changes until the owner applies them.
+   - **Applied values become the real values** used by every chat. They are
+     stored in the existing `retrieval_policy` record, which the memory seed
+     export already carries (`MemorySeedCodec`). Confirm that every backup
+     path includes it, so tuning is never lost.
+   - **Reset to defaults** puts back the values chosen from the test set.
+   - **Raw numbers are allowed here.** The approved retrieval copy forbids
+     unexplained raw thresholds and tuning controls in the ordinary
+     settings. The owner has explicitly asked for them on this test screen
+     (2026-11-08). The ordinary `Memory Match Strictness` choice
+     (`Strict`, `Balanced`, `Broad`) stays as approved.
+   - Still open: how `Memory Match Strictness` combines with a gate strength
+     tuned here (decision D25).
+
    **Engineering requirements:**
    - **One code path.** The ranking functions return an explanation
      alongside each result, and both the chat and this screen use the same
@@ -777,7 +804,8 @@ proposal only.
 | D21 | Should a local re-ranker be added? | Decide after the test set shows a need |
 | D22 | Does date sharing ship on its own, before the rest? | Yes, if the owner wants it sooner; it doesn't depend on the rest |
 | D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | **Decided by the owner, 2026-11-08: search is fixed first.** |
-| D24 | Where is the search test screen reached from? | **Decided by the owner, 2026-11-08: its own screen, opened from Advanced Memory Settings, in the Debug section.** Still open: whether the old search box is removed, and the screen's labels |
+| D24 | Where is the search test screen reached from? | **Decided by the owner, 2026-11-08: its own screen, opened from Advanced Memory Settings, in the Debug section.** It is its own screen, not part of the Debug box. Still open: whether the old search box is removed, and the screen's labels |
+| D25 | How does the ordinary Strict / Balanced / Broad choice combine with a gate strength tuned on the test screen? | The tuned value becomes Balanced; Strict and Broad sit a fixed step either side of it |
 
 ## 16. Relationship to other documents
 
