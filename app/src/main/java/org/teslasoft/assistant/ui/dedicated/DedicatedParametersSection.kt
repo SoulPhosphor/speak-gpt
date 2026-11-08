@@ -62,6 +62,9 @@ class DedicatedParametersSection(
     private val frequencyPenalty: SamplingParameterControl = root.findViewById(R.id.model_frequency_penalty_slider)
     private val presencePenalty: SamplingParameterControl = root.findViewById(R.id.model_presence_penalty_slider)
 
+    /** What the screen last showed or saved, to tell whether it was edited. */
+    private var shown = ""
+
     init {
         streamingRow.setOnClickListener {
             streamingCheck.isChecked = !streamingCheck.isChecked
@@ -86,7 +89,20 @@ class DedicatedParametersSection(
     /** Saves the values on screen as the job's parameters. */
     fun commit() {
         FavoriteModelParameters.setLive(context, scope, currentValues())
+        shown = snapshot(currentValues())
     }
+
+    /**
+     * On returning to the screen: shows the job's parameters again when they
+     * were changed elsewhere (Model Settings saved for the selected model)
+     * while nothing on screen was edited. Unsaved edits are kept.
+     */
+    fun syncIfUnedited() {
+        if (snapshot(currentValues()) == shown) reload() else refreshLink()
+    }
+
+    private fun snapshot(values: FavoriteModelObject): String =
+        "${values.streaming}|${values.temperature}|${values.topP}|${values.frequencyPenalty}|${values.presencePenalty}"
 
     private fun show(values: FavoriteModelObject) {
         val recommended = RecommendedModelParameters.forScope(scope)
@@ -99,6 +115,8 @@ class DedicatedParametersSection(
         presencePenalty.configure(
             SamplingParameterSpec.PRESENCE_PENALTY, values.presencePenalty ?: recommended.presencePenalty!!
         ) { changed() }
+        // The controls round each value to their precision; compare with that.
+        shown = snapshot(currentValues())
         refreshLink()
     }
 

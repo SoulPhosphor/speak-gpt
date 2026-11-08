@@ -21,6 +21,7 @@ import android.content.Context
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
+import com.aallam.openai.api.chat.StreamOptions
 import com.aallam.openai.api.http.Timeout
 import com.aallam.openai.api.logging.LogLevel
 import com.aallam.openai.api.model.ModelId
@@ -1440,7 +1441,9 @@ class SummarizerController(
                 temperature = parameters.temperature,
                 topP = parameters.topP,
                 frequencyPenalty = parameters.frequencyPenalty,
-                presencePenalty = parameters.presencePenalty
+                presencePenalty = parameters.presencePenalty,
+                // A streamed reply reports its usage only when asked.
+                streamOptions = if (parameters.stream) StreamOptions(includeUsage = true) else null
             )
             if (parameters.stream) {
                 val reply = StringBuilder()

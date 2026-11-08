@@ -123,6 +123,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
     override fun onResume() {
         super.onResume()
         modelRows?.refresh()
+        parametersSection?.syncIfUnedited()
     }
 
     private fun bindViews() {
