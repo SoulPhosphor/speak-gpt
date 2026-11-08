@@ -117,10 +117,34 @@ They are educated guesses, tunable on the test screen.
 - **Every open decision in Part E** needs the owner's answer, asked one at a
   time, before the phase that depends on it is built.
 
+### Design corrections after the second review (2026-11-08)
+
+#180 is merged. The owner and a second review found design mistakes in the
+future phases. Part D now follows one rule:
+
+- **Availability, relevance, and permission to mention unprompted are three
+  separate decisions.**
+- Never limit what the AI receives in order to stop it behaving
+  annoyingly. Tell it how to behave instead.
+
+The specific corrections:
+
+- **The "once per chat per day" delivery limit is removed.** A due memory
+  stays available every message, and only how often the AI raises it is
+  guided (D.5).
+- **Always Know has its own cap.** It does not count against the search
+  memory limit or Memory Space (owner, D16).
+- **Picked memories come first, always.** Nothing automatic can displace
+  them.
+- **Automatic fading is proposed for removal** (D34, owner decision).
+- **Carry-over must not refresh itself** from the AI's own replies (B.5).
+- **Inside jokes and "vibe"** have a first proposal (D.9).
+- **Published research** is summarized in Part F.
+
 ### Next steps, in order
 
-1. **Agent:** take #180 through Codex review and Android Checks, then merge
-   it into `beta/new-client` (`CLAUDE.md` section 0).
+1. **Done:** #180 merged into `beta/new-client` after Codex passed it and
+   Android Checks was green.
 2. **Owner:**
    - install the new beta and chat normally;
    - if a chat gets wrong or missing memories, open Memory Search Test, type
@@ -567,6 +591,11 @@ used.
   artificial forgetting during a long conversation.
 - **Wrong memories:** a memory sent by mistake drops on the next message,
   because neither the AI's reply nor the user's message relates to it.
+- **No self-refreshing** (second review): the AI's reply can keep a memory
+  only when the user's latest message is a short continuation with no new
+  subject of its own. If the user writes about something else, the memory
+  drops even if the AI keeps mentioning it. The AI cannot keep a topic
+  alive without the user taking part.
 - **Topic change:** when the user moves to a new subject, the latest
   message and the AI's reply both stop relating to the carried memories,
   and they drop.
@@ -842,7 +871,9 @@ Steps run in this order.
   - a memory stays through a long run of short replies while the topic
     continues;
   - it drops after a clear topic change;
-  - a memory sent by mistake drops on the next message.
+  - a memory sent by mistake drops on the next message;
+  - a memory the AI keeps mentioning drops once the user writes about
+    something else.
 
 ### Step 1.13: The same memory rules on both send paths
 
@@ -968,10 +999,11 @@ Details: Part D, sections D.2, D.5, D.7.
 7. Wording and layout need approval before each screen is built.
    Appearance follows `ui-style-guide.md`.
 
-## Phase 4: Fading (internal timing for May Bring Up)
+## Phase 4: Fading (proposed for removal)
 
-**Future proposal. Blocked until D7 and D8 are decided, and built only after
-carry-over.** Details: Part D, section D.4.
+**Recommended not to build (D34).** If the owner wants fading anyway, it is
+redesigned as a per-memory choice first. Details: Part D, section D.4.
+The steps below are kept only for reference.
 
 1. **What fading decides:** only how long an undated May Bring Up memory
    stays eligible to be raised unprompted after its subject was last
@@ -987,18 +1019,19 @@ carry-over.** Details: Part D, section D.4.
 
 ## Phase 5: The standing briefing
 
-**Future proposal. Blocked until D13, D15, D17, D18, D30–D32 are decided.**
+**Future proposal. Blocked until D13, D15–D18, D30–D32, and D37 are decided.**
 Details: Part D, section D.6.
 
 1. **Two separate parts:**
    - **Background:** Always Know memories, sent every message as context,
      with an instruction not to raise them on their own.
-   - **May mention:** May Bring Up memories that are currently due, by
-     their date window or by fading. Each is offered at most once per chat
-     per day (D32).
-2. **One shared budget:** the briefing comes out of the same Memory Space as
-   search (D16). Background takes its share first, capped, and search fills
-   the rest. The request's total size check still applies.
+   - **May mention:** May Bring Up memories that are currently due. They
+     are sent every message while due and marked "already discussed" once
+     they come up (D32).
+2. **Its own cap:** background has a separate cap that does not count
+   against search's limits (D16). Picked memories come first and are never
+   displaced. The request's total size check still applies, with the
+   trimming order in D37.
 3. **No repeats:** search skips briefing items, and the briefing skips
    picked memories.
 4. **Placement:** after the fixed instructions, Model Rules, and card
@@ -1029,9 +1062,21 @@ section D.5.
 
 # Part D: Design details (future proposals)
 
-Simplified after the independent review (2026-11-08). The central question
-is what the AI should **know** versus what it may **bring up on its own**.
-These are two different behaviors, and the user controls each separately.
+Simplified after the independent reviews (2026-11-08). One rule runs through
+this part:
+
+**Availability, relevance, and permission to mention unprompted are three
+separate decisions.**
+
+- **Availability:** what the AI has in front of it this message.
+- **Relevance:** whether it matters to what is being said now.
+- **Permission:** whether the AI may raise it unprompted.
+
+A memory can be available without being relevant, and the AI can know
+something without talking about it. Never limit what the AI receives in
+order to stop it behaving annoyingly. Instead, tell it how to behave. The
+cooldown and the "once per day" idea both made that mistake, and both are
+gone.
 
 ## D.1 What the user should experience
 
@@ -1049,7 +1094,8 @@ These are two different behaviors, and the user controls each separately.
 - **Dates:** an optional date decides when a May Bring Up memory is due. A
   one-time event is due in the days before and briefly after. A yearly date
   is due around the date each year. An anniversary of a loss is raised only
-  if the user allowed it, and at most once per chat per day.
+  if the user allowed it. Once it has come up in a chat, the AI keeps
+  knowing it but is told it has already been discussed (D.5).
 - **No notifications:** all of this happens inside chats. The app never
   notifies.
 
@@ -1066,8 +1112,21 @@ For each memory, at most three things:
 | May Bring Up | The AI may raise it unprompted when it is due | Off |
 | Date (optional) | When a May Bring Up memory is due: one-time or yearly | None |
 
-- **Internal, never a user choice:** fading, "current", strength, windows,
-  and scores. They are visible only on the Debug test screen.
+**Every combination, defined:**
+
+| Always Know | May Bring Up | What the AI gets | May it raise the memory unprompted? |
+|---|---|---|---|
+| Off | Off | Only when search finds it relevant (as today) | No |
+| On | Off | Every message, as background | No. It uses it when relevant |
+| Off | On | While due: every message, as "may mention". Not due: only through search | Yes, while due |
+| On | On | Every message, as background | Yes, while due |
+
+- **When "due" applies:**
+  - with a date, a memory is due inside its window;
+  - without a date, a May Bring Up memory is due until the user turns
+    permission off (D34).
+- **Internal, never a user choice:** windows and scores. They are visible
+  only on the Debug test screen.
 - **Example:** a user saving an upcoming appointment turns on May Bring Up
   and sets the date. Nothing else.
 - **Existing memories** have neither choice on and no date, so they behave
@@ -1088,20 +1147,20 @@ For each memory, at most three things:
   wording must say so.
 - **This is awareness inside a chat, not a notification.**
 
-## D.4 Fading
+## D.4 Fading (proposed for removal, D34)
 
-- **Purpose:** only how long an undated May Bring Up memory stays due after
-  its subject was last discussed. It never weakens search (D9): an old
-  memory is fully found whenever it becomes relevant again.
-- **"Discussed" follows the conversation.** A memory counts as discussed
-  while carry-over keeps it on topic (B.5), not only when a single message
-  matches it. So "Exactly", "and then she said…", or "that's what bothered
-  me" in a continuing discussion keep it current.
-- **Never counts as discussed:** the briefing sending it, the Memory
-  Assistant, the test screen, or opening the memory.
-- **Technical shape:** each memory stores the date it was last on topic.
-  Eligibility decays with a half-life (D7). Nothing runs in the background.
-- **Editing** a May Bring Up memory counts as it being on topic (D8).
+The second review found that automatic fading of undated May Bring Up
+memories would drop exactly the follow-ups people want. For example, "did
+you hear back about the job?" matters most after a long silence.
+
+**Recommendation:** no automatic fading. An undated May Bring Up memory stays
+due until the user turns permission off or the matter is settled (the user
+edits or supersedes it). Repetition is handled by "already discussed in this
+chat" (D.5), not by withholding.
+
+If fading is ever wanted, it is a per-memory choice the owner approves.
+"Discussed" would then follow the conversation, through carry-over, and
+never the AI's own replies alone. Search is never affected either way (D9).
 
 ## D.5 Dates
 
@@ -1113,9 +1172,15 @@ For each memory, at most three things:
 - **Year boundary:** a 2 January birthday seen from 30 December is 3 days
   away.
 - **29 February** in other years: D12.
-- **Not raised repeatedly:** a due memory is offered to the AI at most once
-  per chat per day (D32). After that it is not offered again that day. If
-  it is also Always Know, it stays as background.
+- **Not raised repeatedly, without being withheld (D32, corrected):**
+  - a due memory is sent every message while it is due, so the AI never
+    loses it;
+  - once the subject has come up in the chat, the memory is marked "already
+    discussed in this chat";
+  - the AI is told not to raise an already-discussed memory again, but it
+    keeps the information and can use it when the user returns to it.
+- **"Come up" is decided from the user's messages,** or a short user
+  continuation of an exchange about it, not from the AI's replies alone.
 - **What the AI is told:** the memory text, the app-worked-out timing, and
   approved guidance to raise it only when it fits naturally (D13).
 - **Set by hand** in the editor, or **proposed by the Memory Assistant**
@@ -1128,16 +1193,24 @@ For each memory, at most three things:
 
 - **Background** (Always Know): context the AI keeps. The instruction tells
   it not to raise these on its own.
-- **May mention** (May Bring Up, currently due): at most once per chat per
-  day each.
+- **May mention** (May Bring Up, currently due): sent every message while
+  due. Each is marked "already discussed" once it has come up in the chat,
+  and the AI is told not to raise it again (D.5).
 - **Permission rule (D30):**
   - nothing is volunteered without the user's May Bring Up permission;
   - a subject is never volunteered just because it was discussed recently;
   - a painful topic is found by search only when the user raises it.
-- **Size and cost:** one shared Memory Space with search (D16).
-  - background takes its share first, capped;
-  - search fills the rest;
-  - the request's total size check still applies.
+- **Size and cost (D16, owner):** background has its own cap, in memories
+  and characters. It does not count against search's Maximum Memories or
+  Memory Space, so it can never crowd out a relevant search result.
+- **Priority, in order:**
+  1. memories the user picked before sending, never displaced;
+  2. search results, within their own limits;
+  3. background, within its own cap;
+  4. may-mention items.
+
+  If the whole request is still too large for the model, the trimming order
+  is D37.
 
   As a rough guide, 20 short background memories add about 600–1,200 tokens
   per message. Background goes first in a fixed order so prompt caching
@@ -1160,6 +1233,39 @@ For each memory, at most three things:
 - **Advanced numbers** stay on the Debug test screen, not in ordinary
   settings.
 - **Look:** `ui-style-guide.md`. Wording needs owner approval.
+
+## D.9 Inside jokes and "vibe" (owner request, 2026-11-08; proposal)
+
+Published systems keep two kinds of memory that matter here (Part F):
+
+- specific facts and events, which is what this app already stores;
+- a short summary of how the user likes to talk and what the relationship
+  is like. ChatGPT keeps "response preferences"; Claude keeps an editable
+  summary of the user.
+
+Inside jokes need both: the joke itself, and the relationship it lives in.
+
+**Proposal, built from existing pieces rather than a new system:**
+
+- **Inside jokes are ordinary memories:**
+  - written with the joke and its origin ("we call the cat the gremlin
+    since the couch incident");
+  - given a user-made Memory Type such as "Inside Joke";
+  - normally both Always Know and May Bring Up.
+
+  Keyword search already finds the joke's phrase when the user uses it.
+- **The AI needs to know a memory is a joke.** Today only the memory text is
+  sent, not its type. For memories of a type the user marks as playful, the
+  type name would be sent with the text, so the AI knows the memory is
+  meant to be used lightly (D35).
+- **"Vibe" is one short, user-editable note per companion.** It describes
+  the tone of the relationship, its running themes, and how the companion
+  should talk, and it is always sent with that companion's chats. Companion
+  records already have an unused relationship-notes field for this (D36).
+  The Memory Assistant could later suggest updates to it through Pending,
+  never silently.
+- **The trauma rule still holds:** a painful subject never becomes a joke or
+  a vibe line unless the user writes it that way.
 
 ## D.8 Data, backup, privacy
 
@@ -1195,7 +1301,7 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D13 | What does the guidance to the AI about dated reminders say? | Owner reviews the exact text before it is built |
 | D14 | Does vague timing get a date? | No; the user can add one in Pending |
 | D15 | Should the briefing be built at all? | Yes, after D30–D32 are settled; it is the only way the AI can bring things up on its own |
-| D16 | How is the briefing's size limited? | It shares Memory Space with search; background takes a capped share first. No separate control (review, 2026-11-08) |
+| D16 | How is the briefing's size limited? | **Owner's view (2026-11-08):** Always Know must not count against the per-message memory amount. So background gets its own cap, separate from search's Maximum Memories and Memory Space |
 | D17 | Does the briefing run in roleplay chats? | Off by default in roleplay |
 | D18 | Is the briefing on or off by default? | Off; it adds a cost to every message |
 | D19 | Is fading strength shown on memory cards? | No; cards stay free of technical numbers. The Debug test screen shows it (review, 2026-11-08) |
@@ -1211,5 +1317,62 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D29 | Should the int8 model become the default? | **Decided, 2026-11-08 (revised):** no change to the default. The user already picks q4 or int8 in Advanced Memory Settings |
 | D30 | Which memories may the standing briefing bring up unprompted? | Only memories the user has marked May Bring Up. Dates and fading then decide when. Never volunteer a topic just because it was discussed a lot. The independent review strongly supports this |
 | D31 | What does the user decide per memory? | Only Always Know, May Bring Up, and an optional date. Fading, windows, and scores stay internal (review, 2026-11-08) |
-| D32 | How often may a due May Bring Up memory be offered to the AI? | At most once per chat per day |
+| D32 | How is repetition of a due May Bring Up memory controlled? | **Corrected (2026-11-08):** never by withholding it. It is sent every message while due, marked "already discussed" once it comes up, and the AI is told not to raise it again |
+| D34 | Should undated May Bring Up memories fade automatically? | No. They stay due until the user turns permission off or settles the matter. Fading, if ever wanted, becomes a per-memory choice |
+| D35 | Should the type name be sent with memories of a "playful" type, such as Inside Joke? | Yes, for types the user marks playful, so the AI knows to use them lightly |
+| D36 | Should each companion have a short, editable "vibe" note that is always sent? | Yes, using the existing unused relationship-notes field. Memory Assistant suggestions only through Pending |
+| D37 | If a whole request is too large for the model, what is trimmed first? | May-mention items, then background, then the lowest-ranked search results. Picked memories are never trimmed |
 | D33 | What does the Memory Assistant propose beyond the memory text? | Dates only, at first. Always Know and May Bring Up stay the user's choices until their behavior is established |
+
+---
+
+# Part F: What published memory systems do (2026-11-08)
+
+A short summary for design, not a specification. The sources are linked so
+the owner or another reviewer can check them.
+
+- **ChatGPT** has two layers: saved memories, which are explicit facts the
+  user can view and delete, and "reference chat history".
+  - Saved memories are placed in the model's instructions for later chats.
+  - Chat history adds summaries: response-style preferences, past topics,
+    and short summaries of recent conversations.
+  - Only the saved-memory behavior comes from OpenAI's own help pages. The
+    breakdown of what is sent is reverse-engineered by a third party, who
+    notes it may be inaccurate.
+  - Sources: [OpenAI help: how reference saved memories works](https://help.openai.com/en/articles/11146739-how-does-reference-saved-memories-work);
+    [OpenAI: memory and new controls](https://openai.com/blog/memory-and-new-controls-for-chatgpt);
+    [Embrace The Red: how ChatGPT remembers you](https://embracethered.com/blog/posts/2025/chatgpt-how-does-chat-history-memory-preferences-work).
+  - **Lesson:** a set of always-available facts plus a summary of the user's
+    style is what makes it feel like it "knows" you. That matches Always
+    Know and the vibe note (D.9).
+- **Claude** can search and reference past chats when asked, and can keep an
+  automatically generated, user-editable summary of what it has learned.
+  - Sources: [Engadget](https://engadget.com/ai/claude-can-now-reference-past-chats-if-you-want-it-to-211806343.html);
+    [The Decoder](https://the-decoder.com/anthropics-claude-can-now-remember-past-conversations/).
+  - **Lesson:** the summary is visible and editable, which supports keeping
+    the vibe note user-editable.
+- **Letta (formerly MemGPT)** splits memory into "core memory" blocks that
+  are always in the model's context, each with its own size limit, and
+  "archival memory" that is searched when needed.
+  - Source: [Letta docs: agent memory](https://docs.letta.com/guides/agents/memory).
+  - **Lesson:** always-present memory gets its own budget, separate from
+    searched memory. That matches the owner's view on D16.
+- **Generative Agents** (Park et al., 2023) ranks memories by relevance,
+  recency, and importance. It periodically writes "reflections": higher-level
+  insights drawn from many memories.
+  - Sources: [arXiv 2304.03442](https://arxiv.org/pdf/2304.03442v2).
+  - **Lesson:** reflections are the research name for "vibe". They are
+    summaries above individual facts.
+- **Mem0** (2025) extracts memories from conversations and compares each one
+  against existing memories, then chooses to add, update, delete, or do
+  nothing. That is close to this app's Memory Assistant with Possible Match.
+  - Source: [arXiv 2504.19413](https://arxiv.org/html/2504.19413v1).
+- **MemoryBank** (AAAI 2024) uses a forgetting curve, where memories fade
+  unless reinforced, for long-term companion chat.
+  - Source: [AAAI](https://ojs.aaai.org/index.php/AAAI/article/view/29946).
+  - **Lesson:** fading has precedent, but in a companion app it risks
+    dropping wanted follow-ups. Hence D34.
+- **Inside jokes:** no published research addresses them directly. The
+  closest ideas are relationship-event memory and summaries of the
+  relationship, as in D.9.
+
