@@ -50,13 +50,13 @@
         </LinearLayout>
     </ScrollView>
     <LinearLayout style="@style/Widget.App.Dialog.Actions">
-        <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Dialog.Actions.EndRow">
+        <org.teslasoft.assistant.ui.widgets.DialogActionRow style="@style/Widget.App.Dialog.Actions.EndRow">
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_legend_okay"
                 style="@style/AppButton.Primary.DialogAction"
                 android:text="@string/btn_ok"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
-        </androidx.constraintlayout.widget.ConstraintLayout>
+        </org.teslasoft.assistant.ui.widgets.DialogActionRow>
     </LinearLayout>
 </LinearLayout>

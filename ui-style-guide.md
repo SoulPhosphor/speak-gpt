@@ -286,9 +286,14 @@ right-aligned unless an approved design says otherwise. Every action is a real
 button (an `AppButton.*` style), never a bare text link.
 
 A row of label-sized actions that may not fit on one line uses a
-`ConstraintLayout` `Flow` (`flow_wrapMode="chain"`, all horizontal biases `1`)
-of `AppButton.*.Inline` buttons, so the last action drops to the next line,
-still on the right. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`)
+`DialogActionRow` (`org.teslasoft.assistant.ui.widgets`, styled
+`Widget.App.Dialog.Actions.EndRow`) holding a `Flow` (`flow_wrapMode="chain"`,
+all horizontal biases `1`) of `AppButton.*.Inline` buttons. When the buttons do
+not fit at their normal text size, the row shrinks every button's text by the
+same amount until they fit, never below `dialog_action_min_text_size` (the
+chat's message information text size, `chat_message_metadata_text_size`);
+past that, the last action drops to the next line, still on the right (owner
+ruling, Nov 8 2026). Every pop-up button row uses `DialogActionRow`. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`)
 the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
 Summarizer Settings centered beneath as an approved exception), and Backup
 Attempts Failed (`dialog_backup_failed_actions.xml`, Cancel then Retry, with

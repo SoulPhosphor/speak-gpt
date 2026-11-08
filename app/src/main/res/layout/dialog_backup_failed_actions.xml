@@ -9,7 +9,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     style="@style/Widget.App.Dialog.Actions">
 
-    <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Dialog.Actions.EndRow">
+    <org.teslasoft.assistant.ui.widgets.DialogActionRow style="@style/Widget.App.Dialog.Actions.EndRow">
 
         <androidx.constraintlayout.helper.widget.Flow
             style="@style/Widget.App.Dialog.Actions.EndRowFlow"
@@ -24,7 +24,7 @@
             android:id="@+id/btn_backup_failed_retry"
             style="@style/AppButton.Primary.Inline"
             android:text="@string/health_btn_retry" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </org.teslasoft.assistant.ui.widgets.DialogActionRow>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_backup_failed_change_folder"

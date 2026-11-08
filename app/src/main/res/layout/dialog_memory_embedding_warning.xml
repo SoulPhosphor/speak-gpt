@@ -3,7 +3,7 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     style="@style/Widget.App.Dialog.Actions">
-    <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Dialog.Actions.EndRow">
+    <org.teslasoft.assistant.ui.widgets.DialogActionRow style="@style/Widget.App.Dialog.Actions.EndRow">
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_embedding_add"
             style="@style/AppButton.Primary.DialogAction"
@@ -15,5 +15,5 @@
         <androidx.constraintlayout.helper.widget.Flow
             style="@style/Widget.App.Dialog.Actions.EndRowFlow"
             app:constraint_referenced_ids="btn_embedding_add,btn_embedding_okay" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </org.teslasoft.assistant.ui.widgets.DialogActionRow>
 </LinearLayout>
