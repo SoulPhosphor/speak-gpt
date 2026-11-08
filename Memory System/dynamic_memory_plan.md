@@ -30,6 +30,23 @@ documents.**
   - the search test screen is its own screen, with adjustable numbers,
     opened from Advanced Memory Settings, and it replaces the old Debug
     search box (step 1.4).
+- **Owner decisions after the technical assessment (2026-11-08):**
+  - the direction of the search repair is approved (D0);
+  - the int8 model becomes the default once it is verified to install and
+    run reliably on the owner's Pixel 8 (D29, step 1.14);
+  - tags are not made mandatory. Independently generated tags are tested
+    first (D28, step 1.15). Tags stay what they were meant to be: a way for
+    the user to find their own memories;
+  - the vector size is whichever performs better in meaningful testing, not
+    768 for its own sake (step 1.14);
+  - conversation carry-over is wanted, but it must recognize topic changes
+    and must not keep carrying irrelevant memories (step 1.12);
+  - scoring, thresholds, keyword handling, and other retrieval details are
+    left to engineering judgment, designed and tested properly (B.5);
+  - priorities: fix the confirmed failures, keep existing memory
+    protections, prove other memory features still work, build in
+    manageable testable stages, and add no complexity or scope without a
+    concrete reason.
 - **Everything else is a recommendation** waiting for the owner's decision
   (Part E).
 - **Stress-tested (2026-11-08):** the design was tested against the real
@@ -239,6 +256,27 @@ The 4 misses were judgment calls, for example the job memory for "How
 should I prep for the interview?". The remaining tuning is done on the
 owner's real memories with the test screen (step 1.4).
 
+**Limits of this test (technical assessment, 2026-11-08).** These results
+show direction, not measured improvement:
+
+- **The two rows are not a fair comparison.** They used different message
+  sets and changed five things at once: model, vector size, tags, keyword
+  search, and gate rule. The gate rules were also picked on the same data
+  they were scored on.
+- **Only the relevance gate was compared,** not what the full app actually
+  sends after importance, limits, and +3 handling.
+- **The samples are small and favorable.** One message is about 10% of the
+  result. The memories and messages were written by the same person, with
+  shared wording, and no roleplay, companion, or long multi-fact memories
+  were included.
+- **The tag gain is an upper bound.** The tags were written knowing the test
+  messages ("family" for "How is my family doing?"), which builds the
+  answer into the memory.
+- **The q4 and int8, and 256 and 768, differences** were about one message
+  each, which is within chance.
+
+Step 1.2 replaces this with a fair test.
+
 ---
 
 # Part B: Recommended design
@@ -261,20 +299,22 @@ the app already has, that part holds up on its own.
      database. Tags and the names of linked companions, worlds, characters,
      campaigns, and projects are part of the searchable text.
 
-   Every memory carries short topic tags, and vectors keep all 768 numbers
-   (A.10).
-4. **Merge the two result lists**, so a memory found both ways ranks
-   highest.
-5. **Keep only memories that clearly stand out** from the rest for this
-   message. When nothing stands out, no memories are sent.
+   Tags, where the user has added them, are part of the searchable text.
+   The model and vector size are chosen by testing (step 1.14).
+4. **Combine both searches into one relevance score per memory** (B.5), so
+   a memory found both ways ranks highest.
+5. **Keep only memories that pass a fixed minimum and also stand out**
+   from the rest for this message (B.5). When nothing qualifies, no
+   memories are sent.
 6. **Order by relevance.** Importance is the only bonus (fading strength is
    added later, in Phase 4). It is capped so it can never beat a clearly
    more relevant memory. A relevant +3 is always included, even past the
    limit.
 7. **Carry the conversation forward.** Memories sent with the previous
-   message stay candidates for this one, with a lower bar. While the
-   conversation stays on the topic they are sent again, and once it moves
-   on they drop. This is what the cooldown should have done.
+   message stay candidates for this one, with a lower bar, as long as the
+   topic has not changed. They drop when the topic changes, and a memory
+   cannot be carried forward repeatedly without fresh support (B.5). This
+   is what the cooldown should have done.
 8. **Skip anything already in this request:** picked memories, briefing
    items (Phase 5), and memories that repeat a lorebook entry.
 9. **Send up to the memory limit and size budget.** Empty slots stay empty.
@@ -290,7 +330,6 @@ the app already has, that part holds up on its own.
 | Scope, freshness, project, and tag bonuses | They outweighed relevance (A.5). Scope still decides which memories are allowed. Tags and names are found by keyword search instead. "Recently edited" does not mean "matters now"; fading (Phase 4) measures that properly |
 | The 10-message memory cooldown | It hid relevant memories from the AI (A.6) |
 | A separate Strict / Balanced / Broad setting | The test screen tunes the real number. A second control for the same thing adds confusion (D25) |
-| Storing only 256 of the model's 768 numbers | Measurably worse separation; the space saved is about 2 KB per memory (A.10) |
 | An on-phone re-ranker | Tested; it did not understand personal memories (A.10) |
 
 ## B.3 What is kept
@@ -307,6 +346,91 @@ the app already has, that part holds up on its own.
 Rewriting the message with an AI before searching, writing a "pretend
 answer" to search with (HyDE), and paid AI re-ranking all add a paid call
 to every message. They are not part of this design.
+
+## B.5 Engineering specification
+
+The owner left these details to engineering judgment (2026-11-08). Each one
+is tested in the step named, and the numbers are tunable on the test screen.
+
+**Owner's priorities for every choice below:** Fix the confirmed failures first, keep every existing memory protection, prove other memory features still work, and add no complexity without a concrete reason.
+
+**One relevance score (steps 1.6, 1.8, 1.9).**
+- **Meaning strength:** how far a memory's similarity stands above this
+  message's typical score, measured with the median and the median absolute
+  deviation, not the mean and standard deviation. These are not pulled
+  upward when several memories are relevant at once, which fixes the
+  "family" problem from the assessment. The spread has a minimum, so a
+  small or uniform library cannot make tiny differences look large.
+- **Keyword strength,** from 0 to 1: the share of the message's informative
+  words that the memory contains, weighted by how rare each word is in the
+  library. This can be compared across messages, unlike raw FTS5 `bm25()`
+  values. FTS5 finds the candidate memories and supplies word counts.
+- **Relevance:** the stronger of the two, plus a small bonus when both
+  agree. This replaces rank-position merging (reciprocal rank fusion),
+  because a rank-based merge cannot support the importance cap or the +3
+  test.
+- **Importance:** a bonus on the same scale, capped below a "clear lead".
+  The +3 property test uses that same lead.
+
+**The gate (step 1.8).** A memory passes if:
+- its similarity clears a **fixed minimum** for the model **and** it stands
+  out by the meaning-strength measure; or
+- its keyword strength clears a minimum and it matches at least one
+  informative word.
+
+The fixed minimum stops the relative rule from always letting the top one
+or two through. Below a minimum library size, only the fixed minimum is
+used.
+
+**Keyword handling (step 1.5).**
+- FTS5 with the `porter unicode61` tokenizer, so "crashing" matches "crash".
+- A built-in list of common words ("the", "how", "doing") that never count
+  as informative. With a small library, a common word that appears in one
+  memory would otherwise look rare.
+- The user's text is never passed as FTS5 query syntax. Each word is quoted
+  as a plain term, so words like "AND" or "NEAR" and symbols like `*` or `-`
+  are ordinary text.
+- Memory content and tags are indexed with SQLite triggers on the memory
+  tables, in the same transaction as each change, as `ChatSearchStore`
+  already does. No code path can forget to update it. On opening, the
+  database checks that the index matches the memories and rebuilds it if
+  not.
+- The names of linked companions, worlds, characters, campaigns, and
+  projects change on their own tables. They are matched in the app, as
+  today, rather than copied into the index.
+
+**Carry-over (step 1.12).**
+- Candidates are the memories sent with the previous message only.
+- **Topic change:** the latest message is compared with the previous user
+  message and with each carried memory. A carried memory stays only if it
+  still relates to the latest message or to the previous exchange above a
+  lower bar, and the topic has not changed. A long message on a new subject
+  counts as a topic change. A short reply ("yes", "and then?") does not.
+- **No endless carrying:** a memory can be carried for at most a few
+  messages in a row without passing the normal gate again. A memory sent by
+  mistake therefore drops quickly instead of riding along.
+- Picked memories are carried like any other sent memory, under the same
+  rules.
+- Carry-over replaces the separate recent-turns search planned earlier,
+  which depended on a brittle "short message" rule.
+
+**Wrong versus missed.** Automatic memory leans toward precision: a wrong
+memory costs tokens and misleads the AI. Missed memories are covered by
+carry-over, by the user's ability to pick a memory, and by tuning on the
+test screen.
+
+**Other features that share the embedding space (step 1.14).** If the model
+or vector size changes, the lorebook-repeat check (`NearDuplicate`, 0.85)
+and Possible Match (`PossibleMatchFinder`, 0.80) are re-checked against
+labelled pairs, and changed only if they no longer give the same results.
+
+**The Memory Assistant** uses the same ranking to see existing memories.
+Its existing tests must pass. Any changed result is reported to the owner
+with the reason.
+
+**Speed.** Search time, embedding time, and memory use are shown on the
+test screen and measured on the owner's Pixel 8. A step that makes sending
+noticeably slower is not finished.
 
 ---
 
@@ -384,9 +508,22 @@ Steps run in this order.
     `rank`, and the keyword ranking are pure functions that can be tested
     with stored vectors.
   - A report counts right, wrong, and missed memories for each message.
+  - **A fair comparison:**
+    - the current search and every later version run on the same memories
+      and the same messages;
+    - the comparison is on what the full app would actually send (after
+      importance, limits, +3, picked memories, and carry-over), not only
+      the gate;
+    - changes are measured one at a time;
+    - the messages are split into a tuning half and a held-back half, and
+      results are reported on the held-back half;
+    - the set includes roleplay, companion, and project memories, long
+      multi-fact memories, conversations with topic changes, and casual
+      messages that should bring back nothing;
+    - the memories and the messages are written separately, so the
+      messages do not reuse the memories' wording.
 - **Done when:** the report runs against the current code and records its
-  results (today: mostly wrong). Later steps add pass/fail checks for what
-  they fix.
+  results. Later steps add pass/fail checks for what they fix.
 
 ### Step 1.3: Explanations from the ranking code
 
@@ -408,16 +545,17 @@ Steps run in this order.
     section. The old Debug search box (`runDebugSearch`, its field, button,
     and results text) is removed in the same change.
   - The owner enters a message, picks which chat's context to test in
-    (companion, project, roleplay, campaign), and chooses whether to
-    include recent turns.
+    (companion, project, roleplay, campaign), and can enter a previous
+    exchange to test carry-over (step 1.12).
   - For each memory, the screen shows every number from step 1.3, whether
     it passed the relevance gate (and by how much it missed if not),
     whether it would be sent, and if not, why: below the gate, not allowed
     in this chat, over the limit, over the size budget, already picked,
     already in the briefing, or a repeat of a lorebook entry.
   - For the whole search, it shows which searches ran, how many memories
-    are missing their embedding, the limits in effect, and the exact memory
-    text the AI would receive.
+    are missing their embedding, the limits in effect, the exact memory
+    text the AI would receive, and how long the search and the embedding
+    took (B.5, Speed).
   - **Adjustable numbers:** every tuning number used by the search can be
     changed here. Changes first apply only to the result on screen, and
     the search re-runs at once. **Apply** makes them the real values for
@@ -450,9 +588,12 @@ Steps run in this order.
     target names. It is kept in step with every way a memory is added,
     edited, deleted, archived, restored, or imported, and it is built for
     existing memories on first open.
-  - Keyword search uses FTS5's built-in `bm25()` ranking. Common words
-    count for almost nothing, and names and rare words count for a lot. A
-    memory needs a minimum keyword score, not just one shared word.
+  - Keyword search finds candidates through FTS5 and scores them with the
+    keyword strength in B.5. Common words count for nothing, and names and
+    rare words count for a lot. A memory needs a minimum keyword strength,
+    not just one shared word.
+  - Tokenizer, common-word list, safe quoting, triggers, and the index check
+    on opening are as specified in B.5.
   - Replaces word-overlap counting in `Librarian.rankLexical`.
 - **Tunable on the test screen:** the minimum keyword score.
 - **Done when:** in the test set, common-word matches no longer bring in
@@ -462,10 +603,9 @@ Steps run in this order.
 
 - **Change:** in `Librarian.searchCore`, run meaning search over every
   memory that has a current vector, and keyword search over all memories,
-  every message. Merge the two lists with reciprocal rank fusion, a
-  standard way to combine two rankings. A memory found both ways ranks
-  highest. A missing vector removes only that one memory from meaning
-  search, never the whole message.
+  every message. Combine them into the single relevance score in B.5. A
+  memory found both ways ranks highest. A missing vector removes only that
+  one memory from meaning search, never the whole message.
 - **Tunable:** the balance between meaning and keyword results.
 - **Done when:** in the test set, a missing vector affects only its own
   memory, and the memories missed in A.3 (for example the chat-app memory
@@ -473,24 +613,19 @@ Steps run in this order.
 
 ### Step 1.7: Search with the user's message on its own
 
-- **Change:** in `Enforcer.kt`, the main search uses only the user's latest
-  message. Recent turns get a separate search with lower weight, and only
-  when the latest message is short or refers back ("what about that?",
-  "yes", "tell me more"). The results are merged by each memory's best
-  score. `Librarian.searchForReconciliation` already searches several text
-  windows and merges them; live search uses the same approach.
-- **Tunable:** the recent-turn weight, and what counts as a short message.
-- **Done when:** in the test set, adding recent turns no longer pulls in
-  unrelated memories, and "what about that?" still finds the topic from
-  the turn before.
+- **Change:** in `Enforcer.kt`, search uses only the user's latest message.
+  Recent turns are no longer glued on. Follow-up messages such as "what
+  about that?" are handled by carry-over (step 1.12), which uses the
+  previous exchange.
+- **Done when:** in the test set, recent turns no longer pull in unrelated
+  memories.
 
 ### Step 1.8: A relevance gate that fits each message
 
-- **Change:** replace `MIN_SIMILARITY = 0.30` with a gate measured against
-  this message's own scores. A memory must stand clearly above the other
-  memories' scores for this message. A strong keyword match also passes.
-  When the library is too small for a fair comparison, a fixed floor tuned
-  on the test set is used instead. Passing nothing is a valid result.
+- **Change:** replace `MIN_SIMILARITY = 0.30` with the gate in B.5: a
+  fixed minimum for the model plus standing out from this message's other
+  scores, or a strong keyword match. Below a minimum library size, only the
+  fixed minimum is used. Passing nothing is a valid result.
 - **Measured on the sample** (meaning search alone, before steps 1.5–1.7):
 
   | Rule | Right | Wrong | Missed |
@@ -501,7 +636,8 @@ Steps run in this order.
 
   The relative rule sent nothing for "hey how are you", which is correct.
   Its misses are the kind keyword search (step 1.5) recovers.
-- **Tunable:** the gate's strength and the small-library floor.
+- **Tunable:** the fixed minimum, the stand-out strength, the keyword
+  minimum, and the small-library size.
 - **Done when:** in the test set, "nothing relevant" messages send nothing
   and wrong memories drop sharply.
 
@@ -555,18 +691,24 @@ Steps run in this order.
 
 ### Step 1.12: Carry the conversation forward
 
-- **Change:** memories sent with the previous message stay candidates for
-  the next message. They are re-checked against the new message (and the
-  recent turns) with a lower bar than new memories. While the conversation
-  stays on the topic they are sent again. Once it moves on, they fail the
-  lower bar and drop.
+- **Change:** carry-over as specified in B.5:
+  - only the previous message's memories are candidates;
+  - they are re-checked against the latest message and the previous
+    exchange with a lower bar;
+  - they drop on a topic change;
+  - none can be carried for more than a few messages in a row without
+    passing the normal gate again;
+  - picked memories follow the same rules.
 - **Why:** the memory block is rebuilt every message and is not kept in the
   history (A.6). Without this, a short reply such as "yes" or "and then
   what?" can lose the memory that the conversation is about.
-- **Tunable:** the lower bar, and how many messages back carry-over reaches.
-- **Done when:** in a test conversation, a memory stays while the topic
-  continues, including through short replies, and drops within a message or
-  two after the topic changes.
+- **Tunable:** the lower bar, the topic-change sensitivity, and the
+  maximum carry length.
+- **Done when:** in test conversations:
+  - a memory stays while the topic continues, including through short
+    replies;
+  - it drops on the first message after a clear topic change;
+  - a memory that was sent by mistake does not stay past the carry limit.
 
 ### Step 1.13: The same memory rules on both send paths
 
@@ -579,34 +721,40 @@ Steps run in this order.
 - **Done when:** on both paths, a memory that repeats a lorebook entry is
   not also sent, and the lorebook tests are unchanged.
 
-### Step 1.14: Keep all 768 numbers, and choose the model
+### Step 1.14: Choose the vector size and the model by testing
 
-- **Change:**
-  - In `EmbeddingModels`, store the model's full 768 numbers instead of
-    the first 256. The model's tag changes with the size, so the existing
-    rebuild repairs every memory's vector automatically. During the
-    rebuild, keyword search (step 1.5) keeps search working, because a
-    missing vector no longer switches the whole message over (step 1.6).
-  - Re-run the test set with the q4 and int8 models. In the stress test,
-    int8 was better (A.10). It is a larger download (about 340 MB instead
-    of 225 MB), so making it the default is the owner's decision (D29).
-- **Done when:** every memory has a 768-number vector, and the test set
-  improves or holds.
+- **Vector size:** run the fair test set (step 1.2) with 256 and 768. Keep
+  256 unless 768 is clearly better on the held-back messages and the
+  owner's saved cases. If 768 is chosen, it ships only after step 1.6, so
+  the full rebuild never sends a message to keyword-only search, and the
+  `NearDuplicate` and `PossibleMatchFinder` thresholds are re-checked
+  (B.5).
+- **Model:** int8 becomes the default (owner decision, D29) once it is
+  verified on the owner's Pixel 8:
+  - the download and install complete, including its extra data file;
+  - the model loads and passes its self-check;
+  - embedding time per message and the full rebuild time are acceptable;
+  - memory use is within the phone's comfortable limits;
+  - repeated use causes no crashes.
 
-### Step 1.15: Topic tags on every memory
+  The test screen shows the timing. If int8 fails any check, q4 stays the
+  default and int8 stays optional.
+- **Done when:** the chosen size and model are backed by the fair test, and
+  the Pixel 8 checks have passed for the default.
 
-- **Change:**
-  - The Memory Assistant's instructions (`ArchivistPrompt.kt`) ask for 2 to
-    4 broad topic tags on every proposed memory, such as "family",
-    "health", "money", "work", "pets", "food", "hobbies". The exact
-    instruction text is model-facing behavior and needs owner approval
-    first (D28). The user sees and edits the tags in Pending, as today.
-  - The test screen shows how many memories have no tags.
-  - Optionally, a one-time pass suggests tags for existing untagged
-    memories. It is started by the user, its suggestions go through
-    Pending, and it uses tokens once (D28).
-- **Done when:** new memories arrive with topic tags, and the test set
-  shows the gain measured in A.10.
+### Step 1.15: Test whether automatic tags help
+
+- **Owner decision (D28):** tags are not made mandatory. Tags stay what
+  they were meant to be: a way for the user to find their own memories.
+- **Test:** in the fair test set, generate tags for the memories
+  independently, without seeing the test messages, and compare search with
+  and without them on the held-back messages.
+- **Only if the gain is real:** propose to the owner that the Memory
+  Assistant suggest topic tags, with the exact instruction text for
+  approval. Any suggested tags appear in Pending for the user to edit, as
+  today. A one-time pass for existing memories is a separate later
+  decision, because it uses tokens.
+- **Done when:** the test result is reported to the owner.
 
 ### Step 1.16: Variety and starting values
 
@@ -623,6 +771,21 @@ Steps run in this order.
 Tested and rejected (A.10). Reconsider only if a small re-ranker made for
 short personal text becomes available. Any candidate is tested against the
 test set and the owner's saved cases first (D21).
+
+### Phase 1 in pull requests
+
+Each pull request can be tested on its own, and none leaves search worse
+than before.
+
+1. **Steps 1.1–1.3:** safety tests, the fair test set, and explanations.
+   Nothing the user sees changes.
+2. **Step 1.4:** the test screen, after its wording is approved.
+3. **Steps 1.5–1.6:** keyword search and the combined score.
+4. **Steps 1.7–1.10:** the message-only search, the gate, relevance-first
+   ranking, and +3.
+5. **Steps 1.11–1.13:** cooldown removal, carry-over, and both send paths.
+6. **Steps 1.14–1.16:** vector size, model, the tag test, variety, and
+   default values.
 
 ### Phase 1 is complete when
 
@@ -874,7 +1037,7 @@ Asked one at a time in chat. A recommendation is a proposal only.
 
 | # | Question | Recommendation or decision |
 |---|---|---|
-| D0 | Approve the recommended search design in Part B as the plan for Phase 1? | Yes |
+| D0 | Approve the recommended search design in Part B as the plan for Phase 1? | **Decided, 2026-11-08:** the direction is approved; details are left to engineering judgment (B.5) |
 | D1 | Is date sharing off or on by default? | Off; the user turns it on |
 | D2 | What date format goes to the AI? | Weekday, day, month name, year, which can't be misread |
 | D3 | Does date sharing apply in roleplay chats? | No by default; the story may have its own time |
@@ -902,5 +1065,5 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D25 | Should the ordinary memory settings also have a Strict / Balanced / Broad match choice? | No; the test screen's tuned numbers are the setting, and a second control adds confusion |
 | D26 | Should roleplay card entries also lose their 10-message cooldown? | Probably yes, since it has the same amnesia flaw, but cards are keyword-based and working, so leave them until the owner decides |
 | D27 | Which memory assembly log lines change when the cooldown and old search are removed? | Present the exact lines at step 1.11 and wait for approval |
-| D28 | Should the Memory Assistant always add broad topic tags, and should existing untagged memories get a one-time tagging pass? | Yes to both; the owner approves the instruction text first, and the pass is started by the user and goes through Pending |
-| D29 | Should the int8 model become the default? | Yes, if the test set confirms A.10; it is a larger download, so the owner decides |
+| D28 | Should the Memory Assistant always add topic tags? | **Decided, 2026-11-08:** not mandatory now. Test independently generated tags first (step 1.15) |
+| D29 | Should the int8 model become the default? | **Decided, 2026-11-08:** yes, once verified to install and run reliably on the owner's Pixel 8 (step 1.14) |
