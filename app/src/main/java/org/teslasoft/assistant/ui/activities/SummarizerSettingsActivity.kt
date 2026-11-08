@@ -144,7 +144,7 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
             textEndpointValue!!, btnEditEndpoint!!, textModelValue!!, btnViewAllModels!!,
             sectionRouting!!, textRoutingValue!!,
             endpointEditorLauncher, routingSetupLauncher
-        ) { section.reload() }
+        ) { section.onModelSelected() }
 
         suppressWatchers = true
         fieldCompleteMessages?.setText(preferences?.getSummarizerDefaultWindow()?.toString() ?: "20")

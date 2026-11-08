@@ -80,6 +80,14 @@ class DedicatedParametersSection(
         show(FavoriteModelParameters.live(context, scope))
     }
 
+    /** After a model was selected: like Quick Settings, the model's
+     *  parameters replace what is on screen only while Enable Model Settings
+     *  is on (that is when selecting a model changes them). Otherwise any
+     *  unsaved edits stay and only the link follows the new model. */
+    fun onModelSelected() {
+        if (FavoriteModelParameters.isEnabled(context)) reload() else refreshLink()
+    }
+
     /** Puts the recommended parameters on screen (saved like any change). */
     fun showRecommended() {
         show(RecommendedModelParameters.forScope(scope))

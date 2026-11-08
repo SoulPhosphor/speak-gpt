@@ -49,6 +49,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.DedicatedModelRouting
 import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.providers.ModelParameterRejection
 import org.teslasoft.assistant.providers.ModelRequestParameters
 import org.teslasoft.assistant.providers.ModelSupportedParametersStore
@@ -979,6 +980,16 @@ class SummarizerController(
             DedicatedModelRouting.SUMMARIZER.effective(appContext, endpointId, model)
         } else {
             null
+        }
+        if (requestFavorite != null &&
+            DedicatedModelRoutingPolicy.needsSetup(requestFavorite.routingType, requestFavorite)
+        ) {
+            recordFailure(
+                prefs, SummarizerErrorCategory.MODEL_MISSING, endpoint.label, model,
+                httpStatus = null,
+                detail = appContext.getString(R.string.summarizer_routing_not_configured_detail)
+            )
+            return null
         }
         val routingResolution = ProviderRoutingResolver.resolve(
             endpoint.isOpenRouterRouting(), requestFavorite

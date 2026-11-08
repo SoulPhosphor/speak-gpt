@@ -55,6 +55,7 @@ import org.teslasoft.assistant.preferences.memory.TranscriptRecord
 import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.providers.ModelParameterRejection
 import org.teslasoft.assistant.providers.ModelRequestParameters
 import org.teslasoft.assistant.providers.ModelSupportedParametersStore
@@ -333,6 +334,13 @@ object Archivist {
             DedicatedModelRouting.MEMORY_SCANNER.effective(context, endpointId, model)
         } else {
             null
+        }
+        if (requestFavorite != null &&
+            DedicatedModelRoutingPolicy.needsSetup(requestFavorite.routingType, requestFavorite)
+        ) {
+            MemoryLog.logAlways(context, "Archivist", "warn",
+                "Archivist Not Ready — selected provider routing is not configured for the Memory Assistant model")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
         }
         val routingResolution = ProviderRoutingResolver.resolve(
             endpoint.isOpenRouterRouting(), requestFavorite

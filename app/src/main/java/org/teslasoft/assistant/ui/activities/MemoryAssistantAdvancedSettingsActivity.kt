@@ -192,7 +192,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
             textArchivistEndpointValue!!, btnEditArchivistEndpoint!!, textArchivistModelValue!!,
             btnViewAllArchivistModels!!, sectionArchivistRouting!!, textArchivistRoutingValue!!,
             archivistEndpointEditorLauncher, archivistRoutingSetupLauncher
-        ) { section.reload() }
+        ) { section.onModelSelected() }
         btnResetParameters?.setOnClickListener { section.showRecommended() }
 
         /* ---- Minimum Importance ---- */
