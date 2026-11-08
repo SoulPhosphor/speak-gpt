@@ -930,8 +930,11 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     /** The routing this chat uses for the model: its own, else the favorite's. */
-    private fun chatRouting(model: String, endpointId: String): FavoriteModelObject? =
-        ChatModelRouting.effective(requireContext(), preferences, endpointId, model)
+    private fun chatRouting(model: String, endpointId: String): FavoriteModelObject? {
+        // Also called after a network check, when the sheet may be gone.
+        val context = context ?: return null
+        return ChatModelRouting.effective(context, preferences, endpointId, model)
+    }
 
     /** Lists the model's favorite providers (starred) and then the last five
      *  used. New providers are chosen through the gear. */
