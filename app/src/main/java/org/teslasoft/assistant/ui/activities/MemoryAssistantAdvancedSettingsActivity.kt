@@ -334,7 +334,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
             finish()
             return
         }
-        val actions = layoutInflater.inflate(R.layout.dialog_three_actions_cancel_first, null)
+        val actions = layoutInflater.inflate(R.layout.dialog_three_actions_row, null)
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.memory_parameters_discard_title)
             .setMessage(R.string.memory_parameters_discard_message)

@@ -230,10 +230,14 @@ The chat/image deletion choice is the first consumer: **Cancel**, **Delete Chat
 Only**, **Delete All**. Do not reorder those actions or reproduce the stacked
 geometry in a feature-local layout.
 
-Advanced Memory Settings uses it when leaving with unsaved Memory Scanner
-parameters: **Discard Changes?** / "You have unsaved parameter changes." with
-**Cancel** (stay), **Save & Exit**, **Okay** (leave without saving), in that
-order (owner ruling, Nov 8 2026).
+Three actions side by side use `layout/dialog_three_actions_row.xml`
+(owner ruling, Nov 8 2026: not stacked): one right-aligned row of
+`AppButton.*.Inline` buttons in the caller's order, cancel/back-out first,
+built on `Widget.App.Dialog.Actions.EndRow` / `EndRowFlow`, so an action that
+does not fit moves to the next line, still on the right. First consumer:
+leaving Advanced Memory Settings with unsaved Memory Scanner parameters,
+**Discard Changes?** / "You have unsaved parameter changes." with **Cancel**
+(stay), **Save & Exit**, **Okay** (leave without saving), in that order.
 
 For three equal, non-destructive choices with no cancel action, use
 `layout/dialog_three_actions_stacked.xml`: the same stacked geometry with every
