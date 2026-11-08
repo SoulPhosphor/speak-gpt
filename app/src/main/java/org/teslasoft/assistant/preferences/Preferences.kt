@@ -2522,14 +2522,19 @@ class Preferences internal constructor(
     }
 
     /** The Memory Scanner's own provider routing for its selected model (see
-     *  getSummarizerRoutingOverride). "" = never written. */
+     *  getSummarizerRoutingOverride). "" = none. */
     fun getMemoryScannerRoutingOverride(): String =
         getGlobalString("memory_scanner_routing_override", "")
 
-    fun hasMemoryScannerRoutingOverride(): Boolean = gp.contains("memory_scanner_routing_override")
+    /** True once the older routing setting was carried over (DedicatedModelRouting). */
+    fun getMemoryScannerRoutingMigrated(): Boolean = getGlobalBoolean("memory_scanner_routing_migrated", false)
+
+    fun setMemoryScannerRoutingMigrated() {
+        putGlobalBoolean("memory_scanner_routing_migrated", true)
+    }
 
     fun setMemoryScannerRoutingOverride(json: String) {
-        gp.edit { putString("memory_scanner_routing_override", json) }
+        putGlobalString("memory_scanner_routing_override", json)
     }
 
     /* The Memory Scanner's parameters besides Temperature (which keeps its
@@ -2539,14 +2544,14 @@ class Preferences internal constructor(
         getGlobalString("memory_scanner_streaming", "").toBooleanStrictOrNull() ?: RecommendedModelParameters.STREAMING
 
     fun setMemoryScannerStreaming(value: Boolean) {
-        gp.edit { putString("memory_scanner_streaming", value.toString()) }
+        putGlobalString("memory_scanner_streaming", value.toString())
     }
 
     fun getMemoryScannerTopP(): Float =
         getGlobalString("memory_scanner_top_p", "").toFloatOrNull() ?: RecommendedModelParameters.TOP_P
 
     fun setMemoryScannerTopP(value: Float) {
-        gp.edit { putString("memory_scanner_top_p", value.toString()) }
+        putGlobalString("memory_scanner_top_p", value.toString())
     }
 
     fun getMemoryScannerFrequencyPenalty(): Float =
@@ -2554,7 +2559,7 @@ class Preferences internal constructor(
             ?: RecommendedModelParameters.FREQUENCY_PENALTY
 
     fun setMemoryScannerFrequencyPenalty(value: Float) {
-        gp.edit { putString("memory_scanner_frequency_penalty", value.toString()) }
+        putGlobalString("memory_scanner_frequency_penalty", value.toString())
     }
 
     fun getMemoryScannerPresencePenalty(): Float =
@@ -2562,7 +2567,7 @@ class Preferences internal constructor(
             ?: RecommendedModelParameters.PRESENCE_PENALTY
 
     fun setMemoryScannerPresencePenalty(value: Float) {
-        gp.edit { putString("memory_scanner_presence_penalty", value.toString()) }
+        putGlobalString("memory_scanner_presence_penalty", value.toString())
     }
 
     /** Analysis temperature, 0.0–2.0. Recommended/default 0.3. */
@@ -3026,15 +3031,19 @@ class Preferences internal constructor(
     /** The Summarizer's own provider routing for its selected model, used when
      *  that routing is not the one saved on a Summarizer favorite (a model that
      *  is not a favorite, or a provider tried that is not one of its favorite
-     *  providers). "" = never written: the older routing setting is carried
-     *  over once (DedicatedModelRouting). */
+     *  providers). "" = none. */
     fun getSummarizerRoutingOverride(): String =
         getGlobalString("summarizer_routing_override", "")
 
-    fun hasSummarizerRoutingOverride(): Boolean = gp.contains("summarizer_routing_override")
+    /** True once the older routing setting was carried over (DedicatedModelRouting). */
+    fun getSummarizerRoutingMigrated(): Boolean = getGlobalBoolean("summarizer_routing_migrated", false)
+
+    fun setSummarizerRoutingMigrated() {
+        putGlobalBoolean("summarizer_routing_migrated", true)
+    }
 
     fun setSummarizerRoutingOverride(json: String) {
-        gp.edit { putString("summarizer_routing_override", json) }
+        putGlobalString("summarizer_routing_override", json)
     }
 
     /* The Summarizer's parameters, shown on Summarizer Settings: what every
@@ -3046,21 +3055,21 @@ class Preferences internal constructor(
         getGlobalString("summarizer_streaming", "").toBooleanStrictOrNull() ?: RecommendedModelParameters.STREAMING
 
     fun setSummarizerStreaming(value: Boolean) {
-        gp.edit { putString("summarizer_streaming", value.toString()) }
+        putGlobalString("summarizer_streaming", value.toString())
     }
 
     fun getSummarizerTemperature(): Float =
         getGlobalString("summarizer_temperature", "").toFloatOrNull() ?: RecommendedModelParameters.TEMPERATURE
 
     fun setSummarizerTemperature(value: Float) {
-        gp.edit { putString("summarizer_temperature", value.toString()) }
+        putGlobalString("summarizer_temperature", value.toString())
     }
 
     fun getSummarizerTopP(): Float =
         getGlobalString("summarizer_top_p", "").toFloatOrNull() ?: RecommendedModelParameters.TOP_P
 
     fun setSummarizerTopP(value: Float) {
-        gp.edit { putString("summarizer_top_p", value.toString()) }
+        putGlobalString("summarizer_top_p", value.toString())
     }
 
     fun getSummarizerFrequencyPenalty(): Float =
@@ -3068,7 +3077,7 @@ class Preferences internal constructor(
             ?: RecommendedModelParameters.FREQUENCY_PENALTY
 
     fun setSummarizerFrequencyPenalty(value: Float) {
-        gp.edit { putString("summarizer_frequency_penalty", value.toString()) }
+        putGlobalString("summarizer_frequency_penalty", value.toString())
     }
 
     fun getSummarizerPresencePenalty(): Float =
@@ -3076,7 +3085,7 @@ class Preferences internal constructor(
             ?: RecommendedModelParameters.PRESENCE_PENALTY
 
     fun setSummarizerPresencePenalty(value: Float) {
-        gp.edit { putString("summarizer_presence_penalty", value.toString()) }
+        putGlobalString("summarizer_presence_penalty", value.toString())
     }
 
     /** Complete Messages default (owner-approved default: 20) — the

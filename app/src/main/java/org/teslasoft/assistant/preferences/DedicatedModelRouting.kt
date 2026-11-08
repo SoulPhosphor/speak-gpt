@@ -82,9 +82,14 @@ class DedicatedModelRouting private constructor(val scope: ModelPickerScope) {
         if (scope == ModelPickerScope.SUMMARIZER) prefs.getSummarizerRoutingOverride()
         else prefs.getMemoryScannerRoutingOverride()
 
-    private fun hasStoredOverride(prefs: Preferences): Boolean =
-        if (scope == ModelPickerScope.SUMMARIZER) prefs.hasSummarizerRoutingOverride()
-        else prefs.hasMemoryScannerRoutingOverride()
+    private fun migrated(prefs: Preferences): Boolean =
+        if (scope == ModelPickerScope.SUMMARIZER) prefs.getSummarizerRoutingMigrated()
+        else prefs.getMemoryScannerRoutingMigrated()
+
+    private fun markMigrated(prefs: Preferences) {
+        if (scope == ModelPickerScope.SUMMARIZER) prefs.setSummarizerRoutingMigrated()
+        else prefs.setMemoryScannerRoutingMigrated()
+    }
 
     private fun storeOverride(prefs: Preferences, json: String) {
         if (scope == ModelPickerScope.SUMMARIZER) prefs.setSummarizerRoutingOverride(json)
@@ -192,21 +197,19 @@ class DedicatedModelRouting private constructor(val scope: ModelPickerScope) {
      * One-time carry-over from the older setting, which kept only a routing
      * type and borrowed provider details from the chat's favorite. The
      * selected model keeps exactly the routing it was using, now as the job's
-     * own, and becomes its first Recent entry. Runs whenever the own-routing
-     * setting has never been written, so an older backup restored later is
-     * carried over too.
+     * own, and becomes its first Recent entry. The marker that it ran is an app
+     * setting, so an older backup restored later (which has none) is carried
+     * over too.
      */
     fun migrate(context: Context) {
         val prefs = prefs(context)
-        if (hasStoredOverride(prefs)) return
+        if (migrated(prefs)) return
         synchronized(this) {
-            if (hasStoredOverride(prefs)) return
+            if (migrated(prefs)) return
+            markMigrated(prefs)
             val endpointId = endpointId(context)
             val modelId = modelId(context)
-            if (endpointId.isBlank() || modelId.isBlank()) {
-                storeOverride(prefs, "")
-                return
-            }
+            if (endpointId.isBlank() || modelId.isBlank()) return
             val chatFavorite = runCatching {
                 FavoriteModelsPreferences.getPreferences(context).getFavorite(modelId, endpointId)
             }.getOrNull()
