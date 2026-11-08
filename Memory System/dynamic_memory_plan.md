@@ -1,485 +1,77 @@
-# Dynamic Memory Plan: Dates, Fading, and the Standing Briefing
+# Memory Plan: Search Repair, Dates, Fading, and the Standing Briefing
 
-**Written 2026-11-08 at the owner's request.**
+**Written 2026-11-08 at the owner's request. Rewritten the same day as one
+step-by-step plan, after a full review for ideas carried over from older
+documents.**
+
+## How to use this document
+
+- **Part A** explains what is wrong with memory search today, measured
+  against the real model.
+- **Part B** is the recommended design.
+- **Part C** is the build plan, in phases and numbered steps. Each step says
+  what changes, where in the code, what it must not break, how it is tested,
+  and when it is done.
+- **Part D** holds the detailed design for dates, fading, and the briefing.
+  Phases 2–6 refer to it.
+- **Part E** lists every decision, both decided and open.
 
 ## Status
 
-- **The owner decides what is built and when.** Build only the part of this
-  plan the owner tells you to build. No roadmap file overrides that.
-- **Search repair (section 10) comes first** (owner decision D23,
-  2026-11-08). It is written as concrete changes to the current code.
-- **Everything else is proposed, not approved.** Every choice in section 15
-  needs the owner's decision first. Recommendations are proposals only.
-- **Old documents are not approvals.** This plan was written from a fresh
-  look at the current code and real measurements, not from older planning
-  documents. Earlier documents were often written by AI agents, and parts
-  of them were never actually decided by the owner. Nothing in an older
-  document counts as an owner decision here, and none of it may be used to
-  overrule this plan or the owner. The only approvals are the owner
-  decisions dated in this plan.
-- **Technical dependency only:** the Memory Assistant has a separate repair
-  written up in `ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`. That document is also
-  not treated as approved here. Both change the same Memory Assistant code,
-  so the two must not be built at the same time.
-- **Names in this plan are planning names, not on-screen wording.** Terms
-  such as "lasting", "fading", "dated", "strength" and "briefing" identify
-  ideas in this document. Every label, explanation, and message the user
-  sees still needs separate owner approval.
-- **Older always-on designs are retired and must not be revived from old
-  files.** `legacy/` describes an "owner portrait", "standing packet",
-  "standing context" and a per-memory "always load" flag. Those designs are
-  dead. This plan replaces them with a different, user-controlled design.
-  The old retrieval specifications (`rag_engine_work_order.md` and
-  `enforcer_librarian_spec.md`) were deleted on 2026-11-08 so they cannot
-  compete with this plan. Git history still holds them.
+- **The owner decides what is built and when.** Build only the phase or
+  step the owner tells you to build. No roadmap file overrides that.
+- **Owner decisions so far (2026-11-08):**
+  - search is fixed first (D23);
+  - +3 is a boost, not a pass (step 1.10);
+  - the memory cooldown is wrong (step 1.11);
+  - the lorebook stays strictly keyword-based and must not break (Phase 0);
+  - a memory the user picks before sending is never included twice
+    (Phase 0);
+  - the search test screen is its own screen, with adjustable numbers,
+    opened from Advanced Memory Settings, and it replaces the old Debug
+    search box (step 1.4).
+- **Everything else is a recommendation** waiting for the owner's decision
+  (Part E).
+- **Old documents are not approvals.** This plan was written from the
+  current code and real measurements. Older planning documents were often
+  written by AI agents and contain choices the owner never made. None of
+  them counts as an owner decision here (`CLAUDE.md` section 2).
+- **Review for carried-over ideas (2026-11-08):** every section was checked.
+  Where the plan mentions an existing feature (Pending, Possible Match, the
+  Memory Assistant, scope rules, Model Rules, cards), it describes what the
+  current code does, verified in the code. It does not rely on any older
+  document's description of it.
+- **Names in this plan are planning names, not on-screen wording.** Every
+  label, explanation, and message the user sees needs owner approval before
+  it is built.
+- **Deleted on 2026-11-08** so they cannot compete with this plan:
+  `legacy/rag_engine_work_order.md` and
+  `legacy/memory-system-v1.11/enforcer_librarian_spec.md`. Older always-on
+  designs in `legacy/` ("owner portrait", "standing packet", "always load")
+  are dead and are not inputs to this plan.
 
 ---
 
-## 1. What the user should experience
+# Part A: What is wrong today
 
-Today the AI hears about a memory only when the current message is about the
-same thing. The AI never brings up something on its own, so it never feels
-like it knows the user.
+The owner reports that memory search hands the AI nearly every memory
+instead of the relevant ones, and that the AI seems to get amnesia. The code
+and a measurement confirm both.
 
-This plan adds three behaviors that work the way people remember things:
-
-- **Some facts always matter.** The user's name, pets, the people in their
-  life. The user chooses which of these the AI always hears.
-- **Some things matter for a while.** "This problem at work is weighing on
-  me." While the user keeps bringing it up, it stays strong and the AI keeps
-  it in mind. Once the user stops mentioning it, it gradually stops being
-  volunteered. It is never deleted. It can still be found when the topic
-  comes back.
-- **Some things matter around a date.**
-  - A one-time event, such as an interview. In the days before, the AI knows
-    it is coming ("Are you nervous about tomorrow?"). Shortly after, it can
-    ask how it went. Then it stops being brought up and becomes an ordinary
-    memory.
-  - A yearly date, such as a birthday. It comes up as the date approaches,
-    every year, and never expires.
-
-Separately, the user can choose to tell the AI **today's date** (never the
-time of day) in every chat. The memory system always knows the date
-internally so it can work out windows and fading, whether or not the date is
-shared with the AI.
-
-## 2. Why anything has to be sent with every message
-
-The AI has no memory of its own between messages. Every message starts
-blank. If the app doesn't send something, it doesn't exist for the AI.
-
-Search sends only memories that match the words in the current message. So
-search can never bring up the interview unprompted, because the user didn't
-mention the interview. The only way the AI can say "your birthday is coming
-up" is for the app to send that fact **before** the user raises it.
-
-That is the job of the **standing briefing** (section 8). It is a small
-block that the app rebuilds fresh for every message. It is not a fixed list
-of everything. It holds only:
-
-1. the facts the user marked as always important;
-2. the things that are currently strong (talked about recently);
-3. dated things inside their window.
-
-## 3. What exists today
-
-Verified in the code on `beta/new-client`, 2026-11-08.
-
-- **Search (the Librarian, `librarian/Librarian.kt`).** An on-device
-  embedding model (EmbeddingGemma) turns each memory and the current
-  message into vectors. The closest matches above a fixed similarity of
-  0.30 are ranked. There are small bonuses for scope, the selected project,
-  matching tags, importance, and recency. The search costs no tokens.
-- **Keyword backup.** Used only when the embedding model is missing, or when
-  **any** memory lacks a current vector. In that case the whole turn uses
-  plain word-overlap matching. Keyword and meaning search never run
-  together.
-- **The search query** is the user's message joined to a few recent turns,
-  turned into one vector (`Enforcer.kt`).
-- **Recency** is based on when a memory was created or last edited, not when
-  it was last talked about.
-- **Importance** is stored on a signed scale from -2 to +3
-  (`ImportanceRanking.kt`). +3 gets a guaranteed slot, but only after the
-  memory has already passed the relevance check. A +3 memory unrelated to
-  the current message is still left out.
-- **The freshness cooldown** (`injection_cooldowns` table) stops the same
-  memory from being re-sent while it is still fresh in a chat.
-- **Dates on memories:** none. A date written in a memory is plain text and
-  nothing treats it as an event.
-- **Mention tracking:** none. Nothing records when a memory was last talked
-  about.
-- **Today's date:** the app does not give the AI the current date.
-- **Retired leftovers:** the `memories.always_load` column and the
-  `owner_profile` table (portrait, standing context) still exist in the
-  database. They are only used for import and export, and nothing in them
-  is sent to the AI. This plan does not reuse them (section 11).
-- **Retrieval controls described but not built:** an older document,
-  `memory_retrieval_and_analysis_ui_copy.md`, describes settings such as a
-  Strict / Balanced / Broad match setting. None of them is built, and the
-  code uses the single fixed 0.30 cut-off. That document is not treated as
-  approved (see Status).
-
-## 4. The three kinds of memory
-
-Each memory gets two independent properties.
-
-### 4.1 How it ages
-
-- **Lasting.** Its weight never changes on its own. This matches how every
-  memory behaves today.
-- **Fading.** It has a strength that rises when the user talks about it and
-  falls over time when they don't (section 6).
-
-### 4.2 Whether it has a date
-
-- **No date.** This matches every memory today.
-- **One-time date.** An event on one day: an interview, an appointment, a
-  move.
-- **Yearly date.** A date that comes back every year: a birthday or an
-  anniversary. The year is optional, so a birthday can be saved without a
-  birth year.
-
-### 4.3 How the combinations play out
-
-| Example | Ages | Date | What the AI experiences |
-|---|---|---|---|
-| The user's name | Lasting | None | Always in the briefing, if the user marked it |
-| A worry the user keeps raising | Fading | None | In the briefing while it is strong, then only found by search |
-| An interview | Lasting or fading | One-time | In the briefing during its window, then only found by search |
-| A birthday | Lasting | Yearly | In the briefing during its window, every year |
-
-### 4.4 Rules that hold for every kind
-
-- **Nothing is deleted, archived, or changed automatically.** Fading and
-  date windows change only what the AI is told without being asked. They
-  never change what is stored.
-- **Search still finds everything.** A faded memory or a past event can
-  still be found when the topic comes up again, exactly as today.
-- **Existing memories keep working exactly as now.** After the update, every
-  existing memory is lasting, has no date, and is not in the briefing. What
-  the AI receives does not change until the user changes something.
-
-## 5. Today's date
-
-### 5.1 One source of today's date
-
-The app gets today's date from one place: the phone's own calendar date, in
-the phone's time zone, at the moment a message is sent. **Only the date is
-used, never the time of day.**
-
-### 5.2 The memory system always uses it
-
-Fading, date windows, and "next birthday" calculations all run on the
-phone. They use today's date whether or not the user shares the date with
-the AI. Using the date this way sends nothing anywhere.
-
-### 5.3 Optionally giving the date to the AI
-
-This is a user setting that adds today's date to what the AI receives.
-
-- It is off unless the user turns it on (decision D1).
-- The date is written so it can't be misread (weekday, day, month name,
-  year). Numeric forms such as 03/04 mean different days in different
-  countries (decision D2).
-- Roleplay may need different handling, because the real date can clash
-  with the story's own time (decision D3).
-
-### 5.4 Reminders when the date is not shared
-
-When the user hasn't turned on date sharing, a dated reminder in the
-briefing can still give **relative** timing that the app works out, such as
-"tomorrow" or "in 5 days". It does not need the calendar date. Without any
-timing at all, a reminder is useless (decision D4).
-
-## 6. Fading: how the math works
-
-### 6.1 In plain terms
-
-Each fading memory has a **strength** between empty and full.
-
-- When the user talks about it, strength goes up.
-- Each day without a mention, it loses a fixed share of what is left. After
-  one "half-life" it is at half, after two at a quarter, and so on. It
-  shrinks smoothly. It does not drop off a cliff.
-- When strength is above a cut-off, the memory is "current" and goes into
-  the briefing. Below the cut-off, it behaves like an ordinary memory.
-
-### 6.2 Technical shape
-
-Each memory stores two values: the strength at its last update, and the date
-of that update.
-
-- **Current strength** = stored strength × 0.5 ^ (days since update ÷
-  half-life).
-- **On a mention:** current strength + boost, capped at full. Then save the
-  new strength and today's date.
-
-Nothing runs in the background, so there is no battery or timer cost.
-Strength is worked out only when it is needed, from those two numbers.
-
-### 6.3 What counts as a mention
-
-- **Counts:** the user's own message strongly matches the memory. The match
-  bar is stricter than the bar for search, so a passing resemblance does not
-  count. One message counts at most once per memory.
-- **Does not count:** the memory being sent to the AI, the AI's own replies,
-  the Memory Assistant analyzing the chat later, or the user opening the
-  memory in the browser.
-- **Why it matters:** if being sent to the AI counted as a mention, every
-  briefing item would refresh itself forever and never fade. Only the user's
-  own words count.
-- **Editing:** whether editing a fading memory refills its strength is
-  decision D8.
-
-### 6.4 Where strength is used
-
-1. **In the briefing:** a fading memory is in the "current" part only while
-   its strength is above the cut-off.
-2. **In search ranking:** possibly a small extra signal, like importance.
-   This is decision D9. If chosen, it follows the same rule as every other
-   bonus in section 10: it can reorder relevant memories but never makes an
-   irrelevant memory eligible.
-
-### 6.5 Last mentioned
-
-The app records the date each memory was last mentioned, for **every**
-memory, lasting ones included, so the browser can show it. Fading only
-applies to fading memories.
-
-## 7. Dates in detail
-
-### 7.1 What a dated memory stores
-
-- the date (day and month, plus year for one-time dates; year optional for
-  yearly dates);
-- whether it repeats: one-time or yearly;
-- no time of day. "Tomorrow afternoon" is stored as tomorrow's date.
-
-### 7.2 Windows
-
-- **Yearly:** shown for a set number of days before the date, through the
-  day itself (decision D10).
-- **One-time:** shown for a set number of days before, on the day, and for a
-  short follow-up period after, so the AI can ask how it went (decision
-  D10).
-- **Whether windows can be changed per memory** is decision D11.
-- **Year boundaries:** a 2 January birthday seen from 30 December is 3 days
-  away. The calculation must not wait for the new year.
-- **29 February:** in other years, the date is treated as 28 February or 1
-  March (decision D12).
-
-### 7.3 What the AI is told
-
-The memory's own text, plus timing the app works out ("today", "in 3 days",
-"2 days ago"), plus a short guidance instruction. The guidance's purpose is
-to make the AI raise a reminder only when it fits naturally, and not repeat
-it once it has already been discussed in the chat. The exact guidance text
-is model-facing behavior and needs approval (decision D13).
-
-### 7.4 How dates get set
-
-- **By hand:** a date control in the memory editor (section 9).
-- **By the Memory Assistant** (not built at the same time as its separate
-  repair):
-  - When a conversation states a date, or says something like "tomorrow",
-    the Memory Assistant includes the date in its proposal. The user sees it
-    in Pending and can change or remove it before saving, like any other
-    part of a proposal.
-  - **Relative dates are worked out from the day the message was sent, not
-    the day the analysis runs.** "My interview is tomorrow", said on 3
-    November and analyzed on 8 November, means 4 November. The recorded
-    transcript already stores when each turn started, which makes this
-    possible.
-  - Vague timing ("sometime next month") gets no date. The proposal says
-    the timing was unclear, and the user can add a date if they want one
-    (decision D14).
-- **Changed plans:** a rescheduled interview is handled through the
-  existing edit, supersede, and Possible Match paths. A different date
-  counts as a change to the fact.
-
-## 8. The standing briefing
-
-### 8.1 What it is
-
-A small block sent with every message, rebuilt fresh each time from three
-parts:
-
-- **A. Core:** memories the user has explicitly marked for the briefing.
-  The AI never adds anything here on its own. The Memory Assistant may
-  suggest a memory for core, but only through Pending, so the user decides.
-- **B. Current:** fading memories whose strength is above the cut-off.
-- **C. Upcoming:** dated memories inside their window.
-
-Parts B and C are chosen automatically by the rules above. Whatever is
-chosen is visible to the user: on the memory card (section 9) and in the
-existing assembly view, which shows what was sent.
-
-### 8.2 Keeping the user in control
-
-The owner said the old "always load" idea was dropped because nobody ever
-explained why something would be sent every time (section 2 explains it).
-The briefing is designed so the user stays in control:
-
-- the user chooses core;
-- everything automatic follows rules the user can see;
-- the user can turn the whole briefing off.
-
-Whether to build the briefing at all is decision D15.
-
-### 8.3 Size and cost
-
-- The briefing has its own limit, counted in memories and in tokens. It is
-  separate from the search memory limit. Whether it gets its own control is
-  decision D16.
-- **Cost:** every briefing item is sent with every message. As a rough
-  guide, 20 short memories add about 600–1,200 tokens per message, and 50
-  add about 1,500–3,000. The memory-count figures are illustrations, not
-  proposed defaults.
-- **Prompt caching** (some providers charge less when the start of a prompt
-  repeats unchanged) makes a stable briefing cheaper. So core goes first in
-  a fixed order, and the parts that change (current and upcoming) go after
-  it.
-
-### 8.4 Where it sits in what the AI receives
-
-After the fixed app instructions, Model Rules, and card material. Before
-the memories found by search. This matches the order the current code
-already uses, in which fixed instructions come before retrieved memory.
-
-### 8.5 No double sending
-
-If a memory is already in the briefing, search skips it for that message.
-
-### 8.6 Cooldown
-
-The briefing is sent with every message by design, the same way the
-current code already sends card cores and Model Rules. Repeated
-reminders are kept in check by the guidance instruction (7.3), not by
-removing items, because the AI only knows what it is sent.
-
-### 8.7 Which memories are allowed
-
-The briefing follows the same scope rules the current search code uses:
-
-- companion memories only for that companion;
-- real-life memories in roleplay only where those rules allow.
-
-Whether the briefing runs in roleplay chats at all is decision D17.
-
-### 8.8 Switches
-
-- A master switch for the whole briefing (decision D18 covers the default).
-- If memory is turned off for a chat, the briefing is off for that chat too.
-
-## 9. Memory Browser, Editor, and Pending
-
-### 9.1 Memory editor
-
-New controls:
-
-- the date, and whether it is one-time or yearly;
-- lasting or fading;
-- whether the memory is in the briefing core.
-
-### 9.2 Memory card in the browser
-
-- the date, and for yearly dates the next occurrence;
-- for fading memories, the current strength, shown simply (decision D19);
-- the last-mentioned date;
-- a marker when the memory is in the briefing core.
-
-### 9.3 Browser filters and sorting
-
-Filters for upcoming dated memories and for briefing members, and sorting by
-strength or by next date (decision D20).
-
-### 9.4 Pending card
-
-Shows a proposed date, a proposed lasting or fading choice, and a proposed
-core marking. The user can edit each one before saving.
-
-### 9.5 Possible Match
-
-A different date on an otherwise matching memory is treated as a change to
-review, not a duplicate.
-
-### 9.6 How it looks
-
-- Appearance follows `ui-style-guide.md`. Never hard-code visual values.
-  Where no shared style fits, create a new shared style and add it to the
-  guide.
-- The Memory Browser and Memory Editor are recorded as **Partial** in
-  `ui-style-adoption.md`. Update that file in the same change.
-- All new labels, explanations, and messages need owner-approved wording,
-  recorded in a copy specification before they are built.
-
-## 10. Search repair: why it hands over almost everything
-
-The owner reports that search hands the AI nearly every memory instead of
-the relevant ones. The code and a measurement confirm it. There are five
-causes, and they add up. Cause 4 is the main reason +3 memories are sent
-with nearly every message.
-
-### 10.0 Recommended design
-
-This is the design recommended from a fresh look at the code and the
-measurements, not a repair of the old design. Where it keeps something the
-app already has, it is because that part holds up, not because an older
-document asked for it.
-
-**How search should work for each message:**
-
-1. **Decide which memories are allowed** in this chat (companion, project,
-   roleplay). This is the only job scope does. Scope no longer changes
-   ranking.
-2. **Search two ways at once**, using the user's latest message:
-   - meaning search with the on-phone embedding model;
-   - keyword search with BM25, through SQLite's built-in full-text search
-     (FTS5). The app already uses FTS5 for chat search, so it works with the
-     encrypted database. Tags and the names of linked companions, worlds,
-     and characters are part of the searchable text.
-3. **Merge the two result lists**, so a memory found both ways ranks
-   highest.
-4. **Keep only memories that clearly stand out** from the rest for this
-   message. When nothing stands out, nothing is sent.
-5. **Order by relevance.** Importance is the only bonus (with fading
-   strength added later, section 6), and it is capped so it can never beat
-   a clearly more relevant memory. A relevant +3 is always included.
-6. **Send up to the memory limit and size budget.** Never fill slots just
-   because they are empty.
-7. **Send every relevant memory each time it is relevant.** No cooldown
-   (cause 5).
-
-**What is removed and why:**
-
-| Removed | Why |
-|---|---|
-| Fixed 0.30 cut-off | Sits inside the noise for this model (cause 2) |
-| Keyword search as an all-or-nothing backup | It matched every memory, and one missing embedding switched the whole message to it (cause 1) |
-| Recent turns glued onto the search | Raised every memory's score (cause 3) |
-| Scope, freshness, project, and tag bonuses | Outweighed relevance (cause 4). Scope still decides which memories are allowed. Tags and names are found by keyword search instead. "Recently edited" does not mean "matters now"; fading (section 6) measures that properly |
-| The 10-message memory cooldown | Hid relevant memories from the AI (cause 5) |
-| A separate Strict / Balanced / Broad setting | The test screen tunes the real number. A second control for the same thing adds confusion (decision D25) |
-
-**What is kept:** the on-phone embedding model, scope rules for which
-memories each chat may use, the importance scale with the owner's +3 rule,
-the memory limit and size budget, and lorebook duplicate removal. All of
-these are tunable on the test screen.
-
-### 10.1 How this was measured (2026-11-08)
+## A.1 How it was measured
 
 - The app's default embedding model (EmbeddingGemma 300M, q4) was run off
   the phone with the same prompt prefixes, the same 256-dimension
   truncation, and the same normalization as `OnnxEmbeddingModel.kt`.
 - 20 sample personal memories, written the way the Memory Assistant writes
   them ("The user ..."), and 6 sample messages, each with its expected
-  memories.
-- This is a small sample. It shows the direction and size of the problem.
-  Final numbers are tuned on the test set (10.7, step 1).
-- For cause 4, sample importance ratings were added (one +3, two +2, two
-  +1, the rest 0) and the app's own scoring formula was applied.
+  memories. For cause 4, sample importance ratings were added (one +3, two
+  +2, two +1, the rest 0) and the app's own scoring formula was applied.
+- This is a small sample. It shows the direction and size of each problem.
+  Final numbers are tuned on the test set (step 1.2) and on the owner's real
+  memories (step 1.4).
 
-### 10.2 Cause 1: the keyword backup matches every memory
+## A.2 Cause 1: the keyword backup matches every memory
 
 - **Where:** `Librarian.rankLexical` and `lexicalTokens`, with
   `MIN_TERM_LENGTH = 3`.
@@ -491,410 +83,707 @@ these are tunable on the test screen.
   own, and 20 of 20 matched for all 6 messages once recent turns were added.
 - **When the backup runs:** whenever the embedding model is missing, and
   also whenever **any single** memory lacks a current vector, because
-  `Librarian.searchCore` only uses meaning search when every memory has
-  one. That happens after adding or editing a memory, until the background
+  `Librarian.searchCore` uses meaning search only when every memory has
+  one. That happens after a memory is added or edited, until the background
   repair finishes, and after a model change.
-- **Result:** the 8 slots are filled by importance and recency, not
-  relevance, and every +3 memory is added on top.
 
-### 10.3 Cause 2: the meaning-search cut-off sits inside the noise
+## A.3 Cause 2: the meaning-search cut-off sits inside the noise
 
 - **Where:** `Librarian.MIN_SIMILARITY = 0.30`. Its own code comment calls
-  it a conservative guess to be tuned on the device. It was never tuned.
+  it a guess to be tuned on the device. It was never tuned.
 - **Measured, message alone:**
   - unrelated memories scored 0.10 to 0.39 (middle value 0.25);
   - relevant memories scored 0.28 to 0.49 (middle value 0.39);
   - at 0.30, 6 memories were right and 22 were wrong;
-  - "hey how are you", which should bring back nothing, passed 4
-    memories.
+  - "hey how are you", which should bring back nothing, passed 4 memories.
 
-### 10.4 Cause 3: recent turns glued onto the search raise every score
+## A.4 Cause 3: recent turns glued onto the search raise every score
 
-- **Where:** `Enforcer.kt` builds the search text as the user's message
-  plus the last 4 turns (up to 200 characters each), from
+- **Where:** `Enforcer.kt` builds the search text as the user's message plus
+  the last 4 turns (up to 200 characters each), from
   `ChatActivity.recentTurnsContext`, all turned into one vector.
 - **Measured:** adding one short recent-turn passage about the user's week
   raised unrelated scores as high as 0.43. 9 to 14 of the 20 memories then
   passed 0.30 for every message, including "hey how are you" (9 of 20).
-  Recent turns that talk about the user's life pull every personal memory
-  upward.
 
-### 10.5 Cause 4: importance, freshness, and scope bonuses outweigh relevance
+## A.5 Cause 4: importance, freshness, and scope bonuses outweigh relevance
 
 - **Where:** `Librarian.rank` and `Librarian.rankLexical`. A memory's score
   is 0.6 × similarity + 0.3 × importance + 0.1 × freshness + scope, project,
-  and tag bonuses. The weights come from `DefaultOperatingData.kt` and are
-  stored in the `retrieval_policy` row.
-- **The values:** importance +1 adds 0.15, and +2 or +3 add 0.30 (−2
-  subtracts 0.30). Freshness adds 0 to 0.10. Scope adds up to 0.12, a
-  selected project 0.08, and matching tags up to 0.06.
-- **The problem:** these weights were set as if similarity ran from 0 to 1.
-  This model's real scores sit between about 0.10 and 0.50, and the gap
-  between a strong match and noise is about 0.15. After × 0.6, that gap is
-  worth about 0.09. A +2 or +3 rating adds 0.30, more than three times the
-  whole gap. Freshness alone (0.10) is as large as the gap. The code comment
-  above `SCOPE_BOOSTS` says the bonuses cannot let a weak match beat a
-  strong one. That only holds on a 0-to-1 scale, so the comment is wrong
-  for this model.
-- **Measured:** with the sample ratings and the app's formula, the +3
-  memory ranked **first in 11 of 12 searches**. That included "hey how are
-  you", "my cat keeps scratching the couch", and "the app keeps crashing".
-  The memory that actually matched best ranked first in only 1 of 12.
-- **Result:** any +2 or +3 memory that gets past the broken gate goes
-  straight to the top, and +3 is also added beyond the 8. This is the
-  "+3 is just handed over" behavior.
+  and tag bonuses (`Librarian.retrievalBoost`, `SCOPE_BOOSTS`,
+  `PROJECT_SELECTED_BOOST`, the tag bonus). The weights come from
+  `DefaultOperatingData.kt` and are stored in the `retrieval_policy` row.
+- **The values:** importance +1 adds 0.15, +2 or +3 add 0.30, and −2
+  subtracts 0.30. Freshness (based on when the memory was created or last
+  edited) adds 0 to 0.10. Scope adds up to 0.12, a selected project 0.08,
+  and matching tags up to 0.06.
+- **The problem:** the weights assume similarity runs from 0 to 1. This
+  model's real scores sit between about 0.10 and 0.50, and the gap between
+  a strong match and noise is about 0.15. After × 0.6, that gap is worth
+  about 0.09. A +2 or +3 rating adds 0.30, more than three times the gap.
+  The code comment above `SCOPE_BOOSTS` claims the bonuses cannot let a weak
+  match beat a strong one. That is false for this model.
+- **Measured:** with the sample ratings, the +3 memory ranked first in 11 of
+  12 searches, including "hey how are you", "my cat keeps scratching the
+  couch", and "the app keeps crashing". The memory that actually matched
+  best ranked first in only 1 of 12.
+- **The +3 rule itself:** `ImportanceRanking.includeMandatory` and
+  `RetrievalBackfill.select` add a +3 memory beyond the 8-memory limit only
+  after it passes the relevance gate. Because the gate lets almost
+  everything through, every +3 is sent with almost every message.
 
-### 10.5a Cause 5: the cooldown hides relevant memories from the AI
+## A.6 Cause 5: the cooldown gives the AI amnesia
 
-- **Where:** `Enforcer.kt`, `COOLDOWN_TURNS = 10`, using the
-  `injection_cooldowns` table. Card entries have the same cooldown.
+- **Where:** `Enforcer.kt`, `COOLDOWN_TURNS = 10`, stored in the
+  `injection_cooldowns` table. Roleplay card entries have the same cooldown.
 - **What happens:** after a memory is sent, it is blocked for the next 10
   messages in that chat.
-- **Why that is wrong:** the memory text is not kept in the chat history.
-  `ChatActivity` places the memory block just before the newest message
-  and rebuilds it every message, so on the next message the AI no longer
-  sees it. The cooldown assumes "the conversation still carries it", but
-  it doesn't. While the user keeps talking about the same topic, the AI
+- **Why it is wrong:** the memory text is not kept in the chat history.
+  `ChatActivity` places the memory block just before the newest message and
+  rebuilds it every message, so on the next message the AI no longer sees
+  it. The cooldown assumes the conversation still carries the memory, and
+  it doesn't. While the user keeps talking about the same thing, the AI
   loses the fact for 9 messages, unless its own earlier reply happened to
   repeat it.
 
-### 10.6 The combined effect
+## A.7 The combined effect
 
-The default limit is 8 memories (`DefaultOperatingData.kt`, `top_k`) and
-6,000 characters. The limit is a maximum, but because most of the library
-passes the gate, all 8 slots are filled every message, mostly with
-unrelated memories. Highly rated memories take the top places whether or
-not they are relevant, and +3 memories are added beyond the 8
-(`ImportanceRanking.includeMandatory`). With a small library, that is
-effectively everything.
+- The limit is 8 memories and 6,000 characters (`DefaultOperatingData.kt`).
+  It is a maximum, but because most of the library passes the gate, all 8
+  slots are filled every message, mostly with unrelated memories.
+- Highly rated memories take the top places whether or not they are
+  relevant, and +3 memories are added beyond the 8.
+- Then a memory that actually matters disappears for 10 messages after it
+  is sent once.
 
-### 10.7 Required changes, in order
+## A.8 What works and must be kept
 
-1. **Build the test set first.**
-   - Sample messages, each paired with the memories that should come back,
-     including messages that should bring back nothing.
-   - Store the real model's vectors for these as test fixtures. The model
-     cannot run inside the unit tests, but the ranking functions
-     (`searchCore`, `rank`, `rankLexical`) are pure and can be tested with
-     stored vectors.
-   - Every later step must improve the test set's results, or it is not
-     kept.
+- **The lorebook.** It is strictly keyword-based: trigger words written by
+  the user (`LoreBookStore`, `LoreBookTriggerMatcher`), duplicate removal
+  (`LoreDedup`), and its own size limit (`LoreBookBudget`). It does not use
+  the embedding model to choose entries.
+- **Picking a memory before sending.** The user can attach memories to a
+  message (`MemoryAttachmentController`, `ManualMemoryPriority`). The
+  memory system puts picked memories first, reserves their room before
+  anything else, and removes them from the search results, so search never
+  adds them a second time (`Enforcer.kt`: the search pool excludes the
+  picked IDs).
+- **Scope eligibility:** which memories a chat may use (companion, project,
+  roleplay). This is decided before ranking, in the store query.
 
-2. **Build the search test screen** (owner request, 2026-11-08). It was
-   planned earlier but never built. Today the only tool is a small search
-   box in Advanced Memory Settings (`AdvancedMemorySettingsActivity.runDebugSearch`).
-   That box shows one blended score per memory, searches without any
-   chat's context (`RetrievalScope.NONE`), and hides the gate, the bonuses,
-   and why memories were dropped.
+## A.9 A difference between the two ways a message is sent
 
-   **What the screen does:** the owner enters a message and sees exactly
-   what memory search would do with it, with every number shown. It sends
-   nothing to any AI service and costs no tokens.
+`ChatActivity` sends messages through two paths:
 
-   **For each memory considered, it shows:**
-   - meaning-search similarity;
-   - keyword score, and which words matched;
-   - relevance relative to this message (the step 6 scale);
-   - the importance bonus (and fading strength, once section 6 is built);
-   - the final score and its rank;
-   - whether it passed the relevance gate, and if not, by how much it
-     missed;
-   - whether it would be sent, and if not, why: below the gate, over the
-     memory limit, over the character budget, not allowed in this chat's
-     scope, or duplicate of a lorebook entry;
-   - whether it was added as a relevant +3 beyond the limit.
+- `regularGPTResponse` passes the matched lorebook entries to the memory
+  system;
+- `buildFrozenRegularRequest` passes none.
 
-   **For the whole search, it shows:**
-   - which search ran (meaning, keyword, or both), and why;
-   - how many memories are missing their embedding;
-   - the limit, budget, and strictness in effect;
-   - the exact memory text the AI would receive.
+So the check that drops a memory when it repeats a lorebook entry
+(`NearDuplicate`, in `Enforcer.kt`) only runs on one path. On the other,
+the AI can receive the same fact twice, once from the lorebook and once from
+memory. The lorebook side is correct in both paths. Only the memory side
+differs.
 
-   **Context:** the owner picks which chat's context to test in (companion,
-   project, roleplay, campaign), because scope changes what is eligible.
-   Recent turns can be included or left out, to see their effect.
+---
 
-   **Adjustable numbers** (owner request, 2026-11-08). The owner can
-   change the search numbers on this screen and immediately see what each
-   change does, so the values can be tuned on the owner's real memories instead of
-   being guessed by whoever writes the code.
-   - **Every tuning number is adjustable:**
-     - the relevance gate's strength;
-     - the importance bonus and its cap;
-     - the +3 boost;
-     - the balance between meaning and keyword search;
-     - the weight given to recent turns;
-     - the memory limit (today 8) and the character budget (today 6,000).
-   - **Try, then apply.** Changed values first apply only to the test
-     result on screen, and the search re-runs at once. Nothing in real chats
-     changes until the owner applies them.
-   - **Applied values become the real values** used by every chat. They are
-     stored in the existing `retrieval_policy` record, which the memory seed
-     export already carries (`MemorySeedCodec`). Confirm that every backup
-     path includes it, so tuning is never lost.
-   - **Reset to defaults** puts back the values chosen from the test set.
-   - **Raw numbers are shown and editable on this screen** (owner request,
-     2026-11-08).
-   - Still open: whether the ordinary settings also get a simple
-     Strict / Balanced / Broad choice at all (decision D25).
+# Part B: Recommended design
 
-   **Engineering requirements:**
-   - **One code path.** The ranking functions return an explanation
-     alongside each result, and both the chat and this screen use the same
-     functions. The screen never recalculates scores on its own, so what it
-     shows is what the chat actually does.
-   - **Read-only.** Testing never counts as a
-     mention for fading (section 6.3), and never changes a memory.
-   - It opens from Advanced Memory Settings, in the Debug section (owner
-     decision D24). The old Debug search box
-     (`runDebugSearch` and its field, button, and results text) is removed
-     in the same change. Its wording and layout need owner approval. Appearance follows `ui-style-guide.md`.
+This is the design recommended from a fresh look at the code and the
+measurements. It is not a repair of the old design. Where it keeps something
+the app already has, that part holds up on its own.
 
-   Build this before tuning, so every later step can be checked on the
-   phone with the owner's real memories, not only in the test set.
+## B.1 For each message
 
-3. **Fix keyword search.** Replace word-overlap counting in `rankLexical`
-   with BM25, the standard keyword formula. Words found in nearly every
-   memory ("the", "user") score close to nothing, and rare, specific words
-   (names, places, "Kotlin") score high. A memory then needs a minimum
-   keyword score, not just one shared word.
-   - Use SQLite FTS5 and its built-in `bm25()` ranking in the memory
-     database, rather than hand-written scoring. `ChatSearchStore` already
-     uses FTS5 with the encrypted database.
-   - Index each memory's content, tags, and linked target names
-     (companions, worlds, characters, campaigns, projects).
+1. **Decide which memories this chat may use** (companion, project,
+   roleplay). This is the only job scope does. Scope no longer changes
+   ranking.
+2. **Put the user's picked memories in first.** They are always sent, take
+   their room first, and are excluded from everything below.
+3. **Search two ways at once**, using the user's latest message:
+   - meaning search with the on-phone embedding model;
+   - keyword search with BM25, through SQLite's built-in full-text search
+     (FTS5). The app already uses FTS5 for chat search with the encrypted
+     database. Tags and the names of linked companions, worlds, characters,
+     campaigns, and projects are part of the searchable text.
+4. **Merge the two result lists**, so a memory found both ways ranks
+   highest.
+5. **Keep only memories that clearly stand out** from the rest for this
+   message. When nothing stands out, no memories are sent.
+6. **Order by relevance.** Importance is the only bonus (fading strength is
+   added later, in Phase 4). It is capped so it can never beat a clearly
+   more relevant memory. A relevant +3 is always included, even past the
+   limit.
+7. **Skip anything already in this request:** picked memories, briefing
+   items (Phase 5), and memories that repeat a lorebook entry.
+8. **Send up to the memory limit and size budget.** Empty slots stay empty.
+9. **Send every relevant memory every time it is relevant.** No cooldown.
 
-4. **End the all-or-nothing fallback.** In `searchCore`, run meaning search
-   over every memory that has a current vector, and keyword search over all
-   memories, then merge the two ranked lists (hybrid search, step 8). A
-   missing vector removes only that one memory from meaning search, not the
-   whole turn.
+## B.2 What is removed and why
 
-5. **Search with the user's message on its own.**
-   - The main search uses only the user's latest message.
-   - Recent turns get their own separate search with a lower weight, and
-     only when the latest message is short or refers back ("what about
-     that?", "yes", "tell me more"). The two result lists are merged by each
-     memory's best score.
-   - `Librarian.searchForReconciliation` already searches several text
-     windows separately and merges them, for the Memory Assistant. Live
-     search can use the same approach.
+| Removed | Why |
+|---|---|
+| The fixed 0.30 cut-off | It sits inside the noise for this model (A.3) |
+| Keyword search as an all-or-nothing backup | It matched every memory, and one missing embedding switched the whole message to it (A.2) |
+| Recent turns glued onto the search | They raised every memory's score (A.4) |
+| Scope, freshness, project, and tag bonuses | They outweighed relevance (A.5). Scope still decides which memories are allowed. Tags and names are found by keyword search instead. "Recently edited" does not mean "matters now"; fading (Phase 4) measures that properly |
+| The 10-message memory cooldown | It hid relevant memories from the AI (A.6) |
+| A separate Strict / Balanced / Broad setting | The test screen tunes the real number. A second control for the same thing adds confusion (D25) |
 
-6. **Replace the fixed 0.30 cut-off with a rule relative to each message's
-   own scores.** A memory must stand clearly above the other memories'
-   scores for this message, not just above a fixed number. Measured on the
-   same sample:
+## B.3 What is kept
 
-   | Rule | Right | Wrong | Missed |
-   |---|---|---|---|
-   | Today: fixed 0.30 | 6 | 22 | 2 |
-   | Fixed 0.38 | 4 | 1 | 4 |
-   | At least 2 standard deviations above this message's average score | 4 | 0 | 4 |
+- the on-phone embedding model;
+- scope rules for which memories each chat may use;
+- the importance scale, with the owner's +3 rule;
+- the memory limit and size budget, now tunable;
+- the user's picked memories, first and never duplicated;
+- the lorebook, completely unchanged.
 
-   - The relative rule sent nothing for "hey how are you", which is
-     correct.
-   - The memories it missed (the garden for cooking, the job for an
-     interview, the "Android chat app" for an app crash) are the ones
-     keyword and hybrid search recover. For example, "app" appears in both
-     the crash message and the chat-app memory.
-   - The rule's strength is one of the numbers tuned on the test screen
-     (step 2). Starting values come from the test set.
-
-7. **Make relevance decide, and bonuses only nudge.**
-   - Measure each memory's relevance on the same relative scale as the
-     gate in step 6: how far it stands above this message's average score.
-   - Remove the scope, freshness, selected-project, and tag bonuses from
-     ranking (`Librarian.retrievalBoost`, `SCOPE_BOOSTS`,
-     `PROJECT_SELECTED_BOOST`, the tag bonus, and the recency weight).
-     Scope stays only as the filter that decides which memories a chat may
-     use.
-   - Importance is the only bonus. It is expressed as a fraction of the
-     relevance scale and capped, so it is smaller than a clear relevance
-     lead.
-   - **Property to test:** if memory A is more relevant than memory B by
-     more than the cap, A ranks above B, whatever their ratings. The Memory
-     Assistant's search uses the same ranking code, so it gets the same
-     guarantee.
-
-8. **Merge meaning and keyword results** with reciprocal rank fusion, a
-   simple, standard way to combine two rankings. A memory found by both
-   ranks highest.
-
-9. **Sending nothing is a valid result.** When nothing passes, no memories
-   are sent. The memory limit stays a maximum, never a quota to fill.
-
-10. **+3 as the owner defined it (2026-11-08): a boost, not a pass.**
-   - A +3 memory must be relevant to the message, like any other memory. It
-     is never sent just for being +3.
-   - It gets the strongest importance boost, so it ranks higher among the
-     relevant memories.
-   - If it is relevant and the 8 slots are already full, it is added
-     anyway.
-   - `ImportanceRanking.includeMandatory` and `RetrievalBackfill.select`
-     already add +3 beyond the 8 only after the relevance gate. Causes 1–4
-     are what turn that into "every +3, every message". Once steps 3–7 are
-     done, the existing rule behaves as the owner describes.
-   - **Tests:** a +3 memory unrelated to the message is not sent (for
-     example "hey how are you"). A relevant +3 memory is sent even when 8
-     more relevant memories fill the slots.
-
-11. **Remove the memory cooldown** (cause 5). A relevant memory is sent
-    every message it is relevant. The only skip is when the same memory is
-    already in this request, for example in the briefing (section 8.5).
-    Card entries have the same cooldown and the same flaw; the same fix is
-    recommended for them.
-
-12. **Variety.** Stop near-identical memories from filling several slots,
-   using MMR (maximal marginal relevance, the standard method).
-
-13. **Optional local re-ranker:** a small second model on the phone that
-    reorders the top results. It costs no tokens, but it is another
-    download and adds a short delay per message. Decide only after the test
-    set shows whether steps 3–12 are enough (decision D21).
-
-14. **Model quality check.** The int8 model is already in the app's model
-    list. Run it against the test set too. If it scores clearly better than
-    q4, raise that with the owner.
-
-### 10.8 Excluded: techniques that cost tokens
+## B.4 Not used: techniques that cost tokens
 
 Rewriting the message with an AI before searching, writing a "pretend
 answer" to search with (HyDE), and paid AI re-ranking all add a paid call
-to every message. They are not part of this plan.
+to every message. They are not part of this design.
 
-### 10.9 Shared code with the Memory Assistant
+---
 
-The Memory Assistant's search uses the same Librarian ranking. Any of its
-existing tests that fail after these changes are reported to the owner
-with the reason, never rewritten just to pass (`CLAUDE.md`).
+# Part C: Build plan
 
-## 11. Data, backup, and restore
+## Phase 0: Rules for every step
 
-- **Database:** one migration from version 33 adds:
-  - date, repeat, and optional year;
-  - lasting or fading;
-  - briefing-core flag;
-  - strength and strength-updated date;
-  - last-mentioned date.
+These apply to every step in every phase.
 
-  New columns are used. The retired `always_load` column and `owner_profile`
-  table are not reused, so old meanings cannot leak in.
-- **Existing memories after the migration:** lasting, no date, not in the
-  briefing (section 4.4).
-- **Backups and exports:** every new field goes into the memory backup, the
-  portable export, the seed format, and shared restore rows. It also goes
-  into the package used by the future Computer Memory Review. Restoring an
-  older backup gives these fields their "unchanged behavior" defaults, never
-  an error.
-- **Settings:** the date-sharing setting and the briefing settings go into
-  the settings backup.
+1. **The lorebook does not change.** No step may change:
+   - `LoreBookStore`, `LoreBookTriggerMatcher`, `LoreBookMatch`,
+     `LoreDedup`, `LoreBookBudget`, `LoreBookInjectionLog`,
+     `ChatLoreBookSelection`, or `LoreBookEncryption`;
+   - how lorebook entries are matched, which entries are chosen, their
+     text, their order, or where they are placed in the request, in either
+     send path;
+   - the lorebook screens.
 
-## 12. Privacy and diagnostics
+   The lorebook stays strictly keyword-based and never uses the embedding
+   model to choose entries. Step 1.1 adds tests that prove this, and they
+   must pass unchanged after every step.
 
-- Dates such as birthdays are personal. They are stored in the same
-  encrypted memory database as everything else.
-- Today's date leaves the phone only when the user has turned on date
-  sharing. Relative timing in reminders (5.4) is the only exception.
-- What the briefing sent is visible in the existing assembly view.
-- **No new log lines without owner approval** (`CLAUDE.md` section 8). Any
-  diagnostics this feature would benefit from are proposed separately, with
-  the exact log and location.
+2. **Picked memories are never sent twice.** A memory the user picks before
+   sending:
+   - is always included in that message;
+   - takes its room first, before search results;
+   - is never added again by search or by the briefing in the same request.
 
-## 13. Build order
+   Step 1.1 adds tests for this, and they must pass after every step.
 
-This is dependency order only. The feature ships whole, and none of these
-steps counts as done on its own.
+3. **No log changes without the owner's approval** (`CLAUDE.md` section 8).
+   Some steps change what the memory assembly log can truthfully say. Those
+   steps stop and ask before changing any log line, naming the exact line
+   and its new text (D27).
 
-1. **Today's date:** the single date source, and the optional
-   date-sharing setting. Whether this ships separately, earlier, is
-   decision D22.
-2. **Data:** the migration, backup, export, and restore support, with
-   round-trip tests.
-3. **Editor, card, browser, and Pending:** date, aging, and core controls.
-4. **Fading:** the strength math, mention detection, and last-mentioned
-   tracking.
-5. **Briefing:** assembly, limits, settings, and the assembly view.
-6. **Memory Assistant proposals** for dates, aging, and core. Not built at
-   the same time as the separate Memory Assistant repair.
+4. **Nothing visible changes beyond the step.** Any extra visible difference
+   is raised with the owner first (`CLAUDE.md` section 3).
 
-Search repair (section 10) comes before all of the above (decision D23).
+5. **Tests are never rewritten just to pass.** Existing tests that check
+   removed behavior (for example the cooldown, scope bonuses, or word-overlap
+   matching) are changed only in the step that removes that behavior, and
+   each one is listed in the report to the owner with the reason.
 
-New code goes in its own files (for example a new folder under
-`preferences/memory/`), with only small hookups in the chat screen, per
-`CLAUDE.md` section 11.
+6. **New code goes in its own files**, with only small hookups in the chat
+   screen (`CLAUDE.md` section 11).
 
-## 14. Tests and on-device proof
+7. **Local checks before every pull request:** `testDebugUnitTest`,
+   `assembleBeta`, and `assembleDebugAndroidTest` (`CLAUDE.md` section 0).
 
-### 14.1 Unit tests
+## Phase 1: Search repair
 
-- **Fading:** half-life math, boost cap, one mention per message, and that
-  the memory being sent to the AI never counts as a mention.
-- **Windows:** before, on, and after the date; the year boundary; 29
-  February; yearly dates without a year.
-- **Relative dates:** resolved from the day the message was sent, not the
-  day of analysis.
-- **Migration:** existing memories produce exactly the same AI input as
-  before.
-- **Backup round-trip:** every new field survives.
-- **Briefing:** scope rules, limits, no double sending with search, and
-  stable ordering.
-- **Search:** the test set (section 10.7) runs as automated tests,
-  including messages that must bring back nothing.
+**Ready to build once the owner approves the recommended design (D0).**
+Steps run in this order.
 
-### 14.2 On-device proof
+### Step 1.1: Safety tests for the lorebook and picked memories
 
-- A birthday saved a week ahead appears in the briefing, is raised
-  naturally, and does not repeat in the same chat.
-- An interview is raised the day before, followed up after, then stops
-  being raised, while still being findable by search.
-- A worry mentioned daily stays current. After some weeks without mention,
-  it leaves the briefing, and the card shows that.
-- With date sharing off, the AI cannot state today's date but still
-  receives "tomorrow" for a dated reminder.
+- **Change:** tests only.
+  - Lorebook: for a fixed set of lorebook entries and messages, the chosen
+    entries, their text, and their order are recorded exactly as the
+    current code produces them.
+  - Picked memories: a picked memory is sent; it is not repeated when search
+    also finds it; it takes its room before search results.
+- **Done when:** the tests pass on the current code, before any other step.
+  They must keep passing unchanged through every later step.
 
-## 15. Decisions needed from the owner
+### Step 1.2: The search test set
 
-Asked one at a time in chat, not all at once. Each recommendation is a
-proposal only.
+- **Change:**
+  - A set of sample messages, each paired with the memories that should
+    come back. It includes messages that should bring back nothing, such
+    as "hey how are you", and messages that use names, numbers, and rare
+    words.
+  - The real model's vectors for these are generated once and stored as
+    test files. The model cannot run inside unit tests, but `searchCore`,
+    `rank`, and the keyword ranking are pure functions that can be tested
+    with stored vectors.
+  - A report counts right, wrong, and missed memories for each message.
+- **Done when:** the report runs against the current code and records its
+  results (today: mostly wrong). Later steps add pass/fail checks for what
+  they fix.
 
-| # | Question | Recommendation |
+### Step 1.3: Explanations from the ranking code
+
+- **Change:** the ranking functions return, for each memory, every number
+  that went into its result: meaning score, keyword score, relevance,
+  importance bonus, final score, rank, and the reason it was or was not
+  sent. `Enforcer` returns the same for the whole message.
+- **Rule:** one code path. The chat and the test screen (step 1.4) use the
+  same functions, so the screen always shows what the chat actually does.
+- **Done when:** for every test-set message, the memories sent are exactly
+  the same as before this step. This step changes nothing the user sees.
+
+### Step 1.4: The search test screen
+
+- **Stop point first:** the screen's labels, explanations, and layout need
+  owner approval before the screen is built (D24). Present them, then wait.
+- **Change:**
+  - A new screen, opened from Advanced Memory Settings in the Debug
+    section. The old Debug search box (`runDebugSearch`, its field, button,
+    and results text) is removed in the same change.
+  - The owner enters a message, picks which chat's context to test in
+    (companion, project, roleplay, campaign), and chooses whether to
+    include recent turns.
+  - For each memory, the screen shows every number from step 1.3, whether
+    it passed the relevance gate (and by how much it missed if not),
+    whether it would be sent, and if not, why: below the gate, not allowed
+    in this chat, over the limit, over the size budget, already picked,
+    already in the briefing, or a repeat of a lorebook entry.
+  - For the whole search, it shows which searches ran, how many memories
+    are missing their embedding, the limits in effect, and the exact memory
+    text the AI would receive.
+  - **Adjustable numbers:** every tuning number used by the search can be
+    changed here. Changes first apply only to the result on screen, and
+    the search re-runs at once. **Apply** makes them the real values for
+    every chat. **Reset** restores the defaults from step 1.13. Applied
+    values are stored in the existing `retrieval_policy` record. Confirm
+    every memory backup and restore path carries that record, so tuning is
+    never lost.
+  - The screen is read-only: it never changes a memory, never counts as a
+    mention for fading (Phase 4), and sends nothing to any AI service.
+  - Appearance follows `ui-style-guide.md`. Update `ui-style-adoption.md`.
+- **Order note:** the screen comes before the fixes, so every later step can
+  be checked on the phone with the owner's real memories. Each later step
+  adds its own numbers to the screen.
+- **Done when:** the screen shows the current search's real numbers for the
+  owner's memories, and nothing in real chats has changed.
+
+### Step 1.5: Keyword search with BM25
+
+- **Change:**
+  - Add an FTS5 full-text index for memories in the memory database
+    (`MemoryStore`). It holds each memory's content, tags, and linked
+    target names. It is kept in step with every way a memory is added,
+    edited, deleted, archived, restored, or imported, and it is built for
+    existing memories on first open.
+  - Keyword search uses FTS5's built-in `bm25()` ranking. Common words
+    count for almost nothing, and names and rare words count for a lot. A
+    memory needs a minimum keyword score, not just one shared word.
+  - Replaces word-overlap counting in `Librarian.rankLexical`.
+- **Tunable on the test screen:** the minimum keyword score.
+- **Done when:** in the test set, common-word matches no longer bring in
+  memories, and name and rare-word matches do.
+
+### Step 1.6: Meaning and keyword search together
+
+- **Change:** in `Librarian.searchCore`, run meaning search over every
+  memory that has a current vector, and keyword search over all memories,
+  every message. Merge the two lists with reciprocal rank fusion, a
+  standard way to combine two rankings. A memory found both ways ranks
+  highest. A missing vector removes only that one memory from meaning
+  search, never the whole message.
+- **Tunable:** the balance between meaning and keyword results.
+- **Done when:** in the test set, a missing vector affects only its own
+  memory, and the memories missed in A.3 (for example the chat-app memory
+  for an app crash) are found.
+
+### Step 1.7: Search with the user's message on its own
+
+- **Change:** in `Enforcer.kt`, the main search uses only the user's latest
+  message. Recent turns get a separate search with lower weight, and only
+  when the latest message is short or refers back ("what about that?",
+  "yes", "tell me more"). The results are merged by each memory's best
+  score. `Librarian.searchForReconciliation` already searches several text
+  windows and merges them; live search uses the same approach.
+- **Tunable:** the recent-turn weight, and what counts as a short message.
+- **Done when:** in the test set, adding recent turns no longer pulls in
+  unrelated memories, and "what about that?" still finds the topic from
+  the turn before.
+
+### Step 1.8: A relevance gate that fits each message
+
+- **Change:** replace `MIN_SIMILARITY = 0.30` with a gate measured against
+  this message's own scores. A memory must stand clearly above the other
+  memories' scores for this message. A strong keyword match also passes.
+  When the library is too small for a fair comparison, a fixed floor tuned
+  on the test set is used instead. Passing nothing is a valid result.
+- **Measured on the sample** (meaning search alone, before steps 1.5–1.7):
+
+  | Rule | Right | Wrong | Missed |
+  |---|---|---|---|
+  | Today: fixed 0.30 | 6 | 22 | 2 |
+  | Fixed 0.38 | 4 | 1 | 4 |
+  | At least 2 standard deviations above this message's average | 4 | 0 | 4 |
+
+  The relative rule sent nothing for "hey how are you", which is correct.
+  Its misses are the kind keyword search (step 1.5) recovers.
+- **Tunable:** the gate's strength and the small-library floor.
+- **Done when:** in the test set, "nothing relevant" messages send nothing
+  and wrong memories drop sharply.
+
+### Step 1.9: Relevance decides, bonuses only nudge
+
+- **Change:**
+  - Remove the scope, freshness, selected-project, and tag bonuses from
+    ranking (`retrievalBoost`, `SCOPE_BOOSTS`, `PROJECT_SELECTED_BOOST`,
+    the tag bonus, and the recency weight). Scope stays only as the filter
+    for which memories a chat may use.
+  - Importance is the only bonus. It is measured on the same scale as
+    relevance and capped below a clear relevance lead.
+  - Correct the false comment above `SCOPE_BOOSTS`, or remove it with the
+    code.
+- **Test:** if memory A is more relevant than memory B by more than the
+  cap, A ranks above B whatever their ratings. The Memory Assistant's
+  search uses the same ranking code, so it gets the same guarantee.
+- **Tunable:** the importance bonus and its cap.
+- **Done when:** in the test set, the +3 memory no longer ranks first for
+  unrelated messages.
+
+### Step 1.10: +3 as the owner defined it
+
+- **Rule (owner, 2026-11-08):** +3 is a boost, not a pass.
+  - A +3 memory must be relevant, like any other memory. It is never sent
+    just for being +3.
+  - It gets the strongest importance boost.
+  - If it is relevant and the memory limit is already full, it is added
+    anyway.
+- **Change:** the existing rule (`ImportanceRanking.includeMandatory`,
+  `RetrievalBackfill.select`) already works this way once the gate works.
+  Keep it, and add the tests below.
+- **Tunable:** the +3 boost.
+- **Tests:** a +3 memory unrelated to the message is not sent ("hey how are
+  you"). A relevant +3 memory is sent even when 8 more relevant memories
+  fill the limit.
+
+### Step 1.11: Remove the memory cooldown
+
+- **Rule (owner, 2026-11-08):** the cooldown is wrong; it causes amnesia.
+- **Change:** in `Enforcer.kt`, stop applying `COOLDOWN_TURNS` to
+  memories. A relevant memory is sent every message it is relevant. The
+  only skips are items already in this request: picked memories, briefing
+  items, and lorebook repeats. Existing rows in `injection_cooldowns` are
+  left in place (no data is deleted). Roleplay card entries are **not**
+  changed in this step (D26).
+- **Log stop point:** the memory assembly log has cooldown lines for
+  memories. Changing or removing them needs owner approval first (D27).
+- **Done when:** in a chat that keeps talking about one topic, the relevant
+  memory is sent on every message.
+
+### Step 1.12: The same memory rules on both send paths
+
+- **Change:** make the memory-side lorebook repeat check (`NearDuplicate`)
+  run on both send paths (A.9). Hand the matched lorebook entries to the
+  memory system **for comparison only** on the path that passes none
+  today.
+- **Protection:** the lorebook's own entries, text, order, size limit, and
+  placement do not change on either path. The step 1.1 tests prove it.
+- **Done when:** on both paths, a memory that repeats a lorebook entry is
+  not also sent, and the lorebook tests are unchanged.
+
+### Step 1.13: Variety and starting values
+
+- **Change:**
+  - Stop near-identical memories from filling several places, using MMR
+    (maximal marginal relevance, the standard method).
+  - Choose default values for every tunable number from the test set.
+    These are what **Reset** restores on the test screen.
+  - Run the int8 model (already in the app's model list) against the test
+    set. If it is clearly better than q4, raise it with the owner.
+- **Done when:** the test set passes with the defaults, and the owner has
+  checked the owner's own messages on the test screen.
+
+### Step 1.14: Optional local re-ranker
+
+A small second model on the phone that re-orders the top results more
+carefully. It costs no tokens, but it is another download and adds a short
+delay per message. Build it only if the test set and the owner's testing
+show steps 1.5–1.13 are not enough (D21).
+
+### Phase 1 is complete when
+
+- the test set passes;
+- the lorebook and picked-memory tests from step 1.1 pass unchanged;
+- on the phone, the owner can see on the test screen that unrelated
+  messages send nothing, relevant memories are sent every time they are
+  relevant, and +3 memories are sent only when relevant;
+- the owner confirms the symptoms are gone in real chats.
+
+## Phase 2: Today's date
+
+**Blocked until D1–D5 and D22 are decided.** Details: Part D, section D.3.
+
+1. **One date source:** today's date from the phone's calendar, in the
+   phone's time zone, date only, never the time of day. Every memory
+   feature reads it from this one place. Tests cover the time-zone change
+   and midnight.
+2. **The date-sharing setting:** adds today's date to what the AI receives,
+   in the agreed format (D2), off unless the user turns it on (D1).
+   Roleplay handling per D3. Wording needs approval first.
+3. **Backup:** the setting goes into the settings backup.
+
+## Phase 3: Dates, lasting or fading, and core on memories
+
+**Blocked until D6, D10–D12, D19, and D20 are decided.** Details: Part D,
+sections D.2 and D.4–D.7.
+
+1. **Database migration** from version 33 adds: date, one-time or yearly,
+   optional year, lasting or fading, briefing core flag, strength and
+   strength date, and last-mentioned date. Existing memories become
+   lasting, undated, and not in core, so what the AI receives does not
+   change.
+2. **Backup, export, restore, and import** carry every new field. Restoring
+   an older backup fills the defaults, never an error. Round-trip tests
+   for each path.
+3. **Memory editor:** date, one-time or yearly, lasting or fading, and core.
+4. **Memory card:** the date and next occurrence, strength for fading
+   memories, last mentioned, and a core marker.
+5. **Browser:** filters and sorting per D20.
+6. **Possible Match:** a different date on a matching memory counts as a
+   change to review, not a duplicate.
+7. Wording and layout need approval before each screen is built.
+   Appearance follows `ui-style-guide.md`.
+
+## Phase 4: Fading
+
+**Blocked until D7–D9 are decided.** Details: Part D, section D.4.
+
+1. **Strength math:** pure functions for current strength and for a
+   mention's boost, with tests for the half-life, the cap, and long gaps.
+2. **Mention detection:** when the user's own message strongly matches a
+   memory, using the Phase 1 search, its strength and last-mentioned date
+   are updated. One mention per memory per message. The memory being sent
+   to the AI, the AI's replies, the Memory Assistant, and the test screen
+   never count.
+3. **Ranking:** if D9 is yes, strength joins importance as a capped bonus.
+4. **Test screen:** shows strength and lets it be tuned.
+
+## Phase 5: The standing briefing
+
+**Blocked until D13 and D15–D18 are decided.** Details: Part D, section D.6.
+
+1. **Assembly:** core, then current fading memories, then dated memories
+   in their window, in a stable order. Within its own limit (D16).
+2. **No repeats:** anything in the briefing is skipped by search, and a
+   picked memory is not repeated by the briefing.
+3. **Placement:** after the fixed instructions, Model Rules, and card
+   material; before searched memories.
+4. **Guidance to the AI** for dated reminders, using text the owner
+   approved (D13).
+5. **Switches:** the master switch (D18), off whenever memory is off for the
+   chat, and roleplay per D17.
+6. **Test screen:** shows the briefing and why each item is in it.
+
+## Phase 6: The Memory Assistant proposes dates, fading, and core
+
+**Blocked until D14 is decided.** Details: Part D, section D.5.
+
+1. Proposals can carry a date, one-time or yearly, lasting or fading, and a
+   core suggestion. The user sees and edits each in Pending before saving.
+2. Relative dates ("tomorrow") are worked out from the day the message was
+   sent, using the transcript's turn times, never the day the analysis
+   runs.
+3. Vague timing gets no date.
+4. If the Memory Assistant is being changed for another reason at the same
+   time, coordinate the two changes, because they touch the same code.
+
+---
+
+# Part D: Design details
+
+## D.1 What the user should experience
+
+Today the AI hears about a memory only when the current message is about the
+same thing. It never brings anything up on its own, so it never feels like it
+knows the user.
+
+This plan adds three behaviors that work the way people remember things:
+
+- **Some facts always matter.** The user's name, pets, the people in their
+  life. The user chooses which of these the AI always hears.
+- **Some things matter for a while.** "This problem at work is weighing on
+  me." While the user keeps bringing it up, it stays strong. Once the user
+  stops mentioning it, it gradually stops being volunteered. It is never
+  deleted and can still be found when the topic comes back.
+- **Some things matter around a date.**
+  - A one-time event, such as an interview. In the days before, the AI
+    knows it is coming ("Are you nervous about tomorrow?"). Shortly after,
+    it can ask how it went. Then it stops being brought up.
+  - A yearly date, such as a birthday. It comes up as the date approaches,
+    every year.
+
+**Why anything is sent every time:** the AI has no memory of its own between
+messages. If the app doesn't send something, it doesn't exist for the AI.
+Search sends only what matches the current message, so it can never bring up
+the interview unprompted. The briefing (D.6) does that.
+
+## D.2 The three kinds of memory
+
+Each memory gets two independent properties.
+
+- **How it ages:** lasting (its weight never changes on its own, as every
+  memory works today) or fading (D.4).
+- **Whether it has a date:** none (as today), one-time, or yearly. A yearly
+  date's year is optional.
+
+| Example | Ages | Date | What the AI experiences |
+|---|---|---|---|
+| The user's name | Lasting | None | Always in the briefing, if the user marked it core |
+| A worry the user keeps raising | Fading | None | In the briefing while strong, then found only by search |
+| An interview | Lasting or fading | One-time | In the briefing during its window, then found only by search |
+| A birthday | Lasting | Yearly | In the briefing during its window, every year |
+
+**Rules for every kind:**
+
+- Nothing is deleted, archived, or changed automatically. Fading and date
+  windows change only what the AI is told without being asked.
+- Search still finds everything, exactly as after Phase 1.
+- Existing memories keep working exactly as before until the user changes
+  them.
+
+## D.3 Today's date
+
+- **One source:** the phone's calendar date, in the phone's time zone, at the
+  moment a message is sent. Date only, never the time of day.
+- **The memory system always uses it,** for fading and date windows. That
+  sends nothing anywhere.
+- **Sharing it with the AI** is a user setting (D1), written so it can't be
+  misread (D2), with roleplay handled per D3.
+- **Reminders without date sharing** can still say "tomorrow" or "in 5
+  days", worked out by the app (D4).
+
+## D.4 Fading
+
+- **In plain terms:** each fading memory has a strength. When the user
+  talks about it, strength goes up. Each day without a mention, it loses a
+  fixed share of what is left: after one half-life it is at half, after two
+  at a quarter. Above a cut-off, the memory is "current" and goes into the
+  briefing.
+- **Technical shape:** each memory stores its strength at the last update
+  and the date of that update. Current strength = stored strength × 0.5 ^
+  (days since update ÷ half-life). On a mention: current strength + boost,
+  capped at full. Nothing runs in the background; strength is worked out
+  only when needed.
+- **What counts as a mention:** only the user's own message strongly
+  matching the memory, once per message. Never the memory being sent, the
+  AI's replies, the Memory Assistant, the test screen, or opening the
+  memory. If being sent counted, briefing items would refresh themselves
+  forever and never fade.
+- **Editing:** whether editing refills strength is D8.
+- **Last mentioned** is recorded for every memory, lasting ones included, so
+  the card can show it.
+
+## D.5 Dates
+
+- **Stored:** day and month, plus year for one-time dates (optional for
+  yearly), and one-time or yearly. No time of day.
+- **Windows:** yearly dates show for some days before through the day.
+  One-time dates show for some days before, the day, and a short follow-up
+  after (D10, D11).
+- **Year boundary:** a 2 January birthday seen from 30 December is 3 days
+  away.
+- **29 February** in other years: D12.
+- **What the AI is told:** the memory text, the app-worked-out timing
+  ("today", "in 3 days", "2 days ago"), and approved guidance to raise it
+  only when it fits naturally and not to repeat it once discussed (D13).
+- **Set by hand** in the editor, or **proposed by the Memory Assistant**
+  (Phase 6). Relative dates are worked out from the day the message was
+  sent. Vague timing gets no date (D14).
+- **Changed plans** go through the existing edit, supersede, and Possible
+  Match paths.
+
+## D.6 The standing briefing
+
+- **What it is:** a small block sent with every message, rebuilt each time
+  from:
+  - **core:** memories the user explicitly marked. The AI never adds to
+    core on its own. The Memory Assistant may suggest core only through
+    Pending;
+  - **current:** fading memories above the cut-off;
+  - **upcoming:** dated memories inside their window.
+- **User control:** the user chooses core, everything automatic follows
+  visible rules, and the whole briefing can be turned off (D15, D18).
+- **Size and cost:** its own limit in memories and tokens (D16). Every item
+  is sent with every message. As a rough guide, 20 short memories add about
+  600–1,200 tokens per message, and 50 add about 1,500–3,000. These counts
+  are illustrations, not proposed defaults. Core goes first in a fixed
+  order so prompt caching (cheaper repeated prompt starts, on providers
+  that offer it) works.
+- **Placement:** after fixed instructions, Model Rules, and card material;
+  before searched memories. This matches the order the current code uses.
+- **No repeats:** search skips briefing items, and the briefing skips
+  picked memories.
+- **Scope:** the same eligibility check the current search code uses
+  (companion memories only for that companion, and the code's existing
+  roleplay eligibility). Roleplay per D17.
+- **Off** whenever memory is off for the chat.
+
+## D.7 Memory screens
+
+- **Editor:** date, one-time or yearly, lasting or fading, core.
+- **Card:** date and next occurrence, strength for fading memories (D19),
+  last mentioned, core marker.
+- **Browser:** filters and sorting (D20).
+- **Pending card:** proposed date, fading choice, and core suggestion, each
+  editable before saving.
+- **Look:** `ui-style-guide.md`. Wording needs owner approval.
+
+## D.8 Data, backup, privacy
+
+- New columns are added. The retired `always_load` column and
+  `owner_profile` table are not reused, so old meanings cannot leak in.
+- Every new field goes into every memory backup, export, restore, and import
+  path. The tuned search values (`retrieval_policy`) do too.
+- Dates such as birthdays stay in the same encrypted database as everything
+  else. Today's date leaves the phone only if the user turns on date
+  sharing; relative timing in reminders is the only exception.
+- What was sent is visible on the test screen.
+
+---
+
+# Part E: Decisions
+
+Asked one at a time in chat. A recommendation is a proposal only.
+
+| # | Question | Recommendation or decision |
 |---|---|---|
+| D0 | Approve the recommended search design in Part B as the plan for Phase 1? | Yes |
 | D1 | Is date sharing off or on by default? | Off; the user turns it on |
 | D2 | What date format goes to the AI? | Weekday, day, month name, year, which can't be misread |
 | D3 | Does date sharing apply in roleplay chats? | No by default; the story may have its own time |
 | D4 | With date sharing off, do reminders carry relative timing ("tomorrow")? | Yes; a reminder is useless without timing |
 | D5 | Is the date-sharing setting app-wide, per chat, or both? | App-wide first; per chat only if wanted later |
 | D6 | Are manually created memories lasting or fading by default? | Lasting, the same as today |
-| D7 | How fast does fading go, and can the user change it? | One app-wide speed with a few simple choices, not per memory |
+| D7 | How fast does fading go, and can the user change it? | One app-wide speed, tunable on the test screen |
 | D8 | Does editing a fading memory refill its strength? | Yes; editing is deliberate attention |
-| D9 | Does strength also nudge search ranking? | Yes, bounded like importance; never makes an irrelevant memory eligible |
+| D9 | Does strength also nudge search ranking? | Yes, capped like importance; never makes an irrelevant memory eligible |
 | D10 | How long are the windows? | Yearly: about a week before through the day. One-time: a few days before through two days after |
 | D11 | Can windows be changed per memory? | Not at first |
 | D12 | How is a 29 February date handled in other years? | 28 February |
-| D13 | What does the guidance instruction to the AI say? | Owner reviews the exact text before it is built |
+| D13 | What does the guidance to the AI about dated reminders say? | Owner reviews the exact text before it is built |
 | D14 | Does vague timing get a date? | No; the user can add one in Pending |
 | D15 | Should the briefing be built at all? | Yes; it is the only way the AI can bring things up on its own |
-| D16 | Does the briefing get its own size limit control? | Yes, separate from search limits |
+| D16 | Does the briefing get its own size limit control? | Yes, separate from the search limit |
 | D17 | Does the briefing run in roleplay chats? | Off by default in roleplay |
 | D18 | Is the briefing on or off by default? | Off; it adds a cost to every message |
 | D19 | How is strength shown on the card? | A simple level plus the last-mentioned date, not a raw number |
-| D20 | Which browser filters and sorts are added? | Upcoming dates, briefing members, sort by strength |
-| D21 | Should a local re-ranker be added? | Decide after the test set shows a need |
-| D22 | Does date sharing ship on its own, before the rest? | Yes, if the owner wants it sooner; it doesn't depend on the rest |
-| D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | **Decided by the owner, 2026-11-08: search is fixed first.** |
-| D24 | Where is the search test screen reached from? | **Decided by the owner, 2026-11-08: its own screen, opened from Advanced Memory Settings, in the Debug section.** It is its own screen, not part of the Debug box. **The old Debug search box is removed when the test screen is added** (owner decision, 2026-11-08). Still open: the screen's labels |
-| D25 | Should the ordinary memory settings also have a simple Strict / Balanced / Broad match choice, or only the test screen's tuned numbers? | Only the tuned numbers; a second control for the same thing adds confusion |
-
-## 16. Relationship to other documents
-
-- **The owner** directs what is built and when.
-- **Older documents** (`owner_approved_rules.md`,
-  `memory_retrieval_and_analysis_ui_copy.md`,
-  `ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`, and others) are not approvals and
-  do not overrule this plan. Where this plan matches current code, it says
-  so from the code, not from those documents.
-- **`CLAUDE.md`** and `ui-style-guide.md` are the owner's current working
-  rules and still apply.
-- **`legacy/`** designs for an always-on profile (owner portrait, standing
-  packet, standing context, always-load) are retired and are not inputs to
-  this plan.
+| D20 | Which browser filters and sorts are added? | Upcoming dates, core members, sort by strength |
+| D21 | Should a local re-ranker be added? | Only if testing shows Phase 1 is not enough |
+| D22 | Does date sharing ship on its own, before the rest? | Yes, if wanted sooner; it doesn't depend on the rest |
+| D23 | When is search fixed? | **Decided, 2026-11-08: first** |
+| D24 | Where does the search test screen open from? | **Decided, 2026-11-08:** its own screen, from Advanced Memory Settings in the Debug section, with adjustable numbers; the old Debug search box is removed. Still open: its wording and layout |
+| D25 | Should the ordinary memory settings also have a Strict / Balanced / Broad match choice? | No; the test screen's tuned numbers are the setting, and a second control adds confusion |
+| D26 | Should roleplay card entries also lose their 10-message cooldown? | Probably yes, since it has the same amnesia flaw, but cards are keyword-based and working, so leave them until the owner decides |
+| D27 | Which memory assembly log lines change when the cooldown and old search are removed? | Present the exact lines at step 1.11 and wait for approval |

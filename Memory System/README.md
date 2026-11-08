@@ -27,7 +27,7 @@ If you are a coding agent assigned the current memory work, read `project-plan.m
 
 ## Proposed, not scheduled
 
-**`dynamic_memory_plan.md`** — proposed design for dated memories, fading memories, an optional today's-date setting, a standing briefing, and search-quality repairs. Section 10 (search repair) is the measured diagnosis of why search sends nearly every memory, with the exact code changes; the owner has ordered it first. The rest is **proposed, not approved**. Build only the part the owner tells you to build.
+**`dynamic_memory_plan.md`** — proposed design for dated memories, fading memories, an optional today's-date setting, a standing briefing, and search-quality repairs. Part A is the measured diagnosis of why search sends nearly every memory and why the AI seems to forget; Part C Phase 1 is the step-by-step search repair, which the owner has ordered first. The rest is **proposed, not approved**. Build only the part the owner tells you to build.
 
 ## Active repair in one line
 
