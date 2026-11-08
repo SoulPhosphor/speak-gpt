@@ -1082,7 +1082,11 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 row(recent)?.let { row ->
                     // Its favorite providers (starred), then the last five used;
                     // a single one that is already in use leaves nothing to pick.
-                    val favorites = recent.favoriteProviders
+                    // A model that is also a favorite keeps its favorite
+                    // providers on the favorite, as everywhere else.
+                    val favorites = saved[ModelIdentity(recent.endpointId, recent.modelId)]
+                        ?.let { store.decodeFavorite(it).favoriteProviders }
+                        ?: recent.favoriteProviders
                     val options = RecentOnlyProviders.quickSettingsOptions(
                         "", favorites, providerNames.recents(recent.endpointId, recent.modelId)
                     )
