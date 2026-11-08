@@ -514,19 +514,67 @@ effectively everything.
    - Every later step must improve the test set's results, or it is not
      kept.
 
-2. **Fix keyword search.** Replace word-overlap counting in `rankLexical`
+2. **Build the search test screen** (owner request, 2026-11-08). It was
+   planned earlier but never built. Today the only tool is a small search
+   box in Advanced Memory Settings (`AdvancedMemorySettingsActivity.runDebugSearch`).
+   That box shows one blended score per memory, searches without any
+   chat's context (`RetrievalScope.NONE`), and hides the gate, the bonuses,
+   and why memories were dropped.
+
+   **What the screen does:** the owner enters a message and sees exactly
+   what memory search would do with it, with every number shown. It sends
+   nothing to any AI service and costs no tokens.
+
+   **For each memory considered, it shows:**
+   - meaning-search similarity;
+   - keyword score, and which words matched;
+   - relevance relative to this message (the step 6 scale);
+   - every bonus separately: importance, freshness, scope, selected
+     project, tags;
+   - the final score and its rank;
+   - whether it passed the relevance gate, and if not, by how much it
+     missed;
+   - whether it would be sent, and if not, why: below the gate, over the
+     memory limit, over the character budget, cooldown, or duplicate of a
+     lorebook entry;
+   - whether it was added as a relevant +3 beyond the limit.
+
+   **For the whole search, it shows:**
+   - which search ran (meaning, keyword, or both), and why;
+   - how many memories are missing their embedding;
+   - the limit, budget, and strictness in effect;
+   - the exact memory text the AI would receive.
+
+   **Context:** the owner picks which chat's context to test in (companion,
+   project, roleplay, campaign), because scope changes what is eligible.
+   Recent turns can be included or left out, to see their effect.
+
+   **Engineering requirements:**
+   - **One code path.** The ranking functions return an explanation
+     alongside each result, and both the chat and this screen use the same
+     functions. The screen never recalculates scores on its own, so what it
+     shows is what the chat actually does.
+   - **Read-only.** Testing never records cooldown, never counts as a
+     mention for fading (section 6.3), and never changes a memory.
+   - Wording, layout, and where the screen is reached from need owner
+     approval (decision D24). Appearance follows `ui-style-guide.md`.
+
+   Build this before tuning, so every later step can be checked on the
+   phone with the owner's real memories, not only in the test set.
+
+3. **Fix keyword search.** Replace word-overlap counting in `rankLexical`
    with BM25, the standard keyword formula. Words found in nearly every
    memory ("the", "user") score close to nothing, and rare, specific words
    (names, places, "Kotlin") score high. A memory then needs a minimum
    keyword score, not just one shared word.
 
-3. **End the all-or-nothing fallback.** In `searchCore`, run meaning search
+4. **End the all-or-nothing fallback.** In `searchCore`, run meaning search
    over every memory that has a current vector, and keyword search over all
-   memories, then merge the two ranked lists (hybrid search, step 7). A
+   memories, then merge the two ranked lists (hybrid search, step 8). A
    missing vector removes only that one memory from meaning search, not the
    whole turn.
 
-4. **Search with the user's message on its own.**
+5. **Search with the user's message on its own.**
    - The main search uses only the user's latest message.
    - Recent turns get their own separate search with a lower weight. The
      two result lists are merged by each memory's best score.
@@ -534,7 +582,7 @@ effectively everything.
      windows separately and merges them, for the Memory Assistant. Live
      search can use the same approach.
 
-5. **Replace the fixed 0.30 cut-off with a rule relative to each message's
+6. **Replace the fixed 0.30 cut-off with a rule relative to each message's
    own scores.** A memory must stand clearly above the other memories'
    scores for this message, not just above a fixed number. Measured on the
    same sample:
@@ -556,9 +604,9 @@ effectively everything.
      the test set. Raw numbers are never shown to the user, as the approved
      copy requires.
 
-6. **Make relevance decide, and bonuses only nudge.**
+7. **Make relevance decide, and bonuses only nudge.**
    - Measure each memory's relevance on the same relative scale as the
-     gate in step 5: how far it stands above this message's average score.
+     gate in step 6: how far it stands above this message's average score.
    - Express importance, freshness, scope, selected-project, and tag bonuses
      as fractions of that scale, capped so that all bonuses together are
      smaller than a clear relevance lead.
@@ -569,14 +617,14 @@ effectively everything.
    - Tune the cap values on the test set, and correct the `SCOPE_BOOSTS`
      comment.
 
-7. **Merge meaning and keyword results** with reciprocal rank fusion, a
+8. **Merge meaning and keyword results** with reciprocal rank fusion, a
    simple, standard way to combine two rankings. A memory found by both
    ranks highest.
 
-8. **Sending nothing is a valid result.** When nothing passes, no memories
+9. **Sending nothing is a valid result.** When nothing passes, no memories
    are sent. The memory limit stays a maximum, never a quota to fill.
 
-9. **+3 as the owner defined it (2026-11-08): a boost, not a pass.**
+10. **+3 as the owner defined it (2026-11-08): a boost, not a pass.**
    - A +3 memory must be relevant to the message, like any other memory. It
      is never sent just for being +3.
    - It gets the strongest importance boost, so it ranks higher among the
@@ -585,21 +633,21 @@ effectively everything.
      anyway.
    - `ImportanceRanking.includeMandatory` and `RetrievalBackfill.select`
      already add +3 beyond the 8 only after the relevance gate. Causes 1–4
-     are what turn that into "every +3, every message". Once steps 2–6 are
+     are what turn that into "every +3, every message". Once steps 3–7 are
      done, the existing rule behaves as the owner describes.
    - **Tests:** a +3 memory unrelated to the message is not sent (for
      example "hey how are you"). A relevant +3 memory is sent even when 8
      more relevant memories fill the slots.
 
-10. **Variety.** Stop near-identical memories from filling several slots,
+11. **Variety.** Stop near-identical memories from filling several slots,
    using MMR (maximal marginal relevance, the standard method).
 
-11. **Optional local re-ranker:** a small second model on the phone that
+12. **Optional local re-ranker:** a small second model on the phone that
     reorders the top results. It costs no tokens, but it is another
     download and adds a short delay per message. Decide only after the test
-    set shows whether steps 2–10 are enough (decision D21).
+    set shows whether steps 3–11 are enough (decision D21).
 
-12. **Model quality check.** The int8 model is already in the app's model
+13. **Model quality check.** The int8 model is already in the app's model
     list. Run it against the test set too. If it scores clearly better than
     q4, raise that with the owner.
 
@@ -729,6 +777,7 @@ proposal only.
 | D21 | Should a local re-ranker be added? | Decide after the test set shows a need |
 | D22 | Does date sharing ship on its own, before the rest? | Yes, if the owner wants it sooner; it doesn't depend on the rest |
 | D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | **Decided by the owner, 2026-11-08: search is fixed first.** |
+| D24 | Where is the search test screen reached from, and what are its labels? | Its own screen, opened from Advanced Memory Settings, replacing the small search box there |
 
 ## 16. Relationship to other documents
 
