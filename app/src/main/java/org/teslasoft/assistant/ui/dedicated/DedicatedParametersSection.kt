@@ -113,6 +113,10 @@ class DedicatedParametersSection(
         if (snapshot(currentValues()) == shown) reload() else refreshLink()
     }
 
+    /** True when the values on screen differ from what was last loaded or
+     *  saved (an edit, or an unsaved Reset to Recommended). */
+    fun hasUnsavedChanges(): Boolean = snapshot(currentValues()) != shown
+
     private fun snapshot(values: FavoriteModelObject): String =
         "${values.streaming}|${values.temperature}|${values.topP}|${values.frequencyPenalty}|${values.presencePenalty}"
 

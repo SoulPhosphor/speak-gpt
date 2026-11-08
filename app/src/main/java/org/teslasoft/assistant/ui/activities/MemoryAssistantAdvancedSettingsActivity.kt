@@ -31,6 +31,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
@@ -172,7 +173,10 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
     }
 
     private fun initLogic() {
-        btnBack?.setOnClickListener { finish() }
+        btnBack?.setOnClickListener { attemptExit() }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() { attemptExit() }
+        })
 
         /* ---- Maximum Suggestions Per Conversation ---- */
         setupMaxSuggestions()
@@ -319,7 +323,47 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
 
     /* ------------------------------ Save ------------------------------ */
 
-    private fun save() {
+    /**
+     * Leaving with Memory Scanner parameter changes that were not saved asks
+     * first (owner ruling, Nov 8 2026): Cancel stays on the screen, Save &
+     * Exit saves and leaves (staying when something cannot be saved), and
+     * Okay leaves without saving.
+     */
+    private fun attemptExit() {
+        if (parametersSection?.hasUnsavedChanges() != true) {
+            finish()
+            return
+        }
+        val actions = layoutInflater.inflate(R.layout.dialog_three_actions_cancel_first, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_parameters_discard_title)
+            .setMessage(R.string.memory_parameters_discard_message)
+            .setView(actions)
+            .create()
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_cancel_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_middle_action).apply {
+            setText(R.string.btn_save_and_exit)
+            setOnClickListener {
+                dialog.dismiss()
+                if (save()) finish()
+            }
+        }
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_final_action).apply {
+            setText(R.string.okay)
+            setOnClickListener {
+                dialog.dismiss()
+                finish()
+            }
+        }
+        dialog.show()
+    }
+
+    /** False when something on screen could not be saved (the user is
+     *  shown why and stays on the screen). */
+    private fun save(): Boolean {
         val average = fieldScannerAverageTokens?.text?.toString()?.trim()?.toIntOrNull()
         val maximum = fieldScannerMaximumTokens?.text?.toString()?.trim()?.toIntOrNull()
         if (average == null || average <= 0 || maximum == null) {
@@ -327,7 +371,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
                 requestFocus()
                 selectAll()
             }
-            return
+            return false
         }
         if (maximum < average) {
             val actions = layoutInflater.inflate(R.layout.dialog_single_action, null)
@@ -341,7 +385,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
                 setOnClickListener { dialog.dismiss() }
             }
             dialog.show()
-            return
+            return false
         }
         preferences?.setMemoryScannerTokenAmounts(average, maximum)
 
@@ -358,6 +402,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
         preferences?.setArchivistLorebookPrompt(if (loreText.isEmpty() || loreText == ArchivistPrompt.LOREBOOK_SYSTEM.trim()) "" else loreText)
 
         Toast.makeText(this, R.string.memory_assistant_adv_saved, Toast.LENGTH_SHORT).show()
+        return true
     }
 
     override fun onAttachedToWindow() {
