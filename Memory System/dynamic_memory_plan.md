@@ -556,8 +556,8 @@ effectively everything.
      shows is what the chat actually does.
    - **Read-only.** Testing never records cooldown, never counts as a
      mention for fading (section 6.3), and never changes a memory.
-   - Wording, layout, and where the screen is reached from need owner
-     approval (decision D24). Appearance follows `ui-style-guide.md`.
+   - It opens from Advanced Memory Settings, in the Debug section (owner
+     decision D24). Its wording and layout need owner approval. Appearance follows `ui-style-guide.md`.
 
    Build this before tuning, so every later step can be checked on the
    phone with the owner's real memories, not only in the test set.
@@ -777,7 +777,7 @@ proposal only.
 | D21 | Should a local re-ranker be added? | Decide after the test set shows a need |
 | D22 | Does date sharing ship on its own, before the rest? | Yes, if the owner wants it sooner; it doesn't depend on the rest |
 | D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | **Decided by the owner, 2026-11-08: search is fixed first.** |
-| D24 | Where is the search test screen reached from, and what are its labels? | Its own screen, opened from Advanced Memory Settings, replacing the small search box there |
+| D24 | Where is the search test screen reached from? | **Decided by the owner, 2026-11-08: its own screen, opened from Advanced Memory Settings, in the Debug section.** Still open: whether the old search box is removed, and the screen's labels |
 
 ## 16. Relationship to other documents
 
