@@ -10,10 +10,17 @@
   2026-11-08). It is written as concrete changes to the current code.
 - **Everything else is proposed, not approved.** Every choice in section 15
   needs the owner's decision first. Recommendations are proposals only.
-- **It does not change `ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md` (Revision 26).**
-  The parts of this plan that change the Memory Assistant must be built on
-  top of that repair, not alongside it, because both change the same
-  Memory Assistant code.
+- **Old documents are not approvals.** This plan was written from a fresh
+  look at the current code and real measurements, not from older planning
+  documents. Earlier documents were often written by AI agents, and parts
+  of them were never actually decided by the owner. Nothing in an older
+  document counts as an owner decision here, and none of it may be used to
+  overrule this plan or the owner. The only approvals are the owner
+  decisions dated in this plan.
+- **Technical dependency only:** the Memory Assistant has a separate repair
+  written up in `ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`. That document is also
+  not treated as approved here. Both change the same Memory Assistant code,
+  so the two must not be built at the same time.
 - **Names in this plan are planning names, not on-screen wording.** Terms
   such as "lasting", "fading", "dated", "strength" and "briefing" identify
   ideas in this document. Every label, explanation, and message the user
@@ -106,9 +113,11 @@ Verified in the code on `beta/new-client`, 2026-11-08.
   `owner_profile` table (portrait, standing context) still exist in the
   database. They are only used for import and export, and nothing in them
   is sent to the AI. This plan does not reuse them (section 11).
-- **Approved retrieval controls not yet built:** `Memory Match Strictness`
-  and the other controls in `memory_retrieval_and_analysis_ui_copy.md` are
-  approved, but the code still uses the single fixed 0.30 cut-off.
+- **Retrieval controls described but not built:** an older document,
+  `memory_retrieval_and_analysis_ui_copy.md`, describes settings such as a
+  Strict / Balanced / Broad match setting. None of them is built, and the
+  code uses the single fixed 0.30 cut-off. That document is not treated as
+  approved (see Status).
 
 ## 4. The three kinds of memory
 
@@ -227,9 +236,9 @@ Strength is worked out only when it is needed, from those two numbers.
 1. **In the briefing:** a fading memory is in the "current" part only while
    its strength is above the cut-off.
 2. **In search ranking:** possibly a small extra signal, like importance.
-   This is decision D9. If approved, it must follow the approved retrieval
-   rule: it can reorder relevant memories but never makes an irrelevant
-   memory eligible.
+   This is decision D9. If chosen, it follows the same rule as every other
+   bonus in section 10: it can reorder relevant memories but never makes an
+   irrelevant memory eligible.
 
 ### 6.5 Last mentioned
 
@@ -270,7 +279,8 @@ is model-facing behavior and needs approval (decision D13).
 ### 7.4 How dates get set
 
 - **By hand:** a date control in the memory editor (section 9).
-- **By the Memory Assistant** (built on top of the Revision 26 repair):
+- **By the Memory Assistant** (not built at the same time as its separate
+  repair):
   - When a conversation states a date, or says something like "tomorrow",
     the Memory Assistant includes the date in its proposal. The user sees it
     in Pending and can change or remove it before saving, like any other
@@ -304,26 +314,23 @@ Parts B and C are chosen automatically by the rules above. Whatever is
 chosen is visible to the user: on the memory card (section 9) and in the
 existing assembly view, which shows what was sent.
 
-### 8.2 How this fits the owner's earlier ruling
+### 8.2 Keeping the user in control
 
-`owner_approved_rules.md` section 10 says there is no per-memory "always
-load" flag. Anything that should be in every message must be visible,
-deliberate, and user-written. The briefing keeps that spirit:
+The owner said the old "always load" idea was dropped because nobody ever
+explained why something would be sent every time (section 2 explains it).
+The briefing is designed so the user stays in control:
 
 - the user chooses core;
 - everything automatic follows rules the user can see;
 - the user can turn the whole briefing off.
 
-It still changes section 10, so it needs an explicit owner ruling that
-updates that section before any code is written (decision D15).
+Whether to build the briefing at all is decision D15.
 
 ### 8.3 Size and cost
 
 - The briefing has its own limit, counted in memories and in tokens. It is
-  separate from `Maximum Memories Per Response`, which covers search
-  results. Approved retrieval copy (section 4, Design Rule) forbids new
-  capacity controls without explicit owner approval, so this limit needs
-  that approval (decision D16).
+  separate from the search memory limit. Whether it gets its own control is
+  decision D16.
 - **Cost:** every briefing item is sent with every message. As a rough
   guide, 20 short memories add about 600–1,200 tokens per message, and 50
   add about 1,500–3,000. The memory-count figures are illustrations, not
@@ -336,8 +343,8 @@ updates that section before any code is written (decision D15).
 ### 8.4 Where it sits in what the AI receives
 
 After the fixed app instructions, Model Rules, and card material. Before
-the memories found by search. This keeps the approved order, in which fixed
-instructions outrank retrieved memory.
+the memories found by search. This matches the order the current code
+already uses, in which fixed instructions come before retrieved memory.
 
 ### 8.5 No double sending
 
@@ -345,15 +352,14 @@ If a memory is already in the briefing, search skips it for that message.
 
 ### 8.6 Cooldown
 
-The briefing is sent with every message by design, the same exemption that
-card cores and Model Rules already have under section 10. Repeated
+The briefing is sent with every message by design, the same way the
+current code already sends card cores and Model Rules. Repeated
 reminders are kept in check by the guidance instruction (7.3), not by
 removing items, because the AI only knows what it is sent.
 
 ### 8.7 Which memories are allowed
 
-The briefing follows the same scope rules as search (`owner_approved_rules.md`
-sections 1 and 3):
+The briefing follows the same scope rules the current search code uses:
 
 - companion memories only for that companion;
 - real-life memories in roleplay only where those rules allow.
@@ -568,13 +574,10 @@ effectively everything.
      export already carries (`MemorySeedCodec`). Confirm that every backup
      path includes it, so tuning is never lost.
    - **Reset to defaults** puts back the values chosen from the test set.
-   - **Raw numbers are allowed here.** The approved retrieval copy forbids
-     unexplained raw thresholds and tuning controls in the ordinary
-     settings. The owner has explicitly asked for them on this test screen
-     (2026-11-08). The ordinary `Memory Match Strictness` choice
-     (`Strict`, `Balanced`, `Broad`) stays as approved.
-   - Still open: how `Memory Match Strictness` combines with a gate strength
-     tuned here (decision D25).
+   - **Raw numbers are shown and editable on this screen** (owner request,
+     2026-11-08).
+   - Still open: whether the ordinary settings also get a simple
+     Strict / Balanced / Broad choice at all (decision D25).
 
    **Engineering requirements:**
    - **One code path.** The ranking functions return an explanation
@@ -628,10 +631,8 @@ effectively everything.
      interview, the "Android chat app" for an app crash) are the ones
      keyword and hybrid search recover. For example, "app" appears in both
      the crash message and the chat-app memory.
-   - The approved `Memory Match Strictness` levels (`Strict`, `Balanced`,
-     `Broad`) become three strengths of this rule. Final values are tuned on
-     the test set. Raw numbers are never shown to the user, as the approved
-     copy requires.
+   - The rule's strength is one of the numbers tuned on the test screen
+     (step 2). Starting values come from the test set.
 
 7. **Make relevance decide, and bonuses only nudge.**
    - Measure each memory's relevance on the same relative scale as the
@@ -641,8 +642,8 @@ effectively everything.
      smaller than a clear relevance lead.
    - **Property to test:** if memory A is more relevant than memory B by
      more than the cap, A ranks above B, whatever their ratings, freshness,
-     or scope. Revision 26 already requires this property for the Memory
-     Assistant's search. Live search gets the same guarantee.
+     or scope. The Memory Assistant's search uses the same ranking code,
+     so it gets the same guarantee.
    - Tune the cap values on the test set, and correct the `SCOPE_BOOSTS`
      comment.
 
@@ -686,11 +687,11 @@ Rewriting the message with an AI before searching, writing a "pretend
 answer" to search with (HyDE), and paid AI re-ranking all add a paid call
 to every message. They are not part of this plan.
 
-### 10.9 Relationship to Revision 26
+### 10.9 Shared code with the Memory Assistant
 
-The Memory Assistant repair uses the same Librarian ranking. Every change
-here must keep Revision 26's tests passing, including its "relevance comes
-first" property.
+The Memory Assistant's search uses the same Librarian ranking. Any of its
+existing tests that fail after these changes are reported to the owner
+with the reason, never rewritten just to pass (`CLAUDE.md`).
 
 ## 11. Data, backup, and restore
 
@@ -738,8 +739,8 @@ steps counts as done on its own.
 4. **Fading:** the strength math, mention detection, and last-mentioned
    tracking.
 5. **Briefing:** assembly, limits, settings, and the assembly view.
-6. **Memory Assistant proposals** for dates, aging, and core. Built on top
-   of the Revision 26 repair.
+6. **Memory Assistant proposals** for dates, aging, and core. Not built at
+   the same time as the separate Memory Assistant repair.
 
 Search repair (section 10) comes before all of the above (decision D23).
 
@@ -797,7 +798,7 @@ proposal only.
 | D12 | How is a 29 February date handled in other years? | 28 February |
 | D13 | What does the guidance instruction to the AI say? | Owner reviews the exact text before it is built |
 | D14 | Does vague timing get a date? | No; the user can add one in Pending |
-| D15 | Should `owner_approved_rules.md` section 10 be updated to allow the briefing? | Yes, as a new ruling recorded there |
+| D15 | Should the briefing be built at all? | Yes; it is the only way the AI can bring things up on its own |
 | D16 | Does the briefing get its own size limit control? | Yes, separate from search limits |
 | D17 | Does the briefing run in roleplay chats? | Off by default in roleplay |
 | D18 | Is the briefing on or off by default? | Off; it adds a cost to every message |
@@ -807,18 +808,18 @@ proposal only.
 | D22 | Does date sharing ship on its own, before the rest? | Yes, if the owner wants it sooner; it doesn't depend on the rest |
 | D23 | When is search quality (section 10) scheduled: before, with, or after this feature? | **Decided by the owner, 2026-11-08: search is fixed first.** |
 | D24 | Where is the search test screen reached from? | **Decided by the owner, 2026-11-08: its own screen, opened from Advanced Memory Settings, in the Debug section.** It is its own screen, not part of the Debug box. **The old Debug search box is removed when the test screen is added** (owner decision, 2026-11-08). Still open: the screen's labels |
-| D25 | How does the ordinary Strict / Balanced / Broad choice combine with a gate strength tuned on the test screen? | The tuned value becomes Balanced; Strict and Broad sit a fixed step either side of it |
+| D25 | Should the ordinary memory settings also have a simple Strict / Balanced / Broad match choice, or only the test screen's tuned numbers? | Only the tuned numbers; a second control for the same thing adds confusion |
 
 ## 16. Relationship to other documents
 
 - **The owner** directs what is built and when.
-- **`ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`** (Revision 26) is unchanged.
-  Memory Assistant changes in this plan wait for it.
-- **`owner_approved_rules.md`** keeps controlling scope, importance, and
-  priority. Section 10 needs an update if the briefing is approved (D15).
-- **`memory_retrieval_and_analysis_ui_copy.md`** keeps controlling the
-  approved search controls. The briefing limit is a new control and needs
-  approval (D16).
+- **Older documents** (`owner_approved_rules.md`,
+  `memory_retrieval_and_analysis_ui_copy.md`,
+  `ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`, and others) are not approvals and
+  do not overrule this plan. Where this plan matches current code, it says
+  so from the code, not from those documents.
+- **`CLAUDE.md`** and `ui-style-guide.md` are the owner's current working
+  rules and still apply.
 - **`legacy/`** designs for an always-on profile (owner portrait, standing
   packet, standing context, always-load) are retired and are not inputs to
   this plan.
