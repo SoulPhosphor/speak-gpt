@@ -410,8 +410,9 @@ review, not a duplicate.
 ## 10. Search repair: why it hands over almost everything
 
 The owner reports that search hands the AI nearly every memory instead of
-the relevant ones. The code and a measurement confirm it. There are three
-causes, and they add up.
+the relevant ones. The code and a measurement confirm it. There are four
+causes, and they add up. Cause 4 is the main reason +3 memories are sent
+with nearly every message.
 
 ### 10.1 How this was measured (2026-11-08)
 
@@ -422,7 +423,9 @@ causes, and they add up.
   them ("The user ..."), and 6 sample messages, each with its expected
   memories.
 - This is a small sample. It shows the direction and size of the problem.
-  Final numbers are tuned on the test set (10.6, step 1).
+  Final numbers are tuned on the test set (10.7, step 1).
+- For cause 4, sample importance ratings were added (one +3, two +2, two
+  +1, the rest 0) and the app's own scoring formula was applied.
 
 ### 10.2 Cause 1: the keyword backup matches every memory
 
@@ -464,16 +467,42 @@ causes, and they add up.
   Recent turns that talk about the user's life pull every personal memory
   upward.
 
-### 10.5 The combined effect
+### 10.5 Cause 4: importance, freshness, and scope bonuses outweigh relevance
+
+- **Where:** `Librarian.rank` and `Librarian.rankLexical`. A memory's score
+  is 0.6 × similarity + 0.3 × importance + 0.1 × freshness + scope, project,
+  and tag bonuses. The weights come from `DefaultOperatingData.kt` and are
+  stored in the `retrieval_policy` row.
+- **The values:** importance +1 adds 0.15, and +2 or +3 add 0.30 (−2
+  subtracts 0.30). Freshness adds 0 to 0.10. Scope adds up to 0.12, a
+  selected project 0.08, and matching tags up to 0.06.
+- **The problem:** these weights were set as if similarity ran from 0 to 1.
+  This model's real scores sit between about 0.10 and 0.50, and the gap
+  between a strong match and noise is about 0.15. After × 0.6, that gap is
+  worth about 0.09. A +2 or +3 rating adds 0.30, more than three times the
+  whole gap. Freshness alone (0.10) is as large as the gap. The code comment
+  above `SCOPE_BOOSTS` says the bonuses cannot let a weak match beat a
+  strong one. That only holds on a 0-to-1 scale, so the comment is wrong
+  for this model.
+- **Measured:** with the sample ratings and the app's formula, the +3
+  memory ranked **first in 11 of 12 searches**. That included "hey how are
+  you", "my cat keeps scratching the couch", and "the app keeps crashing".
+  The memory that actually matched best ranked first in only 1 of 12.
+- **Result:** any +2 or +3 memory that gets past the broken gate goes
+  straight to the top, and +3 is also added beyond the 8. This is the
+  "+3 is just handed over" behavior.
+
+### 10.6 The combined effect
 
 The default limit is 8 memories (`DefaultOperatingData.kt`, `top_k`) and
 6,000 characters. The limit is a maximum, but because most of the library
 passes the gate, all 8 slots are filled every message, mostly with
-unrelated memories. +3 memories are added beyond the 8
+unrelated memories. Highly rated memories take the top places whether or
+not they are relevant, and +3 memories are added beyond the 8
 (`ImportanceRanking.includeMandatory`). With a small library, that is
 effectively everything.
 
-### 10.6 Required changes, in order
+### 10.7 Required changes, in order
 
 1. **Build the test set first.**
    - Sample messages, each paired with the memories that should come back,
@@ -493,7 +522,7 @@ effectively everything.
 
 3. **End the all-or-nothing fallback.** In `searchCore`, run meaning search
    over every memory that has a current vector, and keyword search over all
-   memories, then merge the two ranked lists (hybrid search, step 6). A
+   memories, then merge the two ranked lists (hybrid search, step 7). A
    missing vector removes only that one memory from meaning search, not the
    whole turn.
 
@@ -527,36 +556,60 @@ effectively everything.
      the test set. Raw numbers are never shown to the user, as the approved
      copy requires.
 
-6. **Merge meaning and keyword results** with reciprocal rank fusion, a
+6. **Make relevance decide, and bonuses only nudge.**
+   - Measure each memory's relevance on the same relative scale as the
+     gate in step 5: how far it stands above this message's average score.
+   - Express importance, freshness, scope, selected-project, and tag bonuses
+     as fractions of that scale, capped so that all bonuses together are
+     smaller than a clear relevance lead.
+   - **Property to test:** if memory A is more relevant than memory B by
+     more than the cap, A ranks above B, whatever their ratings, freshness,
+     or scope. Revision 26 already requires this property for the Memory
+     Assistant's search. Live search gets the same guarantee.
+   - Tune the cap values on the test set, and correct the `SCOPE_BOOSTS`
+     comment.
+
+7. **Merge meaning and keyword results** with reciprocal rank fusion, a
    simple, standard way to combine two rankings. A memory found by both
    ranks highest.
 
-7. **Sending nothing is a valid result.** When nothing passes, no memories
+8. **Sending nothing is a valid result.** When nothing passes, no memories
    are sent. The memory limit stays a maximum, never a quota to fill.
 
-8. **Keep the +3 rule as it is.** A +3 memory is still added only after it
-   passes the relevance gate. Once the gate works, +3 stops flooding the
-   prompt.
+9. **+3 as the owner defined it (2026-11-08): a boost, not a pass.**
+   - A +3 memory must be relevant to the message, like any other memory. It
+     is never sent just for being +3.
+   - It gets the strongest importance boost, so it ranks higher among the
+     relevant memories.
+   - If it is relevant and the 8 slots are already full, it is added
+     anyway.
+   - `ImportanceRanking.includeMandatory` and `RetrievalBackfill.select`
+     already add +3 beyond the 8 only after the relevance gate. Causes 1–4
+     are what turn that into "every +3, every message". Once steps 2–6 are
+     done, the existing rule behaves as the owner describes.
+   - **Tests:** a +3 memory unrelated to the message is not sent (for
+     example "hey how are you"). A relevant +3 memory is sent even when 8
+     more relevant memories fill the slots.
 
-9. **Variety.** Stop near-identical memories from filling several slots,
+10. **Variety.** Stop near-identical memories from filling several slots,
    using MMR (maximal marginal relevance, the standard method).
 
-10. **Optional local re-ranker:** a small second model on the phone that
+11. **Optional local re-ranker:** a small second model on the phone that
     reorders the top results. It costs no tokens, but it is another
     download and adds a short delay per message. Decide only after the test
-    set shows whether steps 2–9 are enough (decision D21).
+    set shows whether steps 2–10 are enough (decision D21).
 
-11. **Model quality check.** The int8 model is already in the app's model
+12. **Model quality check.** The int8 model is already in the app's model
     list. Run it against the test set too. If it scores clearly better than
     q4, raise that with the owner.
 
-### 10.7 Excluded: techniques that cost tokens
+### 10.8 Excluded: techniques that cost tokens
 
 Rewriting the message with an AI before searching, writing a "pretend
 answer" to search with (HyDE), and paid AI re-ranking all add a paid call
 to every message. They are not part of this plan.
 
-### 10.8 Relationship to Revision 26
+### 10.9 Relationship to Revision 26
 
 The Memory Assistant repair uses the same Librarian ranking. Every change
 here must keep Revision 26's tests passing, including its "relevance comes
@@ -632,7 +685,7 @@ New code goes in its own files (for example a new folder under
 - **Backup round-trip:** every new field survives.
 - **Briefing:** scope rules, limits, no double sending with search, and
   stable ordering.
-- **Search:** the test set (section 10.6) runs as automated tests,
+- **Search:** the test set (section 10.7) runs as automated tests,
   including messages that must bring back nothing.
 
 ### 14.2 On-device proof
