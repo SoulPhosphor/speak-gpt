@@ -122,12 +122,12 @@ object ChatModelRouting {
         if (chat == null) {
             val target = favorite ?: FavoriteModelObject(routing.modelId, routing.endpointId)
             routing.copyRoutingTo(target)
-            favorites.addFavoriteModel(target)
+            favorites.addFavoriteModel(target, carryRecentRouting = false)
             return
         }
         if (favorite != null && !isTrial(favorite, routing)) {
             routing.copyRoutingTo(favorite)
-            favorites.addFavoriteModel(favorite)
+            favorites.addFavoriteModel(favorite, carryRecentRouting = false)
             if (overrideFor(chat, routing.endpointId, routing.modelId) != null) clear(chat)
         } else {
             use(chat, routing)

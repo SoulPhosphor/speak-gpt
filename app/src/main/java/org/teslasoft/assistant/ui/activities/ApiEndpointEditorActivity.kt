@@ -818,7 +818,8 @@ class ApiEndpointEditorActivity : SettingsPageActivity() {
                     selectedModel, savedId, pendingRoutingType,
                     pendingSelectedProvider, pendingAllowFallbacks,
                     pendingProviderOrder, pendingIgnoredProviders
-                )
+                ),
+                carryRecentRouting = false
             )
         }
 

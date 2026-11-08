@@ -101,7 +101,10 @@ class FavoriteModelsPreferences private constructor(
         }
     }
 
-    fun addFavoriteModel(model: FavoriteModelObject) = saveFavoriteModel(model)
+    /** [carryRecentRouting] false for an explicit routing save, whose routing
+     *  (Automatic included) must be kept exactly as given. */
+    fun addFavoriteModel(model: FavoriteModelObject, carryRecentRouting: Boolean = true) =
+        saveFavoriteModel(model, carryRecentRouting = carryRecentRouting)
 
     /** Saving from a picker menu must leave an existing model's settings and pin intact. */
     fun addFavoriteIfAbsent(model: FavoriteModelObject) = saveFavoriteModel(model, preserveExisting = true)
@@ -109,7 +112,8 @@ class FavoriteModelsPreferences private constructor(
     private fun saveFavoriteModel(
         model: FavoriteModelObject,
         pin: Boolean = false,
-        preserveExisting: Boolean = false
+        preserveExisting: Boolean = false,
+        carryRecentRouting: Boolean = true
     ) {
         var previous: Map<String, String>? = null
         val saved = state.update { current ->
@@ -131,7 +135,7 @@ class FavoriteModelsPreferences private constructor(
                 recentEntry?.invoke(ModelIdentity(model.endpointId, model.modelId))?.let { recent ->
                     if (!model.hasSamplingParameters()) recent.copySamplingTo(model)
                     if (model.favoriteProviders.isEmpty()) model.favoriteProviders = recent.favoriteProviders
-                    if (isDefaultRouting(model)) recent.copyRoutingTo(model)
+                    if (carryRecentRouting && isDefaultRouting(model)) recent.copyRoutingTo(model)
                 }
             }
             val entry = hashMapOf(

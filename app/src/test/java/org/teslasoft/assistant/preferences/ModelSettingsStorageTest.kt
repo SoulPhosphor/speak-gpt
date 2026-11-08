@@ -97,6 +97,19 @@ class ModelSettingsStorageTest {
     }
 
     @Test
+    fun anExplicitAutomaticRoutingSaveIsKept() {
+        val state = FakeSharedPreferences()
+        installEndpoint(state)
+        val recents = RecentModelsPreferences(FakeSharedPreferences())
+        recents.record(FavoriteModelObject("model-a", "ep-1", FavoriteModelObject.ROUTING_ONLY, "chutes"))
+        val favorites = FavoriteModelsPreferences.createForTest(state, recentEntry = recents::entry)
+
+        favorites.addFavoriteModel(FavoriteModelObject("model-a", "ep-1"), carryRecentRouting = false)
+
+        assertEquals(FavoriteModelObject.ROUTING_AUTOMATIC, favorites.getFavorite("model-a", "ep-1")!!.routingType)
+    }
+
+    @Test
     fun loweringTheRecentLimitDropsSavedSettingsWithTheModels() {
         val recents = RecentModelsPreferences(FakeSharedPreferences())
         recents.setSavedParameters(identity, FavoriteModelObject("model-a", "ep-1").apply { temperature = 0.4f })
