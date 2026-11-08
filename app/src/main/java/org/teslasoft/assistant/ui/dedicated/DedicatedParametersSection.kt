@@ -90,7 +90,11 @@ class DedicatedParametersSection(
 
     /** Puts the recommended parameters on screen (saved like any change). */
     fun showRecommended() {
+        // Unsaved until Save (or saved at once with autoSave): keep what was
+        // last loaded or saved, so returning to the screen keeps the reset.
+        val saved = shown
         show(RecommendedModelParameters.forScope(scope))
+        shown = saved
         changed()
     }
 
