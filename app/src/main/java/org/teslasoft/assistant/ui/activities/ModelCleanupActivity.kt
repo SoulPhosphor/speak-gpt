@@ -43,6 +43,7 @@ import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.models.EndpointCatalogCheck
@@ -340,9 +341,14 @@ class ModelCleanupActivity : SettingsPageActivity() {
             .setMessage(R.string.model_cleanup_delete_favorites_confirm_message)
             .setPositiveButton(R.string.model_cleanup_delete_all) { _, _ ->
                 lifecycleScope.launch {
+                    // Removed from every list that holds it (chat, Summarizer,
+                    // Memory Scanner); counted once per model.
                     val removed = withContext(Dispatchers.IO) {
-                        FavoriteModelsPreferences.getPreferences(this@ModelCleanupActivity)
-                            .removeFavoriteModels(targets)
+                        val removedAny = ModelPickerScope.entries.sumOf { scope ->
+                            FavoriteModelsPreferences.getPreferences(this@ModelCleanupActivity, scope)
+                                .removeFavoriteModels(targets)
+                        }
+                        if (removedAny > 0) targets.size else 0
                     }
                     Toast.makeText(
                         this@ModelCleanupActivity,
