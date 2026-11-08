@@ -1322,6 +1322,9 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D35 | Should the type name be sent with memories of a "playful" type, such as Inside Joke? | Yes, for types the user marks playful, so the AI knows to use them lightly |
 | D36 | Should each companion have a short, editable "vibe" note that is always sent? | Yes, using the existing unused relationship-notes field. Memory Assistant suggestions only through Pending |
 | D37 | If a whole request is too large for the model, what is trimmed first? | May-mention items, then background, then the lowest-ranked search results. Picked memories are never trimmed |
+| D38 | Should a companion know what happened in your last few chats with it, through short summaries built from the existing per-chat conversation summaries? | Worth designing. It is the main thing ChatGPT does that this app lacks for continuity ("how did the dentist go yesterday?"). The same permission rules apply: it is background knowledge, not something to raise unprompted |
+| D39 | Should the AI know how long it has been since the last chat with this companion (in days, not times)? | Yes, as part of Phase 2's date awareness, under the same sharing setting |
+| D40 | Should a companion keep its own short reflections or journal about the relationship? | Later and optional. It makes a companion feel alive, but it should come only after the vibe note, and be visible and editable |
 | D33 | What does the Memory Assistant propose beyond the memory text? | Dates only, at first. Always Know and May Bring Up stay the user's choices until their behavior is established |
 
 ---
@@ -1375,4 +1378,73 @@ the owner or another reviewer can check them.
 - **Inside jokes:** no published research addresses them directly. The
   closest ideas are relationship-event memory and summaries of the
   relationship, as in D.9.
+
+## F.1 Companion apps and open-source tools people like (2026-11-08)
+
+Earlier research is saved in the repository:
+
+- `conversation-summary-plan.md` section 3 reviewed SillyTavern Summarize
+  and Qvink MessageSummarize for conversation summaries;
+- the legacy counterplan's section 3 reviewed Mem0, LangMem, Letta, and Zep.
+
+This section adds what makes companions feel alive. Most details come from
+third-party guides and user reports, not official documentation, so they are
+patterns to learn from, not exact specifications.
+
+- **SillyTavern** (open source):
+  - "World Info" is keyword-triggered entries, which this app's lorebook
+    already does.
+  - The "Author's Note" is a short standing note inserted near the newest
+    message. The docs say the closer it is to the bottom of the prompt, the
+    more effect it has on the next reply.
+  - Sources: [Author's Note](https://docs.sillytavern.app/usage/core-concepts/authors-note/);
+    [World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/).
+- **Kindroid:**
+  - Always-present memory is the backstory, "key memories" (for temporary
+    life facts), example messages, and a response directive.
+  - "Journal entries" are keyword-triggered. They fire only when the user,
+    not the AI, mentions a key phrase, with a few per message at most.
+  - Sources: [Types of memory within Kindroid](https://medium.com/@adlerai/types-of-memory-within-kindroid-5659410c07ca);
+    [Journal entries on Kindroid](https://medium.com/@adlerai/journal-entries-on-kindroid-fce640dcceea).
+- **Nomi:** short-, medium-, and long-term layers.
+  - An "identity core" holds stable facts and personality.
+  - "Shared Notes" are a visible, editable list that both the user and the
+    companion use, for things like backstory.
+  - A "Mind Map" organizes people, places, topics, and goals.
+  - Users report that summarized information sometimes picks up mistakes.
+  - Sources: [Nomi app listing](https://apps.apple.com/app/id6450270929);
+    [Kindroid vs Nomi vs Replika memory comparison](https://aicompanionpick.com/ai-companion-memory-kindroid-nomi-replika-long-term-2026).
+- **Replika:** layered memory.
+  - A "Memory" tab of facts about the user, their pets, and people in their
+    life, which the user can review.
+  - A diary of short reflective entries.
+  - A deeper layer drawn from conversation patterns.
+  - Sources: [Replika help: how memory works](https://help.replika.com/hc/en-us/articles/37208679176077-How-does-Replika-s-memory-work).
+- **Honcho** (open source, Plastic Labs): builds a "representation" of each
+  person from conversations. It is an inferred portrait of what they believe
+  and need, kept alongside a short list of concrete facts.
+  - Source: [plastic-labs/honcho](https://github.com/plastic-labs/honcho).
+
+**Patterns that recur, and where this app stands:**
+
+| Pattern | Seen in | This app |
+|---|---|---|
+| Keyword-triggered entries | SillyTavern, Kindroid | Built: lorebook |
+| Memories found by meaning | Letta, Mem0, ChatGPT | Built and repaired in #180 |
+| Always-present facts, with their own space | ChatGPT, Kindroid, Nomi, Letta | Proposed: Always Know with its own cap (D16) |
+| A relationship or personality note the user can edit | Kindroid directive, Nomi Shared Notes, Claude summary | Proposed: vibe note (D36) |
+| Continuity across recent chats | ChatGPT recent-conversation summaries | Gap: proposed as D38 |
+| Awareness of time and time since the last chat | Companion apps generally | Planned as date awareness (Phase 2); time since last chat is D39 |
+| A standing note placed near the newest message | SillyTavern Author's Note | Memory already goes just before the newest message; the vibe note could join it (D36) |
+| Triggers only from the user's own words | Kindroid journals | Matches the no-self-refresh rule (B.5) |
+| The companion's own reflections or diary | Replika diary, Generative Agents reflections | Gap: optional idea, D40 |
+| Everything visible and editable | Replika, Nomi, Claude, ChatGPT | Built: Memory Browser, Pending, test screen |
+
+**Common complaints worth designing against:**
+- Forgetting when the conversation outgrows the context: handled by
+  compaction and carry-over.
+- Summaries drifting into mistakes: anything generated goes through Pending
+  and stays editable.
+- Memory silently breaking after updates: the test screen and assembly
+  log make it visible.
 
