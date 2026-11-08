@@ -22,7 +22,8 @@ documents.**
   step the owner tells you to build. No roadmap file overrides that.
 - **Owner decisions so far (2026-11-08):**
   - search is fixed first (D23);
-  - +3 is a boost, not a pass (step 1.10);
+  - +3 ranks like +2 and is guaranteed a place when it matches; it is never
+    sent when it does not match (step 1.10);
   - the memory cooldown is wrong (step 1.11);
   - the lorebook stays strictly keyword-based and must not break (Phase 0);
   - a memory the user picks before sending is never included twice
@@ -657,19 +658,21 @@ Steps run in this order.
 
 ### Step 1.10: +3 as the owner defined it
 
-- **Rule (owner, 2026-11-08):** +3 is a boost, not a pass.
+- **Rule (owner, 2026-11-08, clarified the same day):** +3 ranks like +2,
+  and is guaranteed a place when it matches.
   - A +3 memory must be relevant, like any other memory. It is never sent
     just for being +3.
-  - It gets the strongest importance boost.
-  - If it is relevant and the memory limit is already full, it is added
-    anyway.
+  - In ordering it counts exactly the same as +2. It gets no extra boost.
+  - If it is relevant and other memories would fill the memory limit ahead
+    of it, it is added anyway.
 - **Change:** the existing rule (`ImportanceRanking.includeMandatory`,
-  `RetrievalBackfill.select`) already works this way once the gate works.
-  Keep it, and add the tests below.
-- **Tunable:** the +3 boost.
+  `RetrievalBackfill.select`, and `normalizedRankingImportance`, which gives
+  +3 the +2 contribution) already works this way once the gate works. Keep
+  it, and add the tests below.
+- **Tunable:** the importance influence, which applies to +2 and +3 alike.
 - **Tests:** a +3 memory unrelated to the message is not sent ("hey how are
   you"). A relevant +3 memory is sent even when 8 more relevant memories
-  fill the limit.
+  fill the limit. A +3 memory and a +2 memory get the same ordering nudge.
 
 ### Step 1.11: Remove the memory cooldown
 

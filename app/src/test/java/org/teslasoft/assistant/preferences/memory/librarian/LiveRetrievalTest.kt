@@ -179,6 +179,16 @@ class LiveRetrievalTest {
     }
 
     @Test
+    fun plusThreeOrdersExactlyLikePlusTwo() {
+        // +3 gets no extra ordering boost over +2; its only extra meaning is
+        // a guaranteed place when it matches (owner, 2026-11-08).
+        val corpus = listOf(cand("two", 0.48, importance = 2), cand("three", 0.48, importance = 3)) + noise()
+        val e = LiveRetrieval.search("x", q, corpus, params, limit = 8).explanations.associateBy { it.memory.memoryId }
+        assertEquals(e.getValue("two").importanceBonus, e.getValue("three").importanceBonus, 1e-12)
+        assertEquals(e.getValue("two").score, e.getValue("three").score, 1e-12)
+    }
+
+    @Test
     fun aRelevantPlusThreeIsAddedPastTheLimit() {
         val corpus = listOf(cand("best", 0.55), cand("second", 0.53), cand("plus3", 0.47, importance = 3)) + noise()
         val r = LiveRetrieval.search("x", q, corpus, params, limit = 1)
