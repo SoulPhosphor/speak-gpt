@@ -1005,6 +1005,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     private fun applyApiEndpoint(endpoint: ApiEndpointObject) {
+        val previousEndpoint = preferences?.getApiEndpointId()
+        val previousModel = preferences?.getModel()
         preferences?.setApiEndpointId(endpoint.id)
         apiEndpoint = endpoint
         textHost?.text = endpoint.label.takeIf(String::isNotBlank)
@@ -1013,7 +1015,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             preferences?.setModel(endpointModel)
             textModel?.text = endpointModel
         }
-        preferences?.getModel()?.takeIf { it.isNotBlank() }?.let(::applyFavoriteParametersForCurrentModel)
+        // Only a real change of API profile or model resets the chat's
+        // parameters; reselecting the same one keeps any live adjustments.
+        val model = preferences?.getModel().orEmpty()
+        if (model.isNotBlank() && (endpoint.id != previousEndpoint || model != previousModel)) {
+            applyFavoriteParametersForCurrentModel(model)
+        }
         saveParametersLink?.refresh()
         shouldForceUpdate = true
         updateListener?.onUpdate()
