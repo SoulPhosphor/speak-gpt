@@ -1351,15 +1351,39 @@ current memory settings screen, which is crowded. It holds:
 - **the fade time** for May Bring Up memories (D45);
 - **whether deleting sends a memory to Retired first** (D44).
 
-**The always-sent tab** (owner's design; its name is D46):
-- each memory in the tab has a checkbox, and only checked memories are sent
-  every message, up to the limit above;
-- unchecking keeps a memory in the tab without sending it, so the user can
-  swap which ones are sent;
-- the row's menu has an action that makes it a normal memory again: out of
-  the tab, still remembered, and found by search when relevant;
-- the always-sent memories have their own cap and do not count against
+**The Always tab** (owner's design, 2026-11-08; D46, D52):
+- **Membership and checking are separate.**
+  - Memories in the Always tab each have a checkbox.
+  - Only checked memories are sent with every message.
+  - Unchecking keeps a memory in the tab without sending it, so the user
+    can swap.
+- **"Checked only" view:** a way to show just the checked memories, so the
+  user can find and uncheck them quickly.
+- **A simple count at the bottom,** for example "12 checked · your limit is
+  10", so the user always knows where they are.
+- **Checking is never blocked.** The user can always check one more.
+  Blocking it would make them choose on the spot between two things they
+  want remembered.
+- **The limit is checked when the user saves.** If more memories are checked
+  than the limit, the app shows all the checked memories and offers two
+  choices:
+  - uncheck some, right there in the list;
+  - keep them all: an exception above the normal limit, which does not
+    change the preference itself.
+
+  After keeping an exception, the user is asked again only if they check
+  even more.
+- **The row menu** has an action that makes it a normal memory again: out of
+  the tab, still remembered, and found by search when relevant.
+- **Always memories have their own cap.** They do not count against
   search's limits (D16).
+- **The preference's subtext** explains, plainly, why sending many memories
+  every message has a cost:
+  - more tokens per message;
+  - less room for the conversation;
+  - the AI's attention spread thin.
+
+  Any number is allowed.
 
 **Auto mode, where the embedding model picks which always-sent memories to
 include (owner question, D47):**
@@ -1369,8 +1393,8 @@ include (owner question, D47):**
 - So the checkboxes only need to cover what should be present even when the
   conversation is not about it, and that is better decided by the user than
   guessed. It also keeps the behavior predictable and the screen simple.
-- If more memories are checked than the limit allows, the screen says so and
-  asks the user to uncheck some, instead of the app silently choosing.
+- Going over the limit is handled at Save, as described above. The app never
+  silently chooses.
 
 ## D.13 Direction for the later phases (owner ruling, 2026-11-08)
 
@@ -1492,6 +1516,7 @@ Asked one at a time in chat. A recommendation is a proposal only.
 | D49 | Fade timing, and an optional "past after" date per memory? | The owner wants custom fade timing, and a per-memory date after which the memory becomes a past event. Recommended: preset choices plus a custom number of days, and an optional "past after" date on any memory |
 | D50 | How are expiring and passed memories reviewed without overwhelming the user? | One review place: Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, the sensible default happens (a fading memory retires; a passed event is kept as past). Reviewing is optional, and one tap renews |
 | D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | Later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
+| D52 | How does the Always tab handle more checked memories than the limit? | **Owner's design, 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
 | D33 | What does the Memory Assistant propose beyond the memory text? | Dates only, at first. Always Know and May Bring Up stay the user's choices until their behavior is established |
 
 ---
