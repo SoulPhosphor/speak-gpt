@@ -186,6 +186,7 @@ import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.RecentModelsPreferences
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
+import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 import org.teslasoft.assistant.providers.NewChatProviderRestore
 import org.teslasoft.assistant.providers.ProviderRoutingBlockedException
 import org.teslasoft.assistant.providers.ProviderRoutingDiagnostics
@@ -7643,10 +7644,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return if (full.endsWith(marker)) full.removeSuffix(marker) else base
     }
 
-    /** The saved favorite for [model] on the active endpoint, or null. */
+    /** The routing this chat uses for [model] on the active endpoint: the
+     *  chat's own routing when it has one, else the saved favorite, else null. */
     private fun favoriteForActiveEndpoint(model: String): org.teslasoft.assistant.preferences.dto.FavoriteModelObject? {
         val endpoint = apiEndpointObject ?: return null
-        return FavoriteModelsPreferences.getPreferences(this).getFavorite(model, endpoint.id)
+        return org.teslasoft.assistant.preferences.ChatModelRouting.effective(this, preferences, endpoint.id, model)
     }
 
     /**
@@ -7670,14 +7672,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // present only while its (model, endpoint) star exists.
         val endpointExists = endpointId.isNotBlank() &&
             (apiEndpointPreferences?.getApiEndpoint(this, endpointId)?.host?.isNotBlank() == true)
+        val lastOverride = preferences?.getLastSuccessfulRoutingOverride().orEmpty()
+        // The last chat's own routing (a trial or a non-favorite model) is a
+        // complete configuration by itself.
         val favoriteExists = endpointId.isNotBlank() && lastModel.isNotBlank() &&
-            FavoriteModelsPreferences.getPreferences(this).getFavorite(lastModel, endpointId) != null
+            (FavoriteModelsPreferences.getPreferences(this).getFavorite(lastModel, endpointId) != null ||
+                lastOverride.isNotBlank())
 
         when (NewChatProviderRestore.decide(endpointId, lastModel, routing, endpointExists, favoriteExists)) {
             NewChatProviderRestore.Outcome.RESTORE -> {
                 preferences?.setApiEndpointId(endpointId)
                 preferences?.setModel(lastModel)
                 apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, endpointId)
+                preferences?.let {
+                    org.teslasoft.assistant.preferences.ChatModelRouting.restoreOverride(it, lastOverride)
+                    org.teslasoft.assistant.preferences.FavoriteModelParameters.applyToChat(this, it, lastModel, endpointId)
+                }
             }
             // Surfaced once the UI exists (initSettings tail).
             NewChatProviderRestore.Outcome.MISSING_CONFIG ->
@@ -11882,6 +11892,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         settings.frequencyPenalty = chatPreferences.getFrequencyPenalty()
         settings.presencePenalty = chatPreferences.getPresencePenalty()
         runCatching { RecentModelsPreferences(this).record(settings) }
+        if (settings.routingType == FavoriteModelObject.ROUTING_ONLY) {
+            RecentOnlyProvidersStore.get(this).record(endpoint.id, modelId, settings.selectedProvider)
+        }
     }
 
     /** Remember the provider, model, routing, and companion that just produced
@@ -11897,7 +11910,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (endpointId.isBlank() || usedModel.isBlank() || !personaExists) return
         val routing = favoriteForActiveEndpoint(usedModel)?.routingType
             ?: FavoriteModelObject.ROUTING_AUTOMATIC
-        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing, personaId)
+        val routingOverride = preferences?.takeIf {
+            org.teslasoft.assistant.preferences.ChatModelRouting.overrideFor(it, endpointId, usedModel) != null
+        }?.let { org.teslasoft.assistant.preferences.ChatModelRouting.storedOverride(it) }.orEmpty()
+        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing, personaId, routingOverride)
     }
 
     /** Stamp a terminal state onto the last assistant message ONLY if it is

@@ -32,6 +32,8 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.preferences.FavoriteModelParameters
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
@@ -75,6 +77,7 @@ class ModelParametersActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnSave: ImageButton? = null
+    private var btnRestoreDefaults: ImageButton? = null
     private var textModel: TextView? = null
     private var checkStreaming: MaterialCheckBox? = null
     private var rowStreaming: android.view.View? = null
@@ -86,7 +89,6 @@ class ModelParametersActivity : FragmentActivity() {
     private var modelId: String = ""
     private var endpointId: String = ""
     private var chatId: String = ""
-    private var favorite: FavoriteModelObject = FavoriteModelObject("", "")
 
     private var streaming: Boolean = true
     private var initialSnapshot: String = ""
@@ -99,6 +101,7 @@ class ModelParametersActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnSave = findViewById(R.id.btn_save)
+        btnRestoreDefaults = findViewById(R.id.btn_restore_defaults)
         textModel = findViewById(R.id.text_model)
         checkStreaming = findViewById(R.id.check_streaming)
         rowStreaming = findViewById(R.id.row_streaming)
@@ -115,10 +118,7 @@ class ModelParametersActivity : FragmentActivity() {
 
         textModel?.text = modelId
 
-        favorite = FavoriteModelsPreferences.getPreferences(this).getFavorite(modelId, endpointId)
-            ?: FavoriteModelObject(modelId, endpointId)
-
-        seedControls()
+        seedControls(FavoriteModelParameters.startingParameters(this, modelId, endpointId))
         initialSnapshot = snapshot()
 
         btnBack?.setOnClickListener { attemptExit() }
@@ -126,6 +126,7 @@ class ModelParametersActivity : FragmentActivity() {
             override fun handleOnBackPressed() { attemptExit() }
         })
         btnSave?.setOnClickListener { save() }
+        btnRestoreDefaults?.setOnClickListener { confirmRestoreDefaults() }
     }
 
     /** The chat this screen was opened from, when it is the model being edited. */
@@ -136,15 +137,14 @@ class ModelParametersActivity : FragmentActivity() {
     }
 
     /**
-     * Initial values come from the favorite's own saved parameters when it has
-     * them. Otherwise, if this is the chat's active model, they start from that
-     * chat's current values (so opening the model you are using shows what you
-     * are using); failing both, the app's default parameters.
+     * The controls start with what the model starts with in a chat: its saved
+     * parameters (on its favorite, or on its Recent entry when it is not a
+     * favorite), otherwise its API profile's defaults.
      */
-    private fun seedControls() {
-        val chatPrefs = currentChatPreferencesIfActiveModel()
+    private fun seedControls(values: FavoriteModelObject) {
+        val defaults = FavoriteModelParameters.apiDefaults(this, modelId, endpointId)
 
-        streaming = favorite.streaming ?: chatPrefs?.getStreaming() ?: true
+        streaming = values.streaming ?: defaults.streaming ?: true
         checkStreaming?.isChecked = streaming
         rowStreaming?.setOnClickListener {
             streaming = checkStreaming?.isChecked != true
@@ -154,19 +154,19 @@ class ModelParametersActivity : FragmentActivity() {
 
         temperatureControl?.configure(
             SamplingParameterSpec.TEMPERATURE,
-            favorite.temperature ?: chatPrefs?.getTemperature() ?: ApiEndpointObject.DEFAULT_TEMPERATURE
+            values.temperature ?: defaults.temperature ?: ApiEndpointObject.DEFAULT_TEMPERATURE
         ) { onEdited() }
         topPControl?.configure(
             SamplingParameterSpec.TOP_P,
-            favorite.topP ?: chatPrefs?.getTopP() ?: ApiEndpointObject.DEFAULT_TOP_P
+            values.topP ?: defaults.topP ?: ApiEndpointObject.DEFAULT_TOP_P
         ) { onEdited() }
         frequencyPenaltyControl?.configure(
             SamplingParameterSpec.FREQUENCY_PENALTY,
-            favorite.frequencyPenalty ?: chatPrefs?.getFrequencyPenalty() ?: ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY
+            values.frequencyPenalty ?: defaults.frequencyPenalty ?: ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY
         ) { onEdited() }
         presencePenaltyControl?.configure(
             SamplingParameterSpec.PRESENCE_PENALTY,
-            favorite.presencePenalty ?: chatPrefs?.getPresencePenalty() ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY
+            values.presencePenalty ?: defaults.presencePenalty ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY
         ) { onEdited() }
     }
 
@@ -181,12 +181,15 @@ class ModelParametersActivity : FragmentActivity() {
             "${frequencyPenaltyControl?.value}|${presencePenaltyControl?.value}"
 
     private fun save() {
-        favorite.streaming = streaming
-        favorite.temperature = temperatureControl?.value
-        favorite.topP = topPControl?.value
-        favorite.frequencyPenalty = frequencyPenaltyControl?.value
-        favorite.presencePenalty = presencePenaltyControl?.value
-        FavoriteModelsPreferences.getPreferences(this).addFavoriteModel(favorite)
+        val values = FavoriteModelObject(modelId, endpointId).apply {
+            streaming = this@ModelParametersActivity.streaming
+            temperature = temperatureControl?.value
+            topP = topPControl?.value
+            frequencyPenalty = frequencyPenaltyControl?.value
+            presencePenalty = presencePenaltyControl?.value
+        }
+        // On the favorite when the model is one, otherwise on its Recent entry.
+        FavoriteModelParameters.save(this, modelId, endpointId, values)
 
         // When this is the chat's active model, the saved parameters take effect
         // in that chat right away rather than waiting for a re-selection.
@@ -197,6 +200,42 @@ class ModelParametersActivity : FragmentActivity() {
         initialSnapshot = snapshot()
         markSaveButtonGreen()
         Toast.makeText(this, R.string.model_parameters_saved_toast, Toast.LENGTH_SHORT).show()
+    }
+
+    /** Restore Default Settings: after Okay, this model's saved parameters are
+     *  removed so it uses its API profile's defaults again, the controls show
+     *  those defaults, and the icon itself turns green like Save does. */
+    private fun confirmRestoreDefaults() {
+        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.model_parameters_restore_title)
+            .setMessage(R.string.model_parameters_restore_message)
+            .setView(actionsView)
+            .create()
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.okay)
+            setOnClickListener {
+                dialog.dismiss()
+                restoreDefaults()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun restoreDefaults() {
+        FavoriteModelParameters.restoreDefaults(this, modelId, endpointId)
+        currentChatPreferencesIfActiveModel()?.let {
+            FavoriteModelParameters.applyToChat(this, it, modelId, endpointId)
+        }
+        seedControls(FavoriteModelParameters.apiDefaults(this, modelId, endpointId))
+        initialSnapshot = snapshot()
+        resetSaveButtonTint()
+        btnRestoreDefaults?.let { SaveIconFlash.flash(it) }
+        Toast.makeText(this, R.string.model_parameters_restore_done, Toast.LENGTH_SHORT).show()
     }
 
     private fun attemptExit() {

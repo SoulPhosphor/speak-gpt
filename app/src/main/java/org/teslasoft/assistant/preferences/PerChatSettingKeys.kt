@@ -55,6 +55,7 @@ object PerChatSettingKeys {
         "logit_biases_config_id",
         "function_calling",
         "reasoning_effort",
+        "chat_routing_override",
 
         // Imaging
         "imageModel",

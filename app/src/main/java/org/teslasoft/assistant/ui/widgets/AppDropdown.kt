@@ -63,6 +63,9 @@ object AppDropdown {
         selectedIndex: Int = labels.indexOf(anchor.text.toString()),
         isOptionEnabled: (Int) -> Boolean = { true },
         optionTypeface: ((Int) -> Typeface?)? = null,
+        /** False for a compact anchor with no box of its own (the model
+         *  picker's provider dropdown): its background is left untouched. */
+        outlineAnchor: Boolean = true,
         onPick: (Int) -> Unit
     ) {
         if (labels.isEmpty() || !anchor.isEnabled) return
@@ -103,7 +106,9 @@ object AppDropdown {
         }
 
         val closedTypeface = anchor.typeface
-        anchor.background = AppCompatResources.getDrawable(context, R.drawable.bg_dropdown_open_anchor)
+        if (outlineAnchor) {
+            anchor.background = AppCompatResources.getDrawable(context, R.drawable.bg_dropdown_open_anchor)
+        }
         if (selectedIndex in labels.indices) {
             anchor.setTypeface(closedTypeface, Typeface.BOLD)
         }
@@ -120,7 +125,9 @@ object AppDropdown {
             onPick(originalIndex)
         }
         popup.setOnDismissListener {
-            anchor.background = AppCompatResources.getDrawable(context, R.drawable.bg_dropdown_closed)
+            if (outlineAnchor) {
+                anchor.background = AppCompatResources.getDrawable(context, R.drawable.bg_dropdown_closed)
+            }
             anchor.typeface = closedTypeface
         }
         popup.show()

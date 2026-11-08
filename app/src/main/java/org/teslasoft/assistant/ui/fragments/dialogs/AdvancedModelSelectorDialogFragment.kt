@@ -60,6 +60,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.ChatModelRouting
 import org.teslasoft.assistant.preferences.RecentModelsPreferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
@@ -72,6 +73,7 @@ import org.teslasoft.assistant.ui.adapters.SavedModelPickerAdapter
 import org.teslasoft.assistant.ui.util.ScreenChrome
 import org.teslasoft.assistant.preferences.models.ModelCleanupReportStore
 import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.providers.RecentOnlyProviders
 import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 import org.teslasoft.assistant.reasoning.EndpointReasoningCapability
 import org.teslasoft.assistant.reasoning.EndpointReasoningCapabilityIndex
@@ -226,6 +228,16 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     /** A successful routing result completes the model pick for this target. */
     private var pendingRoutingTarget: ModelIdentity? = null
 
+    /** How a chat-picker selection sets the chat's provider routing. */
+    private sealed class RoutingChoice {
+        /** The model's saved favorite routing (or Automatic). */
+        object Saved : RoutingChoice()
+        /** The chat uses this routing (a Recent entry or a trial). */
+        class Use(val routing: FavoriteModelObject) : RoutingChoice()
+        /** Already saved by the provider screen; leave it. */
+        object Keep : RoutingChoice()
+    }
+
     override fun onAttach(context: Context) {
         super.onAttach(context)
 
@@ -280,7 +292,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             val savedModel = result.data?.getStringExtra(ChooseProviderActivity.EXTRA_MODEL)
                 ?.takeIf { it.isNotBlank() }
                 ?: pendingModel.modelId
-            finishModelSelection(savedModel, pendingModel.endpointId)
+            finishModelSelection(savedModel, pendingModel.endpointId, RoutingChoice.Keep)
         }
         // Cancel/back leaves the selector open on purpose. The not-yet-applied
         // bad model never reached the chat, so choosing another model is a valid
@@ -319,8 +331,13 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     /** Finalize a normal model pick. Kept in one place so every resolution path
      *  (available provider, Automatic rescue, provider-screen Save) behaves the
      *  same and dismisses the selector exactly once. */
-    private fun finishModelSelection(model: String, endpointId: String = resolvedEndpointId) {
+    private fun finishModelSelection(
+        model: String,
+        endpointId: String = resolvedEndpointId,
+        choice: RoutingChoice = RoutingChoice.Saved
+    ) {
         if (chatPicker) {
+            applyChatRouting(model, endpointId, choice)
             parentFragmentManager.setFragmentResult(
                 CHAT_SELECTION_RESULT,
                 bundleOf(SELECTED_MODEL to model, SELECTED_ENDPOINT to endpointId)
@@ -331,6 +348,23 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         dismiss()
     }
 
+    /** Sets the chat's own routing for the picked model. */
+    private fun applyChatRouting(model: String, endpointId: String, choice: RoutingChoice) {
+        val chat = preferences ?: return
+        when (choice) {
+            RoutingChoice.Keep -> Unit
+            RoutingChoice.Saved -> ChatModelRouting.clear(chat)
+            is RoutingChoice.Use -> {
+                val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
+                if (favorite != null && ChatModelRouting.sameRouting(favorite, choice.routing)) {
+                    ChatModelRouting.clear(chat)
+                } else {
+                    ChatModelRouting.use(chat, choice.routing)
+                }
+            }
+        }
+    }
+
     /**
      * Before an ordinary chat adopts a favorite whose saved routing is Only,
      * verify that the selected provider is still in the model's current,
@@ -339,11 +373,17 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
      * fail-closed, but a transient lookup failure must not falsely accuse the
      * provider of being unavailable.
      */
-    private fun handleModelSelection(model: String, endpointId: String = resolvedEndpointId) {
+    private fun handleModelSelection(
+        model: String,
+        endpointId: String = resolvedEndpointId,
+        choice: RoutingChoice = RoutingChoice.Saved
+    ) {
         if (checkingProvider) return
         val endpoint = if (endpointId == resolvedEndpointId) apiEndpointObject
             else apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
-        val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
+        // The routing this pick will use decides which provider to check.
+        val favorite = (choice as? RoutingChoice.Use)?.routing
+            ?: favoriteModelsPreferences?.getFavorite(model, endpointId)
 
         if (!checkOnlyProviderOnSelection ||
             endpoint == null ||
@@ -351,7 +391,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             favorite?.routingType != FavoriteModelObject.ROUTING_ONLY ||
             favorite.selectedProvider.isBlank()
         ) {
-            finishModelSelection(model, endpointId)
+            finishModelSelection(model, endpointId, choice)
             return
         }
 
@@ -376,7 +416,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             if (availability == OnlyProviderAvailability.UNAVAILABLE) {
                 showProviderUnavailableDialog(model, endpointId, selectedProvider)
             } else {
-                finishModelSelection(model, endpointId)
+                finishModelSelection(model, endpointId, choice)
             }
         }
     }
@@ -402,7 +442,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                     model,
                     endpointId,
                     FavoriteModelObject.ROUTING_ONLY,
-                    keepRoutingOnModelChange = true
+                    keepRoutingOnModelChange = true,
+                    chatId = chatIdForRouting()
                 )?.let { intent ->
                     pendingRoutingTarget = ModelIdentity(endpointId, model)
                     chooseProviderLauncher.launch(intent)
@@ -410,15 +451,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             }
             .setNegativeButton(R.string.provider_unavailable_use_automatic) { _, _ ->
                 val favPrefs = favoriteModelsPreferences ?: return@setNegativeButton
-                val favorite = favPrefs.getFavorite(model, endpointId)
+                val routing = favPrefs.getFavorite(model, endpointId)
                     ?: FavoriteModelObject(model, endpointId)
-                // Preserve the remembered selected provider. Existing Provider
-                // Mode storage is favorite-scoped; changing only routingType is
-                // exactly what the normal Automatic dropdown action does.
-                favorite.routingType = FavoriteModelObject.ROUTING_AUTOMATIC
-                favPrefs.addFavoriteModel(favorite)
+                // Preserve the remembered selected provider; only the routing
+                // type changes, saved by the same rules as every routing choice.
+                routing.routingType = FavoriteModelObject.ROUTING_AUTOMATIC
+                ChatModelRouting.save(requireContext(), preferences.takeIf { chatPicker }, routing)
                 reloadFavorites()
-                finishModelSelection(model, endpointId)
+                finishModelSelection(model, endpointId, RoutingChoice.Keep)
             }
             .setNeutralButton(R.string.provider_unavailable_change_model) { _, _ ->
                 // The selector is already underneath this dialog. Closing the
@@ -834,7 +874,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             chatId,
             ModelIdentity(resolvedEndpointId, preferences?.getModel().orEmpty()),
             ModelCleanupReportStore.get(context).load().unavailable,
-            onSelect = { target -> handleModelSelection(target.modelId, target.endpointId) },
+            onSelect = { row, source ->
+                val target = row.identity
+                val choice = if (source == SavedModelPickerAdapter.Source.RECENT) {
+                    RoutingChoice.Use(row.settings.copy())
+                } else RoutingChoice.Saved
+                handleModelSelection(target.modelId, target.endpointId, choice)
+            },
+            onProvider = ::pickProvider,
             onRoute = ::openRoutingSettings,
             onPin = { settings, pinned ->
                 favoriteModelsPreferences?.setPinned(settings, pinned)
@@ -952,10 +999,40 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         val favorites = favoriteModelsPreferences ?: return
         FavoriteRoutingActions.buildRoutingIntent(
             requireContext(), prefs, favorites, target.modelId, target.endpointId,
-            returnOnBackAfterSave = chatPicker
+            returnOnBackAfterSave = chatPicker,
+            chatId = chatIdForRouting()
         )?.let {
             if (chatPicker) pendingRoutingTarget = target
             chooseProviderLauncher.launch(it)
+        }
+    }
+
+    /** The chat's id for the provider screen, only for the chat picker. */
+    private fun chatIdForRouting(): String =
+        if (chatPicker) requireArguments().getString("chatId").orEmpty() else ""
+
+    /** A provider picked from a row's dropdown selects the model with it. On a
+     *  Favorites row it becomes the favorite's provider; on a Recent row only
+     *  the chat uses it. */
+    private fun pickProvider(row: SavedModelPickerAdapter.Row, source: SavedModelPickerAdapter.Source, slug: String) {
+        val target = row.identity
+        if (source == SavedModelPickerAdapter.Source.FAVORITES) {
+            val favorites = favoriteModelsPreferences ?: return
+            val favorite = favorites.getFavorite(target.modelId, target.endpointId) ?: return
+            favorite.routingType = FavoriteModelObject.ROUTING_ONLY
+            favorite.selectedProvider = slug
+            favorites.addFavoriteModel(favorite)
+            reloadSavedModelRows()
+            render()
+            handleModelSelection(target.modelId, target.endpointId, RoutingChoice.Saved)
+        } else {
+            val routing = row.settings.copy().apply {
+                routingType = FavoriteModelObject.ROUTING_ONLY
+                selectedProvider = slug
+            }
+            RecentOnlyProvidersStore.get(requireContext()).record(target.endpointId, target.modelId, slug)
+            ChatModelRouting.recordRecent(requireContext(), routing)
+            handleModelSelection(target.modelId, target.endpointId, RoutingChoice.Use(routing))
         }
     }
 
@@ -992,10 +1069,41 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             )
         }
 
-        favoriteRows = saved.values.mapNotNull { row(store.decodeFavorite(it)) }
-            .sortedByDescending { it.pinned }
+        fun withProviders(row: SavedModelPickerAdapter.Row, options: List<String>) =
+            if (!row.supportsRouting || options.isEmpty()) row
+            else row.copy(providerOptions = options, providerNames = options.map(providerNames::displayName))
+
+        favoriteRows = saved.values.mapNotNull { entry ->
+            val favorite = store.decodeFavorite(entry)
+            row(favorite)?.let { withProviders(it, favorite.favoriteProviders) }
+        }.sortedByDescending { it.pinned }
         recentRows = runCatching { RecentModelsPreferences(context).models() }.getOrDefault(emptyList())
-            .mapNotNull(::row)
+            .mapNotNull { recent ->
+                row(recent)?.let { row ->
+                    // Its favorite providers (starred), then the last five used;
+                    // a single one that is already in use leaves nothing to pick.
+                    // A model that is also a favorite keeps its favorite
+                    // providers on the favorite, as everywhere else.
+                    val favorites = saved[ModelIdentity(recent.endpointId, recent.modelId)]
+                        ?.let { store.decodeFavorite(it).favoriteProviders }
+                        ?: recent.favoriteProviders
+                    val options = RecentOnlyProviders.quickSettingsOptions(
+                        "", favorites, providerNames.recents(recent.endpointId, recent.modelId)
+                    )
+                    val inUse = recent.routingType == FavoriteModelObject.ROUTING_ONLY &&
+                        options.size == 1 && options.single().equals(recent.selectedProvider, ignoreCase = true)
+                    if (!row.supportsRouting || inUse || options.isEmpty()) row
+                    else row.copy(
+                        providerOptions = options,
+                        providerNames = options.map { slug ->
+                            val name = providerNames.displayName(slug)
+                            if (favorites.any { it.equals(slug, ignoreCase = true) }) {
+                                getString(R.string.provider_favorite_option, name)
+                            } else name
+                        }
+                    )
+                }
+            }
     }
 
     /** The header Back returns to Favorites from the other tabs. */

@@ -23,7 +23,9 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.ChatModelRouting
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.ui.activities.ChooseProviderActivity
 
@@ -87,12 +89,18 @@ object FavoriteRoutingActions {
          *  is on (instead of adopting the new model's saved routing). Only the
          *  Summoning Circle passes true; other callers keep per-model behavior. */
         keepRoutingOnModelChange: Boolean = false,
-        returnOnBackAfterSave: Boolean = false
+        returnOnBackAfterSave: Boolean = false,
+        /** The chat the screen is opened for, so a trial provider or a
+         *  non-favorite model's routing is saved on that chat. */
+        chatId: String = ""
     ): Intent? {
         val endpoint = apiEndpointPreferences.getApiEndpoint(context, endpointId)
         if (!endpoint.isOpenRouterRouting()) return null
 
-        val routingType = routingTypeOverride ?: favoriteModelsPreferences.getRoutingType(modelId, endpointId)
+        val chat = chatId.takeIf { it.isNotBlank() }?.let { Preferences.getPreferences(context, it) }
+        val routingType = routingTypeOverride
+            ?: chat?.let { ChatModelRouting.forEditing(context, it, endpointId, modelId)?.routingType }
+            ?: favoriteModelsPreferences.getRoutingType(modelId, endpointId)
 
         return Intent(context, ChooseProviderActivity::class.java)
             .putExtra(ChooseProviderActivity.EXTRA_PERSIST_DIRECTLY, true)
@@ -102,6 +110,7 @@ object FavoriteRoutingActions {
                 keepRoutingOnModelChange
             )
             .putExtra(ChooseProviderActivity.EXTRA_ENDPOINT_ID, endpointId)
+            .putExtra(ChooseProviderActivity.EXTRA_CHAT_ID, chatId)
             .putExtra(ChooseProviderActivity.EXTRA_MODEL, modelId)
             .putExtra(ChooseProviderActivity.EXTRA_ROUTING_TYPE, routingType)
             .putExtra(ChooseProviderActivity.EXTRA_HOST, endpoint.host)

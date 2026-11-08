@@ -603,6 +603,12 @@ Use:
 
 Do not hand-copy the icon geometry; that is what this style exists to prevent.
 
+`Widget.App.ActionBar.ChainedButton.Plain` is the same chained icon with no
+background and the Save disc's tint (`color/save_icon_tint`), for an action
+that confirms the way Save does: `SaveIconFlash.flash` turns the icon itself
+green for the shared success time. Current user: Restore Default Settings
+(`ic_reset_settings`) to the left of Save on the Model Settings screen.
+
 ### Close-panel header
 
 Use:
@@ -982,6 +988,19 @@ them. Dropdown drawables and styles resolve only those roles; layouts and Kotlin
 must not supply local dropdown colors. This is what allows a palette to restyle
 every closed dropdown and open menu without editing individual screens.
 
+#### Compact provider dropdown in a model picker card
+
+`Widget.App.ModelPicker.SubtitleLine` holds a saved model card's subtitle:
+`Widget.App.ModelPicker.SubtitleText` for "API profile ·" and, when the card
+has providers to choose from, `Widget.App.ModelPicker.ProviderDropdown` for the
+provider (owner request, Nov 7 2026). The compact dropdown keeps the
+subtitle's own text size and color and adds the small V chevron
+(`ic_chevron_down_compact`), with no border or box, so the card keeps its
+height. It opens the shared `AppDropdown` menu. When there is nothing to
+choose, the same line shows the provider as plain `SubtitleText`. Favorites
+cards list the model's favorite providers; Recent cards list the last five
+providers used with the model.
+
 #### Font previews in a dropdown
 
 `AppDropdown.show(..., optionTypeface = ...)` renders each option in its own typeface, so a font picker previews every font. Omitting it keeps the shared option typography, so no other dropdown changes. The screen may also set the closed control's typeface to the chosen font. Current example: Name Style's Font dropdown.
@@ -1100,6 +1119,13 @@ Composition:
 3. one `Chart.Row` per data row of `Chart.Cell` views, built in code.
 
 The header and data rows must take their cell widths from one shared column table in the owning activity so the columns stay aligned. Values render in the default text color (`appTextColor`); unknown values render as `?`. The chart is theme-ready: all colors resolve through theme attributes, so per-column value colors can be added later by extending the cell styles, not by hardcoding colors in code.
+
+A provider the user marked Favorite uses `Widget.App.Chart.Cell.Favorite`
+for every cell on its line (`appTitleTextColor`), so the line stands out
+without changing its height. When the model is a favorite, each line starts
+(after the Only/Preferred control) with `Widget.App.Chart.RowMenu`, a ⋮ icon
+sized by `provider_chart_menu_width` / `provider_chart_menu_height`, whose
+`CompactActionPopup` offers Make Favorite or Unfavorite.
 
 The Ignore control at a row's end uses `bg_ignore_square_off` / `bg_ignore_square_on` with `ic_ignore_x`, tinted at runtime via `appSubtleTextColor` (unmarked) and `colorError`/`colorOnError` (marked).
 
@@ -1402,6 +1428,15 @@ Geometry and motion are centralized in
 The custom view owns the sliding/resizing selected capsule and exposes the two
 labels as mutually exclusive accessible choices. A host supplies only current
 mode, visibility, and a selection listener.
+
+## Text link
+
+`Widget.App.TextLink` is a full-width line of `colorPrimary` text with no
+button box, for an action that should read as a link. After a successful save,
+`SaveIconFlash.flashText` turns its words green for the shared success time.
+`Widget.App.QuickSettings.TextLink` aligns it with the Quick Settings card
+segments. Current user: Save Parameters to Favorite / Recent Model Settings
+above Streaming in Quick Settings.
 
 ## Compact action popup
 

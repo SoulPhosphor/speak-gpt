@@ -249,6 +249,8 @@ internal class ModelEndpointStateGenerationStore private constructor(
     private fun canonical(
         data: ModelEndpointPortableCodec.Data
     ): ModelEndpointPortableCodec.Data = data.copy(
+        // The Recent list lives in its own store, never in a generation.
+        recents = null,
         endpoints = data.endpoints
             .map { it.copy(rejectedTtsVoices = it.rejectedTtsVoices.distinct().sorted()) }
             .sortedBy { it.id },
@@ -267,7 +269,7 @@ internal class ModelEndpointStateGenerationStore private constructor(
         private val FAVORITE_KEYS = setOf(
             "modelId", "endpointId", "routingType", "selectedProvider", "allowFallbacks",
             "providerOrder", "ignoredProviders", "reasoningEffort", "showReasoning", "streaming",
-            "temperature", "topP", "frequencyPenalty", "presencePenalty", "pinned"
+            "temperature", "topP", "frequencyPenalty", "presencePenalty", "pinned", "favoriteProviders"
         )
 
         fun get(context: Context): ModelEndpointStateGenerationStore {

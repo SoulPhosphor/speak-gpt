@@ -99,6 +99,9 @@ class AppAppearanceActivity : SettingsPageActivity() {
         bindSwitch(R.id.switch_open_last_used_chat, preferences.getOpenLastUsedChatAtLaunch()) {
             preferences.setOpenLastUsedChatAtLaunch(it)
         }
+        bindSwitch(R.id.switch_model_settings_enabled, preferences.getModelSettingsEnabled()) {
+            preferences.setModelSettingsEnabled(it)
+        }
     }
 
     private fun bindSwitch(id: Int, checked: Boolean, save: (Boolean) -> Unit) {

@@ -9,20 +9,26 @@ It is not a project history, bug diary, or substitute for the owner's judgment.
 You are not allowed to create Markdown (`.md`) files without the owner's
 permission. Ask first, and say why the file is needed.
 
-## 0. Code workflow (owner ruling, October 31 2026)
+## 0. Code workflow (owner ruling, October 31 2026; revised November 8 2026)
 
 Every code change follows these steps, in this order, with no others added:
 
-1. Finish the code changes.
-2. Run the checks and get Android Checks green.
+1. Finish the code changes and review the whole change yourself first.
+2. Run the local checks and get them passing: the unit tests, the beta build,
+   and compiling the instrumentation tests (`testDebugUnitTest`,
+   `assembleBeta`, `assembleDebugAndroidTest`).
 3. Create the pull request.
-4. Codex reviews it. Codex is the final approval gate.
-5. Fix any Codex findings that need changes, get Android Checks green on the
-   fixes, then ask Codex for its re-review. Repeat until Codex passes it.
-6. Merge into `beta/new-client` as soon as everything passes. Do not wait for
-   the owner to say merge.
+4. Codex reviews it while Android Checks runs. Codex is the final approval
+   gate.
+5. Fix any Codex findings that need changes, get the local checks passing on
+   the fixes, push, then ask Codex for its re-review while Android Checks
+   runs. Repeat until Codex passes it.
+6. Merge into `beta/new-client` as soon as Codex has passed it and Android
+   Checks is green on that same final commit. Do not wait for the owner to
+   say merge.
 
-- Codex never reviews code that has not passed Android Checks.
+- Codex never reviews code that has not passed the local checks.
+- Nothing is merged until Android Checks is green on the final commit.
 - Nothing is pushed to a pull request after Codex has passed it.
 - Stop watching a pull request the moment nothing more needs action.
 
@@ -637,17 +643,18 @@ that triggers a second, duplicate review.
 - Every Codex review costs the owner usage. Open the pull request only when
   the work is completely finished: every requested change is built, no owner
   decision is still pending, nothing else is planned for the branch, and
-  Android Checks is green on the final commit. If anything is still open,
+  the local checks pass on the final commit. If anything is still open,
   ask or finish it first. Being told to create a pull request means "when
   the work is finished," not "now."
 - Then wait for the Codex review.
 - Check each finding against this repository's rules and the owner's
   instructions; Codex does not know them. Fix the valid findings in one push
   and reply on any finding that is not being fixed, saying why.
-- After the fixes are pushed and Android Checks is green on them, comment
-  `@codex review` for a re-review. Codex never reviews code that has not
-  passed the checks. Keep repeating this cycle (fix valid findings, get
-  Android Checks green, request a re-review) until Codex passes it, without
+- After the fixes pass the local checks and are pushed, comment
+  `@codex review` for a re-review; Android Checks runs at the same time
+  (owner ruling, November 8 2026). Codex never reviews code that has not
+  passed the local checks. Keep repeating this cycle (fix valid findings,
+  pass the local checks, request a re-review) until Codex passes it, without
   stopping to ask the owner between rounds (owner ruling, November 2 2026).
 - Once Codex has passed it (no findings, or a clean re-review after the
   fixes) and Android Checks is green on the final commit, merge it into

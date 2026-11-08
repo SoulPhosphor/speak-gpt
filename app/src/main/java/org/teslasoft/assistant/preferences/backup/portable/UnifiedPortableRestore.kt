@@ -862,8 +862,10 @@ object UnifiedPortableRestore {
                         listOf(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS)
                     )
                 }
+            // The Recent list changes after every reply, so it is left out of
+            // the "settings changed since planning" fingerprint.
             generations[PortableRestoreFinalState.Source.MODEL_ENDPOINT_SETTINGS] =
-                Hash.hash(ModelEndpointPortableCodec.encode(current))
+                Hash.hash(ModelEndpointPortableCodec.encode(current.copy(recents = null)))
             current
         } else null
 

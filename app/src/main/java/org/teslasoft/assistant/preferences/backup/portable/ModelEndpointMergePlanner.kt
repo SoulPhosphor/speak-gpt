@@ -68,7 +68,11 @@ object ModelEndpointMergePlanner {
             }
         }
         return Plan(
-            ModelEndpointPortableCodec.Data(endpoints.values.toList(), favorites.values.toList()),
+            ModelEndpointPortableCodec.Data(
+                endpoints.values.toList(),
+                favorites.values.toList(),
+                RecentModelsBackup.merge(current.recents, backup.recents)
+            ),
             Report(addedEndpoints, addedFavorites, identicalSkipped, conflicts)
         )
     }

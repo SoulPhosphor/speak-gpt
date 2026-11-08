@@ -2,6 +2,7 @@
 <resources>
     <!-- View tag key for ui.util.SaveIconFlash's pending revert. -->
     <item name="tag_save_icon_flash" type="id" />
+    <item name="tag_save_text_normal_color" type="id" />
     <!-- View tag key: the chat message list's ui.chat.MessageTextHighlight. -->
     <item name="tag_message_text_highlight" type="id" />
 </resources>

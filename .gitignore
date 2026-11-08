@@ -32,3 +32,6 @@ example_seed*.json
 *.db
 memory-export*.json
 transcripts-export*
+
+# Kotlin compiler cache
+.kotlin/

@@ -34,6 +34,14 @@
             android:id="@+id/activity_title"
             style="@style/Widget.App.ActionBar.Title.NearBack"
             android:text="@string/model_parameters_title"
+            app:layout_constraintEnd_toStartOf="@+id/btn_restore_defaults" />
+
+        <ImageButton
+            android:id="@+id/btn_restore_defaults"
+            style="@style/Widget.App.ActionBar.ChainedButton.Plain"
+            android:contentDescription="@string/model_parameters_restore_desc"
+            android:src="@drawable/ic_reset_settings"
+            android:tooltipText="@string/model_parameters_restore_desc"
             app:layout_constraintEnd_toStartOf="@+id/btn_save" />
 
         <ImageButton

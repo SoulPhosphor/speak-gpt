@@ -13,9 +13,11 @@ import com.google.gson.Gson
 import java.net.URLEncoder
 
 /**
- * The last few providers the user chose in Only mode, per model and endpoint.
- * Quick Settings lists them in its Provider row so a recent provider can be
- * switched back to without opening the full Choose Provider screen.
+ * The last five providers the user chose in Only mode, per model and endpoint.
+ * Quick Settings lists them in its Provider row (after the model's favorite
+ * providers) and the picker's Recent row offers them in its provider
+ * dropdown, so a recent provider can be switched back to without opening the
+ * full Choose Provider screen.
  *
  * Only-mode choices alone are recorded: a provider OpenRouter picked under
  * Automatic or Preferred was never the user's choice. Kept on this device in
@@ -23,7 +25,7 @@ import java.net.URLEncoder
  */
 object RecentOnlyProviders {
 
-    const val LIMIT = 3
+    const val LIMIT = 5
 
     /** [slug] moved to the front of [recents], trimmed to [LIMIT]. */
     fun bump(recents: List<String>, slug: String): List<String> {
@@ -42,6 +44,16 @@ object RecentOnlyProviders {
      *  this list existed still shows its provider. */
     fun options(current: String, recents: List<String>): List<String> =
         if (current.isBlank()) recents.take(LIMIT) else bump(recents, current)
+
+    /** Quick Settings' Provider choices: the model's favorite providers first,
+     *  then the last [LIMIT] used that are not favorites. The provider in use
+     *  is always listed, first when it is in neither group. */
+    fun quickSettingsOptions(current: String, favorites: List<String>, recents: List<String>): List<String> {
+        val listed = (favorites + recents.take(LIMIT)).filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+        return if (current.isBlank() || listed.any { it.equals(current, ignoreCase = true) }) listed
+        else listOf(current) + listed
+    }
 }
 
 class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPreferences) {
@@ -108,6 +120,35 @@ class RecentOnlyProvidersStore internal constructor(private val prefs: SharedPre
     /** The remembered display name, or the slug when none was ever reported. */
     fun displayName(slug: String): String =
         prefs.getString(NAME_PREFIX + encode(slug.lowercase()), null) ?: slug
+
+    /** Every model's recent providers, for backups: (endpointId, modelId, slugs). */
+    fun exportRecents(): List<Triple<String, String, List<String>>> =
+        prefs.all.keys.filter { it.startsWith(RECENTS_PREFIX) }.mapNotNull { key ->
+            val parts = key.removePrefix(RECENTS_PREFIX).split("/")
+            if (parts.size != 2) return@mapNotNull null
+            val endpointId = java.net.URLDecoder.decode(parts[0], "UTF-8")
+            val modelId = java.net.URLDecoder.decode(parts[1], "UTF-8")
+            Triple(endpointId, modelId, recents(endpointId, modelId))
+        }
+
+    /** Every remembered provider display name, for backups (slug to name). */
+    fun exportNames(): Map<String, String> =
+        prefs.all.entries.filter { it.key.startsWith(NAME_PREFIX) && it.value is String }
+            .associate { java.net.URLDecoder.decode(it.key.removePrefix(NAME_PREFIX), "UTF-8") to it.value as String }
+
+    /** Replaces every model's recent providers and the remembered names. */
+    fun replaceAll(recents: List<Triple<String, String, List<String>>>, names: Map<String, String>) {
+        val editor = prefs.edit()
+        prefs.all.keys.forEach { editor.remove(it) }
+        recents.forEach { (endpointId, modelId, slugs) ->
+            val kept = slugs.filter { it.isNotBlank() }.take(RecentOnlyProviders.LIMIT)
+            if (kept.isNotEmpty()) editor.putString(key(endpointId, modelId), gson.toJson(kept))
+        }
+        names.forEach { (slug, name) ->
+            if (slug.isNotBlank() && name.isNotBlank()) editor.putString(NAME_PREFIX + encode(slug.lowercase()), name)
+        }
+        editor.commit()
+    }
 
     // Preference keys are written as XML attributes, so every part is
     // URL-encoded: no control characters reach the file, and "/" stays an

@@ -67,15 +67,6 @@
 
                 <include layout="@layout/view_quick_settings_logit_seed_block" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_save_to_profile"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="24dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginEnd="24dp"
-                    android:text="@string/btn_save_to_profile"
-                    app:cornerRadius="16dp" />
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </FrameLayout>

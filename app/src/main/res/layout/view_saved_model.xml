@@ -16,9 +16,22 @@
                 android:id="@+id/model_picker_model_name"
                 style="@style/Widget.App.ModelPicker.ModelName" />
 
-            <TextView
+            <LinearLayout
                 android:id="@+id/model_picker_model_subtitle"
-                style="@style/Widget.App.Row.Subtitle" />
+                style="@style/Widget.App.ModelPicker.SubtitleLine">
+
+                <TextView
+                    android:id="@+id/model_picker_profile"
+                    style="@style/Widget.App.ModelPicker.SubtitleText" />
+
+                <TextView
+                    android:id="@+id/model_picker_route"
+                    style="@style/Widget.App.ModelPicker.SubtitleText" />
+
+                <TextView
+                    android:id="@+id/model_picker_provider_dropdown"
+                    style="@style/Widget.App.ModelPicker.ProviderDropdown" />
+            </LinearLayout>
         </LinearLayout>
 
         <ImageView
@@ -26,11 +39,6 @@
             style="@style/Widget.App.Row.Icon"
             android:src="@drawable/ic_report"
             android:contentDescription="@string/model_cleanup_unavailable" />
-
-        <ImageButton
-            android:id="@id/btn_parameters"
-            style="@style/Widget.App.ModelPicker.Action"
-            android:src="@drawable/ic_tune" />
 
         <ImageView
             android:id="@+id/model_picker_reasoning_indicator"

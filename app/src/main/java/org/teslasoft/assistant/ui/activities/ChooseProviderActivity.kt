@@ -47,6 +47,8 @@ import org.teslasoft.assistant.imagegen.ToolCapability
 import org.teslasoft.assistant.imagegen.ToolCapabilityScope
 import org.teslasoft.assistant.imagegen.ToolCapabilityStore
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.ChatModelRouting
+import org.teslasoft.assistant.ui.util.CompactActionPopup
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
@@ -118,6 +120,11 @@ class ChooseProviderActivity : SettingsPageActivity() {
          *  model's own saved routing. */
         const val EXTRA_KEEP_ROUTING_ON_MODEL_CHANGE = "keepRoutingOnModelChange"
 
+        /** The chat this screen was opened for, when there is one. A provider
+         *  tried on a favorite, or any routing for a model that is not a
+         *  favorite, is saved on that chat rather than on a favorite. */
+        const val EXTRA_CHAT_ID = "chatId"
+
         private val routingTypes = arrayOf(
             FavoriteModelObject.ROUTING_AUTOMATIC,
             FavoriteModelObject.ROUTING_PREFERRED,
@@ -145,6 +152,14 @@ class ChooseProviderActivity : SettingsPageActivity() {
 
     private var preferences: Preferences? = null
     private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
+    private var chatPreferences: Preferences? = null
+
+    /** The selected model's favorite providers (on its favorite, or on its
+     *  Recent entry when it is not a favorite). */
+    private var favoriteProviders: List<String> = emptyList()
+    /** Whether each provider line has its ⋮ Make Favorite menu: for a chat's
+     *  model, or a favorite opened from the Favorite AI Models list. */
+    private var showProviderMenu = false
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
@@ -222,6 +237,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(this)
 
         endpointId = intent.getStringExtra(EXTRA_ENDPOINT_ID) ?: ""
+        chatPreferences = intent.getStringExtra(EXTRA_CHAT_ID)?.takeIf { it.isNotBlank() }
+            ?.let { Preferences.getPreferences(this, it) }
         persistDirectly = intent.getBooleanExtra(EXTRA_PERSIST_DIRECTLY, false)
         returnOnBackAfterSave = intent.getBooleanExtra(EXTRA_RETURN_ON_BACK_AFTER_SAVE, false)
         savedPickerModel = savedInstanceState?.getString(STATE_SAVED_PICKER_MODEL)
@@ -232,7 +249,12 @@ class ChooseProviderActivity : SettingsPageActivity() {
         discoveryPath = (intent.getStringExtra(EXTRA_DISCOVERY_PATH) ?: "")
             .ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH }
         selectedModel = savedPickerModel ?: intent.getStringExtra(EXTRA_MODEL).orEmpty()
-        val restoredRouting = savedPickerModel?.let { favoriteModelsPreferences?.getRoutingType(it, endpointId) }
+        // After recreation, show the routing this chat actually uses (it may be
+        // the chat's own trial), not only the favorite's.
+        val restoredRouting = savedPickerModel?.let { model ->
+            chatPreferences?.let { ChatModelRouting.forEditing(this, it, endpointId, model)?.routingType }
+                ?: favoriteModelsPreferences?.getRoutingType(model, endpointId)
+        }
         selectedRoutingType = (restoredRouting ?: intent.getStringExtra(EXTRA_ROUTING_TYPE))
             ?.takeIf { it in routingTypes } ?: FavoriteModelObject.ROUTING_AUTOMATIC
 
@@ -415,8 +437,14 @@ class ChooseProviderActivity : SettingsPageActivity() {
     /** Load the model's saved provider memory (rides on its favorite). A model
      *  with no favorite starts from the defaults. */
     private fun seedProviderStateFromFavorite(adoptFavoriteRoutingType: Boolean) {
-        val favorite = if (selectedModel.isBlank()) null
+        val stored = if (selectedModel.isBlank()) null
         else favoriteModelsPreferences?.getFavorite(selectedModel, endpointId)
+        showProviderMenu = selectedModel.isNotBlank() && (stored != null || chatPreferences != null)
+        favoriteProviders = if (selectedModel.isBlank()) emptyList()
+            else ChatModelRouting.favoriteProviders(this, endpointId, selectedModel)
+        // A chat shows the routing it actually uses, which may be its own.
+        val favorite = if (selectedModel.isBlank() || chatPreferences == null) stored
+        else ChatModelRouting.forEditing(this, chatPreferences, endpointId, selectedModel)
 
         selectedProvider = favorite?.selectedProvider ?: ""
         orderList.clear()
@@ -758,6 +786,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         val header = chartHeader ?: return
         header.removeAllViews()
         if (hasLeadColumn()) header.addView(spacerCell())
+        if (showProviderMenu) header.addView(menuSpacerCell())
         for ((labelRes, widthDp) in CHART_COLUMNS) {
             val cell = TextView(this, null, 0, R.style.Widget_App_Chart_HeaderCell)
             cell.text = getString(labelRes)
@@ -776,6 +805,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
         }
 
         if (hasLeadColumn()) row.addView(buildLeadControl(endpoint.slug))
+        if (showProviderMenu) row.addView(buildProviderMenu(endpoint.slug, endpoint.providerName))
+        val cellStyle = cellStyle(endpoint.slug)
 
         val values = listOf(
             endpoint.providerName,
@@ -789,7 +820,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
             mark(endpoint.supportsCaching)
         )
         for ((index, value) in values.withIndex()) {
-            val cell = TextView(this, null, 0, R.style.Widget_App_Chart_Cell)
+            val cell = TextView(this, null, 0, cellStyle)
             cell.text = value
             cell.layoutParams = LinearLayout.LayoutParams(
                 dp(CHART_COLUMNS[index].second), LinearLayout.LayoutParams.WRAP_CONTENT
@@ -816,9 +847,10 @@ class ChooseProviderActivity : SettingsPageActivity() {
             ).apply { topMargin = dp(16) }
         }
         if (hasLeadColumn()) row.addView(buildLeadControl(slug, available = false))
-
         val name = displayNames[slug] ?: slug
-        val nameCell = TextView(this, null, 0, R.style.Widget_App_Chart_Cell)
+        if (showProviderMenu) row.addView(buildProviderMenu(slug, name))
+
+        val nameCell = TextView(this, null, 0, cellStyle(slug))
         nameCell.text = name
         nameCell.layoutParams = LinearLayout.LayoutParams(
             dp(CHART_COLUMNS.first().second), LinearLayout.LayoutParams.WRAP_CONTENT
@@ -826,7 +858,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
         row.addView(nameCell)
 
         // One label across the data columns instead of a row of "?" cells.
-        val wideCell = TextView(this, null, 0, R.style.Widget_App_Chart_Cell)
+        val wideCell = TextView(this, null, 0, cellStyle(slug))
         wideCell.text = getString(R.string.provider_unavailable)
         wideCell.layoutParams = LinearLayout.LayoutParams(
             dp(CHART_COLUMNS.subList(1, CHART_COLUMNS.size - 1).sumOf { it.second }),
@@ -849,6 +881,52 @@ class ChooseProviderActivity : SettingsPageActivity() {
 
     private fun hasLeadColumn(): Boolean =
         selectedRoutingType != FavoriteModelObject.ROUTING_AUTOMATIC
+
+    /** A favorite provider's whole line uses the favorite cell style. */
+    private fun cellStyle(slug: String): Int =
+        if (isFavoriteProvider(slug)) R.style.Widget_App_Chart_Cell_Favorite else R.style.Widget_App_Chart_Cell
+
+    private fun isFavoriteProvider(slug: String): Boolean =
+        favoriteProviders.any { it.equals(slug, ignoreCase = true) }
+
+    private fun menuSpacerCell(): View = View(this).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            resources.getDimensionPixelSize(R.dimen.provider_chart_menu_width), 1
+        )
+    }
+
+    /** The provider's ⋮ menu, just left of its name: Make Favorite, or
+     *  Unfavorite once it is one. Applies immediately, on the model's favorite
+     *  or, when it is not one, on its Recent entry. */
+    private fun buildProviderMenu(slug: String, providerName: String): View {
+        val button = ImageButton(this, null, 0, R.style.Widget_App_Chart_RowMenu)
+        button.layoutParams = LinearLayout.LayoutParams(
+            resources.getDimensionPixelSize(R.dimen.provider_chart_menu_width),
+            resources.getDimensionPixelSize(R.dimen.provider_chart_menu_height)
+        )
+        button.contentDescription = getString(R.string.provider_actions_desc, providerName)
+        button.setOnClickListener { anchor ->
+            val favorite = isFavoriteProvider(slug)
+            CompactActionPopup(this, anchor)
+                .add(
+                    1, 0,
+                    getString(if (favorite) R.string.provider_unfavorite else R.string.provider_make_favorite)
+                )
+                .onAction {
+                    val updated = if (favorite) favoriteProviders.filterNot { it.equals(slug, ignoreCase = true) }
+                        else favoriteProviders + slug
+                    // Dropdowns show the provider by name, also when offline.
+                    RecentOnlyProvidersStore.get(this).rememberName(slug, providerName)
+                    if (ChatModelRouting.setFavoriteProviders(this, endpointId, selectedModel, updated)) {
+                        favoriteProviders = ChatModelRouting.favoriteProviders(this, endpointId, selectedModel)
+                        renderChart()
+                    }
+                    true
+                }
+                .show()
+        }
+        return button
+    }
 
     private fun spacerCell(): View = View(this).apply {
         layoutParams = LinearLayout.LayoutParams(dp(LEAD_CONTROL_WIDTH_DP), 1)
@@ -1015,21 +1093,21 @@ class ChooseProviderActivity : SettingsPageActivity() {
             RecentOnlyProvidersStore.get(this).rememberName(selectedProvider, displayNames[selectedProvider])
         }
 
-        // Saving here always makes the model a favorite — the favorite is the
-        // box that stores this model's routing settings (owner ruling). When
-        // opened from the routing gear there is no editor save to ride on, so
-        // the favorite is written straight to the store; otherwise the choices
-        // are handed back to the caller, which favorites the model on its save.
+        // Saving never makes a model a favorite. A favorite takes the choice
+        // unless it tries a provider that is not one of its favorite providers;
+        // that trial, and any choice for a model that is not a favorite, stays
+        // with the chat and the model's Recent entry. When not opened from the
+        // routing gear the choices are handed back to the caller instead.
         if (persistDirectly) {
             if (selectedModel.isNotBlank()) {
-                val existing = favoriteModelsPreferences?.getFavorite(selectedModel, endpointId)
-                val settings = existing ?: FavoriteModelObject(selectedModel, endpointId)
-                settings.routingType = selectedRoutingType
-                settings.selectedProvider = selectedProvider
-                settings.allowFallbacks = switchAllowFallbacks?.isChecked != false
-                settings.providerOrder = ArrayList(orderList)
-                settings.ignoredProviders = ArrayList(ignored)
-                favoriteModelsPreferences?.addFavoriteModel(settings)
+                val routing = FavoriteModelObject(selectedModel, endpointId).apply {
+                    routingType = selectedRoutingType
+                    selectedProvider = this@ChooseProviderActivity.selectedProvider
+                    allowFallbacks = switchAllowFallbacks?.isChecked != false
+                    providerOrder = ArrayList(orderList)
+                    ignoredProviders = ArrayList(ignored)
+                }
+                ChatModelRouting.save(this, chatPreferences, routing)
                 persistSelectedRouteToolCapability(selectedRouteToolCapability())
             }
             btnSave?.let { SaveIconFlash.flash(it) }

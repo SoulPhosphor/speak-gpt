@@ -500,6 +500,10 @@ class NewConversationCoordinator(private val context: Context) {
         created.setFrequencyPenalty(profile.frequencyPenalty)
         created.setPresencePenalty(profile.presencePenalty)
         created.setStreaming(defaults.getStreaming())
+        // With Enable Model Settings on, the chosen model starts with its own
+        // saved parameters (or the API profile's defaults).
+        org.teslasoft.assistant.preferences.FavoriteModelParameters
+            .applyToChat(app, created, created.getModel(), endpointId)
         created.setAvatarType(request.avatarType.ifBlank { defaults.getAvatarType() })
         created.setAvatarId(request.avatarId.ifBlank { defaults.getAvatarId() })
         created.setAssistantName(request.assistantName.ifBlank { defaults.getAssistantName() })

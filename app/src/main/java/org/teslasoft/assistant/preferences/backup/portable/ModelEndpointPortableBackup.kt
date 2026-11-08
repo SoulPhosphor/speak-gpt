@@ -29,7 +29,12 @@ object ModelEndpointPortableBackup {
 
     fun write(context: Context, out: File): Result = try {
         val appContext = context.applicationContext
-        val data = ModelEndpointStateGenerationStore.get(appContext).read() ?: return Result.Failed
+        val stored = ModelEndpointStateGenerationStore.get(appContext).read() ?: return Result.Failed
+        val data = stored.copy(
+            recents = RecentModelsBackup.forEndpoints(
+                RecentModelsBackup.capture(appContext), stored.endpoints.mapTo(HashSet()) { it.id }
+            )
+        )
         val json = ModelEndpointPortableCodec.encode(data)
         out.writeText(json, Charsets.UTF_8)
         Result.Ok(data.endpoints.size, data.favorites.size)

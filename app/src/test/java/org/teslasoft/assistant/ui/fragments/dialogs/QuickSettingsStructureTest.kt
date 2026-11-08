@@ -16,12 +16,17 @@ class QuickSettingsStructureTest {
         val roleplay = xml.indexOf("view_quick_settings_roleplay_block")
         val modelSettings = xml.indexOf("view_quick_settings_model_settings_block")
         val logitSeed = xml.indexOf("view_quick_settings_logit_seed_block")
-        val save = xml.indexOf("@+id/btn_save_to_profile")
 
         assertTrue(
-            listOf(character, provider, memory, roleplay, modelSettings, logitSeed, save)
+            listOf(character, provider, memory, roleplay, modelSettings, logitSeed)
                 .zipWithNext().all { (a, b) -> a >= 0 && a < b }
         )
+        // Save to Profile was removed (owner decision, Nov 7 2026); the Save
+        // Parameters link sits above Streaming in the model settings block.
+        assertFalse(xml.contains("@+id/btn_save_to_profile"))
+        val block = resource("layout/view_quick_settings_model_settings_block.xml")
+        val link = block.indexOf("@+id/btn_save_model_parameters")
+        assertTrue(link >= 0 && link < block.indexOf("@+id/section_streaming"))
         assertFalse(xml.contains("@+id/usage_cost"))
     }
 

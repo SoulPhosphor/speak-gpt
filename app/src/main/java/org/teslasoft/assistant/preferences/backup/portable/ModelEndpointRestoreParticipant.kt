@@ -133,12 +133,26 @@ class ModelEndpointRestoreParticipant internal constructor(
 
     override fun apply(): Boolean {
         note.reset()
-        return activate(File(stagingRoot, DESIRED_GENERATION_FILE))
+        return activate(File(stagingRoot, DESIRED_GENERATION_FILE)) && applyRecents(File(stagingRoot, DESIRED_FILE))
     }
 
     override fun rollback(): Boolean {
         note.reset()
-        return activate(File(stagingRoot, ORIGINAL_GENERATION_FILE))
+        return activate(File(stagingRoot, ORIGINAL_GENERATION_FILE)) && applyRecents(File(stagingRoot, CURRENT_FILE))
+    }
+
+    /** The Recent list is stored outside the settings generations, so it is
+     *  written from the staged copy; a backup without one leaves it alone. */
+    private fun applyRecents(file: File): Boolean {
+        if (!file.isFile) return note.fail("staged_copy_unreadable: ${file.name}")
+        val data = (ModelEndpointPortableCodec.parse(file.readText(Charsets.UTF_8)) as?
+            ModelEndpointPortableCodec.Result.Ok)?.data ?: return note.fail("staged_copy_rejected_by_codec: ${file.name}")
+        return try {
+            data.recents?.let { RecentModelsBackup.apply(appContext, it) }
+            true
+        } catch (_: Exception) {
+            note.fail("recent_models_not_saved")
+        }
     }
 
     override fun cleanup() {
