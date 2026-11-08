@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared row of three equal, non-destructive pop-up choices with no Cancel
+  (owner ruling, Nov 8 2026: pop-up buttons sit side by side, never stacked).
+  One right-aligned row in the caller's order; a choice that does not fit
+  moves to the next line, still on the right. A caller may hide the first.
+  Structure only; every appearance value comes from the
+  Widget.App.Dialog.Actions styles and AppButton.Primary.Inline.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.App.Dialog.Actions">
+
+    <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.Dialog.Actions.EndRow">
+
+        <androidx.constraintlayout.helper.widget.Flow
+            style="@style/Widget.App.Dialog.Actions.EndRowFlow"
+            app:constraint_referenced_ids="btn_dialog_first_action,btn_dialog_second_action,btn_dialog_third_action" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_dialog_first_action"
+            style="@style/AppButton.Primary.Inline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_dialog_second_action"
+            style="@style/AppButton.Primary.Inline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_dialog_third_action"
+            style="@style/AppButton.Primary.Inline" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

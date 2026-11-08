@@ -216,34 +216,28 @@ prompt editor's Rename, Copy From, Clear, and Delete confirmations.
 
 ### Three dialog actions
 
-`AppButton.Primary.DialogStacked`
+Pop-up buttons sit side by side, never stacked on top of each other (owner
+ruling, Nov 8 2026). Three actions use one right-aligned row of
+`AppButton.*.Inline` buttons built on `Widget.App.Dialog.Actions.EndRow` /
+`EndRowFlow`; an action that does not fit moves to the next line, still on
+the right.
 
-`AppButton.Destructive.DialogStacked`
+- `layout/dialog_three_actions_row.xml`: cancel/back-out first
+  (`AppButton.Destructive.Inline`), then the alternate commitment
+  (`AppButton.Primary.Inline`), then the final commitment
+  (`AppButton.Destructive.Inline`), in the caller's approved order. Users:
+  the chat/image deletion choice (**Cancel**, **Delete Chat Only**,
+  **Delete All**), and leaving Advanced Memory Settings with unsaved Memory
+  Scanner parameters (**Discard Changes?** / "You have unsaved parameter
+  changes." with **Cancel** (stay), **Save & Exit**, **Okay** (leave without
+  saving)).
+- `layout/dialog_three_choices_row.xml`: three equal, non-destructive choices
+  with no Cancel, all `AppButton.Primary.Inline`. User: the on-device Whisper
+  missing-model pop-up (**Download Whisper**, **Google Dictation**, **API**).
 
-Use `layout/dialog_three_actions_cancel_first.xml` when three complete action
-labels would be cramped in one horizontal row. The shared layout stacks the
-actions in their approved top-to-bottom order: cancel/back-out first, alternate
-commitment second, final commitment third. It owns spacing and constraints;
-the shared styles own width, shape, typography, and theme color roles.
-
-The chat/image deletion choice is the first consumer: **Cancel**, **Delete Chat
-Only**, **Delete All**. Do not reorder those actions or reproduce the stacked
-geometry in a feature-local layout.
-
-Three actions side by side use `layout/dialog_three_actions_row.xml`
-(owner ruling, Nov 8 2026: not stacked): one right-aligned row of
-`AppButton.*.Inline` buttons in the caller's order, cancel/back-out first,
-built on `Widget.App.Dialog.Actions.EndRow` / `EndRowFlow`, so an action that
-does not fit moves to the next line, still on the right. First consumer:
-leaving Advanced Memory Settings with unsaved Memory Scanner parameters,
-**Discard Changes?** / "You have unsaved parameter changes." with **Cancel**
-(stay), **Save & Exit**, **Okay** (leave without saving), in that order.
-
-For three equal, non-destructive choices with no cancel action, use
-`layout/dialog_three_actions_stacked.xml`: the same stacked geometry with every
-action on `AppButton.Primary.DialogStacked`, in the caller's approved
-top-to-bottom order. First consumer: the on-device Whisper missing-model dialog
-(**API**, **Google Dictation**, **Download Whisper**).
+An owner-approved single action centered beneath a row
+(`AppButton.Primary.Inline.Centered.BelowDialogRow`) is the only exception to
+side-by-side actions.
 
 ### Inline actions
 

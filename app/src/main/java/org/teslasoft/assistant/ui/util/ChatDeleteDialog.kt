@@ -105,7 +105,7 @@ object ChatDeleteDialog {
         onDecision: (ChatDeletionDecision) -> Unit
     ) {
         val actions = LayoutInflater.from(context)
-            .inflate(R.layout.dialog_three_actions_cancel_first, null)
+            .inflate(R.layout.dialog_three_actions_row, null)
         val cancel = actions.findViewById<MaterialButton>(R.id.btn_dialog_cancel_action)
         val chatOnly = actions.findViewById<MaterialButton>(R.id.btn_dialog_middle_action)
         val deleteAll = actions.findViewById<MaterialButton>(R.id.btn_dialog_final_action)
