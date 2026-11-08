@@ -43,7 +43,7 @@ class ChatDeletionCallSiteContractTest {
     @Test fun folderFlowAndThreeActionDialogPreserveStableIdsAndCancelFirstOrder() {
         val request = source("java/org/teslasoft/assistant/ui/util/ChatDeletionRequestCoordinator.kt")
         val dialog = source("java/org/teslasoft/assistant/ui/util/ChatDeleteDialog.kt")
-        val layout = source("res/layout/dialog_three_actions_cancel_first.xml")
+        val layout = source("res/layout/dialog_three_actions_row.xml")
 
         assertTrue(request.contains("target = ChatDeletionTarget.Folder(folderId)"))
         assertTrue(request.contains("preflight.chatIds.isEmpty()"))
