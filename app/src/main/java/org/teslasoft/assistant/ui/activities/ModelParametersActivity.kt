@@ -223,7 +223,10 @@ class ModelParametersActivity : FragmentActivity() {
         val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.model_parameters_restore_title)
-            .setMessage(R.string.model_parameters_restore_message)
+            .setMessage(
+                if (scope == ModelPickerScope.SUMMARIZER) R.string.model_parameters_restore_message_summarizer
+                else R.string.model_parameters_restore_message
+            )
             .setView(actionsView)
             .create()
         actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
@@ -241,11 +244,19 @@ class ModelParametersActivity : FragmentActivity() {
     }
 
     private fun restoreDefaults() {
-        FavoriteModelParameters.restoreDefaults(this, modelId, endpointId, scope)
-        currentChatPreferencesIfActiveModel()?.let {
-            FavoriteModelParameters.applyToChat(this, it, modelId, endpointId)
+        if (scope == ModelPickerScope.SUMMARIZER) {
+            // A Summarizer model goes back to the recommended settings, never
+            // to an API profile's.
+            val recommended = FavoriteModelParameters.summarizerRecommended(modelId, endpointId)
+            FavoriteModelParameters.save(this, modelId, endpointId, recommended, scope)
+            seedControls(recommended)
+        } else {
+            FavoriteModelParameters.restoreDefaults(this, modelId, endpointId, scope)
+            currentChatPreferencesIfActiveModel()?.let {
+                FavoriteModelParameters.applyToChat(this, it, modelId, endpointId)
+            }
+            seedControls(FavoriteModelParameters.defaults(this, modelId, endpointId, scope))
         }
-        seedControls(FavoriteModelParameters.defaults(this, modelId, endpointId, scope))
         initialSnapshot = snapshot()
         resetSaveButtonTint()
         btnRestoreDefaults?.let { SaveIconFlash.flash(it) }

@@ -84,6 +84,17 @@ object FavoriteModelParameters {
         }
     }
 
+    /** The recommended Summarizer parameters (SummarizerParameterDefaults).
+     *  Restore Default Settings on a Summarizer model returns it to these. */
+    fun summarizerRecommended(modelId: String, endpointId: String): FavoriteModelObject =
+        FavoriteModelObject(modelId, endpointId).apply {
+            streaming = SummarizerParameterDefaults.STREAMING
+            temperature = SummarizerParameterDefaults.TEMPERATURE
+            topP = SummarizerParameterDefaults.TOP_P
+            frequencyPenalty = SummarizerParameterDefaults.FREQUENCY_PENALTY
+            presencePenalty = SummarizerParameterDefaults.PRESENCE_PENALTY
+        }
+
     /** The defaults a model without saved parameters uses in [scope]. */
     fun defaults(context: Context, modelId: String, endpointId: String, scope: ModelPickerScope): FavoriteModelObject =
         when (scope) {
