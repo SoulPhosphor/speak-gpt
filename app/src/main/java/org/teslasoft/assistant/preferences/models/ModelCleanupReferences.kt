@@ -19,7 +19,9 @@ package org.teslasoft.assistant.preferences.models
 import android.content.Context
 import org.json.JSONArray
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.DedicatedModelRouting
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.preferences.RecentModelsPreferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.tts.SavedTtsSource
@@ -34,10 +36,12 @@ data class ModelCleanupReferences(
     val isComplete: Boolean = true,
     val ttsTargets: Set<ModelIdentity> = emptySet(),
     val ttsReadable: Boolean = true,
-    val recentTargets: Set<ModelIdentity> = emptySet()
+    val recentTargets: Set<ModelIdentity> = emptySet(),
+    /** The model each background job (Summarizer, Memory Scanner) is set to use. */
+    val selectedTargets: Map<ModelPickerScope, ModelIdentity> = emptyMap()
 ) {
     val ruleTargets: Set<ModelIdentity> get() = ruleTargetsByRuleId.values.flatten().toSet()
-    val textTargets: Set<ModelIdentity> get() = favorites + ruleTargets + recentTargets
+    val textTargets: Set<ModelIdentity> get() = favorites + ruleTargets + recentTargets + selectedTargets.values
     val allTargets: Set<ModelIdentity> get() = textTargets + ttsTargets
 
     internal fun withTtsSources(result: Result<List<SavedTtsSource>>): ModelCleanupReferences =
@@ -52,8 +56,10 @@ data class ModelCleanupReferences(
 object ModelCleanupReferencesLoader {
     fun load(context: Context): ModelCleanupReferences {
         var complete = true
+        // Every job's favorites and Recent list (chat, Summarizer, Memory
+        // Scanner): a model that is gone is gone for all of them.
         val favorites = try {
-            FavoriteModelsPreferences.getPreferences(context).getFavoriteModels()
+            ModelPickerScope.entries.flatMap { FavoriteModelsPreferences.getPreferences(context, it).getFavoriteModels() }
                 .mapNotNull { item ->
                     val endpointId = item["endpointId"].orEmpty()
                     val modelId = item["modelId"].orEmpty()
@@ -69,7 +75,8 @@ object ModelCleanupReferencesLoader {
         val recentTargets = try {
             val endpointIds = ApiEndpointPreferences.getApiEndpointPreferences(context)
                 .getApiEndpointsList(context).map { it.id }.toSet()
-            RecentModelsPreferences(context).models().filter { it.endpointId in endpointIds }
+            ModelPickerScope.entries.flatMap { RecentModelsPreferences(context, it).models() }
+                .filter { it.endpointId in endpointIds }
                 .map { ModelIdentity(it.endpointId, it.modelId) }.toSet()
         } catch (_: Exception) {
             complete = false
@@ -94,7 +101,15 @@ object ModelCleanupReferencesLoader {
                 complete = false
             }
         }
-        return ModelCleanupReferences(favorites, byRule, legacyCount, complete, recentTargets = recentTargets)
+        val selected = ModelPickerScope.entries.filter { it.isDedicated }.mapNotNull { scope ->
+            val routing = DedicatedModelRouting.of(scope)
+            val endpointId = routing.endpointId(context)
+            val modelId = routing.modelId(context)
+            if (endpointId.isBlank() || modelId.isBlank()) null else scope to ModelIdentity(endpointId, modelId)
+        }.toMap()
+        return ModelCleanupReferences(
+            favorites, byRule, legacyCount, complete, recentTargets = recentTargets, selectedTargets = selected
+        )
             .withTtsSources(SavedTtsSourcesPreferences.getPreferences(context).load())
     }
 }

@@ -293,7 +293,8 @@ class TtsPickerStateTest {
         val elements = document.getElementsByTagName("*")
         val nodes = (0 until elements.length).map { elements.item(it) as Element }
         val headings = nodes.map { it.getAttribute("android:text") }.filter { it.endsWith("_heading") }
-        assertEquals(listOf("@string/model_cleanup_favorites_heading", "@string/model_cleanup_rules_heading",
+        assertEquals(listOf("@string/model_cleanup_cleared_heading", "@string/model_cleanup_favorites_heading",
+            "@string/model_cleanup_recents_heading", "@string/model_cleanup_rules_heading",
             "@string/model_cleanup_tts_heading"), headings)
         assertEquals(1, document.getElementsByTagName("ScrollView").length)
         val activity = source("java/org/teslasoft/assistant/ui/activities/ModelCleanupActivity.kt").readText()

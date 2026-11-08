@@ -71,6 +71,8 @@ object ModelCatalogAvailabilityClient {
                 .applyEndpointAuth(endpoint)
                 .get()
                 .build()
+            // A catalog that says more pages follow cannot prove a model is gone.
+            var partial = false
             val ids = client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext EndpointCatalogCheck.Unchecked
                 val body = response.body?.string().orEmpty()
@@ -78,9 +80,10 @@ object ModelCatalogAvailabilityClient {
                 if (!root.isJsonObject) return@withContext EndpointCatalogCheck.Unchecked
                 val data = root.asJsonObject.get("data")
                 if (data == null || !data.isJsonArray) return@withContext EndpointCatalogCheck.Unchecked
+                partial = incomplete(root.asJsonObject, data.asJsonArray.size()) ||
+                    response.headers.values("Link").any { Regex("rel=\"?next", RegexOption.IGNORE_CASE).containsMatchIn(it) }
                 if (speechModelIds.isNotEmpty() && (
-                        incomplete(root.asJsonObject, data.asJsonArray.size()) ||
-                        response.headers.values("Link").any { Regex("rel=\"?next", RegexOption.IGNORE_CASE).containsMatchIn(it) } ||
+                        partial ||
                         data.asJsonArray.any { item -> !item.isJsonObject ||
                             item.asJsonObject.stringId("id") == null }
                     )) return@withContext EndpointCatalogCheck.Unchecked
@@ -128,7 +131,7 @@ object ModelCatalogAvailabilityClient {
                     AliasCheck.INDETERMINATE -> indeterminate.add(targetModelId)
                 }
             }
-            EndpointCatalogCheck.Checked(available, indeterminate)
+            EndpointCatalogCheck.Checked(available, indeterminate, complete = !partial)
         } catch (_: Exception) {
             EndpointCatalogCheck.Unchecked
         }
