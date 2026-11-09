@@ -6,8 +6,8 @@ documents.**
 
 ## Where things stand (read this first)
 
-**Last updated 2026-11-08** (later phases brought in line with the owner's
-current design, and approvals recorded). The owner relies on the agent to lead this
+**Last updated 2026-11-09** (later phases brought in line with the owner's
+current design, approvals recorded, and the Dates tab added). The owner relies on the agent to lead this
 work step by step. A new session reads this section first, then continues
 from "Next steps". Do not re-diagnose what Part A already measured. An
 independent review of the plan and of pull request #180 was folded in on
@@ -118,7 +118,7 @@ They are educated guesses, tunable on the test screen.
   - Phase 2, data control: the view dropdown, Retired, Memory Handling
     Preferences, and Delete to Retired;
   - Phase 3, the Always tab and the bring-up setting;
-  - Phase 4, today's date and dates on memories;
+  - Phase 4, today's date, important dates, and the Dates tab;
   - Phase 5, fading;
   - Phase 6, Memory Assistant date proposals.
 - **Later features:** the background reviewer, the vibe note, recent-chat
@@ -1057,10 +1057,11 @@ guidance text to the AI (D13) is shown to the owner first.**
 4. **Database migration** adds, for each memory:
    - an important date: day and month, an optional year, one-time or
      yearly, and its range of days (D.5);
+   - whether it is checked on the Dates tab;
    - a "past after" date;
    - the event state: upcoming, happened, or settled (D42);
    - an internal last-discussed date, used by fading in Phase 5.
-5. **Sending (D.5):** a memory whose date is near is sent with every
+5. **Sending (D.5):** a checked memory whose date is near is sent with every
    message, past every limit, with timing worked out by the app, while the
    Memory Handling Preferences toggle is on. Once it has come up in the
    chat, it is marked "already discussed" (D32). After its event, or after
@@ -1072,10 +1073,11 @@ guidance text to the AI (D13) is shown to the owner first.**
 8. **Pending review:** an "Event passed" label (D50). If the user does
    nothing, the passed event is kept as a past event.
 9. **Memory editor:** the optional dates and the range. **Card:** an
-   upcoming-date marker. **Browser:** the Dates view (D.11, D54).
-10. **Possible Match:** a different date on a matching memory counts as a
+   upcoming-date marker.
+10. **The Dates tab** in the view dropdown, with its checkboxes (D.11, D54).
+11. **Possible Match:** a different date on a matching memory counts as a
     change to review, not a duplicate.
-11. **Backup:** every new field, the toggle, and the date-sharing setting,
+12. **Backup:** every new field, the toggle, and the date-sharing setting,
     with round-trip tests.
 
 ## Phase 5: Fading
@@ -1190,7 +1192,7 @@ For each memory:
 |---|---|---|
 | Always | A checkbox on the Always tab. Checked memories are sent with every message (D.12) | Not in the tab |
 | Bring-up setting | Always memories and memories with an important date: whether the AI may raise it unprompted. The four options are listed below | When it fits |
-| Important date (optional) | A birthday, anniversary, or event: yearly or one-time, with a range of days before it that counts as near. While near, the memory is handed to the AI past every limit (D.5) | None. The range is prefilled |
+| Important date (optional) | A birthday, anniversary, or event: yearly or one-time, with a range of days before it that counts as near. While near, the memory is handed to the AI past every limit, if it is checked on the Dates tab (D.5, D.11) | None. The range is prefilled, and a new date starts checked |
 | "Past after" date (optional) | After this date the memory is treated as past and leaves Always (D49) | None |
 | Fading (optional) | Retires after the fade time without being discussed: the app-wide time or custom days (D.4) | Off |
 
@@ -1201,8 +1203,8 @@ only within its range, without being checked on the Always tab.
 
 **How the choices work together:**
 - **What the AI receives:** search results, as now; checked Always
-  memories, every message; and memories whose important date is near.
-  Nothing else.
+  memories, every message; and memories checked on the Dates tab whose date
+  is near. Nothing else.
 - **Whether the AI may raise a memory unprompted:** for an Always memory or
   a dated one, its bring-up setting. A searched memory is already about what
   the user said.
@@ -1289,14 +1291,18 @@ owner's choice, and the Retired area makes it easy to undo.
 - **Stored in its own field** (owner's design, 2026-11-08): day and month,
   plus year for one-time dates (optional for yearly), and one-time or
   yearly. No time of day.
-- **The Memory Handling Preferences toggle** (owner's design): memories with
-  important dates are handed to the AI while the date is near. Default on
+- **The Dates tab checkbox** (owner's design, 2026-11-09): each memory with
+  an important date has a checkbox on the Dates tab (D.11). Only checked
+  memories are sent automatically. Unchecking keeps the date.
+- **The Memory Handling Preferences toggle** (owner's design): turns
+  automatic sending by date on or off for every memory at once. Default on
   (presented 2026-11-08), so a date the user adds works without hunting for a
   setting. With it off, dates are still saved and shown, and those memories
   are found by search as usual.
-- **Past every limit** (owner's design): a memory whose date is near is sent
-  even when the Always and search limits are full. Usually only one or two
-  are near at once, so there is no cap. The Debug test screen shows them.
+- **Past every limit** (owner's design): a checked memory whose date is near
+  is sent even when the Always and search limits are full. There is no cap,
+  and the app never chooses among them: the checkboxes decide (owner,
+  2026-11-09). The Debug test screen shows them.
 - **"Past after" date (D49):** optional, on any memory. After it, the AI is
   told the memory is in the past, and it leaves Always.
 - **Range** (owner's design, D10, D11): each important date has a field for
@@ -1339,7 +1345,8 @@ owner's choice, and the Retired area makes it easy to undo.
 is not about them:
 
 - **Always:** checked memories, sent every message as background.
-- **Important dates:** memories whose date is near, when the toggle is on.
+- **Important dates:** memories checked on the Dates tab whose date is
+  near, when the toggle is on.
   Each is marked "already discussed" once it has come up in the chat, and
   the AI is told not to raise it again (D.5).
 
@@ -1388,7 +1395,7 @@ prompt starts, on providers that offer it) works.
 - **Card:** small markers only: Always, an upcoming date, fading with its
   retire date, or faded. No scores or technical numbers.
 - **Browser:** the view dropdown: Memories, Pending, Retired, Always, and
-  Dates (D.11).
+  Dates. Always and Dates have checkboxes (D.11).
 - **Pending:** review labels (D50), and proposed dates with their bring-up
   setting (Phase 6), editable before saving.
 - **Memory Handling Preferences:** D.12.
@@ -1471,20 +1478,30 @@ earlier version of this plan wrongly said a Status filter showed them.
 **Owner's design:**
 - **A dropdown for the view.** The browser's "Memories | Pending" words
   become one dropdown with Memories, Pending, Retired, and Always (D.12,
-  D46). It uses the canonical dropdown style.
+  D46), and Dates (D54). It uses the canonical dropdown style.
 - **Memories shows memories in use.** Once Retired exists, archived
   memories are listed there instead of being mixed into Memories.
-- **A Dates view** (presented 2026-11-09, D54), for the owner's request to
-  see memories that are sent automatically because of their date:
-  - every memory with an important date, in the order the dates come up
-    next;
-  - each shows its date, whether it is one-time or every year, and its
-    range;
-  - a marker on the ones being sent to the AI right now.
+- **A Dates tab** (owner's design, 2026-11-09, D54): one tab for memories
+  that are sent automatically because of their important date, so the user
+  can review what will be sent before it is sent.
+  - **Checkboxes,** as on the Always tab. A checked memory is sent
+    automatically while its date is near. Unchecking stops that; the date
+    stays saved and shown, and the memory is still found by search.
+  - **The user decides, never the system.** There is no cap, and the app
+    never picks which dated memories are sent. If 20 are checked and near,
+    all 20 are sent.
+  - **Presented 2026-11-09:**
+    - the tab lists every memory with an important date, checked or not, so
+      an unchecked one can be checked again;
+    - memories are listed in the order their dates come up next;
+    - each shows its date, whether it is one-time or every year, and its
+      range;
+    - a marker shows the ones being sent to the AI right now;
+    - a newly added important date starts checked.
 
-  It is a view rather than a filter because the filter panel can only
-  narrow the list and sort it newest or oldest. A view can list memories in
-  upcoming-date order.
+  It is a tab rather than a filter because the filter panel can only narrow
+  the list and sort it newest or oldest. A tab can list memories in
+  upcoming-date order and hold the checkboxes.
 - **Retired** lists everything taken out of use, so it can be seen
   immediately:
   - memories the user archived;
@@ -1638,9 +1655,9 @@ per model, once the full system works.
 | D15 | Should memories be sent outside search (Always and due dates)? | **Decided, 2026-11-08:** yes. The owner designed the Always tab and dates (D46, D49, D52) |
 | D16 | How is the size of what is sent outside search limited? | **Decided (owner), 2026-11-08:** Always memories have their own limit, set in Memory Handling Preferences. It does not count against search's Maximum Memories or Memory Space. Memories whose important date is near count against no limit |
 | D17 | Are Always and dated memories sent in roleplay chats? | **Approved:** not by default |
-| D18 | Is there an on/off switch for sending memories outside search? | **Always:** no switch; checking memories is the opt-in (presented 2026-11-08). **Important dates (owner's design, 2026-11-08):** a toggle in Memory Handling Preferences. **Presented:** default on |
+| D18 | Is there an on/off switch for sending memories outside search? | **Always:** no switch; checking memories is the opt-in (presented 2026-11-08). **Important dates (owner's design):** a toggle in Memory Handling Preferences for all of them (2026-11-08), and a checkbox for each on the Dates tab (2026-11-09). **Presented:** the toggle defaults to on, and a new date starts checked |
 | D19 | What does a memory card show about fading? | **Approved:** no numbers. A fading memory shows when it was last discussed and the date it will retire (D.4) |
-| D20 | Which browser filters are added? | **Superseded** by the view dropdown (D.11), the card markers (D.7), and the Dates view (D54) |
+| D20 | Which browser filters are added? | **Superseded** by the view dropdown (D.11), the card markers (D.7), and the Dates tab (D54) |
 | D21 | Should a local re-ranker be added? | **Approved:** no; tested and it did not work (A.10). Reconsider only if a suitable small model appears |
 | D22 | Does date sharing ship on its own, before the rest? | **Approved:** it can, if wanted sooner; it doesn't depend on the rest |
 | D23 | When is search fixed? | **Decided, 2026-11-08: first** |
@@ -1657,7 +1674,7 @@ per model, once the full system works.
 | D34 | Should memories fade? | **Decided, 2026-11-08: yes,** with Memory Browser markers for fading, not fading, and faded, and with faded memories reinstatable from Retired. **Approved:** fading is an optional choice on each memory, off unless the user turns it on (D.2) |
 | D35 | Should the type name be sent with memories of a "playful" type, such as Inside Joke? | **Approved:** yes, for types the user marks playful, so the AI knows to use them lightly |
 | D36 | Should each companion have a short, editable "vibe" note that is always sent? | **Approved:** yes, using the existing unused relationship-notes field. Memory Assistant suggestions only through Pending |
-| D37 | If a whole request is too large for the model, what is trimmed first? | **Presented 2026-11-08 (revised, because the owner treats important dates as important):** the lowest-ranked search results first, then Always memories, then memories whose date is near. Picked memories are never trimmed |
+| D37 | If a whole request is too large for the model, what is trimmed first? | **Presented 2026-11-08 (revised, because the owner treats important dates as important):** the lowest-ranked search results first, then Always memories, then memories whose date is near. Picked memories are never trimmed. This is only a last resort for a request the model cannot accept at all. Otherwise the app never chooses which Always or dated memories are sent; the user's checkboxes do (owner, 2026-11-09) |
 | D38 | Should a companion know what happened in your last few chats with it, through short summaries built from the existing per-chat conversation summaries? | **Approved for design:** it is the main thing ChatGPT does that this app lacks for continuity ("how did the dentist go yesterday?"). It is background knowledge, and the bring-up rules apply |
 | D39 | Should the AI know how long it has been since the last chat with this companion (in days, not times)? | **Approved:** yes, as part of Phase 4, under the date-sharing setting |
 | D40 | Should a companion keep its own short reflections or journal about the relationship? | **Approved:** later and optional, after the vibe note, and visible and editable |
@@ -1673,7 +1690,7 @@ per model, once the full system works.
 | D50 | How are expiring and passed memories reviewed without overwhelming the user? | **Approved:** one review place, Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, a fading memory retires and a passed event is kept as past. One tap renews |
 | D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | **Approved:** later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
 | D52 | How does the Always tab handle more checked memories than the limit? | **Decided (owner's design), 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
-| D54 | How does the user see memories that are sent automatically because of their date? | **Owner request, 2026-11-09.** **Presented 2026-11-09:** a Dates view in the browser's view dropdown, listing every memory with an important date in upcoming order, with a marker on the ones being sent now |
+| D54 | How does the user see and control memories that are sent automatically because of their date? | **Decided (owner), 2026-11-09:** a Dates tab in the browser's view dropdown, with a checkbox on each memory, so the user reviews what will be sent and unchecks what they don't want sent. No cap, and the app never picks among them. **Presented 2026-11-09:** it lists every dated memory, checked or not, in upcoming order, with a marker on the ones being sent now; a new date starts checked |
 | D53 | Should a Custom condition also be searched by meaning? | **Decided (owner), 2026-11-08:** no. An Always memory is already sent with every message, so the condition only guides when the AI raises it, and the model uses its own judgment. Condition search was tested and dropped |
 
 ---
