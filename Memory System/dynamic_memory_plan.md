@@ -1406,6 +1406,33 @@ prompt starts, on providers that offer it) works.
 
 ## D.9 Inside jokes and "vibe" (owner request, 2026-11-08; proposal)
 
+**Owner request, 2026-11-09:** the vibe should be built soon, ahead of the
+later phases. The owner also asked whether vibes need categories, whether
+Type and Scope need revising, and whether users should make their own.
+
+**Found in the code (2026-11-09):**
+- **Scope** decides which chats may see a memory. It is a privacy wall
+  enforced in the database query: Real life memories never reach roleplay
+  chats, and a companion's memories reach only that companion. There are
+  seven fixed scopes, and each has its own rule.
+- **Type** says what kind of memory it is. The data is built for
+  user-owned types: adding, renaming, and deleting exist behind the scenes,
+  seeded with five starters (Fact, Preference, Event, Status, Instruction).
+  But no screen offers them. The memory editor lists only the five
+  starters, so a user cannot create an "Inside Joke" type today.
+
+**Recommended (D56, D57):**
+- **No user-made scopes.** A new scope word would have no rule for which
+  chats may see it.
+- **User-managed types,** in Memory Handling Preferences: the starter
+  collection plus Inside Joke, which the user can add to, rename, and
+  remove. Each type has an option to tell the AI the type along with the
+  memory (D35), on for Inside Joke.
+- **Inside jokes are a type, not a vibe category,** so there is one list of
+  categories, not two that overlap.
+- **The vibe note stays one short note per companion,** written by the
+  user and sent with every chat with that companion.
+
 Published systems keep two kinds of memory that matter here (Part F):
 
 - specific facts and events, which is what this app already stores;
@@ -1420,7 +1447,8 @@ Inside jokes need both: the joke itself, and the relationship it lives in.
 - **Inside jokes are ordinary memories:**
   - written with the joke and its origin ("we call the cat the gremlin
     since the couch incident");
-  - given a user-made Memory Type such as "Inside Joke";
+  - given a Memory Type such as "Inside Joke" (types cannot be created in
+    the app yet; D56);
   - often on the Always tab, with When it fits.
 
   Keyword search already finds the joke's phrase when the user uses it.
@@ -1694,6 +1722,8 @@ per model, once the full system works.
 | D52 | How does the Always tab handle more checked memories than the limit? | **Decided (owner's design), 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
 | D54 | How does the user see and control memories that are sent automatically because of their date? | **Decided (owner), 2026-11-09:** a Dates tab in the browser's view dropdown, with a checkbox on each memory, so the user reviews what will be sent and unchecks what they don't want sent. No cap, and the app never picks among them. **Presented 2026-11-09:** it lists every dated memory, checked or not, in upcoming order, with a marker on the ones being sent now; a new date starts checked |
 | D55 | Should the "past after" date and a one-time important date be one field? | **Open (raised 2026-11-09), to settle before Phase 4.** Both make a memory past after a date, and two date fields may confuse. Recommended: one date field. A one-time date always makes the memory past afterwards, and its Dates tab checkbox decides whether it is also sent while near |
+| D56 | Should vibes have their own categories, or should inside jokes be a memory Type? | **Open (raised 2026-11-09).** Recommended: one list. Inside Joke becomes a starter Type the user can rename or remove, types become user-managed in Memory Handling Preferences, and the vibe note stays one free-written note per companion |
+| D57 | Should users make their own scopes? | **Recommended (2026-11-09):** no. Scope is the privacy rule for which chats may see a memory, and a user-made scope would have no rule |
 | D53 | Should a Custom condition also be searched by meaning? | **Decided (owner), 2026-11-08:** no. An Always memory is already sent with every message, so the condition only guides when the AI raises it, and the model uses its own judgment. Condition search was tested and dropped |
 
 ---
