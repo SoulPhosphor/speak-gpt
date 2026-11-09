@@ -981,10 +981,11 @@ receives.** It gives the user control and visibility first.
 
 1. **Browser view dropdown:** the "Memories | Pending" words become one
    dropdown, in the canonical dropdown style. This phase adds Memories,
-   Pending, and Retired. Always is added in Phase 3.
+   Pending, and Retired. Always is added in Phase 3 and Dates in Phase 4.
+   Memories then lists only memories in use.
 2. **Retired view:** everything taken out of use, visible at once:
-   - memories the user archived (they exist today but are hidden behind
-     the Status filter);
+   - memories the user archived (today they are mixed into Memories, marked
+     only by a small badge);
    - deleted memories, when the setting below is on;
    - memories retired by fading, from Phase 5.
 
@@ -1071,7 +1072,7 @@ guidance text to the AI (D13) is shown to the owner first.**
 8. **Pending review:** an "Event passed" label (D50). If the user does
    nothing, the passed event is kept as a past event.
 9. **Memory editor:** the optional dates and the range. **Card:** an
-   upcoming-date marker.
+   upcoming-date marker. **Browser:** the Dates view (D.11, D54).
 10. **Possible Match:** a different date on a matching memory counts as a
     change to review, not a duplicate.
 11. **Backup:** every new field, the toggle, and the date-sharing setting,
@@ -1192,6 +1193,11 @@ For each memory:
 | Important date (optional) | A birthday, anniversary, or event: yearly or one-time, with a range of days before it that counts as near. While near, the memory is handed to the AI past every limit (D.5) | None. The range is prefilled |
 | "Past after" date (optional) | After this date the memory is treated as past and leaves Always (D49) | None |
 | Fading (optional) | Retires after the fade time without being discussed: the app-wide time or custom days (D.4) | Off |
+
+**Only the important-date field hands a memory over by date** (owner,
+2026-11-09). A date written in a memory's text is just information. An
+important date is one-time or every year, and either way the memory is sent
+only within its range, without being checked on the Always tab.
 
 **How the choices work together:**
 - **What the AI receives:** search results, as now; checked Always
@@ -1381,7 +1387,8 @@ prompt starts, on providers that offer it) works.
   menu.
 - **Card:** small markers only: Always, an upcoming date, fading with its
   retire date, or faded. No scores or technical numbers.
-- **Browser:** the view dropdown: Memories, Pending, Retired, Always (D.11).
+- **Browser:** the view dropdown: Memories, Pending, Retired, Always, and
+  Dates (D.11).
 - **Pending:** review labels (D50), and proposed dates with their bring-up
   setting (Phase 6), editable before saving.
 - **Memory Handling Preferences:** D.12.
@@ -1455,14 +1462,29 @@ memory the user did not bring up.
 
 ## D.11 Retired area and the browser's views (owner request, 2026-11-08)
 
-**Found in the code:** archived memories exist, but the Memory Browser shows
-only active memories by default. Archived ones appear only if the user
-changes the Status filter, which is why they seemed impossible to find.
+**Found in the code (corrected 2026-11-09):** archived memories exist, and
+they are listed in the Memories view mixed in with memories in use, marked
+only by a small "Archived" badge. The Status filter was removed from the
+filter panel in July, so there is no way to see only archived memories. An
+earlier version of this plan wrongly said a Status filter showed them.
 
 **Owner's design:**
 - **A dropdown for the view.** The browser's "Memories | Pending" words
   become one dropdown with Memories, Pending, Retired, and Always (D.12,
   D46). It uses the canonical dropdown style.
+- **Memories shows memories in use.** Once Retired exists, archived
+  memories are listed there instead of being mixed into Memories.
+- **A Dates view** (presented 2026-11-09, D54), for the owner's request to
+  see memories that are sent automatically because of their date:
+  - every memory with an important date, in the order the dates come up
+    next;
+  - each shows its date, whether it is one-time or every year, and its
+    range;
+  - a marker on the ones being sent to the AI right now.
+
+  It is a view rather than a filter because the filter panel can only
+  narrow the list and sort it newest or oldest. A view can list memories in
+  upcoming-date order.
 - **Retired** lists everything taken out of use, so it can be seen
   immediately:
   - memories the user archived;
@@ -1618,7 +1640,7 @@ per model, once the full system works.
 | D17 | Are Always and dated memories sent in roleplay chats? | **Approved:** not by default |
 | D18 | Is there an on/off switch for sending memories outside search? | **Always:** no switch; checking memories is the opt-in (presented 2026-11-08). **Important dates (owner's design, 2026-11-08):** a toggle in Memory Handling Preferences. **Presented:** default on |
 | D19 | What does a memory card show about fading? | **Approved:** no numbers. A fading memory shows when it was last discussed and the date it will retire (D.4) |
-| D20 | Which browser filters are added? | **Superseded** by the view dropdown (D.11) and the card markers (D.7) |
+| D20 | Which browser filters are added? | **Superseded** by the view dropdown (D.11), the card markers (D.7), and the Dates view (D54) |
 | D21 | Should a local re-ranker be added? | **Approved:** no; tested and it did not work (A.10). Reconsider only if a suitable small model appears |
 | D22 | Does date sharing ship on its own, before the rest? | **Approved:** it can, if wanted sooner; it doesn't depend on the rest |
 | D23 | When is search fixed? | **Decided, 2026-11-08: first** |
@@ -1651,6 +1673,7 @@ per model, once the full system works.
 | D50 | How are expiring and passed memories reviewed without overwhelming the user? | **Approved:** one review place, Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, a fading memory retires and a passed event is kept as past. One tap renews |
 | D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | **Approved:** later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
 | D52 | How does the Always tab handle more checked memories than the limit? | **Decided (owner's design), 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
+| D54 | How does the user see memories that are sent automatically because of their date? | **Owner request, 2026-11-09.** **Presented 2026-11-09:** a Dates view in the browser's view dropdown, listing every memory with an important date in upcoming order, with a marker on the ones being sent now |
 | D53 | Should a Custom condition also be searched by meaning? | **Decided (owner), 2026-11-08:** no. An Always memory is already sent with every message, so the condition only guides when the AI raises it, and the model uses its own judgment. Condition search was tested and dropped |
 
 ---
