@@ -1432,6 +1432,8 @@ Inside jokes need both: the joke itself, and the relationship it lives in.
   the tone of the relationship, its running themes, and how the companion
   should talk, and it is always sent with that companion's chats. Companion
   records already have an unused relationship-notes field for this (D36).
+  Checked 2026-11-09: it is saved and backed up, but no screen shows it and
+  it is never sent to the AI.
   The Memory Assistant could later suggest updates to it through Pending,
   never silently.
 - **The trauma rule still holds:** a painful subject never becomes a joke or
@@ -1691,6 +1693,7 @@ per model, once the full system works.
 | D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | **Approved:** later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
 | D52 | How does the Always tab handle more checked memories than the limit? | **Decided (owner's design), 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
 | D54 | How does the user see and control memories that are sent automatically because of their date? | **Decided (owner), 2026-11-09:** a Dates tab in the browser's view dropdown, with a checkbox on each memory, so the user reviews what will be sent and unchecks what they don't want sent. No cap, and the app never picks among them. **Presented 2026-11-09:** it lists every dated memory, checked or not, in upcoming order, with a marker on the ones being sent now; a new date starts checked |
+| D55 | Should the "past after" date and a one-time important date be one field? | **Open (raised 2026-11-09), to settle before Phase 4.** Both make a memory past after a date, and two date fields may confuse. Recommended: one date field. A one-time date always makes the memory past afterwards, and its Dates tab checkbox decides whether it is also sent while near |
 | D53 | Should a Custom condition also be searched by meaning? | **Decided (owner), 2026-11-08:** no. An Always memory is already sent with every message, so the condition only guides when the AI raises it, and the model uses its own judgment. Condition search was tested and dropped |
 
 ---
