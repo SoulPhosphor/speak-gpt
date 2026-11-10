@@ -1060,9 +1060,18 @@ The current vertical order is intentional: identity and character choices;
 this chat's Always Speak Responses, a self-contained `Segment.Standalone`
 toggle (owner ruling, Oct 9 2026; it becomes a connected group if more rows
 join it); model/provider/endpoint routing; memory controls; independent roleplay context;
+this chat's Experimental Mode, a self-contained `Segment.Standalone` toggle
+(owner ruling, Nov 10 2026);
 the summarizer and its Summary, Compaction, and Image prompts (owner ruling,
 Oct 3 2026); generation parameters; Logit Bias and Seed; usage/cost; Save to Profile. Keep
 that order unless the owner explicitly changes it.
+
+A Quick Settings switch with a title and subtext (Experimental Mode) uses
+`Widget.App.QuickSettings.ToggleRow` holding `Widget.App.Row.TextColumn`
+with `Widget.App.QuickSettings.ToggleRow.Title` (the same look as the other
+Quick Settings labels) and `Widget.App.Row.Subtitle`, then
+`Widget.App.QuickSettings.Switch`. The row's start inset is
+`quick_settings_segment_padding_horizontal`.
 
 The Lorebooks segment may expand internally. While lorebooks are enabled, its
 centered **Add Lorebook** action is always available. That action opens a pure
@@ -1196,7 +1205,7 @@ Use:
 - `Widget.App.Chat.ComposerAction` on bare primary composer actions such as Add and the conditional conversation-tools gear. It owns their 48dp geometry, transparent background, centered icon, and theme-resolved tint.
 - `Widget.App.Chat.ComposerContentToggle` on both Expand Content and Collapse Content. It owns their 48dp icon-button geometry, transparent background, centered icon, and theme-resolved tint. The layout owns only their different placement and visibility. Do not replace this background in Kotlin, including legacy theme handling.
 
-The initial empty composer keeps the one-row editor between the bottom controls. Focusing it moves that same editor above the controls and allows natural growth up to eight lines. The expand control is shown only for an active non-empty draft; expanded mode uses the bounded space below the app header and the collapse control restores the previous mode. Keep the controls in this order: Add, conditional conversation tools, conditional persistent Includes, Expand content, microphone, Send.
+The initial empty composer keeps the one-row editor between the bottom controls. Focusing it moves that same editor above the controls and allows natural growth up to eight lines. The expand control is shown only for an active non-empty draft; expanded mode uses the bounded space below the app header and the collapse control restores the previous mode. Keep the controls in this order: Add, conditional conversation tools, the Experimental Mode atom (`Widget.App.Chat.ComposerAction`, shown only while the chat's Experimental Mode is on; tapping it turns the mode off), conditional persistent Includes, Expand content, microphone, Send.
 
 Do not assign phone/dynamic-system colors or a second local composer palette in XML or Kotlin. The host remains transparent and the surface resolves through the shared drawable/theme roles.
 

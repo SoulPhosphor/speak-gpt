@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This chat's Experimental Mode (owner ruling, Nov 10 2026). A
+     self-contained standalone segment above Use Summarizer. Every chat
+     starts with it off; a change here stays with this chat only. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <LinearLayout
+        android:id="@+id/row_chat_experimental_mode"
+        style="@style/Widget.App.QuickSettings.Segment.Standalone">
+
+        <LinearLayout style="@style/Widget.App.QuickSettings.ToggleRow">
+
+            <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                <TextView
+                    style="@style/Widget.App.QuickSettings.ToggleRow.Title"
+                    android:text="@string/experimental_mode_toggle" />
+
+                <TextView
+                    style="@style/Widget.App.Row.Subtitle"
+                    android:text="@string/experimental_mode_hint" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switch_chat_experimental_mode"
+                style="@style/Widget.App.QuickSettings.Switch" />
+        </LinearLayout>
+    </LinearLayout>
+</merge>

@@ -319,6 +319,8 @@ import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatSelectionMode
+import org.teslasoft.assistant.ui.chat.ExperimentalModeIndicator
+import org.teslasoft.assistant.conversation.ExperimentalMode
 import org.teslasoft.assistant.ui.chat.ChatExportBuilder
 import org.teslasoft.assistant.ui.drawer.ChatDrawerController
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
@@ -601,6 +603,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var threadLoader: LinearLayout? = null
     private var btnAttachFile: ImageButton? = null
     private var btnChatTools: ImageButton? = null
+    private var experimentalModeIndicator: ExperimentalModeIndicator? = null
     private var btnPersistentIncludes: ImageButton? = null
     private var btnExpandContent: ImageButton? = null
     private var btnCollapseContent: ImageButton? = null
@@ -3391,6 +3394,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnAttachFile = findViewById(R.id.btn_attach)
         btnChatTools = findViewById(R.id.btn_chat_tools)
         btnPersistentIncludes = findViewById(R.id.btn_persistent_includes)
+        experimentalModeIndicator = ExperimentalModeIndicator(
+            findViewById(R.id.btn_experimental_mode)
+        ) { preferences }
         btnExpandContent = findViewById(R.id.btn_expand_content)
         btnCollapseContent = findViewById(R.id.btn_collapse_content)
         visionActions = findViewById(R.id.vision_action_selector)
@@ -6254,6 +6260,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return FrozenSummarizerState(true, folded, injection)
     }
 
+    private fun experimentalModeOn(): Boolean =
+        preferences?.getChatExperimentalMode() == true
+
+    /** Experimental Mode sends no summary, as in a fresh chat. */
+    private fun experimentalSummarizerState(experimental: Boolean): FrozenSummarizerState =
+        if (experimental) FrozenSummarizerState(false, 0, null) else frozenSummarizerState()
+
     private fun canonicalConversationSnapshot(): List<CanonicalConversationMessage> =
         messages.map(::canonicalMessage)
 
@@ -7750,6 +7763,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // model it started with (commonly the older per-chat
                     // default) while Quick Settings shows the new one.
                     loadModel()
+                    experimentalModeIndicator?.refresh()
                 }
 
                 override fun onForceUpdate() {
@@ -10463,15 +10477,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             storedMessage,
             sentIncludesJson
         )
-        val canonical = ArrayList(canonicalConversationSnapshot())
-        canonical.add(
+        val fullConversation = ArrayList(canonicalConversationSnapshot())
+        fullConversation.add(
             CanonicalConversationMessage(
                 isBot = false,
                 text = storedMessage,
                 includes = sentIncludes
             )
         )
-        val summarizerState = frozenSummarizerState()
+        val experimental = experimentalModeOn()
+        val canonical = ArrayList(ExperimentalMode.requestConversation(fullConversation, experimental))
+        val summarizerState = experimentalSummarizerState(experimental)
         protectRequestImagePayloads(canonical)
 
         disableTurnControlsUnlessTheyAreStops()
@@ -13665,13 +13681,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         suppressImageTools: Boolean = false
     ) {
         val streamingEnabled = preferences?.getStreaming() ?: true
+        val legacyExperimental = preparedTurn == null && experimentalModeOn()
         val legacyCanonical = if (preparedTurn == null) {
-            canonicalConversationSnapshot()
+            ExperimentalMode.requestConversation(canonicalConversationSnapshot(), legacyExperimental)
         } else {
             null
         }
         val legacySummarizerState = if (preparedTurn == null) {
-            frozenSummarizerState()
+            experimentalSummarizerState(legacyExperimental)
         } else {
             null
         }
@@ -13886,7 +13903,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 chatId = chatId,
                                 personaId = personaId,
                                 userMessage = lastUserMessageForLore,
-                                recentContext = recentTurnsContext(),
+                                recentContext = if (legacyExperimental) "" else recentTurnsContext(),
                                 modelTag = model,
                                 loreMatches = dedupedLoreMatches,
                                 worldId = preferences?.getChatWorldId(),
