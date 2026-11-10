@@ -216,10 +216,11 @@ The specific corrections:
    Nothing else is needed from the owner for this step.
 3. **Done:** section 3's pull request (#182) is merged.
 4. **Owner and outside reviewers:** read Part G and correct it.
-5. **Owner:** answer the open decisions in G.17, one at a time.
+5. **Owner:** answer the open decisions in G.17 only as each stage needs
+   them. None is needed before stage 1.
 6. **Agent:** build nothing until the owner approves Part G. Then build the
    stages in G.16, in the order the owner chooses, each as its own pull
-   request, measured against the test conversations (G.15).
+   request with its own tests (G.15, G.19).
 7. **Agent, each when the owner asks for it:** Phase 2 (data control),
    Phase 3 (the Always tab), Phase 4 (important dates and the Dates tab;
    settle D55 first), Phase 5 (fading), Phase 6 (Memory Assistant date
@@ -2123,9 +2124,14 @@ Each was checked in the current code on 2026-11-10.
   cut never separates a message from its reply (`SummarySections.kt`).
 - **The Memory Search Test screen.**
 
-What this means: the conversation index does not start from nothing. The
-keyword half and its upkeep exist. The new work is the meaning half, the
-paragraph-sized entries, the scope labels, and recall itself.
+What this means: the conversation index does not start from nothing, but
+neither existing store is the index this part describes.
+
+- The chat search index holds one entry per **message**, for keywords only.
+- The vector store holds vectors for **saved memories** only.
+- The paragraph-sized conversation entries, their vectors, their scope
+  labels, and recall itself are new. G.5 says exactly how they are stored
+  and what is reused.
 
 ## G.5 Index entries (Proposed)
 
@@ -2150,8 +2156,17 @@ and can be found.
 | Keyword text | Keyword search |
 | AI notes (optional, kept separate) | Written only by the live AI worker (G.11) |
 
-**Where a long message is cut.** At paragraph breaks first, then sentence
-ends. Never in the middle of a sentence. Never across two messages.
+**Where a long message is cut.** In this order, until the piece fits the
+embedding model's limit:
+
+1. at paragraph breaks;
+2. at sentence ends;
+3. at clause breaks (commas, semicolons, line breaks);
+4. at the nearest space before the limit.
+
+Step 4 is the guaranteed fallback. Every character of every message ends up
+in some entry, so no text is ever silently unsearchable. An entry never
+spans two messages.
 
 **How big an entry is.** A starting size is chosen by measurement (G.15),
 inside the embedding model's limit. Published starting points are 400
@@ -2168,9 +2183,43 @@ fragment.
 **What is indexed.** The text of messages as the user sees them. Attached
 files, images, and hidden messages are open questions (G.17).
 
-**Where vectors are kept.** Making a vector is the slow step, so a vector is
-stored against its text fingerprint and model. Text that has not changed is
-never embedded twice, including after a rebuild of the keyword index.
+**Storage design.** Three linked stores:
+
+| Store | One row is | Key | Points to |
+|---|---|---|---|
+| Passages | One entry (about a paragraph) | chat ID, message ID, position in the message | The message, by its permanent ID, with the start and end of the passage inside the message text, and the exchange it belongs to |
+| Passage vectors | One vector | the passage's text fingerprint and the model that made it | Nothing. Any passage with that fingerprint uses it |
+| Passage keywords | The searchable words of one passage | the passage row | The passage |
+
+- The original text is **not copied** into a second permanent home. A
+  passage records where it sits inside its message. The message stays the
+  only source.
+- Vectors are keyed by text fingerprint, not by passage row. Making a
+  vector is the slow step, so text that has not changed is never embedded
+  twice, including after the passages are rebuilt or a message is edited
+  elsewhere.
+- Passages and keywords are derived and can be dropped and rebuilt at any
+  time. Vectors are kept through a rebuild.
+- AI notes (G.11) are their own rows, keyed to a passage or an exchange,
+  never mixed into the passage text.
+
+**Reused as it is:** permanent message IDs (`MessageIdentity.kt`); the rule
+for which messages are searchable and how their text is read
+(`SearchableMessageProjection.kt`); the embedding model, its lock, and
+vector maths (`Librarian.kt`, `VectorMath.kt`); the keyword word rules
+(`KeywordText.kt`).
+
+**Extended:** the chat index's refresh, journal, rebuild, deletion, and
+restore handling (`ChatSearchIndexManager.kt`, `ChatSearchIndexJournal.kt`)
+gain the passage stores as a second thing they keep in step. The scoring in
+`LiveRetrieval.kt` is written for saved memories and is generalized so it
+can score passages too, without changing saved-memory results.
+
+**New:** the three stores above, the passage cutter, background embedding
+of passages, and recall.
+
+**Not changed:** the existing chat search feature and its one-entry-per-
+message index, the saved-memory vector table, and the stored chats.
 
 ## G.6 Search (Proposed)
 
@@ -2180,9 +2229,10 @@ never embedded twice, including after a rebuild of the keyword index.
 - **Search text:** the user's latest message. For a long message, each
   sentence is also searched on its own (G.10).
 - **Follow-up questions** such as "what did we decide?" have no meaningful
-  words of their own. They are handled by the same "still on this subject"
-  check as carry-over (G.9), not by gluing earlier messages onto the search
-  text, which #180 measured as harmful.
+  words of their own. They are handled by the subject check (G.9a), not by
+  gluing earlier messages onto the search text, which #180 measured as
+  harmful. The subject check is its own component, so recall does not wait
+  for saved-memory carry-over to be built.
 - **A relevance gate:** an entry is used only when it clearly relates. When
   nothing relates, nothing is added.
 - **Duplicates:** several entries from the same exchange count once.
@@ -2210,9 +2260,19 @@ reach companion-only material.
   - real-life and project entries never enter roleplay.
 - **Open:** which ordinary chats may see each other, and whether cross-chat
   recall is chosen per chat or per companion (G.17).
-- **Known limit:** a chat's settings can change during its life. Messages
-  written before the index existed can only be stamped with the chat's
-  settings at the time they are indexed.
+- **Where an entry's scope comes from.** A chat's companion, project, or
+  roleplay settings can change during its life, so the chat's settings
+  today are not a safe label for its older messages. The memory system
+  already stamps each captured stretch of conversation with the companion,
+  world, campaign, character, and project that were active when it was
+  captured (`TranscriptRecord`, used by `ArchivistSceneContext`), and
+  never infers them afterwards. The index takes scope from that record
+  where one exists, and stamps new messages itself as they are written.
+- **Unknown scope is treated as private to its own chat.** An older message
+  with no recorded scope can be recalled inside its own chat and is never
+  offered to another chat.
+- **To verify when stage 1 is built:** how much existing conversation has a
+  recorded scope.
 
 ## G.8 Recall: what is added to a request (Proposed)
 
@@ -2234,10 +2294,27 @@ Rules:
 
 - **Its own size limit,** separate from Memory Space, so recall can never
   push out saved memories, and saved memories can never push out recall.
+  Separate limits are a way of sharing room. They do not create room: the
+  model's total size is still one fixed amount.
+- **One final size check for the whole request.** After everything is
+  assembled (the history, the Summarizer's text when it is on, saved
+  memories, carried-over memories, and recalled exchanges), the existing
+  request-size check runs once on the total. When recall would push the
+  request over the model's limit, recall is what is left out for that
+  message, and the request goes exactly as it does today. Nothing else
+  gives way to recall unless the user has chosen that (G3).
+- **When an exchange is too large to add whole.** Indexing and delivery are
+  separate. Every part of it stays searchable. For delivery, the whole
+  exchange is added when it fits recall's limit. When it does not, the
+  matching passage and the paragraphs around it are added in their original
+  words, marked as an excerpt, with a note that the rest of that exchange
+  was left out. It is never cut silently.
 - **Not the most recent messages.** An exchange the AI has just read is not
   recalled again.
-- **Not what is already added.** An exchange that repeats a saved memory or
-  a lorebook entry already in the request is skipped.
+- **Only true duplicates are skipped.** An exchange is skipped when its own
+  text is already in the request close to the newest message. An exchange
+  is **not** skipped because a saved memory covers the same fact. A short
+  saved fact does not carry what the conversation meant.
 - **Neighbours.** The exchange before or after is brought along when the
   matching one cannot be understood alone.
 - **How many.** A starting number is set by measurement. SillyTavern starts
@@ -2276,10 +2353,34 @@ continuation" have no published answer. They are measured on the test
 conversations before anything is built (G.15).
 
 **Relation to recall.** Carry-over and conversation recall are separate.
-They share the "still on this subject" check and nothing else. Each has its
-own size limit.
+They share the subject check (G.9a) and the final size check (G.8), and
+nothing else. Each has its own size limit.
 
 **Open:** whether a recalled exchange is also carried over (G.17).
+
+## G.9a The subject check (Proposed)
+
+One small component, built once and used by both recall and carry-over. It
+does not depend on either of them.
+
+- **What it answers:** is the user's new message still about the subject of
+  the previous exchange?
+- **What it reads:** the new message, the previous exchange, and nothing
+  older.
+- **How it decides:**
+  - the new message relates to the previous exchange by meaning or
+    keywords; or
+  - the new message is a short continuation with no subject of its own, and
+    so cannot be judged alone.
+- **What uses the answer:**
+  - recall searches with the previous exchange's subject as well when the
+    answer is yes and the new message has no subject of its own;
+  - carry-over keeps the previous message's memories when the answer is
+    yes.
+- **What it never does:** glue earlier messages onto every search, or let
+  the AI's reply alone keep a subject alive.
+- Its two numbers (how closely related, and how short is "short") are
+  measured when it is built.
 
 ## G.10 Long messages (Proposed)
 
@@ -2324,6 +2425,11 @@ message-level work while the user chats, as an option.
   helps find it.
 - **Cost.** It runs once per stretch of conversation, not once per message
   sent. The app shows what the service reports and never a built-in price.
+- **Cost controls, required before it is built:** off by default; chosen by
+  the user; a limit the user sets on how much it may read; it stops, and
+  says so, when the limit is reached; it never re-reads an exchange that
+  has not changed; and existing chats are never sent to it in bulk without
+  the user asking.
 - **Everything about it that the user sees or the AI is told** is shown to
   the owner before it is built.
 
@@ -2375,57 +2481,69 @@ misled, and never as a generic error.
 
 ## G.15 Testing and measurement
 
-Published research settles the structure of the index. It does not answer
-these, so they are measured here, with the real embedding model, before the
-part that needs them is built:
+Tests are written with the component they test, in the same pull request.
+There is no separate testing stage in front of the building.
 
-- the easier bar for carry-over, and what counts as a short continuation;
-- whether searching each sentence finds small details without bringing in
-  wrong matches;
-- the entry size, the relevance gate for conversation entries, and how many
-  exchanges to recall;
-- speed on the phone.
-
-The test set is a group of written sample conversations: long messages with
-one small important detail, follow-ups, changes of subject, a memory sent
-by mistake, roleplay and companion chats, and a library where most
-memories share one subject. Each stage in G.16 must pass it before it
-merges, and it becomes part of the automated tests.
+- **Correctness tests** come with every stage: for example, that every
+  character of a message lands in an entry, that an edit replaces only the
+  entries it touched, and that a deleted message leaves nothing behind.
+- **Sample conversations** are added as each stage needs them: long
+  messages with one small important detail, follow-ups, changes of
+  subject, a memory sent by mistake, roleplay and companion chats, and a
+  library where most memories share one subject. They stay as automated
+  tests.
+- **Numbers that research does not give** are measured inside the stage
+  that needs them, with the real embedding model: the entry size, the
+  relevance gate for conversation entries, how many exchanges to recall,
+  the subject check's two numbers, the carry-over bar, and speed on the
+  phone.
+- **These are engineering numbers.** The owner is not asked to choose them.
+  Each has a starting value from measurement and is adjustable afterwards.
 
 ## G.16 Build stages
 
-The design covers all stages. Each stage works on its own and is its own
-pull request. The owner chooses the order and when each starts.
+The design covers all stages. Each stage works on its own, is its own pull
+request, and comes with its own tests. The owner chooses the order and when
+each starts.
 
 | Stage | What is built | Depends on |
 |---|---|---|
-| 1 | The test conversations and the measurements in G.15 | Nothing |
-| 2 | The two live gaps in saved-memory search: long messages and carry-over | Stage 1 |
-| 3 | Index entries, vectors, scope labels, and upkeep | Stage 1 |
-| 4 | Recall within the current chat | Stage 3 |
-| 5 | The optional live AI worker | Stage 3 |
-| 6 | Recall from other chats, behind the scope walls | Stage 4 |
-| Later | Keyword-only recall for users without an embedding model | Stage 4 |
+| 1 | The passage stores, the passage cutter, background embedding, scope labels, and upkeep (G.5, G.7, G.12) | Nothing |
+| 2 | Conversation search, the subject check, and a way to inspect what a message would recall (G.6, G.9a) | Stage 1 |
+| 3 | Recall added to real chat requests, with the final size check (G.8) | Stage 2 |
+| 4 | Saved-memory fixes: long messages and carry-over (G.9, G.10) | The subject check from stage 2 |
+| Later | The optional live AI worker (G.11) | Stage 1 |
+| Later | Recall from other chats, behind the scope walls (G.7) | Stage 3 |
+| Later | Keyword-only recall for users without an embedding model | Stage 3 |
+
+**One choice for the owner about order.** The two saved-memory gaps in
+stage 4 are live on the beta now and affect every chat that uses memory.
+The long-message fix depends on nothing and could be built first. Carry-
+over needs only the subject check, which could be built with it. Putting
+stage 4 first fixes what is broken today sooner; keeping it fourth gets
+the index started sooner. Neither blocks the other.
 
 ## G.17 Open decisions for the owner
 
-Asked one at a time, not all at once. Each has a recommendation.
+Asked one at a time, and only when the stage that needs the answer is
+about to start. None of these has to be answered before stage 1. Each has a
+recommendation.
 
-| # | Question | Recommendation |
-|---|---|---|
-| G1 | Is recall on for every chat, or chosen per chat? | Per chat, starting off, so nothing changes for anyone who does not turn it on |
-| G2 | How large is recall's own size limit, and can the user set it? | Adjustable, with a starting value from measurement |
-| G3 | When a chat no longer fits the model, may the user choose to send recent messages plus recalled exchanges? | Yes, as an explicit choice. Warn or block stays the default |
-| G4 | Does recall apply in Experimental Mode? | No. That mode sends only the current message by design |
-| G5 | Are attached files and images indexed? | Not at first. Message text only |
-| G6 | When are existing chats indexed? | In the background while charging, newest first, with progress shown |
-| G7 | Do backups carry the index? | No. It is rebuilt after a restore |
-| G8 | Which jobs does the live AI worker do, and is it chosen per chat? | Per chat. Start with marking what matters |
-| G9 | Across chats, which ordinary chats may see each other? | Same companion or same project only, at first |
-| G10 | Is a recalled exchange carried over like a saved memory? | Yes, under the same rule |
-| G11 | What does the user see when recall adds something? | Show it where sent memories are shown today, so the user can always tell what the AI was given |
-| G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E? | If not, relabel those rows as proposed |
-| G13 | Should this plan move out of the `Memory System` folder? | Yes, to the top level, with the older documents moved to `legacy/` |
+| # | Question | Recommendation | Needed before |
+|---|---|---|---|
+| G1 | Is recall on for every chat, or chosen per chat? | Per chat, starting off, so nothing changes for anyone who does not turn it on | Stage 3 |
+| G2 | How large is recall's own size limit, and can the user set it? | Adjustable, with a starting value from measurement | Stage 3 |
+| G3 | When a chat no longer fits the model, may the user choose to send recent messages plus recalled exchanges? | Yes, as an explicit choice. Warn or block stays the default | Stage 3 |
+| G4 | Does recall apply in Experimental Mode? | No. That mode sends only the current message by design | Stage 3 |
+| G5 | Are attached files and images indexed? | Not at first. Message text only | Stage 1 (recommendation is used unless the owner says otherwise) |
+| G6 | When are existing chats indexed? | In the background while charging, newest first, with progress shown | Stage 1 (recommendation is used unless the owner says otherwise) |
+| G7 | Do backups carry the index? | No. It is rebuilt after a restore | Stage 1 (recommendation is used unless the owner says otherwise) |
+| G8 | Which jobs does the live AI worker do, and is it chosen per chat? | Per chat. Start with marking what matters | The live AI worker |
+| G9 | Across chats, which ordinary chats may see each other? | Same companion or same project only, at first | Recall from other chats |
+| G10 | Is a recalled exchange carried over like a saved memory? | Yes, under the same rule | Stage 4 |
+| G11 | What does the user see when recall adds something? | Show it where sent memories are shown today, so the user can always tell what the AI was given | Stage 3 |
+| G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E? | If not, relabel those rows as proposed | Any time |
+| G13 | Should this plan move out of the `Memory System` folder? | Yes, to the top level, with the older documents moved to `legacy/` | Any time |
 
 ## G.18 Research behind this part (2026-11-10)
 
@@ -2468,3 +2586,27 @@ Sources:
 - RAPTOR: https://arxiv.org/abs/2401.18059
 - EmbeddingGemma model card: https://huggingface.co/google/embeddinggemma-300m
 - SillyTavern chat vectorization: https://docs.sillytavern.app/extensions/chat-vectorization/
+
+## G.19 Rules for whoever builds a stage
+
+A stage may be built by a different agent or model than the one that wrote
+this part. These rules keep that safe.
+
+- **Read this part and the files it names for your stage.** Parts A to F
+  are background for saved-memory work and are not needed for the
+  conversation index.
+- **Build one stage, as one pull request.** Do not start the next stage.
+- **Only "Owner" items are decisions.** Anything marked "Proposed" that
+  the user would see, read, or pay for is shown to the owner before it is
+  built: wording, screens, settings, defaults, and text sent to the AI.
+- **Never change:** the stored chats; the Summarizer and its summaries; the
+  existing chat search feature; saved-memory search results; the lorebook;
+  what a request contains when recall is off.
+- **Never remove anything from a request to make room for recall.**
+- **Never add or change a log line** without the owner's approval.
+- **If the code does not match what this part says about it, stop and say
+  so.** Do not guess, and do not copy another part of the app to fill the
+  gap.
+- **A stage is finished** when its tests pass, the local checks and Android
+  Checks pass, and this part is updated to say what was built.
+
