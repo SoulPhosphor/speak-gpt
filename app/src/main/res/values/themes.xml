@@ -2275,6 +2275,21 @@
         <item name="android:layout_marginEnd">10dp</item>
     </style>
 
+    <!-- A Quick Settings switch row with a title and subtext (Experimental
+         Mode). The title matches the other Quick Settings labels; the
+         subtext is the shared row subtitle and always wraps in full. -->
+    <style name="Widget.App.QuickSettings.ToggleRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingStart">@dimen/quick_settings_segment_padding_horizontal</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.ToggleRow.Title" parent="Widget.App.Dropdown.CanonicalLabel">
+        <item name="android:layout_width">match_parent</item>
+    </style>
+
     <style name="Widget.App.QuickSettings.Gear" parent="Widget.App.QuickTile.EditButton">
         <item name="android:src">@drawable/ic_settings</item>
     </style>

@@ -3226,6 +3226,14 @@ class Preferences internal constructor(
 
     fun getChatUseSummarizer(): Boolean = getChatUseSummarizerRaw() == "true"
 
+    /** This chat's Experimental Mode. Off in every new chat; stays on in a
+     *  chat until turned off there. */
+    fun getChatExperimentalMode(): Boolean = getBoolean("experimental_mode", false)
+
+    fun setChatExperimentalMode(enabled: Boolean) {
+        putBoolean("experimental_mode", enabled)
+    }
+
     fun setChatUseSummarizer(enabled: Boolean) {
         putString("use_summarizer", if (enabled) "true" else "false")
     }

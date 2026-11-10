@@ -1201,6 +1201,14 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         switchChatAlwaysSpeak?.setOnCheckedChangeListener { _, checked ->
             preferences?.setChatAlwaysSpeak(checked)
         }
+        // This chat only; every chat starts with it off.
+        view.findViewById<MaterialSwitch>(R.id.switch_chat_experimental_mode)?.apply {
+            isChecked = preferences?.getChatExperimentalMode() ?: false
+            setOnCheckedChangeListener { _, checked ->
+                preferences?.setChatExperimentalMode(checked)
+                updateListener?.onUpdate()
+            }
+        }
         switchChatMemory?.isChecked = preferences?.getChatMemoryEnabled() ?: true
         // "Archive this chat": positive framing. Checked = archive (capture on).
         // The stored pref is still "excluded" (the inverse), so flip both ways.

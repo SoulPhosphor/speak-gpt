@@ -318,8 +318,9 @@ import org.teslasoft.assistant.ui.chat.ResizeTrace
 import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
-import org.teslasoft.assistant.ui.chat.ConversationModeSelector
 import org.teslasoft.assistant.ui.chat.ChatSelectionMode
+import org.teslasoft.assistant.ui.chat.ExperimentalModeHint
+import org.teslasoft.assistant.conversation.ExperimentalMode
 import org.teslasoft.assistant.ui.chat.ChatExportBuilder
 import org.teslasoft.assistant.ui.drawer.ChatDrawerController
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
@@ -529,7 +530,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var pendingChatExportBytes: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
-    private var conversationModeSelector: ConversationModeSelector? = null
     private var drawerController: ChatDrawerController? = null
     private var playgroundPanel: View? = null
     private var conversationMode: ConversationMode = ConversationMode.CHAT
@@ -603,6 +603,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var threadLoader: LinearLayout? = null
     private var btnAttachFile: ImageButton? = null
     private var btnChatTools: ImageButton? = null
+    private var experimentalModeHint: ExperimentalModeHint? = null
     private var btnPersistentIncludes: ImageButton? = null
     private var btnExpandContent: ImageButton? = null
     private var btnCollapseContent: ImageButton? = null
@@ -1134,7 +1135,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // is false here on a stop → the mic is shown again.
             visibility = if (isHandsFreeEngaged()) View.GONE else View.VISIBLE
         }
-        messageInput?.hint = getString(R.string.hint_message)
+        messageInput?.hint = messageHint()
     }
 
     private fun micRecording() {
@@ -1208,7 +1209,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Hide the mic entirely while the conversation is live so it can't be
         // tapped by accident; it comes back when the loop stops (micIdle).
         btnMicro?.visibility = View.GONE
-        messageInput?.hint = getString(if (listening) R.string.hint_listening else R.string.hint_message)
+        messageInput?.hint = if (listening) getString(R.string.hint_listening) else messageHint()
     }
 
     /** True while a hands-free conversation is engaged (started from the
@@ -3370,6 +3371,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
         messageInput = findViewById(R.id.message_input)
+        experimentalModeHint = messageInput?.let { input ->
+            ExperimentalModeHint(input) { preferences }.also { it.refresh() }
+        }
         btnSend = findViewById(R.id.btn_send)
         progress = findViewById(R.id.progress)
         activityTitle = findViewById(R.id.chat_activity_title)
@@ -6256,6 +6260,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return FrozenSummarizerState(true, folded, injection)
     }
 
+    /** The "Message" placeholder, with Experimental Mode's atom when on. */
+    private fun messageHint(): CharSequence =
+        experimentalModeHint?.messageHint() ?: getString(R.string.hint_message)
+
+    private fun experimentalModeOn(): Boolean =
+        preferences?.getChatExperimentalMode() == true
+
+    /** Experimental Mode sends no summary, as in a fresh chat. */
+    private fun experimentalSummarizerState(experimental: Boolean): FrozenSummarizerState =
+        if (experimental) FrozenSummarizerState(false, 0, null) else frozenSummarizerState()
+
     private fun canonicalConversationSnapshot(): List<CanonicalConversationMessage> =
         messages.map(::canonicalMessage)
 
@@ -7752,6 +7767,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // model it started with (commonly the older per-chat
                     // default) while Quick Settings shows the new one.
                     loadModel()
+                    experimentalModeHint?.refresh()
                 }
 
                 override fun onForceUpdate() {
@@ -8823,21 +8839,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun initializeConversationModeUi() {
-        conversationModeSelector = findViewById(R.id.conversation_mode_selector)
         playgroundPanel = findViewById(R.id.playground_panel)
-        conversationModeSelector?.visibility = if (pendingConversation) View.VISIBLE else View.GONE
-        conversationModeSelector?.setMode(conversationMode, animate = false)
-        conversationModeSelector?.setOnModeChangedListener { selected ->
-            if (!pendingConversation) return@setOnModeChangedListener
-            val coordinator = NewConversationCoordinator(this)
-            if (!coordinator.setPendingMode(chatId, selected)) {
-                conversationModeSelector?.setMode(conversationMode, animate = false)
-                showPendingCommitFailure()
-                return@setOnModeChangedListener
-            }
-            conversationMode = selected
-            renderConversationMode()
-        }
 
         val tag = "embedded-playground-$chatId"
         if (supportFragmentManager.findFragmentByTag(tag) == null) {
@@ -8873,7 +8875,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun finishPendingCommit() {
         pendingConversation = false
         preferences?.setLastUsedChatId(chatId)
-        conversationModeSelector?.visibility = View.GONE
         intent.putExtra("pendingConversation", false)
     }
 
@@ -10480,15 +10481,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             storedMessage,
             sentIncludesJson
         )
-        val canonical = ArrayList(canonicalConversationSnapshot())
-        canonical.add(
+        val fullConversation = ArrayList(canonicalConversationSnapshot())
+        fullConversation.add(
             CanonicalConversationMessage(
                 isBot = false,
                 text = storedMessage,
                 includes = sentIncludes
             )
         )
-        val summarizerState = frozenSummarizerState()
+        val experimental = experimentalModeOn()
+        val canonical = ArrayList(ExperimentalMode.requestConversation(fullConversation, experimental))
+        val summarizerState = experimentalSummarizerState(experimental)
         protectRequestImagePayloads(canonical)
 
         disableTurnControlsUnlessTheyAreStops()
@@ -10776,7 +10779,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private suspend fun awaitVisionCapabilityCheck(): Boolean {
-        if (!conversationHasFullImages(chatMessageIncludes)) {
+        if (!conversationHasFullImages(requestMessageIncludes())) {
             activeImageCapabilityScope = null
             return true
         }
@@ -12239,6 +12242,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return "data:${ref.imageMimeType};base64,$encoded"
     }
 
+    /** The attachments the next request sends: those of every message, or
+     *  only the current message's while Experimental Mode is on. */
+    private fun requestMessageIncludes(): List<String?> =
+        ExperimentalMode.requestEntries(
+            chatMessages.indices.toList(),
+            experimentalModeOn()
+        ) { chatMessages[it].role == ChatRole.User }
+            .map { chatMessageIncludes.getOrNull(it) }
+
     private fun conversationHasFullImages(
         includesList: List<String?>
     ): Boolean = includesList.any { json ->
@@ -12598,7 +12610,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val genError = GenerationErrorClassifier.classify(e, providerEvidence)
             logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence)
 
-            if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
+            if (genError.isVisionRejection && conversationHasFullImages(requestMessageIncludes())) {
                 recordVisionCapability(
                     ImageCapability.UNSUPPORTED,
                     providerEvidence?.actualServingProvider
@@ -13682,13 +13694,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         suppressImageTools: Boolean = false
     ) {
         val streamingEnabled = preferences?.getStreaming() ?: true
+        val legacyExperimental = preparedTurn == null && experimentalModeOn()
         val legacyCanonical = if (preparedTurn == null) {
-            canonicalConversationSnapshot()
+            ExperimentalMode.requestConversation(canonicalConversationSnapshot(), legacyExperimental)
         } else {
             null
         }
         val legacySummarizerState = if (preparedTurn == null) {
-            frozenSummarizerState()
+            experimentalSummarizerState(legacyExperimental)
         } else {
             null
         }
@@ -13903,7 +13916,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 chatId = chatId,
                                 personaId = personaId,
                                 userMessage = lastUserMessageForLore,
-                                recentContext = recentTurnsContext(),
+                                recentContext = if (legacyExperimental) "" else recentTurnsContext(),
                                 modelTag = model,
                                 loreMatches = dedupedLoreMatches,
                                 worldId = preferences?.getChatWorldId(),
