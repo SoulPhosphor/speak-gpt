@@ -217,7 +217,7 @@ The specific corrections:
 3. **Done:** section 3's pull request (#182) is merged.
 4. **Owner and outside reviewers:** read Part G and correct it.
 5. **Owner:** answer the open decisions in G.17 only as each stage needs
-   them. None is needed before stage 1.
+   them. Only G5, G6, and G7 are needed before stage 1.
 6. **Agent:** build nothing until the owner approves Part G. Then build the
    stages in G.16, in the order the owner chooses, each as its own pull
    request with its own tests (G.15, G.19).
@@ -2526,7 +2526,7 @@ the index started sooner. Neither blocks the other.
 ## G.17 Open decisions for the owner
 
 Asked one at a time, and only when the stage that needs the answer is
-about to start. None of these has to be answered before stage 1. Each has a
+about to start. Only G5, G6, and G7 are needed before stage 1. Each has a
 recommendation.
 
 | # | Question | Recommendation | Needed before |
@@ -2535,9 +2535,9 @@ recommendation.
 | G2 | How large is recall's own size limit, and can the user set it? | Adjustable, with a starting value from measurement | Stage 3 |
 | G3 | When a chat no longer fits the model, may the user choose to send recent messages plus recalled exchanges? | Yes, as an explicit choice. Warn or block stays the default | Stage 3 |
 | G4 | Does recall apply in Experimental Mode? | No. That mode sends only the current message by design | Stage 3 |
-| G5 | Are attached files and images indexed? | Not at first. Message text only | Stage 1 (recommendation is used unless the owner says otherwise) |
-| G6 | When are existing chats indexed? | In the background while charging, newest first, with progress shown | Stage 1 (recommendation is used unless the owner says otherwise) |
-| G7 | Do backups carry the index? | No. It is rebuilt after a restore | Stage 1 (recommendation is used unless the owner says otherwise) |
+| G5 | Are attached files and images indexed? | Not at first. Message text only | Stage 1 |
+| G6 | When are existing chats indexed? | In the background while charging, newest first, with progress shown | Stage 1 |
+| G7 | Do backups carry the index? | No. It is rebuilt after a restore | Stage 1 |
 | G8 | Which jobs does the live AI worker do, and is it chosen per chat? | Per chat. Start with marking what matters | The live AI worker |
 | G9 | Across chats, which ordinary chats may see each other? | Same companion or same project only, at first | Recall from other chats |
 | G10 | Is a recalled exchange carried over like a saved memory? | Yes, under the same rule | Stage 4 |
