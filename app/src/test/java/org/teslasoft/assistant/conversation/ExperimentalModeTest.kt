@@ -32,6 +32,23 @@ class ExperimentalModeTest {
     }
 
     @Test
+    fun onKeepsOnlyTheNewestUserEntryOfAnyList() {
+        val roles = listOf("user", "assistant", "user", "assistant")
+        assertEquals(
+            listOf(2),
+            ExperimentalMode.requestEntries(roles.indices.toList(), enabled = true) {
+                roles[it] == "user"
+            }
+        )
+        assertEquals(
+            roles.indices.toList(),
+            ExperimentalMode.requestEntries(roles.indices.toList(), enabled = false) {
+                roles[it] == "user"
+            }
+        )
+    }
+
+    @Test
     fun onWithNoUserMessageSendsNothing() {
         val onlyReply = listOf(CanonicalConversationMessage(isBot = true, text = "reply"))
         assertTrue(ExperimentalMode.requestConversation(onlyReply, enabled = true).isEmpty())

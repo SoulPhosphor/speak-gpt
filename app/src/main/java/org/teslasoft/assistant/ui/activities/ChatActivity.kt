@@ -10775,7 +10775,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private suspend fun awaitVisionCapabilityCheck(): Boolean {
-        if (!conversationHasFullImages(chatMessageIncludes)) {
+        if (!conversationHasFullImages(requestMessageIncludes())) {
             activeImageCapabilityScope = null
             return true
         }
@@ -12238,6 +12238,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return "data:${ref.imageMimeType};base64,$encoded"
     }
 
+    /** The attachments the next request sends: those of every message, or
+     *  only the current message's while Experimental Mode is on. */
+    private fun requestMessageIncludes(): List<String?> =
+        ExperimentalMode.requestEntries(
+            chatMessages.indices.toList(),
+            experimentalModeOn()
+        ) { chatMessages[it].role == ChatRole.User }
+            .map { chatMessageIncludes.getOrNull(it) }
+
     private fun conversationHasFullImages(
         includesList: List<String?>
     ): Boolean = includesList.any { json ->
@@ -12597,7 +12606,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val genError = GenerationErrorClassifier.classify(e, providerEvidence)
             logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence)
 
-            if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
+            if (genError.isVisionRejection && conversationHasFullImages(requestMessageIncludes())) {
                 recordVisionCapability(
                     ImageCapability.UNSUPPORTED,
                     providerEvidence?.actualServingProvider

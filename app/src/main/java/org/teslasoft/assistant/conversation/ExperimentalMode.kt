@@ -28,9 +28,20 @@ object ExperimentalMode {
     fun requestConversation(
         canonical: List<CanonicalConversationMessage>,
         enabled: Boolean
-    ): List<CanonicalConversationMessage> {
-        if (!enabled) return canonical
-        val current = canonical.indexOfLast { !it.isBot }
-        return if (current < 0) emptyList() else listOf(canonical[current])
+    ): List<CanonicalConversationMessage> =
+        requestEntries(canonical, enabled) { !it.isBot }
+
+    /**
+     * The same choice for any per-message list: all of [entries] when the mode
+     * is off; otherwise only the newest entry [isUser] accepts.
+     */
+    fun <T> requestEntries(
+        entries: List<T>,
+        enabled: Boolean,
+        isUser: (T) -> Boolean
+    ): List<T> {
+        if (!enabled) return entries
+        val current = entries.indexOfLast(isUser)
+        return if (current < 0) emptyList() else listOf(entries[current])
     }
 }
