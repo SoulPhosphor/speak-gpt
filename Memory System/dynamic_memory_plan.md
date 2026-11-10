@@ -6,12 +6,35 @@ documents.**
 
 ## Where things stand (read this first)
 
-**Last updated 2026-11-10** (Inside Joke built on the work branch; the vibe
-moved to each memory; next steps updated). The owner relies on the agent to lead this
-work step by step. A new session reads this section first, then continues
-from "Next steps". Do not re-diagnose what Part A already measured. An
-independent review of the plan and of pull request #180 was folded in on
-2026-11-08; its points are reflected below and in Part E.
+**Last updated 2026-11-10** (a fresh review of #180; carry-over put on hold;
+Part G added for the conversation index and recall). The owner relies on the
+agent to lead this work step by step. A new session reads this section
+first, then continues from "Next steps". Do not re-diagnose what Part A
+already measured. An independent review of the plan and of pull request #180
+was folded in on 2026-11-08; its points are reflected below and in Part E.
+
+### 0. Review on 2026-11-10: read this before anything else
+
+A second agent reviewed #180 and this plan with the owner on 2026-11-10.
+
+- **#180 is a sound foundation but unfinished.** Two gaps are live on the
+  beta: follow-up messages lose their memories, and long messages miss
+  memories. Details: G.2.
+- **On hold (owner, 2026-11-10):** carry-over (step 1.12) and everything
+  else in section 3b. Nothing there is built until the owner approves
+  Part G.
+- **New work wanted by the owner:** recall of earlier conversation, built on
+  a proper index. The whole design is Part G, at the end of this document.
+  Part G is a proposal for the owner and outside reviewers to read. Only the
+  items it marks "Owner" are decisions.
+- **Unconfirmed approvals.** Part E marks many rows "Approved" under a rule
+  that a recommendation the owner saw and did not object to counts as
+  approved. The owner has not confirmed making that rule. Until the owner
+  does, treat every row that is not marked "Decided (owner)" as a proposal,
+  not a decision (`CLAUDE.md` section 2).
+- **Measurements in Part A are small.** The best result quoted in A.10 came
+  from a setup that did not ship (a different model variant, full-size
+  vectors, hand-written tags). G.18 has the published figures.
 
 ### 1. Built (pull request #180 into `beta/new-client`)
 
@@ -121,6 +144,9 @@ Built in the pull request from branch `ccr-985655d1-x68k8w` (owner approval,
 
 ### 3b. The pull request after that (approved direction, not yet built)
 
+**On hold (owner, 2026-11-10).** Nothing in this section is built until the
+owner approves Part G. Carry-over is redesigned there (G.9).
+
 - **Carry-over** (step 1.12), with the revised rule in B.5: no fixed carry
   length.
 - **The lorebook repeat check on both send paths** (step 1.13). Picked
@@ -188,18 +214,17 @@ The specific corrections:
    - tell the agent what looked wrong.
 
    Nothing else is needed from the owner for this step.
-3. **Agent:** if section 3's pull request is still open, merge it when Codex
-   passes it and Android Checks is green. Then ask the owner the follow-up
-   in section 3.
-4. **Agent:** build section 3b: carry-over, the lorebook repeat check on
-   both send paths, the test conversations, and the memory-use instruction.
-   Show the owner the instruction's exact text first.
-5. **Agent, in this order, each when the owner asks for it:** Phase 2 (data
-   control), Phase 3 (the Always tab), Phase 4 (important dates and the
-   Dates tab; settle D55 first), Phase 5 (fading), Phase 6 (Memory Assistant
-   date proposals), then the later features. Before each, show the owner its
-   exact wording, screens, and AI-facing text. The design decisions are
-   already recorded in Part E.
+3. **Done:** section 3's pull request (#182) is merged.
+4. **Owner and outside reviewers:** read Part G and correct it.
+5. **Owner:** answer the open decisions in G.17, one at a time.
+6. **Agent:** build nothing until the owner approves Part G. Then build the
+   stages in G.16, in the order the owner chooses, each as its own pull
+   request, measured against the test conversations (G.15).
+7. **Agent, each when the owner asks for it:** Phase 2 (data control),
+   Phase 3 (the Always tab), Phase 4 (important dates and the Dates tab;
+   settle D55 first), Phase 5 (fading), Phase 6 (Memory Assistant date
+   proposals), then the later features. Before each, show the owner its
+   exact wording, screens, and AI-facing text.
 
 ## How to use this document
 
@@ -213,6 +238,9 @@ The specific corrections:
   bring-up setting, dates, fading, Retired, and the briefing. Phases 2–6
   refer to it.
 - **Part E** lists every decision, both decided and open.
+- **Part F** summarizes published memory systems.
+- **Part G** is the design for the conversation index, recall, and
+  carry-over (2026-11-10). It is a proposal until the owner approves it.
 
 ## Status
 
@@ -1938,3 +1966,505 @@ patterns to learn from, not exact specifications.
 - Memory silently breaking after updates: the test screen and assembly
   log make it visible.
 
+
+---
+
+# Part G: The conversation index, recall, and carry-over (2026-11-10)
+
+## G.0 Status and how to read this part
+
+- **This part is a proposal.** It was written on 2026-11-10 from the current
+  code, the review of #180, and published research. Nothing in it is built.
+- **Two labels are used throughout:**
+  - **Owner** means the owner said it on 2026-11-10. These are decisions.
+  - **Proposed** means the agent recommends it. The owner has not approved
+    it.
+- **Names here are planning names,** not on-screen wording. Every label,
+  explanation, and AI-facing text is shown to the owner before it is built.
+- **The design covers the whole system,** including parts built later.
+  Building in stages (G.16) decides the order. It does not leave anything
+  out of the design.
+
+Words used in this part:
+
+- **Embedding model:** the on-phone model that turns text into numbers that
+  stand for its meaning, so texts with similar meaning can be found.
+- **Exchange:** one message from the user and the reply or replies that
+  follow it, up to the user's next message.
+- **Index:** a separate list of entries stored beside the chats. Each entry
+  points to a place in a conversation. The conversation itself is never cut,
+  moved, or rewritten.
+- **Index entry:** one searchable piece, about a paragraph long, with labels.
+- **Recall:** finding an earlier exchange through the index and adding a copy
+  of it to what the AI reads for the current message.
+- **Carry-over:** keeping what was relevant to the previous message while
+  the conversation stays on that subject.
+- **Scope:** the rule for which chats may see something (ordinary, companion,
+  project, or roleplay).
+
+## G.1 What the owner asked for (2026-11-10)
+
+1. **Owner:** recall only ever adds. The full chat keeps being sent as it is
+   today. Nothing is removed from what the AI receives in order to recall
+   something else.
+2. **Owner:** the Summarizer is a continuity engine, not a fact compressor.
+   It carries the tone and depth of the conversation in the form the user
+   chose. This work does not change it, does not use its summaries as raw
+   material, and does not replace it.
+3. **Owner:** recalled conversation is handed over in its original words.
+   Tone is never stripped out.
+4. **Owner:** chunking and the index must be designed properly, from
+   research, before anything is built.
+5. **Owner:** an extra paid AI model is optional. The system must work fully
+   without one. The foundation must still be able to support the
+   Summarizer's model doing message-level work while the user is chatting.
+   The same model can do several jobs; the summarizing job stays its own
+   job.
+6. **Owner:** keep it cheap. Future AI prices are unknown. The Memory
+   Assistant is not to be run live just to build the index.
+7. **Owner:** recall within the current chat comes first. Recall from other
+   chats is wanted later, and it must be controlled by scope: a roleplay
+   chat must not reach companion-only material.
+8. **Owner:** users with an embedding model come first. Support for users
+   without one can come later.
+9. **Owner:** no carry-over work until this plan is solid.
+10. **Owner:** rely on published research where it exists. Spend effort on
+    our own testing only where research gives no answer.
+
+## G.2 What the review of #180 found
+
+What #180 got right, checked in the code:
+
+- common words no longer match every memory;
+- importance is a small nudge and cannot outrank a real match;
+- removing the cooldown was correct: the memory text is attached only to
+  the message being sent and is never kept in the chat history
+  (`ChatActivity.kt`, both send paths);
+- the tuning numbers are stored, bounded, and adjustable on the test
+  screen;
+- the Memory Assistant's own search is untouched.
+
+Gaps that are live on the beta:
+
+- **Follow-up messages lose their memories.** Search uses only the latest
+  message. "What should I feed her?" does not find the Pepper memory that
+  the previous message found. Carry-over was planned to cover this and is
+  not built.
+- **Long messages miss memories.** A memory passes on keywords only when it
+  covers half of the message's meaningful words, so one name in a long
+  message never passes that way. Meaning search weakens too, because a long
+  message blends its subjects into one average. Part A.11's own numbers
+  show it: 8 missed of 26, up from 5.
+- **The numbers are guesses.** They come from 20 invented memories. The
+  test conversations that were meant to check them are not built.
+
+Smaller issues:
+
+- "move" does not match "moving", and "run" does not match "running";
+- when more than half of a library relates to the message, meaning search
+  can reject all of it, because none stands out;
+- every message re-reads the words of every memory. Nobody has measured
+  this on a phone with thousands of memories;
+- one log label says "no model" when the real cause was that the message
+  failed to embed;
+- meaning search reads only the first 512 tokens of a memory
+  (`EmbeddingModels.kt`), so a very long memory is partly invisible to it.
+  The model itself can read 2,048.
+
+## G.3 The whole system at a glance
+
+| Part | What it does | Exists today? | Cost to the user |
+|---|---|---|---|
+| Conversation store | Keeps every chat whole and in order | Yes. Untouched | None |
+| Index entries | Paragraph-sized entries pointing to the whole exchange, with labels | Partly (G.4) | None |
+| Search | Finds entries by meaning and by keywords | Yes, for saved memories and for chat search | None |
+| Scope walls | Decide which entries a chat may see | Yes, for saved memories | None |
+| Recall | Adds matching exchanges beside the newest message | Partly. Saved memories are placed this way | A little more text per message |
+| Carry-over | Keeps what was relevant while the subject continues | No | None |
+| Live AI worker | Optional. The Summarizer's model does message-level work during a chat | No. The model connection exists | Paid, only when turned on |
+| Upkeep | Keeps the index correct after edits, deletions, restores | Yes, for chat search | None |
+| Testing | Test conversations and the Memory Search Test screen | Screen yes. Conversations no | None |
+
+Recall from other chats is not a separate part. It is the same index and
+search, with the scope walls deciding how far the search may look.
+
+## G.4 Parts the app already has
+
+Each was checked in the current code on 2026-11-10.
+
+- **A keyword index of every message in every chat.** The chat search
+  feature already keeps one entry per message in its own encrypted database
+  (`preferences/chatsearch/ChatSearchStore.kt`). Each entry holds the chat,
+  the message's permanent ID, who wrote it, the text, a text fingerprint,
+  and timestamps.
+- **Upkeep for that index.** `ChatSearchIndexManager.kt` refreshes a chat
+  when it changes, handles deleted chats, rebuilds from the stored chats,
+  and rebases after a restore. `ChatSearchIndexJournal.kt` records which
+  chats still need refreshing.
+- **Permanent message IDs.** Every message keeps one ID for life, through
+  edits, regenerated replies, and renames (`MessageIdentity.kt`).
+- **The embedding model and vector storage.** Vectors are stored by which
+  model made them, so a model change is detected and missing vectors are
+  repaired in the background (`Librarian.kt`, the `embeddings` table).
+- **Meaning and keyword search with a relevance gate** (`LiveRetrieval.kt`,
+  `KeywordText.kt`).
+- **Scope rules,** enforced in the database query itself
+  (`RetrievalScope`, `MemoryStore.activeMemoriesForScope`). Roleplay chats
+  are walled off from real-life and project memories, and companion
+  memories need an explicit door.
+- **Placement beside the newest message.** Memory text is added just before
+  the newest message so the earlier history stays unchanged and cacheable
+  (`ChatActivity.kt`).
+- **A size limit for added text** (Memory Space) and the request-size check
+  that warns or blocks when a request does not fit the model.
+- **A record of what was sent with the previous message** (the injection
+  record in `MemoryStore.kt`, kept from the removed cooldown).
+- **The Summarizer's model connection and settings,** and its rule that a
+  cut never separates a message from its reply (`SummarySections.kt`).
+- **The Memory Search Test screen.**
+
+What this means: the conversation index does not start from nothing. The
+keyword half and its upkeep exist. The new work is the meaning half, the
+paragraph-sized entries, the scope labels, and recall itself.
+
+## G.5 Index entries (Proposed)
+
+**What one entry is.** An entry covers about one paragraph of one message.
+It points to its message and its exchange. A short message is one entry. A
+long message becomes several entries, so a small detail has its own entry
+and can be found.
+
+**What an entry records:**
+
+| Field | Why |
+|---|---|
+| Chat ID | Which conversation. Lets search stay in one chat or cross chats |
+| Message ID (permanent) | Points back to the original message |
+| Exchange position | Lets recall deliver the whole exchange and its neighbours |
+| Position within the message | Which paragraph |
+| Who wrote it | The user or the AI |
+| Time written | For date-aware search and ordering |
+| Text fingerprint | Detects edits, so only changed text is re-indexed |
+| Scope labels | The companion, project, world, campaign, or character the chat had (G.7) |
+| Meaning vector, and which model made it | Meaning search. A model change is detected |
+| Keyword text | Keyword search |
+| AI notes (optional, kept separate) | Written only by the live AI worker (G.11) |
+
+**Where a long message is cut.** At paragraph breaks first, then sentence
+ends. Never in the middle of a sentence. Never across two messages.
+
+**How big an entry is.** A starting size is chosen by measurement (G.15),
+inside the embedding model's limit. Published starting points are 400
+characters (SillyTavern) and 256 tokens. One study found that chunk size
+changed results only slightly, and another found that automatic
+"semantic chunking" did no better than plain fixed sizes on realistic text
+(G.18). So a simple paragraph rule is supported, and the size is tuned, not
+guessed.
+
+**Small entries, whole delivery.** Search runs on the small entries. What
+the AI receives is always the whole exchange the entry belongs to, never a
+fragment.
+
+**What is indexed.** The text of messages as the user sees them. Attached
+files, images, and hidden messages are open questions (G.17).
+
+**Where vectors are kept.** Making a vector is the slow step, so a vector is
+stored against its text fingerprint and model. Text that has not changed is
+never embedded twice, including after a rebuild of the keyword index.
+
+## G.6 Search (Proposed)
+
+- **Two ways together:** meaning (the embedding model) and keywords. On
+  conversation text, published results show keyword search matters as much
+  as meaning search (G.18), and it does not depend on the embedding model.
+- **Search text:** the user's latest message. For a long message, each
+  sentence is also searched on its own (G.10).
+- **Follow-up questions** such as "what did we decide?" have no meaningful
+  words of their own. They are handled by the same "still on this subject"
+  check as carry-over (G.9), not by gluing earlier messages onto the search
+  text, which #180 measured as harmful.
+- **A relevance gate:** an entry is used only when it clearly relates. When
+  nothing relates, nothing is added.
+- **Duplicates:** several entries from the same exchange count once.
+- **The gate numbers for conversation entries are set separately** from the
+  saved-memory numbers. Conversation text is longer and looser than a saved
+  memory, so the same numbers are not assumed to fit.
+
+## G.7 Scope walls (Proposed, on the owner's requirement)
+
+**Owner:** recall across chats must be controlled. A roleplay chat must not
+reach companion-only material.
+
+- **Every entry is stamped with scope labels from the first day,** even
+  while recall only looks inside the current chat. Adding other chats later
+  is then a change to where search looks, not a rebuild.
+- **Recall inside the current chat needs no wall.** The chat is already
+  sending that conversation.
+- **Recall across chats uses the same wall saved memories use,** enforced in
+  the database query, not afterwards:
+  - a roleplay chat sees only entries from chats with the same world,
+    campaign, or character;
+  - companion entries are seen only with that companion, and in roleplay
+    only through the existing door (the narrator match or the existing
+    setting);
+  - real-life and project entries never enter roleplay.
+- **Open:** which ordinary chats may see each other, and whether cross-chat
+  recall is chosen per chat or per companion (G.17).
+- **Known limit:** a chat's settings can change during its life. Messages
+  written before the index existed can only be stamped with the chat's
+  settings at the time they are indexed.
+
+## G.8 Recall: what is added to a request (Proposed)
+
+1. The request is built exactly as today: the full chat, or the Summarizer's
+   summaries plus recent messages when the Summarizer is on.
+2. The index is searched with the user's latest message.
+3. Matching exchanges are added, whole and in their original words, in a
+   clearly marked section just before the newest message, beside the saved
+   memories. The stored conversation is not changed.
+4. Each recalled exchange carries when it was said, so the AI can tell old
+   from recent.
+
+Why this helps even when the whole chat is already sent: models attend most
+to the start and end of what they are given and least to the middle (G.18).
+An exchange from far back sits in the middle. A copy beside the newest
+message is where the model reads most carefully.
+
+Rules:
+
+- **Its own size limit,** separate from Memory Space, so recall can never
+  push out saved memories, and saved memories can never push out recall.
+- **Not the most recent messages.** An exchange the AI has just read is not
+  recalled again.
+- **Not what is already added.** An exchange that repeats a saved memory or
+  a lorebook entry already in the request is skipped.
+- **Neighbours.** The exchange before or after is brought along when the
+  matching one cannot be understood alone.
+- **How many.** A starting number is set by measurement. SillyTavern starts
+  with 3. Redis's tested setup is reported as 5 with one neighbour each
+  side; that figure could not be confirmed from its public page.
+- **When the chat no longer fits the model:** today the app warns or blocks.
+  That stays the default. Any other behaviour is the user's explicit choice
+  (G.17).
+- **Experimental Mode** sends only the current message by design. Whether
+  recall applies there is open (G.17).
+
+## G.9 Carry-over for saved memories (Proposed; on hold)
+
+**The problem.** The saved-memory text is rebuilt for every message and is
+not kept in the chat history. A memory found for one message is gone for
+the next unless that message finds it again.
+
+**The rule.**
+
+- Only the memories sent with the previous message are candidates.
+- A candidate stays when the user's new message still relates to it, at an
+  easier bar than a new memory must clear.
+- A candidate also stays when the new message is a short continuation with
+  no subject of its own ("exactly", "and then?") and the AI's previous
+  reply still relates to it.
+- Otherwise it is dropped. This covers a change of subject and a memory
+  that was sent by mistake.
+- The AI's reply alone can never keep a memory alive. The user has to still
+  be on the subject.
+- There is no fixed number of messages after which a memory is dropped.
+- New matches rank ahead of carried ones when the memory limit is full.
+- Carried memories obey scope like any other.
+
+**What is not known.** The "easier bar" and the test for "a short
+continuation" have no published answer. They are measured on the test
+conversations before anything is built (G.15).
+
+**Relation to recall.** Carry-over and conversation recall are separate.
+They share the "still on this subject" check and nothing else. Each has its
+own size limit.
+
+**Open:** whether a recalled exchange is also carried over (G.17).
+
+## G.10 Long messages (Proposed)
+
+- Each sentence of a long message is searched on its own, as well as the
+  whole message. A memory or an index entry is used when it matches the
+  whole message or any one sentence.
+- "I'm worried about Pepper" inside a long message is then judged as its
+  own short message.
+- An accidental word in a sentence about something else is still only a
+  small part of that sentence, so the protection against wrong matches is
+  kept.
+- **Cost:** each sentence is one more pass through the on-phone model, so a
+  long message takes longer to send. The owner said on 2026-11-10 that it
+  should take longer. The number of sentences searched is limited, and the
+  time is measured on the phone before it ships.
+- No published study covers this. It is measured here.
+
+## G.11 The optional live AI worker (Proposed, on the owner's requirement)
+
+**Owner:** the foundation must support the Summarizer's model doing
+message-level work while the user chats, as an option.
+
+- **What it is.** A background job that reads new exchanges as they are
+  indexed and writes notes about them. It is off unless the user turns it
+  on. With it off, everything else in this part works in full.
+- **Which model.** The connection and settings the Summarizer already has.
+  It is a separate job with its own instruction. It never reads or writes
+  the Summarizer's summaries.
+- **Jobs it could do,** each one the owner's decision:
+  - mark which exchanges hold something that matters (a decision, a date, a
+    promise), which the embedding model cannot judge;
+  - label the topic of a stretch of conversation. Published results favour
+    topic-sized pieces, but only when a capable model does the grouping
+    (G.18);
+  - propose saved memories into Pending during the chat, for the user to
+    review later.
+- **What the foundation provides for it:** a place on each index entry for
+  AI notes, kept separate from the original text and always marked as
+  AI-written; a queue of exchanges waiting to be read; and upkeep that
+  discards a note when its exchange is edited or deleted.
+- **What is always delivered** is the original exchange. An AI note only
+  helps find it.
+- **Cost.** It runs once per stretch of conversation, not once per message
+  sent. The app shows what the service reports and never a built-in price.
+- **Everything about it that the user sees or the AI is told** is shown to
+  the owner before it is built.
+
+## G.12 Upkeep (Proposed)
+
+| Event | What happens to the index |
+|---|---|
+| New message | Its entries are added in the background |
+| Message edited | Entries for that message are replaced. Unchanged paragraphs keep their vectors |
+| Reply regenerated or another version chosen | Entries follow the version that is shown |
+| Message deleted | Its entries and any AI notes on them are removed |
+| Chat deleted | All its entries are removed |
+| Backup restored | The index is rebuilt from the restored chats |
+| Embedding model changed | Keyword search keeps working at once. Vectors are remade in the background |
+| Chat settings changed (companion, project, roleplay) | Scope labels on later messages follow the new settings |
+| Existing chats, first time | Indexed in the background, a little at a time, newest first |
+
+The index is derived: it can always be rebuilt from the stored chats, and
+losing it loses nothing the user wrote.
+
+## G.13 When a part is unavailable (Proposed)
+
+| Missing | What still works |
+|---|---|
+| The embedding model | Keyword recall. This is also the later path for users who cannot have the model |
+| A vector for some entries | Those entries are found by keywords until the vector is made |
+| The live AI worker, or its network | Everything except AI notes |
+| The whole index | The chat is sent exactly as today. Sending is never blocked by recall |
+
+Failures are shown in plain words where the user would otherwise be
+misled, and never as a generic error.
+
+## G.14 Cost, speed, storage, privacy (Proposed)
+
+- **Tokens.** A recalled exchange is sent once more in that request. Its
+  own size limit bounds the cost.
+- **Speed.** Indexing runs in the background and must not slow typing,
+  scrolling, or sending. Search time is added to sending, and is measured
+  on the owner's Pixel 8. No public figure exists for this model on a
+  phone's ordinary processor.
+- **Battery.** Indexing existing chats is heavy work. When it runs is an
+  open decision (G.17).
+- **Storage.** A 256-number vector is about 1 KB per entry.
+- **Privacy.** The index stays on the phone, encrypted like the chat search
+  database. Nothing is sent anywhere by indexing. Only the optional AI
+  worker sends conversation text to a model, and only when turned on.
+- **Backups.** The index can be rebuilt, so whether backups carry it is an
+  open decision (G.17).
+
+## G.15 Testing and measurement
+
+Published research settles the structure of the index. It does not answer
+these, so they are measured here, with the real embedding model, before the
+part that needs them is built:
+
+- the easier bar for carry-over, and what counts as a short continuation;
+- whether searching each sentence finds small details without bringing in
+  wrong matches;
+- the entry size, the relevance gate for conversation entries, and how many
+  exchanges to recall;
+- speed on the phone.
+
+The test set is a group of written sample conversations: long messages with
+one small important detail, follow-ups, changes of subject, a memory sent
+by mistake, roleplay and companion chats, and a library where most
+memories share one subject. Each stage in G.16 must pass it before it
+merges, and it becomes part of the automated tests.
+
+## G.16 Build stages
+
+The design covers all stages. Each stage works on its own and is its own
+pull request. The owner chooses the order and when each starts.
+
+| Stage | What is built | Depends on |
+|---|---|---|
+| 1 | The test conversations and the measurements in G.15 | Nothing |
+| 2 | The two live gaps in saved-memory search: long messages and carry-over | Stage 1 |
+| 3 | Index entries, vectors, scope labels, and upkeep | Stage 1 |
+| 4 | Recall within the current chat | Stage 3 |
+| 5 | The optional live AI worker | Stage 3 |
+| 6 | Recall from other chats, behind the scope walls | Stage 4 |
+| Later | Keyword-only recall for users without an embedding model | Stage 4 |
+
+## G.17 Open decisions for the owner
+
+Asked one at a time, not all at once. Each has a recommendation.
+
+| # | Question | Recommendation |
+|---|---|---|
+| G1 | Is recall on for every chat, or chosen per chat? | Per chat, starting off, so nothing changes for anyone who does not turn it on |
+| G2 | How large is recall's own size limit, and can the user set it? | Adjustable, with a starting value from measurement |
+| G3 | When a chat no longer fits the model, may the user choose to send recent messages plus recalled exchanges? | Yes, as an explicit choice. Warn or block stays the default |
+| G4 | Does recall apply in Experimental Mode? | No. That mode sends only the current message by design |
+| G5 | Are attached files and images indexed? | Not at first. Message text only |
+| G6 | When are existing chats indexed? | In the background while charging, newest first, with progress shown |
+| G7 | Do backups carry the index? | No. It is rebuilt after a restore |
+| G8 | Which jobs does the live AI worker do, and is it chosen per chat? | Per chat. Start with marking what matters |
+| G9 | Across chats, which ordinary chats may see each other? | Same companion or same project only, at first |
+| G10 | Is a recalled exchange carried over like a saved memory? | Yes, under the same rule |
+| G11 | What does the user see when recall adds something? | Show it where sent memories are shown today, so the user can always tell what the AI was given |
+| G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E? | If not, relabel those rows as proposed |
+| G13 | Should this plan move out of the `Memory System` folder? | Yes, to the top level, with the older documents moved to `legacy/` |
+
+## G.18 Research behind this part (2026-11-10)
+
+Read by the agent from the sources named. Figures are the sources' own.
+
+| Question | Finding | Source |
+|---|---|---|
+| Is sending a whole long history best? | No. Whole history scored 54.15; retrieved topic segments scored 71.57. Another study found large drops with a 113,000-token history against a focused excerpt | Microsoft SeCom (ICLR 2025); Chroma, "Context Rot" |
+| Where do models attend? | Most to the start and end of the input, least to the middle | "Lost in the Middle" (Liu et al., 2023) |
+| What size should a piece be? | Topic segments 71.57, single turns 65.58, whole sessions 63.16 | Microsoft SeCom |
+| Who can split by topic? | GPT-4 did. With a small model the score fell to 61.84, and on a second test it lost to single turns | Microsoft SeCom, Table 11 |
+| Does automatic semantic chunking help? | Not consistently. On realistic text, fixed-size chunks did as well or better | Qu, Tu and Bao, NAACL 2025 Findings |
+| Meaning or keywords? | Both. Keyword search beat meaning search by up to 11.98 points on single turns and sessions; with topic segments the gap was about 2 | Microsoft SeCom |
+| Saved facts or the original conversation? | Both. Facts alone 71.2%; with the original conversation 86.1% | Redis, LongMemEval study |
+| Does linking facts to conversation help? | Yes. Searching with extracted facts attached raised recall about 9.4% and answers 5.4% | LongMemEval (ICLR 2025) |
+| Do dates help? | Date-aware search raised recall 6.8% to 11.3% on time questions, using a strong paid model | LongMemEval |
+| Does a line of context on each piece help? | Missed retrievals fell 35%, and 49% with keyword search. It used a paid call per piece | Anthropic, "Contextual Retrieval" |
+| Do summary layers help? | Up to 20 points on one long-document test, built with paid summaries | RAPTOR (ICLR 2024) |
+| Do knowledge graphs help? | 71.2% against 60.2% in the maker's own test; an independent test measured 63.8% | Zep paper; third-party comparison |
+| How good is the app's embedding model? | Ranked first among models under 500 million parameters by its maker. English score 69.67 at full size, 68.37 at the app's 256 numbers, 69.31 for the q4 variant | EmbeddingGemma model card |
+| Is there one best system? | No. Top scores are self-reported and no neutral test compares the designs under the same conditions | LongMemEval and LoCoMo comparisons |
+| What does a working chat client do? | Searches with the last 2 messages, protects the last 5, inserts 3, cuts long messages at 400 characters, stores each message separately, and places recalled messages prominently even when they are already in the request | SillyTavern documentation |
+
+Two cautions:
+
+- SillyTavern searches with the last 2 messages. #180 measured that gluing
+  recent messages onto the search hurt saved-memory search in this app, so
+  that setting is not adopted without testing.
+- The widely repeated "256 tokens with 50 overlap" figure could not be
+  confirmed from its named source, which studied documents, not chats.
+
+Sources:
+
+- Microsoft SeCom: https://arxiv.org/abs/2502.05589
+- LongMemEval: https://arxiv.org/abs/2410.10813
+- Redis study: https://redis.github.io/redis-ai-research-public/longmemeval-agent-memory/
+- Semantic chunking study: https://arxiv.org/abs/2410.13070
+- Chroma, "Context Rot": https://research.trychroma.com/context-rot
+- Anthropic, "Contextual Retrieval": https://www.anthropic.com/engineering/contextual-retrieval
+- RAPTOR: https://arxiv.org/abs/2401.18059
+- EmbeddingGemma model card: https://huggingface.co/google/embeddinggemma-300m
+- SillyTavern chat vectorization: https://docs.sillytavern.app/extensions/chat-vectorization/
