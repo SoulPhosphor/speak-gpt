@@ -2838,6 +2838,11 @@
         <item name="android:layout_marginTop">@dimen/field_label_page_top_gap</item>
     </style>
 
+    <!-- A field label that follows a control row or another field on a page. -->
+    <style name="Widget.App.Field.Label.AfterRow">
+        <item name="android:layout_marginTop">@dimen/field_label_after_row_gap</item>
+    </style>
+
     <!-- Expandable text box: a Widget.App.Field.Box with the Expand Content
          icon in its lower-right corner. The input keeps the field's normal
          size (three lines, growing with the text). Expanding shows the
@@ -3492,6 +3497,11 @@
         <item name="android:maxLines">1</item>
         <item name="android:textSize">@dimen/memory_browser_metadata_text_size</item>
     </style>
+    <!-- A memory card's vibe line, under the memory text. -->
+    <style name="Widget.App.MemoryBrowser.Vibe" parent="Widget.App.Field.Hint">
+        <item name="android:layout_marginTop">@dimen/memory_browser_vibe_gap</item>
+        <item name="android:textSize">@dimen/memory_browser_metadata_text_size</item>
+    </style>
     <style name="Widget.App.MemoryBrowser.Note" parent="Widget.App.Field.Hint">
         <item name="android:textColor">?attr/colorPrimary</item>
         <item name="android:textStyle">bold</item>
@@ -3537,6 +3547,10 @@
     <style name="Widget.App.ActionBar.ChainedButton.Primary" parent="Widget.App.ActionBar.ChainedButton">
         <item name="android:tint">?attr/colorPrimary</item>
     </style>
+    <!-- The memory editor's Vibe box: the same short box as the Title, so the
+         memory's two short notes always match. -->
+    <style name="Widget.App.Field.Box.MemoryVibe" parent="Widget.App.Field.Box.MemoryTitle" />
+
     <style name="Widget.App.Field.Box.MemoryTitle" parent="Widget.App.Field.Box">
         <item name="android:gravity">top|start</item>
         <item name="android:minLines">2</item>

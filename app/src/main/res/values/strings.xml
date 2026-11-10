@@ -2180,6 +2180,11 @@
     <string name="mem_type_event_hint">Something that happened.</string>
     <string name="mem_type_status_hint">Something currently true but expected to change.</string>
     <string name="mem_type_instruction_hint">Applies when its topic comes up — for always-on rules, write them on the card.</string>
+    <string name="mem_type_inside_joke">Inside Joke</string>
+    <string name="mem_type_inside_joke_hint">A joke, nickname, or running gag you share.</string>
+    <string name="mem_edit_label_vibe">Vibe</string>
+    <string name="mem_edit_vibe_hint">How the AI should treat this memory, like playful or gentle.</string>
+    <string name="mem_row_vibe_fmt">Vibe: %1$s</string>
     <string name="mem_type_lore_hint">Fictional/world/roleplay information.</string>
     <!-- Scope categories (owner_approved_rules §1/§2) -->
     <string name="mem_scope_global">Global</string>

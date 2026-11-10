@@ -75,6 +75,20 @@ class LiveRetrievalTest {
     // ---- keyword search --------------------------------------------------
 
     @Test
+    fun aVibeIsNeverSearched() {
+        // The vibe says how to treat a memory, not what it is about, so its
+        // words must never make the memory match (owner decision, Nov 10 2026).
+        val withVibe = LiveRetrieval.Candidate(
+            mem("pets", content = "The user has two cats named Pepper and Salt.")
+                .copy(vibe = "playful teasing about gardening"),
+            null, emptyList(), emptyList()
+        )
+        val r = LiveRetrieval.search("playful teasing about gardening", null, listOf(withVibe) + noise(), params, limit = 8)
+        assertTrue(ids(r).isEmpty())
+    }
+
+
+    @Test
     fun aCommonWordInEveryMemoryBringsNothingIn() {
         // Memories written "The user ..." used to match any message with "the".
         val corpus = listOf(

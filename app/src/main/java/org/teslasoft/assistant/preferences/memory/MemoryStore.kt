@@ -75,7 +75,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 33
+        private const val DATABASE_VERSION = 34
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -453,6 +453,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 // The optional browser title was restored in v33.
                 "type_id TEXT REFERENCES memory_types(type_id), " +
                 "title TEXT NOT NULL DEFAULT '', " +
+                // The optional per-memory vibe, added in v34.
+                "vibe TEXT NOT NULL DEFAULT '', " +
                 "content TEXT NOT NULL, " +
                 "embedding_text TEXT, " +
                 "tags_json TEXT DEFAULT '[]', " +
@@ -1049,13 +1051,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "Defaults created at first launch ($now); a seed import replaces these."
             )
         )
-        // Seed the five starter Memory Types once (§5.1). Fresh installs get
-        // them here; upgraded installs get them in the v21 migration block.
+        // Seed the starter Memory Types once (§5.1). Fresh installs get them
+        // here; upgraded installs get them in the v21 migration block, and the
+        // Inside Joke Type in the v34 block.
         seedStarterMemoryTypes(db, now)
     }
 
     /**
-     * Insert the five starter Memory Types (§5.1) if they are not already
+     * Insert the starter Memory Types (§5.1) if they are not already
      * present. Idempotent (INSERT OR IGNORE on the stable ids), so it is safe
      * to call from both onCreate and the v21 migration, and a re-run never
      * duplicates or overwrites a Type the user has since renamed. Types the
@@ -2178,6 +2181,31 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "33")
             )
         }
+        if (oldVersion < 34) {
+            // The built-in Inside Joke Type and the optional per-memory vibe
+            // (owner decisions, November 10 2026). Additive only: no memory
+            // changes Type, and existing memories have no vibe.
+            ensureInsideJokeType(db)
+            if (!hasColumn(db, "memories", "vibe")) {
+                db.execSQL("ALTER TABLE memories ADD COLUMN vibe TEXT NOT NULL DEFAULT ''")
+            }
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "34")
+            )
+        }
+    }
+
+    /** Adds the built-in Inside Joke Type if it is missing. Idempotent. */
+    private fun ensureInsideJokeType(db: SQLiteDatabase) {
+        val t = MemoryTypeMigration.STARTER_TYPES.first {
+            it.typeId == MemoryTypeMigration.INSIDE_JOKE_TYPE_ID
+        }
+        db.execSQL(
+            "INSERT OR IGNORE INTO memory_types (type_id, name, created_at) VALUES (?, ?, ?)",
+            arrayOf(t.typeId, t.name, nowIso())
+        )
     }
 
     /**
@@ -2592,7 +2620,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             // only upserts, so it never deletes a Type the user still has. A
             // pre-Phase-1 backup carries no Types and never triggers this.
             if (overwriteSingletons && data.memoryTypes.isNotEmpty()) {
+                // The built-in Inside Joke Type is always kept: users cannot
+                // remove Types, so a backup without it predates it.
                 val keepIds = data.memoryTypes.map { it.typeId }.toHashSet()
+                keepIds.add(MemoryTypeMigration.INSIDE_JOKE_TYPE_ID)
                 val toRemove = ArrayList<String>()
                 db.query("memory_types", arrayOf("type_id"), null, null, null, null, null).use {
                     while (it.moveToNext()) {
@@ -2830,6 +2861,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("scope", m.scope)
                     put("type_id", resolvedTypeId)
                     put("title", m.title)
+                    put("vibe", m.vibe)
                     put("content", m.content)
                     put("embedding_text", m.embeddingText)
                     put("tags_json", m.tagsJson)
@@ -3222,6 +3254,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         scope = it.getString(it.getColumnIndexOrThrow("scope")),
                         content = it.getString(it.getColumnIndexOrThrow("content")),
                         title = it.getStringOrNull("title") ?: "",
+                        vibe = it.getStringOrNull("vibe") ?: "",
                         embeddingText = it.getStringOrNull("embedding_text"),
                         tagsJson = it.getStringOrNull("tags_json") ?: "[]",
                         importance = it.getInt(it.getColumnIndexOrThrow("importance")),
@@ -4886,7 +4919,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
         val sql = "SELECT m.memory_id, m.scope, m.content, m.embedding_text, " +
             "m.importance, m.created_at, m.updated_at, m.world_id, " +
-            "m.protection_json, m.type_id, m.tags_json " +
+            "m.protection_json, m.type_id, m.tags_json, m.vibe " +
             "FROM memories m WHERE m.status = 'active' AND (" +
             branches.joinToString(" OR ") + ")"
         readableDatabase.rawQuery(sql, args.toTypedArray()).use {
@@ -5051,7 +5084,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             "memories",
             arrayOf("memory_id", "scope", "content", "embedding_text",
                 "importance", "created_at", "updated_at", "world_id",
-                "protection_json", "type_id", "tags_json"),
+                "protection_json", "type_id", "tags_json", "vibe"),
             "status = 'active'", null, null, null, "created_at ASC"
         ).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
@@ -5070,7 +5103,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         protectionJson = c.getStringOrNull("protection_json"),
         typeId = c.getStringOrNull("type_id"),
         tagsJson = c.getStringOrNull("tags_json") ?: "[]",
-        updatedAt = c.getStringOrNull("updated_at")
+        updatedAt = c.getStringOrNull("updated_at"),
+        vibe = c.getStringOrNull("vibe") ?: ""
     )
 
     /** Stable target display names for every active memory — its linked
@@ -5204,7 +5238,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         readableDatabase.rawQuery(
             "SELECT m.memory_id, m.scope, m.content, m.embedding_text, " +
                 "m.importance, m.created_at, m.updated_at, m.world_id, " +
-                "m.protection_json, m.type_id, m.tags_json " +
+                "m.protection_json, m.type_id, m.tags_json, m.vibe " +
                 "FROM memories m WHERE m.status = 'active' AND NOT EXISTS " +
                 "(SELECT 1 FROM embeddings e WHERE e.memory_id = m.memory_id AND e.embedding_model = ?) " +
                 "ORDER BY m.created_at ASC",
@@ -7095,6 +7129,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             scope = it.getString(it.getColumnIndexOrThrow("scope")),
             content = it.getString(it.getColumnIndexOrThrow("content")),
             title = it.getStringOrNull("title") ?: "",
+            vibe = it.getStringOrNull("vibe") ?: "",
             embeddingText = it.getStringOrNull("embedding_text"),
             tagsJson = it.getStringOrNull("tags_json") ?: "[]",
             importance = it.getInt(it.getColumnIndexOrThrow("importance")),
@@ -7125,6 +7160,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         // User-owned Type (§5); null = No Type.
         put("type_id", m.typeId)
         put("title", m.title)
+        put("vibe", m.vibe)
         put("content", m.content)
         put("embedding_text", m.embeddingText)
         put("tags_json", m.tagsJson)
@@ -7724,6 +7760,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      *  undo in Phase 6 and a "before" view in the change-log screen. */
     private fun snapshotMemoryJson(m: MemoryRecord): String = org.json.JSONObject().apply {
         put("title", m.title)
+        put("vibe", m.vibe)
         put("content", m.content)
         put("scope", m.scope)
         m.typeId?.let { put("type_id", it) }

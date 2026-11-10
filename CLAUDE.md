@@ -320,6 +320,12 @@ For example, "User sent a resume" records a container while discarding the perso
 
 When the owner explains why a feature matters, treat that explanation as a product requirement. Do not preserve only the requested mechanism and discard the purpose.
 
+### No crisis wording in memory instructions (owner ruling, November 8 2026)
+
+Do not add crisis, safety, or hotline wording to the instructions the memory
+system sends to the AI. The selected model uses its own judgment and the
+user's instructions. This rule covers the memory system's instructions only.
+
 ## 8. Errors and diagnostics must tell the truth
 
 Do not make the user investigate information the system already knows.

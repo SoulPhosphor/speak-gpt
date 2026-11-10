@@ -207,6 +207,23 @@
                     style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
             </LinearLayout>
 
+            <!-- Vibe (owner design, Nov 10 2026): an optional note on how the
+                 AI should treat this memory, under Importance. -->
+            <TextView
+                style="@style/Widget.App.Field.Label.AfterRow"
+                android:labelFor="@+id/field_mem_vibe"
+                android:text="@string/mem_edit_label_vibe" />
+
+            <TextView
+                style="@style/Widget.App.Field.Hint"
+                android:text="@string/mem_edit_vibe_hint" />
+
+            <EditText
+                android:id="@+id/field_mem_vibe"
+                style="@style/Widget.App.Field.Box.MemoryVibe"
+                android:inputType="textCapSentences|textMultiLine"
+                android:importantForAutofill="no" />
+
             <!-- Roleplay drafts only (owner design, July 8 2026 evening):
                  "Link to Lore Card:" — picking a card + section here makes
                  Approve All As Shown MOVE the memory onto that card instead

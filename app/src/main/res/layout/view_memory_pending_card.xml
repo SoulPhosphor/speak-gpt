@@ -134,6 +134,11 @@
                     android:layout_marginTop="4dp"
                     android:textColor="@color/text_subtitle"
                     android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/pending_vibe"
+                    android:visibility="gone"
+                    style="@style/Widget.App.MemoryBrowser.Vibe" />
             </LinearLayout>
         </LinearLayout>
 

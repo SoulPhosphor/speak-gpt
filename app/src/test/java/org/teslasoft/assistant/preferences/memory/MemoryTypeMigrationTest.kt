@@ -31,9 +31,9 @@ import org.junit.Test
 class MemoryTypeMigrationTest {
 
     @Test
-    fun seedsExactlyTheFiveStarterTypes() {
+    fun seedsTheFiveStarterTypesThenInsideJoke() {
         val names = MemoryTypeMigration.STARTER_TYPES.map { it.name }
-        assertEquals(listOf("Fact", "Preference", "Event", "Status", "Instruction"), names)
+        assertEquals(listOf("Fact", "Preference", "Event", "Status", "Instruction", "Inside Joke"), names)
     }
 
     @Test
@@ -45,7 +45,7 @@ class MemoryTypeMigrationTest {
         assertEquals(
             listOf(
                 "mtype-fact", "mtype-preference", "mtype-event",
-                "mtype-status", "mtype-instruction"
+                "mtype-status", "mtype-instruction", "mtype-inside-joke"
             ),
             ids
         )

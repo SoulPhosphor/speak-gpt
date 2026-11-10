@@ -339,10 +339,15 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // existing pending row (Accept/Delete/Edit/Add to Card + needs-target) so
         // that unrelated roleplay behavior is unchanged.
         val usePendingCard = pending && !roleplay
+        // The vibe is part of the memory's text, so it follows the same
+        // show-memory-text setting as the content line.
+        val showText = preferences?.getShowMemoryText() != false
+        val vibe = m.vibe.trim()
         return MemoryRow(
             id = m.memoryId,
             title = m.title.trim(),
-            subtitle = if (preferences?.getShowMemoryText() != false) m.content.trim().ifEmpty { null } else null,
+            subtitle = if (showText) m.content.trim().ifEmpty { null } else null,
+            vibeLine = if (showText && vibe.isNotEmpty()) getString(R.string.mem_row_vibe_fmt, vibe) else null,
             browserCard = true,
             selectable = pickingMemories,
             tagsLine = tagsLine,

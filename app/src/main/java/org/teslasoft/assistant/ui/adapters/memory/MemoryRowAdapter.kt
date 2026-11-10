@@ -81,7 +81,9 @@ data class MemoryRow(
     val iconTintError: Boolean = false,
     /** Browser-specific arrangement; other memory-manager lists keep their layout. */
     val browserCard: Boolean = false,
-    val selectable: Boolean = false
+    val selectable: Boolean = false,
+    /** A memory's vibe line ("Vibe: …") on browser and pending cards, or null. */
+    val vibeLine: String? = null
 )
 
 class MemoryRowAdapter(
@@ -244,6 +246,11 @@ class MemoryRowAdapter(
             subtitle.text = row.subtitle
         }
 
+        view.findViewById<TextView>(R.id.row_vibe)?.apply {
+            if (row.vibeLine.isNullOrBlank()) visibility = View.GONE
+            else { visibility = View.VISIBLE; text = row.vibeLine }
+        }
+
         if (row.badge.isNullOrBlank()) {
             badge.visibility = View.GONE
         } else {
@@ -330,6 +337,10 @@ class MemoryRowAdapter(
         view.findViewById<TextView>(R.id.pending_content).apply {
             if (row.subtitle.isNullOrBlank()) visibility = View.GONE
             else { visibility = View.VISIBLE; text = row.subtitle }
+        }
+        view.findViewById<TextView>(R.id.pending_vibe).apply {
+            if (row.vibeLine.isNullOrBlank()) visibility = View.GONE
+            else { visibility = View.VISIBLE; text = row.vibeLine }
         }
         view.findViewById<TextView>(R.id.pending_importance).apply {
             if (!row.showImportance) {

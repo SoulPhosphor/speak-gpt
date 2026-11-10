@@ -251,6 +251,8 @@
     <!-- Expandable text box (Widget.App.Field.ExpandableBox / ExpandedPanel).
          The expanded panel uses the chat message box's expanded measurements. -->
     <dimen name="field_label_page_top_gap">16dp</dimen>
+    <!-- Space above a field label that follows a control row or field. -->
+    <dimen name="field_label_after_row_gap">16dp</dimen>
     <dimen name="field_expandable_padding">12dp</dimen>
     <dimen name="field_expandable_toggle_size">48dp</dimen>
     <dimen name="field_expanded_panel_margin_horizontal">12dp</dimen>
@@ -314,6 +316,8 @@
     <dimen name="memory_browser_badge_vertical_padding">2dp</dimen>
     <dimen name="memory_browser_metadata_text_size">11sp</dimen>
     <dimen name="memory_browser_tags_gap">4dp</dimen>
+    <!-- The vibe line on a memory card, under the memory text. -->
+    <dimen name="memory_browser_vibe_gap">4dp</dimen>
     <dimen name="memory_browser_action_text_size">15sp</dimen>
     <dimen name="memory_browser_action_vertical_padding">6dp</dimen>
     <dimen name="memory_browser_action_end_padding">18dp</dimen>

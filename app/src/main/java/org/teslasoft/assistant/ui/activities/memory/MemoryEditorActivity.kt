@@ -80,6 +80,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
     private var btnBack: ImageButton? = null
     private var titleView: TextView? = null
     private var fieldTitle: EditText? = null
+    private var fieldVibe: EditText? = null
     private var fieldContent: EditText? = null
     private var fieldContentExpanded: EditText? = null
     private var panelContentExpanded: View? = null
@@ -141,9 +142,10 @@ class MemoryEditorActivity : SettingsPageActivity() {
     companion object {
         private const val STATE_MEMORY_ID = "memoryId"
         private const val STATE_CONTENT_EXPANDED = "contentExpanded"
-        // No Type plus the five starter Types. Lore is not a Type (§5.1) and is
-        // deliberately absent. The keys map to type_ids at save time.
-        private val TYPE_KEYS = listOf("none", "fact", "preference", "event", "status", "instruction")
+        // No Type plus the starter Types, in STARTER_TYPES order. Lore is not a
+        // Type (§5.1) and is deliberately absent. The keys map to type_ids at
+        // save time.
+        private val TYPE_KEYS = listOf("none", "fact", "preference", "event", "status", "instruction", "inside joke")
         private val SCOPE_KEYS = listOf("global", "real_life", "companion", "project", "world", "campaign", "rp_character")
         private val TARGET_SCOPES = setOf("companion", "project", "world", "campaign", "rp_character")
     }
@@ -164,6 +166,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         btnBack = findViewById(R.id.btn_back)
         titleView = findViewById(R.id.activity_title)
         fieldTitle = findViewById(R.id.field_mem_title)
+        fieldVibe = findViewById(R.id.field_mem_vibe)
         fieldContent = findViewById(R.id.field_mem_content)
         fieldContentExpanded = findViewById(R.id.field_mem_content_expanded)
         panelContentExpanded = findViewById(R.id.panel_content_expanded)
@@ -262,6 +265,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 existing = record
                 if (record != null) {
                     fieldTitle?.setText(record.title)
+                    fieldVibe?.setText(record.vibe)
                     fieldContent?.setText(record.content)
                     findViewById<TextInputEditText>(R.id.field_mem_tags)?.setText(tagsToText(record.tagsJson))
                     // Type is the user-owned type_id itself (source of truth),
@@ -358,6 +362,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             "event" -> R.string.mem_type_event
             "status" -> R.string.mem_type_status
             "instruction" -> R.string.mem_type_instruction
+            "inside joke" -> R.string.mem_type_inside_joke
             else -> R.string.mem_type_none
         }
     )
@@ -369,6 +374,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             "event" -> R.string.mem_type_event_hint
             "status" -> R.string.mem_type_status_hint
             "instruction" -> R.string.mem_type_instruction_hint
+            "inside joke" -> R.string.mem_type_inside_joke_hint
             else -> R.string.mem_type_none_hint
         }
     )
@@ -412,7 +418,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         // selected and No Type stays in the list.
         val current = if (currentTypeId != null && key == "none") -1 else TYPE_KEYS.indexOf(key)
         AppDropdown.show(anchor, labels, current) { which ->
-            // index 0 = No Type; 1..5 = the matching starter Type id.
+            // index 0 = No Type; 1..6 = the matching starter Type id.
             currentTypeId = if (which == 0) null
                 else MemoryTypeMigration.STARTER_TYPES[which - 1].typeId
             refreshType()
@@ -639,6 +645,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             return
         }
         val title = fieldTitle?.text?.toString()?.trim().orEmpty()
+        val vibe = fieldVibe?.text?.toString()?.trim().orEmpty()
         val content = activeContentField()?.text?.toString()?.trim().orEmpty()
         if (content.isEmpty()) {
             btnHeaderSave?.let { SaveIconFlash.flashError(it) }
@@ -668,7 +675,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             val section = linkSection
             if (activate && prior != null && cardType != null && cardId != null && section != null) {
                 store.updateMemory(
-                    prior.copy(content = content, typeId = typeId, title = title),
+                    prior.copy(content = content, typeId = typeId, title = title, vibe = vibe),
                     getString(R.string.memory_change_edited)
                 )
                 store.convertMemoryToCardEntry(prior.memoryId, cardType, cardId, section)
@@ -684,7 +691,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                     memoryId = org.teslasoft.assistant.preferences.memory.MemoryId
                         .generate(org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
                     scope = currentScope, typeId = typeId, content = content, title = title,
-                    embeddingText = null, tagsJson = tagsJson, importance = currentImportance,
+                    vibe = vibe, embeddingText = null, tagsJson = tagsJson, importance = currentImportance,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
                     projectIds = projectIds,
                     protectionJson = null, modeHintsJson = "[]",
@@ -698,7 +705,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
             } else {
                 val updated = prior.copy(
                     scope = currentScope, typeId = typeId, content = content, title = title,
-                    importance = currentImportance, tagsJson = tagsJson,
+                    vibe = vibe, importance = currentImportance, tagsJson = tagsJson,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
                     projectIds = projectIds, companionIds = companionIds,
                     // Save keeps a draft a draft (§14); Accept activates it.

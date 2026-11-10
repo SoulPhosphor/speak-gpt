@@ -35,11 +35,12 @@ class PromptAssemblerTest {
         handling: List<String> = emptyList(),
         neverAssume: List<String> = emptyList(),
         content: String = "content of $id",
-        typeId: String? = null
+        typeId: String? = null,
+        vibe: String = ""
     ) = AssembledMemory(
         memoryId = id, content = content,
         handling = handling, neverAssume = neverAssume,
-        score = score, typeId = typeId
+        score = score, typeId = typeId, vibe = vibe
     )
 
     @Test
@@ -224,6 +225,76 @@ class PromptAssemblerTest {
         assertTrue(out.contains("## From the story's cards"))
         assertTrue(out.contains("- Reliquary — The Silver Key: held by: Vael; Opens the vault."))
         assertTrue(out.contains("  connected to: Eclipse Gate, The Long Dark"))
+    }
+
+    @Test
+    fun insideJokeMemoryIsMarkedAsAnInsideJoke() {
+        val line = PromptAssembler.renderMemoryLine(
+            mem("j", content = "we call the cat the gremlin", typeId = "mtype-inside-joke")
+        )
+        assertEquals("- Inside joke: we call the cat the gremlin", line)
+    }
+
+    @Test
+    fun insideJokeIsKeyedOnTheStableTypeIdAndStaysAmongTheFacts() {
+        val joke = mem("j", content = "the gremlin", typeId = "mtype-inside-joke")
+        val nameLike = mem("n", content = "not a joke", typeId = "Inside Joke")
+        assertTrue(joke.isInsideJoke)
+        assertFalse("only the stable Inside Joke Type id marks a joke", nameLike.isInsideJoke)
+        assertFalse(PromptAssembler.renderMemoryLine(nameLike).contains("Inside joke"))
+
+        val rendered = PromptAssembler.render(AssemblyComponents(memories = listOf(joke)))
+        assertTrue(rendered.contains("## Things you know\n- Inside joke: the gremlin"))
+        assertFalse(rendered.contains("Handling rules"))
+    }
+
+    @Test
+    fun vibeRendersOnItsOwnLineUnderTheMemory() {
+        val line = PromptAssembler.renderMemoryLine(
+            mem(
+                "j", content = "We call the cat the gremlin since the couch incident.",
+                typeId = "mtype-inside-joke", vibe = "tease me about it"
+            )
+        )
+        assertEquals(
+            "- Inside joke: We call the cat the gremlin since the couch incident.\n  Vibe: tease me about it",
+            line
+        )
+    }
+
+    @Test
+    fun noVibeMeansNoVibeLine() {
+        assertFalse(PromptAssembler.renderMemoryLine(mem("m", vibe = "   ")).contains("Vibe"))
+        assertFalse(PromptAssembler.renderMemoryLine(mem("m")).contains("Vibe"))
+    }
+
+    @Test
+    fun aMultiLineVibeStaysOnOneLine() {
+        val line = PromptAssembler.renderMemoryLine(mem("m", content = "fact", vibe = "gentle\n\nno jokes"))
+        assertEquals("- fact\n  Vibe: gentle no jokes", line)
+    }
+
+    @Test
+    fun vibeComesBeforeHandlingOnAProtectedMemory() {
+        val line = PromptAssembler.renderMemoryLine(
+            mem("p", content = "fact", vibe = "gentle", handling = listOf("tread softly"))
+        )
+        assertEquals("- fact\n  Vibe: gentle\n  HANDLE WITH CARE: tread softly.", line)
+    }
+
+    @Test
+    fun vibeCountsTowardMemorySpace() {
+        val m = mem("m", content = "fact", vibe = "gentle")
+        assertEquals("fact".length + PromptAssembler.VIBE_LABEL.length + "gentle".length, PromptAssembler.memoryCost(m))
+    }
+
+    @Test
+    fun insideJokeLabelCountsTowardMemorySpace() {
+        val joke = mem("j", content = "the gremlin", typeId = "mtype-inside-joke")
+        assertEquals(
+            PromptAssembler.INSIDE_JOKE_LABEL.length + joke.content.length,
+            PromptAssembler.memoryCost(joke)
+        )
     }
 
     @Test

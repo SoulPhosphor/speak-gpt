@@ -110,6 +110,18 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun vibeSurvivesABackupAndIsEmptyInOlderBackups() {
+        val original = MemorySeedCodec.parse(fixtureJson()).memories.first()
+        for (vibe in listOf("tease me about it", "")) {
+            val edited = original.copy(vibe = vibe)
+            assertEquals(edited, MemorySeedCodec.decodeSingleMemory(MemorySeedCodec.encodeSingleMemory(edited)))
+        }
+        val oldBackup = JSONObject(MemorySeedCodec.encodeSingleMemory(original.copy(vibe = "gentle")))
+        oldBackup.getJSONArray("memories").getJSONObject(0).remove("vibe")
+        assertEquals("", MemorySeedCodec.parse(oldBackup.toString()).memories.first().vibe)
+    }
+
+    @Test
     fun originRoundTripsAndDefaultsToUser() {
         // A record with no origin in the JSON parses as 'user'; a non-default
         // origin survives a serialize/parse cycle.

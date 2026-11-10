@@ -6,7 +6,8 @@ documents.**
 
 ## Where things stand (read this first)
 
-**Last updated 2026-11-08.** The owner relies on the agent to lead this
+**Last updated 2026-11-10** (Inside Joke built on the work branch; the vibe
+moved to each memory; next steps updated). The owner relies on the agent to lead this
 work step by step. A new session reads this section first, then continues
 from "Next steps". Do not re-diagnose what Part A already measured. An
 independent review of the plan and of pull request #180 was folded in on
@@ -95,7 +96,30 @@ Chosen from the measurements in Part A, on the default q4 model with
 
 They are educated guesses, tunable on the test screen.
 
-### 3. Next pull request (approved direction, not yet built)
+### 3. Inside Joke and the per-memory vibe (one pull request)
+
+Built in the pull request from branch `ccr-985655d1-x68k8w` (owner approval,
+2026-11-10).
+
+- **Inside Joke (D56):** a built-in Type, in the editor's type picker with
+  the definition "A joke, nickname, or running gag you share." Database
+  version 34 adds it for existing users; restoring an older backup keeps it.
+  The AI receives "Inside joke:" before the memory text. The Memory
+  Assistant may suggest it.
+- **Vibe (D58):** an optional note on each memory, under Importance in the
+  memory editor ("Vibe", with the hint "How the AI should treat this memory,
+  like playful or gentle."). The AI receives it on its own line under the
+  memory ("  Vibe: ..."), it counts toward Memory Space, and it shows on
+  browser and pending cards while memory text is shown. Search never reads
+  it. Backups, restores, and imports carry it. The Memory Assistant does not
+  suggest vibes.
+- **The existing "- " before each memory line stays** (owner, 2026-11-10).
+- **Follow-up for the owner:** when a Memory Assistant update replaces a
+  memory (Save & Supersede or Replace), the new version starts without the
+  old one's vibe, as it does today for the title. Whether the vibe should
+  carry over is an open question.
+
+### 3b. The pull request after that (approved direction, not yet built)
 
 - **Carry-over** (step 1.12), with the revised rule in B.5: no fixed carry
   length.
@@ -104,23 +128,58 @@ They are educated guesses, tunable on the test screen.
 - **A modest set of representative test conversations** (step 1.2) as
   automated tests.
 - **A previous-exchange field on the test screen,** for checking carry-over.
+- **The memory-use instruction** (D41), with its exact text shown to the
+  owner before it is built. No crisis or safety wording (owner ruling).
 
-### 4. Future proposals only (not authorized to build)
+### 4. Later phases (approved designs; built only when the owner says)
 
 - **Rest of Phase 1, only if testing shows a need:**
   - vector size (step 1.14);
   - the tag test (step 1.15);
   - variety (step 1.16).
-- **Phases 2–6:** today's date, the "always know" and "may bring up"
-  choices with dates, fading, the standing briefing, and Memory Assistant
-  date proposals. The design in Part D was simplified after the review.
-- **Every open decision in Part E** needs the owner's answer, asked one at a
-  time, before the phase that depends on it is built.
+- **Phases 2–6** (Part C), in order:
+  - Phase 2, data control: the view dropdown, Retired, Memory Handling
+    Preferences, and Delete to Retired;
+  - Phase 3, the Always tab and the bring-up setting;
+  - Phase 4, today's date, important dates, and the Dates tab;
+  - Phase 5, fading;
+  - Phase 6, Memory Assistant date proposals.
+- **Later features:** the background reviewer, the vibe note, recent-chat
+  continuity, the companion journal, and Model Rules adjustments.
+- **Decisions:** the designs are approved (Part E). Before each part is
+  built, the owner sees its exact wording, screens, and AI-facing text.
+
+### Design corrections after the second review (2026-11-08)
+
+#180 is merged. The owner and a second review found design mistakes in the
+future phases. Part D now follows one rule:
+
+- **Availability, relevance, and permission to mention unprompted are three
+  separate decisions.**
+- Never limit what the AI receives in order to stop it behaving
+  annoyingly. Tell it how to behave instead.
+
+The specific corrections:
+
+- **The "once per chat per day" delivery limit is removed.** A due memory
+  stays available every message, and only how often the AI raises it is
+  guided (D.5).
+- **Always memories have their own limit.** They do not count against the
+  search memory limit or Memory Space (owner, D16).
+- **Picked memories come first, always.** Nothing automatic can displace
+  them.
+- **Fading stays, as the owner decided** (D34, D43): optional on each
+  memory, with markers and the Retired area.
+- **The May Bring Up switch is dropped.** Always memories, and memories with
+  an important date, carry a bring-up setting instead (D48).
+- **Carry-over must not refresh itself** from the AI's own replies (B.5).
+- **Inside jokes and "vibe"** have a first proposal (D.9).
+- **Published research** is summarized in Part F.
 
 ### Next steps, in order
 
-1. **Agent:** take #180 through Codex review and Android Checks, then merge
-   it into `beta/new-client` (`CLAUDE.md` section 0).
+1. **Done:** #180 merged into `beta/new-client` after Codex passed it and
+   Android Checks was green.
 2. **Owner:**
    - install the new beta and chat normally;
    - if a chat gets wrong or missing memories, open Memory Search Test, type
@@ -129,9 +188,18 @@ They are educated guesses, tunable on the test screen.
    - tell the agent what looked wrong.
 
    Nothing else is needed from the owner for this step.
-3. **Agent:** build the "Next pull request" group above.
-4. **Agent:** before any Phase 2–6 work, walk the owner through the open
-   decisions in Part E, one at a time, starting with D31.
+3. **Agent:** if section 3's pull request is still open, merge it when Codex
+   passes it and Android Checks is green. Then ask the owner the follow-up
+   in section 3.
+4. **Agent:** build section 3b: carry-over, the lorebook repeat check on
+   both send paths, the test conversations, and the memory-use instruction.
+   Show the owner the instruction's exact text first.
+5. **Agent, in this order, each when the owner asks for it:** Phase 2 (data
+   control), Phase 3 (the Always tab), Phase 4 (important dates and the
+   Dates tab; settle D55 first), Phase 5 (fading), Phase 6 (Memory Assistant
+   date proposals), then the later features. Before each, show the owner its
+   exact wording, screens, and AI-facing text. The design decisions are
+   already recorded in Part E.
 
 ## How to use this document
 
@@ -141,8 +209,9 @@ They are educated guesses, tunable on the test screen.
 - **Part C** is the build plan, in phases and numbered steps. Each step says
   what changes, where in the code, what it must not break, how it is tested,
   and when it is done.
-- **Part D** holds the detailed design for dates, fading, and the briefing.
-  Phases 2–6 refer to it.
+- **Part D** holds the detailed design for the later phases: Always, the
+  bring-up setting, dates, fading, Retired, and the briefing. Phases 2–6
+  refer to it.
 - **Part E** lists every decision, both decided and open.
 
 ## Status
@@ -178,8 +247,11 @@ They are educated guesses, tunable on the test screen.
     protections, prove other memory features still work, build in
     manageable testable stages, and add no complexity or scope without a
     concrete reason.
-- **Everything else is a recommendation** waiting for the owner's decision
-  (Part E).
+- **Recommendations the owner has seen and not objected to count as
+  approved** (owner ruling, 2026-11-08). Part E records each one. This
+  applies to design choices discussed for this plan only. It is not standing
+  permission for unreviewed changes or for building anything. Exact wording
+  and AI-facing text still need the owner to see the actual text.
 - **Stress-tested (2026-11-08):** the design was tested against the real
   model before being recommended, and changed where the test showed a
   weakness (A.10).
@@ -193,8 +265,9 @@ They are educated guesses, tunable on the test screen.
   current code does, verified in the code. It does not rely on any older
   document's description of it.
 - **Names in this plan are planning names, not on-screen wording.** Every
-  label, explanation, and message the user sees needs owner approval before
-  it is built.
+  label, explanation, and message the user sees is shown to the owner before
+  it is built. The exceptions are names already settled in Part E: Always,
+  Retired, Memory Handling Preferences, and the bring-up choices.
 - **Deleted on 2026-11-08** so they cannot compete with this plan:
   `legacy/rag_engine_work_order.md` and
   `legacy/memory-system-v1.11/enforcer_librarian_spec.md`. Older always-on
@@ -469,7 +542,8 @@ the app already has, that part holds up on its own.
    still relates to them, with no fixed carry length, and drop when neither
    does (B.5). This is what the cooldown should have done.
 8. **Skip anything already in this request:** picked memories, briefing
-   items (Phase 5), and memories that repeat a lorebook entry.
+   items (Always and due dated memories, Phases 3 and 4), and memories that
+   repeat a lorebook entry.
 9. **Send up to the memory limit and size budget.** Empty slots stay empty.
 10. **Send every relevant memory every time it is relevant.** No cooldown.
 
@@ -480,7 +554,7 @@ the app already has, that part holds up on its own.
 | The fixed 0.30 cut-off | It sits inside the noise for this model (A.3) |
 | Keyword search as an all-or-nothing backup | It matched every memory, and one missing embedding switched the whole message to it (A.2) |
 | Recent turns glued onto the search | They raised every memory's score (A.4) |
-| Scope, freshness, project, and tag bonuses | They outweighed relevance (A.5). Scope still decides which memories are allowed. Tags and names are found by keyword search instead. "Recently edited" does not mean "matters now"; fading (Phase 4) measures that properly |
+| Scope, freshness, project, and tag bonuses | They outweighed relevance (A.5). Scope still decides which memories are allowed. Tags and names are found by keyword search instead. "Recently edited" does not mean "matters now"; fading (Phase 5) handles that where the user turns it on |
 | The 10-message memory cooldown | It hid relevant memories from the AI (A.6) |
 | A separate Strict / Balanced / Broad setting | The test screen tunes the real number. A second control for the same thing adds confusion (D25) |
 | An on-phone re-ranker | Tested; it did not understand personal memories (A.10) |
@@ -567,6 +641,11 @@ used.
   artificial forgetting during a long conversation.
 - **Wrong memories:** a memory sent by mistake drops on the next message,
   because neither the AI's reply nor the user's message relates to it.
+- **No self-refreshing** (second review): the AI's reply can keep a memory
+  only when the user's latest message is a short continuation with no new
+  subject of its own. If the user writes about something else, the memory
+  drops even if the AI keeps mentioning it. The AI cannot keep a topic
+  alive without the user taking part.
 - **Topic change:** when the user moves to a new subject, the latest
   message and the AI's reply both stop relating to the carried memories,
   and they drop.
@@ -842,7 +921,9 @@ Steps run in this order.
   - a memory stays through a long run of short replies while the topic
     continues;
   - it drops after a clear topic change;
-  - a memory sent by mistake drops on the next message.
+  - a memory sent by mistake drops on the next message;
+  - a memory the AI keeps mentioning drops once the user writes about
+    something else.
 
 ### Step 1.13: The same memory rules on both send paths
 
@@ -923,9 +1004,72 @@ test set and the owner's saved cases first (D21).
   relevant, and +3 memories are sent only when relevant;
 - the owner confirms the symptoms are gone in real chats.
 
-## Phase 2: Today's date
+## Phase 2: Data control
 
-**Blocked until D1–D5 and D22 are decided.** Details: Part D, section D.3.
+**Approved design (D.11, D.12, D44). Changes nothing about what the AI
+receives.** It gives the user control and visibility first.
+
+1. **Browser view dropdown:** the "Memories | Pending" words become one
+   dropdown, in the canonical dropdown style. This phase adds Memories,
+   Pending, and Retired. Always is added in Phase 3 and Dates in Phase 4.
+   Memories then lists only memories in use.
+2. **Retired view:** everything taken out of use, visible at once:
+   - memories the user archived (today they are mixed into Memories, marked
+     only by a small badge);
+   - deleted memories, when the setting below is on;
+   - memories retired by fading, from Phase 5.
+
+   Each can be reinstated, or deleted permanently from there. Nothing in
+   Retired is sent to the AI or found by search.
+3. **Memory Handling Preferences:** a new settings screen, separate from the
+   crowded memory settings screen. In this phase it holds whether Delete
+   sends a memory to Retired first (default on, D44). The Always limit
+   arrives in Phase 3 and the fade time in Phase 5.
+4. **Delete:** with the setting on, Delete moves a memory to Retired. With
+   it off, Delete stays permanent, as today.
+5. **Backup, export, restore, and import** carry the setting and every
+   Retired memory.
+6. Wording and layout are shown to the owner before each screen is built.
+   Appearance follows `ui-style-guide.md`.
+
+## Phase 3: The Always tab and the bring-up setting
+
+**Approved design (D.2, D.6, D.12, D16, D46–D48, D52, D53).**
+
+1. **Database migration** from version 33 adds, for each memory:
+   - Always membership and whether it is checked;
+   - the bring-up setting for Always memories, default When it fits;
+   - the Custom condition text.
+
+   Existing memories are not in Always, so what the AI receives does not
+   change.
+2. **The Always tab** in the view dropdown (D.12, D52):
+   - a checkbox on each memory; only checked ones are sent;
+   - a "checked only" view and a running count;
+   - the limit is checked at Save, with the keep-them-all exception;
+   - the row menu returns a memory to a normal memory.
+3. **Memory Handling Preferences** gains the Always limit: default 10, any
+   number allowed, with subtext explaining the cost.
+4. **Sending (D.6):** checked Always memories go with every message as
+   background, under their own limit, never counting against search's
+   limits (D16). Picked memories come first. Search skips memories already
+   sent as Always, so nothing is sent twice.
+5. **The bring-up setting** for Always memories: one dropdown with Only if
+   I bring it up, When it fits, Ask me first, and Custom, which opens a
+   write-in field (D.2). The setting goes to the AI with the memory, in text
+   the owner approves first.
+6. **Memory Search Test screen** shows the Always memories that would be
+   sent.
+7. **Roleplay:** Always memories are not sent in roleplay chats by default
+   (D17).
+8. **Backup, export, restore, and import** carry every new field. Restoring
+   an older backup fills the defaults, never an error. Round-trip tests for
+   each path.
+
+## Phase 4: Today's date and dates on memories
+
+**Approved design (D.3, D.5, D1–D5, D10–D12, D14, D39, D42, D49). The
+guidance text to the AI (D13) is shown to the owner first.**
 
 1. **One date source:** today's date from the phone's calendar, in the
    phone's time zone, date only, never the time of day. Every memory
@@ -933,123 +1077,137 @@ test set and the owner's saved cases first (D21).
    and midnight.
 2. **The date-sharing setting:** adds today's date to what the AI receives,
    in the agreed format (D2), off unless the user turns it on (D1).
-   Roleplay handling per D3. Wording needs approval first, and must state
-   plainly:
+   Roleplay handling per D3. Its wording must state plainly:
    - this is the AI knowing the date inside a chat, not a notification;
    - the app never sends notifications about dates;
-   - relative timing for dated memories ("tomorrow") can still reach the AI
+   - relative timing for dated memories ("tomorrow") still reaches the AI
      with date sharing off (D4).
-3. **Backup:** the setting goes into the settings backup.
+3. **Time since the last chat** with a companion, in days (D39), under the
+   same sharing setting.
+4. **Database migration** adds, for each memory:
+   - an important date: day and month, an optional year, one-time or
+     yearly, and its range of days (D.5);
+   - whether it is checked on the Dates tab;
+   - a "past after" date;
+   - the event state: upcoming, happened, or settled (D42);
+   - an internal last-discussed date, used by fading in Phase 5.
+5. **Sending (D.5):** a checked memory whose date is near is sent with every
+   message, past every limit, with timing worked out by the app, while the
+   Memory Handling Preferences toggle is on. Once it has come up in the
+   chat, it is marked "already discussed" (D32). After its event, or after
+   its "past after" date, the AI is told it is in the past, and it leaves
+   Always.
+6. **The bring-up dropdown** also appears on memories with an important
+   date (D48).
+7. **The toggle** is added to Memory Handling Preferences, default on.
+8. **Pending review:** an "Event passed" label (D50). If the user does
+   nothing, the passed event is kept as a past event.
+9. **Memory editor:** the optional dates and the range. **Card:** an
+   upcoming-date marker.
+10. **The Dates tab** in the view dropdown, with its checkboxes (D.11, D54).
+11. **Possible Match:** a different date on a matching memory counts as a
+    change to review, not a duplicate.
+12. **Backup:** every new field, the toggle, and the date-sharing setting,
+    with round-trip tests.
 
-## Phase 3: Always Know, May Bring Up, and dates on memories
+## Phase 5: Fading
 
-**Future proposal. Blocked until D31, D10–D12, and D20 are decided.**
-Details: Part D, sections D.2, D.5, D.7.
+**Approved design (D.4, D34, D43, D45, D49, D50).**
 
-1. **Database migration** from version 33 adds:
-   - an Always Know flag;
-   - a May Bring Up flag;
-   - date, one-time or yearly, and optional year;
-   - an internal last-on-topic date (used by fading, D.4).
-
-   Existing memories get neither flag and no date, so what the AI receives
-   does not change.
-2. **Backup, export, restore, and import** carry every new field. Restoring
-   an older backup fills the defaults, never an error. Round-trip tests for
-   each path.
-3. **Memory editor:** the two choices and an optional date. No fading,
-   strength, or scoring controls. Those stay internal or on the Debug test
-   screen.
-4. **Memory card:** at most a small marker for Always Know, May Bring Up,
-   and an upcoming date. No technical numbers.
-5. **Browser:** the filters in D20.
-6. **Possible Match:** a different date on a matching memory counts as a
-   change to review, not a duplicate.
-7. Wording and layout need approval before each screen is built.
-   Appearance follows `ui-style-guide.md`.
-
-## Phase 4: Fading (internal timing for May Bring Up)
-
-**Future proposal. Blocked until D7 and D8 are decided, and built only after
-carry-over.** Details: Part D, section D.4.
-
-1. **What fading decides:** only how long an undated May Bring Up memory
-   stays eligible to be raised unprompted after its subject was last
-   discussed.
-2. **What it does not touch:** search ranking (D9), and what is stored.
-3. **"Discussed" means the conversation, not one message.** A memory counts
-   as discussed while carry-over (step 1.12) keeps it on topic, so a long
-   run of short replies counts as continued discussion. Being sent by the
-   briefing alone never counts.
-4. **Math:** pure functions with tests for the half-life and long gaps.
-5. **Debug test screen:** shows each May Bring Up memory's remaining
-   eligibility.
-
-## Phase 5: The standing briefing
-
-**Future proposal. Blocked until D13, D15, D17, D18, D30–D32 are decided.**
-Details: Part D, section D.6.
-
-1. **Two separate parts:**
-   - **Background:** Always Know memories, sent every message as context,
-     with an instruction not to raise them on their own.
-   - **May mention:** May Bring Up memories that are currently due, by
-     their date window or by fading. Each is offered at most once per chat
-     per day (D32).
-2. **One shared budget:** the briefing comes out of the same Memory Space as
-   search (D16). Background takes its share first, capped, and search fills
-   the rest. The request's total size check still applies.
-3. **No repeats:** search skips briefing items, and the briefing skips
-   picked memories.
-4. **Placement:** after the fixed instructions, Model Rules, and card
-   material; before searched memories.
-5. **Guidance to the AI** for may-mention items, using text the owner
-   approved (D13).
-6. **Switches:** a master switch (D18), off whenever memory is off for the
-   chat, and roleplay per D17.
-7. **Debug test screen:** shows the briefing and why each item is in it.
+1. **Fading is an optional choice on each memory,** off unless the user
+   turns it on (D.2). It uses the app-wide fade time from Memory Handling
+   Preferences (2 weeks, 1 month, 3 months, or 6 months; default 1 month),
+   or a custom number of days.
+2. **A fading memory retires** after its fade time without being discussed.
+   "Discussed" is defined in D.4. Being sent as Always or as a due date never
+   counts.
+3. **Markers:** a fading memory's card shows when it was last discussed and
+   the date it will retire. The browser marks memories as fading, not
+   fading, or faded.
+4. **Retiring:** a fully faded memory moves to Retired (D43). A reinstated
+   memory starts fresh.
+5. **Pending review:** a "Retiring soon" label, with one-tap renew. If the
+   user does nothing, the memory retires.
+6. **The fade time setting** is added to Memory Handling Preferences.
+7. **Tests** for the timing, long gaps, and reinstating.
 
 ## Phase 6: The Memory Assistant proposes dates
 
-**Future proposal. Blocked until D14 and D33 are decided.** Details: Part D,
-section D.5.
+**Approved design (D14, D33).** Details: Part D, section D.5.
 
 1. Proposals can carry a date and whether it is one-time or yearly. The user
    sees and edits it in Pending before saving.
-2. **Not proposed:** Always Know and May Bring Up stay the user's own
-   choices until their behavior is established (D33). This keeps Pending
-   simple.
-3. Relative dates ("tomorrow") are worked out from the day the message was
+2. **The bring-up setting is shown beside a proposed date,** so the user
+   chooses how it may come up when they accept the date. An anniversary of a
+   loss, for example, can be set to Only if I bring it up (D33).
+3. **Not proposed:** Always, the bring-up setting, and fading stay the
+   user's own choices (D33).
+4. Relative dates ("tomorrow") are worked out from the day the message was
    sent, using the transcript's turn times, never the day the analysis runs.
-4. Vague timing gets no date.
-5. If the Memory Assistant is being changed for another reason at the same
+5. Vague timing gets no date.
+6. If the Memory Assistant is being changed for another reason at the same
    time, coordinate the two changes, because they touch the same code.
+
+## Later features (approved designs; the owner chooses when)
+
+- **The background reviewer** (D51): finds passed events, outdated facts,
+  conflicts, and duplicates, with its own owner-approved prompt.
+  Suggestions only, through Pending.
+- **A vibe note per companion** (D36), and playful memory types (D35).
+- **Recent-chat continuity** (D38): short summaries of the last few chats
+  with a companion.
+- **A companion journal** (D40), after the vibe note.
+- **Model Rules adjustments,** per model, once the full system works
+  (D.13).
+- **Search tuning, revisited** after Phases 2–5, using the test screen and
+  the test conversations.
 
 ---
 
-# Part D: Design details (future proposals)
+# Part D: Design details (approved designs for later phases)
 
-Simplified after the independent review (2026-11-08). The central question
-is what the AI should **know** versus what it may **bring up on its own**.
-These are two different behaviors, and the user controls each separately.
+Simplified after the independent reviews (2026-11-08). One rule runs through
+this part:
+
+**Availability, relevance, and permission to mention unprompted are three
+separate decisions.**
+
+- **Availability:** what the AI has in front of it this message.
+- **Relevance:** whether it matters to what is being said now.
+- **Permission:** whether the AI may raise it unprompted.
+
+A memory can be available without being relevant, and the AI can know
+something without talking about it. Never limit what the AI receives in
+order to stop it behaving annoyingly. Instead, tell it how to behave. The
+cooldown and the "once per day" idea both made that mistake, and both are
+gone.
 
 ## D.1 What the user should experience
 
 - **Search, as built:** a memory reaches the AI when the conversation is
   about it.
-- **Always Know:** a few memories the AI always has as background, such as
-  the user's name, pets, and the people in their life. Knowing is not
-  raising: the AI uses them when relevant and does not bring them up on its
-  own.
-- **May Bring Up:** memories the user has given permission for the AI to
-  raise unprompted at a suitable moment, such as an upcoming interview or a
-  birthday. Nothing is ever raised unprompted without this permission
-  (D30). A painful topic the user has discussed a lot is never volunteered
-  just because it was discussed.
-- **Dates:** an optional date decides when a May Bring Up memory is due. A
-  one-time event is due in the days before and briefly after. A yearly date
-  is due around the date each year. An anniversary of a loss is raised only
-  if the user allowed it, and at most once per chat per day.
+- **Always:** memories the user checks on the Always tab are sent with
+  every message, so the AI always knows them. Examples: the user's name,
+  pets, the people in their life, or a concern that matters right now.
+- **Important dates** (owner's design, 2026-11-08): a birthday,
+  anniversary, or event, kept in its own field. While the date is near, the
+  memory is handed to the AI even when every memory limit is full:
+  - before an interview: "Are you nervous about tomorrow?";
+  - around a birthday, every year;
+  - after an event: "How did Tuesday go?".
+
+  Once it has come up in a chat, the AI keeps knowing it but is told it has
+  already been discussed. A toggle in Memory Handling Preferences turns this
+  on or off.
+- **The bring-up setting:** each Always memory, and each memory with an
+  important date, says whether the AI may raise it unprompted. A date alone
+  is not permission: the user may want the AI to know an anniversary without
+  mentioning it. Painful or private things can be set to Only if I
+  bring it up. A painful topic is never volunteered just because it was
+  discussed a lot.
+- **Fading (optional):** a memory can be set to fade, so a concern that
+  stops coming up retires on its own. Retired is the safety net, and
+  anything there can be reinstated.
 - **No notifications:** all of this happens inside chats. The app never
   notifies.
 
@@ -1058,22 +1216,60 @@ messages. If the app doesn't send something, it doesn't exist for the AI.
 
 ## D.2 What the user decides
 
-For each memory, at most three things:
+For each memory:
 
 | Choice | Meaning | Default |
 |---|---|---|
-| Always Know | Sent every message as background; never raised on its own | Off |
-| May Bring Up | The AI may raise it unprompted when it is due | Off |
-| Date (optional) | When a May Bring Up memory is due: one-time or yearly | None |
+| Always | A checkbox on the Always tab. Checked memories are sent with every message (D.12) | Not in the tab |
+| Bring-up setting | Always memories and memories with an important date: whether the AI may raise it unprompted. The four options are listed below | When it fits |
+| Important date (optional) | A birthday, anniversary, or event: yearly or one-time, with a range of days before it that counts as near. While near, the memory is handed to the AI past every limit, if it is checked on the Dates tab (D.5, D.11) | None. The range is prefilled, and a new date starts checked |
+| "Past after" date (optional) | After this date the memory is treated as past and leaves Always (D49) | None |
+| Fading (optional) | Retires after the fade time without being discussed: the app-wide time or custom days (D.4) | Off |
 
-- **Internal, never a user choice:** fading, "current", strength, windows,
-  and scores. They are visible only on the Debug test screen.
-- **Example:** a user saving an upcoming appointment turns on May Bring Up
-  and sets the date. Nothing else.
-- **Existing memories** have neither choice on and no date, so they behave
-  exactly as after Phase 1.
-- **Nothing is deleted, archived, or changed automatically.** Search still
-  finds every memory whenever it becomes relevant.
+**Only the important-date field hands a memory over by date** (owner,
+2026-11-09). A date written in a memory's text is just information. An
+important date is one-time or every year, and either way the memory is sent
+only within its range, without being checked on the Always tab.
+
+**How the choices work together:**
+- **What the AI receives:** search results, as now; checked Always
+  memories, every message; and memories checked on the Dates tab whose date
+  is near. Nothing else.
+- **Whether the AI may raise a memory unprompted:** for an Always memory or
+  a dated one, its bring-up setting. A searched memory is already about what
+  the user said.
+- **How long a memory stays in use:** the "past after" date and fading
+  decide that. A memory that retires goes to Retired (D.11).
+- **Internal, never a user choice:** the date windows and the last-discussed
+  tracking. The Debug test screen shows them.
+- **Existing memories** are not in Always and have no date and no fading.
+  They behave exactly as after Phase 1.
+- **Example:** a user saving an upcoming appointment adds the date. Nothing
+  else.
+
+**The bring-up setting** (D48, D53; owner ruling, 2026-11-08) is a dropdown
+on Always memories and on memories with an important date:
+- **Only if I bring it up:** the AI never raises it on its own;
+- **When it fits:** the default. The AI uses its own judgment;
+- **Ask me first:** the AI may offer, in a way that is easy to decline;
+- **Custom:** a written condition, for example "when I express low
+  self-esteem" for a memory about winning an award.
+
+**Why only those:** they are the only memories the AI has when the user has
+not brought the subject up.
+- **A searched memory** reaches the AI because the user's message is about
+  it, so it needs no setting. If the user wants a condition on one, they
+  write it into the memory's own text, for example "Mention this only if
+  the user brings up their mom."
+- **A dated memory** is handed over while its date is near, so it is in
+  the same position as an Always memory for that time. Having a date is not
+  permission to raise it: for an anniversary of a loss, the user can choose
+  Only if I bring it up, and the AI still knows the date.
+
+**Custom is guidance, not search (D53).** An Always memory is already sent
+with every message, so its condition only tells the AI when to raise it, and
+the model uses its own judgment. Searching conditions by meaning was tested
+on 2026-11-08 and dropped as unnecessary.
 
 ## D.3 Today's date
 
@@ -1083,83 +1279,408 @@ For each memory, at most three things:
   sends nothing anywhere.
 - **Sharing it with the AI** is a user setting (D1), written so it can't be
   misread (D2), with roleplay handled per D3.
-- **Relative timing** ("tomorrow", "in 5 days") for a due May Bring Up
+- **Relative timing** ("tomorrow", "in 5 days") for a due dated
   memory reaches the AI even with date sharing off (D4). The setting's
   wording must say so.
 - **This is awareness inside a chat, not a notification.**
 
-## D.4 Fading
+## D.4 Fading and retiring (owner decisions D34, D43, 2026-11-08)
 
-- **Purpose:** only how long an undated May Bring Up memory stays due after
-  its subject was last discussed. It never weakens search (D9): an old
-  memory is fully found whenever it becomes relevant again.
-- **"Discussed" follows the conversation.** A memory counts as discussed
-  while carry-over keeps it on topic (B.5), not only when a single message
-  matches it. So "Exactly", "and then she said…", or "that's what bothered
-  me" in a continuing discussion keep it current.
-- **Never counts as discussed:** the briefing sending it, the Memory
-  Assistant, the test screen, or opening the memory.
-- **Technical shape:** each memory stores the date it was last on topic.
-  Eligibility decays with a half-life (D7). Nothing runs in the background.
-- **Editing** a May Bring Up memory counts as it being on topic (D8).
+**Decided:**
+- memories can fade (D34). Fading is an optional choice on each memory, off
+  unless the user turns it on (D.2), so someone who chats rarely does not
+  come back to find their memories retired;
+- when a fading memory has fully faded it is **retired**: it moves to the Retired area
+  (D.11) and is out of use until the user reinstates it;
+- a reinstated memory starts fresh.
+
+**How fast, in plain terms (D45, D49):**
+- a memory retires after a set time without being discussed;
+- the time is the app-wide choice in Memory Handling Preferences (D.12), or
+  a custom number of days on that memory;
+- the exponential "strength" from earlier drafts is dropped, because "last
+  discussed plus the fade time" is easier to understand and to show.
+
+**What the user sees on a fading memory's card:** when it was last
+discussed, and the date it will retire if it is not discussed again.
+Memories that are not fading show nothing extra. Retired memories are listed
+under Retired.
+
+**What counts as "discussed":**
+- the conversation stays on the topic, through carry-over (B.5), which is
+  never refreshed by the AI's replies alone;
+- the user edits the memory;
+- being sent as Always or as a due date never counts.
+
+**Note on the trade-off:** a retired memory is not found by search either,
+even when the user raises the subject, until it is reinstated. That is the
+owner's choice, and the Retired area makes it easy to undo.
 
 ## D.5 Dates
 
-- **Stored:** day and month, plus year for one-time dates (optional for
-  yearly), and one-time or yearly. No time of day.
-- **Windows:** yearly dates are due for some days before through the day.
-  One-time dates are due some days before, on the day, and briefly after
-  (D10, D11).
+- **Stored in its own field** (owner's design, 2026-11-08): day and month,
+  plus year for one-time dates (optional for yearly), and one-time or
+  yearly. No time of day.
+- **The Dates tab checkbox** (owner's design, 2026-11-09): each memory with
+  an important date has a checkbox on the Dates tab (D.11). Only checked
+  memories are sent automatically. Unchecking keeps the date.
+- **The Memory Handling Preferences toggle** (owner's design): turns
+  automatic sending by date on or off for every memory at once. Default on
+  (presented 2026-11-08), so a date the user adds works without hunting for a
+  setting. With it off, dates are still saved and shown, and those memories
+  are found by search as usual.
+- **Past every limit** (owner's design): a checked memory whose date is near
+  is sent even when the Always and search limits are full. There is no cap,
+  and the app never chooses among them: the checkboxes decide (owner,
+  2026-11-09). The Debug test screen shows them.
+- **"Past after" date (D49):** optional, on any memory. After it, the AI is
+  told the memory is in the past, and it leaves Always.
+- **Range** (owner's design, D10, D11): each important date has a field for
+  how many days before it counts as near, prefilled so the user does not
+  have to set it (presented 2026-11-08):
+  - yearly dates: 7 days before, through the day;
+  - one-time dates: 3 days before, through 2 days after, so the AI can ask
+    how it went.
 - **Year boundary:** a 2 January birthday seen from 30 December is 3 days
   away.
 - **29 February** in other years: D12.
-- **Not raised repeatedly:** a due memory is offered to the AI at most once
-  per chat per day (D32). After that it is not offered again that day. If
-  it is also Always Know, it stays as background.
-- **What the AI is told:** the memory text, the app-worked-out timing, and
-  approved guidance to raise it only when it fits naturally (D13).
+- **Not raised repeatedly, without being withheld (D32, corrected):**
+  - a due memory is sent every message while it is due, so the AI never
+    loses it;
+  - once the subject has come up in the chat, the memory is marked "already
+    discussed in this chat";
+  - the AI is told not to raise an already-discussed memory again, but it
+    keeps the information and can use it when the user returns to it.
+- **"Come up" is decided from the user's messages,** or a short user
+  continuation of an exchange about it, not from the AI's replies alone.
+- **What the AI is told:** the memory text, the app-worked-out timing, the
+  memory's bring-up setting, and guidance text the owner approves (D13).
 - **Set by hand** in the editor, or **proposed by the Memory Assistant**
   (Phase 6). Relative dates count from the day the message was sent. Vague
   timing gets no date (D14).
 - **Changed plans** go through the existing edit, supersede, and Possible
   Match paths.
+- **Event state, rather than more fading rules** (research, F.2): a one-time
+  event moves through three states:
+  - **upcoming:** "Are you nervous about Tuesday?";
+  - **happened, with the outcome unknown:** "How did Tuesday go?";
+  - **settled:** the outcome is saved, and the memory stops being raised.
 
-## D.6 The standing briefing
+  The date moves an event from upcoming to happened. Settling it is the
+  user's edit, or a Memory Assistant suggestion through Pending (D42).
 
-- **Background** (Always Know): context the AI keeps. The instruction tells
-  it not to raise these on its own.
-- **May mention** (May Bring Up, currently due): at most once per chat per
-  day each.
-- **Permission rule (D30):**
-  - nothing is volunteered without the user's May Bring Up permission;
-  - a subject is never volunteered just because it was discussed recently;
-  - a painful topic is found by search only when the user raises it.
-- **Size and cost:** one shared Memory Space with search (D16).
-  - background takes its share first, capped;
-  - search fills the rest;
-  - the request's total size check still applies.
+## D.6 What is sent outside search (the standing briefing)
 
-  As a rough guide, 20 short background memories add about 600–1,200 tokens
-  per message. Background goes first in a fixed order so prompt caching
-  (cheaper repeated prompt starts, on providers that offer it) works.
+"The briefing" is the planning name for memories sent when the conversation
+is not about them:
+
+- **Always:** checked memories, sent every message as background.
+- **Important dates:** memories checked on the Dates tab whose date is
+  near, when the toggle is on.
+  Each is marked "already discussed" once it has come up in the chat, and
+  the AI is told not to raise it again (D.5).
+
+**Permission rule (D30, D48):**
+- whether the AI may raise an Always or dated memory unprompted follows its
+  bring-up setting. A date alone is not permission;
+- a subject is never volunteered just because it was discussed recently.
+
+**Size and cost (D16, owner):** Always memories have their own limit, the
+count set in Memory Handling Preferences (default 10, with the exception at
+Save, D52). They do not count against search's Maximum Memories or Memory
+Space, so they can never crowd out a relevant search result. Memories whose
+date is near count against no limit at all (owner's design).
+
+**Priority, in order:**
+1. memories the user picked before sending, never displaced;
+2. search results, within their own limits;
+3. Always memories, within their own limit;
+4. memories whose date is near, never held back by a limit.
+
+If the whole request is still too large for the model, the trimming order is
+D37.
+
+As a rough guide, 20 short Always memories add about 600–1,200 tokens per
+message. They go first in a fixed order so prompt caching (cheaper repeated
+prompt starts, on providers that offer it) works.
+
+**Other rules:**
 - **Placement:** after fixed instructions, Model Rules, and card material;
   before searched memories.
 - **No repeats:** search skips briefing items, and the briefing skips
   picked memories.
 - **Scope:** the same eligibility check the current search uses. Roleplay
   per D17.
-- **Off** whenever memory is off for the chat, and optional overall (D18).
+- **Off** whenever memory is off for the chat.
+- **Switches** (D18): Always has none; checking memories is the opt-in.
+  Important dates have the toggle in Memory Handling Preferences.
 - **Visible:** the Debug test screen shows what the briefing sent and why.
 
 ## D.7 Memory screens
 
-- **Editor:** Always Know, May Bring Up, and an optional date. Nothing else.
-- **Card:** small markers only. No strength, scores, or technical numbers.
-- **Browser:** filters in D20.
-- **Pending card:** a proposed date only (Phase 6), editable before saving.
+- **Editor:** the optional important date with its range, the optional
+  "past after" date, and the fading choice. For an Always memory or one with
+  an important date, the bring-up dropdown (Custom opens a write-in field). Always membership is set from the Always tab and the row
+  menu.
+- **Card:** small markers only: Always, an upcoming date, fading with its
+  retire date, or faded. No scores or technical numbers.
+- **Browser:** the view dropdown: Memories, Pending, Retired, Always, and
+  Dates. Always and Dates have checkboxes (D.11).
+- **Pending:** review labels (D50), and proposed dates with their bring-up
+  setting (Phase 6), editable before saving.
+- **Memory Handling Preferences:** D.12.
 - **Advanced numbers** stay on the Debug test screen, not in ordinary
   settings.
-- **Look:** `ui-style-guide.md`. Wording needs owner approval.
+- **Look:** `ui-style-guide.md`. Wording is shown to the owner before it is
+  built.
+
+## D.9 Inside jokes and "vibe" (owner request, 2026-11-08; proposal)
+
+**Owner request, 2026-11-09:** the vibe should be built soon, ahead of the
+later phases. The owner also asked whether vibes need categories, whether
+Type and Scope need revising, and whether users should make their own.
+
+**Found in the code (2026-11-09):**
+- **Scope** decides which chats may see a memory. It is a privacy wall
+  enforced in the database query: Real life memories never reach roleplay
+  chats, and a companion's memories reach only that companion. There are
+  seven fixed scopes, and each has its own rule.
+- **Type** says what kind of memory it is. The data is built for
+  user-owned types: adding, renaming, and deleting exist behind the scenes,
+  seeded with five starters (Fact, Preference, Event, Status, Instruction).
+  But no screen offers them. The memory editor lists only the five
+  starters, so a user cannot create an "Inside Joke" type today.
+
+**Decided (owner, 2026-11-10; D56, D57):**
+- **Users do not add types.** The built-in list stays, with Inside Joke
+  added to it.
+- **No user-made scopes.** A new scope word would have no rule for which
+  chats may see it.
+- **Inside Joke is an ordinary Type** (owner, revised 2026-11-10). Scope
+  decides where it is seen, as for every memory. There is no extra link
+  requirement: the user puts it wherever they want.
+- **The AI is told when a memory is an Inside Joke** (D35): the memory line
+  starts with "Inside joke:" (approved 2026-11-10).
+- **The Memory Assistant may suggest Inside Joke,** with a scope, as it
+  already suggests a scope for every memory. Suggestions go through Pending.
+- **The vibe is per memory, not per companion** (owner, 2026-11-10): a note
+  the user types on a memory, placed under Importance in the memory editor.
+  Its label, helper text, what the AI receives, and the related details are
+  shown to the owner before it is built (D58).
+
+**Status (2026-11-10):** Inside Joke is being built on the work branch:
+the Type, the database step that adds it for existing users, keeping it when
+an older backup is restored, and the "Inside joke:" label. Still waiting for
+the owner: its definition in the editor's Type Definitions pop-up.
+
+Published systems keep two kinds of memory that matter here (Part F):
+
+- specific facts and events, which is what this app already stores;
+- a short summary of how the user likes to talk and what the relationship
+  is like. ChatGPT keeps "response preferences"; Claude keeps an editable
+  summary of the user.
+
+Inside jokes need both: the joke itself, and the relationship it lives in.
+
+**Proposal, built from existing pieces rather than a new system:**
+
+- **Inside jokes are ordinary memories:**
+  - written with the joke and its origin ("we call the cat the gremlin
+    since the couch incident");
+  - given the built-in Inside Joke type, with whatever scope the user
+    chooses (D56);
+  - often on the Always tab, with When it fits.
+
+  Keyword search already finds the joke's phrase when the user uses it.
+- **The AI needs to know a memory is a joke.** Today only the memory text is
+  sent, not its type. For memories of a type the user marks as playful, the
+  type name would be sent with the text, so the AI knows the memory is
+  meant to be used lightly (D35).
+- **Superseded (2026-11-10): the vibe is per memory (D58).** Earlier
+  proposal: **"Vibe" is one short, user-editable note per companion.** It describes
+  the tone of the relationship, its running themes, and how the companion
+  should talk, and it is always sent with that companion's chats. Companion
+  records already have an unused relationship-notes field for this (D36).
+  Checked 2026-11-09: it is saved and backed up, but no screen shows it and
+  it is never sent to the AI.
+  The Memory Assistant could later suggest updates to it through Pending,
+  never silently.
+- **The trauma rule still holds:** a painful subject never becomes a joke or
+  a vibe line unless the user writes it that way.
+
+## D.10 How the AI uses what it is given (research, F.2)
+
+The most useful published guidance is about behavior, not search: people
+value natural continuity and dislike announcements of remembering, stale
+details, and badly timed or overly broad references. Published research
+also found that filtering memories after retrieval does not reliably stop
+irrelevant references, repetition, or the AI agreeing too readily with the
+user.
+
+**Proposal (D41):** the instructions sent with memories teach four ways to
+use a memory:
+
+1. **ignore it** when it does not help right now;
+2. **use it silently** to shape the reply, without narrating the past;
+3. **mention it** only when it is the answer, or continuity the user would
+   expect;
+4. **ask first**, with one easy-to-decline question, when it might help but
+   permission is unclear.
+
+It should also never announce "I remember…", and never raise a sensitive
+memory the user did not bring up.
+
+- **Could help soon:** this instruction applies to ordinary searched
+  memories too, so it could improve current chats before any later phase.
+- **The exact text is model-facing behavior** and needs the owner's approval
+  before it is written.
+- **Testing:** check the final replies for irrelevant references,
+  repetition, and over-agreement, not only which memories were retrieved.
+  Judging replies with an AI costs tokens, so it is a small, occasional set.
+
+## D.11 Retired area and the browser's views (owner request, 2026-11-08)
+
+**Found in the code (corrected 2026-11-09):** archived memories exist, and
+they are listed in the Memories view mixed in with memories in use, marked
+only by a small "Archived" badge. The Status filter was removed from the
+filter panel in July, so there is no way to see only archived memories. An
+earlier version of this plan wrongly said a Status filter showed them.
+
+**Owner's design:**
+- **A dropdown for the view.** The browser's "Memories | Pending" words
+  become one dropdown with Memories, Pending, Retired, and Always (D.12,
+  D46), and Dates (D54). It uses the canonical dropdown style.
+- **Memories shows memories in use.** Once Retired exists, archived
+  memories are listed there instead of being mixed into Memories.
+- **A Dates tab** (owner's design, 2026-11-09, D54): one tab for memories
+  that are sent automatically because of their important date, so the user
+  can review what will be sent before it is sent.
+  - **Checkboxes,** as on the Always tab. A checked memory is sent
+    automatically while its date is near. Unchecking stops that; the date
+    stays saved and shown, and the memory is still found by search.
+  - **The user decides, never the system.** There is no cap, and the app
+    never picks which dated memories are sent. If 20 are checked and near,
+    all 20 are sent.
+  - **Presented 2026-11-09:**
+    - the tab lists every memory with an important date, checked or not, so
+      an unchecked one can be checked again;
+    - memories are listed in the order their dates come up next;
+    - each shows its date, whether it is one-time or every year, and its
+      range;
+    - a marker shows the ones being sent to the AI right now;
+    - a newly added important date starts checked.
+
+  It is a tab rather than a filter because the filter panel can only narrow
+  the list and sort it newest or oldest. A tab can list memories in
+  upcoming-date order and hold the checkboxes.
+- **Retired** lists everything taken out of use, so it can be seen
+  immediately:
+  - memories the user archived;
+  - memories retired by fading;
+  - deleted memories, if the setting below is on.
+
+  Each can be reinstated, and permanently deleted from there.
+- **Deleted memories go to Retired first:** a setting in Memory Handling
+  Preferences (D44). With it on, Delete moves a memory to Retired. With it
+  off, Delete stays permanent, as today.
+- **Nothing in Retired is sent to the AI.**
+
+## D.12 Memory Handling Preferences and the Always tab (owner request, 2026-11-08)
+
+**A new settings screen, "Memory Handling Preferences",** separate from the
+current memory settings screen, which is crowded. It holds:
+
+- **the most always-sent memories allowed per message.** The default is 10,
+  and more is allowed;
+- **the fade time** for memories set to fade (D45);
+- **whether memories with important dates are handed to the AI** while the
+  date is near (D18, D.5);
+- **whether deleting sends a memory to Retired first** (D44).
+
+**The Always tab** (owner's design, 2026-11-08; D46, D52):
+- **Membership and checking are separate.**
+  - Memories in the Always tab each have a checkbox.
+  - Only checked memories are sent with every message.
+  - Unchecking keeps a memory in the tab without sending it, so the user
+    can swap.
+- **"Checked only" view:** a way to show just the checked memories, so the
+  user can find and uncheck them quickly.
+- **A simple count at the bottom,** for example "12 checked · your limit is
+  10", so the user always knows where they are.
+- **Checking is never blocked.** The user can always check one more.
+  Blocking it would make them choose on the spot between two things they
+  want remembered.
+- **The limit is checked when the user saves.** If more memories are checked
+  than the limit, the app shows all the checked memories and offers two
+  choices:
+  - uncheck some, right there in the list;
+  - keep them all: an exception above the normal limit, which does not
+    change the preference itself.
+
+  After keeping an exception, the user is asked again only if they check
+  even more.
+- **The row menu** has an action that makes it a normal memory again: out of
+  the tab, still remembered, and found by search when relevant.
+- **Always memories have their own cap.** They do not count against
+  search's limits (D16).
+- **The preference's subtext** explains, plainly, why sending many memories
+  every message has a cost:
+  - more tokens per message;
+  - less room for the conversation;
+  - the AI's attention spread thin.
+
+  Any number is allowed.
+
+**Auto mode, where the embedding model picks which always-sent memories to
+include (owner question, D47):**
+- **Recommendation: no auto mode, checkboxes only.** Ordinary search already
+  is that auto mode. Every message, any memory that matches the
+  conversation, checked or not, is found and sent.
+- So the checkboxes only need to cover what should be present even when the
+  conversation is not about it, and that is better decided by the user than
+  guessed. It also keeps the behavior predictable and the screen simple.
+- Going over the limit is handled at Save, as described above. The app never
+  silently chooses.
+
+## D.13 Direction for the later phases (owner ruling, 2026-11-08)
+
+**Design principle (owner):** build the memory system the owner wants,
+designed for capable models. Do not simplify it around a weaker model's
+habits.
+
+- Per-model adjustments go through the existing **Model Rules**, which are
+  sent only for a chosen model and removed when the model is gone. For a
+  model that recaps history or cannot handle many memories, a rule changes
+  its behavior behind the scenes. The system itself stays the same for
+  everyone else.
+- If a model needs fewer memories, not just different instructions, Model
+  Rules may later gain per-model memory limits. That is an extension to
+  propose when it is needed.
+
+**What the user sets on each memory:** D.2 (Always, important dates, the
+bring-up setting for Always and dated memories, and fading).
+
+**All the time:** the memory-use instruction (D.10, D41) teaches the AI to
+use what it is given naturally.
+
+**Keeping track without extra work (D50):**
+- one review place, Pending, with labelled reasons;
+- nothing requires action; doing nothing leads to the sensible default;
+- renewing is one tap.
+
+**Order, each a separate pull request, foundations first:**
+1. Carry-over, both send paths, and the memory-use instruction (D41). These
+   are the next pull request.
+2. Data control (Phase 2). This changes no AI behavior.
+3. The Always tab and the bring-up setting (Phase 3).
+4. Today's date and dates on memories (Phase 4).
+5. Fading (Phase 5).
+6. Memory Assistant date proposals (Phase 6), then the later features,
+   including the background reviewer (D51).
+
+**After these are in place,** revisit how search picks memories, using the
+test screen and the test conversations. Model Rules adjustments come last,
+per model, once the full system works.
 
 ## D.8 Data, backup, privacy
 
@@ -1175,41 +1696,245 @@ For each memory, at most three things:
 
 # Part E: Decisions
 
-Asked one at a time in chat. A recommendation is a proposal only.
+**How decisions are recorded (owner ruling, 2026-11-08):**
+- A recommendation the owner has seen and not objected to counts as
+  approved. Those rows say **Approved**.
+- Rows marked **Presented 2026-11-08** were first shown to the owner on that
+  date. They count as approved unless the owner objects.
+- Exact wording and text sent to the AI count as approved only once the
+  owner has seen the actual text.
+- Approving a design does not start the work. The owner decides what is
+  built and when.
 
-| # | Question | Recommendation or decision |
+| # | Question | Decision |
 |---|---|---|
 | D0 | Approve the recommended search design in Part B as the plan for Phase 1? | **Decided, 2026-11-08:** the direction is approved; details are left to engineering judgment (B.5) |
-| D1 | Is date sharing off or on by default? | Off; the user turns it on |
-| D2 | What date format goes to the AI? | Weekday, day, month name, year, which can't be misread |
-| D3 | Does date sharing apply in roleplay chats? | No by default; the story may have its own time |
-| D4 | With date sharing off, do reminders carry relative timing ("tomorrow")? | Yes; a reminder is useless without timing |
-| D5 | Is the date-sharing setting app-wide, per chat, or both? | App-wide first; per chat only if wanted later |
-| D6 | Are manually created memories lasting or fading by default? | **Retired (review, 2026-11-08):** fading is internal, not a user choice (D31) |
-| D7 | How fast does fading go? | One app-wide speed, tunable only on the Debug test screen |
-| D8 | Does editing a May Bring Up memory count as it being on topic? | Yes; editing is deliberate attention |
-| D9 | Does fading affect search ranking? | No (review, 2026-11-08). Old memories stay fully searchable; reconsider only if testing shows a real need |
-| D10 | How long are the windows? | Yearly: about a week before through the day. One-time: a few days before through two days after |
-| D11 | Can windows be changed per memory? | Not at first |
-| D12 | How is a 29 February date handled in other years? | 28 February |
-| D13 | What does the guidance to the AI about dated reminders say? | Owner reviews the exact text before it is built |
-| D14 | Does vague timing get a date? | No; the user can add one in Pending |
-| D15 | Should the briefing be built at all? | Yes, after D30–D32 are settled; it is the only way the AI can bring things up on its own |
-| D16 | How is the briefing's size limited? | It shares Memory Space with search; background takes a capped share first. No separate control (review, 2026-11-08) |
-| D17 | Does the briefing run in roleplay chats? | Off by default in roleplay |
-| D18 | Is the briefing on or off by default? | Off; it adds a cost to every message |
-| D19 | Is fading strength shown on memory cards? | No; cards stay free of technical numbers. The Debug test screen shows it (review, 2026-11-08) |
-| D20 | Which browser filters are added? | Upcoming dates, Always Know, May Bring Up |
-| D21 | Should a local re-ranker be added? | No; tested and it did not work (A.10). Reconsider only if a suitable small model appears |
-| D22 | Does date sharing ship on its own, before the rest? | Yes, if wanted sooner; it doesn't depend on the rest |
+| D1 | Is date sharing off or on by default? | **Approved:** off; the user turns it on |
+| D2 | What date format goes to the AI? | **Approved:** weekday, day, month name, year, which can't be misread |
+| D3 | Does date sharing apply in roleplay chats? | **Approved:** no by default; the story may have its own time |
+| D4 | With date sharing off, do dated memories carry relative timing ("tomorrow")? | **Approved:** yes; a reminder is useless without timing |
+| D5 | Is the date-sharing setting app-wide, per chat, or both? | **Approved:** app-wide first; per chat only if wanted later |
+| D6 | Are manually created memories lasting or fading by default? | **Superseded:** fading is an optional choice on each memory, off by default (D34) |
+| D7 | How fast does fading go? | **Superseded** by D45 and D49 |
+| D8 | Does editing a fading memory count as it being discussed? | **Approved:** yes; editing is deliberate attention |
+| D9 | Does fading affect search ranking? | **Approved:** no. A fading memory stays fully searchable. Once retired, it is out of use (D43) |
+| D10 | How long are the date windows? | **Decided (owner), 2026-11-08:** each important date has its own range field. **Presented 2026-11-08:** prefilled with 7 days before for yearly dates (through the day), and 3 days before through 2 days after for one-time dates |
+| D11 | Can windows be changed per memory? | **Decided (owner), 2026-11-08:** yes, through the range field (D10) |
+| D12 | How is a 29 February date handled in other years? | **Approved:** 28 February |
+| D13 | What does the guidance to the AI about dated memories say? | **Open until drafted:** the owner sees the exact text before it is built |
+| D14 | Does vague timing get a date? | **Approved:** no; the user can add one in Pending |
+| D15 | Should memories be sent outside search (Always and due dates)? | **Decided, 2026-11-08:** yes. The owner designed the Always tab and dates (D46, D49, D52) |
+| D16 | How is the size of what is sent outside search limited? | **Decided (owner), 2026-11-08:** Always memories have their own limit, set in Memory Handling Preferences. It does not count against search's Maximum Memories or Memory Space. Memories whose important date is near count against no limit |
+| D17 | Are Always and dated memories sent in roleplay chats? | **Approved:** not by default |
+| D18 | Is there an on/off switch for sending memories outside search? | **Always:** no switch; checking memories is the opt-in (presented 2026-11-08). **Important dates (owner's design):** a toggle in Memory Handling Preferences for all of them (2026-11-08), and a checkbox for each on the Dates tab (2026-11-09). **Presented:** the toggle defaults to on, and a new date starts checked |
+| D19 | What does a memory card show about fading? | **Approved:** no numbers. A fading memory shows when it was last discussed and the date it will retire (D.4) |
+| D20 | Which browser filters are added? | **Superseded** by the view dropdown (D.11), the card markers (D.7), and the Dates tab (D54) |
+| D21 | Should a local re-ranker be added? | **Approved:** no; tested and it did not work (A.10). Reconsider only if a suitable small model appears |
+| D22 | Does date sharing ship on its own, before the rest? | **Approved:** it can, if wanted sooner; it doesn't depend on the rest |
 | D23 | When is search fixed? | **Decided, 2026-11-08: first** |
-| D24 | Where does the search test screen open from? | **Decided, 2026-11-08:** its own screen, from Advanced Memory Settings in the Debug section, with adjustable numbers; the old Debug search box is removed. Still open: its wording and layout |
-| D25 | Should the ordinary memory settings also have a Strict / Balanced / Broad match choice? | No; the test screen's tuned numbers are the setting, and a second control adds confusion |
+| D24 | Where does the search test screen open from? | **Decided, 2026-11-08:** its own screen, from Advanced Memory Settings in the Debug section, with adjustable numbers. Built in #180 |
+| D25 | Should the ordinary memory settings also have a Strict / Balanced / Broad match choice? | **Approved:** no; the test screen's tuned numbers are the setting |
 | D26 | Should roleplay card entries also lose their 10-message cooldown? | **Decided, 2026-11-08: yes.** Card entries ride the same rebuilt message, so the cooldown hid them from the AI. Lorebooks were checked and have no cooldown |
-| D27 | Which memory assembly log lines change when the cooldown and old search are removed? | **Decided, 2026-11-08:** the summary line, the memory cooldown line, the project wording, and the chat-search missing-vector line, as proposed. The card-cooldown log line stays in the code (it no longer fires) until its removal is approved |
+| D27 | Which memory assembly log lines change when the cooldown and old search are removed? | **Decided, 2026-11-08:** the summary line, the memory cooldown line, the project wording, and the chat-search missing-vector line. The card-cooldown log line stays in the code (it no longer fires) until its removal is approved |
 | D28 | Should the Memory Assistant always add topic tags? | **Decided, 2026-11-08:** not mandatory now. Test independently generated tags first (step 1.15) |
 | D29 | Should the int8 model become the default? | **Decided, 2026-11-08 (revised):** no change to the default. The user already picks q4 or int8 in Advanced Memory Settings |
-| D30 | Which memories may the standing briefing bring up unprompted? | Only memories the user has marked May Bring Up. Dates and fading then decide when. Never volunteer a topic just because it was discussed a lot. The independent review strongly supports this |
-| D31 | What does the user decide per memory? | Only Always Know, May Bring Up, and an optional date. Fading, windows, and scores stay internal (review, 2026-11-08) |
-| D32 | How often may a due May Bring Up memory be offered to the AI? | At most once per chat per day |
-| D33 | What does the Memory Assistant propose beyond the memory text? | Dates only, at first. Always Know and May Bring Up stay the user's choices until their behavior is established |
+| D30 | Which memories may the AI raise unprompted? | **Decided (owner), 2026-11-08:** an Always memory, or a memory whose date is near, as its bring-up setting allows (D48). A date alone is not permission. A searched memory is already about what the user said. A topic is never volunteered just because it was discussed a lot |
+| D31 | What does the user decide per memory? | **Approved:** Always, an optional important date with its range, an optional "past after" date, optional fading, and the bring-up setting for Always and dated memories (D.2). Last-discussed tracking stays internal |
+| D32 | How is repetition of a memory whose date is near controlled? | **Decided (corrected), 2026-11-08:** never by withholding it. It is sent every message while near, marked "already discussed" once it comes up, and the AI is told not to raise it again |
+| D33 | What does the Memory Assistant propose beyond the memory text? | **Approved:** dates only, at first. Always, the bring-up setting, and fading stay the user's choices. **Presented 2026-11-08:** Pending shows the bring-up setting beside a proposed date |
+| D34 | Should memories fade? | **Decided, 2026-11-08: yes,** with Memory Browser markers for fading, not fading, and faded, and with faded memories reinstatable from Retired. **Approved:** fading is an optional choice on each memory, off unless the user turns it on (D.2) |
+| D35 | Should the type name be sent with memories of a "playful" type, such as Inside Joke? | **Approved:** yes, for types the user marks playful, so the AI knows to use them lightly |
+| D36 | Should each companion have a short, editable "vibe" note that is always sent? | **Superseded (owner), 2026-11-10:** the vibe is a note on each memory, not on each companion (D58) |
+| D37 | If a whole request is too large for the model, what is trimmed first? | **Presented 2026-11-08 (revised, because the owner treats important dates as important):** the lowest-ranked search results first, then Always memories, then memories whose date is near. Picked memories are never trimmed. This is only a last resort for a request the model cannot accept at all. Otherwise the app never chooses which Always or dated memories are sent; the user's checkboxes do (owner, 2026-11-09) |
+| D38 | Should a companion know what happened in your last few chats with it, through short summaries built from the existing per-chat conversation summaries? | **Approved for design:** it is the main thing ChatGPT does that this app lacks for continuity ("how did the dentist go yesterday?"). It is background knowledge, and the bring-up rules apply |
+| D39 | Should the AI know how long it has been since the last chat with this companion (in days, not times)? | **Approved:** yes, as part of Phase 4, under the date-sharing setting |
+| D40 | Should a companion keep its own short reflections or journal about the relationship? | **Approved:** later and optional, after the vibe note, and visible and editable |
+| D41 | Should the instructions sent with memories teach the four ways of using them (ignore, use silently, mention, ask first)? | **Approved:** yes, in the next pull request. **Owner ruling, 2026-11-08:** no crisis or safety wording; the model uses its own judgment. **Open until drafted:** the owner sees the exact text before it is built |
+| D42 | Should one-time events track upcoming, happened, and settled? | **Approved:** yes, instead of more fading rules. Settling is a user edit or a Memory Assistant suggestion through Pending |
+| D43 | When a memory fades fully, what happens? | **Decided, 2026-11-08:** it is retired: it moves to Retired, out of use until the user reinstates it |
+| D44 | Should deleting a memory move it to Retired first, with Delete Permanently from there? What is the default? | **Decided (owner):** a setting in Memory Handling Preferences. **Approved:** default on, so a mistaken delete can be undone |
+| D45 | How fast do memories fade? | **Approved:** one app-wide fade time in Memory Handling Preferences: 2 weeks, 1 month, 3 months, or 6 months. Default 1 month |
+| D46 | What is the always-sent tab called, and what does it mean? | **Decided, 2026-11-08:** the dropdown entry is "Always". Checked Always memories are sent with every message |
+| D47 | Should an auto mode let the embedding model pick which Always memories to include? | **Approved:** no. Ordinary search already does this every message; checkboxes only |
+| D48 | How does the user say how a memory may be brought up? | **Decided (owner), 2026-11-08:** a dropdown on Always memories: Only if I bring it up, When it fits (the default), Ask me first, or Custom, a written condition. For a searched memory, a condition goes into the memory's own text. **Presented 2026-11-08:** the same dropdown on memories with an important date, because a date alone is not permission. Weaker models are handled through Model Rules (owner ruling) |
+| D49 | Fade timing, and an optional "past after" date per memory? | **Decided (owner):** custom fade timing, and a per-memory date after which the memory is a past event. **Approved:** the preset times plus a custom number of days, and an optional "past after" date on any memory |
+| D50 | How are expiring and passed memories reviewed without overwhelming the user? | **Approved:** one review place, Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, a fading memory retires and a passed event is kept as past. One tap renews |
+| D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | **Approved:** later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
+| D52 | How does the Always tab handle more checked memories than the limit? | **Decided (owner's design), 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
+| D54 | How does the user see and control memories that are sent automatically because of their date? | **Decided (owner), 2026-11-09:** a Dates tab in the browser's view dropdown, with a checkbox on each memory, so the user reviews what will be sent and unchecks what they don't want sent. No cap, and the app never picks among them. **Presented 2026-11-09:** it lists every dated memory, checked or not, in upcoming order, with a marker on the ones being sent now; a new date starts checked |
+| D55 | Should the "past after" date and a one-time important date be one field? | **Open (raised 2026-11-09), to settle before Phase 4.** Both make a memory past after a date, and two date fields may confuse. Recommended: one date field. A one-time date always makes the memory past afterwards, and its Dates tab checkbox decides whether it is also sent while near |
+| D56 | Should vibes have their own categories, or should inside jokes be a memory Type? | **Decided (owner), 2026-11-10:** Inside Joke is a built-in Type and works like any other Type: scope decides where it is seen, with no extra link requirement. Users do not add types. The AI receives "Inside joke:" before the memory text. The Memory Assistant may suggest it, with a scope |
+| D58 | What does the per-memory vibe look like? | **Decided (owner), 2026-11-10:** an optional note on each memory, typed by the user, under Importance in the memory editor. Label "Vibe", hint "How the AI should treat this memory, like playful or gentle." The AI receives it on its own line under the memory. Empty by default, shown on the memory card, never read by search, and not suggested by the Memory Assistant at first. **Open:** whether a Memory Assistant update that replaces a memory carries the old vibe over |
+| D57 | Should users make their own scopes? | **Decided (owner), 2026-11-10:** no. Scope is the privacy rule for which chats may see a memory, and a user-made scope would have no rule |
+| D53 | Should a Custom condition also be searched by meaning? | **Decided (owner), 2026-11-08:** no. An Always memory is already sent with every message, so the condition only guides when the AI raises it, and the model uses its own judgment. Condition search was tested and dropped |
+
+---
+
+# Part F: What published memory systems do (2026-11-08)
+
+A short summary for design, not a specification. The sources are linked so
+the owner or another reviewer can check them.
+
+- **ChatGPT** has two layers: saved memories, which are explicit facts the
+  user can view and delete, and "reference chat history".
+  - Saved memories are placed in the model's instructions for later chats.
+  - Chat history adds summaries: response-style preferences, past topics,
+    and short summaries of recent conversations.
+  - Only the saved-memory behavior comes from OpenAI's own help pages. The
+    breakdown of what is sent is reverse-engineered by a third party, who
+    notes it may be inaccurate.
+  - Sources: [OpenAI help: how reference saved memories works](https://help.openai.com/en/articles/11146739-how-does-reference-saved-memories-work);
+    [OpenAI: memory and new controls](https://openai.com/blog/memory-and-new-controls-for-chatgpt);
+    [Embrace The Red: how ChatGPT remembers you](https://embracethered.com/blog/posts/2025/chatgpt-how-does-chat-history-memory-preferences-work).
+  - **Lesson:** a set of always-available facts plus a summary of the user's
+    style is what makes it feel like it "knows" you. That matches Always
+    Know and the vibe note (D.9).
+- **Claude** can search and reference past chats when asked, and can keep an
+  automatically generated, user-editable summary of what it has learned.
+  - Sources: [Engadget](https://engadget.com/ai/claude-can-now-reference-past-chats-if-you-want-it-to-211806343.html);
+    [The Decoder](https://the-decoder.com/anthropics-claude-can-now-remember-past-conversations/).
+  - **Lesson:** the summary is visible and editable, which supports keeping
+    the vibe note user-editable.
+- **Letta (formerly MemGPT)** splits memory into "core memory" blocks that
+  are always in the model's context, each with its own size limit, and
+  "archival memory" that is searched when needed.
+  - Source: [Letta docs: agent memory](https://docs.letta.com/guides/agents/memory).
+  - **Lesson:** always-present memory gets its own budget, separate from
+    searched memory. That matches the owner's view on D16.
+- **Generative Agents** (Park et al., 2023) ranks memories by relevance,
+  recency, and importance. It periodically writes "reflections": higher-level
+  insights drawn from many memories.
+  - Sources: [arXiv 2304.03442](https://arxiv.org/pdf/2304.03442v2).
+  - **Lesson:** reflections are the research name for "vibe". They are
+    summaries above individual facts.
+- **Mem0** (2025) extracts memories from conversations and compares each one
+  against existing memories, then chooses to add, update, delete, or do
+  nothing. That is close to this app's Memory Assistant with Possible Match.
+  - Source: [arXiv 2504.19413](https://arxiv.org/html/2504.19413v1).
+- **MemoryBank** (AAAI 2024) uses a forgetting curve, where memories fade
+  unless reinforced, for long-term companion chat.
+  - Source: [AAAI](https://ojs.aaai.org/index.php/AAAI/article/view/29946).
+  - **Lesson:** fading has precedent, but in a companion app it risks
+    dropping wanted follow-ups. Hence D34.
+- **Inside jokes:** no published research addresses them directly. The
+  closest ideas are relationship-event memory and summaries of the
+  relationship, as in D.9.
+
+## F.2 Frontier-lab and academic research (supplied by the owner's second reviewer, verified 2026-11-08)
+
+- **Anthropic, "The components of agent memory"** (6 November 2026):
+  - **Layers:** a searchable transcript log, memory notes, organized
+    knowledge such as wikis, and a small injected context loaded every
+    session.
+  - **"Dreaming":** an offline process that checks the notes against the
+    original transcripts and corrects them.
+  - **The top, always-present layer has to stay small.** In one test, 10
+    focused files did far better than 413 stale ones, and bigger memory was
+    not automatically better.
+  - Source: [anthropic.com/research/components-of-agent-memory](https://www.anthropic.com/research/components-of-agent-memory).
+  - **Lesson:** keep Always small, and let a Memory Assistant pass
+    correct and update memories through Pending.
+- **OpenAI, "Dreaming"** (4 June 2026, confirmed through news coverage
+  because OpenAI's page could not be read directly):
+  - a background process synthesizes past conversations and keeps memory
+    current as circumstances change, for example a planned trip becoming a
+    completed one;
+  - OpenAI notes its memory summary page may not show everything it
+    remembers.
+  - Sources: [PCWorld](https://www.pcworld.com/article/3158111/chatgpt-new-dreaming-feature-makes-it-way-better-at-remembering-you.html);
+    [Tom's Guide](https://www.tomsguide.com/ai/chatgpts-new-memory-builds-a-profile-of-you-on-its-own-and-openai-admits-you-cant-see-all-of-it).
+  - **Lessons:**
+    - track an event's state (D.5) rather than adding more fading rules;
+    - unlike ChatGPT, keep everything the app remembers visible.
+- **"Before Bringing It Up: When and How AI Companions Should Use Memory"**
+  (University of Toronto, arXiv 2610.09470, October 2026):
+  - interviews with 14 companion users: they valued continuity but objected
+    to stale, mistimed, or overly broad uses;
+  - it proposes four modes for using a memory: ignore, use silently,
+    mention explicitly, or ask first;
+  - **caveat:** results were judged by AI models, not people, and were
+    inconclusive for GPT and Claude.
+  - Source: [arXiv 2610.09470](https://arxiv.org/html/2610.09470v2).
+  - **Lesson:** D.10.
+- **"OP-Bench: Benchmarking Over-Personalization"** (EMNLP 2026):
+  - three failures: irrelevant references, repetition, and sycophancy
+    (agreeing too readily);
+  - agents over-attend to memories even when they are not needed;
+  - the post-processing fixes tested gave only limited improvement.
+  - Source: [ACL Anthology 2026.emnlp-main.1168](https://aclanthology.org/2026.emnlp-main.1168/).
+  - **Lesson:** good retrieval is not enough. Instruct how to use memories
+    (D.10), and test the final replies.
+
+**Design goal these support:** the AI carries shared experiences forward,
+recognizes when circumstances change, and uses what it knows naturally,
+without announcing what it remembers or dragging in unrelated memories.
+
+## F.1 Companion apps and open-source tools people like (2026-11-08)
+
+Earlier research is saved in the repository:
+
+- `conversation-summary-plan.md` section 3 reviewed SillyTavern Summarize
+  and Qvink MessageSummarize for conversation summaries;
+- the legacy counterplan's section 3 reviewed Mem0, LangMem, Letta, and Zep.
+
+This section adds what makes companions feel alive. Most details come from
+third-party guides and user reports, not official documentation, so they are
+patterns to learn from, not exact specifications.
+
+- **SillyTavern** (open source):
+  - "World Info" is keyword-triggered entries, which this app's lorebook
+    already does.
+  - The "Author's Note" is a short standing note inserted near the newest
+    message. The docs say the closer it is to the bottom of the prompt, the
+    more effect it has on the next reply.
+  - Sources: [Author's Note](https://docs.sillytavern.app/usage/core-concepts/authors-note/);
+    [World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/).
+- **Kindroid:**
+  - Always-present memory is the backstory, "key memories" (for temporary
+    life facts), example messages, and a response directive.
+  - "Journal entries" are keyword-triggered. They fire only when the user,
+    not the AI, mentions a key phrase, with a few per message at most.
+  - Sources: [Types of memory within Kindroid](https://medium.com/@adlerai/types-of-memory-within-kindroid-5659410c07ca);
+    [Journal entries on Kindroid](https://medium.com/@adlerai/journal-entries-on-kindroid-fce640dcceea).
+- **Nomi:** short-, medium-, and long-term layers.
+  - An "identity core" holds stable facts and personality.
+  - "Shared Notes" are a visible, editable list that both the user and the
+    companion use, for things like backstory.
+  - A "Mind Map" organizes people, places, topics, and goals.
+  - Users report that summarized information sometimes picks up mistakes.
+  - Sources: [Nomi app listing](https://apps.apple.com/app/id6450270929);
+    [Kindroid vs Nomi vs Replika memory comparison](https://aicompanionpick.com/ai-companion-memory-kindroid-nomi-replika-long-term-2026).
+- **Replika:** layered memory.
+  - A "Memory" tab of facts about the user, their pets, and people in their
+    life, which the user can review.
+  - A diary of short reflective entries.
+  - A deeper layer drawn from conversation patterns.
+  - Sources: [Replika help: how memory works](https://help.replika.com/hc/en-us/articles/37208679176077-How-does-Replika-s-memory-work).
+- **Honcho** (open source, Plastic Labs): builds a "representation" of each
+  person from conversations. It is an inferred portrait of what they believe
+  and need, kept alongside a short list of concrete facts.
+  - Source: [plastic-labs/honcho](https://github.com/plastic-labs/honcho).
+
+**Patterns that recur, and where this app stands:**
+
+| Pattern | Seen in | This app |
+|---|---|---|
+| Keyword-triggered entries | SillyTavern, Kindroid | Built: lorebook |
+| Memories found by meaning | Letta, Mem0, ChatGPT | Built and repaired in #180 |
+| Always-present facts, with their own space | ChatGPT, Kindroid, Nomi, Letta | Planned: Always, with its own limit (D16) |
+| A relationship or personality note the user can edit | Kindroid directive, Nomi Shared Notes, Claude summary | Proposed: vibe note (D36) |
+| Continuity across recent chats | ChatGPT recent-conversation summaries | Gap: proposed as D38 |
+| Awareness of time and time since the last chat | Companion apps generally | Planned as date awareness (Phase 4); time since last chat is D39 |
+| A standing note placed near the newest message | SillyTavern Author's Note | Memory already goes just before the newest message; the vibe note could join it (D36) |
+| Triggers only from the user's own words | Kindroid journals | Matches the no-self-refresh rule (B.5) |
+| The companion's own reflections or diary | Replika diary, Generative Agents reflections | Gap: optional idea, D40 |
+| Everything visible and editable | Replika, Nomi, Claude, ChatGPT | Built: Memory Browser, Pending, test screen |
+
+**Common complaints worth designing against:**
+- Forgetting when the conversation outgrows the context: handled by
+  compaction and carry-over.
+- Summaries drifting into mistakes: anything generated goes through Pending
+  and stays editable.
+- Memory silently breaking after updates: the test screen and assembly
+  log make it visible.
+

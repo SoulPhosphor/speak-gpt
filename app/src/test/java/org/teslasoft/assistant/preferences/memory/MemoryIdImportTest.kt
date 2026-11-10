@@ -143,6 +143,20 @@ class MemoryIdImportTest {
     }
 
     @Test
+    fun aVibeOnlyEditIsAVersionConflict() {
+        val stored = record("same content", emptyList()).copy(vibe = "gentle")
+        val live = MemoryIdImport.Existing.Live(stored.createdAt, MemoryIdImport.substanceOf(stored))
+        for (newVibe in listOf("tease me about it", "")) {
+            val incoming = stored.copy(vibe = newVibe)
+            assertEquals(
+                MemoryIdImport.Disposition.CONFLICT_VERSION,
+                MemoryIdImport.classify(incoming.memoryId, incoming.createdAt,
+                    MemoryIdImport.substanceOf(incoming), type, live)
+            )
+        }
+    }
+
+    @Test
     fun identicalOptionalTitleStillPreservesExistingMemory() {
         for (title in listOf("", "Same label")) {
             val stored = record("same content", emptyList()).copy(title = title)
