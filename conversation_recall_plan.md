@@ -104,7 +104,12 @@ Smaller issues:
   failed to embed;
 - meaning search reads only the first 512 tokens of a memory
   (`EmbeddingModels.kt`), so a very long memory is partly invisible to it.
-  The model itself can read 2,048.
+  The model itself can read 2,048;
+- the embedding model must run one request at a time, and `Librarian.kt`
+  has a lock for that (`embedLocked`). The live chat search embeds the
+  user's message without the lock (`searchInternal`), so it can run at the
+  same moment as a background repair. Found in review on 2026-11-10; fixed
+  as part of G.5a rule 6.
 
 ## G.3 The whole system at a glance
 
@@ -224,6 +229,7 @@ files, images, and hidden messages are open questions (G.17).
 | Passages | One entry (about a paragraph) | chat ID, message ID, position in the message | The message, by its permanent ID, with the start and end of the passage inside the message text, and the exchange it belongs to |
 | Passage vectors | One vector | the passage's text fingerprint and the model that made it | Nothing. Any passage with that fingerprint uses it |
 | Passage keywords | The searchable words of one passage | the passage row | The passage |
+| Index state | One row per chat | chat ID | Which saved version of the chat the index describes, how many passages still wait for a vector, and whether the chat is fully indexed |
 
 - The original text is **not copied** into a second permanent home. A
   passage records where it sits inside its message. The message stays the
@@ -254,6 +260,93 @@ of passages, and recall.
 
 **Not changed:** the existing chat search feature and its one-entry-per-
 message index, the saved-memory vector table, and the stored chats.
+
+## G.5a Rules the index must guarantee (Proposed)
+
+Added after an outside review on 2026-11-10. Each point was checked in the
+code and is true today. These are requirements for stage 1, not options.
+
+**1. A message hidden from the AI is never recalled.**
+- The app lets the user hide a message from the AI
+  (`MessageVisibility.kt`). Everything that sends conversation to a model
+  must skip it.
+- The chat search index does not apply that rule
+  (`SearchableMessageProjection.kt`), because it serves the user's own
+  search. It must not be reused for recall as it is.
+- Rule: a hidden message is not eligible for recall. Eligibility is checked
+  twice: when indexing, and again at the moment of recall against the
+  stored message, so hiding a message takes effect at once even when
+  background indexing has not caught up.
+- The same double check applies to deleted messages, unfinished replies,
+  and reply versions that are not the one shown.
+
+**2. No text is ever cut off silently.**
+- The tokenizer drops everything past the model's limit without saying so
+  (`HfTokenizer.encode`).
+- Rule: the passage cutter measures every piece with the real tokenizer,
+  counting the instruction prefix and special tokens, and cuts again until
+  the piece fits. A passage is recorded as embedded only when all of its
+  text was read by the model.
+
+**3. Vectors have an owner and a lifetime.**
+- A vector is reused only when the text, the embedding model, the vector
+  size, and the way the text was prepared all match.
+- When the last passage that uses a vector is deleted or changed, the
+  vector is removed.
+- Vectors made by a model that is no longer selected are removed once the
+  new model's vectors are complete.
+- Deleting a chat removes everything derived from it, including vectors no
+  other chat uses.
+
+**4. An index update is all or nothing.**
+- The chat search index already records which saved version of a chat it
+  was built from and refuses stale results (`ChatSearchIndexManager.kt`,
+  `ChatSearchIndexJournal.kt`). The passage stores follow the same method.
+- Rule: passages and keywords for a chat are replaced together, in one
+  database transaction, against a recorded version of the chat. Before
+  publishing, the version is checked again. A background job that finishes
+  after the chat changed throws its result away.
+- A vector that arrives for text that no longer exists is discarded.
+
+**5. Search stays fast as conversations grow.**
+- Saved-memory search compares the message against every vector, which
+  its own notes say suits up to about 50,000 memories (`Librarian.kt`).
+  Conversation passages will outnumber saved memories many times over.
+- Rule for stages 1 to 3: meaning search looks only at the current chat's
+  passages. Keyword search uses the database's own keyword index. Vectors
+  are read in bounded batches, never all chats at once.
+- Passage counts, indexing progress, and search time are recorded so they
+  can be shown and measured.
+- Recall from other chats needs a different search method for large
+  collections. That choice is made when that stage is designed, and the
+  storage is shaped so it can be added without rebuilding.
+- Size, for reference: one vector is about 1 KB, so 100,000 passages are
+  about 100 MB before overhead. Smaller vector storage is measured in
+  stage 1.
+
+**6. One path runs the embedding model.**
+- Rule: every use of the model goes through one queue: the live message,
+  saved memories, and conversation indexing. A live chat request always
+  goes ahead of background work, and background indexing pauses for it.
+- This also fixes the unlocked call noted in G.2.
+
+**7. Only messages with a permanent ID are indexed.**
+- Older messages receive an ID the first time the app assigns one
+  (`MessageIdentity.kt`). A message with no usable ID yet is not indexed
+  until it has one.
+- To verify in stage 1: how many older messages lack an ID or a recorded
+  scope. Missing scope stays private to its own chat (G.7).
+
+**The indexing steps for one new or changed message:**
+
+1. Check that it may be recalled: visible to the AI, finished, and the
+   version shown.
+2. Cut it into passages that each fit the model, recording exactly where
+   each sits in the message.
+3. Replace that message's passages and keywords in one transaction.
+4. Reuse any vector that already matches. Queue the rest.
+5. Make queued vectors in the background, behind any live request.
+6. Mark the chat's index state complete when nothing is waiting.
 
 ## G.6 Search (Proposed)
 
@@ -474,7 +567,8 @@ message-level work while the user chats, as an option.
 | New message | Its entries are added in the background |
 | Message edited | Entries for that message are replaced. Unchanged paragraphs keep their vectors |
 | Reply regenerated or another version chosen | Entries follow the version that is shown |
-| Message deleted | Its entries and any AI notes on them are removed |
+| Message deleted | Its entries and any AI notes on them are removed, and any vector nothing else uses |
+| Message hidden from the AI, or made visible again | Takes effect on recall at once (G.5a rule 1) |
 | Chat deleted | All its entries are removed |
 | Backup restored | The index is rebuilt from the restored chats |
 | Embedding model changed | Keyword search keeps working at once. Vectors are remade in the background |
@@ -542,7 +636,7 @@ each starts.
 
 | Stage | What is built | Depends on |
 |---|---|---|
-| 1 | The passage stores, the passage cutter, background embedding, scope labels, and upkeep (G.5, G.7, G.12) | Nothing |
+| 1 | The passage stores, the passage cutter, background embedding, scope labels, upkeep, and every rule in G.5a (G.5, G.5a, G.7, G.12) | Nothing |
 | 2 | Conversation search, the subject check, and a way to inspect what a message would recall (G.6, G.9a) | Stage 1 |
 | 3 | Recall added to real chat requests, with the final size check (G.8) | Stage 2 |
 | 4 | Saved-memory fixes: long messages and carry-over (G.9, G.10) | The subject check from stage 2 |
