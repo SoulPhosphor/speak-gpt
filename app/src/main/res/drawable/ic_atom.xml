@@ -1,6 +1,6 @@
-<!-- Lucide "atom" (lucide-static 0.460.0, ISC license). Shown in the chat
-     composer while Experimental Mode is on. The color comes from the
-     button's style. -->
+<!-- Lucide "atom" (lucide-static 0.460.0, ISC license). Shown before the
+     message box's "Message" placeholder while Experimental Mode is on. Its
+     color is set to the placeholder's color where it is shown. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

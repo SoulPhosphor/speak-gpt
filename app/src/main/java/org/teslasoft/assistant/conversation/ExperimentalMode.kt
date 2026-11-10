@@ -17,7 +17,8 @@ import org.teslasoft.assistant.preferences.includes.CanonicalConversationMessage
  * turning the mode off sends the whole chat again.
  *
  * The setting belongs to one chat: a new chat always starts with it off, and
- * returning to a chat where it was on finds it still on.
+ * returning to a chat where it was on finds it still on. While it is on, the
+ * empty message box shows the atom icon before "Message".
  */
 object ExperimentalMode {
 

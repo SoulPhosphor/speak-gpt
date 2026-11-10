@@ -138,17 +138,6 @@
                                 android:tooltipText="@string/btn_quick_settings"
                                 app:srcCompat="@drawable/ic_history_edu" />
 
-                            <!-- Shown only while this chat's Experimental
-                                 Mode is on; tapping it turns the mode off. -->
-                            <ImageButton
-                                style="@style/Widget.App.Chat.ComposerAction"
-                                android:id="@+id/btn_experimental_mode"
-                                android:contentDescription="@string/experimental_mode_exit_desc"
-                                android:src="@drawable/ic_atom"
-                                android:tooltipText="@string/experimental_mode_exit_desc"
-                                android:visibility="gone"
-                                app:srcCompat="@drawable/ic_atom" />
-
                             <ImageButton
                                 android:id="@+id/btn_persistent_includes"
                                 android:layout_width="48dp"

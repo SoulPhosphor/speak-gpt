@@ -319,7 +319,7 @@ import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatSelectionMode
-import org.teslasoft.assistant.ui.chat.ExperimentalModeIndicator
+import org.teslasoft.assistant.ui.chat.ExperimentalModeHint
 import org.teslasoft.assistant.conversation.ExperimentalMode
 import org.teslasoft.assistant.ui.chat.ChatExportBuilder
 import org.teslasoft.assistant.ui.drawer.ChatDrawerController
@@ -603,7 +603,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var threadLoader: LinearLayout? = null
     private var btnAttachFile: ImageButton? = null
     private var btnChatTools: ImageButton? = null
-    private var experimentalModeIndicator: ExperimentalModeIndicator? = null
+    private var experimentalModeHint: ExperimentalModeHint? = null
     private var btnPersistentIncludes: ImageButton? = null
     private var btnExpandContent: ImageButton? = null
     private var btnCollapseContent: ImageButton? = null
@@ -1135,7 +1135,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // is false here on a stop → the mic is shown again.
             visibility = if (isHandsFreeEngaged()) View.GONE else View.VISIBLE
         }
-        messageInput?.hint = getString(R.string.hint_message)
+        messageInput?.hint = messageHint()
     }
 
     private fun micRecording() {
@@ -1209,7 +1209,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Hide the mic entirely while the conversation is live so it can't be
         // tapped by accident; it comes back when the loop stops (micIdle).
         btnMicro?.visibility = View.GONE
-        messageInput?.hint = getString(if (listening) R.string.hint_listening else R.string.hint_message)
+        messageInput?.hint = if (listening) getString(R.string.hint_listening) else messageHint()
     }
 
     /** True while a hands-free conversation is engaged (started from the
@@ -3371,6 +3371,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
         messageInput = findViewById(R.id.message_input)
+        experimentalModeHint = messageInput?.let { input ->
+            ExperimentalModeHint(input) { preferences }.also { it.refresh() }
+        }
         btnSend = findViewById(R.id.btn_send)
         progress = findViewById(R.id.progress)
         activityTitle = findViewById(R.id.chat_activity_title)
@@ -3394,9 +3397,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnAttachFile = findViewById(R.id.btn_attach)
         btnChatTools = findViewById(R.id.btn_chat_tools)
         btnPersistentIncludes = findViewById(R.id.btn_persistent_includes)
-        experimentalModeIndicator = ExperimentalModeIndicator(
-            findViewById(R.id.btn_experimental_mode)
-        ) { preferences }
         btnExpandContent = findViewById(R.id.btn_expand_content)
         btnCollapseContent = findViewById(R.id.btn_collapse_content)
         visionActions = findViewById(R.id.vision_action_selector)
@@ -6260,6 +6260,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return FrozenSummarizerState(true, folded, injection)
     }
 
+    /** The "Message" placeholder, with Experimental Mode's atom when on. */
+    private fun messageHint(): CharSequence =
+        experimentalModeHint?.messageHint() ?: getString(R.string.hint_message)
+
     private fun experimentalModeOn(): Boolean =
         preferences?.getChatExperimentalMode() == true
 
@@ -7763,7 +7767,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // model it started with (commonly the older per-chat
                     // default) while Quick Settings shows the new one.
                     loadModel()
-                    experimentalModeIndicator?.refresh()
+                    experimentalModeHint?.refresh()
                 }
 
                 override fun onForceUpdate() {

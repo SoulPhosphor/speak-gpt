@@ -3803,7 +3803,6 @@
     <string name="summarizer_use_toggle">Use Summarizer</string>
     <string name="experimental_mode_toggle">Experimental Mode</string>
     <string name="experimental_mode_hint">Independent prompts, with only the current message and applicable system instructions sent to the model. Turning it off will resume normal chat behavior.</string>
-    <string name="experimental_mode_exit_desc">Turn off experimental mode</string>
     <string name="quick_summarizer_hint">The Summarizer periodically condenses older completed messages into a shorter context summary. This helps a long chat retain important history without sending the entire transcript to the model on every turn. It does not delete messages from the visible conversation. Complete Messages controls how many finished messages are kept before another summary is created.\n\nGeneral Recommended Default: On, when a Summarizer model is configured.</string>
 
     <!-- Summary view (decision 11; wording owner-approved July 29 2026). -->
