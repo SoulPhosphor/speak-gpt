@@ -318,7 +318,6 @@ import org.teslasoft.assistant.ui.chat.ResizeTrace
 import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
-import org.teslasoft.assistant.ui.chat.ConversationModeSelector
 import org.teslasoft.assistant.ui.chat.ChatSelectionMode
 import org.teslasoft.assistant.ui.chat.ChatExportBuilder
 import org.teslasoft.assistant.ui.drawer.ChatDrawerController
@@ -529,7 +528,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var pendingChatExportBytes: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
-    private var conversationModeSelector: ConversationModeSelector? = null
     private var drawerController: ChatDrawerController? = null
     private var playgroundPanel: View? = null
     private var conversationMode: ConversationMode = ConversationMode.CHAT
@@ -8823,21 +8821,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun initializeConversationModeUi() {
-        conversationModeSelector = findViewById(R.id.conversation_mode_selector)
         playgroundPanel = findViewById(R.id.playground_panel)
-        conversationModeSelector?.visibility = if (pendingConversation) View.VISIBLE else View.GONE
-        conversationModeSelector?.setMode(conversationMode, animate = false)
-        conversationModeSelector?.setOnModeChangedListener { selected ->
-            if (!pendingConversation) return@setOnModeChangedListener
-            val coordinator = NewConversationCoordinator(this)
-            if (!coordinator.setPendingMode(chatId, selected)) {
-                conversationModeSelector?.setMode(conversationMode, animate = false)
-                showPendingCommitFailure()
-                return@setOnModeChangedListener
-            }
-            conversationMode = selected
-            renderConversationMode()
-        }
 
         val tag = "embedded-playground-$chatId"
         if (supportFragmentManager.findFragmentByTag(tag) == null) {
@@ -8873,7 +8857,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun finishPendingCommit() {
         pendingConversation = false
         preferences?.setLastUsedChatId(chatId)
-        conversationModeSelector?.visibility = View.GONE
         intent.putExtra("pendingConversation", false)
     }
 

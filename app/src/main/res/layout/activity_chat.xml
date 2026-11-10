@@ -421,17 +421,6 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/chat_selection_bar" />
 
-        <org.teslasoft.assistant.ui.chat.ConversationModeSelector
-            android:id="@+id/conversation_mode_selector"
-            style="@style/Widget.App.ConversationModeSelector"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="12dp"
-            android:visibility="gone"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/bookmark_navigation"
-            tools:visibility="visible" />
-
         <!-- Database Health A2 banner (§15.2a): persistent, dismissible,
              re-shown per new chat while a database stays disabled. GONE by
              default, so the messages list sits exactly where it always did;
@@ -448,7 +437,7 @@
             android:visibility="gone"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/conversation_mode_selector"
+            app:layout_constraintTop_toBottomOf="@id/bookmark_navigation"
             tools:visibility="visible">
 
             <TextView
@@ -489,7 +478,7 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/conversation_mode_selector" />
+            app:layout_constraintTop_toBottomOf="@id/bookmark_navigation" />
 
         <!-- The message viewport now ends at the live composer instead of
              extending behind it with a guessed fixed bottom padding. As the
