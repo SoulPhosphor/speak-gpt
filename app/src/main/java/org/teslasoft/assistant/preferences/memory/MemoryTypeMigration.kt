@@ -50,17 +50,29 @@ object MemoryTypeMigration {
     data class StarterType(val typeId: String, val name: String)
 
     /**
-     * The five starter Types, in seed order (§5.1). Ids are fixed literals so
-     * the legacy-kind mapping below is deterministic and testable; names are
-     * the initial user-facing labels and may later be renamed by the user.
+     * The starter Types, in seed order: the five original starters (§5.1) and
+     * the built-in Inside Joke Type (owner decision, November 10 2026), which
+     * is always last so the editor's picker positions stay stable. Ids are
+     * fixed literals so the legacy-kind mapping below is deterministic and
+     * testable.
      */
     val STARTER_TYPES: List<StarterType> = listOf(
         StarterType("mtype-fact", "Fact"),
         StarterType("mtype-preference", "Preference"),
         StarterType("mtype-event", "Event"),
         StarterType("mtype-status", "Status"),
-        StarterType(INSTRUCTION_TYPE_ID, "Instruction")
+        StarterType(INSTRUCTION_TYPE_ID, "Instruction"),
+        StarterType(INSIDE_JOKE_TYPE_ID, "Inside Joke")
     )
+
+    /**
+     * The stable id of the built-in Inside Joke Type. A memory of this Type is
+     * marked as an inside joke when it reaches the AI, keyed on THIS id, never
+     * on the display name. Users do not add or remove Types (owner decision,
+     * November 10 2026), so this Type is always present: upgrades add it, and
+     * restoring a backup made before it existed keeps it.
+     */
+    const val INSIDE_JOKE_TYPE_ID = "mtype-inside-joke"
 
     /**
      * The stable id of the starter Instruction Type. Instruction behavior (a

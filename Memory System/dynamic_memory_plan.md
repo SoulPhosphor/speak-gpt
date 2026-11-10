@@ -1426,17 +1426,22 @@ Type and Scope need revising, and whether users should make their own.
   added to it.
 - **No user-made scopes.** A new scope word would have no rule for which
   chats may see it.
-- **An Inside Joke is linked to whoever shares it:** one or more companions,
-  or roleplay characters, worlds, or campaigns. When Inside Joke is chosen
-  in the memory editor, the editor offers that link.
-- **The AI is told when a memory is an Inside Joke** (D35), so it knows to
-  use it lightly.
-- **The vibe note stays one short note per companion,** written by the
-  user and sent with every chat with that companion. There are no separate
-  vibe categories.
-- **The vibe note comes first** among the later features (owner request,
-  2026-11-09). Its field label, helper text, and the line the AI receives
-  are shown to the owner before it is built.
+- **Inside Joke is an ordinary Type** (owner, revised 2026-11-10). Scope
+  decides where it is seen, as for every memory. There is no extra link
+  requirement: the user puts it wherever they want.
+- **The AI is told when a memory is an Inside Joke** (D35): the memory line
+  starts with "Inside joke:" (approved 2026-11-10).
+- **The Memory Assistant may suggest Inside Joke,** with a scope, as it
+  already suggests a scope for every memory. Suggestions go through Pending.
+- **The vibe is per memory, not per companion** (owner, 2026-11-10): a note
+  the user types on a memory, placed under Importance in the memory editor.
+  Its label, helper text, what the AI receives, and the related details are
+  shown to the owner before it is built (D58).
+
+**Status (2026-11-10):** Inside Joke is being built on the work branch:
+the Type, the database step that adds it for existing users, keeping it when
+an older backup is restored, and the "Inside joke:" label. Still waiting for
+the owner: its definition in the editor's Type Definitions pop-up.
 
 Published systems keep two kinds of memory that matter here (Part F):
 
@@ -1452,8 +1457,8 @@ Inside jokes need both: the joke itself, and the relationship it lives in.
 - **Inside jokes are ordinary memories:**
   - written with the joke and its origin ("we call the cat the gremlin
     since the couch incident");
-  - given the built-in Inside Joke type, and linked to the companions or
-    roleplay characters, worlds, or campaigns it belongs to (D56);
+  - given the built-in Inside Joke type, with whatever scope the user
+    chooses (D56);
   - often on the Always tab, with When it fits.
 
   Keyword search already finds the joke's phrase when the user uses it.
@@ -1461,7 +1466,8 @@ Inside jokes need both: the joke itself, and the relationship it lives in.
   sent, not its type. For memories of a type the user marks as playful, the
   type name would be sent with the text, so the AI knows the memory is
   meant to be used lightly (D35).
-- **"Vibe" is one short, user-editable note per companion.** It describes
+- **Superseded (2026-11-10): the vibe is per memory (D58).** Earlier
+  proposal: **"Vibe" is one short, user-editable note per companion.** It describes
   the tone of the relationship, its running themes, and how the companion
   should talk, and it is always sent with that companion's chats. Companion
   records already have an unused relationship-notes field for this (D36).
@@ -1708,7 +1714,7 @@ per model, once the full system works.
 | D33 | What does the Memory Assistant propose beyond the memory text? | **Approved:** dates only, at first. Always, the bring-up setting, and fading stay the user's choices. **Presented 2026-11-08:** Pending shows the bring-up setting beside a proposed date |
 | D34 | Should memories fade? | **Decided, 2026-11-08: yes,** with Memory Browser markers for fading, not fading, and faded, and with faded memories reinstatable from Retired. **Approved:** fading is an optional choice on each memory, off unless the user turns it on (D.2) |
 | D35 | Should the type name be sent with memories of a "playful" type, such as Inside Joke? | **Approved:** yes, for types the user marks playful, so the AI knows to use them lightly |
-| D36 | Should each companion have a short, editable "vibe" note that is always sent? | **Approved:** yes, using the existing unused relationship-notes field. Memory Assistant suggestions only through Pending |
+| D36 | Should each companion have a short, editable "vibe" note that is always sent? | **Superseded (owner), 2026-11-10:** the vibe is a note on each memory, not on each companion (D58) |
 | D37 | If a whole request is too large for the model, what is trimmed first? | **Presented 2026-11-08 (revised, because the owner treats important dates as important):** the lowest-ranked search results first, then Always memories, then memories whose date is near. Picked memories are never trimmed. This is only a last resort for a request the model cannot accept at all. Otherwise the app never chooses which Always or dated memories are sent; the user's checkboxes do (owner, 2026-11-09) |
 | D38 | Should a companion know what happened in your last few chats with it, through short summaries built from the existing per-chat conversation summaries? | **Approved for design:** it is the main thing ChatGPT does that this app lacks for continuity ("how did the dentist go yesterday?"). It is background knowledge, and the bring-up rules apply |
 | D39 | Should the AI know how long it has been since the last chat with this companion (in days, not times)? | **Approved:** yes, as part of Phase 4, under the date-sharing setting |
@@ -1727,7 +1733,8 @@ per model, once the full system works.
 | D52 | How does the Always tab handle more checked memories than the limit? | **Decided (owner's design), 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
 | D54 | How does the user see and control memories that are sent automatically because of their date? | **Decided (owner), 2026-11-09:** a Dates tab in the browser's view dropdown, with a checkbox on each memory, so the user reviews what will be sent and unchecks what they don't want sent. No cap, and the app never picks among them. **Presented 2026-11-09:** it lists every dated memory, checked or not, in upcoming order, with a marker on the ones being sent now; a new date starts checked |
 | D55 | Should the "past after" date and a one-time important date be one field? | **Open (raised 2026-11-09), to settle before Phase 4.** Both make a memory past after a date, and two date fields may confuse. Recommended: one date field. A one-time date always makes the memory past afterwards, and its Dates tab checkbox decides whether it is also sent while near |
-| D56 | Should vibes have their own categories, or should inside jokes be a memory Type? | **Decided (owner), 2026-11-10:** Inside Joke is a built-in Type, linked to companions or to roleplay characters, worlds, or campaigns, and the editor offers that link. Users do not add types. **Approved:** the vibe note stays one free-written note per companion, with no separate categories |
+| D56 | Should vibes have their own categories, or should inside jokes be a memory Type? | **Decided (owner), 2026-11-10:** Inside Joke is a built-in Type and works like any other Type: scope decides where it is seen, with no extra link requirement. Users do not add types. The AI receives "Inside joke:" before the memory text. The Memory Assistant may suggest it, with a scope |
+| D58 | What does the per-memory vibe look like? | **Decided (owner), 2026-11-10:** a note on each memory, typed by the user, under Importance in the memory editor. **Open:** its helper text, what the AI receives, whether it is shown on the memory card, whether search reads it, and whether the Memory Assistant suggests it |
 | D57 | Should users make their own scopes? | **Decided (owner), 2026-11-10:** no. Scope is the privacy rule for which chats may see a memory, and a user-made scope would have no rule |
 | D53 | Should a Custom condition also be searched by meaning? | **Decided (owner), 2026-11-08:** no. An Always memory is already sent with every message, so the condition only guides when the AI raises it, and the model uses its own judgment. Condition search was tested and dropped |
 

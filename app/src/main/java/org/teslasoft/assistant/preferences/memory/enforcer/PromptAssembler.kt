@@ -46,8 +46,12 @@ object PromptAssembler {
      * sheared off a protected memory, and no memory is ever truncated.
      */
     fun memoryCost(m: AssembledMemory): Int =
-        m.content.length +
+        (if (m.isInsideJoke) INSIDE_JOKE_LABEL.length else 0) + m.content.length +
             m.handling.sumOf { it.length } + m.neverAssume.sumOf { it.length }
+
+    /** Marks an Inside Joke memory for the AI (owner-approved wording,
+     *  November 10 2026), so it knows the memory is a shared joke. */
+    const val INSIDE_JOKE_LABEL = "Inside joke: "
 
     /** The single memory-line renderer. There is deliberately no other place
      *  that turns an [AssembledMemory] into prompt text: a protected memory
@@ -56,7 +60,9 @@ object PromptAssembler {
         val sb = StringBuilder()
         // Plain memory text (Phase 2 review): no (told)/(observed)/(guessed)
         // provenance marker is ever rendered.
-        sb.append("- ").append(m.content.trim())
+        sb.append("- ")
+        if (m.isInsideJoke) sb.append(INSIDE_JOKE_LABEL)
+        sb.append(m.content.trim())
         if (m.isProtected) {
             sb.append("\n  HANDLE WITH CARE")
             if (m.handling.isNotEmpty()) {

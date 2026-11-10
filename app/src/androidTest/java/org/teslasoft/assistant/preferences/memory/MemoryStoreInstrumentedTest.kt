@@ -85,10 +85,37 @@ class MemoryStoreInstrumentedTest {
     /* --------------------------- fresh current schema ---------------------- */
 
     @Test
-    fun freshV21_seedsFiveStarterTypes() {
+    fun freshInstall_seedsFiveStarterTypesAndInsideJoke() {
         val store = open(freshDbName())
         val names = store.getMemoryTypes().map { it.name }
-        assertEquals(listOf("Fact", "Preference", "Event", "Status", "Instruction"), names)
+        assertEquals(listOf("Fact", "Preference", "Event", "Status", "Instruction", "Inside Joke"), names)
+    }
+
+    @Test
+    fun upgradeFromV33_addsTheInsideJokeType() {
+        val name = freshDbName()
+        val before = open(name)
+        before.writableDatabase.execSQL("DELETE FROM memory_types WHERE type_id = 'mtype-inside-joke'")
+        before.writableDatabase.version = 33
+        before.close()
+
+        val after = open(name)
+        val joke = after.getMemoryTypes().firstOrNull { it.typeId == "mtype-inside-joke" }
+        assertEquals("Inside Joke", joke?.name)
+        assertEquals(6, after.getMemoryTypes().size)
+    }
+
+    @Test
+    fun restoreOfABackupMadeBeforeInsideJokeKeepsTheType() {
+        val src = open(freshDbName())
+        val exported = src.exportData().let { data ->
+            MemorySeedCodec.serialize(
+                data.copy(memoryTypes = data.memoryTypes.filterNot { it.typeId == "mtype-inside-joke" })
+            )
+        }
+        val dest = open(freshDbName())
+        dest.importData(MemorySeedCodec.parse(exported), overwriteSingletons = true)
+        assertTrue(dest.getMemoryTypes().any { it.typeId == "mtype-inside-joke" })
     }
 
     @Test
@@ -145,8 +172,8 @@ class MemoryStoreInstrumentedTest {
         assertEquals(3, importanceOf(store, "m-inst"))
         assertEquals(2, importanceOf(store, "m-lore"))
 
-        // The five starter Types exist after the upgrade.
-        assertEquals(5, store.getMemoryTypes().size)
+        // The five starter Types and Inside Joke exist after the upgrade.
+        assertEquals(6, store.getMemoryTypes().size)
 
         // An upgraded database also defaults NEW memories to 0 (not the legacy 3).
         store.writableDatabase.execSQL(

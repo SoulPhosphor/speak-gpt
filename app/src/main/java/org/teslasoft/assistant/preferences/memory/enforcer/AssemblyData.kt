@@ -57,6 +57,9 @@ data class AssembledMemory(
 ) {
     val isProtected: Boolean get() = handling.isNotEmpty() || neverAssume.isNotEmpty()
     val isInstruction: Boolean get() = typeId == MemoryTypeMigration.INSTRUCTION_TYPE_ID
+    /** An Inside Joke memory reaches the AI marked as an inside joke, keyed on
+     *  the stable Inside Joke Type id. */
+    val isInsideJoke: Boolean get() = typeId == MemoryTypeMigration.INSIDE_JOKE_TYPE_ID
 }
 
 /** A matched lore entry — the user's hand-written notes tier. */

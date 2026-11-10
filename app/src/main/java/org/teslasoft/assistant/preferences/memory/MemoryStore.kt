@@ -75,7 +75,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 33
+        private const val DATABASE_VERSION = 34
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -1049,13 +1049,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "Defaults created at first launch ($now); a seed import replaces these."
             )
         )
-        // Seed the five starter Memory Types once (§5.1). Fresh installs get
-        // them here; upgraded installs get them in the v21 migration block.
+        // Seed the starter Memory Types once (§5.1). Fresh installs get them
+        // here; upgraded installs get them in the v21 migration block, and the
+        // Inside Joke Type in the v34 block.
         seedStarterMemoryTypes(db, now)
     }
 
     /**
-     * Insert the five starter Memory Types (§5.1) if they are not already
+     * Insert the starter Memory Types (§5.1) if they are not already
      * present. Idempotent (INSERT OR IGNORE on the stable ids), so it is safe
      * to call from both onCreate and the v21 migration, and a re-run never
      * duplicates or overwrites a Type the user has since renamed. Types the
@@ -2178,6 +2179,27 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "33")
             )
         }
+        if (oldVersion < 34) {
+            // The built-in Inside Joke Type (owner decision, November 10 2026).
+            // Additive only: no memory changes Type.
+            ensureInsideJokeType(db)
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "34")
+            )
+        }
+    }
+
+    /** Adds the built-in Inside Joke Type if it is missing. Idempotent. */
+    private fun ensureInsideJokeType(db: SQLiteDatabase) {
+        val t = MemoryTypeMigration.STARTER_TYPES.first {
+            it.typeId == MemoryTypeMigration.INSIDE_JOKE_TYPE_ID
+        }
+        db.execSQL(
+            "INSERT OR IGNORE INTO memory_types (type_id, name, created_at) VALUES (?, ?, ?)",
+            arrayOf(t.typeId, t.name, nowIso())
+        )
     }
 
     /**
@@ -2592,7 +2614,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             // only upserts, so it never deletes a Type the user still has. A
             // pre-Phase-1 backup carries no Types and never triggers this.
             if (overwriteSingletons && data.memoryTypes.isNotEmpty()) {
+                // The built-in Inside Joke Type is always kept: users cannot
+                // remove Types, so a backup without it predates it.
                 val keepIds = data.memoryTypes.map { it.typeId }.toHashSet()
+                keepIds.add(MemoryTypeMigration.INSIDE_JOKE_TYPE_ID)
                 val toRemove = ArrayList<String>()
                 db.query("memory_types", arrayOf("type_id"), null, null, null, null, null).use {
                     while (it.moveToNext()) {

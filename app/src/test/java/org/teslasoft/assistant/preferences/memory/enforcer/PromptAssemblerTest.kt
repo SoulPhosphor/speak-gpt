@@ -227,6 +227,36 @@ class PromptAssemblerTest {
     }
 
     @Test
+    fun insideJokeMemoryIsMarkedAsAnInsideJoke() {
+        val line = PromptAssembler.renderMemoryLine(
+            mem("j", content = "we call the cat the gremlin", typeId = "mtype-inside-joke")
+        )
+        assertEquals("- Inside joke: we call the cat the gremlin", line)
+    }
+
+    @Test
+    fun insideJokeIsKeyedOnTheStableTypeIdAndStaysAmongTheFacts() {
+        val joke = mem("j", content = "the gremlin", typeId = "mtype-inside-joke")
+        val nameLike = mem("n", content = "not a joke", typeId = "Inside Joke")
+        assertTrue(joke.isInsideJoke)
+        assertFalse("only the stable Inside Joke Type id marks a joke", nameLike.isInsideJoke)
+        assertFalse(PromptAssembler.renderMemoryLine(nameLike).contains("Inside joke"))
+
+        val rendered = PromptAssembler.render(AssemblyComponents(memories = listOf(joke)))
+        assertTrue(rendered.contains("## Things you know\n- Inside joke: the gremlin"))
+        assertFalse(rendered.contains("Handling rules"))
+    }
+
+    @Test
+    fun insideJokeLabelCountsTowardMemorySpace() {
+        val joke = mem("j", content = "the gremlin", typeId = "mtype-inside-joke")
+        assertEquals(
+            PromptAssembler.INSIDE_JOKE_LABEL.length + joke.content.length,
+            PromptAssembler.memoryCost(joke)
+        )
+    }
+
+    @Test
     fun memoryCostIsAtomicIncludingProtectionHandling() {
         // The budget cost carries the handling and never-assume lines with
         // the memory, so the enforcer's walk can only ever cut a protected
