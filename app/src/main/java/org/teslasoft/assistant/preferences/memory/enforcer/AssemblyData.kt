@@ -53,7 +53,10 @@ data class AssembledMemory(
      *  Type. An Instruction-Type memory renders as a context rule (law 5), not a
      *  fact. Keyed on the STABLE Instruction Type id, so a rename keeps the
      *  behavior and reassigning to No Type ends it. */
-    val typeId: String? = null
+    val typeId: String? = null,
+    /** The user's note on how to treat this memory, sent on its own line
+     *  under the memory. Empty = no vibe line. */
+    val vibe: String = ""
 ) {
     val isProtected: Boolean get() = handling.isNotEmpty() || neverAssume.isNotEmpty()
     val isInstruction: Boolean get() = typeId == MemoryTypeMigration.INSTRUCTION_TYPE_ID

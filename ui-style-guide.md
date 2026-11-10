@@ -640,6 +640,10 @@ Use these pieces in order:
 
 Use for editable text fields with a visible label above the input.
 
+When the field follows a control row or another field on a page, use
+`Widget.App.Field.Label.AfterRow` for the label: it adds
+`field_label_after_row_gap` above it, matching the space between control rows.
+
 Do not replace the separate label with a floating `TextInputLayout` hint when using this pattern.
 
 Keep field-specific behavior on the individual input, including:
@@ -1780,6 +1784,14 @@ navigation and no action buttons, `Widget.App.Page.Content`, and the standard
 `Widget.App.Row.Toggle`/TextColumn/Title/Subtitle/Switch family. Both settings
 default on. The optional editor Title follows Memory, using Field.Label, Hint,
 and a two-line Field.Box. A blank title collapses its browser label entirely.
+
+The optional editor Vibe follows Importance, using `Field.Label.AfterRow`,
+`Field.Hint`, and `Widget.App.Field.Box.MemoryVibe`, which inherits the Title's
+two-line box so the memory's two short notes always match. On browser and
+pending cards, a memory's vibe shows under its text as
+`Widget.App.MemoryBrowser.Vibe` (the metadata text size, with
+`memory_browser_vibe_gap` above it), only while memory text is shown. A blank
+vibe shows nothing.
 
 The map action opens a read-only Icon Legend using `App.MaterialAlertDialog`,
 shared Row.Icon/Title typography, and a single right-aligned

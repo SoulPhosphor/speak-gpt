@@ -24,7 +24,8 @@ object ManualMemoryPriority {
                 embeddingText = memory.embeddingText, importance = memory.importance,
                 createdAt = memory.createdAt, worldId = memory.worldIds.firstOrNull(),
                 protectionJson = memory.protectionJson, typeId = memory.typeId,
-                tagsJson = memory.tagsJson, updatedAt = memory.updatedAt
+                tagsJson = memory.tagsJson, updatedAt = memory.updatedAt,
+                vibe = memory.vibe
             )
         }
     }
@@ -59,7 +60,8 @@ object ManualMemoryPriority {
             score = score,
             similarity = similarity,
             importance = m.importance ?: 0,
-            typeId = m.typeId
+            typeId = m.typeId,
+            vibe = m.vibe
         )
     }
 

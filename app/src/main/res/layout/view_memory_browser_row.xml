@@ -39,6 +39,10 @@
                 style="@style/Widget.App.MemoryBrowser.Tags" />
             <TextView android:id="@+id/row_subtitle" android:visibility="gone" style="@style/Widget.App.Field.Hint" />
             <TextView
+                android:id="@+id/row_vibe"
+                android:visibility="gone"
+                style="@style/Widget.App.MemoryBrowser.Vibe" />
+            <TextView
                 android:id="@+id/row_note"
                 android:visibility="gone"
                 style="@style/Widget.App.MemoryBrowser.Note" />

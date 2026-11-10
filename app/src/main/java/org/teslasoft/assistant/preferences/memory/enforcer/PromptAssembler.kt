@@ -47,11 +47,23 @@ object PromptAssembler {
      */
     fun memoryCost(m: AssembledMemory): Int =
         (if (m.isInsideJoke) INSIDE_JOKE_LABEL.length else 0) + m.content.length +
+            (vibeText(m)?.let { VIBE_LABEL.length + it.length } ?: 0) +
             m.handling.sumOf { it.length } + m.neverAssume.sumOf { it.length }
 
     /** Marks an Inside Joke memory for the AI (owner-approved wording,
      *  November 10 2026), so it knows the memory is a shared joke. */
     const val INSIDE_JOKE_LABEL = "Inside joke: "
+
+    /** Starts the line under a memory that carries its vibe (owner-approved
+     *  wording, November 10 2026). */
+    const val VIBE_LABEL = "Vibe: "
+
+    /** The vibe as one line (line breaks become spaces, so it can never look
+     *  like a separate memory), or null when the memory has none. */
+    private fun vibeText(m: AssembledMemory): String? =
+        m.vibe.trim().replace(LINE_BREAK, " ").takeIf { it.isNotEmpty() }
+
+    private val LINE_BREAK = Regex("\\s*\\n\\s*")
 
     /** The single memory-line renderer. There is deliberately no other place
      *  that turns an [AssembledMemory] into prompt text: a protected memory
@@ -63,6 +75,7 @@ object PromptAssembler {
         sb.append("- ")
         if (m.isInsideJoke) sb.append(INSIDE_JOKE_LABEL)
         sb.append(m.content.trim())
+        vibeText(m)?.let { sb.append("\n  ").append(VIBE_LABEL).append(it) }
         if (m.isProtected) {
             sb.append("\n  HANDLE WITH CARE")
             if (m.handling.isNotEmpty()) {

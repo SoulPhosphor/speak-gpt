@@ -96,26 +96,28 @@ Chosen from the measurements in Part A, on the default q4 model with
 
 They are educated guesses, tunable on the test screen.
 
-### 3. In progress: Inside Joke and the per-memory vibe (work branch)
+### 3. Inside Joke and the per-memory vibe (one pull request)
 
-On branch `ccr-985655d1-x68k8w`, not merged, no pull request yet.
+Built in the pull request from branch `ccr-985655d1-x68k8w` (owner approval,
+2026-11-10).
 
-- **Built:** the Inside Joke Type (D56): the Type itself, the database step
-  (version 34) that adds it for existing users, keeping it when an older
-  backup is restored, and the "Inside joke:" label the AI receives. Tests:
-  `PromptAssemblerTest`, `MemoryTypeMigrationTest`, and the instrumented
-  `MemoryStoreInstrumentedTest`.
-- **Waiting for the owner's yes (proposed 2026-11-10):**
-  - Inside Joke's one-line definition for the memory editor's Type
-    Definitions pop-up. Until then it is not in the editor's type picker;
-  - the six vibe details in D58: label and helper text, the line the AI
-    receives, optional and empty by default, shown on the memory card, not
-    read by search, and not suggested by the Memory Assistant at first.
-- **Then:** add Inside Joke to the editor's picker, build the vibe in the
-  same pull request, run the local checks, and follow the CLAUDE.md
-  workflow to merge. Another session may merge chat-screen work into
-  `beta/new-client` first; update this branch from it before opening the
-  pull request.
+- **Inside Joke (D56):** a built-in Type, in the editor's type picker with
+  the definition "A joke, nickname, or running gag you share." Database
+  version 34 adds it for existing users; restoring an older backup keeps it.
+  The AI receives "Inside joke:" before the memory text. The Memory
+  Assistant may suggest it.
+- **Vibe (D58):** an optional note on each memory, under Importance in the
+  memory editor ("Vibe", with the hint "How the AI should treat this memory,
+  like playful or gentle."). The AI receives it on its own line under the
+  memory ("  Vibe: ..."), it counts toward Memory Space, and it shows on
+  browser and pending cards while memory text is shown. Search never reads
+  it. Backups, restores, and imports carry it. The Memory Assistant does not
+  suggest vibes.
+- **The existing "- " before each memory line stays** (owner, 2026-11-10).
+- **Follow-up for the owner:** when a Memory Assistant update replaces a
+  memory (Save & Supersede or Replace), the new version starts without the
+  old one's vibe, as it does today for the title. Whether the vibe should
+  carry over is an open question.
 
 ### 3b. The pull request after that (approved direction, not yet built)
 
@@ -186,9 +188,9 @@ The specific corrections:
    - tell the agent what looked wrong.
 
    Nothing else is needed from the owner for this step.
-3. **Owner, then agent:** approve the Inside Joke definition and the vibe
-   details (section 3). The agent then finishes that pull request and merges
-   it when Codex passes it and Android Checks is green.
+3. **Agent:** if section 3's pull request is still open, merge it when Codex
+   passes it and Android Checks is green. Then ask the owner the follow-up
+   in section 3.
 4. **Agent:** build section 3b: carry-over, the lorebook repeat check on
    both send paths, the test conversations, and the memory-use instruction.
    Show the owner the instruction's exact text first.
@@ -1762,7 +1764,7 @@ per model, once the full system works.
 | D54 | How does the user see and control memories that are sent automatically because of their date? | **Decided (owner), 2026-11-09:** a Dates tab in the browser's view dropdown, with a checkbox on each memory, so the user reviews what will be sent and unchecks what they don't want sent. No cap, and the app never picks among them. **Presented 2026-11-09:** it lists every dated memory, checked or not, in upcoming order, with a marker on the ones being sent now; a new date starts checked |
 | D55 | Should the "past after" date and a one-time important date be one field? | **Open (raised 2026-11-09), to settle before Phase 4.** Both make a memory past after a date, and two date fields may confuse. Recommended: one date field. A one-time date always makes the memory past afterwards, and its Dates tab checkbox decides whether it is also sent while near |
 | D56 | Should vibes have their own categories, or should inside jokes be a memory Type? | **Decided (owner), 2026-11-10:** Inside Joke is a built-in Type and works like any other Type: scope decides where it is seen, with no extra link requirement. Users do not add types. The AI receives "Inside joke:" before the memory text. The Memory Assistant may suggest it, with a scope |
-| D58 | What does the per-memory vibe look like? | **Decided (owner), 2026-11-10:** a note on each memory, typed by the user, under Importance in the memory editor. **Open:** its helper text, what the AI receives, whether it is shown on the memory card, whether search reads it, and whether the Memory Assistant suggests it |
+| D58 | What does the per-memory vibe look like? | **Decided (owner), 2026-11-10:** an optional note on each memory, typed by the user, under Importance in the memory editor. Label "Vibe", hint "How the AI should treat this memory, like playful or gentle." The AI receives it on its own line under the memory. Empty by default, shown on the memory card, never read by search, and not suggested by the Memory Assistant at first. **Open:** whether a Memory Assistant update that replaces a memory carries the old vibe over |
 | D57 | Should users make their own scopes? | **Decided (owner), 2026-11-10:** no. Scope is the privacy rule for which chats may see a memory, and a user-made scope would have no rule |
 | D53 | Should a Custom condition also be searched by meaning? | **Decided (owner), 2026-11-08:** no. An Always memory is already sent with every message, so the condition only guides when the AI raises it, and the model uses its own judgment. Condition search was tested and dropped |
 

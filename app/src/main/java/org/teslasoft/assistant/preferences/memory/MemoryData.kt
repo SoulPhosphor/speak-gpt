@@ -475,7 +475,11 @@ data class MemoryRecord(
     val suggestedSection: String? = null,
     val typeId: String? = null,
     /** Optional user-written browser label; not part of retrieval. */
-    val title: String = ""
+    val title: String = "",
+    /** Optional user-written note on how the AI should treat this memory
+     *  (owner decision, November 10 2026). Sent with the memory; never part
+     *  of search. Empty = no vibe. */
+    val vibe: String = ""
 )
 
 data class ModeRecord(
@@ -768,7 +772,9 @@ data class RetrievableMemory(
     val tagsJson: String = "[]",
     // Phase A (counterplan §5.5): freshness ranks by the last edit, not only
     // creation — a corrected memory must outrank its obsolete peers.
-    val updatedAt: String? = null
+    val updatedAt: String? = null,
+    /** The memory's vibe, sent with it to the AI. Never used for matching. */
+    val vibe: String = ""
 )
 
 /**

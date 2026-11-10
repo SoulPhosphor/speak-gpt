@@ -191,6 +191,7 @@ object MemorySeedCodec {
                 typeId = m.str("type_id") ?: MemoryTypeMigration.typeIdForLegacyKind(m.str("kind")),
                 content = m.reqStr("content"),
                 title = m.str("title") ?: "",
+                vibe = m.str("vibe") ?: "",
                 embeddingText = m.str("embedding_text"),
                 tagsJson = m.arrText("tags"),
                 importance = m.optInt("importance", 0),
@@ -597,6 +598,7 @@ object MemorySeedCodec {
                     // titles round-trip independently of retrieval.
                     putIfNotNull("type_id", m.typeId)
                     put("title", m.title)
+                    put("vibe", m.vibe)
                     put("content", m.content)
                     putIfNotNull("embedding_text", m.embeddingText)
                     put("tags", jsonArrayOrEmpty(m.tagsJson))

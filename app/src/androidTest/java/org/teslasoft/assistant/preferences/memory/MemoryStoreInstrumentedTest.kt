@@ -92,10 +92,12 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
-    fun upgradeFromV33_addsTheInsideJokeType() {
+    fun upgradeFromV33_addsTheInsideJokeTypeAndAnEmptyVibe() {
         val name = freshDbName()
         val before = open(name)
+        before.insertMemory(mem("m-old", scope = "global"))
         before.writableDatabase.execSQL("DELETE FROM memory_types WHERE type_id = 'mtype-inside-joke'")
+        before.writableDatabase.execSQL("ALTER TABLE memories DROP COLUMN vibe")
         before.writableDatabase.version = 33
         before.close()
 
@@ -103,6 +105,22 @@ class MemoryStoreInstrumentedTest {
         val joke = after.getMemoryTypes().firstOrNull { it.typeId == "mtype-inside-joke" }
         assertEquals("Inside Joke", joke?.name)
         assertEquals(6, after.getMemoryTypes().size)
+        assertEquals("", after.getMemory("m-old")!!.vibe)
+        assertEquals("content of m-old", after.getMemory("m-old")!!.content)
+    }
+
+    @Test
+    fun vibeIsSavedEditedAndRestored() {
+        val src = open(freshDbName())
+        src.insertMemory(mem("m-vibe", scope = "global").copy(vibe = "tease me about it"))
+        assertEquals("tease me about it", src.getMemory("m-vibe")!!.vibe)
+        src.updateMemory(src.getMemory("m-vibe")!!.copy(vibe = "gentle"), null)
+        assertEquals("gentle", src.getMemory("m-vibe")!!.vibe)
+        assertEquals("gentle", src.allActiveMemories().first { it.memoryId == "m-vibe" }.vibe)
+
+        val dest = open(freshDbName())
+        dest.importData(MemorySeedCodec.parse(MemorySeedCodec.serialize(src.exportData())), overwriteSingletons = true)
+        assertEquals("gentle", dest.getMemory("m-vibe")!!.vibe)
     }
 
     @Test
