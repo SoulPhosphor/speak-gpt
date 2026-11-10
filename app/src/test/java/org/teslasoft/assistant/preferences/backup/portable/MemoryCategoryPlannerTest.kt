@@ -45,6 +45,42 @@ class MemoryCategoryPlannerTest {
     }
 
     @Test
+    fun `replacing with a backup made before Inside Joke keeps the type`() {
+        val joke = linkedMapOf<String, Any?>(
+            "type_id" to "mtype-inside-joke", "name" to "Inside Joke", "created_at" to "2026-11-10T08:00:00Z"
+        )
+        val fact = linkedMapOf<String, Any?>(
+            "type_id" to "mtype-fact", "name" to "Fact", "created_at" to "2026-08-01T00:00:00Z"
+        )
+        val current = rows(MemoryPortableGroup.MEMORIES, mapOf("memory_types" to listOf(fact, joke)))
+        val oldBackup = rows(MemoryPortableGroup.MEMORIES, mapOf(
+            "memory_types" to listOf(fact),
+            "memories" to listOf(memory("m", "Text"))
+        ))
+        val ready = MemoryCategoryPlanner.plan(
+            MemoryPortableGroup.MEMORIES, current, oldBackup, PortableRestoreMode.REPLACE
+        ) as MemoryCategoryPlanner.Result.Ready
+
+        val types = ready.rows.tables.getValue("memory_types")
+        assertEquals(listOf("mtype-fact", "mtype-inside-joke"), types.map { it["type_id"] })
+        assertEquals(joke, types.last())
+    }
+
+    @Test
+    fun `a backup that has Inside Joke is restored as it is`() {
+        val fromBackup = linkedMapOf<String, Any?>(
+            "type_id" to "mtype-inside-joke", "name" to "Inside Joke", "created_at" to "2026-11-11T00:00:00Z"
+        )
+        val ready = MemoryCategoryPlanner.plan(
+            MemoryPortableGroup.MEMORIES,
+            rows(MemoryPortableGroup.MEMORIES),
+            rows(MemoryPortableGroup.MEMORIES, mapOf("memory_types" to listOf(fromBackup))),
+            PortableRestoreMode.REPLACE
+        ) as MemoryCategoryPlanner.Result.Ready
+        assertEquals(listOf(fromBackup), ready.rows.tables.getValue("memory_types"))
+    }
+
+    @Test
     fun `model rule links require both stable owners`() {
         val backup = rows(MemoryPortableGroup.MODEL_RULES, mapOf(
             "model_rules" to listOf(linkedMapOf("rule_id" to "rule", "text" to "Text")),

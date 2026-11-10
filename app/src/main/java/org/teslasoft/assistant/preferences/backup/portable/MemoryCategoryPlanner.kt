@@ -8,6 +8,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 import org.teslasoft.assistant.preferences.memory.MemoryPortableGroup
 import org.teslasoft.assistant.preferences.memory.MemoryPortableRowFormat
 import org.teslasoft.assistant.preferences.memory.MemoryPortableRows
+import org.teslasoft.assistant.preferences.memory.MemoryTypeMigration
 
 data class MemoryReferenceIds(
     val companions: Set<String> = emptySet(),
@@ -63,6 +64,9 @@ object MemoryCategoryPlanner {
         }
         var cleared = 0
         if (group == MemoryPortableGroup.MEMORIES) {
+            tables["memory_types"] = withBuiltInTypes(
+                tables.getValue("memory_types"), current.tables.getValue("memory_types")
+            )
             val memoryIds = ids(tables, "memories", "memory_id")
             val entityIds = ids(tables, "entities", "entity_id")
             val projectIds = ids(tables, "projects", "project_id")
@@ -119,6 +123,31 @@ object MemoryCategoryPlanner {
         val result = MemoryPortableRows(tables)
         if (!MemoryPortableRowFormat.valid(group, result)) return Result.Invalid
         return Result.Ready(result, Report(conflicts, cleared))
+    }
+
+    /**
+     * The built-in Inside Joke Type is always in the restored set. Users cannot
+     * remove Types (owner decision, November 10 2026), so a backup without it
+     * was made before it existed; replacing with that backup must not delete
+     * the Type the memory editor offers. The current store's own row is kept
+     * when there is one.
+     */
+    /** Fixed so that planning the same restore twice gives the same rows. */
+    private const val BUILT_IN_TYPE_CREATED_AT = "2026-11-10T00:00:00Z"
+
+    private fun withBuiltInTypes(
+        planned: List<Map<String, Any?>>,
+        current: List<Map<String, Any?>>
+    ): List<Map<String, Any?>> {
+        val id = MemoryTypeMigration.INSIDE_JOKE_TYPE_ID
+        if (planned.any { it["type_id"] == id }) return planned
+        val row = current.firstOrNull { it["type_id"] == id }?.let { LinkedHashMap(it) }
+            ?: linkedMapOf<String, Any?>(
+                "type_id" to id,
+                "name" to MemoryTypeMigration.STARTER_TYPES.first { it.typeId == id }.name,
+                "created_at" to BUILT_IN_TYPE_CREATED_AT
+            )
+        return planned + row
     }
 
     private fun ids(
