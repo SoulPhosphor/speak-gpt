@@ -6,8 +6,8 @@ documents.**
 
 ## Where things stand (read this first)
 
-**Last updated 2026-11-09** (later phases brought in line with the owner's
-current design, approvals recorded, and the Dates tab added). The owner relies on the agent to lead this
+**Last updated 2026-11-10** (Inside Joke built on the work branch; the vibe
+moved to each memory; next steps updated). The owner relies on the agent to lead this
 work step by step. A new session reads this section first, then continues
 from "Next steps". Do not re-diagnose what Part A already measured. An
 independent review of the plan and of pull request #180 was folded in on
@@ -96,7 +96,28 @@ Chosen from the measurements in Part A, on the default q4 model with
 
 They are educated guesses, tunable on the test screen.
 
-### 3. Next pull request (approved direction, not yet built)
+### 3. In progress: Inside Joke and the per-memory vibe (work branch)
+
+On branch `ccr-985655d1-x68k8w`, not merged, no pull request yet.
+
+- **Built:** the Inside Joke Type (D56): the Type itself, the database step
+  (version 34) that adds it for existing users, keeping it when an older
+  backup is restored, and the "Inside joke:" label the AI receives. Tests:
+  `PromptAssemblerTest`, `MemoryTypeMigrationTest`, and the instrumented
+  `MemoryStoreInstrumentedTest`.
+- **Waiting for the owner's yes (proposed 2026-11-10):**
+  - Inside Joke's one-line definition for the memory editor's Type
+    Definitions pop-up. Until then it is not in the editor's type picker;
+  - the six vibe details in D58: label and helper text, the line the AI
+    receives, optional and empty by default, shown on the memory card, not
+    read by search, and not suggested by the Memory Assistant at first.
+- **Then:** add Inside Joke to the editor's picker, build the vibe in the
+  same pull request, run the local checks, and follow the CLAUDE.md
+  workflow to merge. Another session may merge chat-screen work into
+  `beta/new-client` first; update this branch from it before opening the
+  pull request.
+
+### 3b. The pull request after that (approved direction, not yet built)
 
 - **Carry-over** (step 1.12), with the revised rule in B.5: no fixed carry
   length.
@@ -165,10 +186,17 @@ The specific corrections:
    - tell the agent what looked wrong.
 
    Nothing else is needed from the owner for this step.
-3. **Agent:** build the "Next pull request" group above, showing the owner
-   the memory-use instruction's exact text first.
-4. **Agent:** when the owner asks for a later phase, show its exact wording,
-   screens, and AI-facing text before building it. The design decisions are
+3. **Owner, then agent:** approve the Inside Joke definition and the vibe
+   details (section 3). The agent then finishes that pull request and merges
+   it when Codex passes it and Android Checks is green.
+4. **Agent:** build section 3b: carry-over, the lorebook repeat check on
+   both send paths, the test conversations, and the memory-use instruction.
+   Show the owner the instruction's exact text first.
+5. **Agent, in this order, each when the owner asks for it:** Phase 2 (data
+   control), Phase 3 (the Always tab), Phase 4 (important dates and the
+   Dates tab; settle D55 first), Phase 5 (fading), Phase 6 (Memory Assistant
+   date proposals), then the later features. Before each, show the owner its
+   exact wording, screens, and AI-facing text. The design decisions are
    already recorded in Part E.
 
 ## How to use this document
