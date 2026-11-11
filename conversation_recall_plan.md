@@ -201,11 +201,14 @@ embedding model's limit:
 1. at paragraph breaks;
 2. at sentence ends;
 3. at clause breaks (commas, semicolons, line breaks);
-4. at the nearest space before the limit.
+4. at the nearest space before the limit;
+5. when there is no space (a long web address or an unbroken string),
+   between two characters, never through the middle of one.
 
-Step 4 is the guaranteed fallback. Every character of every message ends up
-in some entry, so no text is ever silently unsearchable. An entry never
-spans two messages.
+Step 5 is the guaranteed fallback. After every cut the piece is measured
+again (G.5a rule 2). Every character of every message ends up in some
+entry, so no text is ever silently unsearchable. An entry never spans two
+messages.
 
 **How big an entry is.** A starting size is chosen by measurement (G.15),
 inside the embedding model's limit. Published starting points are 400
@@ -315,6 +318,9 @@ code and is true today. These are requirements for stage 1, not options.
 - Rule for stages 1 to 3: meaning search looks only at the current chat's
   passages. Keyword search uses the database's own keyword index. Vectors
   are read in bounded batches, never all chats at once.
+- Memory use is bounded too: as each batch is scored, only the best
+  candidates so far are kept and the batch is released. The vectors of a
+  long chat are never all held in memory together.
 - Passage counts, indexing progress, and search time are recorded so they
   can be shown and measured.
 - Recall from other chats needs a different search method for large
@@ -328,14 +334,20 @@ code and is true today. These are requirements for stage 1, not options.
 - Rule: every use of the model goes through one queue: the live message,
   saved memories, and conversation indexing. A live chat request always
   goes ahead of background work, and background indexing pauses for it.
+- Background indexing works in small steps, one passage at a time, so a
+  live message never waits behind a large batch.
 - This also fixes the unlocked call noted in G.2.
 
 **7. Only messages with a permanent ID are indexed.**
-- Older messages receive an ID the first time the app assigns one
-  (`MessageIdentity.kt`). A message with no usable ID yet is not indexed
-  until it has one.
-- To verify in stage 1: how many older messages lack an ID or a recorded
-  scope. Missing scope stays private to its own chat (G.7).
+- Checked in the code on 2026-11-11: every new message receives a
+  permanent ID, and an older chat's messages receive theirs the first time
+  that chat is opened (`ChatActivity.kt`, `MessageIdentity.kt`). So the
+  chat a user is in always has IDs, and recall inside the current chat
+  loses nothing.
+- **Owner (2026-11-11):** no migration is built to give IDs to old chats
+  that have never been reopened. Those chats are simply not indexed until
+  the user opens them. Backwards compatibility for them is not wanted.
+- Missing scope stays private to its own chat (G.7).
 
 **The indexing steps for one new or changed message:**
 
