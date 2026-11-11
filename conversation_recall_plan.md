@@ -1182,6 +1182,56 @@ losing it loses nothing the user wrote.
 Failures are shown in plain words where the user would otherwise be
 misled, and never as a generic error.
 
+## G.13a Damage, failures, and logs (Owner direction, 2026-11-11)
+
+**Owner (2026-11-11):** a damaged index must be detectable without the
+user having to start anything; it also belongs on the existing database
+check button; and whatever repair is possible follows. Errors must be
+written to a log. Provider logs must stay accurate when a request fails.
+Critical failures must be told to the user.
+
+**How damage is found.**
+- **By itself.** The database reports damage whenever the app opens or
+  reads it, the way the app's other encrypted databases already do. The
+  index is also compared with the stored chats during upkeep; a chat whose
+  index does not match is re-indexed.
+- **On request.** The existing Check Database Integrity button (Backup &
+  Restore, Database Health section) also checks the conversation index and
+  reports it as its own line. Checked in the code on 2026-11-11: today that
+  button checks the memory, lorebook, and user image databases.
+
+**How it is repaired.** The index is derived from the stored chats, so
+repair is always a rebuild, started automatically. No backup is needed, no
+choice is asked of the user, and nothing the user wrote can be lost. Stored
+vectors are kept when they can still be read, so a rebuild does not always
+mean embedding everything again.
+
+**Where failures are written.**
+- **Error Log:** failures of indexing and recall that happen on the phone:
+  damage found, a rebuild that failed, a chat that could not be indexed,
+  vectors that could not be made, and recall failing for a message.
+- **Provider Failure Log:** unchanged. Indexing and recall make no
+  provider requests of their own. Recalled text travels inside the
+  ordinary chat request; if that request fails it is logged exactly as
+  today, under the chat's own function name. The optional AI worker, when
+  it is built, logs its failures under a function name of its own, so a
+  failure is never attributed to the wrong feature.
+- **Never logged:** the text of any message or passage.
+- Being skipped for the time limit is not an error. It is shown in the
+  "what was sent" view, not in the Error Log.
+
+**What the user is told.**
+- **Critical:** the index is damaged and could not be rebuilt, so indexing
+  and recall have stopped. The user is told directly, once.
+- **For one message:** recall failed and the message was sent without it.
+  The user sees a short notice, as happens today when memory is
+  unavailable for a message.
+- **Everything else** is repaired without interrupting the user and
+  recorded in the Error Log.
+
+The exact log lines and on-screen wording are approved by the owner before
+they are built (G19).
+
 ## G.14 Cost, speed, storage, privacy (Proposed)
 
 - **Tokens.** A recalled exchange is sent once more in that request. Its
@@ -1195,6 +1245,8 @@ misled, and never as a generic error.
   and it may keep running after the app is closed. On Android that
   requires a visible notification while it runs. It is mostly a one-time
   job, repeated only after a large restore or a change of embedding model.
+  **Owner (2026-11-11):** indexing does not pause for battery saver. Some
+  phones are always in battery saver.
 - **Storage.** A 256-number vector is about 1 KB per entry.
 - **Privacy.** Three separate things, stated separately:
   - **Indexing is entirely on the phone.** The index is encrypted like the
@@ -1418,7 +1470,9 @@ nothing and can be built at any time, including first.
   two-action dialogs, header action icons); `ui-style-adoption.md`;
   `MemoryAnalysisForegroundService.kt` for how the app already keeps work
   running with a notification.
-- **Build:** exactly what G.16a lists, with the approved wording. Every
+- **Build:** exactly what G.16a lists, with the approved wording, and the
+  conversation index's line on the Check Database Integrity button
+  (G.13a). Every
   visible value comes from a shared style; a missing style is created and
   added to the guide. `ui-style-adoption.md` is updated.
 - **Must not change:** any other part of the chat header or of Advanced
@@ -1527,6 +1581,10 @@ Embeddings:
 | Confirmation text | This removes the search index. Your conversations are not changed. |
 | Confirmation buttons | Cancel, Delete |
 
+**With no embedding model installed (Owner, 2026-11-11),** the status
+under the toggle reads: "Keyword search only. Install the embedding model
+to also find conversations by meaning."
+
 **Behaviour approved with it:**
 - Index Conversations starts off. Turning it on starts background
   indexing.
@@ -1566,6 +1624,7 @@ recommendation.
 | G16 | Does recall apply in hands-free voice chat, where any delay is felt? | Yes, under the time limit in G.6, so a slow search is skipped and never delays a reply | Stage 3 |
 | G17 | Which settings screen holds the recall setting, what is it called, what does its explanation say, and does it start on or off? | **Decided (owner, 2026-11-11):** it is in Memory Controls. Its name, explanation, and starting state are still open | Stage 3 |
 | G18 | The app already has a per-chat switch for saved memories. Does turning that off for a chat also stop recall in that chat? | Asked before step 3 | Stage 3 |
+| G19 | The exact Error Log lines, the database check's line and hint for the conversation index, and the wording that tells the user of a failure | Proposed to the owner as one list before step 1F | Step 1F |
 
 ## G.18 Research behind this plan (2026-11-10)
 
@@ -1631,7 +1690,9 @@ this plan. These rules keep that safe.
   existing chat search feature; saved-memory search results; the lorebook;
   what a request contains when recall is off.
 - **Never remove anything from a request to make room for recall.**
-- **Never add or change a log line** without the owner's approval.
+- **Never add or change a log line** without the owner's approval. The
+  owner has ruled which logs are used (G.13a); the exact lines still need
+  approval (G19).
 - **Put new code in its own files.** The chat screen's files are too large
   to change safely; add only the small hookup they need.
 - **Never copy another screen or file** as a pattern. Follow
