@@ -1229,8 +1229,39 @@ mean embedding everything again.
 - **Everything else** is repaired without interrupting the user and
   recorded in the Error Log.
 
-The exact log lines and on-screen wording are approved by the owner before
-they are built (G19).
+**Approved wording (Owner, 2026-11-11).** "(cause)" and "(number)" are
+filled in with the real cause and number.
+
+Error Log entries:
+
+| When | Entry |
+|---|---|
+| Damage found | Conversation index is damaged: (cause). Rebuilding from the stored chats. |
+| Rebuild failed | Conversation index could not be rebuilt: (cause). |
+| A chat could not be indexed | Conversation index: a chat could not be indexed: (cause). |
+| Vectors could not be made | Conversation index: meaning search could not be prepared for (number) passages: (cause). |
+| Recall failed for a message | Conversation recall failed: (cause). The message was sent without recall. |
+
+Check Database Integrity:
+
+| Part | Wording |
+|---|---|
+| Hint under the button, replacing today's | Checks the memory, lorebook, user image, and conversation index databases for problems. Chats are not included. |
+| Name in the report | Conversation index |
+| When damage is found there | The conversation index is being rebuilt. Your conversations are not affected. |
+
+What the user is told:
+
+| When | Wording |
+|---|---|
+| Critical: the index could not be rebuilt | Title: Conversation Index Could Not Be Rebuilt. Text: Indexing and Conversation Recall are off until this is fixed. Your conversations are not affected. See the Error Log for details. Button: Okay |
+| Recall failed for one message | Conversation recall unavailable this turn — continuing without it |
+
+**A snack bar for major errors (Owner, 2026-11-11).** A major error must be
+shown in a snack bar that the user has to acknowledge; it does not
+disappear by itself. How it relates to the critical message above, and its
+short wording, are still open (G20). `ui-style-guide.md` has no snack bar
+style yet; the builder creates a shared one and adds it to the guide.
 
 ## G.14 Cost, speed, storage, privacy (Proposed)
 
@@ -1624,7 +1655,8 @@ recommendation.
 | G16 | Does recall apply in hands-free voice chat, where any delay is felt? | Yes, under the time limit in G.6, so a slow search is skipped and never delays a reply | Stage 3 |
 | G17 | Which settings screen holds the recall setting, what is it called, what does its explanation say, and does it start on or off? | **Decided (owner, 2026-11-11):** it is in Memory Controls. Its name, explanation, and starting state are still open | Stage 3 |
 | G18 | The app already has a per-chat switch for saved memories. Does turning that off for a chat also stop recall in that chat? | Asked before step 3 | Stage 3 |
-| G19 | The exact Error Log lines, the database check's line and hint for the conversation index, and the wording that tells the user of a failure | Proposed to the owner as one list before step 1F | Step 1F |
+| G19 | The exact Error Log lines, the database check's line and hint for the conversation index, and the wording that tells the user of a failure | **Decided (owner, 2026-11-11):** as recorded in G.13a | Decided |
+| G20 | Which errors count as major, what the snack bar says, and whether it replaces the critical message or opens it | Proposed to the owner before step 1F | Step 1F |
 
 ## G.18 Research behind this plan (2026-11-10)
 
