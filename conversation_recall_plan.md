@@ -74,6 +74,9 @@ Words used in this plan:
 13. **Owner (2026-11-11):** a deeper system for giving the AI access to
     larger documents is wanted some day, not now. The foundation should
     not rule it out.
+14. **Owner (2026-11-11):** recall is turned on with one setting in a
+    settings menu. It is not something the user turns on in each
+    conversation.
 
 ## G.2 What the review of #180 found
 
@@ -1190,7 +1193,7 @@ misled, and never as a generic error.
 - **Privacy.** Three separate things, stated separately:
   - **Indexing is entirely on the phone.** The index is encrypted like the
     chat search database, and building it sends nothing anywhere.
-  - **Recall sends text to the chat AI.** When recall is on for a chat,
+  - **Recall sends text to the chat AI.** When recall is on,
     the recalled exchanges are part of the ordinary request to whichever
     AI service that chat uses. For a summarized chat this means original
     wording is sent that the summary alone would not have sent. Any
@@ -1435,8 +1438,8 @@ nothing and can be built at any time, including first.
 ### Step 3: context assembly (Hard)
 
 - **Goal:** recall is added to real requests (G.8, G.8a point 3).
-- **Before building, the owner decides or approves:** G1, G2, G3, G4, G11,
-  G16, and the exact text given to the AI.
+- **Before building, the owner decides or approves:** G2, G3, G4, G11,
+  G16, G17, G18, and the exact text given to the AI.
 - **Read:** G.8, G.8a; both request builders in `ChatActivity.kt`;
   `memory/enforcer/PromptAssembler.kt`; `util/RequestCapacity.kt`.
 - **Build:** assembly in its own file, called from both request builders
@@ -1500,7 +1503,7 @@ Embeddings:
 |---|---|
 | Section heading | Conversation Index |
 | Toggle | Index Conversations |
-| Toggle explanation | Builds a searchable index of your conversations on this device. Indexing is entirely local. When recall is turned on for a chat, relevant earlier parts of that chat are included in your normal AI requests. |
+| Toggle explanation | Builds a searchable index of your conversations on this device. Indexing is entirely local. |
 | Status | 310 conversations indexed (real number) |
 | Button | Delete Conversation Index |
 | Confirmation title | Delete Conversation Index? |
@@ -1513,10 +1516,13 @@ Embeddings:
 - Deleting the index also turns the setting off, so it is not rebuilt
   against the user's wishes.
 
-**One sentence to revisit.** The toggle explanation says recall is turned
-on "for a chat". Whether recall is chosen per chat is still open (G1). If
-the owner decides otherwise, that sentence is reworded and shown to the
-owner again.
+**A sentence that was removed.** The approved explanation had a third
+sentence saying recall is turned on "for a chat". That described a
+per-conversation setting the owner had not chosen, and on 2026-11-11 the
+owner ruled that recall is one setting for all chats (G1). The sentence is
+removed and is not built. A sentence telling the user that recall sends
+earlier conversation to the AI is still needed; its wording is proposed to
+the owner with the recall setting (G17).
 
 ## G.17 Open decisions for the owner
 
@@ -1526,14 +1532,14 @@ recommendation.
 
 | # | Question | Recommendation | Needed before |
 |---|---|---|---|
-| G1 | Is recall on for every chat, or chosen per chat? | Per chat, starting off, so nothing changes for anyone who does not turn it on | Stage 3 |
+| G1 | Is recall on for every chat, or chosen per chat? | **Decided (owner, 2026-11-11):** one setting in a settings menu, applying to all chats. Not chosen per conversation. Which menu, its wording, and whether it starts on or off are G17 | Decided |
 | G2 | How large is recall's own size limit, and can the user set it? | Adjustable, with a starting value from measurement | Stage 3 |
 | G3 | When a chat no longer fits the model, may the user choose to send recent messages plus recalled exchanges? | Yes, as an explicit choice. Warn or block stays the default | Stage 3 |
 | G4 | Does recall apply in Experimental Mode? | No. That mode sends only the current message by design | Stage 3 |
 | G5 | Are attached files and images indexed? | **Decided (owner, 2026-11-11):** no, not in this work | Decided |
 | G6 | When are existing chats indexed? | **Decided (owner, 2026-11-11):** in the background, never on opening a chat. Proposed details: newest first, with progress shown and a way to pause | Decided |
 | G7 | Do backups carry the index? | **Decided (owner, 2026-11-11):** no. It is rebuilt after a restore | Decided |
-| G8 | Which jobs does the live AI worker do, and is it chosen per chat? | Per chat. Start with marking what matters | The live AI worker |
+| G8 | Which jobs does the live AI worker do, and how is it turned on? | Open. Start with marking what matters. The owner chose one app-wide setting for recall, not a per-conversation one | The live AI worker |
 | G9 | Across chats, which ordinary chats may see each other? | Same companion or same project only, at first | Recall from other chats |
 | G10 | Is a recalled exchange carried over like a saved memory? | Yes, under the same rule | Stage 4 |
 | G11 | What does the user see when recall adds something? | Show it where sent memories are shown today, so the user can always tell what the AI was given | Stage 3 |
@@ -1541,6 +1547,8 @@ recommendation.
 | G14 | Does background indexing of existing chats continue after the app is closed? | **Decided (owner, 2026-11-11):** yes. The notification this requires is part of G15 | Decided |
 | G15 | Where does the user see indexing progress, pause it, and delete the index, and what does the notification say? | **Decided (owner, 2026-11-11):** as recorded in G.16a. Index Conversations starts off | Decided |
 | G16 | Does recall apply in hands-free voice chat, where any delay is felt? | Yes, under the time limit in G.6, so a slow search is skipped and never delays a reply | Stage 3 |
+| G17 | Which settings screen holds the recall setting, what is it called, what does its explanation say, and does it start on or off? | Shown to the owner as exact wording and placement before step 3 | Stage 3 |
+| G18 | The app already has a per-chat switch for saved memories. Does turning that off for a chat also stop recall in that chat? | Asked before step 3 | Stage 3 |
 
 ## G.18 Research behind this plan (2026-11-10)
 
