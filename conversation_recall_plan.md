@@ -1547,7 +1547,7 @@ recommendation.
 | G14 | Does background indexing of existing chats continue after the app is closed? | **Decided (owner, 2026-11-11):** yes. The notification this requires is part of G15 | Decided |
 | G15 | Where does the user see indexing progress, pause it, and delete the index, and what does the notification say? | **Decided (owner, 2026-11-11):** as recorded in G.16a. Index Conversations starts off | Decided |
 | G16 | Does recall apply in hands-free voice chat, where any delay is felt? | Yes, under the time limit in G.6, so a slow search is skipped and never delays a reply | Stage 3 |
-| G17 | Which settings screen holds the recall setting, what is it called, what does its explanation say, and does it start on or off? | Shown to the owner as exact wording and placement before step 3 | Stage 3 |
+| G17 | Which settings screen holds the recall setting, what is it called, what does its explanation say, and does it start on or off? | **Decided (owner, 2026-11-11):** it is in Memory Controls. Its name, explanation, and starting state are still open | Stage 3 |
 | G18 | The app already has a per-chat switch for saved memories. Does turning that off for a chat also stop recall in that chat? | Asked before step 3 | Stage 3 |
 
 ## G.18 Research behind this plan (2026-11-10)
