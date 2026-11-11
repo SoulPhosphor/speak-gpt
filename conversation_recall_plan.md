@@ -704,6 +704,37 @@ ranked first.
   ordering. The gate stays either way.
 - A passage found both ways scores higher than one found one way.
 
+**Step 5a: an optional re-ranker (a place is kept for it; not built
+yet).**
+- A re-ranker is a second model that reads the user's message and one
+  candidate passage **together** and judges how well they fit. The
+  embedding model never does that: it turns each text into numbers
+  separately and compares the numbers. A re-ranker is slower and usually
+  more accurate.
+- It does not have to be an outside or paid model. It can run on the
+  phone, downloaded by the user like the embedding model.
+- **What is known.** The memory plan (A.10) records one test: a 23 MB
+  on-phone re-ranker trained on web search did poorly on short saved
+  memories. That test used a handful of invented memories and one model,
+  and it was not run on conversation passages, which are longer and closer
+  to the text such models are trained on. So it does not settle the
+  question for this work. Published results do show a re-ranker helping:
+  in Anthropic's test it took missed retrievals from 49% fewer to 67%
+  fewer (G.18).
+- **What it costs.** A download of tens to hundreds of megabytes, and
+  time: it runs once per candidate. One small model is reported at about
+  39 pairs a second on a desktop processor, so on a phone, re-ranking 20
+  candidates could add a second or more to sending.
+- **The design.** A re-ranker, when present, runs here: after the gate and
+  the blend, on the best candidates only, and before grouping. It can
+  reorder candidates and can remove one it judges unrelated. It can never
+  add a candidate the gate rejected. With no re-ranker, this step is
+  skipped and nothing else changes.
+- **When it is decided.** After stage 2 shows what retrieval gets wrong on
+  this app's conversations. If the mistakes are ones a re-ranker fixes,
+  candidate models are tested on those same conversations, on the phone,
+  and the owner decides whether to offer it as an optional download.
+
 **Step 6: group passages into exchanges.**
 - Passages are grouped by the exchange they belong to. An exchange's score
   is its best passage's score, with a small addition when several of its
@@ -1137,6 +1168,7 @@ each starts.
 | 2 | Retrieval, the subject check, and a way to inspect what a message would recall and why (G.6, G.8a, G.9a) | Stage 1 |
 | 3 | Context assembly: recall added to real chat requests, with the final size check (G.8, G.8a) | Stage 2 |
 | 4 | Saved-memory fixes: long messages and carry-over (G.9, G.10) | The subject check from stage 2 |
+| Later | An optional on-phone re-ranker (G.6 step 5a), if stage 2 shows it would help | Stage 2 |
 | Later | The optional live AI worker (G.11) | Stage 1 |
 | Later | Recall from other chats, behind the scope walls (G.7) | Stage 3 |
 | Later | Keyword-only recall for users without an embedding model | Stage 3 |
@@ -1190,6 +1222,7 @@ Read by the agent from the sources named. Figures are the sources' own.
 | Do summary layers help? | Up to 20 points on one long-document test, built with paid summaries | RAPTOR (ICLR 2024) |
 | Do knowledge graphs help? | 71.2% against 60.2% in the maker's own test; an independent test measured 63.8% | Zep paper; third-party comparison |
 | How good is the app's embedding model? | Ranked first among models under 500 million parameters by its maker. English score 69.67 at full size, 68.37 at the app's 256 numbers, 69.31 for the q4 variant | EmbeddingGemma model card |
+| Does a re-ranker help? | Yes in published tests: it took Anthropic's missed retrievals from 49% fewer to 67% fewer. It runs once per candidate, so it adds time | Anthropic, "Contextual Retrieval"; Jina and Mixedbread model reports |
 | How should meaning and keyword results be combined? | A weighted blend of the two scores beat reciprocal rank fusion on familiar and unfamiliar text, was less sensitive to its settings, and could be tuned from a handful of examples | Bruch, Gai and Ingber, "An Analysis of Fusion Functions for Hybrid Retrieval" |
 | Does the order of retrieved passages matter? | Not reliably. Rearranging passages into "preferred" positions did no better than random order in one study, and results differ between models | "Do RAG Systems Really Suffer From Positional Bias?" (EMNLP 2025) |
 | Is there one best system? | No. Top scores are self-reported and no neutral test compares the designs under the same conditions | LongMemEval and LoCoMo comparisons |
