@@ -241,6 +241,13 @@ object SummarizerErrorClassifier {
  * is stored in a Summarizer Errors entry or the app-wide Error Log (errors
  * doc §1: never display or copy an API key, authorization header, complete
  * request body, conversation text, or summary text).
+ *
+ * Only the words are removed (owner ruling, Nov 11 2026). Text the model
+ * returned (an answer, its thinking, a streamed piece, tool-call arguments,
+ * or text in a shape the app does not recognize) is replaced by its length,
+ * and everything that explains the response stays: the stop reason, the
+ * refusal, error messages, token usage, the serving provider, and whether
+ * the answer was missing or empty.
  */
 object SummarizerDetailSanitizer {
 
@@ -253,8 +260,28 @@ object SummarizerDetailSanitizer {
     )
 
     /** Remove payload fields even inside client exception JSON dumps. */
-    private val privateFields = setOf("messages", "choices", "content", "text", "input", "output", "prompt",
+    private val privateFields = setOf("messages", "input", "prompt",
         "summary", "request", "request_body", "body", "headers", "authorization", "api_key", "api-key", "x-api-key", "token", "access_token", "password", "secret")
+
+    /** Text values that explain a response rather than carry what the model
+     *  wrote. Every other text value inside JSON is treated as the model's
+     *  words: they are removed and the length kept. A null or empty value,
+     *  a number and true/false are always kept as they are. */
+    private val evidenceFields = setOf(
+        "id", "object", "model", "provider", "provider_name", "system_fingerprint", "service_tier",
+        "role", "type", "name", "index", "finish_reason", "native_finish_reason", "stop_reason",
+        "status", "refusal", "error", "message", "code", "param", "raw", "reason", "detail", "title",
+        "generation_id", "created"
+    )
+
+    /** A streamed body keeps its first and last events in full; the events
+     *  between them only carry pieces of the answer. */
+    private const val STREAM_EDGE_EVENTS = 3
+
+    private fun removedText(length: Int) = "[removed: $length characters]"
+
+    /** Keeps null values: an answer that came back as null is evidence. */
+    private val evidenceJson = com.google.gson.GsonBuilder().serializeNulls().disableHtmlEscaping().create()
 
     fun sanitize(raw: String?, secrets: List<String> = emptyList(), maxChars: Int = MAX_DETAIL_CHARS): String? {
         if (raw.isNullOrBlank()) return null
@@ -266,18 +293,69 @@ object SummarizerDetailSanitizer {
         fun clean(value: com.google.gson.JsonElement) {
             if (value.isJsonObject) {
                 value.asJsonObject.entrySet().toList().forEach { (key, child) ->
-                    if (key.lowercase() in privateFields) value.asJsonObject.addProperty(key, "[removed]") else clean(child)
+                    val name = key.lowercase()
+                    when {
+                        name in privateFields -> value.asJsonObject.addProperty(key, "[removed]")
+                        child.isJsonPrimitive && child.asJsonPrimitive.isString -> {
+                            val text = child.asString
+                            if (name !in evidenceFields && text.isNotEmpty())
+                                value.asJsonObject.addProperty(key, removedText(text.length))
+                        }
+                        else -> clean(child)
+                    }
                 }
-            } else if (value.isJsonArray) value.asJsonArray.forEach { clean(it) }
+            } else if (value.isJsonArray) {
+                // A bare string in a list can be returned text in a shape the
+                // app does not recognize, so its words go and its length stays.
+                val array = value.asJsonArray
+                for (i in 0 until array.size()) {
+                    val item = array[i]
+                    if (item.isJsonPrimitive && item.asJsonPrimitive.isString) {
+                        val text = item.asString
+                        if (text.isNotEmpty()) array.set(i, com.google.gson.JsonPrimitive(removedText(text.length)))
+                    } else clean(item)
+                }
+            }
+        }
+        val streamed = Regex("""(?m)^data:""").containsMatchIn(out)
+        if (streamed) {
+            // A streamed reply is one JSON event per line, not one envelope.
+            val lines = out.lines()
+            val events = lines.indices.filter { lines[it].startsWith("data:") }
+            val kept = if (events.size <= STREAM_EDGE_EVENTS * 2) events.toSet()
+                else (events.take(STREAM_EDGE_EVENTS) + events.takeLast(STREAM_EDGE_EVENTS)).toSet()
+            val omitted = events.size - kept.size
+            val firstOmitted = events.firstOrNull { it !in kept }
+            out = lines.mapIndexedNotNull { index, line ->
+                when {
+                    index == firstOmitted -> "[$omitted streamed events omitted]"
+                    index in events && index !in kept -> null
+                    !line.startsWith("data:") -> line
+                    else -> {
+                        // Only the end marker passes as it is. Every other
+                        // event is cleaned, and anything that is not an
+                        // object or list keeps only its length.
+                        val payload = line.removePrefix("data:").trim()
+                        if (payload == "[DONE]" || payload.isEmpty()) line
+                        else {
+                            val parsed = runCatching { com.google.gson.JsonParser.parseString(payload) }.getOrNull()
+                            if (parsed != null && (parsed.isJsonObject || parsed.isJsonArray)) {
+                                clean(parsed)
+                                "data: ${evidenceJson.toJson(parsed)}"
+                            } else "data: ${removedText(payload.length)}"
+                        }
+                    }
+                }
+            }.joinToString("\n")
         }
         // Client exceptions can prefix/suffix an otherwise valid JSON envelope.
         val start = out.indexOf('{')
         val end = out.lastIndexOf('}')
-        if (start >= 0 && end > start) {
+        if (!streamed && start >= 0 && end > start) {
             try {
                 val parsed = com.google.gson.JsonParser.parseString(out.substring(start, end + 1))
                 clean(parsed)
-                out = out.substring(0, start) + parsed.toString() + out.substring(end + 1)
+                out = out.substring(0, start) + evidenceJson.toJson(parsed) + out.substring(end + 1)
             } catch (_: Exception) {
                 // Broken JSON must not leak a partial request/completion dump.
                 if (Regex("\"(?i:messages|choices|content|prompt|summary|headers)\"\\s*:").containsMatchIn(out.substring(start)))

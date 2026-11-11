@@ -6544,6 +6544,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
         okay?.setOnClickListener { dialog.dismiss() }
+        view.findViewById<View>(R.id.btn_summarizer_errors_settings)?.setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, SummarizerSettingsActivity::class.java))
+        }
 
         dialog.show()
     }

@@ -27,10 +27,14 @@ object SummarizerDiagnostics {
         @Volatile var status: Int? = null
         @Volatile var body: String? = null
 
-        /** An incompatible success body might itself be conversation-derived
-         * summary text. Its shape/length is evidence; that text is private. */
+        /** A success body that is not JSON at all might itself be the
+         * summary text, so it is kept private whole; its length is still
+         * reported. A JSON or streamed body is never removed whole: the
+         * sanitizer takes out only the words the model wrote and keeps the
+         * evidence of why the answer was unusable. */
         fun privateResponseValues(): List<String> =
-            if (status?.let { it in 200..299 } == true && snapshot().errorEvents.isEmpty() && unusableResponse(body))
+            if (status?.let { it in 200..299 } == true && snapshot().errorEvents.isEmpty() &&
+                unusableResponse(body) && !structuredResponse(body))
                 listOfNotNull(body?.takeIf { it.isNotBlank() }) else emptyList()
 
         fun snapshot(): ProviderDiagnosticSnapshot {
@@ -84,6 +88,16 @@ object SummarizerDiagnostics {
         if (result.code == GenErrorCode.S2 && request.status != null && unusableResponse(request.body))
             return Owner.EXTERNAL
         return Owner.LOCAL
+    }
+
+    /** True when [raw] is a JSON envelope or a stream of JSON events. */
+    fun structuredResponse(raw: String?): Boolean {
+        if (raw.isNullOrBlank()) return false
+        val streamed = raw.lines().filter { it.startsWith("data:") }
+        if (streamed.isNotEmpty()) return streamed.any { line ->
+            runCatching { JsonParser.parseString(line.removePrefix("data:").trim()).isJsonObject }.getOrDefault(false)
+        }
+        return runCatching { JsonParser.parseString(raw.trim()).isJsonObject }.getOrDefault(false)
     }
 
     fun unusableResponse(raw: String?): Boolean {

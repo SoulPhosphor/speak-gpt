@@ -5,7 +5,9 @@
   stored errors (newest first, at most five), then one action row: Copy
   (every listed error), Hide (every listed error) and Okay, side by side.
   The row is right-aligned; Okay drops to the next line, still on the
-  right, only when the row does not fit. The entries
+  right, only when the row does not fit. Summarizer Settings sits centered
+  beneath the row and opens the page where the Summary Model is chosen
+  (owner ruling, Nov 11 2026). The entries
   are built by ChatActivity from the stored log.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -57,5 +59,10 @@
                 style="@style/AppButton.Destructive.Inline"
                 android:text="@string/summarizer_errors_okay" />
         </org.teslasoft.assistant.ui.widgets.DialogActionRow>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_summarizer_errors_settings"
+            style="@style/AppButton.Primary.Inline.Centered.BelowDialogRow"
+            android:text="@string/title_summarizer_settings" />
     </LinearLayout>
 </LinearLayout>
