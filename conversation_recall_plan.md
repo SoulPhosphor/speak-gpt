@@ -293,6 +293,7 @@ design:
 | Time written, and position in the chat | Time for dates. Position because some old messages have no time |
 | Fingerprint of the original text | Detects edits |
 | Fingerprint of the search text | Finds the right vector |
+| Messages the search text borrowed from | So the search text is rebuilt when one of them is hidden, edited, or deleted (G.5b) |
 | Scope labels | Companion, project, world, campaign, character, or "unknown" (G.7) |
 | Cutter version | Which version of the cutting rules made it (G.5b) |
 | Vector state | Waiting, made, or failed, and for which model |
@@ -428,6 +429,25 @@ text; the original text and what the AI receives are unchanged.
   edit to that message also remakes the search text of the passages that
   borrowed from it.
 
+**Borrowed context obeys the same rules as the passage itself.** This
+covers the overlap in step 5 and the context in step 6.
+- Text is borrowed only from a message that is itself eligible: visible to
+  the AI, finished, the version the AI is sent, and not deleted. A passage
+  can be eligible while the message beside it is not; then nothing is
+  borrowed from that message.
+- Text is borrowed only from a message with the same scope. If the chat's
+  companion, project, or roleplay settings changed between the two
+  messages, nothing is borrowed across that change.
+- When a message is hidden, edited, deleted, or changes scope, every
+  passage that borrowed from it has its search text rebuilt without the
+  old text, and its vector remade. The old vector is removed under G.5a
+  rule 3.
+- Until that rebuild finishes, a passage whose borrowed context is no
+  longer allowed is not matched by its old vector. It can still be found
+  by its own words.
+- Each passage records which messages its search text borrowed from, so
+  these passages can be found at once when one of those messages changes.
+
 **Step 7: record who is speaking.** The search text states whether the
 user or the AI said it, using the embedding model's own title slot, so
 "I moved to Leeds" from the user is not confused with the AI saying it.
@@ -461,7 +481,10 @@ cannot read in full.
   tokenizer;
 - short neighbouring paragraphs share a passage;
 - a detail in the middle of a long message has a passage that contains it;
-- the same message always cuts the same way.
+- the same message always cuts the same way;
+- no search text borrows from a hidden, unfinished, deleted, or
+  differently scoped message, and hiding a message rebuilds the search
+  text of the passages that borrowed from it.
 
 ## G.5a Rules the index must guarantee (Proposed)
 
@@ -479,8 +502,12 @@ stage 1, not options.
   indexing, and again at the moment of recall against the stored message.
   Hiding a message therefore takes effect at once, even when background
   indexing has not caught up. The same holds for a deleted message.
+- The rule covers borrowed context as well as the passage's own text: no
+  search text and no vector may contain words from a message the AI may
+  not be sent (G.5b).
 - A test proves that the set of messages the index may recall is the same
-  as the set the chat request may send.
+  as the set the chat request may send, and another proves that hiding a
+  message removes its words from every neighbour's search text.
 
 **2. No text is ever cut off silently.**
 - The tokenizer drops everything past the model's limit without saying so
@@ -826,7 +853,7 @@ message-level work while the user chats, as an option.
 | Message edited | Passages for that message are replaced, and the search text of short neighbouring passages that borrowed from it (G.5b step 6). Unchanged search text keeps its vector |
 | Reply regenerated or another version chosen | Entries follow the version that is shown |
 | Message deleted | Its entries and any AI notes on them are removed, and any vector nothing else uses |
-| Message hidden from the AI, or made visible again | Takes effect on recall at once (G.5a rule 1) |
+| Message hidden from the AI, or made visible again | Takes effect on recall at once (G.5a rule 1). Neighbouring passages that borrowed its words have their search text and vectors rebuilt |
 | Chat deleted | All its entries are removed, and any vector nothing else uses |
 | Chat renamed | For older chats a rename changes the chat's ID. Its entries move to the new ID (G.5a rule 9) |
 | Reply finishes streaming | Indexed then, not while streaming. A failed reply is not indexed |
@@ -862,10 +889,10 @@ misled, and never as a generic error.
   on the owner's Pixel 8. No public figure exists for this model on a
   phone's ordinary processor.
 - **Battery.** Indexing existing chats is heavy work. **Owner
-  (2026-11-11):** it runs in the background and the user never waits for
-  it. What "background" means on the phone is still open (G14): only while
-  the app is open, or also after the app is closed, which on Android needs
-  a visible notification.
+  (2026-11-11):** it runs in the background, the user never waits for it,
+  and it may keep running after the app is closed. On Android that
+  requires a visible notification while it runs. It is mostly a one-time
+  job, repeated only after a large restore or a change of embedding model.
 - **Storage.** A 256-number vector is about 1 KB per entry.
 - **Privacy.** The index stays on the phone, encrypted like the chat search
   database. Nothing is sent anywhere by indexing. Only the optional AI
@@ -920,7 +947,7 @@ the index started sooner. Neither blocks the other.
 ## G.17 Open decisions for the owner
 
 Asked one at a time, and only when the stage that needs the answer is
-about to start. G14 and G15 are needed before stage 1. Each has a
+about to start. Only G15 is still needed before stage 1. Each has a
 recommendation.
 
 | # | Question | Recommendation | Needed before |
@@ -937,8 +964,8 @@ recommendation.
 | G10 | Is a recalled exchange carried over like a saved memory? | Yes, under the same rule | Stage 4 |
 | G11 | What does the user see when recall adds something? | Show it where sent memories are shown today, so the user can always tell what the AI was given | Stage 3 |
 | G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E of the memory plan? | If not, relabel those rows as proposed | Any time |
-| G14 | Does background indexing of existing chats continue after the app is closed? | While the app is open only, picking up where it stopped. Nothing new appears on the phone. Continuing after the app is closed would need a visible notification | Stage 1 |
-| G15 | Where does the user see indexing progress, pause it, and delete the index, and in what words? | Shown to the owner as exact wording and placement before stage 1 is built | Stage 1 |
+| G14 | Does background indexing of existing chats continue after the app is closed? | **Decided (owner, 2026-11-11):** yes. The notification this requires is part of G15 | Decided |
+| G15 | Where does the user see indexing progress, pause it, and delete the index, and what does the notification say while it runs after the app is closed? | Shown to the owner as exact wording and placement before stage 1 is built | Stage 1 |
 
 ## G.18 Research behind this plan (2026-11-10)
 

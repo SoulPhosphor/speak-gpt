@@ -220,7 +220,7 @@ The specific corrections:
 4. **Owner and outside reviewers:** read `conversation_recall_plan.md` and
    correct it.
 5. **Owner:** answer the open decisions in G.17 only as each stage needs
-   them. G14 and G15 are needed before stage 1.
+   them. Only G15 is still needed before stage 1.
 6. **Agent:** build nothing until the owner approves that plan. Then build the
    stages in G.16, in the order the owner chooses, each as its own pull
    request with its own tests (G.15, G.19).
