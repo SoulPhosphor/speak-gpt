@@ -125,7 +125,8 @@ Smaller issues:
 | Part | What it does | Exists today? | Cost to the user |
 |---|---|---|---|
 | Conversation store | Keeps every chat whole and in order | Yes. Untouched | None |
-| Index entries | Paragraph-sized entries pointing to the whole exchange, with labels | Partly (G.4) | None |
+| Chunking | Cuts each message into passages the embedding model can read in full (G.5b) | No | None |
+| Index entries | One entry per passage, pointing to the whole exchange, with labels (G.5) | No. Useful parts exist (G.4) | None |
 | Search | Finds entries by meaning and by keywords | Yes, for saved memories and for chat search | None |
 | Scope walls | Decide which entries a chat may see | Yes, for saved memories | None |
 | Recall | Adds matching exchanges beside the newest message | Partly. Saved memories are placed this way | A little more text per message |
@@ -137,213 +138,393 @@ Smaller issues:
 Recall from other chats is not a separate part. It is the same index and
 search, with the scope walls deciding how far the search may look.
 
-## G.4 Parts the app already has
+## G.4 What the app already has, and what it means for this work
 
-Each was checked in the current code on 2026-11-10.
+Every point was read in the current code (2026-11-10 and 2026-11-11). A
+builder must re-read the named files before relying on a point, because
+code changes.
 
-- **A keyword index of every message in every chat.** The chat search
-  feature already keeps one entry per message in its own encrypted database
-  (`preferences/chatsearch/ChatSearchStore.kt`). Each entry holds the chat,
-  the message's permanent ID, who wrote it, the text, a text fingerprint,
-  and timestamps.
-- **Upkeep for that index.** `ChatSearchIndexManager.kt` refreshes a chat
-  when it changes, handles deleted chats, rebuilds from the stored chats,
-  and rebases after a restore. `ChatSearchIndexJournal.kt` records which
-  chats still need refreshing.
-- **Permanent message IDs.** Every message keeps one ID for life, through
-  edits, regenerated replies, and renames (`MessageIdentity.kt`).
-- **The embedding model and vector storage.** Vectors are stored by which
-  model made them, so a model change is detected and missing vectors are
-  repaired in the background (`Librarian.kt`, the `embeddings` table).
-- **Meaning and keyword search with a relevance gate** (`LiveRetrieval.kt`,
-  `KeywordText.kt`).
-- **Scope rules,** enforced in the database query itself
-  (`RetrievalScope`, `MemoryStore.activeMemoriesForScope`). Roleplay chats
-  are walled off from real-life and project memories, and companion
-  memories need an explicit door.
-- **Placement beside the newest message.** Memory text is added just before
-  the newest message so the earlier history stays unchanged and cacheable
-  (`ChatActivity.kt`).
-- **A size limit for added text** (Memory Space) and the request-size check
-  that warns or blocks when a request does not fit the model.
-- **A record of what was sent with the previous message** (the injection
-  record in `MemoryStore.kt`, kept from the removed cooldown).
-- **The Summarizer's model connection and settings,** and its rule that a
-  cut never separates a message from its reply (`SummarySections.kt`).
-- **The Memory Search Test screen.**
+**Where chats are stored.**
+- Two stores exist. Today every installation uses the older one: each chat
+  is one encrypted file holding all its messages. A newer encrypted
+  database with one row per message (`chatstore/ChatStore.kt`) is built
+  but not switched on yet (`chatstore/ChatStorageAuthority.kt`).
+- **Consequence:** the index must read chats through the app's existing
+  chat-reading layer and identify a message only by its permanent message
+  ID. It must never depend on which store is in use, on a database row
+  number, or on a message's position in a file.
 
-What this means: the conversation index does not start from nothing, but
-neither existing store is the index this plan describes.
+**How messages and chats are identified.**
+- Every message has a permanent ID that survives edits, regenerated
+  replies, and renames (`MessageIdentity.kt`). New messages get one when
+  written. Older chats get theirs the first time they are opened.
+- A chat has an ID too. For older chats that never had a stored ID, the ID
+  is derived from the chat's title, so **renaming such a chat changes its
+  chat ID** (`ChatPreferences.storedChatId`, `ChatRenameTransaction.kt`).
+- **Consequence:** a rename must move the chat's index entries to the new
+  chat ID (G.12). An index that ignores this would orphan the entries.
 
-- The chat search index holds one entry per **message**, for keywords only.
-- The vector store holds vectors for **saved memories** only.
-- The paragraph-sized conversation entries, their vectors, their scope
-  labels, and recall itself are new. G.5 says exactly how they are stored
-  and what is reused.
+**What a stored message holds.**
+- Its text, who wrote it, a time (missing on some old messages), and for
+  AI replies a completion state: still streaming, done, or failed
+  (`MessageCompletionState.kt`). A failed reply's error text is stored
+  apart from the reply's words.
+- A reply can have several versions (the stored fields `variants`,
+  `displayVariant`, `canonicalVariant`).
+- A message can be hidden from the AI (`MessageVisibility.kt`).
+- Attachments are separate from the user's typed words.
+
+**What the AI is actually sent for each message.**
+- The Summarizer already builds, for every stored message, its permanent
+  ID and its "model-facing" text: the exact words the AI would be sent, or
+  nothing for a message that is not sent (`SummarizerController.Snapshot`,
+  `Entry`).
+- The chat search feature builds a different list for the user's own
+  search (`SearchableMessageProjection.kt`). It skips unfinished replies
+  but does **not** skip hidden messages.
+- **Consequence:** the index is built from the model-facing text, not from
+  the chat search list. What may be recalled is exactly what the AI could
+  have been sent.
+
+**The existing chat search index.**
+- One entry per message, keywords only, in its own encrypted database
+  (`chatsearch/ChatSearchStore.kt`).
+- It is kept in step by `ChatSearchIndexManager.kt`: a chat is refreshed
+  after it is saved, deleted chats are removed, a restore triggers a
+  rebuild, and stale results are refused using a per-chat revision and a
+  journal (`ChatSearchIndexJournal.kt`).
+- When a chat changes, it **replaces every entry of that chat**. That is
+  cheap for keywords. It would be far too slow for passages, which need
+  cutting and embedding.
+- **Consequence:** the triggers and the revision method are reused. The
+  "replace the whole chat" method is not. Passages are updated one message
+  at a time (G.5a rule 4).
+
+**The embedding model.**
+- EmbeddingGemma, in a q4 or int8 variant the user picks, producing 256
+  numbers per text (`EmbeddingModels.kt`). It reads at most 512 tokens per
+  text; the model itself allows 2,048.
+- Text is given an instruction prefix before it is read
+  (`OnnxEmbeddingModel.kt`): one prefix for a search, another for a stored
+  text. The stored-text prefix has a title slot that is always "none"
+  today.
+- The tokenizer (`HfTokenizer.kt`) cuts off anything past the limit without
+  saying so, and has no way to report how many tokens a text needs.
+- The model must run one request at a time. `Librarian.kt` has a lock for
+  that, and one call skips it (G.2).
+- The model is downloaded by the user. It can be absent, and it can be
+  changed.
+- **Consequences:** a token-counting function must be added. Cutting
+  cannot depend on a model being present (G.5b). Vectors must record which
+  model made them.
+
+**Saved-memory search.** Meaning and keyword search with a relevance gate
+(`LiveRetrieval.kt`, `KeywordText.kt`). It is written for saved memories.
+Its keyword word rules are for English.
+
+**Scope.**
+- Saved memories are filtered by scope inside the database query
+  (`RetrievalScope`, `MemoryStore.activeMemoriesForScope`).
+- When a turn finishes, the chat's companion, world, campaign, character,
+  and project at that moment are recorded with the turn, together with
+  the message IDs, for the Memory Assistant (`TranscriptRecorder.recordTurn`,
+  called from one place in `ChatActivity.kt`). This happens only when the
+  memory system is set up, and the record groups several turns in one row.
+- **Consequence:** the index stamps scope itself, at that same point, from
+  the same values (G.7). The turn record is a source for older messages
+  only where it exists.
+
+**An exchange already has a definition.** A finished turn is one user
+message and the reply to it. The Summarizer also never separates a message
+from its reply (`SummarySections.kt`).
+
+**Restore and merge.** A backup can replace the phone's chats or be merged
+into them (`ChatMergePlanner.kt`). A restore changes a "generation" value
+that the chat search index watches to know it must rebuild
+(`ChatSetSourceGeneration`).
+
+**Existing text splitters.** `ConversationTokenChunks.kt` splits text at
+sentence ends for compaction and the Memory Assistant, using an estimate of
+tokens, and deliberately leaves an oversized sentence whole.
+`CompactionBatches.kt` groups exchanges into large batches. Neither fits
+this work: one estimates, and both are built for a different size and
+purpose. They are not changed.
+
+**Other parts reused later:** placement of added text just before the
+newest message, the Memory Space limit, the request-size check, the record
+of what was sent with the previous message, the Summarizer's model
+connection, and the Memory Search Test screen.
+
+**Summary.** Neither existing index is the one this plan describes. The
+chat search index holds one keyword entry per message and includes hidden
+messages. The vector store holds saved memories only. The passages, their
+vectors, their scope labels, the cutter, and recall are new.
 
 ## G.5 Index entries (Proposed)
 
-**What one entry is.** An entry covers about one paragraph of one message.
-It points to its message and its exchange. A short message is one entry. A
-long message becomes several entries, so a small detail has its own entry
-and can be found.
+**What one entry is.** An entry, called a passage, covers a stretch of one
+message: usually a few short paragraphs or one long one. It points to its
+message and its exchange. A short message is one passage. A long message
+becomes several, so a small detail has a passage of its own and can be
+found.
 
-**What an entry records:**
+**Two texts for every passage.** This distinction runs through the whole
+design:
+
+- **The original text** is the stretch of the message itself. It is never
+  changed. It is what the AI is given.
+- **The search text** is what is handed to the embedding model to find the
+  passage. It is the original text plus, where it helps, a little
+  surrounding context (G.5b). It is never shown to the user and never sent
+  to the chat AI.
+
+**What a passage records:**
 
 | Field | Why |
 |---|---|
-| Chat ID | Which conversation. Lets search stay in one chat or cross chats |
+| Source kind | Today always "chat message". Lets a later document system share the stores |
+| Chat ID | Which conversation. Lets search stay in one chat or cross chats later |
 | Message ID (permanent) | Points back to the original message |
-| Exchange position | Lets recall deliver the whole exchange and its neighbours |
-| Position within the message | Which paragraph |
+| Start and end inside the message text | Exactly which characters the passage covers |
+| Order within the message | First, second, third passage of that message |
+| Exchange it belongs to | The user message ID that opens the exchange |
+| Previous and next passage | So nearby context can be added on a match |
 | Who wrote it | The user or the AI |
-| Time written | For date-aware search and ordering |
-| Text fingerprint | Detects edits, so only changed text is re-indexed |
-| Scope labels | The companion, project, world, campaign, or character the chat had (G.7) |
-| Meaning vector, and which model made it | Meaning search. A model change is detected |
-| Keyword text | Keyword search |
-| AI notes (optional, kept separate) | Written only by the live AI worker (G.11) |
+| Time written, and position in the chat | Time for dates. Position because some old messages have no time |
+| Fingerprint of the original text | Detects edits |
+| Fingerprint of the search text | Finds the right vector |
+| Scope labels | Companion, project, world, campaign, character, or "unknown" (G.7) |
+| Cutter version | Which version of the cutting rules made it (G.5b) |
+| Vector state | Waiting, made, or failed, and for which model |
 
-**Where a long message is cut.** In this order, until the piece fits the
-embedding model's limit:
+AI notes (G.11) are separate rows that point to a passage or an exchange.
+They are never mixed into a passage.
 
-1. at paragraph breaks;
-2. at sentence ends;
-3. at clause breaks (commas, semicolons, line breaks);
-4. at the nearest space before the limit;
-5. when there is no space (a long web address or an unbroken string),
-   between two characters, never through the middle of one.
+**What is indexed.**
+- The model-facing text of each message: what the AI would be sent (G.4).
+- Only finished replies. A reply that is still streaming, or that failed,
+  is not indexed. A failed reply's error text is never indexed.
+- Only the reply version the AI is sent. Which stored field that is must be
+  confirmed in the code when stage 1 is built.
+- Never a message hidden from the AI (G.5a rule 1).
 
-Step 5 is the guaranteed fallback. After every cut the piece is measured
-again (G.5a rule 2). Every character of every message ends up in some
-entry, so no text is ever silently unsearchable. An entry never spans two
-messages.
+**Attached documents and images are not indexed in this work (Owner,
+2026-11-11).** An attached document is sent to the AI with every message
+until the user condenses it, reduces it, or removes it
+(`document-includes-plan.md`), so the AI already has it in full. Once the
+user condenses or removes a document, recall does not bring the removed
+text back. The owner noted that some documents may deserve to become saved
+memories; that belongs to the Memory Assistant and is not part of this
+plan.
 
-**How big an entry is.** A starting size is chosen by measurement (G.15),
-inside the embedding model's limit. Published starting points are 400
-characters (SillyTavern) and 256 tokens. One study found that chunk size
-changed results only slightly, and another found that automatic
-"semantic chunking" did no better than plain fixed sizes on realistic text
-(G.18). So a simple paragraph rule is supported, and the size is tuned, not
-guessed.
+**Small passages, whole delivery.** Search runs on passages. What the AI
+receives is the whole exchange the passage belongs to, or a marked excerpt
+when the exchange is too large (G.8).
 
-**Small entries, whole delivery.** Search runs on the small entries. What
-the AI receives is always the whole exchange the entry belongs to, never a
-fragment.
-
-**What is indexed.** The text of messages. Messages hidden from the AI are
-never recalled (G.5a rule 1).
-
-**Attached documents and images are not indexed in this work (Proposed).**
-Checked in the code and `document-includes-plan.md` on 2026-11-11: an
-attached document is sent to the AI with every message until the user
-condenses it, reduces it, or removes it. So the AI already has it in full,
-and recall has nothing to add. Once the user condenses or removes a
-document, that is the user's choice, and recall does not bring the removed
-text back. The owner noted on 2026-11-11 that some documents may deserve to
-become saved memories. That belongs to the Memory Assistant and is not part
-of this plan.
-
-**Storage design.** Three linked stores:
+**Storage design.** Four linked stores, in an encrypted database on the
+phone, separate from the stored chats and from the saved-memory database:
 
 | Store | One row is | Key | Points to |
 |---|---|---|---|
-| Passages | One entry (about a paragraph) | chat ID, message ID, position in the message | The message, by its permanent ID, with the start and end of the passage inside the message text, and the exchange it belongs to |
-| Passage vectors | One vector | the passage's text fingerprint and the model that made it | Nothing. Any passage with that fingerprint uses it |
+| Passages | One passage | chat ID, message ID, order within the message | The message, by its permanent ID |
+| Passage vectors | One vector | search-text fingerprint, model, vector size | Nothing. Any passage with that fingerprint uses it |
 | Passage keywords | The searchable words of one passage | the passage row | The passage |
-| Index state | One row per chat | chat ID | Which saved version of the chat the index describes, how many passages still wait for a vector, and whether the chat is fully indexed |
+| Index state | One row per chat | chat ID | Which saved version of the chat the index describes, how many passages wait for a vector, and whether the chat is fully indexed |
 
-- The original text is **not copied** into a second permanent home. A
-  passage records where it sits inside its message. The message stays the
-  only source.
-- Vectors are keyed by text fingerprint, not by passage row. Making a
-  vector is the slow step, so text that has not changed is never embedded
-  twice, including after the passages are rebuilt or a message is edited
-  elsewhere.
-- Passages and keywords are derived and can be dropped and rebuilt at any
-  time. Vectors are kept through a rebuild.
-- AI notes (G.11) are their own rows, keyed to a passage or an exchange,
-  never mixed into the passage text.
-- A passage records what kind of source it points to. Today the only kind
-  is a chat message. Recording the kind means a later system for larger
-  documents (G.1 item 13) can add its own passages to the same stores
-  without a rebuild.
+- The stored chat stays the only home of the conversation. A passage holds
+  positions, not a copy of the message.
+- The keyword store does have to hold the passage's words to be searchable,
+  as the chat search index already does. It is encrypted, derived, and
+  removed with its passage. Where the database allows it, only the word
+  index is kept, not a readable copy of the text.
+- A vector is keyed by the search text's fingerprint, not by the passage
+  row. Making a vector is the slow step, so the same search text is never
+  embedded twice, including after passages are rebuilt.
+- Passages, keywords, and index state can be dropped and rebuilt from the
+  chats at any time. Vectors are kept through a rebuild.
 
-**Reused as it is:** permanent message IDs (`MessageIdentity.kt`); the rule
-for which messages are searchable and how their text is read
-(`SearchableMessageProjection.kt`); the embedding model, its lock, and
-vector maths (`Librarian.kt`, `VectorMath.kt`); the keyword word rules
-(`KeywordText.kt`).
+**Reused as it is:** permanent message IDs; the Summarizer's model-facing
+text for each message; the embedding model and vector maths; the keyword
+word rules; the chat index's triggers, revision check, and journal method.
 
-**Extended:** the chat index's refresh, journal, rebuild, deletion, and
-restore handling (`ChatSearchIndexManager.kt`, `ChatSearchIndexJournal.kt`)
-gain the passage stores as a second thing they keep in step. The scoring in
-`LiveRetrieval.kt` is written for saved memories and is generalized so it
-can score passages too, without changing saved-memory results.
+**Extended:** the embedding model gains a token count. The scoring in
+`LiveRetrieval.kt` is generalized so it can score passages as well as
+saved memories, without changing any saved-memory result. Every use of the
+embedding model moves onto one queue (G.5a rule 6).
 
-**New:** the three stores above, the passage cutter, background embedding
+**New:** the four stores, the passage cutter (G.5b), background embedding
 of passages, and recall.
 
-**Not changed:** the existing chat search feature and its one-entry-per-
-message index, the saved-memory vector table, and the stored chats.
+**Not changed:** the stored chats, the chat search feature and its index,
+the saved-memory vector table, the Summarizer, and the existing text
+splitters.
+
+## G.5b Chunking: how a message is cut into passages (Proposed)
+
+Chunking decides what each index entry means, so it is settled before the
+index is built. It runs on the phone, costs the user nothing, and uses no
+AI model beyond the embedding model.
+
+**What the research supports.** A simple rule based on paragraphs and
+sentences. A study of automatic "semantic chunking" found it did no better
+than plain sizes on realistic text, and splitting by topic only helped when
+a capable paid model did it (G.18). So the cutter is a plain rule, made
+careful, not a clever one.
+
+**The goals, in order.**
+1. Every character of the message is in exactly one passage.
+2. Every passage can be read in full by the embedding model.
+3. A passage is large enough to mean something on its own.
+4. A small detail is not buried in a passage about something else.
+5. Nothing that belongs together is lost at a boundary.
+
+**Step 1: split the message into natural pieces.** In this order:
+paragraphs (a blank line); then lines, which keeps code, lists, and tables
+intact; then sentences; then clauses; then words; and last, between two
+characters, never through the middle of one. A piece is only split further
+when it is too large for a passage.
+
+**Step 2: join short neighbouring pieces.** Short pieces next to each other
+in the same message are joined, in order, until the passage reaches the
+target size. Four one-line paragraphs become one passage, not four vague
+ones. Pieces are never joined across two messages.
+
+**Step 3: respect the two sizes.**
+- **The target size** is what the cutter aims for. Starting value: about
+  256 tokens, the figure most often used in published work. A smaller
+  target finds small details better and a larger one carries more meaning;
+  the right value for this app is measured in stage 2 and is adjustable.
+- **The hard limit** is the embedding model's limit (512 tokens today),
+  counting the instruction prefix and special tokens. No passage's search
+  text may exceed it.
+
+**Step 4: cutting does not depend on a model being present.**
+- The model can be absent or changed, and keyword recall must still work
+  without it. So the cutter measures size with a model-independent
+  estimate and aims well under the hard limit.
+- When a vector is about to be made, the search text is measured with the
+  real tokenizer. If it does not fit, that message is cut again with a
+  smaller target and its passages are replaced. A passage is marked as
+  embedded only when the model read all of its search text.
+- A model with a different limit therefore needs no change to the rules.
+
+**Step 5: carry meaning across boundaries.** Two protections, both wanted:
+- **Overlap in the search text only.** The search text of a passage begins
+  with the last sentence of the passage before it, when both are in the
+  same message and it fits. The original text is not overlapped, so no
+  character is delivered twice.
+- **Neighbour links.** Each passage records the one before and after it, so
+  recall can add the neighbour when a match cannot be understood alone.
+
+**Step 6: give short replies their question.** "It needs to survive. Don't
+clear the composer." means little alone. When a passage is short, its
+search text also includes the start of the message it answers: for an AI
+reply, the user's message; for a short user message, the end of the AI
+reply before it. This uses no AI call. The context is only in the search
+text; the original text and what the AI receives are unchanged.
+- It applies only below a size threshold. Adding context to a long passage
+  would blur it.
+- Because the search text then depends on the neighbouring message, an
+  edit to that message also remakes the search text of the passages that
+  borrowed from it.
+
+**Step 7: record who is speaking.** The search text states whether the
+user or the AI said it, using the embedding model's own title slot, so
+"I moved to Leeds" from the user is not confused with the AI saying it.
+Whether this improves results is measured in stage 2; it is dropped if it
+does not.
+
+**Very short messages.** "ok", "thanks", and "exactly" have no meaning to
+search for. Each is still a passage, so every character is covered, and it
+is found through its exchange. On its own it has no informative words and
+cannot pass the relevance gate.
+
+**Versions.** The cutting rules have a version number, stored on every
+passage. When the rules or the target size change, chats are re-cut in the
+background and the old passages are replaced. Unchanged search text keeps
+its vector.
+
+**Languages.** Sentence and word boundaries are found with the platform's
+own language-aware tools, so cutting works in any language. The keyword
+word rules are written for English; other languages rely more on meaning
+search. That limit is stated, not hidden.
+
+**What the cutter never does:** change a message; drop a character; join
+two messages; call a paid model; or leave a passage the embedding model
+cannot read in full.
+
+**Tests the cutter must pass, written with it:**
+- joining every passage of a message, in order, gives back the message
+  exactly, for ordinary text, very long text, text with no spaces, text
+  with no punctuation, code, tables, emoji, and non-English text;
+- no search text exceeds the model's limit, measured with the real
+  tokenizer;
+- short neighbouring paragraphs share a passage;
+- a detail in the middle of a long message has a passage that contains it;
+- the same message always cuts the same way.
 
 ## G.5a Rules the index must guarantee (Proposed)
 
-Added after an outside review on 2026-11-10. Each point was checked in the
-code and is true today. These are requirements for stage 1, not options.
+Added after outside reviews and an audit of the code on 2026-11-10 and
+2026-11-11. Each point was checked in the code. These are requirements for
+stage 1, not options.
 
-**1. A message hidden from the AI is never recalled.**
+**1. Only what the AI may be sent can be recalled.**
 - The app lets the user hide a message from the AI
   (`MessageVisibility.kt`). Everything that sends conversation to a model
-  must skip it.
-- The chat search index does not apply that rule
-  (`SearchableMessageProjection.kt`), because it serves the user's own
-  search. It must not be reused for recall as it is.
-- Rule: a hidden message is not eligible for recall. Eligibility is checked
-  twice: when indexing, and again at the moment of recall against the
-  stored message, so hiding a message takes effect at once even when
-  background indexing has not caught up.
-- The same double check applies to deleted messages, unfinished replies,
-  and reply versions that are not the one shown.
+  must skip it. The chat search index does not apply that rule, so it is
+  not reused for recall as it is.
+- Rule: a message is eligible only when it is visible to the AI, finished,
+  and the version the AI is sent. Eligibility is checked twice: when
+  indexing, and again at the moment of recall against the stored message.
+  Hiding a message therefore takes effect at once, even when background
+  indexing has not caught up. The same holds for a deleted message.
+- A test proves that the set of messages the index may recall is the same
+  as the set the chat request may send.
 
 **2. No text is ever cut off silently.**
 - The tokenizer drops everything past the model's limit without saying so
   (`HfTokenizer.encode`).
-- Rule: the passage cutter measures every piece with the real tokenizer,
-  counting the instruction prefix and special tokens, and cuts again until
-  the piece fits. A passage is recorded as embedded only when all of its
-  text was read by the model.
+- Rule: before a vector is made, the search text is measured with the real
+  tokenizer, counting the instruction prefix and special tokens. If it does
+  not fit, the message is cut again (G.5b step 4). A passage is recorded
+  as embedded only when all of its search text was read.
 
 **3. Vectors have an owner and a lifetime.**
-- A vector is reused only when the text, the embedding model, the vector
-  size, and the way the text was prepared all match.
+- A vector is reused only when the search text, the embedding model, the
+  vector size, and the cutter version that prepared the text all match.
 - When the last passage that uses a vector is deleted or changed, the
   vector is removed.
 - Vectors made by a model that is no longer selected are removed once the
   new model's vectors are complete.
 - Deleting a chat removes everything derived from it, including vectors no
   other chat uses.
+- The user must be able to delete the whole index. Its wording and place
+  are shown to the owner before stage 1 is built.
 
-**4. An index update is all or nothing.**
-- The chat search index already records which saved version of a chat it
-  was built from and refuses stale results (`ChatSearchIndexManager.kt`,
-  `ChatSearchIndexJournal.kt`). The passage stores follow the same method.
-- Rule: passages and keywords for a chat are replaced together, in one
+**4. An index update is correct or it does not happen.**
+- Passages are updated **one message at a time**, never by replacing the
+  whole chat. When a chat is saved, its messages are compared with the
+  index by permanent ID and original-text fingerprint. Only messages that
+  are new, changed, or gone are touched.
+- The passages and keywords of one message are replaced together, in one
   database transaction, against a recorded version of the chat. Before
   publishing, the version is checked again. A background job that finishes
   after the chat changed throws its result away.
-- A vector that arrives for text that no longer exists is discarded.
+- A vector that arrives for search text that no longer exists is
+  discarded.
+- A failure leaves the previous correct state in place and the chat marked
+  as needing a refresh. It never leaves half-updated entries.
 
 **5. Search stays fast as conversations grow.**
-- Saved-memory search compares the message against every vector, which
-  its own notes say suits up to about 50,000 memories (`Librarian.kt`).
+- Saved-memory search compares the message against every vector, which its
+  own notes say suits up to about 50,000 memories (`Librarian.kt`).
   Conversation passages will outnumber saved memories many times over.
 - Rule for stages 1 to 3: meaning search looks only at the current chat's
   passages. Keyword search uses the database's own keyword index. Vectors
   are read in bounded batches, never all chats at once.
 - Memory use is bounded too: as each batch is scored, only the best
-  candidates so far are kept and the batch is released. The vectors of a
-  long chat are never all held in memory together.
+  candidates so far are kept and the batch is released.
 - Passage counts, indexing progress, and search time are recorded so they
   can be shown and measured.
 - Recall from other chats needs a different search method for large
@@ -362,23 +543,17 @@ code and is true today. These are requirements for stage 1, not options.
 - This also fixes the unlocked call noted in G.2.
 
 **7. Only messages with a permanent ID are indexed.**
-- Checked in the code on 2026-11-11: every new message receives a
-  permanent ID, and an older chat's messages receive theirs the first time
-  that chat is opened (`ChatActivity.kt`, `MessageIdentity.kt`). So the
-  chat a user is in always has IDs, and recall inside the current chat
-  loses nothing.
+- Every new message receives a permanent ID, and an older chat's messages
+  receive theirs the first time that chat is opened. So the chat a user is
+  in always has IDs, and recall inside the current chat loses nothing.
 - **Owner (2026-11-11):** no migration is built to give IDs to old chats
   that have never been reopened. Those chats are simply not indexed until
-  the user opens them. Backwards compatibility for them is not wanted.
-- Missing scope stays private to its own chat (G.7).
+  the user opens them.
 
 **8. Restored and merged chats are checked, never assumed.**
 - **Owner (2026-11-11):** after a restore, every message must be checked
   for whether it is already indexed. A user may also combine the history
   of two phones.
-- The app already restores chats in two ways, replacing everything or
-  merging a backup into what is on the phone (`ChatMergePlanner.kt`,
-  `PortableRestoreMode`).
 - Rule: after any restore or merge, each affected chat is compared with
   its index state, message by message, using the permanent message ID and
   the text fingerprint:
@@ -388,19 +563,34 @@ code and is true today. These are requirements for stage 1, not options.
   - indexed here but no longer in the chat: its entries are removed.
 - A message is never indexed twice, and a merged chat never ends up with
   entries from both phones for the same message.
-- Because backups do not carry the index (rule below), a restored phone
-  rebuilds it from the chats, and the same check applies.
+
+**9. The index never depends on how chats are stored.**
+- Two chat stores exist and the app will move from one to the other
+  (G.4). The index reads through the app's chat-reading layer and keys on
+  permanent IDs only, so the move needs no change to the index.
+- When a rename changes a chat's ID, its entries move to the new ID in the
+  same step, or the chat is marked for a refresh.
+
+**10. Indexing never harms the chat.**
+- Indexing runs off the main thread, never delays typing, scrolling,
+  sending, or opening a chat, and never blocks a save.
+- If the index is missing, damaged, or behind, the chat is sent exactly as
+  it is today.
+- An index failure is never shown as a chat error.
 
 **The indexing steps for one new or changed message:**
 
-1. Check that it may be recalled: visible to the AI, finished, and the
-   version shown.
-2. Cut it into passages that each fit the model, recording exactly where
-   each sits in the message.
-3. Replace that message's passages and keywords in one transaction.
-4. Reuse any vector that already matches. Queue the rest.
-5. Make queued vectors in the background, behind any live request.
-6. Mark the chat's index state complete when nothing is waiting.
+1. Check that it may be recalled: visible to the AI, finished, the version
+   the AI is sent, and holding a permanent ID.
+2. Take its model-facing text and cut it into passages (G.5b), recording
+   exactly where each sits in the message.
+3. Stamp scope and the exchange it belongs to.
+4. Replace that message's passages and keywords in one transaction.
+5. Build each passage's search text. Reuse any vector that already
+   matches. Queue the rest.
+6. Make queued vectors in the background, behind any live request,
+   measuring each with the real tokenizer first.
+7. Mark the chat's index state complete when nothing is waiting.
 
 ## G.6 Search (Proposed)
 
@@ -441,17 +631,22 @@ reach companion-only material.
   - real-life and project entries never enter roleplay.
 - **Open:** which ordinary chats may see each other, and whether cross-chat
   recall is chosen per chat or per companion (G.17).
-- **Where an entry's scope comes from.** A chat's companion, project, or
+- **Where a passage's scope comes from.** A chat's companion, project, or
   roleplay settings can change during its life, so the chat's settings
-  today are not a safe label for its older messages. The memory system
-  already stamps each captured stretch of conversation with the companion,
-  world, campaign, character, and project that were active when it was
-  captured (`TranscriptRecord`, used by `ArchivistSceneContext`), and
-  never infers them afterwards. The index takes scope from that record
-  where one exists, and stamps new messages itself as they are written.
-- **Unknown scope is treated as private to its own chat.** An older message
-  with no recorded scope can be recalled inside its own chat and is never
-  offered to another chat.
+  today are not a safe label for its older messages.
+  - **New messages:** scope is stamped when the turn finishes, at the one
+    place in `ChatActivity.kt` that already passes the chat's companion,
+    world, campaign, character, and project to
+    `TranscriptRecorder.recordTurn`, using those same values. The index
+    does this itself, so it works whether or not the memory system is set
+    up.
+  - **Older messages:** scope is taken from the stored turn record where
+    one names that message. That record exists only for turns captured
+    while the memory system was set up.
+  - **Everything else:** scope is "unknown".
+- **Unknown scope is private to its own chat.** Such a passage can be
+  recalled inside its own chat and is never offered to another chat.
+- **Scope is never guessed** from the chat's present settings.
 - **To verify when stage 1 is built:** how much existing conversation has a
   recorded scope.
 
@@ -628,11 +823,15 @@ message-level work while the user chats, as an option.
 | Event | What happens to the index |
 |---|---|
 | New message | Its entries are added in the background |
-| Message edited | Entries for that message are replaced. Unchanged paragraphs keep their vectors |
+| Message edited | Passages for that message are replaced, and the search text of short neighbouring passages that borrowed from it (G.5b step 6). Unchanged search text keeps its vector |
 | Reply regenerated or another version chosen | Entries follow the version that is shown |
 | Message deleted | Its entries and any AI notes on them are removed, and any vector nothing else uses |
 | Message hidden from the AI, or made visible again | Takes effect on recall at once (G.5a rule 1) |
-| Chat deleted | All its entries are removed |
+| Chat deleted | All its entries are removed, and any vector nothing else uses |
+| Chat renamed | For older chats a rename changes the chat's ID. Its entries move to the new ID (G.5a rule 9) |
+| Reply finishes streaming | Indexed then, not while streaming. A failed reply is not indexed |
+| Cutting rules or target size changed | Chats are re-cut in the background. Unchanged search text keeps its vector |
+| The user deletes the index | Everything derived is removed. The chats are untouched |
 | Backup restored, or a backup merged into the phone's chats | Each affected chat is checked message by message (G.5a rule 8). Nothing is indexed twice |
 | Embedding model changed | Keyword search keeps working at once. Vectors are remade in the background |
 | Chat settings changed (companion, project, roleplay) | Scope labels on later messages follow the new settings |
@@ -662,8 +861,11 @@ misled, and never as a generic error.
   scrolling, or sending. Search time is added to sending, and is measured
   on the owner's Pixel 8. No public figure exists for this model on a
   phone's ordinary processor.
-- **Battery.** Indexing existing chats is heavy work. When it runs is an
-  open decision (G.17).
+- **Battery.** Indexing existing chats is heavy work. **Owner
+  (2026-11-11):** it runs in the background and the user never waits for
+  it. What "background" means on the phone is still open (G14): only while
+  the app is open, or also after the app is closed, which on Android needs
+  a visible notification.
 - **Storage.** A 256-number vector is about 1 KB per entry.
 - **Privacy.** The index stays on the phone, encrypted like the chat search
   database. Nothing is sent anywhere by indexing. Only the optional AI
@@ -700,7 +902,7 @@ each starts.
 
 | Stage | What is built | Depends on |
 |---|---|---|
-| 1 | The passage stores, the passage cutter, background embedding, scope labels, upkeep, and every rule in G.5a (G.5, G.5a, G.7, G.12) | Nothing |
+| 1 | The passage cutter, the four stores, background embedding, scope labels, upkeep, and every rule in G.5a (G.5, G.5a, G.5b, G.7, G.12) | Nothing |
 | 2 | Conversation search, the subject check, and a way to inspect what a message would recall (G.6, G.9a) | Stage 1 |
 | 3 | Recall added to real chat requests, with the final size check (G.8) | Stage 2 |
 | 4 | Saved-memory fixes: long messages and carry-over (G.9, G.10) | The subject check from stage 2 |
@@ -718,7 +920,7 @@ the index started sooner. Neither blocks the other.
 ## G.17 Open decisions for the owner
 
 Asked one at a time, and only when the stage that needs the answer is
-about to start. Only G5 is still needed before stage 1. Each has a
+about to start. G14 and G15 are needed before stage 1. Each has a
 recommendation.
 
 | # | Question | Recommendation | Needed before |
@@ -727,7 +929,7 @@ recommendation.
 | G2 | How large is recall's own size limit, and can the user set it? | Adjustable, with a starting value from measurement | Stage 3 |
 | G3 | When a chat no longer fits the model, may the user choose to send recent messages plus recalled exchanges? | Yes, as an explicit choice. Warn or block stays the default | Stage 3 |
 | G4 | Does recall apply in Experimental Mode? | No. That mode sends only the current message by design | Stage 3 |
-| G5 | Are attached files and images indexed? | Not at first. Message text only | Stage 1 |
+| G5 | Are attached files and images indexed? | **Decided (owner, 2026-11-11):** no, not in this work | Decided |
 | G6 | When are existing chats indexed? | **Decided (owner, 2026-11-11):** in the background, never on opening a chat. Proposed details: newest first, with progress shown and a way to pause | Decided |
 | G7 | Do backups carry the index? | **Decided (owner, 2026-11-11):** no. It is rebuilt after a restore | Decided |
 | G8 | Which jobs does the live AI worker do, and is it chosen per chat? | Per chat. Start with marking what matters | The live AI worker |
@@ -735,6 +937,8 @@ recommendation.
 | G10 | Is a recalled exchange carried over like a saved memory? | Yes, under the same rule | Stage 4 |
 | G11 | What does the user see when recall adds something? | Show it where sent memories are shown today, so the user can always tell what the AI was given | Stage 3 |
 | G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E of the memory plan? | If not, relabel those rows as proposed | Any time |
+| G14 | Does background indexing of existing chats continue after the app is closed? | While the app is open only, picking up where it stopped. Nothing new appears on the phone. Continuing after the app is closed would need a visible notification | Stage 1 |
+| G15 | Where does the user see indexing progress, pause it, and delete the index, and in what words? | Shown to the owner as exact wording and placement before stage 1 is built | Stage 1 |
 
 ## G.18 Research behind this plan (2026-11-10)
 
