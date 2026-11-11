@@ -836,7 +836,8 @@ deleted, or unfinished message; make a paid call; or delay sending beyond
 the time measured and accepted in stage 2.
 
 **A time limit.** Retrieval has a fixed time allowance, set from the
-stage 2 measurements. If it has not finished in that time, the message is
+stage 2 measurements. Recall is never skipped merely because searching
+takes some time. Only if it has not finished within the allowance, the message is
 sent exactly as it is today, without recall, and the "what was sent" view
 shows that recall was skipped. A slow phone or a very long chat can
 therefore make recall miss a message, but can never hold a message back.
@@ -941,8 +942,8 @@ fit:
   request-size check runs once on the total. When recall would push the
   request over the model's limit, recalled exchanges are removed, least
   relevant first, until it fits. If it still does not fit with none, the
-  request is handled exactly as it is today. Nothing else gives way to
-  recall unless the user has chosen that (G3).
+  request is handled exactly as it is today. Nothing else ever gives way
+  to recall.
 
 **When an exchange is too large to add whole.** Indexing and delivery are
 separate. Every part of it stays searchable. For delivery, the whole
@@ -998,11 +999,59 @@ from both, so the two can never differ. A test sends the same message
 down both and compares what was added.
 
 **Other rules.**
-- **When the chat no longer fits the model:** today the app warns or
-  blocks. That stays the default. Any other behaviour is the user's
-  explicit choice (G3).
-- **Experimental Mode** sends only the current message by design. Whether
-  recall applies there is open (G4).
+- **When the chat no longer fits the model:** the app warns or blocks, as
+  it does today. Recall changes nothing about that (Owner, 2026-11-11).
+- **Experimental Mode** sends only the current message by design. Recall
+  does not apply there (G.8b).
+
+## G.8b The recall setting and where recall applies (Owner, 2026-11-11)
+
+Decided by the owner on 2026-11-11.
+
+**The setting.**
+- It is in **Memory Controls**, is called **Conversation Recall**, and
+  starts **off**. It is one setting for all chats, not chosen per
+  conversation.
+- Its explanation reads: "Brings back earlier parts of the current chat
+  when they relate to your message, including parts that were summarized.
+  Recalled text is included in your normal AI requests."
+- Turning it on may also turn on Index Conversations, so one switch is
+  enough.
+- It **never downloads an embedding model by itself.** With no model,
+  recall works by keywords.
+- If the user later turns Index Conversations off, indexing is **not
+  silently restarted**, by recall or by anything else.
+
+**Where recall applies.**
+- **A chat whose memory is turned off** with the existing per-chat switch:
+  recall is off in that chat too. That switch stays the one way to keep
+  the memory system out of a chat.
+- **Roleplay chats:** yes. Recall only ever reads the same chat.
+- **Experimental Mode:** no. That mode sends only the current message.
+- **Hands-free voice chat:** yes. It has a small, measured time allowance.
+  Recall is not skipped merely because searching takes some time; it is
+  skipped only when the allowance is exceeded.
+- **A chat that no longer fits the AI model:** nothing changes. The app
+  warns or blocks as it does today.
+
+**Room for recalled text.** A starting amount is set through testing. It
+is adjustable in **Advanced Memory Settings**, not only on the test
+screen. Its label and explanation are shown to the owner before step 3.
+
+**What the user sees.** Recalled exchanges are listed on the existing
+screen that shows which memories were sent with a reply, as a second
+group.
+
+**Follow-ups.** A recalled exchange stays through follow-up messages
+under the same rule as saved memories (G.9).
+
+**The recall test screen** is in Advanced Memory Settings, Debug section,
+beside Memory Search Test, and is called **Conversation Recall Test**.
+
+**Debug information.** Recall and carry-over may add information to the
+existing memory debugging view, so a wrong result can be explained. This
+does not authorize any new general application log entries. The exact
+lines are shown to the owner before step 3.
 
 ## G.8a How the parts connect
 
@@ -1061,7 +1110,8 @@ conversations before anything is built (G.15).
 They share the subject check (G.9a) and the final size check (G.8), and
 nothing else. Each has its own size limit.
 
-**Open:** whether a recalled exchange is also carried over (G10).
+A recalled exchange is carried over under the same rule (Owner,
+2026-11-11; G.8b).
 
 ## G.9a The subject check (Proposed)
 
@@ -1257,11 +1307,14 @@ What the user is told:
 | Critical: the index could not be rebuilt | Title: Conversation Index Could Not Be Rebuilt. Text: Indexing and Conversation Recall are off until this is fixed. Your conversations are not affected. See the Error Log for details. Button: Okay |
 | Recall failed for one message | Conversation recall unavailable this turn — continuing without it |
 
-**A snack bar for major errors (Owner, 2026-11-11).** A major error must be
-shown in a snack bar that the user has to acknowledge; it does not
-disappear by itself. How it relates to the critical message above, and its
-short wording, are still open (G20). `ui-style-guide.md` has no snack bar
-style yet; the builder creates a shared one and adds it to the guide.
+**A snack bar for every index error (Owner, 2026-11-11).** Any error in
+the index system is brought to the user in a snack bar that stays until
+the user acknowledges it. The user must be able to tell what is happening
+behind the scenes. Each error has a full message, in plain words, saying
+what happened, what is not affected, and what the user should do. The
+messages are written and approved by the owner before step 1F (G20).
+`ui-style-guide.md` has no snack bar style yet; the builder creates a
+shared one and adds it to the guide.
 
 ## G.14 Cost, speed, storage, privacy (Proposed)
 
@@ -1394,8 +1447,8 @@ keep, or search the index. With no model: 1C and 1E work in full, 1D
 leaves passages waiting, 1F shows that search is by keywords only, and 2A
 and 3 recall by keywords. Each step's tests include the no-model case.
 
-Steps 4A and 4B fix gaps that are live on the beta today. 4A depends on
-nothing and can be built at any time, including first.
+Steps 4A and 4B fix gaps that are live on the beta today. **Owner
+(2026-11-11): step 4A is built first.** It depends on nothing.
 
 ### Step 1A: the passage cutter (Routine)
 
@@ -1532,16 +1585,18 @@ nothing and can be built at any time, including first.
 
 - **Goal:** a way to type a message for a chat and see what would be
   recalled and why, and measured starting values for the numbers.
-- **Before building:** the screen's wording and placement are shown to the
-  owner. The natural home is beside the Memory Search Test screen.
+- **Placement and name are decided (G.8b).** Before building, the screen's
+  labels are shown to the owner as one list.
 - **Done when:** the numbers in G.15 have measured starting values recorded
   in this plan, with search time on the owner's phone.
 
 ### Step 3: context assembly (Hard)
 
 - **Goal:** recall is added to real requests (G.8, G.8a point 3).
-- **Before building, the owner decides or approves:** G2, G3, G4, G11,
-  G16, G17, G18, and the exact text given to the AI.
+- **Before building, the owner approves:** the exact text given to the
+  AI; the wording for the "what was sent" group, the recall room setting,
+  and the debug view lines; and G24. Everything else for this step is
+  decided (G.8b).
 - **Read:** G.8, G.8a; both request builders in `ChatActivity.kt`;
   `memory/enforcer/PromptAssembler.kt`; `util/RequestCapacity.kt`.
 - **Build:** assembly in its own file, called from both request builders
@@ -1639,24 +1694,28 @@ recommendation.
 | # | Question | Recommendation | Needed before |
 |---|---|---|---|
 | G1 | Is recall on for every chat, or chosen per chat? | **Decided (owner, 2026-11-11):** one setting in a settings menu, applying to all chats. Not chosen per conversation. Which menu, its wording, and whether it starts on or off are G17 | Decided |
-| G2 | How large is recall's own size limit, and can the user set it? | Adjustable, with a starting value from measurement | Stage 3 |
-| G3 | When a chat no longer fits the model, may the user choose to send recent messages plus recalled exchanges? | Yes, as an explicit choice. Warn or block stays the default | Stage 3 |
-| G4 | Does recall apply in Experimental Mode? | No. That mode sends only the current message by design | Stage 3 |
+| G2 | How large is recall's own size limit, and can the user set it? | **Decided (owner, 2026-11-11):** a starting amount from testing, adjustable in Advanced Memory Settings (G.8b). Its label is shown to the owner before step 3 | Decided |
+| G3 | When a chat no longer fits the model, does anything change? | **Decided (owner, 2026-11-11):** no. It warns or blocks as today | Decided |
+| G4 | Does recall apply in Experimental Mode? | **Decided (owner, 2026-11-11):** no | Decided |
 | G5 | Are attached files and images indexed? | **Decided (owner, 2026-11-11):** no, not in this work | Decided |
 | G6 | When are existing chats indexed? | **Decided (owner, 2026-11-11):** in the background, never on opening a chat. Proposed details: newest first, with progress shown and a way to pause | Decided |
 | G7 | Do backups carry the index? | **Decided (owner, 2026-11-11):** no. It is rebuilt after a restore | Decided |
 | G8 | Which jobs does the live AI worker do, and how is it turned on? | Open. Start with marking what matters. The owner chose one app-wide setting for recall, not a per-conversation one | The live AI worker |
 | G9 | Across chats, which ordinary chats may see each other? | Same companion or same project only, at first | Recall from other chats |
-| G10 | Is a recalled exchange carried over like a saved memory? | Yes, under the same rule | Stage 4 |
-| G11 | What does the user see when recall adds something? | Show it where sent memories are shown today, so the user can always tell what the AI was given | Stage 3 |
-| G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E of the memory plan? | If not, relabel those rows as proposed | Any time |
+| G10 | Is a recalled exchange carried over like a saved memory? | **Decided (owner, 2026-11-11):** yes, under the same rule | Decided |
+| G11 | What does the user see when recall adds something? | **Decided (owner, 2026-11-11):** listed on the existing screen that shows which memories were sent, as a second group. Its wording is shown to the owner before step 3 | Decided |
+| G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E of the memory plan? | **Decided (owner, 2026-11-11):** silence does not count as approval. Explicitly approved decisions are kept; everything else in the memory plan is relabelled as proposed | Decided |
 | G14 | Does background indexing of existing chats continue after the app is closed? | **Decided (owner, 2026-11-11):** yes. The notification this requires is part of G15 | Decided |
 | G15 | Where does the user see indexing progress, pause it, and delete the index, and what does the notification say? | **Decided (owner, 2026-11-11):** as recorded in G.16a. Index Conversations starts off | Decided |
-| G16 | Does recall apply in hands-free voice chat, where any delay is felt? | Yes, under the time limit in G.6, so a slow search is skipped and never delays a reply | Stage 3 |
-| G17 | Which settings screen holds the recall setting, what is it called, what does its explanation say, and does it start on or off? | **Decided (owner, 2026-11-11):** it is in Memory Controls. Its name, explanation, and starting state are still open | Stage 3 |
-| G18 | The app already has a per-chat switch for saved memories. Does turning that off for a chat also stop recall in that chat? | Asked before step 3 | Stage 3 |
+| G16 | Does recall apply in hands-free voice chat? | **Decided (owner, 2026-11-11):** yes, with a small measured time allowance. Skipped only when the allowance is exceeded | Decided |
+| G17 | Which settings screen holds the recall setting, what is it called, what does its explanation say, and does it start on or off? | **Decided (owner, 2026-11-11):** as recorded in G.8b | Decided |
+| G18 | Does the per-chat memory switch also stop recall in that chat? | **Decided (owner, 2026-11-11):** yes | Decided |
 | G19 | The exact Error Log lines, the database check's line and hint for the conversation index, and the wording that tells the user of a failure | **Decided (owner, 2026-11-11):** as recorded in G.13a | Decided |
-| G20 | Which errors count as major, what the snack bar says, and whether it replaces the critical message or opens it | Proposed to the owner before step 1F | Step 1F |
+| G20 | The snack bar and full message for each index error | **Decided (owner, 2026-11-11):** every index error raises one. The messages are written and approved before step 1F | Step 1F |
+| G21 | Where the recall test screen goes, and its name | **Decided (owner, 2026-11-11):** Advanced Memory Settings, Debug section; Conversation Recall Test | Decided |
+| G22 | May recall and carry-over add to the existing memory debugging view? | **Decided (owner, 2026-11-11):** yes. No new general application log entries | Decided |
+| G23 | Which step is built first? | **Decided (owner, 2026-11-11):** step 4A, the long-message fix | Decided |
+| G24 | If the user turns Index Conversations off while Conversation Recall is on, what happens to recall? | Open. Indexing is never silently restarted (G.8b) | Step 3 |
 
 ## G.18 Research behind this plan (2026-11-10)
 
