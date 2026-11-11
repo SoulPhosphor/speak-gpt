@@ -1257,34 +1257,271 @@ agreeing. The owner ranks a wrong memory as worse than a missed one, so
 **These are engineering numbers.** The owner is not asked to choose them.
 Each has a starting value from measurement and is adjustable afterwards.
 
-## G.16 Build stages
+## G.16 Build stages and work orders
 
-The design covers all stages. Each stage works on its own, is its own pull
-request, and comes with its own tests. The owner chooses the order and when
-each starts.
+The design covers everything. Building is split into steps small enough to
+hand to an agent one at a time: "build step 1A". Each step is one pull
+request with its own tests, and each leaves the app working.
 
-| Stage | What is built | Depends on |
-|---|---|---|
-| 1 | The passage cutter, the four stores, background embedding, scope labels, upkeep, and every rule in G.5a (G.5, G.5a, G.5b, G.7, G.12) | Nothing |
-| 2 | Retrieval, the subject check, and a way to inspect what a message would recall and why (G.6, G.8a, G.9a) | Stage 1 |
-| 3 | Context assembly: recall added to real chat requests, with the final size check (G.8, G.8a) | Stage 2 |
-| 4 | Saved-memory fixes: long messages and carry-over (G.9, G.10) | The subject check from stage 2 |
-| Later | An optional on-phone re-ranker (G.6 step 5a), if stage 2 shows it would help | Stage 2 |
-| Later | The optional live AI worker (G.11) | Stage 1 |
-| Later | Recall from other chats, behind the scope walls (G.7) | Stage 3 |
-| Later | Keyword-only recall for users without an embedding model | Stage 3 |
+**How to use this section.** Give the agent this plan and the step's
+letter. The agent reads G.19 first, then the sections the step names, then
+the code files the step names. It builds only that step.
 
-**One choice for the owner about order.** The two saved-memory gaps in
-stage 4 are live on the beta now and affect every chat that uses memory.
-The long-message fix depends on nothing and could be built first. Carry-
-over needs only the subject check, which could be built with it. Putting
-stage 4 first fixes what is broken today sooner; keeping it fourth gets
-the index started sooner. Neither blocks the other.
+**Difficulty** is marked so the owner can choose which model does a step:
+- **Routine:** self-contained, little risk. A lighter model can do it.
+- **Careful:** touches shared code or has several cases to get right.
+- **Hard:** many moving parts, or touches the chat screen. Use the
+  strongest model available, and expect more than one review round.
+
+### Overview
+
+| Step | What is built | Difficulty | The user sees | Depends on |
+|---|---|---|---|---|
+| 1A | The passage cutter | Routine | Nothing | Nothing |
+| 1B | Token counting, and one queue for the embedding model | Careful | Nothing | Nothing |
+| 1C | The passage stores and per-message updating | Hard | Nothing | 1A |
+| 1D | Background embedding of passages | Hard | Nothing | 1B, 1C |
+| 1E | Keeping the index in step with the chats | Hard | Nothing | 1C |
+| 1F | The setting, progress icon, pop-up, notification, and delete | Careful | The approved screens (G.16a) | 1D, 1E |
+| 2A | Retrieval and the subject check | Hard | Nothing | Stage 1 |
+| 2B | The inspector, and the measurements | Careful | A test screen (wording to approve) | 2A |
+| 3 | Context assembly: recall in real requests | Hard | Recall works (wording to approve) | Stage 2 |
+| 4A | Long messages in saved-memory search | Careful | Better memory matches | Nothing |
+| 4B | Carry-over for saved memories | Careful | Memories stay through follow-ups | 2A's subject check |
+| Later | Optional re-ranker; live AI worker; other chats; keyword-only recall | To be designed | | |
+
+Nothing changes for any user until step 1F. Steps 1A to 1E add code that
+stays switched off, because Index Conversations starts off and cannot be
+turned on until 1F.
+
+Steps 4A and 4B fix gaps that are live on the beta today. 4A depends on
+nothing and can be built at any time, including first.
+
+### Step 1A: the passage cutter (Routine)
+
+- **Goal:** a function that takes one message's text and returns its
+  passages, exactly as G.5b describes.
+- **Read:** G.5b; `util/ConversationTokenChunks.kt` to see how the
+  platform's sentence tool is used (do not change or call it).
+- **Build:** new files only, plain Kotlin with no Android screen code. The
+  cutter takes the text, a target size, and a size-estimating function, and
+  returns each passage's start and end. It includes splitting, joining
+  short pieces, the last-resort cut, and the version number.
+- **Not in this step:** search text, overlap, borrowed context (1C), real
+  token counts (1B), any storage.
+- **Done when:** every test listed at the end of G.5b that concerns cutting
+  passes, including that the passages of a message join back into the
+  message exactly.
+
+### Step 1B: token counting and one embedding queue (Careful)
+
+- **Goal:** the app can ask how many tokens a text needs, and every use of
+  the embedding model goes through one queue where a live chat request
+  goes first (G.5a rules 2 and 6).
+- **Read:** G.5a rules 2 and 6; G.2's last point;
+  `memory/librarian/HfTokenizer.kt`, `OnnxEmbeddingModel.kt`,
+  `EmbeddingModel.kt`, `Librarian.kt`.
+- **Build:** a counting function on the tokenizer and the model that
+  counts the instruction prefix and special tokens and never cuts
+  anything off. One queue for all embedding work with two priorities. Move
+  the unlocked call in `Librarian.searchInternal` onto it.
+- **Must not change:** any saved-memory search result, any vector already
+  stored, or what the tokenizer returns for text that fits.
+- **Done when:** existing tests pass unchanged; new tests show the count
+  matches the real encoding, and that a live request is served before
+  queued background work.
+
+### Step 1C: the passage stores and per-message updating (Hard)
+
+- **Goal:** the four stores exist, and one chat's passages can be brought
+  up to date one message at a time (G.5, G.5a rules 1, 3, 4, 7, 9).
+- **Read:** G.4, G.5, G.5a, G.5b steps 5 to 7 and "borrowed context", G.7;
+  `chatsearch/ChatSearchStore.kt` and `ChatSearchIndexManager.kt` for the
+  encrypted-database and revision method; `SummarizerController.kt`
+  (`Snapshot`, `Entry`) for the model-facing text; `MessageVisibility.kt`,
+  `MessageCompletionState.kt`, `MessageIdentity.kt`.
+- **Build:** the encrypted database with the four stores. A function that
+  takes a chat's current messages, compares them with the index by
+  permanent ID and fingerprint, and replaces only what changed, in one
+  transaction per message. Eligibility. Search text, including overlap and
+  borrowed context with its rules. Scope stamping from values passed in.
+  Vector rows are created as "waiting"; no vectors are made in this step.
+- **Confirm in the code and record in this plan:** which stored field
+  holds the reply version the AI is sent.
+- **Must not change:** the chat search feature or its database, the stored
+  chats, the saved-memory database.
+- **Done when:** correctness tests pass for new, edited, deleted, hidden,
+  unfinished, and failed messages; for borrowed context; and for a run
+  interrupted halfway, which must leave the previous correct state.
+
+### Step 1D: background embedding of passages (Hard)
+
+- **Goal:** waiting passages get their vectors in the background, and
+  vectors are reused and removed correctly (G.5a rules 2, 3, 5, 6).
+- **Read:** G.5a; the queue from 1B; `Librarian.kt` for how missing
+  saved-memory vectors are repaired in the background today.
+- **Build:** a background worker that takes waiting passages one at a
+  time, measures the search text with the real tokenizer, re-cuts the
+  message when it does not fit, makes the vector, and stores it by
+  search-text fingerprint. Vector reuse. Removal of vectors nothing uses
+  and of an old model's vectors. Index state per chat. It can be paused
+  and resumed, and it survives the app being closed and reopened.
+- **Not in this step:** running after the app is closed (1F), any screen.
+- **Done when:** tests show no search text is ever cut off, an edit during
+  embedding discards the stale vector, identical search text is embedded
+  once, and a live request is never delayed by indexing.
+
+### Step 1E: keeping the index in step with the chats (Hard)
+
+- **Goal:** every event in G.12 updates the index correctly.
+- **Read:** G.12, G.5a rules 4, 8, 9, G.7;
+  `chatsearch/ChatSearchIndexManager.kt` and where it is called from
+  `ChatPreferences.kt`; `ChatRenameTransaction.kt`; `chatdeletion/`;
+  `backup/portable/ChatMergePlanner.kt`; `ChatSetSourceGeneration`;
+  `TranscriptRecorder.kt` and its one call in `ChatActivity.kt`.
+- **Build:** the hookups, each as small as possible and each calling code
+  in the new files: after a chat is saved; when a reply finishes; when a
+  message is hidden or shown; when a chat is deleted or renamed; after a
+  restore or merge; when the embedding model changes. Scope is stamped
+  where the finished turn is already recorded. Indexing existing chats,
+  newest first.
+- **Confirm in the code and record in this plan:** how much existing
+  conversation has a recorded scope.
+- **Must not change:** how any of those flows behave or how long they
+  take. Indexing is always handed to the background.
+- **Done when:** a test for each row of the G.12 table passes, including
+  restore, merge of two histories, and rename of an older chat.
+
+### Step 1F: what the user sees for indexing (Careful)
+
+- **Goal:** the approved screens in G.16a, and indexing that continues
+  after the app is closed.
+- **Read:** G.16a; `ui-style-guide.md` in full for the parts used
+  (Progress pop-up, toggle rows, section headings, destructive buttons,
+  two-action dialogs, header action icons); `ui-style-adoption.md`;
+  `MemoryAnalysisForegroundService.kt` for how the app already keeps work
+  running with a notification.
+- **Build:** exactly what G.16a lists, with the approved wording. Every
+  visible value comes from a shared style; a missing style is created and
+  added to the guide. `ui-style-adoption.md` is updated.
+- **Must not change:** any other part of the chat header or of Advanced
+  Memory Settings.
+- **Done when:** turning the setting on starts indexing; the icon appears
+  only while indexing runs or is paused; the percentage comes from work
+  actually done; deleting the index removes everything derived and turns
+  the setting off.
+
+### Step 2A: retrieval and the subject check (Hard)
+
+- **Goal:** given a chat and a message, return the exchanges to offer,
+  with every score and reason (G.6, G.9a, G.8a points 1 and 2).
+- **Read:** G.6, G.8a, G.9a, G.10; `LiveRetrieval.kt` and
+  `KeywordText.kt`.
+- **Build:** all nine steps of G.6 and the subject check, as plain Kotlin
+  behind the G.8a interfaces. The time limit. Nothing is added to any
+  request.
+- **Done when:** the quality tests in G.15 that concern "found" and "left
+  out" run and report their scores.
+
+### Step 2B: the inspector and the measurements (Careful)
+
+- **Goal:** a way to type a message for a chat and see what would be
+  recalled and why, and measured starting values for the numbers.
+- **Before building:** the screen's wording and placement are shown to the
+  owner. The natural home is beside the Memory Search Test screen.
+- **Done when:** the numbers in G.15 have measured starting values recorded
+  in this plan, with search time on the owner's phone.
+
+### Step 3: context assembly (Hard)
+
+- **Goal:** recall is added to real requests (G.8, G.8a point 3).
+- **Before building, the owner decides or approves:** G1, G2, G3, G4, G11,
+  G16, and the exact text given to the AI.
+- **Read:** G.8, G.8a; both request builders in `ChatActivity.kt`;
+  `memory/enforcer/PromptAssembler.kt`; `util/RequestCapacity.kt`.
+- **Build:** assembly in its own file, called from both request builders
+  with the smallest possible hookup. The size limits, the final size
+  check, excerpts, date order, labels, and the "what was sent" view.
+- **Must not change:** anything a request contains when recall is off.
+- **Done when:** all quality tests in G.15 pass at the "sent" point, and
+  both request paths add the same text.
+
+### Step 4A: long messages in saved-memory search (Careful)
+
+- **Goal:** a small detail in a long message finds its saved memory
+  (G.10).
+- **Read:** G.2, G.10; `LiveRetrieval.kt`, `Librarian.kt`.
+- **Done when:** the long-message test conversations pass, existing
+  saved-memory tests pass unchanged, and added sending time is measured
+  and reported.
+
+### Step 4B: carry-over for saved memories (Careful)
+
+- **Goal:** a saved memory stays through follow-up messages and drops on a
+  change of subject (G.9).
+- **Read:** G.9, G.9a; `enforcer/Enforcer.kt`; the injection record in
+  `MemoryStore.kt`.
+- **Done when:** the carry-over test conversations pass: stays through
+  short replies, drops on a topic change, drops when sent by mistake.
+
+## G.16a The approved screens for indexing (Owner, 2026-11-11)
+
+Approved by the owner on 2026-11-11: placement, wording, and that Index
+Conversations starts off.
+
+**In the chat header.** A small indexing icon, beside the existing icon
+that appears only when needed. It is shown only while indexing is running
+or paused. It spins while running and is still when paused. Tapping it
+opens the progress pop-up.
+
+**The progress pop-up,** using the shared Progress pop-up style:
+
+| Part | Wording |
+|---|---|
+| Title | Indexing Conversations |
+| Percentage | A real percentage, based on messages processed |
+| Status line, running | 128 of 310 conversations indexed (real numbers) |
+| Status line, paused | Paused |
+| Explanation | This runs in the background. You can keep chatting. |
+| Buttons, running | Pause, Close |
+| Buttons, paused | Resume, Close |
+
+**The notification while indexing runs after the app is closed:**
+
+| Part | Wording |
+|---|---|
+| Title | Indexing Conversations |
+| Text | 42% done. Tap to open. (real percentage) |
+
+**In Advanced Memory Settings,** a new section after Librarian /
+Embeddings:
+
+| Part | Wording |
+|---|---|
+| Section heading | Conversation Index |
+| Toggle | Index Conversations |
+| Toggle explanation | Builds a searchable index of your conversations on this device. Indexing is entirely local. When recall is turned on for a chat, relevant earlier parts of that chat are included in your normal AI requests. |
+| Status | 310 conversations indexed (real number) |
+| Button | Delete Conversation Index |
+| Confirmation title | Delete Conversation Index? |
+| Confirmation text | This removes the search index. Your conversations are not changed. |
+| Confirmation buttons | Cancel, Delete |
+
+**Behaviour approved with it:**
+- Index Conversations starts off. Turning it on starts background
+  indexing.
+- Deleting the index also turns the setting off, so it is not rebuilt
+  against the user's wishes.
+
+**One sentence to revisit.** The toggle explanation says recall is turned
+on "for a chat". Whether recall is chosen per chat is still open (G1). If
+the owner decides otherwise, that sentence is reworded and shown to the
+owner again.
 
 ## G.17 Open decisions for the owner
 
 Asked one at a time, and only when the stage that needs the answer is
-about to start. Only G15 is still needed before stage 1. Each has a
+about to start. Nothing more is needed before stage 1. Each has a
 recommendation.
 
 | # | Question | Recommendation | Needed before |
@@ -1302,7 +1539,7 @@ recommendation.
 | G11 | What does the user see when recall adds something? | Show it where sent memories are shown today, so the user can always tell what the AI was given | Stage 3 |
 | G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E of the memory plan? | If not, relabel those rows as proposed | Any time |
 | G14 | Does background indexing of existing chats continue after the app is closed? | **Decided (owner, 2026-11-11):** yes. The notification this requires is part of G15 | Decided |
-| G15 | Where does the user see indexing progress, pause it, and delete the index, and what does the notification say while it runs after the app is closed? | Shown to the owner as exact wording and placement before stage 1 is built | Stage 1 |
+| G15 | Where does the user see indexing progress, pause it, and delete the index, and what does the notification say? | **Decided (owner, 2026-11-11):** as recorded in G.16a. Index Conversations starts off | Decided |
 | G16 | Does recall apply in hands-free voice chat, where any delay is felt? | Yes, under the time limit in G.6, so a slow search is skipped and never delays a reply | Stage 3 |
 
 ## G.18 Research behind this plan (2026-11-10)
@@ -1360,7 +1597,8 @@ this plan. These rules keep that safe.
 - **Read this plan and the files it names for your stage.** The memory
   plan (`Memory System/dynamic_memory_plan.md`) is background for
   saved-memory work and is not needed for the conversation index.
-- **Build one stage, as one pull request.** Do not start the next stage.
+- **Build one step from G.16, as one pull request.** Do not start the next
+  step.
 - **Only "Owner" items are decisions.** Anything marked "Proposed" that
   the user would see, read, or pay for is shown to the owner before it is
   built: wording, screens, settings, defaults, and text sent to the AI.
