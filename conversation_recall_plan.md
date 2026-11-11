@@ -222,8 +222,18 @@ guessed.
 the AI receives is always the whole exchange the entry belongs to, never a
 fragment.
 
-**What is indexed.** The text of messages as the user sees them. Attached
-files, images, and hidden messages are open questions (G.17).
+**What is indexed.** The text of messages. Messages hidden from the AI are
+never recalled (G.5a rule 1).
+
+**Attached documents and images are not indexed in this work (Proposed).**
+Checked in the code and `document-includes-plan.md` on 2026-11-11: an
+attached document is sent to the AI with every message until the user
+condenses it, reduces it, or removes it. So the AI already has it in full,
+and recall has nothing to add. Once the user condenses or removes a
+document, that is the user's choice, and recall does not bring the removed
+text back. The owner noted on 2026-11-11 that some documents may deserve to
+become saved memories. That belongs to the Memory Assistant and is not part
+of this plan.
 
 **Storage design.** Three linked stores:
 
@@ -348,6 +358,25 @@ code and is true today. These are requirements for stage 1, not options.
   that have never been reopened. Those chats are simply not indexed until
   the user opens them. Backwards compatibility for them is not wanted.
 - Missing scope stays private to its own chat (G.7).
+
+**8. Restored and merged chats are checked, never assumed.**
+- **Owner (2026-11-11):** after a restore, every message must be checked
+  for whether it is already indexed. A user may also combine the history
+  of two phones.
+- The app already restores chats in two ways, replacing everything or
+  merging a backup into what is on the phone (`ChatMergePlanner.kt`,
+  `PortableRestoreMode`).
+- Rule: after any restore or merge, each affected chat is compared with
+  its index state, message by message, using the permanent message ID and
+  the text fingerprint:
+  - already indexed and unchanged: left alone, and its vector is reused;
+  - new to this phone: indexed;
+  - same ID but different text: re-indexed, and the old entries removed;
+  - indexed here but no longer in the chat: its entries are removed.
+- A message is never indexed twice, and a merged chat never ends up with
+  entries from both phones for the same message.
+- Because backups do not carry the index (rule below), a restored phone
+  rebuilds it from the chats, and the same check applies.
 
 **The indexing steps for one new or changed message:**
 
@@ -582,7 +611,7 @@ message-level work while the user chats, as an option.
 | Message deleted | Its entries and any AI notes on them are removed, and any vector nothing else uses |
 | Message hidden from the AI, or made visible again | Takes effect on recall at once (G.5a rule 1) |
 | Chat deleted | All its entries are removed |
-| Backup restored | The index is rebuilt from the restored chats |
+| Backup restored, or a backup merged into the phone's chats | Each affected chat is checked message by message (G.5a rule 8). Nothing is indexed twice |
 | Embedding model changed | Keyword search keeps working at once. Vectors are remade in the background |
 | Chat settings changed (companion, project, roleplay) | Scope labels on later messages follow the new settings |
 | Existing chats, first time | Indexed in the background, a little at a time, newest first |
@@ -616,8 +645,8 @@ misled, and never as a generic error.
 - **Privacy.** The index stays on the phone, encrypted like the chat search
   database. Nothing is sent anywhere by indexing. Only the optional AI
   worker sends conversation text to a model, and only when turned on.
-- **Backups.** The index can be rebuilt, so whether backups carry it is an
-  open decision (G.17).
+- **Backups.** **Owner (2026-11-11):** backups do not carry the index. It is
+  rebuilt from the chats after a restore.
 
 ## G.15 Testing and measurement
 
@@ -666,7 +695,7 @@ the index started sooner. Neither blocks the other.
 ## G.17 Open decisions for the owner
 
 Asked one at a time, and only when the stage that needs the answer is
-about to start. Only G5, G6, and G7 are needed before stage 1. Each has a
+about to start. Only G5 and G6 are still needed before stage 1. Each has a
 recommendation.
 
 | # | Question | Recommendation | Needed before |
@@ -677,7 +706,7 @@ recommendation.
 | G4 | Does recall apply in Experimental Mode? | No. That mode sends only the current message by design | Stage 3 |
 | G5 | Are attached files and images indexed? | Not at first. Message text only | Stage 1 |
 | G6 | When are existing chats indexed? | In the background while charging, newest first, with progress shown | Stage 1 |
-| G7 | Do backups carry the index? | No. It is rebuilt after a restore | Stage 1 |
+| G7 | Do backups carry the index? | **Decided (owner, 2026-11-11):** no. It is rebuilt after a restore | Decided |
 | G8 | Which jobs does the live AI worker do, and is it chosen per chat? | Per chat. Start with marking what matters | The live AI worker |
 | G9 | Across chats, which ordinary chats may see each other? | Same companion or same project only, at first | Recall from other chats |
 | G10 | Is a recalled exchange carried over like a saved memory? | Yes, under the same rule | Stage 4 |
