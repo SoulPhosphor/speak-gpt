@@ -77,6 +77,11 @@ Words used in this plan:
 14. **Owner (2026-11-11):** recall is turned on with one setting in a
     settings menu. It is not something the user turns on in each
     conversation.
+15. **Owner (2026-11-11):** conversations can be indexed without an
+    embedding model. Index Conversations can be turned on with no model
+    installed; the index is then built for keyword search. When a model is
+    installed later, meaning search is added to the same index without
+    rebuilding it.
 
 ## G.2 What the review of #180 found
 
@@ -1168,7 +1173,8 @@ losing it loses nothing the user wrote.
 
 | Missing | What still works |
 |---|---|
-| The embedding model | Keyword recall. This is also the later path for users who cannot have the model |
+| The embedding model was never installed | The index is built and kept up to date for keyword search, and recall works by keywords. Passages wait for their vectors. Installing a model later adds meaning search to the same passages, with no re-cutting and no rebuild |
+| The embedding model is installed but fails | The same keyword path keeps working. This is reported as a failure, separately from "no model installed", because the user's next step is different |
 | A vector for some entries | Those entries are found by keywords until the vector is made |
 | The live AI worker, or its network | Everything except AI notes |
 | The whole index | The chat is sent exactly as today. Sending is never blocked by recall |
@@ -1250,6 +1256,8 @@ There is no separate testing stage in front of the building.
 | The same message sent down both request paths | The same text is added by both |
 | Retrieval runs out of time | The message is sent as today, and recall is shown as skipped |
 | A passage with no vector yet | It can be found by keywords, and is shown as waiting for its vector |
+| No embedding model installed | The index is built, and an exchange is recalled by its distinctive words |
+| A model is installed after indexing | Meaning search starts working on the existing passages, and nothing is re-cut |
 
 **How quality is judged.** No pass mark is invented in advance. The first
 run on each stage sets the baseline. After that, a change must not lower
@@ -1291,11 +1299,17 @@ the code files the step names. It builds only that step.
 | 3 | Context assembly: recall in real requests | Hard | Recall works (wording to approve) | Stage 2 |
 | 4A | Long messages in saved-memory search | Careful | Better memory matches | Nothing |
 | 4B | Carry-over for saved memories | Careful | Memories stay through follow-ups | 2A's subject check |
-| Later | Optional re-ranker; live AI worker; other chats; keyword-only recall | To be designed | | |
+| Later | Optional re-ranker; live AI worker; other chats | To be designed | | |
 
 Nothing changes for any user until step 1F. Steps 1A to 1E add code that
 stays switched off, because Index Conversations starts off and cannot be
 turned on until 1F.
+
+**Keyword-only use is part of every step, not a later one (Owner,
+2026-11-11).** No step may require an embedding model in order to build,
+keep, or search the index. With no model: 1C and 1E work in full, 1D
+leaves passages waiting, 1F shows that search is by keywords only, and 2A
+and 3 recall by keywords. Each step's tests include the no-model case.
 
 Steps 4A and 4B fix gaps that are live on the beta today. 4A depends on
 nothing and can be built at any time, including first.
@@ -1409,6 +1423,9 @@ nothing and can be built at any time, including first.
   added to the guide. `ui-style-adoption.md` is updated.
 - **Must not change:** any other part of the chat header or of Advanced
   Memory Settings.
+- **With no embedding model:** the setting can still be turned on. The
+  status says search is by keywords only. The wording for that status is
+  approved by the owner before this step is built.
 - **Done when:** turning the setting on starts indexing; the icon appears
   only while indexing runs or is paused; the percentage comes from work
   actually done; deleting the index removes everything derived and turns
