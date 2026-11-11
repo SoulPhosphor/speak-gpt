@@ -243,10 +243,11 @@ object SummarizerErrorClassifier {
  * request body, conversation text, or summary text).
  *
  * Only the words are removed (owner ruling, Nov 11 2026). Text the model
- * returned (an answer, its thinking, a streamed piece) is replaced by its
- * length, and everything that explains the response stays: the stop reason,
- * the refusal, token usage, the serving provider, and whether the answer was
- * missing or empty.
+ * returned (an answer, its thinking, a streamed piece, tool-call arguments,
+ * or text in a shape the app does not recognize) is replaced by its length,
+ * and everything that explains the response stays: the stop reason, the
+ * refusal, error messages, token usage, the serving provider, and whether
+ * the answer was missing or empty.
  */
 object SummarizerDetailSanitizer {
 
@@ -262,9 +263,16 @@ object SummarizerDetailSanitizer {
     private val privateFields = setOf("messages", "input", "prompt",
         "summary", "request", "request_body", "body", "headers", "authorization", "api_key", "api-key", "x-api-key", "token", "access_token", "password", "secret")
 
-    /** Fields holding text the model wrote. Their words are removed and their
-     *  length kept; a missing (null) or empty value is kept as it is. */
-    private val textFields = setOf("content", "text", "reasoning", "reasoning_content", "output")
+    /** Text values that explain a response rather than carry what the model
+     *  wrote. Every other text value inside JSON is treated as the model's
+     *  words: they are removed and the length kept. A null or empty value,
+     *  a number and true/false are always kept as they are. */
+    private val evidenceFields = setOf(
+        "id", "object", "model", "provider", "provider_name", "system_fingerprint", "service_tier",
+        "role", "type", "name", "index", "finish_reason", "native_finish_reason", "stop_reason",
+        "status", "refusal", "error", "message", "code", "param", "raw", "reason", "detail", "title",
+        "generation_id", "created"
+    )
 
     /** A streamed body keeps its first and last events in full; the events
      *  between them only carry pieces of the answer. */
@@ -288,9 +296,10 @@ object SummarizerDetailSanitizer {
                     val name = key.lowercase()
                     when {
                         name in privateFields -> value.asJsonObject.addProperty(key, "[removed]")
-                        name in textFields && child.isJsonPrimitive -> {
+                        child.isJsonPrimitive && child.asJsonPrimitive.isString -> {
                             val text = child.asString
-                            if (text.isNotEmpty()) value.asJsonObject.addProperty(key, removedText(text.length))
+                            if (name !in evidenceFields && text.isNotEmpty())
+                                value.asJsonObject.addProperty(key, removedText(text.length))
                         }
                         else -> clean(child)
                     }

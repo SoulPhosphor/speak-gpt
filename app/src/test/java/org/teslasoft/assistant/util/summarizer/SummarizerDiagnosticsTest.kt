@@ -200,6 +200,20 @@ class SummarizerDiagnosticsTest {
         }
     }
 
+    @Test fun toolCallArgumentsLoseTheirWordsAndKeepTheirShape() {
+        val body = """{"id":"gen-5","created":1,"model":"m","choices":[{"index":0,"finish_reason":"tool_calls",""" +
+            """"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function",""" +
+            """"function":{"name":"save_summary","arguments":"{\"summary\":\"private paraphrase\"}"}}],""" +
+            """"function_call":{"name":"legacy","arguments":"private legacy paraphrase"}}}],"error":{"message":"Provider note","code":502}}"""
+        val evidence = request(200, body)
+        val logged = SummarizerDetailSanitizer.sanitize(evidence.body, evidence.privateResponseValues())!!
+        assertFalse(logged, logged.contains("private"))
+        assertTrue(logged, logged.contains("\"name\":\"save_summary\""))
+        assertTrue(logged, logged.contains("\"finish_reason\":\"tool_calls\""))
+        assertTrue(logged, logged.contains("\"message\":\"Provider note\""))
+        assertTrue(logged, logged.contains("\"content\":null"))
+    }
+
     companion object {
         private const val validResponse = """{"id":"response-id","created":1,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"valid reply"},"finish_reason":"stop"}]}"""
     }
