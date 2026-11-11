@@ -684,6 +684,16 @@ relevant.** A candidate passes only when one of these is true:
 
 When nothing passes, nothing is recalled. Empty is a correct result.
 
+**Two bars, not one.** Candidates are sorted into three groups:
+- **clearly relevant:** passes the gate above;
+- **borderline:** misses the gate narrowly, by a set margin;
+- **not relevant:** everything else, dropped here.
+
+Without a re-ranker, only the clearly relevant go forward and the
+borderline are dropped, so behaviour is exactly the gate above. The
+borderline group exists so that a better judge, when one is present, can
+look again at a near miss (step 5a).
+
 The gate uses absolute measures on purpose. A method that only compares
 ranks cannot say "nothing here is relevant", because something is always
 ranked first.
@@ -703,6 +713,27 @@ ranked first.
   does better on this app's conversations, it replaces the blend for
   ordering. The gate stays either way.
 - A passage found both ways scores higher than one found one way.
+
+**How each score is put on the 0 to 1 scale.** The two scores are not
+comparable as they come, so each is converted by a fixed rule, never by
+comparing against the other candidates in the list (which would make the
+best candidate look perfect even when it is poor):
+- **Meaning score:** 0 at the fixed minimum similarity, 1 at a "full
+  strength" similarity, in a straight line between, and capped at both
+  ends. Both similarities are settings for the embedding model in use.
+- **Keyword score:** the share of the message's informative words the
+  passage contains, weighted by rarity. It is already between 0 and 1.
+  The database's raw keyword ranking number is used only to pick
+  candidates, never as the score, because it cannot be compared from one
+  message to the next.
+
+**When a passage has no vector yet.** Its meaning score is unknown, not
+zero. It can pass the gate on keywords alone. For ordering, its meaning
+score is counted as 0, so it ranks below a passage with the same keyword
+score that also matched by meaning. This is deliberate: a wrong recall is
+worse than a missed one, and the gap closes as soon as the vector is made.
+The inspector shows such a passage as "no vector yet", so a low rank is
+never mistaken for a poor match.
 
 **Step 5a: an optional re-ranker (a place is kept for it; not built
 yet).**
@@ -725,11 +756,17 @@ yet).**
   time: it runs once per candidate. One small model is reported at about
   39 pairs a second on a desktop processor, so on a phone, re-ranking 20
   candidates could add a second or more to sending.
-- **The design.** A re-ranker, when present, runs here: after the gate and
-  the blend, on the best candidates only, and before grouping. It can
-  reorder candidates and can remove one it judges unrelated. It can never
-  add a candidate the gate rejected. With no re-ranker, this step is
-  skipped and nothing else changes.
+- **The design.** A re-ranker, when present, runs here, on a bounded
+  number of the best candidates: the clearly relevant **and the
+  borderline** (step 4). It reads each with the message and makes the
+  final relevance decision. It can reorder, it can reject a candidate the
+  first search liked, and it can accept a borderline candidate the first
+  search narrowly missed.
+- It never sees the "not relevant" group, so it cannot bring back
+  something far off, and its work stays bounded.
+- "Nothing is relevant" remains a possible answer after re-ranking.
+- With no re-ranker, this step is skipped: the clearly relevant go
+  forward and the borderline are dropped. Nothing else changes.
 - **When it is decided.** After stage 2 shows what retrieval gets wrong on
   this app's conversations. If the mistakes are ones a re-ranker fixes,
   candidate models are tested on those same conversations, on the phone,
@@ -753,9 +790,32 @@ yet).**
 **Step 8: avoid near-repeats.**
 - When two exchanges say nearly the same thing, the higher-scoring one is
   kept and the other dropped, so the limit is not spent on repeats.
-- Two exchanges that **differ** on the same subject are both kept. "We
-  chose X" and, later, "we changed to Y" must both reach the AI, in date
-  order, so it can see what changed (G.8).
+- Two exchanges that **differ** on the same subject are both kept.
+
+**Step 9: follow a subject to its later turns.** A decision is often made
+in one place and changed in another: "Let's use model A for summaries",
+then much later, "Actually, switch the summarizer to model B". A question
+about it may match only one of the two. Keeping both when both happen to
+be found is not enough, so retrieval looks for the other on purpose:
+- For each exchange that will be offered, the chat is searched once more
+  using that exchange's own matched passage as the search text. This
+  finds other exchanges on the same subject, however the user's question
+  was worded.
+- From those, the **most recent** one that clears the relevance gate
+  against the passage, and is not a near-repeat of it, is added as a
+  related exchange. Most recent, because the latest word on a subject is
+  what the AI most needs.
+- At most one related exchange is added for each offered exchange, and it
+  counts against recall's size limit.
+- Both are delivered in date order with their dates (G.8), so the AI sees
+  what was said first and what was said later.
+- **What this is and is not.** It is a rule that actively looks for later
+  turns on the same subject. It is not a guarantee: it finds what the
+  embedding model and keywords judge to be the same subject, and a change
+  worded very differently can be missed. Its hit rate is measured in
+  stage 2 on the changed-decision test conversations, and reported.
+- It uses vectors already stored, so it adds a comparison pass and no new
+  embedding work.
 
 **What retrieval hands on.** A short list of exchanges, best first, each
 with its message IDs, which passages matched and where, its scores, the
@@ -766,6 +826,14 @@ point. G.8 decides what is sent.
 empty; search another chat (until that stage is built); read a hidden,
 deleted, or unfinished message; make a paid call; or delay sending beyond
 the time measured and accepted in stage 2.
+
+**A time limit.** Retrieval has a fixed time allowance, set from the
+stage 2 measurements. If it has not finished in that time, the message is
+sent exactly as it is today, without recall, and the "what was sent" view
+shows that recall was skipped. A slow phone or a very long chat can
+therefore make recall miss a message, but can never hold a message back.
+This matters most in hands-free voice chat, where a delay is felt at
+once.
 
 ## G.7 Scope walls (Proposed, on the owner's requirement)
 
@@ -786,7 +854,7 @@ reach companion-only material.
     setting);
   - real-life and project entries never enter roleplay.
 - **Open:** which ordinary chats may see each other, and whether cross-chat
-  recall is chosen per chat or per companion (G.17).
+  recall is chosen per chat or per companion (G9).
 - **Where a passage's scope comes from.** A chat's companion, project, or
   roleplay settings can change during its life, so the chat's settings
   today are not a safe label for its older messages.
@@ -906,6 +974,21 @@ saved memories were sent with it. Recalled exchanges are shown in that
 same place, so the user can always tell what the AI was given (G11). The
 wording and layout are shown to the owner before stage 3.
 
+**Recalled text never becomes part of the conversation.**
+- It is added to one request and not stored. The next message starts
+  again from the stored chat.
+- It is never summarized or compacted, never given to the Memory
+  Assistant as if it were new conversation, never indexed, and never
+  counted as a message. Recall can therefore never feed on its own
+  output.
+
+**Both ways a message is sent.** The chat screen builds requests in two
+places (`buildFrozenRegularRequest` and `regularGPTResponse` in
+`ChatActivity.kt`), and the memory plan records that they have drifted
+apart before (its A.9). Recall is built once, in its own file, and called
+from both, so the two can never differ. A test sends the same message
+down both and compares what was added.
+
 **Other rules.**
 - **When the chat no longer fits the model:** today the app warns or
   blocks. That stays the default. Any other behaviour is the user's
@@ -970,7 +1053,7 @@ conversations before anything is built (G.15).
 They share the subject check (G.9a) and the final size check (G.8), and
 nothing else. Each has its own size limit.
 
-**Open:** whether a recalled exchange is also carried over (G.17).
+**Open:** whether a recalled exchange is also carried over (G10).
 
 ## G.9a The subject check (Proposed)
 
@@ -1037,6 +1120,14 @@ message-level work while the user chats, as an option.
   discards a note when its exchange is edited or deleted.
 - **What is always delivered** is the original exchange. An AI note only
   helps find it.
+- **What stage 1 must leave in place for it,** so adding the worker later
+  changes nothing already built: every passage belongs to an exchange with
+  a stable ID; every passage records its source kind; the stores can gain
+  a notes table without altering the existing ones; and upkeep already
+  knows when an exchange was edited or deleted.
+- **What is designed only when the owner starts this stage:** which jobs
+  it does, the exact instruction it is given, the cost limits, and what
+  the user sees. None of that is fixed here.
 - **Cost.** It runs once per stretch of conversation, not once per message
   sent. The app shows what the service reports and never a built-in price.
 - **Cost controls, required before it is built:** off by default; chosen by
@@ -1096,9 +1187,16 @@ misled, and never as a generic error.
   requires a visible notification while it runs. It is mostly a one-time
   job, repeated only after a large restore or a change of embedding model.
 - **Storage.** A 256-number vector is about 1 KB per entry.
-- **Privacy.** The index stays on the phone, encrypted like the chat search
-  database. Nothing is sent anywhere by indexing. Only the optional AI
-  worker sends conversation text to a model, and only when turned on.
+- **Privacy.** Three separate things, stated separately:
+  - **Indexing is entirely on the phone.** The index is encrypted like the
+    chat search database, and building it sends nothing anywhere.
+  - **Recall sends text to the chat AI.** When recall is on for a chat,
+    the recalled exchanges are part of the ordinary request to whichever
+    AI service that chat uses. For a summarized chat this means original
+    wording is sent that the summary alone would not have sent. Any
+    wording shown to the user must say this plainly.
+  - **The optional AI worker sends conversation text to its model,** and
+    only when the user has turned it on.
 - **Backups.** **Owner (2026-11-11):** backups do not carry the index. It is
   rebuilt from the chats after a restore.
 
@@ -1138,7 +1236,6 @@ There is no separate testing stage in front of the building.
 | A summarized or compacted chat | The original exchange is recalled although the AI otherwise has only the summary |
 | Nothing relevant | Nothing is added |
 | A long message with one small important detail | The exchange about that detail is recalled |
-| A changed decision | Both the earlier and the later exchange are recalled, in date order |
 | A hidden message | It is never recalled, and neither is anything that borrowed its words |
 | An edited message | The new text is recalled, never the old |
 | A deleted message | It is never recalled |
@@ -1146,6 +1243,10 @@ There is no separate testing stage in front of the building.
 | A roleplay chat and a companion chat | Each recalls only its own conversation |
 | A very long exchange | An excerpt is sent, marked as one, and nothing is cut silently |
 | More matches than fit | The most relevant are sent, and the rest are reported as left out |
+| A decision made early and changed later, asked about in words that match only one | Both are recalled, in date order. The hit rate is reported |
+| The same message sent down both request paths | The same text is added by both |
+| Retrieval runs out of time | The message is sent as today, and recall is shown as skipped |
+| A passage with no vector yet | It can be found by keywords, and is shown as waiting for its vector |
 
 **How quality is judged.** No pass mark is invented in advance. The first
 run on each stage sets the baseline. After that, a change must not lower
@@ -1202,6 +1303,7 @@ recommendation.
 | G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E of the memory plan? | If not, relabel those rows as proposed | Any time |
 | G14 | Does background indexing of existing chats continue after the app is closed? | **Decided (owner, 2026-11-11):** yes. The notification this requires is part of G15 | Decided |
 | G15 | Where does the user see indexing progress, pause it, and delete the index, and what does the notification say while it runs after the app is closed? | Shown to the owner as exact wording and placement before stage 1 is built | Stage 1 |
+| G16 | Does recall apply in hands-free voice chat, where any delay is felt? | Yes, under the time limit in G.6, so a slow search is skipped and never delays a reply | Stage 3 |
 
 ## G.18 Research behind this plan (2026-11-10)
 
@@ -1267,6 +1369,10 @@ this plan. These rules keep that safe.
   what a request contains when recall is off.
 - **Never remove anything from a request to make room for recall.**
 - **Never add or change a log line** without the owner's approval.
+- **Put new code in its own files.** The chat screen's files are too large
+  to change safely; add only the small hookup they need.
+- **Never copy another screen or file** as a pattern. Follow
+  `ui-style-guide.md` for anything visible.
 - **If the code does not match what this plan says about it, stop and say
   so.** Do not guess, and do not copy another part of the app to fill the
   gap.
