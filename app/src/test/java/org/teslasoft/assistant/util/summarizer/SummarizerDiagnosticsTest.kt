@@ -172,6 +172,19 @@ class SummarizerDiagnosticsTest {
         assertTrue(logged.contains("data: [DONE]"))
     }
 
+    @Test fun anUnrecognizedJsonShapeStillLosesTheReturnedWords() {
+        for (body in listOf(
+            """{"output":"private generated summary"}""",
+            """{"choices":[{"message":{"content":["private generated summary"]}}]}""",
+            """{"result":{"pieces":["private generated summary"]}}"""
+        )) {
+            val evidence = request(200, body)
+            val logged = SummarizerDetailSanitizer.sanitize(evidence.body, evidence.privateResponseValues())!!
+            assertFalse(logged, logged.contains("private generated summary"))
+            assertTrue(logged, logged.contains("[removed: 25 characters]"))
+        }
+    }
+
     companion object {
         private const val validResponse = """{"id":"response-id","created":1,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"valid reply"},"finish_reason":"stop"}]}"""
     }

@@ -264,7 +264,7 @@ object SummarizerDetailSanitizer {
 
     /** Fields holding text the model wrote. Their words are removed and their
      *  length kept; a missing (null) or empty value is kept as it is. */
-    private val textFields = setOf("content", "text", "reasoning", "reasoning_content")
+    private val textFields = setOf("content", "text", "reasoning", "reasoning_content", "output")
 
     /** A streamed body keeps its first and last events in full; the events
      *  between them only carry pieces of the answer. */
@@ -295,7 +295,18 @@ object SummarizerDetailSanitizer {
                         else -> clean(child)
                     }
                 }
-            } else if (value.isJsonArray) value.asJsonArray.forEach { clean(it) }
+            } else if (value.isJsonArray) {
+                // A bare string in a list can be returned text in a shape the
+                // app does not recognize, so its words go and its length stays.
+                val array = value.asJsonArray
+                for (i in 0 until array.size()) {
+                    val item = array[i]
+                    if (item.isJsonPrimitive && item.asJsonPrimitive.isString) {
+                        val text = item.asString
+                        if (text.isNotEmpty()) array.set(i, com.google.gson.JsonPrimitive(removedText(text.length)))
+                    } else clean(item)
+                }
+            }
         }
         val streamed = Regex("""(?m)^data:""").containsMatchIn(out)
         if (streamed) {
