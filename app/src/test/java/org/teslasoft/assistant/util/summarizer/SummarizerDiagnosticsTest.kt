@@ -131,6 +131,47 @@ class SummarizerDiagnosticsTest {
         assertEquals("API access rejected", SummarizerDetailSanitizer.sanitize(providerError.body))
     }
 
+    @Test fun anEmptyAnswerKeepsTheEvidenceOfWhyItWasEmpty() {
+        val body = """{"id":"gen-1","provider":"Nvidia","model":"vendor/model","object":"chat.completion","created":1,""" +
+            """"choices":[{"index":0,"finish_reason":"length","native_finish_reason":"max_tokens",""" +
+            """"message":{"role":"assistant","content":null,"refusal":null,"reasoning":"thinking about the private chat"}}],""" +
+            """"usage":{"prompt_tokens":6374,"completion_tokens":4096}}"""
+        val evidence = request(200, body)
+        val logged = SummarizerDetailSanitizer.sanitize(evidence.body, evidence.privateResponseValues())!!
+        assertTrue(logged.contains("\"finish_reason\":\"length\""))
+        assertTrue(logged.contains("\"native_finish_reason\":\"max_tokens\""))
+        assertTrue(logged.contains("\"content\":null"))
+        assertTrue(logged.contains("\"completion_tokens\":4096"))
+        assertTrue(logged.contains("\"provider\":\"Nvidia\""))
+        assertTrue(logged.contains("\"reasoning\":\"[removed: 31 characters]\""))
+        assertFalse(logged.contains("private chat"))
+    }
+
+    @Test fun aReturnedSummaryIsReplacedByItsLengthWhileTheRestStays() {
+        val summary = "The user and the companion talked about the garden."
+        val body = """{"id":"gen-2","created":1,"model":"m","choices":[{"index":0,"finish_reason":"stop",""" +
+            """"message":{"role":"assistant","content":"$summary"}}]}"""
+        val logged = SummarizerDetailSanitizer.sanitize(body)!!
+        assertFalse(logged.contains("garden"))
+        assertTrue(logged.contains("[removed: ${summary.length} characters]"))
+        assertTrue(logged.contains("\"finish_reason\":\"stop\""))
+    }
+
+    @Test fun aStreamedAnswerKeepsItsLastEventsAndLosesOnlyTheWords() {
+        val events = (1..10).joinToString("\n") {
+            """data: {"id":"gen-3","choices":[{"index":0,"delta":{"content":"secret piece $it"},"finish_reason":null}]}"""
+        } + "\n" + """data: {"id":"gen-3","choices":[{"index":0,"delta":{"content":""},"finish_reason":"length"}],"usage":{"completion_tokens":512}}""" +
+            "\ndata: [DONE]"
+        val evidence = request(200, events)
+        assertTrue(evidence.privateResponseValues().isEmpty())
+        val logged = SummarizerDetailSanitizer.sanitize(evidence.body, evidence.privateResponseValues())!!
+        assertFalse(logged.contains("secret piece"))
+        assertTrue(logged.contains("\"finish_reason\":\"length\""))
+        assertTrue(logged.contains("\"completion_tokens\":512"))
+        assertTrue(logged.contains("streamed events omitted"))
+        assertTrue(logged.contains("data: [DONE]"))
+    }
+
     companion object {
         private const val validResponse = """{"id":"response-id","created":1,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"valid reply"},"finish_reason":"stop"}]}"""
     }

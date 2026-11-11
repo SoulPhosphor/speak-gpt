@@ -293,7 +293,8 @@ not fit at their normal text size, the row shrinks every button's text by the
 same amount until they fit, never below `dialog_action_min_text_size` (the
 chat's message information text size, `chat_message_metadata_text_size`);
 past that, the last action drops to the next line, still on the right (owner
-ruling, Nov 8 2026). Every pop-up button row uses `DialogActionRow`. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`)
+ruling, Nov 8 2026). Every pop-up button row uses `DialogActionRow`. Current users: Summarizer Errors (`dialog_summarizer_errors.xml`, with
+Summarizer Settings centered beneath as an approved exception),
 the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
 Summarizer Settings centered beneath as an approved exception), and Backup
 Attempts Failed (`dialog_backup_failed_actions.xml`, Cancel then Retry, with
