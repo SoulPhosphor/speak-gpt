@@ -65,6 +65,15 @@ Words used in this plan:
 9. **Owner:** no carry-over work until this plan is solid.
 10. **Owner:** rely on published research where it exists. Spend effort on
     our own testing only where research gives no answer.
+11. **Owner (2026-11-11):** when a chat is summarized or compacted, recall
+    must still be able to bring back the original exchanges, even though
+    the chat AI is otherwise given only the summary. This makes up for
+    what a summary or compaction leaves out.
+12. **Owner (2026-11-11):** existing chats are indexed in the background.
+    The user never waits for indexing when opening a chat.
+13. **Owner (2026-11-11):** a deeper system for giving the AI access to
+    larger documents is wanted some day, not now. The foundation should
+    not rule it out.
 
 ## G.2 What the review of #180 found
 
@@ -255,6 +264,10 @@ of this plan.
   time. Vectors are kept through a rebuild.
 - AI notes (G.11) are their own rows, keyed to a passage or an exchange,
   never mixed into the passage text.
+- A passage records what kind of source it points to. Today the only kind
+  is a chat message. Recording the kind means a later system for larger
+  documents (G.1 item 13) can add its own passages to the same stores
+  without a rebuild.
 
 **Reused as it is:** permanent message IDs (`MessageIdentity.kt`); the rule
 for which messages are searchable and how their text is read
@@ -444,14 +457,23 @@ reach companion-only material.
 
 ## G.8 Recall: what is added to a request (Proposed)
 
-1. The request is built exactly as today: the full chat, or the Summarizer's
-   summaries plus recent messages when the Summarizer is on.
+1. The request is built exactly as today: the full chat, or the summary
+   plus recent messages when the Summarizer or Compact has condensed the
+   older ones.
 2. The index is searched with the user's latest message.
 3. Matching exchanges are added, whole and in their original words, in a
    clearly marked section just before the newest message, beside the saved
    memories. The stored conversation is not changed.
 4. Each recalled exchange carries when it was said, so the AI can tell old
    from recent.
+
+**Summarized and compacted chats (Owner, 2026-11-11).** This is where
+recall matters most. Checked in the code: summarizing or compacting changes
+only what is sent. The original messages stay stored on the phone, with
+their permanent IDs. The index is built from those stored originals, so an
+exchange that the chat AI now sees only as part of a summary can still be
+found and added in its original words. The summary itself is not changed
+and is not searched.
 
 Why this helps even when the whole chat is already sent: models attend most
 to the start and end of what they are given and least to the middle (G.18).
@@ -614,7 +636,8 @@ message-level work while the user chats, as an option.
 | Backup restored, or a backup merged into the phone's chats | Each affected chat is checked message by message (G.5a rule 8). Nothing is indexed twice |
 | Embedding model changed | Keyword search keeps working at once. Vectors are remade in the background |
 | Chat settings changed (companion, project, roleplay) | Scope labels on later messages follow the new settings |
-| Existing chats, first time | Indexed in the background, a little at a time, newest first |
+| Existing chats, first time | **Owner (2026-11-11):** indexed in the background, a little at a time, newest first. Opening a chat never waits for it |
+| Already indexed text | Stays indexed. It is redone only when the message is edited, the embedding model is changed (the meaning half only; keywords keep working), or the index is rebuilt after a restore |
 
 The index is derived: it can always be rebuilt from the stored chats, and
 losing it loses nothing the user wrote.
@@ -695,7 +718,7 @@ the index started sooner. Neither blocks the other.
 ## G.17 Open decisions for the owner
 
 Asked one at a time, and only when the stage that needs the answer is
-about to start. Only G5 and G6 are still needed before stage 1. Each has a
+about to start. Only G5 is still needed before stage 1. Each has a
 recommendation.
 
 | # | Question | Recommendation | Needed before |
@@ -705,7 +728,7 @@ recommendation.
 | G3 | When a chat no longer fits the model, may the user choose to send recent messages plus recalled exchanges? | Yes, as an explicit choice. Warn or block stays the default | Stage 3 |
 | G4 | Does recall apply in Experimental Mode? | No. That mode sends only the current message by design | Stage 3 |
 | G5 | Are attached files and images indexed? | Not at first. Message text only | Stage 1 |
-| G6 | When are existing chats indexed? | In the background while charging, newest first, with progress shown | Stage 1 |
+| G6 | When are existing chats indexed? | **Decided (owner, 2026-11-11):** in the background, never on opening a chat. Proposed details: newest first, with progress shown and a way to pause | Decided |
 | G7 | Do backups carry the index? | **Decided (owner, 2026-11-11):** no. It is rebuilt after a restore | Decided |
 | G8 | Which jobs does the live AI worker do, and is it chosen per chat? | Per chat. Start with marking what matters | The live AI worker |
 | G9 | Across chats, which ordinary chats may see each other? | Same companion or same project only, at first | Recall from other chats |
