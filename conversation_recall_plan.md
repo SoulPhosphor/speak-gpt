@@ -127,9 +127,9 @@ Smaller issues:
 | Conversation store | Keeps every chat whole and in order | Yes. Untouched | None |
 | Chunking | Cuts each message into passages the embedding model can read in full (G.5b) | No | None |
 | Index entries | One entry per passage, pointing to the whole exchange, with labels (G.5) | No. Useful parts exist (G.4) | None |
-| Search | Finds entries by meaning and by keywords | Yes, for saved memories and for chat search | None |
+| Retrieval | Finds the right passages by meaning and by keywords, and rejects what is not relevant (G.6) | Parts exist for saved memories and for chat search | None |
 | Scope walls | Decide which entries a chat may see | Yes, for saved memories | None |
-| Recall | Adds matching exchanges beside the newest message | Partly. Saved memories are placed this way | A little more text per message |
+| Context assembly | Chooses which exchanges are sent and writes them, labelled, beside the newest message (G.8) | Partly. Saved memories are placed this way | A little more text per message |
 | Carry-over | Keeps what was relevant while the subject continues | No | None |
 | Live AI worker | Optional. The Summarizer's model does message-level work during a chat | No. The model connection exists | Paid, only when turned on |
 | Upkeep | Keeps the index correct after edits, deletions, restores | Yes, for chat search | None |
@@ -619,24 +619,122 @@ stage 1, not options.
    measuring each with the real tokenizer first.
 7. Mark the chat's index state complete when nothing is waiting.
 
-## G.6 Search (Proposed)
+## G.6 Retrieval: how the right conversation is found (Proposed)
 
-- **Two ways together:** meaning (the embedding model) and keywords. On
-  conversation text, published results show keyword search matters as much
-  as meaning search (G.18), and it does not depend on the embedding model.
-- **Search text:** the user's latest message. For a long message, each
-  sentence is also searched on its own (G.10).
-- **Follow-up questions** such as "what did we decide?" have no meaningful
-  words of their own. They are handled by the subject check (G.9a), not by
-  gluing earlier messages onto the search text, which #180 measured as
-  harmful. The subject check is its own component, so recall does not wait
-  for saved-memory carry-over to be built.
-- **A relevance gate:** an entry is used only when it clearly relates. When
-  nothing relates, nothing is added.
-- **Duplicates:** several entries from the same exchange count once.
-- **The gate numbers for conversation entries are set separately** from the
-  saved-memory numbers. Conversation text is longer and looser than a saved
-  memory, so the same numbers are not assumed to fit.
+A good index can still give bad recall if this part is loose. It is
+specified here step by step. The numbers named are starting values,
+measured and adjusted in stage 2. They are engineering numbers; the owner
+is not asked to choose them.
+
+**What the existing code offers, and what is not copied.**
+- Saved-memory search (`LiveRetrieval.kt`) scores every memory in the app's
+  own code, re-reading every memory's words for each message. That suits a
+  few hundred short memories. It is not copied for conversation passages,
+  which number in the thousands and are longer.
+- The chat search database already ranks keyword matches with the
+  database's own keyword ranking (`ChatSearchStore.kt`). Passage keyword
+  search uses that same database feature.
+- Chat search orders results for a person browsing: titles first, then
+  exact words, then newest. That ordering is for the search screen and is
+  not used for recall.
+- The ideas kept from saved-memory search are the relevance gate, "nothing
+  qualifies" as a real result, and the rule that common words never count.
+
+**Step 1: decide what to search with.**
+- The user's latest message, on its own.
+- A long message is also searched one sentence at a time (G.10), up to a
+  limit.
+- When the subject check (G.9a) says the message is a short continuation
+  with no subject of its own, the previous exchange's user message is
+  searched as well, as a separate search. Earlier messages are never glued
+  onto the search text.
+- Each of these is a separate search. A passage qualifies when it passes
+  for any one of them.
+
+**Step 2: read a time reference, when there is one.**
+- "Yesterday", "last week", "on Tuesday", "in March", or a written date is
+  turned into a date range by plain rules, with no AI call.
+- A recognized range favours passages written inside it. It does not
+  exclude others, so a misread date cannot hide the right answer.
+- Only clear phrases are read. Anything unclear is ignored, and time then
+  plays no part. Published results show date-aware search helps time
+  questions, and that a weak reader of dates does not (G.18), so this is
+  kept simple and is measured before it is relied on.
+- Time comes from the message's stored time. A passage with no stored time
+  is not affected by a date range.
+
+**Step 3: gather candidates two ways, inside the current chat.**
+- **Keywords:** the database's keyword index returns the best-matching
+  passages for the message's informative words. Common words are dropped
+  first, by the same rule saved-memory search uses.
+- **Meaning:** the message's vector is compared with the chat's passage
+  vectors, in bounded batches, keeping only the best so far (G.5a rule 5).
+- A passage with no vector yet can still be found by keywords.
+- Each way returns a bounded list. Starting value: the best 50 of each.
+
+**Step 4: the relevance gate. Being the best match is not the same as being
+relevant.** A candidate passes only when one of these is true:
+- **Meaning:** its similarity clears a fixed minimum **and** stands clearly
+  above this chat's typical similarity for this message. A chat about one
+  project has a high typical similarity, so only a passage that is closer
+  than the general run of the chat passes.
+- **Keywords:** it contains enough of the message's informative words,
+  weighted by how rare each word is in this chat. One accidental shared
+  word in a long message does not pass.
+
+When nothing passes, nothing is recalled. Empty is a correct result.
+
+The gate uses absolute measures on purpose. A method that only compares
+ranks cannot say "nothing here is relevant", because something is always
+ranked first.
+
+**Step 5: combine the two ways into one order.**
+- Each passing candidate gets one relevance score: a weighted blend of its
+  meaning score and its keyword score, each first put on the same 0 to 1
+  scale. Starting weights: 0.7 meaning, 0.3 keywords, the split reported
+  for Redis's tested system.
+- Why a blend and not rank fusion. Reciprocal rank fusion, which merges
+  two ranked lists by position, is widely recommended because it needs no
+  tuning. A published comparison found the weighted blend more accurate,
+  both on familiar and unfamiliar text, less sensitive to its settings, and
+  tunable from a handful of examples (G.18). The blend also keeps real
+  scores, which the gate and the size decisions need.
+- Rank fusion is run alongside in the stage 2 tests as a comparison. If it
+  does better on this app's conversations, it replaces the blend for
+  ordering. The gate stays either way.
+- A passage found both ways scores higher than one found one way.
+
+**Step 6: group passages into exchanges.**
+- Passages are grouped by the exchange they belong to. An exchange's score
+  is its best passage's score, with a small addition when several of its
+  passages matched.
+- Several matching paragraphs of one exchange therefore count once and
+  cannot crowd out other exchanges.
+
+**Step 7: remove what should not be recalled.**
+- An exchange the AI is already reading close to the newest message: the
+  messages the Summarizer keeps in full, or the last few exchanges when
+  the whole chat is sent.
+- An exchange containing a message that is no longer eligible, checked
+  against the stored message at this moment (G.5a rule 1).
+- The current message itself.
+
+**Step 8: avoid near-repeats.**
+- When two exchanges say nearly the same thing, the higher-scoring one is
+  kept and the other dropped, so the limit is not spent on repeats.
+- Two exchanges that **differ** on the same subject are both kept. "We
+  chose X" and, later, "we changed to Y" must both reach the AI, in date
+  order, so it can see what changed (G.8).
+
+**What retrieval hands on.** A short list of exchanges, best first, each
+with its message IDs, which passages matched and where, its scores, the
+matched words, and its date. Nothing is written into the request at this
+point. G.8 decides what is sent.
+
+**What retrieval must never do:** return something because the list was
+empty; search another chat (until that stage is built); read a hidden,
+deleted, or unfinished message; make a paid call; or delay sending beyond
+the time measured and accepted in stage 2.
 
 ## G.7 Scope walls (Proposed, on the owner's requirement)
 
@@ -677,17 +775,21 @@ reach companion-only material.
 - **To verify when stage 1 is built:** how much existing conversation has a
   recorded scope.
 
-## G.8 Recall: what is added to a request (Proposed)
+## G.8 Context assembly: what the AI actually receives (Proposed)
 
+Retrieval finds exchanges. Assembly decides which of them are sent, in what
+form, and where.
+
+**The order of work.**
 1. The request is built exactly as today: the full chat, or the summary
    plus recent messages when the Summarizer or Compact has condensed the
    older ones.
-2. The index is searched with the user's latest message.
-3. Matching exchanges are added, whole and in their original words, in a
-   clearly marked section just before the newest message, beside the saved
-   memories. The stored conversation is not changed.
-4. Each recalled exchange carries when it was said, so the AI can tell old
-   from recent.
+2. Retrieval (G.6) returns its list of exchanges for the latest message.
+3. Assembly chooses from that list, within recall's limits.
+4. The chosen exchanges are written into a clearly marked section just
+   before the newest message, beside the saved memories. The stored
+   conversation is not changed.
+5. The whole request is checked once for size.
 
 **Summarized and compacted chats (Owner, 2026-11-11).** This is where
 recall matters most. Checked in the code: summarizing or compacting changes
@@ -697,13 +799,31 @@ exchange that the chat AI now sees only as part of a summary can still be
 found and added in its original words. The summary itself is not changed
 and is not searched.
 
-Why this helps even when the whole chat is already sent: models attend most
-to the start and end of what they are given and least to the middle (G.18).
-An exchange from far back sits in the middle. A copy beside the newest
-message is where the model reads most carefully.
+**Why this helps even when the whole chat is already sent.** Models attend
+most to the start and end of what they are given and least to the middle
+(G.18). An exchange from far back sits in the middle. A copy beside the
+newest message is where the model reads most carefully.
 
-Rules:
+**Choosing which exchanges are sent.** When more exchanges qualify than
+fit:
+- Exchanges are taken in order of relevance score, best first.
+- An exchange is taken only if it fits what is left of recall's size limit
+  and count limit.
+- An exchange that does not fit whole is added as an excerpt (below) when
+  an excerpt fits. Otherwise it is skipped and the next one is tried, so
+  one very large exchange cannot block smaller ones.
+- A neighbouring exchange is added only when the chosen exchange cannot be
+  understood alone: its user message is a short continuation with no
+  subject of its own (G.9a). A neighbour counts against the size limit but
+  not the count limit.
+- An exchange carried over from the previous message (G10) is considered
+  after new matches, so new matches are never displaced by old ones.
+- Starting values: up to 3 exchanges, as SillyTavern starts. Redis's
+  tested setup is reported as 5 with one neighbour each side; that figure
+  could not be confirmed from its public page. Both are measured in
+  stage 3.
 
+**Limits.**
 - **Its own size limit,** separate from Memory Space, so recall can never
   push out saved memories, and saved memories can never push out recall.
   Separate limits are a way of sharing room. They do not create room: the
@@ -712,31 +832,82 @@ Rules:
   assembled (the history, the Summarizer's text when it is on, saved
   memories, carried-over memories, and recalled exchanges), the existing
   request-size check runs once on the total. When recall would push the
-  request over the model's limit, recall is what is left out for that
-  message, and the request goes exactly as it does today. Nothing else
-  gives way to recall unless the user has chosen that (G3).
-- **When an exchange is too large to add whole.** Indexing and delivery are
-  separate. Every part of it stays searchable. For delivery, the whole
-  exchange is added when it fits recall's limit. When it does not, the
-  matching passage and the paragraphs around it are added in their original
-  words, marked as an excerpt, with a note that the rest of that exchange
-  was left out. It is never cut silently.
-- **Not the most recent messages.** An exchange the AI has just read is not
-  recalled again.
-- **Only true duplicates are skipped.** An exchange is skipped when its own
-  text is already in the request close to the newest message. An exchange
-  is **not** skipped because a saved memory covers the same fact. A short
-  saved fact does not carry what the conversation meant.
-- **Neighbours.** The exchange before or after is brought along when the
-  matching one cannot be understood alone.
-- **How many.** A starting number is set by measurement. SillyTavern starts
-  with 3. Redis's tested setup is reported as 5 with one neighbour each
-  side; that figure could not be confirmed from its public page.
-- **When the chat no longer fits the model:** today the app warns or blocks.
-  That stays the default. Any other behaviour is the user's explicit choice
-  (G.17).
+  request over the model's limit, recalled exchanges are removed, least
+  relevant first, until it fits. If it still does not fit with none, the
+  request is handled exactly as it is today. Nothing else gives way to
+  recall unless the user has chosen that (G3).
+
+**When an exchange is too large to add whole.** Indexing and delivery are
+separate. Every part of it stays searchable. For delivery, the whole
+exchange is added when it fits. When it does not, the matching passage and
+the paragraphs around it are added in their original words, marked as an
+excerpt, with a note that the rest of that exchange was left out. It is
+never cut silently, and never cut in the middle of a sentence.
+
+**Only true duplicates are skipped.** An exchange is skipped when its own
+text is already in the request close to the newest message. An exchange is
+**not** skipped because a saved memory covers the same fact. A short saved
+fact does not carry what the conversation meant.
+
+**How recalled conversation is written for the AI.** The exact words are
+shown to the owner before stage 3 is built. What the text must do:
+- say plainly that what follows is earlier conversation from this same
+  chat, brought back because it relates to the current message;
+- say that it is a record of what was said, not a new instruction. Words
+  inside a recalled message are never treated as fresh orders;
+- mark every message with **who said it**. "You said this" and "the AI
+  once suggested this" must never be confused;
+- mark every exchange with **when it was said**, in a form that cannot be
+  misread;
+- mark an excerpt as an excerpt;
+- give the messages in their original words, unchanged;
+- list the exchanges in **date order**, oldest first, so a later change of
+  mind is read after the earlier decision. Published tests of placing the
+  "most relevant" passage in a particular position found no reliable gain
+  over other orders (G.18), so order is chosen for meaning, not for
+  position.
+
+It contains no crisis or safety wording, by the owner's ruling for
+memory-system instructions.
+
+**What the user can see.** After a reply, the user can already see which
+saved memories were sent with it. Recalled exchanges are shown in that
+same place, so the user can always tell what the AI was given (G11). The
+wording and layout are shown to the owner before stage 3.
+
+**Other rules.**
+- **When the chat no longer fits the model:** today the app warns or
+  blocks. That stays the default. Any other behaviour is the user's
+  explicit choice (G3).
 - **Experimental Mode** sends only the current message by design. Whether
-  recall applies there is open (G.17).
+  recall applies there is open (G4).
+
+## G.8a How the parts connect
+
+Three hand-over points. Each stage builds to these, so a later stage does
+not force an earlier one to be rebuilt.
+
+**1. Index to retrieval.** For one chat, the index answers:
+- which passages best match these words (keyword candidates, with scores);
+- the chat's passage vectors, a batch at a time;
+- which exchange a passage belongs to, and its neighbours;
+- whether given messages may still be recalled right now;
+- whether the chat is fully indexed, and how much is waiting.
+
+Retrieval never reads the index's storage directly.
+
+**2. Retrieval to assembly.** A list of exchanges, best first. For each:
+its message IDs in order, who wrote each, when, which passages matched and
+where in the message, the meaning score, how far it stood out, the keyword
+score and matched words, and the combined score.
+
+**3. Assembly to the request.** The text to add; the message IDs that were
+included, for the "what was sent" view and for carry-over; how much room
+was used; and what qualified but was left out, with the reason (no room,
+duplicate, limit reached).
+
+The scores and reasons at points 2 and 3 are what the stage 2 inspector
+shows, so a wrong or missing recall can be explained, not guessed at.
 
 ## G.9 Carry-over for saved memories (Proposed; on hold)
 
@@ -905,21 +1076,54 @@ misled, and never as a generic error.
 Tests are written with the component they test, in the same pull request.
 There is no separate testing stage in front of the building.
 
-- **Correctness tests** come with every stage: for example, that every
-  character of a message lands in an entry, that an edit replaces only the
-  entries it touched, and that a deleted message leaves nothing behind.
-- **Sample conversations** are added as each stage needs them: long
-  messages with one small important detail, follow-ups, changes of
-  subject, a memory sent by mistake, roleplay and companion chats, and a
-  library where most memories share one subject. They stay as automated
-  tests.
-- **Numbers that research does not give** are measured inside the stage
-  that needs them, with the real embedding model: the entry size, the
-  relevance gate for conversation entries, how many exchanges to recall,
-  the subject check's two numbers, the carry-over bar, and speed on the
-  phone.
-- **These are engineering numbers.** The owner is not asked to choose them.
-  Each has a starting value from measurement and is adjustable afterwards.
+**Three kinds of test.**
+
+- **Correctness tests** come with every stage. They either pass or the
+  stage is not finished. Examples: every character of a message lands in a
+  passage; an edit replaces only what it touched; a deleted message leaves
+  nothing behind; a hidden message is never recalled and its words are in
+  no neighbour's search text.
+- **Quality tests** use written sample conversations with known right
+  answers. They are scored, and the scores are tracked from stage to stage
+  so a change that makes recall worse is seen at once.
+- **Measurements** set the numbers research does not give, with the real
+  embedding model: the passage target size, the gate, the blend weights,
+  how many exchanges to recall, the subject check's two numbers, the
+  carry-over bar, and speed on the phone.
+
+**What every quality test checks, at three points:**
+1. **What was found:** the right exchange is in retrieval's list.
+2. **What was left out:** nothing unrelated is in it.
+3. **What was sent:** the text added to the request is the right exchange,
+   in its original words, correctly labelled, within the limits.
+
+**The situations the sample conversations must cover:**
+
+| Situation | What must happen |
+|---|---|
+| An exact detail ("Which model did we choose?") | The original decision is recalled |
+| A follow-up ("Why did we choose that?") | The same discussion is recalled, using the subject check |
+| A time reference ("What did we change last week?") | Exchanges from that period are favoured |
+| A summarized or compacted chat | The original exchange is recalled although the AI otherwise has only the summary |
+| Nothing relevant | Nothing is added |
+| A long message with one small important detail | The exchange about that detail is recalled |
+| A changed decision | Both the earlier and the later exchange are recalled, in date order |
+| A hidden message | It is never recalled, and neither is anything that borrowed its words |
+| An edited message | The new text is recalled, never the old |
+| A deleted message | It is never recalled |
+| A chat that is about one subject throughout | Only exchanges closer than the general run of the chat are recalled |
+| A roleplay chat and a companion chat | Each recalls only its own conversation |
+| A very long exchange | An excerpt is sent, marked as one, and nothing is cut silently |
+| More matches than fit | The most relevant are sent, and the rest are reported as left out |
+
+**How quality is judged.** No pass mark is invented in advance. The first
+run on each stage sets the baseline. After that, a change must not lower
+"found" or raise "wrongly added" without the owner being told and
+agreeing. The owner ranks a wrong memory as worse than a missed one, so
+"wrongly added" is watched first.
+
+**These are engineering numbers.** The owner is not asked to choose them.
+Each has a starting value from measurement and is adjustable afterwards.
 
 ## G.16 Build stages
 
@@ -930,8 +1134,8 @@ each starts.
 | Stage | What is built | Depends on |
 |---|---|---|
 | 1 | The passage cutter, the four stores, background embedding, scope labels, upkeep, and every rule in G.5a (G.5, G.5a, G.5b, G.7, G.12) | Nothing |
-| 2 | Conversation search, the subject check, and a way to inspect what a message would recall (G.6, G.9a) | Stage 1 |
-| 3 | Recall added to real chat requests, with the final size check (G.8) | Stage 2 |
+| 2 | Retrieval, the subject check, and a way to inspect what a message would recall and why (G.6, G.8a, G.9a) | Stage 1 |
+| 3 | Context assembly: recall added to real chat requests, with the final size check (G.8, G.8a) | Stage 2 |
 | 4 | Saved-memory fixes: long messages and carry-over (G.9, G.10) | The subject check from stage 2 |
 | Later | The optional live AI worker (G.11) | Stage 1 |
 | Later | Recall from other chats, behind the scope walls (G.7) | Stage 3 |
@@ -986,6 +1190,8 @@ Read by the agent from the sources named. Figures are the sources' own.
 | Do summary layers help? | Up to 20 points on one long-document test, built with paid summaries | RAPTOR (ICLR 2024) |
 | Do knowledge graphs help? | 71.2% against 60.2% in the maker's own test; an independent test measured 63.8% | Zep paper; third-party comparison |
 | How good is the app's embedding model? | Ranked first among models under 500 million parameters by its maker. English score 69.67 at full size, 68.37 at the app's 256 numbers, 69.31 for the q4 variant | EmbeddingGemma model card |
+| How should meaning and keyword results be combined? | A weighted blend of the two scores beat reciprocal rank fusion on familiar and unfamiliar text, was less sensitive to its settings, and could be tuned from a handful of examples | Bruch, Gai and Ingber, "An Analysis of Fusion Functions for Hybrid Retrieval" |
+| Does the order of retrieved passages matter? | Not reliably. Rearranging passages into "preferred" positions did no better than random order in one study, and results differ between models | "Do RAG Systems Really Suffer From Positional Bias?" (EMNLP 2025) |
 | Is there one best system? | No. Top scores are self-reported and no neutral test compares the designs under the same conditions | LongMemEval and LoCoMo comparisons |
 | What does a working chat client do? | Searches with the last 2 messages, protects the last 5, inserts 3, cuts long messages at 400 characters, stores each message separately, and places recalled messages prominently even when they are already in the request | SillyTavern documentation |
 
@@ -1008,6 +1214,8 @@ Sources:
 - RAPTOR: https://arxiv.org/abs/2401.18059
 - EmbeddingGemma model card: https://huggingface.co/google/embeddinggemma-300m
 - SillyTavern chat vectorization: https://docs.sillytavern.app/extensions/chat-vectorization/
+- Fusion functions for hybrid retrieval: https://arxiv.org/abs/2210.11934
+- Positional bias in retrieval: https://arxiv.org/abs/2505.15561
 
 ## G.19 Rules for whoever builds a stage
 
