@@ -323,16 +323,17 @@ object SummarizerDetailSanitizer {
                     index in events && index !in kept -> null
                     !line.startsWith("data:") -> line
                     else -> {
+                        // Only the end marker passes as it is. Every other
+                        // event is cleaned, and anything that is not an
+                        // object or list keeps only its length.
                         val payload = line.removePrefix("data:").trim()
-                        try {
-                            val parsed = com.google.gson.JsonParser.parseString(payload)
-                            if (parsed.isJsonObject) {
+                        if (payload == "[DONE]" || payload.isEmpty()) line
+                        else {
+                            val parsed = runCatching { com.google.gson.JsonParser.parseString(payload) }.getOrNull()
+                            if (parsed != null && (parsed.isJsonObject || parsed.isJsonArray)) {
                                 clean(parsed)
                                 "data: ${evidenceJson.toJson(parsed)}"
-                            } else line
-                        } catch (_: Exception) {
-                            if (Regex("\"(?i:messages|choices|content|prompt|summary|headers)\"\\s*:").containsMatchIn(payload))
-                                "data: [payload removed]" else line
+                            } else "data: ${removedText(payload.length)}"
                         }
                     }
                 }

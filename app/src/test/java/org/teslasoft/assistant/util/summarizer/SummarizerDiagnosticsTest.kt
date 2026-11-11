@@ -185,6 +185,21 @@ class SummarizerDiagnosticsTest {
         }
     }
 
+    @Test fun aStreamedEventThatIsNotAnObjectStillLosesTheReturnedWords() {
+        val first = """data: {"id":"gen-4","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}"""
+        for (odd in listOf(
+            """data: ["private generated summary"]""",
+            """data: "private generated summary"""",
+            """data: private generated summary"""
+        )) {
+            val evidence = request(200, "$first\n$odd\ndata: [DONE]")
+            val logged = SummarizerDetailSanitizer.sanitize(evidence.body, evidence.privateResponseValues())!!
+            assertFalse(logged, logged.contains("private generated summary"))
+            assertTrue(logged, logged.contains("data: [DONE]"))
+            assertTrue(logged, logged.contains("\"role\":\"assistant\""))
+        }
+    }
+
     companion object {
         private const val validResponse = """{"id":"response-id","created":1,"model":"test","choices":[{"index":0,"message":{"role":"assistant","content":"valid reply"},"finish_reason":"stop"}]}"""
     }
