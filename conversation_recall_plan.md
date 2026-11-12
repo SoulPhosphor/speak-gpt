@@ -82,6 +82,17 @@ Words used in this plan:
     installed; the index is then built for keyword search. When a model is
     installed later, meaning search is added to the same index without
     rebuilding it.
+16. **Owner (2026-11-12):** conversation recall requires the embedding
+    model. This replaces item 15. Lorebook keyword matching is separate,
+    is not changed by this work, and keeps working whenever the lorebook
+    is on, with or without a model.
+17. **Owner (2026-11-12):** where the right decision is not known, use
+    what established, proven systems do to decide (G.18a). Custom design
+    is acceptable where it is needed.
+18. **Owner (2026-11-12):** the agent's recommendations of that day are
+    accepted: overlapping pieces for long and dictated messages (G29),
+    the simpler cutter, searching with the previous messages, and leaving
+    borrowed context out of the first build.
 
 ## G.2 What the review of #180 found
 
@@ -413,8 +424,7 @@ ones. Pieces are never joined across two messages.
   text may exceed it.
 
 **Step 4: cutting does not depend on a model being present.**
-- The model can be absent or changed, and keyword recall must still work
-  without it. So the cutter measures size with a model-independent
+- The model can be changed, and its limit with it. So the cutter measures size with a model-independent
   estimate and aims well under the hard limit.
 - When a vector is about to be made, the search text is measured with the
   real tokenizer. If it does not fit, that message is cut again with a
@@ -693,7 +703,8 @@ is not asked to choose them.
   first, by the same rule saved-memory search uses.
 - **Meaning:** the message's vector is compared with the chat's passage
   vectors, in bounded batches, keeping only the best so far (G.5a rule 5).
-- A passage with no vector yet can still be found by keywords.
+- A passage with no vector yet is not a candidate until its vector is
+  made (G30).
 - Each way returns a bounded list. Starting value: the best 50 of each.
 
 **Step 4: the relevance gate. Being the best match is not the same as being
@@ -751,12 +762,8 @@ best candidate look perfect even when it is poor):
   candidates, never as the score, because it cannot be compared from one
   message to the next.
 
-**When a passage has no vector yet.** Its meaning score is unknown, not
-zero. It can pass the gate on keywords alone. For ordering, its meaning
-score is counted as 0, so it ranks below a passage with the same keyword
-score that also matched by meaning. This is deliberate: a wrong recall is
-worse than a missed one, and the gap closes as soon as the vector is made.
-The inspector shows such a passage as "no vector yet", so a low rank is
+**When a passage has no vector yet.** It is not recalled until its vector
+is made (G30). The inspector shows it as waiting, so a missing result is
 never mistaken for a poor match.
 
 **Step 5a: an optional re-ranker (a place is kept for it; not built
@@ -1037,8 +1044,9 @@ Decided by the owner on 2026-11-11.
   Recalled text is included in your normal AI requests."
 - Turning it on may also turn on Index Conversations, so one switch is
   enough.
-- It **never downloads an embedding model by itself.** With no model,
-  recall works by keywords.
+- It **never downloads an embedding model by itself.** With no model
+  installed it cannot be turned on, and the user is told why and where to
+  install one (G30, G31).
 - If the user later turns Index Conversations off, indexing is **not
   silently restarted**, by recall or by anything else.
 
@@ -1302,10 +1310,10 @@ message-level work while the user chats, as an option.
 | Cutting rules or target size changed | Chats are re-cut in the background. Unchanged search text keeps its vector |
 | The user deletes the index | Everything derived is removed. The chats are untouched |
 | Backup restored, or a backup merged into the phone's chats | Each affected chat is checked message by message (G.5a rule 8). Nothing is indexed twice |
-| Embedding model changed | Keyword search keeps working at once. Vectors are remade in the background |
+| Embedding model changed | Vectors are remade in the background. A chat is recalled from again once its vectors are ready |
 | Chat settings changed (companion, project, roleplay) | Scope labels on later messages follow the new settings |
 | Existing chats, first time | **Owner (2026-11-11):** indexed in the background, a little at a time, newest first. Opening a chat never waits for it |
-| Already indexed text | Stays indexed. It is redone only when the message is edited, the embedding model is changed (the meaning half only; keywords keep working), or the index is rebuilt after a restore |
+| Already indexed text | Stays indexed. It is redone only when the message is edited, the embedding model is changed, or the index is rebuilt after a restore |
 
 The index is derived: it can always be rebuilt from the stored chats, and
 losing it loses nothing the user wrote.
@@ -1314,9 +1322,9 @@ losing it loses nothing the user wrote.
 
 | Missing | What still works |
 |---|---|
-| The embedding model was never installed | The index is built and kept up to date for keyword search, and recall works by keywords. Passages wait for their vectors. Installing a model later adds meaning search to the same passages, with no re-cutting and no rebuild |
-| The embedding model is installed but fails | The same keyword path keeps working. This is reported as a failure, separately from "no model installed", because the user's next step is different |
-| A vector for some entries | Those entries are found by keywords until the vector is made |
+| The embedding model is not installed | Index Conversations and Conversation Recall are not available, and the user is told why and where to install it (G31). The chat is sent exactly as today |
+| The embedding model is installed but fails | Recall is skipped for that message and the user is told why (G.13b). This is reported separately from "no model installed", because the user's next step is different |
+| A vector for some entries | Those entries are not recalled until the vector is made |
 | The live AI worker, or its network | Everything except AI notes |
 | The whole index | The chat is sent exactly as today. Sending is never blocked by recall |
 
@@ -1428,7 +1436,6 @@ cannot happen and what they can do to fix it.
 |---|---|
 | "Conversation recall unavailable this turn — continuing without it" (G.13a) | Why it was unavailable, and whether the user needs to do anything |
 | "Indexing and Conversation Recall are off until this is fixed. … See the Error Log for details." (G.13a) | What "fixed" means and how the user fixes it. It sends the user to a log to find out |
-| "Keyword search only. Install the embedding model to also find conversations by meaning." (G.16a) | Where the model is installed |
 | "meaning search could not be prepared for (number) passages" (G.13a) | "Passages" is a planning word |
 
 - **An existing line has the same fault** and is handled with step 4A
@@ -1517,9 +1524,9 @@ it.
 | A decision made early and changed later, asked about in words that match only one | Both are recalled, in date order. The hit rate is reported |
 | The same message sent down both request paths | The same text is added by both |
 | Retrieval runs out of time | The message is sent as today, and recall is shown as skipped |
-| A passage with no vector yet | It can be found by keywords, and is shown as waiting for its vector |
-| No embedding model installed | The index is built, and an exchange is recalled by its distinctive words |
-| A model is installed after indexing | Meaning search starts working on the existing passages, and nothing is re-cut |
+| A passage with no vector yet | It is not recalled, and is shown as waiting for its vector |
+| No embedding model installed | Index Conversations and Conversation Recall cannot be turned on, and the user is told why |
+| The model is changed after indexing | Recall resumes once the new vectors are made, and nothing is re-cut |
 
 **How quality is judged.** No pass mark is invented in advance. The first
 run on each stage sets the baseline. After that, a change must not lower
@@ -1571,11 +1578,13 @@ Nothing changes for any user until step 1F. Steps 1A to 1E add code that
 stays switched off, because Index Conversations starts off and cannot be
 turned on until 1F.
 
-**Keyword-only use is part of every step, not a later one (Owner,
-2026-11-11).** No step may require an embedding model in order to build,
-keep, or search the index. With no model: 1C and 1E work in full, 1D
-leaves passages waiting, 1F shows that search is by keywords only, and 2A
-and 3 recall by keywords. Each step's tests include the no-model case.
+**The embedding model is required (Owner, 2026-11-12; G30).** This
+replaces the earlier rule that every step must work on keywords alone.
+Index Conversations and Conversation Recall need an embedding model
+installed. Keywords are still used together with meaning to find passages
+(G.6). What is dropped is running on keywords alone. What the user sees
+when no model is installed, or when the model is removed later, is shown
+to the owner before step 1F (G31).
 
 Steps 4A and 4B fix gaps that are live on the beta today. **Owner
 (2026-11-11): step 4A is built first.** Review on 2026-11-12 found that
@@ -1724,8 +1733,9 @@ needs is its own step (S). Which step is built first is the owner's decision.
   missing style is created and added to the guide. `ui-style-adoption.md`
   is updated.
 - **Must not change:** any other part of Advanced Memory Settings.
-- **With no embedding model:** the setting can still be turned on. The
-  status says search is by keywords only.
+- **With no embedding model:** the setting cannot be turned on, and the
+  user is told why and where to install one. That wording is approved
+  first (G31).
 - **Done when:** turning the setting on starts indexing while the app is
   open; deleting the index removes everything derived and turns the
   setting off.
@@ -1880,9 +1890,10 @@ Embeddings:
 | Confirmation text | This removes the search index. Your conversations are not changed. |
 | Confirmation buttons | Cancel, Delete |
 
-**With no embedding model installed (Owner, 2026-11-11),** the status
-under the toggle reads: "Keyword search only. Install the embedding model
-to also find conversations by meaning."
+**With no embedding model installed.** The earlier "Keyword search only"
+status is withdrawn. On 2026-11-12 the owner decided that conversation
+recall requires the embedding model (G30), so the toggle cannot be turned
+on without one. The wording that tells the user why is G31.
 
 **Behaviour approved with it:**
 - Index Conversations starts off. Turning it on starts background
@@ -1933,8 +1944,10 @@ recommendation.
 | G26 | The Memory Debug Log line "Query embed failed, using lexical fallback: (cause)" and the two lines like it are not plain English (G.13b). What do they say instead? | **Owner (2026-11-12):** the plain wording proposed for the first line is fine: "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause)." The two lines like it are still to be proposed | Step 4A |
 | G27 | G.13a says every index error raises a snack bar that stays until acknowledged, and also that most failures are repaired without interrupting the user. Which failures raise a snack bar? | Open. Recommended: a snack bar only when something has stopped working or the user has something to do. Failures the app repairs by itself go to the Error Log only | Step 1F |
 | G28 | Chats that have never been reopened cannot be indexed until they are opened (G.5a rule 7). What does the progress count show for them? | Open. Recommended: count only what can be indexed now, and say plainly how many conversations will be indexed when they are next opened | Step 1F |
-| G29 | To find a small detail in a long or dictated message, should the app also search with overlapping pieces of the message, cut between words and never at periods (G.10)? | Open. Recommended: yes. It is what established systems do, the pieces are only used for finding, and nothing cut is shown to the AI | Step 4A |
-| G30 | No established chat app offers recall without an embedding model (G.18a). This plan builds keyword-only indexing and recall into every step. Is that kept? | Open. Recommended: require the embedding model for conversation recall. Keyword-only matching is where wrong results are most likely, and dropping it removes work from every step | Step 1C |
+| G29 | To find a small detail in a long or dictated message, should the app also search with overlapping pieces of the message, cut between words and never at periods (G.10)? | **Decided (owner, 2026-11-12):** yes, on the agent's recommendation | Decided |
+| G30 | Is recall offered without an embedding model? | **Decided (owner, 2026-11-12):** no. Conversation recall requires the embedding model. Lorebook keyword matching is separate and keeps working whenever the lorebook is on | Decided |
+| G31 | What the user sees when Index Conversations or Conversation Recall cannot be turned on because no embedding model is installed, and when the model is removed after indexing | Open. Written to the plain-wording rule (G.13b): why it cannot be turned on, and where to install the model | Step 1F |
+| G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | Open. Recommended: start at 2, allow 0 to 3, and place it with the other search numbers on the Memory Search Test screen. Each message is searched on its own, so the embedding model sets no limit; the limit is there because every extra message lets an old subject's memories linger one message longer | Step S |
 
 ## G.18 Research behind this plan (2026-11-10)
 
