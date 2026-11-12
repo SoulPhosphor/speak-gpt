@@ -124,7 +124,7 @@ For code work, use this sequence:
 5. Repeat until Codex has no outstanding actionable findings and Android Checks is green on **the final commit**. Codex is the final code-review gate: do not push further code after it passes. If a later correction is unavoidable, repeat checks and obtain a fresh Codex review of that commit. Do not merge work that is still running, failed, or unreviewed.
 6. Merge the approved, green PR into the **verified owner-designated integration branch** immediately, without waiting for the owner to give a second merge instruction. Use an ordinary merge method and no force-push. If the target branch or approval status is genuinely uncertain, leave it unmerged and ask rather than choosing silently.
 
-For documentation-only changes, inspect the complete replacement text, links, scope, and diff. Do not claim Android tests were executed if only documentation was checked. Any required CI checks still must be green before merge.
+**Codex review is required only for pull requests that change application or test code.** A PR changing only `CLAUDE.md` or other documentation needs no Codex review or re-review. For documentation-only changes, inspect the complete replacement text, links, scope, and diff; do not run Android builds solely to validate documentation or claim tests were executed when they were not. Wait for any required repository checks, then merge without a Codex approval gate. A PR containing both documentation and code follows the code workflow above.
 
 After opening a PR, do not trigger a duplicate first Codex review, run repetitive status checks, or schedule watchers. Check while CI or review action is pending, then stop. If only the owner can decide the remaining blocker, ask once and leave the PR intact.
 
