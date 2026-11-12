@@ -52,6 +52,36 @@
                     android:id="@+id/switch_allow_message_visibility"
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/chat_usage_alert_toggle" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_chat_usage_alert"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/chat_usage_alert_amount_area"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+                <TextView
+                    style="@style/Widget.App.Field.Label.AfterRow"
+                    android:labelFor="@id/chat_usage_alert_amount"
+                    android:text="@string/chat_usage_alert_amount_label" />
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/chat_usage_alert_amount_hint" />
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/chat_usage_alert_amount"
+                    style="@style/Widget.App.Field.Box"
+                    android:inputType="numberDecimal"
+                    android:maxLines="1" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1242,6 +1242,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    private val chatUsageAlert by lazy { org.teslasoft.assistant.usage.ChatUsageAlert(this, ::calculateCost) }
+
     /** Build the usage summary from frozen per-request records. CL100K runs only for
      * legacy assistant messages that have no durable record; a new
      * provider-reported turn never reaches the tokenizer. */
@@ -1250,6 +1252,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private suspend fun refreshConversationUsageSummary(): ConversationUsageSummary {
+        val usageChatId = chatId
+        val usagePreferences = preferences
         val snapshot = messages.map { HashMap(it) }
         val summary = withContext(Dispatchers.Default) {
                 val legacyIndexes = snapshot.indices.filter { index ->
@@ -1282,22 +1286,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Reconcile durable message records before summarizing. A
                 // rejected/skipped usage-log append must not make a completed
                 // request disappear from this screen.
-                val log = preferences?.let { UsageLogStore.seed(it, snapshot) }
+                val log = usagePreferences?.let { UsageLogStore.seed(it, snapshot) }
                 if (log != null && log.seeded) {
-                    kotlin.Pair(log.summarize(snapshot, estimate), log.sections(snapshot, estimate))
+                    Triple(log.summarize(snapshot, estimate), log.sections(snapshot, estimate),
+                        log.entries.maxOfOrNull { it.recordedAtMs } ?: 0L)
                 } else {
                     // No readable log: only the records inside messages, all chat replies.
                     val fromMessages = TokenUsageAccounting.summarizeMessages(snapshot, estimate)
-                    kotlin.Pair(
+                    Triple(
                         fromMessages,
                         listOfNotNull(
                             fromMessages.takeIf { it.groups.isNotEmpty() }
                                 ?.let { UsageSection(UsageCategory.CHAT, it) }
-                        )
+                        ),
+                        0L
                     )
                 }
-        }.let { (total, sections) ->
+        }.let { (total, sections, latestUsageAt) ->
             conversationUsageSections = sections
+            if (chatId == usageChatId) chatUsageAlert.onSummary(usageChatId, total.totalCost, latestUsageAt)
             total
         }
         conversationUsageSummary = summary
