@@ -374,8 +374,8 @@ Chunking decides what each index entry means, so it is settled before the
 index is built. It runs on the phone, costs the user nothing, and uses no
 AI model beyond the embedding model.
 
-**What the research supports.** A simple rule based on paragraphs and
-sentences. A study of automatic "semantic chunking" found it did no better
+**What the research supports.** A simple rule based on paragraphs, lines,
+and words. A study of automatic "semantic chunking" found it did no better
 than plain sizes on realistic text, and splitting by topic only helped when
 a capable paid model did it (G.18). So the cutter is a plain rule, made
 careful, not a clever one.
@@ -389,9 +389,14 @@ careful, not a clever one.
 
 **Step 1: split the message into natural pieces.** In this order:
 paragraphs (a blank line); then lines, which keeps code, lists, and tables
-intact; then sentences; then clauses; then words; and last, between two
-characters, never through the middle of one. A piece is only split further
-when it is too large for a passage.
+intact; then between words; and last, between two characters, never
+through the middle of one. A piece is only split further when it is too
+large for a passage.
+
+Periods are not used as cut points. Speech-to-text leaves them out of
+whole paragraphs and also puts them in the middle of a thought (Owner,
+2026-11-12). SillyTavern and LangChain's standard splitter cut the same
+way: paragraph, line, then between words (G.18a).
 
 **Step 2: join short neighbouring pieces.** Short pieces next to each other
 in the same message are joined, in order, until the passage reaches the
@@ -419,13 +424,20 @@ ones. Pieces are never joined across two messages.
 
 **Step 5: carry meaning across boundaries.** Two protections, both wanted:
 - **Overlap in the search text only.** The search text of a passage begins
-  with the last sentence of the passage before it, when both are in the
-  same message and it fits. Where the passage before has no sentence break
-  (dictated text often has none), its last few words are used instead, up
-  to a set number. The original text is not overlapped, so no character is
-  delivered twice.
+  with the last words of the passage before it, up to a set number, when
+  both are in the same message and it fits. The original text is not
+  overlapped, so no character is delivered twice.
 - **Neighbour links.** Each passage records the one before and after it, so
   recall can add the neighbour when a match cannot be understood alone.
+
+**Step 6 is not in the first build (2026-11-12).** No established chat
+app adds a neighbouring message's words to a short reply before indexing
+it (G.18a), and it causes most of the upkeep work in this plan: every
+hide, edit, deletion, or scope change has to rebuild its neighbours. Step
+6 and the borrowed-context rules below stay here as the design to use if
+the stage 2 measurements show short replies are being missed. Until then,
+a short reply is found through its exchange, and the only overlap is
+between passages of the same message (step 5).
 
 **Step 6: give short replies their question.** "It needs to survive. Don't
 clear the composer." means little alone. When a passage is short, its
@@ -474,7 +486,7 @@ passage. When the rules or the target size change, chats are re-cut in the
 background and the old passages are replaced. Unchanged search text keeps
 its vector.
 
-**Languages.** Sentence and word boundaries are found with the platform's
+**Languages.** Word boundaries are found with the platform's
 own language-aware tools, so cutting works in any language. The keyword
 word rules are written for English; other languages rely more on meaning
 search. That limit is stated, not hidden.
@@ -655,12 +667,11 @@ is not asked to choose them.
 
 **Step 1: decide what to search with.**
 - The user's latest message, on its own.
-- A small detail inside the message is also searched for through the
-  words around it (G.10), up to a limit. Punctuation plays no part.
-- When the subject check (G.9a) says the message is a short continuation
-  with no subject of its own, the previous exchange's user message is
-  searched as well, as a separate search. Earlier messages are never glued
-  onto the search text.
+- A message longer than one piece is also searched in overlapping pieces
+  (G.10), up to a limit. Periods play no part.
+- The user's previous one or two messages are searched as well, each as
+  a separate search that counts for less than the newest (G.9a). Earlier
+  messages are never glued onto the search text.
 - Each of these is a separate search. A passage qualifies when it passes
   for any one of them.
 
@@ -930,8 +941,8 @@ fit:
   an excerpt fits. Otherwise it is skipped and the next one is tried, so
   one very large exchange cannot block smaller ones.
 - A neighbouring exchange is added only when the chosen exchange cannot be
-  understood alone: its user message is a short continuation with no
-  subject of its own (G.9a). A neighbour counts against the size limit but
+  understood alone: its user message is only a few words and names no
+  subject ("exactly", "and then?"). A neighbour counts against the size limit but
   not the count limit.
 - An exchange carried over from the previous message (G10) is considered
   after new matches, so new matches are never displaced by old ones.
@@ -1095,56 +1106,53 @@ shows, so a wrong or missing recall can be explained, not guessed at.
 not kept in the chat history. A memory found for one message is gone for
 the next unless that message finds it again.
 
-**The rule.**
+**The rule (rewritten 2026-11-12 to use an established method, G.9a).**
 
-- Only the memories sent with the previous message are candidates.
-- A candidate stays when the user's new message still relates to it, at an
-  easier bar than a new memory must clear.
-- A candidate also stays when the new message is a short continuation with
-  no subject of its own ("exactly", "and then?") and the AI's previous
-  reply still relates to it.
-- Otherwise it is dropped. This covers a change of subject and a memory
-  that was sent by mistake.
-- The AI's reply alone can never keep a memory alive. The user has to still
-  be on the subject.
-- There is no fixed number of messages after which a memory is dropped.
-- New matches rank ahead of carried ones when the memory limit is full.
+- The user's previous one or two messages are searched again, each on its
+  own, alongside the new message.
+- A memory found through an earlier message must pass the same relevance
+  gate against that message. Nothing is kept merely because it was sent
+  before.
+- Matches for the new message come first. Matches for the message before
+  it come next, and for the one before that last.
+- A memory therefore stays through a follow-up such as "What should I feed
+  her?", and falls away one or two messages after the subject changes.
+- Only the user's messages are searched. The AI's reply alone can never
+  keep a memory alive.
 - Carried memories obey scope like any other.
 
-**What is not known.** The "easier bar" and the test for "a short
-continuation" have no published answer. They are measured on the test
-conversations before anything is built (G.15).
+**What is not known.** How many earlier messages to search, and how much
+less they count, are measured on the test set (step 0). A memory that was
+sent by mistake stays for those one or two messages; whether that needs a
+stricter rule is measured too.
 
 **Relation to recall.** Carry-over and conversation recall are separate.
-They share the subject check (G.9a) and the final size check (G.8), and
-nothing else. Each has its own size limit.
+They share this way of searching (G.9a) and the final size check (G.8),
+and nothing else. Each has its own size limit.
 
 A recalled exchange is carried over under the same rule (Owner,
 2026-11-11; G.8b).
 
-## G.9a The subject check (Proposed)
+## G.9a Searching with the previous messages (Proposed; replaces the subject check, 2026-11-12)
 
-One small component, built once and used by both recall and carry-over. It
-does not depend on either of them.
+The earlier version of this plan had a "subject check": a new component
+with two unmeasured numbers that judged whether a message was still on the
+previous subject. No established system does that. It is replaced by what
+RisuAI does (G.18a).
 
-- **What it answers:** is the user's new message still about the subject of
-  the previous exchange?
-- **What it reads:** the new message, the previous exchange, and nothing
-  older.
-- **How it decides:**
-  - the new message relates to the previous exchange by meaning or
-    keywords; or
-  - the new message is a short continuation with no subject of its own, and
-    so cannot be judged alone.
-- **What uses the answer:**
-  - recall searches with the previous exchange's subject as well when the
-    answer is yes and the new message has no subject of its own;
-  - carry-over keeps the previous message's memories when the answer is
-    yes.
-- **What it never does:** glue earlier messages onto every search, or let
-  the AI's reply alone keep a subject alive.
-- Its two numbers (how closely related, and how short is "short") are
-  measured when it is built.
+- **What is searched:** the new message, and the user's previous one or
+  two messages.
+- **How:** each is its own search. They are never joined into one text.
+  #180 measured that joining recent messages hurt saved-memory search in
+  this app; separate searches avoid that.
+- **How results combine:** a match for the newest message outranks a match
+  for an earlier one.
+- **What it adds on the phone:** nothing new to read. The earlier
+  messages' search results from the previous turn are kept and reused.
+- **Used by:** carry-over for saved memories (G.9) and conversation recall
+  (G.6 step 1).
+- **What it never does:** search with the AI's replies, or keep anything
+  that does not pass the relevance gate.
 
 ## G.10 A small detail inside a larger message (Proposed; rewritten 2026-11-12)
 
@@ -1162,68 +1170,79 @@ more subjects:
   means. A message about one thing gives a sharp summary. A message about
   five things gives a blur that is not close to any one memory.
 
-**Punctuation and word counts are not used to divide a message (Owner,
-2026-11-12).** Speech-to-text leaves periods out of whole paragraphs, and
-it also puts periods in the middle of a thought. Cutting a thought in half
-changes what it means. So a message is never divided at its periods, and
-never chopped into pieces of a fixed number of words.
+**The owner's concern (2026-11-12).** Periods cannot be trusted in
+dictated text: speech-to-text leaves them out of whole paragraphs and also
+puts them in the middle of a thought. Cutting a thought in half changes
+what it means.
 
-**The rule: look at the words around the match.**
+**What established systems do (G.18a).** None has a clean answer. They do
+one of two things:
+- search with pieces of the message as well as the whole. Pieces are cut
+  at a paragraph, a line, or between words, never at periods, and each
+  piece overlaps the one before it;
+- or have an AI model rewrite the message into a search, at the cost of a
+  paid call for every message.
+
+**The rule proposed here: overlapping pieces, used only for finding
+(G29).**
 - The whole message is searched first, exactly as today.
-- Then, for each word of the message that also appears in a saved memory,
-  the stretch of words around that word is looked at: a set number of
-  words before it and after it, with the word in the middle. The detail is
-  never at a cut edge, because the stretch is centred on it.
-- The memory is used when it is close enough in meaning to that stretch.
-  The words around "Pepper" in "I'm worried about Pepper" are close in
-  meaning to the Pepper memory. The words around "spring" in "it was about
-  spring cleaning" are not close in meaning to a memory about moving house
-  in spring. The shared word alone is never enough.
-- In a short message the stretch is the whole message, so the result is
-  the same as today. There is no line between "long" and "short".
+- A message longer than one piece is also searched in pieces. A piece is
+  cut at a paragraph or a line where there is one, otherwise between
+  words. Periods play no part.
+- Each piece overlaps the one before it by half. Any thought shorter than
+  half a piece is therefore whole inside at least one piece.
+- **A piece is only ever used to find a memory. It is never shown to the
+  AI.** What the AI receives is the whole saved memory, or the whole
+  earlier exchange.
+- A message short enough to be one piece is searched exactly as today.
+  There is no line between "long" and "short" beyond that.
+
+**When a piece's match counts.** A wrong memory is worse than a missed
+one. Established systems send their best few matches even when none fits
+well; this app does not.
+- **By meaning:** a piece passes the same gate as a whole message.
+- **By keywords:** a keyword match from a piece counts only when meaning
+  search agrees: the memory must also be close enough in meaning to that
+  piece. "I'm worried about Pepper" is close in meaning to the Pepper
+  memory. "It was about spring cleaning" shares the word "spring" with a
+  memory about moving house in spring, and is not close to it in meaning.
+  This check is this app's own addition and is measured on the test set.
 - **With no embedding model, or for a memory that has no vector yet,**
   nothing can confirm the match, so only the whole-message search runs, as
-  today. Nothing changes for those users.
-- How many words a stretch holds, and how close is "close enough", are
-  numbers measured on the test set (step 0).
-
-**A detail that shares no word with its memory** ("my kitty" for a memory
-that says "cat") can only be found by meaning, which would need the whole
-message divided into stretches. That is not built. If the test set shows
-real cases are missed this way, the options are shown to the owner first.
+  today.
 
 **Order and room.**
 - Everything that matches the whole message keeps its place, in today's
   order. Nothing that is sent today is pushed out.
-- Memories found only through a stretch come after those, best first, in
+- Memories found only through a piece come after those, best first, in
   whatever room the memory limit leaves.
 
 **Time.**
-- The number of stretches looked at has a limit. When a message has more
-  matching words than the limit, the rarest words (names and unusual
-  terms) are looked at first. Position in the message does not decide it.
-- This search has a time allowance. When it runs out, the stretches not
-  yet looked at are skipped and the message is sent with what was found.
-  The whole-message search always runs.
+- The number of pieces searched has a limit. When a message has more
+  pieces than the limit, the pieces holding the rarest words (names and
+  unusual terms) are searched first.
+- This search has a time allowance. When it runs out, the pieces not yet
+  searched are skipped and the message is sent with what was found. The
+  whole-message search always runs.
 - The words of every memory are read once per message and reused, so the
   keyword work does not multiply.
-- The limit and the time allowance are engineering numbers, measured on
-  the test set and on a phone before this ships.
+- The piece size, the limit, and the time allowance are engineering
+  numbers, measured on the test set and on a phone before this ships.
 
 **What the user can see.** The Memory Search Test screen must show which
-word of the message a memory matched, with the words around it, and when
-the search ran out of time. Without that, the screen can no longer explain
-why a memory was sent. Its wording is shown to the owner before step 4A is
-built.
+piece of the message a memory matched, and when the search ran out of
+time. Without that, the screen can no longer explain why a memory was
+sent. Its wording is shown to the owner before step 4A is built.
 
-**When the embedding model cannot read a stretch.** That stretch adds
-nothing. This is reported, never silent, using the existing Memory Debug
-Log line for this failure with its plain wording (G26). No log line is
-added or changed without the owner's approval.
+**When the embedding model cannot read a piece.** That piece adds nothing.
+This is reported, never silent, using the existing Memory Debug Log line
+for this failure with its plain wording (G26). No log line is added or
+changed without the owner's approval.
+
+**The paid rewrite** is not built. It can be offered later as an optional
+setting if the pieces prove not to be enough.
 
 **The same rule serves recall** (G.6 step 1).
-
-No published study covers this. It is measured here.
 
 ## G.11 The optional live AI worker (Proposed, on the owner's requirement)
 
@@ -1467,7 +1486,7 @@ it.
   so a change that makes recall worse is seen at once.
 - **Measurements** set the numbers research does not give, with the real
   embedding model: the passage target size, the gate, the blend weights,
-  how many exchanges to recall, the subject check's two numbers, the
+  how many exchanges to recall, how many earlier messages are searched, the
   carry-over bar, and speed on the phone.
 
 **What every quality test checks, at three points:**
@@ -1481,7 +1500,7 @@ it.
 | Situation | What must happen |
 |---|---|
 | An exact detail ("Which model did we choose?") | The original decision is recalled |
-| A follow-up ("Why did we choose that?") | The same discussion is recalled, using the subject check |
+| A follow-up ("Why did we choose that?") | The same discussion is recalled, by also searching with the previous message |
 | A time reference ("What did we change last week?") | Exchanges from that period are favoured |
 | A summarized or compacted chat | The original exchange is recalled although the AI otherwise has only the summary |
 | Nothing relevant | Nothing is added |
@@ -1540,7 +1559,7 @@ the code files the step names. It builds only that step.
 | 1F | The setting, status, delete, database check line, and error notices | Careful | The approved settings section (G.16a) | 1D, 1E |
 | 1G | The progress icon and pop-up, with pause and resume | Careful | The approved icon and pop-up (G.16a) | 1F |
 | 1H | Indexing that continues after the app is closed, with its notification | Hard | The approved notification (G.16a) | 1G |
-| S | The subject check | Careful | Nothing | 0 |
+| S | Searching with the previous messages | Careful | Nothing | 0 |
 | 2A | Retrieval | Hard | Nothing | Stage 1, S |
 | 2B | The inspector, and the measurements | Careful | A test screen (wording to approve) | 2A |
 | 3 | Context assembly: recall in real requests | Hard | Recall works (wording to approve) | Stage 2 |
@@ -1564,8 +1583,8 @@ Steps 4A and 4B fix gaps that are live on the beta today. **Owner
 the test set it has no test to pass and wrong memories cannot be counted;
 and step 1B, because 4A runs the on-phone model several times per message
 on a path that skips the model's one-at-a-time lock. Step 4B no longer
-waits for the conversation index: the subject check it needs is its own
-step (S). Which step is built first is the owner's decision.
+waits for the conversation index: the search with previous messages it
+needs is its own step (S). Which step is built first is the owner's decision.
 
 ### Step 0: the test set (Careful)
 
@@ -1596,12 +1615,13 @@ step (S). Which step is built first is the owner's decision.
 - **Goal:** a function that takes one message's text and returns its
   passages, exactly as G.5b describes.
 - **Read:** G.5b; `util/ConversationTokenChunks.kt` to see how the
-  platform's sentence tool is used (do not change or call it).
+  platform's language-aware boundary tool is used (do not change or call
+  it).
 - **Build:** new files only, plain Kotlin with no Android screen code. The
   cutter takes the text, a target size, and a size-estimating function, and
   returns each passage's start and end. It includes splitting, joining
   short pieces, the last-resort cut, and the version number.
-- **Not in this step:** search text, overlap, borrowed context (1C), real
+- **Not in this step:** search text and overlap (1C), real
   token counts (1B), any storage.
 - **Done when:** every test listed at the end of G.5b that concerns cutting
   passes, including that the passages of a message join back into the
@@ -1629,7 +1649,7 @@ step (S). Which step is built first is the owner's decision.
 
 - **Goal:** the four stores exist, and one chat's passages can be brought
   up to date one message at a time (G.5, G.5a rules 1, 3, 4, 7, 9).
-- **Read:** G.4, G.5, G.5a, G.5b steps 5 to 7 and "borrowed context", G.7;
+- **Read:** G.4, G.5, G.5a, G.5b steps 5 and 7, G.7;
   `chatsearch/ChatSearchStore.kt` and `ChatSearchIndexManager.kt` for the
   encrypted-database and revision method; `SummarizerController.kt`
   (`Snapshot`, `Entry`) for the model-facing text; `MessageVisibility.kt`,
@@ -1637,15 +1657,17 @@ step (S). Which step is built first is the owner's decision.
 - **Build:** the encrypted database with the four stores. A function that
   takes a chat's current messages, compares them with the index by
   permanent ID and fingerprint, and replaces only what changed, in one
-  transaction per message. Eligibility. Search text, including overlap and
-  borrowed context with its rules. Scope stamping from values passed in.
+  transaction per message. Eligibility. Search text, including overlap
+  between passages of the same message. Borrowed context from a
+  neighbouring message is not built (G.5b step 6). Scope stamping from
+  values passed in.
   Vector rows are created as "waiting"; no vectors are made in this step.
 - **Confirm in the code and record in this plan:** which stored field
   holds the reply version the AI is sent.
 - **Must not change:** the chat search feature or its database, the stored
   chats, the saved-memory database.
 - **Done when:** correctness tests pass for new, edited, deleted, hidden,
-  unfinished, and failed messages; for borrowed context; and for a run
+  unfinished, and failed messages; and for a run
   interrupted halfway, which must leave the previous correct state.
 
 ### Step 1D: background embedding of passages (Hard)
@@ -1735,15 +1757,15 @@ step (S). Which step is built first is the owner's decision.
 - **Done when:** indexing continues with the app closed; the notification
   shows a real percentage; a stop by the system loses no finished work.
 
-### Step S: the subject check (Careful)
+### Step S: searching with the previous messages (Careful)
 
-- **Goal:** the component in G.9a, built on its own, so the fix for
-  follow-up messages (4B) does not wait for the conversation index.
+- **Goal:** the method in G.9a, built on its own, so the fix for follow-up
+  messages (4B) does not wait for the conversation index.
 - **Read:** G.9a; `LiveRetrieval.kt`, `KeywordText.kt`.
 - **Build:** plain Kotlin in its own file, connected to nothing yet. Its
-  two numbers are measured on step 0's set.
-- **Done when:** the follow-up and topic-change samples from step 0 are
-  judged correctly, and the scores are recorded in this plan.
+  numbers are measured on step 0's set.
+- **Done when:** the follow-up and topic-change samples from step 0 give
+  the right memories, and the scores are recorded in this plan.
 
 ### Step 2A: retrieval (Hard)
 
@@ -1751,7 +1773,7 @@ step (S). Which step is built first is the owner's decision.
   with every score and reason (G.6, G.9a, G.8a points 1 and 2).
 - **Read:** G.6, G.8a, G.9a, G.10; `LiveRetrieval.kt` and
   `KeywordText.kt`.
-- **Build:** all nine steps of G.6, using the subject check from step S,
+- **Build:** all nine steps of G.6, using the method from step S,
   as plain Kotlin behind the G.8a interfaces. The time limit. Nothing is
   added to any request.
 - **Done when:** the quality tests in G.15 that concern "found" and "left
@@ -1789,8 +1811,8 @@ step (S). Which step is built first is the owner's decision.
   being sent (G.10).
 - **Needs first:** step 0 and step 1B.
 - **Before building, the owner approves:** the Memory Search Test screen
-  wording that shows which word of a message matched and when the search
-  ran out of time; the two remaining lines of G26.
+  wording that shows which piece of a message matched and when the search
+  ran out of time; G29; the two remaining lines of G26.
 - **Read:** G.2, G.10; `LiveRetrieval.kt`, `Librarian.kt`,
   `SearchTestReport.kt`.
 - **Build:** G.10, in its own file, with a small hookup. Every use of the
@@ -1807,12 +1829,13 @@ step (S). Which step is built first is the owner's decision.
 
 ### Step 4B: carry-over for saved memories (Careful)
 
-- **Goal:** a saved memory stays through follow-up messages and drops on a
-  change of subject (G.9).
+- **Goal:** a saved memory stays through follow-up messages and falls away
+  after the subject changes (G.9).
 - **Read:** G.9, G.9a; `enforcer/Enforcer.kt`; the injection record in
   `MemoryStore.kt`.
-- **Done when:** the carry-over test conversations pass: stays through
-  short replies, drops on a topic change, drops when sent by mistake.
+- **Done when:** the carry-over test conversations pass: a memory stays
+  through short replies and is gone within two messages of a topic change.
+  How long a memory sent by mistake stays is measured and reported.
 
 ## G.16a The approved screens for indexing (Owner, 2026-11-11)
 
@@ -1910,6 +1933,8 @@ recommendation.
 | G26 | The Memory Debug Log line "Query embed failed, using lexical fallback: (cause)" and the two lines like it are not plain English (G.13b). What do they say instead? | **Owner (2026-11-12):** the plain wording proposed for the first line is fine: "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause)." The two lines like it are still to be proposed | Step 4A |
 | G27 | G.13a says every index error raises a snack bar that stays until acknowledged, and also that most failures are repaired without interrupting the user. Which failures raise a snack bar? | Open. Recommended: a snack bar only when something has stopped working or the user has something to do. Failures the app repairs by itself go to the Error Log only | Step 1F |
 | G28 | Chats that have never been reopened cannot be indexed until they are opened (G.5a rule 7). What does the progress count show for them? | Open. Recommended: count only what can be indexed now, and say plainly how many conversations will be indexed when they are next opened | Step 1F |
+| G29 | To find a small detail in a long or dictated message, should the app also search with overlapping pieces of the message, cut between words and never at periods (G.10)? | Open. Recommended: yes. It is what established systems do, the pieces are only used for finding, and nothing cut is shown to the AI | Step 4A |
+| G30 | No established chat app offers recall without an embedding model (G.18a). This plan builds keyword-only indexing and recall into every step. Is that kept? | Open. Recommended: require the embedding model for conversation recall. Keyword-only matching is where wrong results are most likely, and dropping it removes work from every step | Step 1C |
 
 ## G.18 Research behind this plan (2026-11-10)
 
@@ -1957,6 +1982,54 @@ Sources:
 - SillyTavern chat vectorization: https://docs.sillytavern.app/extensions/chat-vectorization/
 - Fusion functions for hybrid retrieval: https://arxiv.org/abs/2210.11934
 - Positional bias in retrieval: https://arxiv.org/abs/2505.15561
+
+## G.18a What established open-source systems do (2026-11-12)
+
+**Owner (2026-11-12):** where the right decision is not known, look at
+what established, proven systems do and use that to decide. Custom design
+is acceptable. Credit can be given in the app's About screen for anything
+shared. The app is never to be sold, by the owner or by anyone else.
+
+Read on 2026-11-12 from each project's documentation or source code.
+
+| Decision | What they do | This plan |
+|---|---|---|
+| Cutting text into pieces | SillyTavern: 400 characters, cut at a paragraph, a line, or between words, no overlap for chat messages. GPT4All: 512 characters. LangChain's standard splitter: paragraph, line, then between words, with overlap | Same cut points (G.5b) |
+| What the AI is handed | SillyTavern finds a piece and hands over the whole original message, labelled with who said it, under "Past events" | The whole exchange (G.8) |
+| What to search with | SillyTavern: the last 2 messages joined. RisuAI: the last 3 messages, each searched on its own, later ones counting more. AnythingLLM: the latest message only | The newest message and the previous one or two, each on its own (G.9a) |
+| How many are sent | SillyTavern 3, GPT4All 3, AnythingLLM 4 | 3 (G.8) |
+| The cut-off | SillyTavern: a fixed 25% score, then the best 3 | A stricter gate, this app's own, because a wrong result is worse than a missed one (G.6) |
+| Keywords as well as meaning | SillyTavern, GPT4All, AnythingLLM, RisuAI: meaning only. Open WebUI and Mem0: both, with an optional re-ranker | Both (G.6) |
+| No embedding model | None of the chat apps offers recall without one | Keyword-only mode in every step (G30) |
+| Follow-up messages | AnythingLLM fills empty room with what was used in recent replies, newest first, with no relevance check. Open WebUI and LlamaIndex have an AI model rewrite the follow-up, a paid call | G.9a |
+| A long message about several things | RisuAI's experimental mode searches each paragraph of the message separately. Others offer a paid rewrite | Overlapping pieces (G.10) |
+| Keeping the index correct | SillyTavern keeps a fingerprint per message; on every edit, deletion, or new message it adds what is missing and deletes what is gone | The same idea (G.5a rule 4) |
+| Prompt caching | SillyTavern's documentation warns that recall works against prompt caching, because it changes text early in the request | Recalled text sits beside the newest message, which leaves the earlier text unchanged. To be confirmed with a caching provider in stage 3 |
+
+**Not verified:** Open WebUI's default numbers.
+
+**Licences.** Only approaches are taken from these projects, which no
+licence restricts. Code is a different matter:
+- SillyTavern and RisuAI are understood to be under licences (AGPL and
+  GPL) that would require this whole app to be released under the same
+  terms, which allow others to sell it. Their code is never copied.
+- AnythingLLM, LlamaIndex, LangChain, GPT4All, and Mem0 are understood to
+  be under permissive licences that allow copying with credit.
+- These licences were not re-read on 2026-11-12. Before any code is
+  copied from any project, its licence file is read and the owner is
+  told.
+
+Sources:
+
+- SillyTavern chat vectorization: https://docs.sillytavern.app/extensions/chat-vectorization/
+- SillyTavern vector extension source: https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/extensions/vectors/index.js
+- RisuAI HypaMemory V3 source: https://github.com/kwaroran/RisuAI/blob/main/src/ts/process/memory/hypav3.ts
+- AnythingLLM chat helper source: https://github.com/Mintplex-Labs/anything-llm/blob/master/server/utils/helpers/chat/index.js
+- GPT4All settings: https://docs.gpt4all.io/gpt4all_desktop/settings.html
+- LangChain recursive text splitter: https://docs.langchain.com/oss/python/integrations/splitters/recursive_text_splitter
+- LlamaIndex chat engines: https://developers.llamaindex.ai/python/framework-api-reference/chat_engines/condense_plus_context/
+- Mem0 search: https://docs.mem0.ai/core-concepts/memory-operations/search
+- Open WebUI retrieval: https://docs.openwebui.com/features/rag
 
 ## G.19 Rules for whoever builds a stage
 
