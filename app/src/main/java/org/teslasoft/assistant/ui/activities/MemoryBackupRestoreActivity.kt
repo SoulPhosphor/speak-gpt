@@ -2162,8 +2162,9 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         if (backupFailureDialogShown || isFinishing) return
         for (type in BackupType.displayOrder) {
             val response = BackupFailurePolicy.respond(
-                RecoveryBackupState.getConsecutiveFailures(this, type),
-                RecoveryBackupState.getLastFailureCategory(this, type)
+                automaticBackupsEnabled = RecoveryBackupState.isEnabled(this),
+                consecutiveFailures = RecoveryBackupState.getConsecutiveFailures(this, type),
+                category = RecoveryBackupState.getLastFailureCategory(this, type)
             )
             when (response) {
                 BackupFailurePolicy.Response.STORAGE_DIALOG -> {

@@ -998,7 +998,7 @@
          status shown on a reply that did not finish streaming; the partial
          text stays visible above them. Wording pending owner approval. -->
     <string name="message_state_interrupted">Reply interrupted and may be incomplete. The app interrupted the reply before it finished.</string>
-    <string name="message_state_stopped">Reply stopped and may be incomplete.</string>
+    <string name="message_state_stopped">AI response could not be completed due user stopping generation.</string>
     <string name="message_state_failed">Reply failed and may be incomplete.</string>
     <string name="message_state_incomplete">Reply status is unknown and may be incomplete.</string>
     <!-- The reply ended early and the app genuinely cannot determine why (a

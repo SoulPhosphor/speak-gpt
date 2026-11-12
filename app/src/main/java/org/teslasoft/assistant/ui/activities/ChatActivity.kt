@@ -6881,6 +6881,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                     processRecordingScope?.launch {
                         progress?.setOnClickListener {
+                            userRequestedStop = true
                             cancel()
                             restoreUIState()
                         }
@@ -7574,6 +7575,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             processRecordingScope = CoroutineScope(Dispatchers.Main)
             processRecordingScope?.launch {
                 progress?.setOnClickListener {
+                    userRequestedStop = true
                     cancel()
                     restoreUIState()
                 }
@@ -8826,6 +8828,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 setupScope?.launch {
                     progress?.setOnClickListener {
+                        userRequestedStop = true
                         cancel()
                         restoreUIState()
                         saveSettings()
@@ -9171,6 +9174,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 parseMessageScope = CoroutineScope(Dispatchers.Main)
                 parseMessageScope?.launch {
                     progress?.setOnClickListener {
+                        userRequestedStop = true
                         cancel()
                         restoreUIState()
                         saveSettings()
@@ -11983,7 +11987,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     messages[idx][MessageCompletionState.KEY_ERROR_TEXT] = reason
                 }
                 if (messages.size > 2) {
-                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                    adapter?.notifyItemRangeChanged(messages.size - 3, 3)
                 } else {
                     adapter?.notifyItemChanged(messages.size - 1)
                 }
@@ -12333,6 +12337,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ) {
         try {
             generateResponseUnsettled(request, shouldPronounce, preparedTurn)
+        } catch (e: CancellationException) {
+            // Preflight can suspend before the request's terminal handler exists.
+            if (userRequestedStop) {
+                showTerminalFailure(
+                    MessageCompletionState.STOPPED, MessageCompletionState.DETAIL_USER_STOP,
+                    null, logAsError = false, errorTag = "", errorSummary = ""
+                )
+            }
+            throw e
         } finally {
             // Every way a regeneration can end passes here; one that produced
             // no reply puts the removed reply back.
@@ -12538,14 +12551,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
             when (detail) {
                 MessageCompletionState.DETAIL_USER_STOP -> {
-                    // Deliberate user Stop: not an error. No chat marker and no
-                    // Error Log entry; the Response Lifecycle still records it
-                    // (kept on for now, for debugging).
+                    // A deliberate Stop names the user's action in the chat,
+                    // while remaining a non-error in the existing diagnostics.
                     finalizeLifecycleTerminal(
                         ResponseLifecycle.Outcome.STOPPED, "missing", true,
                         ResponseLifecycle.Termination.USER_STOP, null
                     )
-                    finalizeStreamingMessageState(state, detail)
+                    showTerminalFailure(
+                        state, detail, null, logAsError = false,
+                        errorTag = "", errorSummary = ""
+                    )
                 }
                 MessageCompletionState.DETAIL_START_FAILED -> {
                     // The reply never started. Include the known reason (a

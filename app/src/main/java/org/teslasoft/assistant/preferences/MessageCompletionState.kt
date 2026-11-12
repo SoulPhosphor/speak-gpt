@@ -90,8 +90,8 @@ object MessageCompletionState {
      *  that ran no code on the way out. */
     const val DETAIL_PROCESS_DEATH = "process_death"
 
-    /** The user deliberately pressed Stop. A benign, non-error terminal state —
-     *  the chat shows no failure marker for it (owner ruling, Aug 8 2026). */
+    /** The user deliberately pressed Stop. A non-error terminal state with
+     *  a visible explanation naming the user's action. */
     const val DETAIL_USER_STOP = "user_stop"
 
     /** The reply ended early and the cause is genuinely unknown — carried on a
@@ -168,7 +168,7 @@ object MessageCompletionState {
      *
      * Returns the (state, detail) to stamp:
      *  - user stop                         -> [STOPPED] / [DETAIL_USER_STOP]
-     *    (a benign, non-error state the chat shows no marker for).
+     *    (a non-error state with an explicit user-stop explanation).
      *  - not started (nothing streamed)    -> [FAILED] / [DETAIL_START_FAILED].
      *  - a reply in progress, teardown     -> [INTERRUPTED] / [DETAIL_SCREEN_CLOSED].
      *  - a reply in progress, cause unknown-> [FAILED] / [DETAIL_UNKNOWN_END].
