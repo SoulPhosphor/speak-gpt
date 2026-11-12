@@ -3716,4 +3716,80 @@
         <item name="android:textIsSelectable">true</item>
         <item name="android:textSize">@dimen/search_test_preview_text_size</item>
     </style>
+    <!-- Model-rule text uses equal inner insets; constraints center short content. -->
+    <style name="Widget.App.ModelRules.Body" parent="Widget.App.MemoryBrowser.Body">
+        <item name="android:layout_marginStart">@dimen/memory_browser_content_vertical_padding</item>
+        <item name="android:layout_marginEnd">@dimen/memory_browser_content_vertical_padding</item>
+    </style>
+
+    <!-- Model-rule navigation matches the Quick Settings card outline. -->
+    <style name="Widget.App.ModelRules.OpenButton" parent="Widget.App.MemoryBrowser.OpenButton">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:tint">?attr/colorOutlineVariant</item>
+        <item name="tint">?attr/colorOutlineVariant</item>
+    </style>
+
+    <!-- Tag-entry borders belong to the frame, outside editable text scrolling. -->
+    <style name="Widget.App.TagEntry.Row" parent="Widget.App.Page.ControlRow">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:baselineAligned">false</item>
+    </style>
+    <style name="Widget.App.TagEntry.Frame" parent="Widget.App.Field.Box">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">3</item>
+        <item name="android:padding">0dp</item>
+    </style>
+    <style name="Widget.App.TagEntry.Input" parent="Widget.App.Field.Box">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:background">@null</item>
+        <item name="android:backgroundTint">@null</item>
+        <item name="backgroundTint">@null</item>
+        <item name="android:minHeight">@dimen/tag_entry_min_height</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:includeFontPadding">true</item>
+    </style>
+    <style name="AppButton.Primary.TagEntry" parent="AppButton.Primary">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">@dimen/tag_entry_action_gap</item>
+        <item name="android:layout_marginTop">6dp</item>
+    </style>
+    <style name="Widget.App.Chip.Group" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/tag_entry_chip_gap</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.Scroll" parent="">
+        <item name="android:clipToPadding">false</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.RuleText" parent="Widget.App.Field.Box">
+        <item name="android:gravity">top</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.Counter" parent="Widget.App.Field.Hint">
+        <item name="android:gravity">end</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.ModelRow" parent="Widget.App.Page.ControlRow">
+        <item name="android:layout_marginTop">@dimen/model_rule_editor_control_gap</item>
+    </style>
+    <style name="AppButton.Primary.ModelRuleAccept" parent="AppButton.Primary">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/field_label_page_top_gap</item>
+    </style>
+    <style name="AppButton.Primary.ModelRuleChoice" parent="AppButton.Primary">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+    <style name="AppButton.Primary.ModelRuleChoice.Trailing" parent="AppButton.Primary.ModelRuleChoice">
+        <item name="android:layout_marginStart">@dimen/tag_entry_action_gap</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.TargetList" parent="Widget.App.Chip.Group">
+        <item name="android:orientation">vertical</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.TargetWarning" parent="Widget.App.Row.Icon">
+        <item name="android:src">@drawable/ic_report</item>
+        <item name="android:tint">?attr/colorError</item>
+    </style>
 </resources>

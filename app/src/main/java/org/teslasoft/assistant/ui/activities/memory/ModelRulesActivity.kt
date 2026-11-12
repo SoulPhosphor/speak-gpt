@@ -72,7 +72,14 @@ class ModelRulesActivity : MemoryScreenActivity() {
     override fun screenTitle(): String =
         if (pendingOnly) getString(R.string.model_rules_pending_title) else getString(R.string.row_model_rules_title)
     override fun showSearch(): Boolean = true
-    override fun addButtonText(): String = getString(R.string.model_rules_btn_new)
+    override fun actionIcon(): Int = R.drawable.ic_add
+    override fun actionLabel(): String = getString(R.string.model_rules_btn_new)
+    override fun onActionClick() = onAddClick()
+
+    override fun buildListAdapter(rows: List<MemoryRow>): android.widget.ListAdapter =
+        org.teslasoft.assistant.ui.adapters.memory.MemoryRowAdapter(
+            rows, this, R.layout.view_model_rule_row
+        ).also { it.setOnRowListener(this) }
     override fun showFilterBar(): Boolean = !pendingOnly
     override fun renderFilterBar() { buildFilterChips() }
 

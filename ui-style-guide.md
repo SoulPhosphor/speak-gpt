@@ -1857,3 +1857,38 @@ MemoryBrowser card typography, spacing, checkbox and icon geometry are owned
 by the stylesheet, with dimensions in `dimens.xml`. The trailing icon/chevron
 uses a vertical spread-inside constraint chain: top/bottom with the hint shown,
 centered with the hint gone. Kotlin only changes content and visibility.
+
+### Model-rule cards
+
+`view_model_rule_row.xml` uses `MemoryBrowser.Card` for the Quick Settings
+surface and outline, `Row.Title` for normal rule text, and `Row.Subtitle` for
+its smaller model details. `Widget.App.ModelRules.OpenButton` inherits
+`MemoryBrowser.OpenButton`, uses `colorOutlineVariant` for the border-matching
+chevron, and removes the image-hint top gap so it centers vertically.
+`Widget.App.ModelRules.Body` reuses the shared 12dp vertical-padding token
+for its start and end gaps too; the body centers within the minimum-height card. The Model Rules screen opts into this
+layout; other manager lists retain their existing rows. Its Add action uses
+the existing far-right header button.
+
+### Model-rule form and tag entry
+
+The model-rule editor uses `Page.Content`, existing field/section/dropdown and
+primary-button families, with `Widget.App.ModelRuleEditor.*` and
+`AppButton.Primary.ModelRule*` only for its form spacing and alignments.
+`Widget.App.Chip.Group` supplies a wrapping chip group's full width and top gap;
+individual chips still use `Widget.App.Chip.Removable`.
+
+`Widget.App.TagEntry.Row` contains a weighted `TagEntry.Frame` and
+`AppButton.Primary.TagEntry`. The frame inherits the standard `Field.Box`
+outline; its `TagEntry.Input` child has no background, retains the normal field
+padding, and grows with font size above its minimum height. Keeping the outline
+on the frame prevents the editable text's scroll from moving the border. Place
+the selected chip group below the entry row. Other tag editors have different
+compositions and do not yet use this family.
+
+The model-rule editor places `AppButton.Primary.ModelRuleChoice` and its
+`Trailing` variant in `ModelRuleEditor.ModelRow` for equal-width actions.
+`view_model_rule_target_row.xml` composes `RemovableList.Row`, a weighted
+`Row.TextColumn` with `Row.Title` and `Row.Subtitle`, and `RemovableList.Remove`.
+`ModelRuleEditor.TargetList` stacks these rows vertically. Model names and
+endpoint labels wrap, and the remove action remains at the trailing edge.

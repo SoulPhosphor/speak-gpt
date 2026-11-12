@@ -35,12 +35,12 @@ internal fun newModelCutoff(now: Instant): Instant = now.minus(30, ChronoUnit.DA
 internal data class ModelBrowserPage(val entries: List<ModelBrowserEntry>, val nextPage: Int?)
 
 internal object ModelBrowserCatalog {
-    fun parse(body: String, requestedPage: Int = 1): ModelBrowserPage {
+    fun parse(body: String, requestedPage: Int = 1, includeAllModels: Boolean = false): ModelBrowserPage {
         val root = JsonParser.parseString(body).asJsonObject
         val entries = requireNotNull(root.getAsJsonArray("data")).mapNotNull { element ->
             val model = element.objectOrNull() ?: return@mapNotNull null
             val id = model.value("id")?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-            if (!isChatModel(model, id)) return@mapNotNull null
+            if (!includeAllModels && !isChatModel(model, id)) return@mapNotNull null
             ModelBrowserEntry(
                 id,
                 model.value("name").orEmpty(),

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.App.MemoryBrowser.Row">
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/ui"
+        style="@style/Widget.App.MemoryBrowser.Card"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+        <LinearLayout
+            android:id="@+id/browser_card_body"
+            app:layout_constraintStart_toEndOf="@id/row_icon"
+            app:layout_constraintEnd_toStartOf="@id/btn_row_action"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintVertical_bias="0.5"
+            style="@style/Widget.App.ModelRules.Body">
+            <TextView
+                android:id="@+id/row_title"
+                android:text="@string/label_memory"
+                android:ellipsize="end"
+                android:maxLines="2"
+                style="@style/Widget.App.Row.Title" />
+            <TextView
+                android:id="@+id/row_badge"
+                android:visibility="gone"
+                style="@style/Widget.App.MemoryBrowser.Badge" />
+            <TextView
+                android:id="@+id/row_tags"
+                android:visibility="gone"
+                style="@style/Widget.App.MemoryBrowser.Tags" />
+            <TextView android:id="@+id/row_subtitle" android:visibility="gone" style="@style/Widget.App.Row.Subtitle" />
+            <TextView
+                android:id="@+id/row_vibe"
+                android:visibility="gone"
+                style="@style/Widget.App.MemoryBrowser.Vibe" />
+            <TextView
+                android:id="@+id/row_note"
+                android:visibility="gone"
+                style="@style/Widget.App.MemoryBrowser.Note" />
+            <LinearLayout
+                android:id="@+id/row_pending_actions"
+                android:visibility="gone"
+                style="@style/Widget.App.MemoryBrowser.PendingActions">
+                <TextView
+                    android:id="@+id/action_accept"
+                    android:text="@string/mem_pending_accept"
+                    style="@style/Widget.App.MemoryBrowser.PendingAction" />
+                <TextView
+                    android:id="@+id/action_delete"
+                    android:text="@string/mem_pending_delete"
+                    style="@style/Widget.App.MemoryBrowser.PendingAction" />
+                <TextView
+                    android:id="@+id/action_edit"
+                    android:text="@string/mem_pending_edit"
+                    style="@style/Widget.App.MemoryBrowser.PendingAction" />
+                <TextView
+                    android:id="@+id/action_add_card"
+                    android:text="@string/mem_pending_add_card"
+                    android:visibility="gone"
+                    style="@style/Widget.App.MemoryBrowser.PendingAction.Last" />
+            </LinearLayout>
+        </LinearLayout>
+        <ImageView
+            android:id="@+id/row_icon"
+            android:contentDescription="@string/mem_row_icon"
+            android:src="@drawable/ic_mem_public"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            style="@style/Widget.App.Row.Icon" />
+        <ImageButton
+            android:id="@+id/btn_row_action"
+            style="@style/Widget.App.ModelRules.OpenButton"
+            android:contentDescription="@string/mem_row_edit"
+            android:src="@drawable/ic_chevron_right"
+            android:tooltipText="@string/mem_row_edit"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

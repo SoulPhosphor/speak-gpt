@@ -49,35 +49,27 @@
         android:id="@+id/scroll"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:clipToPadding="false"
-        android:paddingBottom="24dp"
+        style="@style/Widget.App.ModelRuleEditor.Scroll"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/action_bar">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="24dp">
+        <LinearLayout style="@style/Widget.App.Page.Content">
 
             <TextView
-                style="@style/Widget.App.Field.Label"
-                android:layout_marginTop="24dp"
+                style="@style/Widget.App.Field.Label.PageTop"
                 android:text="@string/model_rule_edit_hint_text" />
 
             <androidx.appcompat.widget.AppCompatEditText
                 android:id="@+id/field_rule_text"
-                style="@style/Widget.App.Field.Box"
-                android:gravity="top"
+                style="@style/Widget.App.ModelRuleEditor.RuleText"
                 android:inputType="textMultiLine|textCapSentences"
                 android:minLines="4" />
 
             <TextView
                 android:id="@+id/text_rule_size"
-                style="@style/Widget.App.Field.Hint"
-                android:gravity="end" />
+                style="@style/Widget.App.ModelRuleEditor.Counter" />
 
             <TextView
                 style="@style/Widget.App.Section.Title"
@@ -87,101 +79,48 @@
                 style="@style/Widget.App.Section.Hint"
                 android:text="@string/model_rule_edit_models_hint" />
 
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/chips_models"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
-
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/model_rule_edit_select_endpoint" />
-
-            <TextView
-                android:id="@+id/field_model_endpoint"
-                style="@style/Widget.App.Dropdown.CanonicalValue"
-                android:layout_width="match_parent"
-                android:layout_marginTop="12dp"
-                android:text="@string/model_rule_select_endpoint" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
+            <LinearLayout style="@style/Widget.App.ModelRuleEditor.ModelRow">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_use_current_model"
+                    style="@style/AppButton.Primary.ModelRuleChoice"
+                    android:text="@string/model_rule_use_current_chat_model" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_choose_model"
-                    style="@style/AppButton.Primary.Inline"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/choose_provider_choose_model_title" />
-
-                <TextView
-                    android:id="@+id/text_selected_model"
-                    style="@style/Widget.App.Row.Title"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1" />
+                    style="@style/AppButton.Primary.ModelRuleChoice.Trailing"
+                    android:text="@string/model_rule_choose_ai_model" />
             </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_add_model"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/model_rule_edit_add_model" />
+            <LinearLayout
+                android:id="@+id/model_rule_targets"
+                style="@style/Widget.App.ModelRuleEditor.TargetList" />
 
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/model_rule_edit_label_tags" />
 
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/chips_tags"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:baselineAligned="false"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <AutoCompleteTextView
-                    android:id="@+id/field_tag_input"
-                    style="@style/Widget.App.Field.Box"
-                    android:layout_width="0dp"
-                    android:layout_weight="3"
-                    android:gravity="center_vertical"
-                    android:hint="@string/model_rule_edit_hint_tag_input"
-                    android:imeOptions="actionDone"
-                    android:inputType="text"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="8dp"
-                    android:singleLine="true" />
-
+            <LinearLayout style="@style/Widget.App.TagEntry.Row">
+                <FrameLayout style="@style/Widget.App.TagEntry.Frame">
+                    <androidx.appcompat.widget.AppCompatAutoCompleteTextView
+                        android:id="@+id/field_tag_input"
+                        style="@style/Widget.App.TagEntry.Input"
+                        android:hint="@string/model_rule_edit_hint_tag_input"
+                        android:imeOptions="actionDone"
+                        android:inputType="text"
+                        android:singleLine="true" />
+                </FrameLayout>
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_add_tag"
-                    style="@style/AppButton.Primary"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:layout_marginTop="6dp"
-                    android:layout_weight="1"
+                    style="@style/AppButton.Primary.TagEntry"
                     android:text="@string/btn_add" />
             </LinearLayout>
 
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chips_tags"
+                style="@style/Widget.App.Chip.Group" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_rule_accept"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                style="@style/AppButton.Primary.ModelRuleAccept"
                 android:text="@string/mem_edit_accept"
                 android:visibility="gone" />
         </LinearLayout>

@@ -2023,7 +2023,7 @@
     <string name="model_rule_edit_title_edit">Edit Rule</string>
     <string name="model_rule_edit_hint_text">Rule for the AI Model</string>
     <string name="model_rule_edit_label_models">Applied Models</string>
-    <string name="model_rule_edit_models_hint">Appends this rule to the system prompt for the models selected below.</string>
+    <string name="model_rule_edit_models_hint">Appends this rule to the system prompt for the models selected below. Rules apply to models under specific AI endpoints to account for different added service instructions.</string>
     <string name="model_rule_edit_add_model">Add Model</string>
     <string name="model_rule_edit_select_endpoint">Select Endpoint</string>
     <string name="model_rule_select_endpoint">Select API Endpoint</string>
@@ -2032,7 +2032,7 @@
     <string name="model_rule_target_label">%1$s: %2$s</string>
     <string name="model_rule_legacy_target_label">%1$s</string>
     <string name="model_rule_missing_endpoint">Unavailable Endpoint</string>
-    <string name="model_rule_edit_model_required">Add at least one endpoint and model before activating this rule.</string>
+    <string name="model_rule_edit_model_required">Add at least one AI model before activating this rule.</string>
     <string name="model_rule_edit_add_selected_model">Endpoint and model is selected. Please click Add Model to make the rule active before saving.</string>
     <string name="model_rule_no_endpoints">Add an API endpoint before selecting a model.</string>
     <string name="model_rule_edit_label_tags">Tags (Optional)</string>
@@ -4408,4 +4408,6 @@
     <string name="memory_search_reset_done">The default numbers are shown. Tap Use in Chats to keep them.</string>
     <string name="memory_search_unsaved">These numbers are not saved yet. Chats are still using the saved numbers.</string>
     <string name="memory_search_save_failed">The numbers could not be saved: %1$s</string>
+    <string name="model_rule_choose_ai_model">Choose AI Model</string>
+    <string name="model_rule_add_another_ai">Add Another AI</string>
 </resources>

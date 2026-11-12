@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.RemovableList.Row">
+    <ImageView
+        android:id="@+id/model_rule_target_warning"
+        style="@style/Widget.App.ModelRuleEditor.TargetWarning"
+        android:visibility="gone" />
+    <LinearLayout style="@style/Widget.App.Row.TextColumn">
+        <TextView
+            android:id="@+id/model_rule_target_name"
+            style="@style/Widget.App.Row.Title" />
+        <TextView
+            android:id="@+id/model_rule_target_endpoint"
+            style="@style/Widget.App.Row.Subtitle" />
+    </LinearLayout>
+    <ImageButton
+        android:id="@+id/removable_list_remove"
+        style="@style/Widget.App.RemovableList.Remove" />
+</LinearLayout>
