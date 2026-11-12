@@ -138,13 +138,42 @@ Smaller issues:
 - one log label says "no model" when the real cause was that the message
   failed to embed;
 - meaning search reads only the first 512 tokens of a memory
-  (`EmbeddingModels.kt`), so a very long memory is partly invisible to it.
-  The model itself can read 2,048;
+  (`EmbeddingModels.kt`), about 375 words, so a longer memory is partly
+  invisible to it. A memory's tags are placed last in the text the model
+  reads (`RetrievalDocument.kt`), so on a long memory they are cut off
+  too. The model itself can read 2,048 tokens, about 1,500 words. No
+  reason for 512 is recorded in the code. See "The reading limit" below;
 - the embedding model must run one request at a time, and `Librarian.kt`
   has a lock for that (`embedLocked`). The live chat search embeds the
   user's message without the lock (`searchInternal`), so it can run at the
   same moment as a background repair. Found in review on 2026-11-10; fixed
   as part of G.5a rule 6.
+
+**The reading limit, measured on 2026-11-12.** The model file the app
+downloads (the q4 variant) was run directly, outside the app, on a cloud
+machine. Phone times will be slower and are not measured yet.
+
+| Text length | Result | Time on the cloud machine |
+|---|---|---|
+| 32 tokens | Read | 35 ms |
+| 128 tokens | Read | 123 ms |
+| 512 tokens (today's limit) | Read | 478 ms |
+| 1,024 tokens | Read | 1,060 ms |
+| 2,048 tokens | Read | 2,532 ms |
+| 2,049 tokens | Refused by the model | |
+
+- The model file accepts any length up to 2,048 tokens. The 512 limit is
+  set in the app's own code, not by the model.
+- Time follows the real length of the text. A short text costs the same
+  whatever the limit is set to.
+- **Proposed (G33):** raise the limit to 2,048 for stored text, meaning
+  saved memories. They are read in the background, never while a message
+  is being sent. The message being sent keeps a short whole-message pass
+  and is covered by pieces (G.10), because one pass over a very long
+  message is slow and blurs its details.
+- **Owner (2026-11-12):** a memory the model cannot read in full must not
+  be allowed silently. Memories are limited to what can be read, and the
+  user is shown how long a memory is (G34).
 
 ## G.3 The whole system at a glance
 
@@ -1705,7 +1734,10 @@ needs is its own step (S). Which step is built first is the owner's decision.
 - **Build:** a counting function on the tokenizer and the model that
   counts the instruction prefix and special tokens and never cuts
   anything off. One queue for all embedding work with two priorities. Move
-  the unlocked call in `Librarian.searchInternal` onto it.
+  the unlocked call in `Librarian.searchInternal` onto it. Raise the
+  reading limit for stored text to 2,048 tokens (G33), and read again only
+  the saved memories that were longer than the old limit, so no other
+  memory loses its place in meaning search while that happens.
 - **Must not change:** any saved-memory search result, any vector already
   stored, or what the tokenizer returns for text that fits.
 - **Done when:** existing tests pass unchanged; new tests show the count
@@ -2017,6 +2049,8 @@ recommendation.
 | G30 | Is recall offered without an embedding model? | **Decided (owner, 2026-11-12):** no. Conversation recall requires the embedding model. Lorebook keyword matching is separate and keeps working whenever the lorebook is on | Decided |
 | G31 | What the user sees when Index Conversations or Conversation Recall cannot be turned on because no embedding model is installed, and when the model is removed after indexing | Open. Written to the plain-wording rule (G.13b): why it cannot be turned on, and where to install the model | Step 1F |
 | G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | **Decided (owner, 2026-11-12):** yes. 0 to 3, and it starts at 1. Where the control goes is still open. Recommended: with the other search numbers on the Memory Search Test screen. Its label and explanation are shown to the owner before step S | Step S |
+| G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | Open. Recommended: yes, in step 1B. It is an engineering change with no cost for ordinary memories. Speed and memory use on the phone are checked before it ships | Step 1B |
+| G34 | How is a saved memory limited to what the model can read, and how is its length shown? Covers memories the user writes, memories the Memory Assistant proposes, and existing memories that are already too long | Open. Recommended: a memory that is too long cannot be saved, with a message saying why and what to do (shorten it, or split it in two); the editor shows the length as it is typed; existing over-length memories are kept, never shortened automatically, and marked so the user can find them | Before the limit is built |
 
 ## G.18 Research behind this plan (2026-11-10)
 
