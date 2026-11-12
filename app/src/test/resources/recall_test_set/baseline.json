@@ -100,7 +100,9 @@
     },
     "dictated_04": {
       "found": [],
-      "wrongly_sent": []
+      "wrongly_sent": [
+        "home_latch"
+      ]
     },
     "typed_05": {
       "found": [],
@@ -175,9 +177,7 @@
         "food_sesame"
       ],
       "wrongly_sent": [
-        "health_wrist",
-        "home_latch",
-        "home_leak"
+        "home_latch"
       ]
     },
     "very_long_04": {
@@ -301,7 +301,9 @@
       "found": [
         "pet_tansy"
       ],
-      "wrongly_sent": []
+      "wrongly_sent": [
+        "food_tea"
+      ]
     },
     "conversation_01_turn_3": {
       "found": [
@@ -400,6 +402,84 @@
     "conversation_06_turn_3": {
       "found": [
         "plan_eclipse"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_07_turn_1": {
+      "found": [
+        "pet_brindle"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_07_turn_2": {
+      "found": [],
+      "wrongly_sent": [
+        "hobby_camera"
+      ]
+    },
+    "conversation_07_turn_3": {
+      "found": [
+        "pet_brindle"
+      ],
+      "wrongly_sent": [
+        "family_leon"
+      ]
+    },
+    "conversation_07_turn_4": {
+      "found": [
+        "family_ada"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_08_turn_1": {
+      "found": [
+        "hobby_spring"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_08_turn_2": {
+      "found": [
+        "hobby_spring"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_08_turn_3": {
+      "found": [
+        "hobby_spring"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_08_turn_4": {
+      "found": [
+        "pet_cobalt"
+      ],
+      "wrongly_sent": [
+        "work_password"
+      ]
+    },
+    "conversation_09_turn_1": {
+      "found": [
+        "plan_concert"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_09_turn_2": {
+      "found": [
+        "plan_concert"
+      ],
+      "wrongly_sent": [
+        "work_archive",
+        "work_budget",
+        "work_password"
+      ]
+    },
+    "conversation_09_turn_3": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "conversation_09_turn_4": {
+      "found": [
+        "health_dental"
       ],
       "wrongly_sent": []
     }
