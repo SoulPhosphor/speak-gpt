@@ -1718,8 +1718,10 @@ and replaces the text on each update, so a later pass removes the emphasis.
 ## Restore Options
 
 Restore categories use `Widget.App.CheckOption.Row` and `CheckOption.CheckBox`,
-`Widget.App.Row.Title.Fill` and `Row.Subtitle`, and the canonical dropdown's
-`CanonicalValue.Trailing` / `StaticValue` controls. The credential explanation
+a shared `Widget.App.Row.TextColumn` containing `Row.Title` and `Row.Subtitle`,
+and the canonical dropdown's
+`CanonicalValue.Trailing` / `StaticValue` controls. The fixed value sizes to its
+text without claiming a share of the title/description column. The credential explanation
 uses `Widget.App.Section.Hint`. Restore actions use
 `AppButton.Primary.Inline.Centered`, matching the backup actions.
 

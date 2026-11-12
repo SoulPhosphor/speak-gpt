@@ -30,10 +30,16 @@
             android:layout_height="wrap_content"
             android:checked="true" />
 
-        <TextView
-            android:id="@+id/category_title"
-            style="@style/Widget.App.Row.Title.Fill"
-            android:importantForAccessibility="no" />
+        <LinearLayout style="@style/Widget.App.Row.TextColumn">
+            <TextView
+                android:id="@+id/category_title"
+                style="@style/Widget.App.Row.Title"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/category_description"
+                style="@style/Widget.App.Row.Subtitle" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/category_mode"
@@ -45,12 +51,11 @@
         <TextView
             android:id="@+id/category_mode_fixed"
             style="@style/Widget.App.Dropdown.StaticValue"
+            android:layout_width="wrap_content"
+            android:layout_weight="0"
             android:text="@string/restore_mode_replace_only"
             android:visibility="gone" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/category_description"
-        style="@style/Widget.App.Row.Subtitle" />
 
 </merge>
