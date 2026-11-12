@@ -253,10 +253,13 @@ it can take input focus. When the composer is tapped it moves its editor, and
 for a moment Android hands focus to a message. That message then asks the
 conversation to scroll until its top is showing. It only happens when that
 message is partly cut off at the top, so it looks random.
-`ChatTranscriptRecyclerView.requestChildRectangleOnScreen()` declines the
-request unless a finger is on the conversation or a text field inside a row is
-being typed in. `ChatTranscriptLayoutManager` declines the other form of the
-same request.
+The cause is the focus leaving the composer, so `ChatComposerLayout.applyMode()`
+holds the focus on the composer itself while the editor moves and no message
+ever receives it. As a second line, the conversation declines such a request
+from a message anyway, unless a finger is on the conversation or a text field
+inside a row is being typed in
+(`ChatTranscriptRecyclerView.requestChildRectangleOnScreen()` and
+`ChatTranscriptLayoutManager`).
 
 **Focusing the composer when a turn finishes.** Calling `requestFocus()` on the
 message box at the end of a turn runs the composer's focus listener, which shows

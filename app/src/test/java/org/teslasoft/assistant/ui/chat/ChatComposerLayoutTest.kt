@@ -52,6 +52,26 @@ class ChatComposerLayoutTest {
     }
 
     @Test
+    fun movingTheFocusedEditorNeverHandsFocusToAMessage() = withActivity { activity ->
+        // No focusable host here, so the message is the first view Android
+        // would pick if focus ever left the composer.
+        val fixture = Fixture(activity, focusableHost = false)
+
+        assertTrue(fixture.editor.requestFocus())
+        // Only focus that arrives after the editor has it counts.
+        fixture.messageTookFocus = false
+        shadowOf(Looper.getMainLooper()).idle()
+        fixture.assertEditorIn(fixture.content)
+        fixture.expand.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertFalse(fixture.messageTookFocus)
+        assertTrue(fixture.editor.hasFocus())
+        assertFalse(fixture.composer.isFocusable)
+        assertFalse(fixture.composer.isFocusableInTouchMode)
+    }
+
+    @Test
     fun expandingFocusedInlineEditorDoesNotReenterRemoval() = withActivity { activity ->
         val fixture = Fixture(activity)
         fixture.editor.setText("draft text")
@@ -187,7 +207,14 @@ class ChatComposerLayoutTest {
 
     /** Same nested content/control hierarchy as activity_chat, without starting
      * ChatActivity's network, speech, or encrypted-storage services. */
-    private class Fixture(activity: Activity) {
+    private class Fixture(activity: Activity, focusableHost: Boolean = true) {
+        /** Stands in for a selectable message in the transcript. */
+        var messageTookFocus = false
+        val message = View(activity).apply {
+            isFocusable = true
+            isFocusableInTouchMode = true
+            setOnFocusChangeListener { _, hasFocus -> if (hasFocus) messageTookFocus = true }
+        }
         val composer = ChatComposerLayout(activity).apply { id = R.id.composer_surface }
         val content = LinearLayout(activity).apply {
             id = R.id.composer_content
@@ -216,12 +243,16 @@ class ChatComposerLayoutTest {
                 isAccessible = true
             }.invoke(composer)
             val host = LinearLayout(activity).apply {
-                isFocusableInTouchMode = true
-                descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
+                if (focusableHost) {
+                    isFocusableInTouchMode = true
+                    descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
+                } else {
+                    addView(message)
+                }
                 addView(composer)
             }
             activity.setContentView(host)
-            host.requestFocus()
+            if (focusableHost) host.requestFocus()
         }
 
         fun assertEditorIn(parent: ViewGroup) {
