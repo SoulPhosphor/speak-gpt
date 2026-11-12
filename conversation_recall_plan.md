@@ -6,6 +6,13 @@ the memory plan, `Memory System/dynamic_memory_plan.md`, which remains the recor
 saved-memory search (its Parts A to F). References below to "Part A",
 "Part E", or a step number mean that document.
 
+**State on 2026-11-12.** Nothing in this plan is built. It was reviewed
+and corrected on 2026-11-12: the long-message design (G.10), follow-ups
+(G.9, G.9a), the cutter (G.5b), the build steps (G.16), the wording rule
+(G.13b), and a comparison with established open-source systems (G.18a).
+The open questions are in G.17. Where the "Next steps" list in the memory
+plan disagrees with this document, this document is the current one.
+
 ## G.0 Status and how to read this plan
 
 - **This plan is a proposal.** It was written on 2026-11-10 from the current
@@ -1723,7 +1730,7 @@ needs is its own step (S). Which step is built first is the owner's decision.
   index's line on the Check Database Integrity button (G.13a), and the
   error notices (G20).
 - **Before building, the owner approves:** the full message for each index
-  error (G20) and the no-model status, written to the plain-wording rule
+  error (G20) and the no-model wording (G31), written to the plain-wording rule
   (G.13b); G27; G28.
 - **Read:** G.16a; G.13a; G.13b; `ui-style-guide.md` in full for the parts
   used (toggle rows, section headings, destructive buttons, two-action
