@@ -18,7 +18,9 @@ package org.teslasoft.assistant.preferences.backup
 
 /**
  * Pure 3-strikes decision (Build Phase 3 item 8; unit-tested): what the UI
- * does about a type's consecutive backup failures. Category-split by owner
+ * does about a type's consecutive backup failures while automatic backups
+ * are enabled. Saved failures do not trigger a response while they are off.
+ * Category-split by owner
  * approval (July 20 2026):
  *  - destination/verify failures → the storage dialog (`Change Backup Folder
  *    | Retry | Cancel`) — they must NEVER mark the source degraded or
@@ -34,8 +36,14 @@ object BackupFailurePolicy {
 
     enum class Response { NONE, STORAGE_DIALOG, SOURCE_CHECK }
 
-    fun respond(consecutiveFailures: Int, category: BackupFailureCategory?): Response {
-        if (consecutiveFailures < STRIKES || category == null) return Response.NONE
+    fun respond(
+        automaticBackupsEnabled: Boolean,
+        consecutiveFailures: Int,
+        category: BackupFailureCategory?
+    ): Response {
+        if (!automaticBackupsEnabled || consecutiveFailures < STRIKES || category == null) {
+            return Response.NONE
+        }
         return when (category) {
             BackupFailureCategory.DESTINATION_PERMISSION,
             BackupFailureCategory.DESTINATION_WRITE,

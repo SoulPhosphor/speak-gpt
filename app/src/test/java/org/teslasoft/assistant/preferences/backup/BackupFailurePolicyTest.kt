@@ -27,10 +27,23 @@ import org.junit.Test
 class BackupFailurePolicyTest {
 
     @Test
+    fun disabledAutomaticBackupsDoNotEscalateSavedFailureStreaks() {
+        for (category in BackupFailureCategory.values()) {
+            for (failures in listOf(3, 4, 10)) {
+                assertEquals(
+                    "Disabled automatic backups must stay quiet: $category, $failures failures",
+                    BackupFailurePolicy.Response.NONE,
+                    BackupFailurePolicy.respond(false, failures, category)
+                )
+            }
+        }
+    }
+
+    @Test
     fun underThreeStrikesStaysQuiet() {
         for (category in BackupFailureCategory.values()) {
-            assertEquals(BackupFailurePolicy.Response.NONE, BackupFailurePolicy.respond(0, category))
-            assertEquals(BackupFailurePolicy.Response.NONE, BackupFailurePolicy.respond(2, category))
+            assertEquals(BackupFailurePolicy.Response.NONE, BackupFailurePolicy.respond(true, 0, category))
+            assertEquals(BackupFailurePolicy.Response.NONE, BackupFailurePolicy.respond(true, 2, category))
         }
     }
 
@@ -38,15 +51,15 @@ class BackupFailurePolicyTest {
     fun destinationAndVerifyFailuresGetTheStorageDialog() {
         assertEquals(
             BackupFailurePolicy.Response.STORAGE_DIALOG,
-            BackupFailurePolicy.respond(3, BackupFailureCategory.DESTINATION_PERMISSION)
+            BackupFailurePolicy.respond(true, 3, BackupFailureCategory.DESTINATION_PERMISSION)
         )
         assertEquals(
             BackupFailurePolicy.Response.STORAGE_DIALOG,
-            BackupFailurePolicy.respond(4, BackupFailureCategory.DESTINATION_WRITE)
+            BackupFailurePolicy.respond(true, 4, BackupFailureCategory.DESTINATION_WRITE)
         )
         assertEquals(
             BackupFailurePolicy.Response.STORAGE_DIALOG,
-            BackupFailurePolicy.respond(10, BackupFailureCategory.VERIFY)
+            BackupFailurePolicy.respond(true, 10, BackupFailureCategory.VERIFY)
         )
     }
 
@@ -54,12 +67,12 @@ class BackupFailurePolicyTest {
     fun sourceFailuresRouteToTheStoreCheckNeverTheStorageDialog() {
         assertEquals(
             BackupFailurePolicy.Response.SOURCE_CHECK,
-            BackupFailurePolicy.respond(3, BackupFailureCategory.SOURCE)
+            BackupFailurePolicy.respond(true, 3, BackupFailureCategory.SOURCE)
         )
     }
 
     @Test
     fun aStreakWithNoRecordedCategoryStaysQuiet() {
-        assertEquals(BackupFailurePolicy.Response.NONE, BackupFailurePolicy.respond(5, null))
+        assertEquals(BackupFailurePolicy.Response.NONE, BackupFailurePolicy.respond(true, 5, null))
     }
 }

@@ -18,37 +18,42 @@
 -->
 <merge xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <LinearLayout style="@style/Widget.App.Restore.Category.Header">
+    <LinearLayout style="@style/Widget.App.CheckOption.Row">
 
         <!-- Checkbox and category name on the left; the name uses the
-             canonical dropdown label typography. Tapping the name toggles
+             shared row-title typography. Tapping the name toggles
              the checkbox (wired in RestoreCategoryView). -->
         <com.google.android.material.checkbox.MaterialCheckBox
             android:id="@+id/category_check"
-            style="@style/Widget.App.Restore.Category.CheckBox"
+            style="@style/Widget.App.CheckOption.CheckBox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:checked="true" />
 
-        <TextView
-            android:id="@+id/category_title"
-            style="@style/Widget.App.Restore.Category.Title"
-            android:importantForAccessibility="no" />
+        <LinearLayout style="@style/Widget.App.Row.TextColumn">
+            <TextView
+                android:id="@+id/category_title"
+                style="@style/Widget.App.Row.Title"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/category_description"
+                style="@style/Widget.App.Row.Subtitle" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/category_mode"
-            style="@style/Widget.App.Restore.Category.Mode"
+            style="@style/Widget.App.Dropdown.CanonicalValue.Trailing"
             android:text="@string/restore_mode_merge" />
 
         <!-- Shown instead of the dropdown when the category has only one
              mode (Settings and Preferences); plain description-text style. -->
         <TextView
             android:id="@+id/category_mode_fixed"
-            style="@style/Widget.App.Restore.Category.FixedMode"
+            style="@style/Widget.App.Dropdown.StaticValue.Wrap"
             android:text="@string/restore_mode_replace_only"
             android:visibility="gone" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/category_description"
-        style="@style/Widget.App.Restore.Category.Description" />
 
 </merge>
