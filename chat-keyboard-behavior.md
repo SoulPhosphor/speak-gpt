@@ -248,6 +248,16 @@ but it also stacks a short conversation against the composer instead of
 starting it at the top. That is a visible change to every new chat and is not
 approved.
 
+**Letting a message scroll itself into view.** Message text is selectable, so
+it can take input focus. When the composer is tapped it moves its editor, and
+for a moment Android hands focus to a message. That message then asks the
+conversation to scroll until its top is showing. It only happens when that
+message is partly cut off at the top, so it looks random.
+`ChatTranscriptRecyclerView.requestChildRectangleOnScreen()` declines the
+request unless a finger is on the conversation or a text field inside a row is
+being typed in. `ChatTranscriptLayoutManager` declines the other form of the
+same request.
+
 **Focusing the composer when a turn finishes.** Calling `requestFocus()` on the
 message box at the end of a turn runs the composer's focus listener, which shows
 the keyboard. No completion path may focus the composer, in any mode. Putting a
