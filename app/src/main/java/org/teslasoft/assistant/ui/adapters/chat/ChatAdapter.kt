@@ -140,12 +140,6 @@ import org.teslasoft.assistant.util.ShareUtil.Companion.sharePlainText
 
 class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, private val selectorProjection: ArrayList<HashMap<String, Any>>, private val context: FragmentActivity, private val preferences: Preferences, private var chatId: String) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), EditMessageDialogFragment.StateChangesListener {
 
-    init {
-        // Keeps every assistant row's avatar in step with the chat-wide
-        // error-avatar choice (see ChatErrorAvatarSync).
-        registerAdapterDataObserver(ChatErrorAvatarSync(this) { dataArray })
-    }
-
     private val generatedImageDataUrls = ConcurrentHashMap<String, String>()
     private var listener: OnUpdateListener? = null
     private var searchTargetPosition = RecyclerView.NO_POSITION
