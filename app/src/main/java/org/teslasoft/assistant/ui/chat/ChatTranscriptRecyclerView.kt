@@ -211,29 +211,6 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         return super.dispatchTouchEvent(event)
     }
 
-    /**
-     * A view inside a row asking to be scrolled into view. Message text is
-     * selectable, so it can take input focus, and Android hands it that focus
-     * for a moment while the composer moves its editor on a tap. The text
-     * then asks for its own top to be shown, which drags the conversation
-     * away from the composer as the keyboard opens (chat-keyboard-behavior.md,
-     * rule 4). Nothing automatic moves the conversation, so the request is
-     * declined.
-     *
-     * Two requests are the user's own and stay as they were: one made while
-     * a finger is on the conversation (dragging a text selection), and one
-     * from a text field inside a row (the image summary editor being typed
-     * in).
-     */
-    override fun requestChildRectangleOnScreen(
-        child: View,
-        rect: android.graphics.Rect,
-        immediate: Boolean
-    ): Boolean {
-        if (!touching && child.findFocus() !is android.widget.EditText) return false
-        return super.requestChildRectangleOnScreen(child, rect, immediate)
-    }
-
     /** Capture the bottommost visible row while this view still has its old height. */
     fun captureResizeAnchor(reason: String = "external") {
         captureResizeAnchor(height, reason)

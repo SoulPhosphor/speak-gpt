@@ -304,37 +304,6 @@ class ChatTranscriptResizeAnchorTest {
     }
 
     @Test
-    fun aMessageAskingToBeShownDoesNotMoveTheConversation() = withTranscript { t ->
-        t.showEnd(TALL)
-        t.transcript.scrollBy(0, -100)
-        // The first visible row is now cut off at the top, as a message is
-        // when Android hands it focus while the composer moves its editor.
-        val row = t.manager.findFirstVisibleItemPosition()
-        val view = t.manager.findViewByPosition(row)!!
-        val top = view.top
-
-        view.requestRectangleOnScreen(android.graphics.Rect(0, 0, view.width, view.height), true)
-
-        assertEquals(top, t.manager.findViewByPosition(row)!!.top)
-    }
-
-    @Test
-    fun aRequestMadeUnderAFingerStillScrolls() = withTranscript { t ->
-        t.showEnd(TALL)
-        t.transcript.scrollBy(0, -100)
-        val row = t.manager.findFirstVisibleItemPosition()
-        val view = t.manager.findViewByPosition(row)!!
-        val top = view.top
-
-        t.touch(MotionEvent.ACTION_DOWN)
-        view.requestRectangleOnScreen(android.graphics.Rect(0, 0, view.width, view.height), true)
-        t.touch(MotionEvent.ACTION_UP)
-
-        assertEquals(0, t.manager.findViewByPosition(row)!!.top)
-        assertEquals(true, top < 0)
-    }
-
-    @Test
     fun aSendReleasesAnAlreadyCapturedResizeHold() = withTranscript { t ->
         t.layout(SHORT)
         t.manager.scrollToPositionWithOffset(10, 0)
