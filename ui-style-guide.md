@@ -1723,8 +1723,9 @@ Restore categories use `Widget.App.CheckOption.Row` and `CheckOption.CheckBox`,
 uses `Widget.App.Section.Hint`. Restore actions use
 `AppButton.Primary.Inline.Centered`, matching the backup actions.
 
-The database-type selector and progress line use `Widget.App.Page.ControlRow`.
-Progress uses the Material extra-small indicator and `Widget.App.Row.Subtitle`
+The database-type label stays above its full-width canonical dropdown so long
+labels do not squeeze the options. The progress line uses
+`Widget.App.Page.ControlRow`, the Material extra-small indicator and `Widget.App.Row.Subtitle`
 in a `Row.TextColumn`, as on Automatic Backups.
 
 BackUp Options and Restore Options use the simple screen header and

@@ -139,7 +139,10 @@
             <com.google.android.material.button.MaterialButton android:id="@+id/btn_portable_restore"
                 style="@style/AppButton.Primary.Inline.Centered" android:text="@string/restore_from_backup" />
 
-            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
                 <TextView
                     style="@style/Widget.App.Dropdown.CanonicalLabel"
@@ -147,7 +150,8 @@
 
                 <TextView
                     android:id="@+id/btn_restore_type"
-                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="match_parent" />
             </LinearLayout>
 
             <com.google.android.material.button.MaterialButton android:id="@+id/btn_restore_database"
