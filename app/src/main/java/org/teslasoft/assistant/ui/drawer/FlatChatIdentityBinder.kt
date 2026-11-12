@@ -128,7 +128,7 @@ class CompanionImageLookup(private val activity: FragmentActivity) {
 
     private fun resolve(companionId: String): File? {
         val ref = if (companionId.isNotEmpty()) try {
-            PersonaPreferences.getPersonaPreferences(activity).getPersona(companionId).avatarRef
+            PersonaPreferences.getPersonaPreferences(activity).getPersonaAvatarRef(companionId)
         } catch (_: Exception) { "" } else ""
         return ProfileImageResolver.resolveAiImageFile(activity, ref)
     }

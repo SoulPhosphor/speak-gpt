@@ -170,6 +170,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var companionImageFile: File? = null
     private var companionImageShape: String = ProfileImageShape.DEFAULT
     private var companionNameStyle: ChatNameStyle.Resolved? = null
+    private val companionAvatarRecovery = org.teslasoft.assistant.util.CompanionAvatarRecovery()
 
     // The chat's current companion name, used only as the display fallback for
     // assistant messages that carry no stamped [KEY_COMPANION_NAME] of their own.
@@ -191,7 +192,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         nameStyle: ChatNameStyle.Resolved
     ) {
         val stamp = imageStamp(file)
-        if (stamp == companionImageStamp && shape == companionImageShape &&
+        val recoveringFromError = companionAvatarRecovery.takeRecovery(
+            MessageCompletionState.chatShowsErrorAvatar(dataArray)
+        )
+        if (!recoveringFromError && stamp == companionImageStamp && shape == companionImageShape &&
             label == companionLabel && nameStyle == companionNameStyle) return
         companionImageStamp = stamp
         companionImageFile = file
@@ -2047,6 +2051,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
             val marker = statusMarker ?: return
             val state = chatMessage[MessageCompletionState.KEY_STATE]?.toString()
+            // A deliberate Stop has a known cause, even if no text arrived.
+            if (chatMessage["isBot"] == true && state == MessageCompletionState.STOPPED) {
+                marker.text = context.getString(R.string.message_state_stopped)
+                marker.visibility = View.VISIBLE
+                return
+            }
             val providerWarning = chatMessage[MessageCompletionState.KEY_PROVIDER_WARNING_TEXT]
                 ?.toString().orEmpty()
             if (chatMessage["isBot"] == true && providerWarning.isNotBlank() &&
@@ -2056,13 +2066,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 marker.visibility = View.VISIBLE
                 return
             }
-            // A deliberate user Stop is not an error and shows no marker at all
-            // (owner ruling, Aug 8 2026); a complete or still-streaming reply
-            // never shows one either.
+            // A complete or still-streaming reply has no termination marker.
             if (chatMessage["isBot"] != true ||
                 MessageCompletionState.isComplete(state) ||
-                state == MessageCompletionState.STREAMING ||
-                state == MessageCompletionState.STOPPED
+                state == MessageCompletionState.STREAMING
             ) {
                 marker.visibility = View.GONE
                 return
@@ -2952,16 +2959,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 return
             }
             val file = companionImageFile
-            if (file != null && file.exists()) {
-                useFullPortraitSlot()
-                ProfileImageBinder.bind(context, icon, file, companionImageShape) {
-                    // Only reachable if the file vanished between resolve and load.
-                    icon.background = iconInitialBackground
-                    displayLegacyOrBuiltinAvatar()
-                }
-            } else {
+            if (file != null && file.exists()) useFullPortraitSlot()
+            // Reset the pending image request even when falling back to a glyph.
+            ProfileImageBinder.bind(context, icon, file, companionImageShape) {
                 icon.background = iconInitialBackground
-                icon.imageTintList = null
                 displayLegacyOrBuiltinAvatar()
             }
         }
@@ -2971,13 +2972,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  tint are cleared and the view fully reset to avoid recycled-row
          *  bleed, matching the Companion-photo binder's discipline. */
         private fun displayErrorAvatar() {
+            companionAvatarRecovery.onErrorAvatarBound()
             useFullPortraitSlot()
-            icon.background = null
-            icon.imageTintList = null
-            icon.clearColorFilter()
-            icon.scaleType = ImageView.ScaleType.FIT_CENTER
-            icon.setImageResource(R.drawable.ic_avatar_error)
-            icon.contentDescription = context.getString(R.string.chat_avatar_error_desc)
+            // Cancel a pending companion/default photo before showing the X.
+            ProfileImageBinder.bind(context, icon, null, companionImageShape) {
+                icon.clearColorFilter()
+                icon.scaleType = ImageView.ScaleType.FIT_CENTER
+                icon.setImageResource(R.drawable.ic_avatar_error)
+                icon.contentDescription = context.getString(R.string.chat_avatar_error_desc)
+            }
         }
 
         private fun displayLegacyOrBuiltinAvatar() {

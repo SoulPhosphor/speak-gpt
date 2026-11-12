@@ -1242,6 +1242,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    private val chatUsageAlert by lazy { org.teslasoft.assistant.usage.ChatUsageAlert(this, ::calculateCost) }
+
     /** Build the usage summary from frozen per-request records. CL100K runs only for
      * legacy assistant messages that have no durable record; a new
      * provider-reported turn never reaches the tokenizer. */
@@ -1250,6 +1252,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private suspend fun refreshConversationUsageSummary(): ConversationUsageSummary {
+        val usageChatId = chatId
+        val usagePreferences = preferences
         val snapshot = messages.map { HashMap(it) }
         val summary = withContext(Dispatchers.Default) {
                 val legacyIndexes = snapshot.indices.filter { index ->
@@ -1282,22 +1286,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Reconcile durable message records before summarizing. A
                 // rejected/skipped usage-log append must not make a completed
                 // request disappear from this screen.
-                val log = preferences?.let { UsageLogStore.seed(it, snapshot) }
+                val log = usagePreferences?.let { UsageLogStore.seed(it, snapshot) }
                 if (log != null && log.seeded) {
-                    kotlin.Pair(log.summarize(snapshot, estimate), log.sections(snapshot, estimate))
+                    Triple(log.summarize(snapshot, estimate), log.sections(snapshot, estimate),
+                        log.entries.maxOfOrNull { it.recordedAtMs } ?: 0L)
                 } else {
                     // No readable log: only the records inside messages, all chat replies.
                     val fromMessages = TokenUsageAccounting.summarizeMessages(snapshot, estimate)
-                    kotlin.Pair(
+                    Triple(
                         fromMessages,
                         listOfNotNull(
                             fromMessages.takeIf { it.groups.isNotEmpty() }
                                 ?.let { UsageSection(UsageCategory.CHAT, it) }
-                        )
+                        ),
+                        0L
                     )
                 }
-        }.let { (total, sections) ->
+        }.let { (total, sections, latestUsageAt) ->
             conversationUsageSections = sections
+            if (chatId == usageChatId) chatUsageAlert.onSummary(usageChatId, total.totalCost, latestUsageAt)
             total
         }
         conversationUsageSummary = summary
@@ -1815,7 +1822,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 try {
                     val persona = if (personaId.isEmpty()) null
                         else PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId)
-                    val file = ProfileImageResolver.resolveAiImageFile(this@ChatActivity, persona?.avatarRef ?: "")
+                    val avatarRef = PersonaPreferences.getPersonaPreferences(this@ChatActivity)
+                        .getPersonaAvatarRef(personaId)
+                    val file = ProfileImageResolver.resolveAiImageFile(this@ChatActivity, avatarRef)
                     Triple(
                         file,
                         persona?.label ?: "",
@@ -6874,6 +6883,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                     processRecordingScope?.launch {
                         progress?.setOnClickListener {
+                            userRequestedStop = true
                             cancel()
                             restoreUIState()
                         }
@@ -7567,6 +7577,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             processRecordingScope = CoroutineScope(Dispatchers.Main)
             processRecordingScope?.launch {
                 progress?.setOnClickListener {
+                    userRequestedStop = true
                     cancel()
                     restoreUIState()
                 }
@@ -8819,6 +8830,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 setupScope?.launch {
                     progress?.setOnClickListener {
+                        userRequestedStop = true
                         cancel()
                         restoreUIState()
                         saveSettings()
@@ -9164,6 +9176,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 parseMessageScope = CoroutineScope(Dispatchers.Main)
                 parseMessageScope?.launch {
                     progress?.setOnClickListener {
+                        userRequestedStop = true
                         cancel()
                         restoreUIState()
                         saveSettings()
@@ -11668,6 +11681,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // This chat just produced a successful reply, so its complete
             // model-and-companion snapshot may qualify for the next new chat.
             recordLastSuccessfulConfig()
+            refreshCompanionAvatar()
         }
     }
 
@@ -11975,7 +11989,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     messages[idx][MessageCompletionState.KEY_ERROR_TEXT] = reason
                 }
                 if (messages.size > 2) {
-                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                    adapter?.notifyItemRangeChanged(messages.size - 3, 3)
                 } else {
                     adapter?.notifyItemChanged(messages.size - 1)
                 }
@@ -12325,6 +12339,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ) {
         try {
             generateResponseUnsettled(request, shouldPronounce, preparedTurn)
+        } catch (e: CancellationException) {
+            // Preflight can suspend before the request's terminal handler exists.
+            if (userRequestedStop) {
+                showTerminalFailure(
+                    MessageCompletionState.STOPPED, MessageCompletionState.DETAIL_USER_STOP,
+                    null, logAsError = false, errorTag = "", errorSummary = ""
+                )
+            }
+            throw e
         } finally {
             // Every way a regeneration can end passes here; one that produced
             // no reply puts the removed reply back.
@@ -12530,14 +12553,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
             when (detail) {
                 MessageCompletionState.DETAIL_USER_STOP -> {
-                    // Deliberate user Stop: not an error. No chat marker and no
-                    // Error Log entry; the Response Lifecycle still records it
-                    // (kept on for now, for debugging).
+                    // A deliberate Stop names the user's action in the chat,
+                    // while remaining a non-error in the existing diagnostics.
                     finalizeLifecycleTerminal(
                         ResponseLifecycle.Outcome.STOPPED, "missing", true,
                         ResponseLifecycle.Termination.USER_STOP, null
                     )
-                    finalizeStreamingMessageState(state, detail)
+                    showTerminalFailure(
+                        state, detail, null, logAsError = false,
+                        errorTag = "", errorSummary = ""
+                    )
                 }
                 MessageCompletionState.DETAIL_START_FAILED -> {
                     // The reply never started. Include the known reason (a

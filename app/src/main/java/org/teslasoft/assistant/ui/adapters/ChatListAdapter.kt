@@ -410,7 +410,7 @@ class ChatListAdapter(
             val personaId = chatPreferences.getPersonaId()
             companionImageShape = GlobalPreferences.getPreferences(mContext.requireActivity()).getProfileImageShape()
             val companionRef = if (personaId.isNotEmpty()) {
-                PersonaPreferences.getPersonaPreferences(mContext.requireActivity()).getPersona(personaId).avatarRef
+                PersonaPreferences.getPersonaPreferences(mContext.requireActivity()).getPersonaAvatarRef(personaId)
             } else ""
             companionImageFile = ProfileImageResolver.resolveAiImageFile(mContext.requireActivity(), companionRef)
 

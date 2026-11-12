@@ -998,7 +998,7 @@
          status shown on a reply that did not finish streaming; the partial
          text stays visible above them. Wording pending owner approval. -->
     <string name="message_state_interrupted">Reply interrupted and may be incomplete. The app interrupted the reply before it finished.</string>
-    <string name="message_state_stopped">Reply stopped and may be incomplete.</string>
+    <string name="message_state_stopped">AI response could not be completed due user stopping generation.</string>
     <string name="message_state_failed">Reply failed and may be incomplete.</string>
     <string name="message_state_incomplete">Reply status is unknown and may be incomplete.</string>
     <!-- The reply ended early and the app genuinely cannot determine why (a
@@ -4410,4 +4410,9 @@
     <string name="memory_search_save_failed">The numbers could not be saved: %1$s</string>
     <string name="model_rule_choose_ai_model">Choose AI Model</string>
     <string name="model_rule_add_another_ai">Add Another AI</string>
+    <string name="chat_usage_alert_toggle">Show Chat Usage Alert</string>
+    <string name="chat_usage_alert_amount_label">Combined Usage Alert Amount</string>
+    <string name="chat_usage_alert_amount_hint">If the estimated cost of the conversation gets to this amount, a pop-up alert will show.</string>
+    <string name="chat_usage_alert_title">Usage Cost Warning</string>
+    <string name="chat_usage_alert_message">The total amount of usage for this conversation has reached %1$s.</string>
 </resources>
