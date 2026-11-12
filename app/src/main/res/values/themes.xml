@@ -1419,6 +1419,13 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- A single-choice value that sizes to its text, so it does not take a
+         share of the row from the title column beside it. -->
+    <style name="Widget.App.Dropdown.StaticValue.Wrap">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_weight">0</item>
+    </style>
+
     <!-- Label-sized primary action after a field on the same line. -->
     <style name="AppButton.Primary.Inline.Trailing">
         <item name="android:layout_marginStart">8dp</item>

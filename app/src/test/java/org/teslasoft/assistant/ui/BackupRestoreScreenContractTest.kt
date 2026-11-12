@@ -135,10 +135,18 @@ class BackupRestoreScreenContractTest {
         val column = title.parentNode as org.w3c.dom.Element
         assertTrue(column.getAttribute("style") == "@style/Widget.App.Row.TextColumn")
         val fixedMode = view("category_mode_fixed")
+        assertTrue("Fixed mode must size to its text through its shared style",
+            fixedMode.getAttribute("style") == "@style/Widget.App.Dropdown.StaticValue.Wrap")
+        val themes = find(
+            "src/main/res/values/themes.xml",
+            "app/src/main/res/values/themes.xml"
+        ).readText()
+        val wrap = themes.substringAfter("<style name=\"Widget.App.Dropdown.StaticValue.Wrap\">")
+            .substringBefore("</style>")
         assertTrue("Fixed mode must size to its text",
-            fixedMode.getAttributeNS(android, "layout_width") == "wrap_content")
+            wrap.contains("<item name=\"android:layout_width\">wrap_content</item>"))
         assertTrue("Fixed mode must leave remaining width for the text column",
-            fixedMode.getAttributeNS(android, "layout_weight") == "0")
+            wrap.contains("<item name=\"android:layout_weight\">0</item>"))
     }
 
     @Test
