@@ -79,35 +79,20 @@
                 style="@style/Widget.App.Section.Hint"
                 android:text="@string/model_rule_edit_models_hint" />
 
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/chips_models"
-                style="@style/Widget.App.Chip.Group" />
-
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/model_rule_edit_select_endpoint" />
-
-            <TextView
-                android:id="@+id/field_model_endpoint"
-                style="@style/Widget.App.ModelRuleEditor.Endpoint"
-                android:text="@string/model_rule_select_endpoint" />
-
             <LinearLayout style="@style/Widget.App.ModelRuleEditor.ModelRow">
-
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_use_current_model"
+                    style="@style/AppButton.Primary.ModelRuleChoice"
+                    android:text="@string/model_rule_use_current_chat_model" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_choose_model"
-                    style="@style/AppButton.Primary.Inline"
-                    android:text="@string/choose_provider_choose_model_title" />
-
-                <TextView
-                    android:id="@+id/text_selected_model"
-                    style="@style/Widget.App.ModelRuleEditor.SelectedModel" />
+                    style="@style/AppButton.Primary.ModelRuleChoice.Trailing"
+                    android:text="@string/model_rule_choose_ai_model" />
             </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_add_model"
-                style="@style/AppButton.Primary.ModelRuleTarget"
-                android:text="@string/model_rule_edit_add_model" />
+            <LinearLayout
+                android:id="@+id/model_rule_targets"
+                style="@style/Widget.App.ModelRuleEditor.TargetList" />
 
             <TextView
                 style="@style/Widget.App.Section.Title"

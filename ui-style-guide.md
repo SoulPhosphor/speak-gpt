@@ -1885,3 +1885,10 @@ padding, and grows with font size above its minimum height. Keeping the outline
 on the frame prevents the editable text's scroll from moving the border. Place
 the selected chip group below the entry row. Other tag editors have different
 compositions and do not yet use this family.
+
+The model-rule editor places `AppButton.Primary.ModelRuleChoice` and its
+`Trailing` variant in `ModelRuleEditor.ModelRow` for equal-width actions.
+`view_model_rule_target_row.xml` composes `RemovableList.Row`, a weighted
+`Row.TextColumn` with `Row.Title` and `Row.Subtitle`, and `RemovableList.Remove`.
+`ModelRuleEditor.TargetList` stacks these rows vertically. Model names and
+endpoint labels wrap, and the remove action remains at the trailing edge.

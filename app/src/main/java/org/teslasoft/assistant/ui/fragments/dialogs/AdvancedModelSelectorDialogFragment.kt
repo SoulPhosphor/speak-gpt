@@ -91,6 +91,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         private const val ARG_START_WITH_ALL_MODELS = "startWithAllModels"
         private const val ARG_RAW_MODEL_CATALOG = "rawModelCatalog"
         private const val ARG_CURRENT_CHAT_MODEL = "currentChatModel"
+        private const val ARG_MODEL_RULE_PICKER = "modelRulePicker"
+        const val MODEL_RULE_SELECTION_RESULT = "modelRulePickerSelection"
         private const val ARG_CHAT_MODEL_PICKER = "chatModelPicker"
         private const val ARG_SCOPE = "scope"
         private const val STATE_PICKER_TAB = "pickerTab"
@@ -167,20 +169,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 requireArguments().putString(ARG_SCOPE, scope.name)
             }
 
-        /**
-         * Model Rule entry point: keep the Favorites-first landing, but make
-         * View all/search use every exact id advertised by the endpoint rather
-         * than the chat picker's name-based exclusions.
-         */
-        fun newModelRuleTargetInstance(
-            chatId: String,
-            endpointId: String,
-            currentChatModel: String = ""
-        ): AdvancedModelSelectorDialogFragment =
-            newInstance(name = "", chatId = chatId, endpointId = endpointId).apply {
+        /** Reuse Favorites / Recent / View All, returning an exact target without changing chat. */
+        fun newModelRuleTargetInstance(chatId: String): AdvancedModelSelectorDialogFragment =
+            newInstance(name = "", chatId = chatId).apply {
+                requireArguments().putBoolean(ARG_CHAT_MODEL_PICKER, true)
+                requireArguments().putBoolean(ARG_MODEL_RULE_PICKER, true)
                 requireArguments().putBoolean(ARG_RAW_MODEL_CATALOG, true)
-                requireArguments().putString(ARG_CURRENT_CHAT_MODEL, currentChatModel)
             }
+
     }
 
     private var modelList: ListView? = null
@@ -196,6 +192,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private enum class PickerTab { FAVORITES, RECENT, VIEW_ALL }
 
     /** The Favorites / Recent / View All picker (chat or Summarizer). */
+    private val modelRulePicker: Boolean
+        get() = requireArguments().getBoolean(ARG_MODEL_RULE_PICKER)
     private val chatPicker: Boolean
         get() = requireArguments().getBoolean(ARG_CHAT_MODEL_PICKER)
     private val scope: ModelPickerScope
@@ -368,7 +366,12 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         endpointId: String = resolvedEndpointId,
         choice: RoutingChoice = RoutingChoice.Saved
     ) {
-        if (dedicatedPicker) {
+        if (modelRulePicker) {
+            parentFragmentManager.setFragmentResult(
+                MODEL_RULE_SELECTION_RESULT,
+                bundleOf(SELECTED_MODEL to model, SELECTED_ENDPOINT to endpointId)
+            )
+        } else if (dedicatedPicker) {
             applyDedicatedSelection(model, endpointId, choice)
             parentFragmentManager.setFragmentResult(
                 DEDICATED_SELECTION_RESULT,
@@ -1082,13 +1085,17 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     /** The chat's id for the provider screen, only for the chat picker. */
     private fun chatIdForRouting(): String =
-        if (chatPicker) requireArguments().getString("chatId").orEmpty() else ""
+        if (chatPicker && !modelRulePicker) requireArguments().getString("chatId").orEmpty() else ""
 
     /** A provider picked from a row's dropdown selects the model with it. On a
      *  Favorites row it becomes the favorite's provider; on a Recent row only
      *  the chat uses it. */
     private fun pickProvider(row: SavedModelPickerAdapter.Row, source: SavedModelPickerAdapter.Source, slug: String) {
         val target = row.identity
+        if (modelRulePicker) {
+            finishModelSelection(target.modelId, target.endpointId)
+            return
+        }
         if (source == SavedModelPickerAdapter.Source.FAVORITES) {
             val favorites = favoriteModelsPreferences ?: return
             val favorite = favorites.getFavorite(target.modelId, target.endpointId) ?: return
