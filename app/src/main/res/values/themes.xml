@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 52217)
+Total output lines: 3731
+
 <resources>
     <!-- Base application theme. -->
     <style name="Theme.App" parent="Theme.Material3.DayNight.NoActionBar">
@@ -1781,178 +1784,7 @@
         <item name="android:textStyle">bold</item>
     </style>
     <style name="Widget.App.Usage.ChatDetailLabel" parent="Widget.App.Usage.TableLabel">
-        <item name="android:paddingStart">@dimen/usage_chat_detail_indent</item>
-    </style>
-    <style name="Widget.App.Usage.ChatDetailDivider" parent="Widget.App.Usage.TableDivider">
-        <item name="android:layout_marginStart">@dimen/usage_chat_detail_indent</item>
-    </style>
-
-    <style name="Widget.App.Usage.CacheRate" parent="">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginStart">@dimen/usage_card_padding</item>
-        <item name="android:layout_marginEnd">@dimen/usage_card_padding</item>
-        <item name="android:layout_marginBottom">10dp</item>
-        <item name="android:background">@drawable/bg_usage_cache_rate</item>
-        <item name="android:gravity">center_vertical</item>
-        <item name="android:orientation">horizontal</item>
-        <item name="android:paddingStart">11dp</item>
-        <item name="android:paddingEnd">11dp</item>
-        <item name="android:paddingTop">9dp</item>
-        <item name="android:paddingBottom">9dp</item>
-    </style>
-
-    <style name="Widget.App.Usage.CacheRateLabel" parent="">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_weight">1</item>
-        <item name="android:textColor">?attr/appUsageModelTextColor</item>
-        <item name="android:textSize">13sp</item>
-    </style>
-
-    <style name="Widget.App.Usage.CacheRateValue" parent="">
-        <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">?attr/appUsageModelTextColor</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <!-- Frozen prices at the bottom of a provider: one PriceFact per billed
-         part, then the centered PriceCaption naming the price basis. -->
-    <style name="Widget.App.Usage.PricingFooter" parent="">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@drawable/bg_usage_pricing_footer</item>
-        <item name="android:orientation">vertical</item>
-        <item name="android:paddingStart">@dimen/usage_card_padding</item>
-        <item name="android:paddingTop">11dp</item>
-        <item name="android:paddingEnd">@dimen/usage_card_padding</item>
-        <item name="android:paddingBottom">13dp</item>
-    </style>
-
-    <style name="Widget.App.Usage.PriceFacts" parent="">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:orientation">horizontal</item>
-    </style>
-
-    <style name="Widget.App.Usage.PriceFact" parent="">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_weight">1</item>
-        <item name="android:gravity">center</item>
-        <item name="android:orientation">vertical</item>
-    </style>
-
-    <style name="Widget.App.Usage.PriceFactLabel" parent="">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/appUsageModelTextColor</item>
-        <item name="android:textSize">11sp</item>
-    </style>
-
-    <style name="Widget.App.Usage.PriceFactValue" parent="">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">2dp</item>
-        <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/appUsageModelTextColor</item>
-        <item name="android:textSize">12sp</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <style name="Widget.App.Usage.PriceCaption" parent="">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">8dp</item>
-        <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/appUsageModelTextColor</item>
-        <item name="android:textSize">11sp</item>
-    </style>
-
-    <!-- Explanatory text for a section, directly under its Section.Title and
-         before that section's first control (see the ordering rule above). -->
-    <style name="Widget.App.Section.Hint" parent="">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:paddingTop">8dp</item>
-        <item name="android:textColor">?attr/appSubtleTextColor</item>
-        <item name="android:textSize">13sp</item>
-    </style>
-
-    <!-- Plain standalone paragraph at the top of a screen, with no title of
-         its own above it (owner ruling, July 26 2026). Distinct from both
-         Section.Title (bold, larger, colorPrimary) and Section.Hint/
-         Row.Subtitle (13sp, muted text_subtitle) - this is normal-weight
-         body text at full text_title strength, for a screen-level
-         explanation that isn't paired with a heading. -->
-    <!-- Summary section date/time header (owner-approved design, Oct 4 2026):
-         protected, generated metadata in a low-emphasis rounded surface,
-         left-aligned and tappable to open the conversation preview. Not a
-         button and not disabled-looking. -->
-    <style name="Widget.App.SummarySection.Header" parent="">
-        <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@drawable/bg_summary_section_header</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
-        <item name="android:paddingStart">12dp</item>
-        <item name="android:paddingEnd">12dp</item>
-        <item name="android:paddingTop">6dp</item>
-        <item name="android:paddingBottom">6dp</item>
-        <item name="android:textColor">?attr/appTextColor</item>
-        <item name="android:textSize">13sp</item>
-    </style>
-
-    <!-- The bookmark flag beside the summary section reached from the chat. -->
-    <style name="Widget.App.SummarySection.Flag" parent="">
-        <item name="android:layout_width">24dp</item>
-        <item name="android:layout_height">24dp</item>
-        <item name="android:layout_marginEnd">8dp</item>
-        <item name="android:src">@drawable/ic_bookmark_flag</item>
-    </style>
-
-    <style name="Widget.App.Screen.Intro" parent="">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">?attr/appTitleTextColor</item>
-        <item name="android:textSize">14sp</item>
-    </style>
-
-    <!-- A label-sized primary action centered on its own line directly
-         below a screen's intro text (Widget.App.Screen.Intro), for vertical
-         (LinearLayout) hosts. First user: Recompact Messages from Scratch on
-         the Compaction Summary screen. -->
-    <style name="AppButton.Primary.Inline.Centered.BelowIntro">
-        <item name="android:layout_marginTop">@dimen/screen_intro_action_gap</item>
-    </style>
-
-    <!-- Chat header. Every color and size of the bar, its title and its
-         action icons is defined here; recolor the header from these styles
-         and bg_chat_header* (which use bg_surface_level4* on Android 12+). -->
-    <style name="Widget.App.Chat.HeaderBar" parent="">
-        <item name="android:background">@drawable/bg_chat_header</item>
-    </style>
-
-    <style name="Widget.App.Chat.HeaderTitle" parent="">
-        <item name="android:layout_height">@dimen/chat_header_title_height</item>
-        <item name="android:layout_marginStart">@dimen/chat_header_action_gap</item>
-        <item name="android:layout_marginEnd">@dimen/chat_header_action_gap</item>
-        <item name="android:background">@drawable/bg_chat_header</item>
-        <item name="android:ellipsize">end</item>
-        <item name="android:gravity">center_vertical</item>
-        <item name="android:singleLine">true</item>
-        <item name="android:textColor">@color/text_title</item>
-        <item name="android:textSize">@dimen/chat_header_title_text_size</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <!-- Right-side header icons (New Chat, Quick Settings, Settings, Summary,
-         Active Profile, Summarizer Errors, Chat Menu). -->
-    <style name="Widget.App.Chat.HeaderAction" parent="">
-        <item name="android:layout_width">@dimen/chat_header_action_size</item>
+        <item name="android:paddingStart">@dimen/usage_chat_detail_…2217 tokens truncated…ction_size</item>
         <item name="android:layout_height">@dimen/chat_header_action_size</item>
         <item name="android:layout_marginEnd">@dimen/chat_header_action_gap</item>
         <item name="android:background">@drawable/btn_chat_header_action</item>
@@ -3715,5 +3547,17 @@
         <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textIsSelectable">true</item>
         <item name="android:textSize">@dimen/search_test_preview_text_size</item>
+    </style>
+    <!-- Model-rule text uses equal inner insets; constraints center short content. -->
+    <style name="Widget.App.ModelRules.Body" parent="Widget.App.MemoryBrowser.Body">
+        <item name="android:layout_marginStart">@dimen/memory_browser_content_vertical_padding</item>
+        <item name="android:layout_marginEnd">@dimen/memory_browser_content_vertical_padding</item>
+    </style>
+
+    <!-- Model-rule navigation matches the Quick Settings card outline. -->
+    <style name="Widget.App.ModelRules.OpenButton" parent="Widget.App.MemoryBrowser.OpenButton">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:tint">?attr/colorOutlineVariant</item>
+        <item name="tint">?attr/colorOutlineVariant</item>
     </style>
 </resources>

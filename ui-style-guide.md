@@ -1857,3 +1857,15 @@ MemoryBrowser card typography, spacing, checkbox and icon geometry are owned
 by the stylesheet, with dimensions in `dimens.xml`. The trailing icon/chevron
 uses a vertical spread-inside constraint chain: top/bottom with the hint shown,
 centered with the hint gone. Kotlin only changes content and visibility.
+
+### Model-rule cards
+
+`view_model_rule_row.xml` uses `MemoryBrowser.Card` for the Quick Settings
+surface and outline, `Row.Title` for normal rule text, and `Row.Subtitle` for
+its smaller model details. `Widget.App.ModelRules.OpenButton` inherits
+`MemoryBrowser.OpenButton`, uses `colorOutlineVariant` for the border-matching
+chevron, and removes the image-hint top gap so it centers vertically.
+`Widget.App.ModelRules.Body` reuses the shared 12dp vertical-padding token
+for its start and end gaps too; the body centers within the minimum-height card. The Model Rules screen opts into this
+layout; other manager lists retain their existing rows. Its Add action uses
+the existing far-right header button.

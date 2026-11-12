@@ -88,7 +88,8 @@ data class MemoryRow(
 
 class MemoryRowAdapter(
     private val rows: List<MemoryRow>,
-    private val context: Context
+    private val context: Context,
+    private val normalRowLayoutRes: Int = R.layout.view_memory_row
 ) : BaseAdapter() {
 
     interface OnRowListener {
@@ -185,7 +186,7 @@ class MemoryRowAdapter(
         }
 
         val view = convertView ?: LayoutInflater.from(context).inflate(
-            if (rows[position].browserCard) R.layout.view_memory_browser_row else R.layout.view_memory_row,
+            if (rows[position].browserCard) R.layout.view_memory_browser_row else normalRowLayoutRes,
             parent, false
         )
 
