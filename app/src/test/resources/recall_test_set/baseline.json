@@ -1,0 +1,407 @@
+{
+  "cases_sha256": "c09a0d49624f860c26f305d945f081c36b6de5e13f4b68a3c5a697dc3bb8a62f",
+  "by_message": {
+    "short_01": {
+      "found": [
+        "pet_tansy"
+      ],
+      "wrongly_sent": []
+    },
+    "short_02": {
+      "found": [
+        "pet_brindle"
+      ],
+      "wrongly_sent": []
+    },
+    "short_03": {
+      "found": [
+        "pet_cobalt"
+      ],
+      "wrongly_sent": []
+    },
+    "short_04": {
+      "found": [
+        "health_knee"
+      ],
+      "wrongly_sent": [
+        "health_wrist"
+      ]
+    },
+    "short_05": {
+      "found": [
+        "health_dental"
+      ],
+      "wrongly_sent": []
+    },
+    "short_06": {
+      "found": [
+        "work_archive"
+      ],
+      "wrongly_sent": [
+        "work_budget",
+        "work_password"
+      ]
+    },
+    "short_07": {
+      "found": [
+        "family_ada"
+      ],
+      "wrongly_sent": []
+    },
+    "short_08": {
+      "found": [
+        "home_move"
+      ],
+      "wrongly_sent": []
+    },
+    "short_09": {
+      "found": [
+        "hobby_camera"
+      ],
+      "wrongly_sent": []
+    },
+    "short_10": {
+      "found": [
+        "plan_ferry"
+      ],
+      "wrongly_sent": []
+    },
+    "typed_01": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "dictated_01": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "typed_02": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "dictated_02": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "typed_03": {
+      "found": [
+        "work_budget"
+      ],
+      "wrongly_sent": []
+    },
+    "dictated_03": {
+      "found": [
+        "work_budget"
+      ],
+      "wrongly_sent": []
+    },
+    "typed_04": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "dictated_04": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "typed_05": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "dictated_05": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "typed_06": {
+      "found": [
+        "hobby_chess"
+      ],
+      "wrongly_sent": []
+    },
+    "dictated_06": {
+      "found": [
+        "hobby_chess"
+      ],
+      "wrongly_sent": []
+    },
+    "typed_07": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "dictated_07": {
+      "found": [
+        "food_stew"
+      ],
+      "wrongly_sent": []
+    },
+    "typed_08": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "dictated_08": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "bad_periods_01": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "bad_periods_02": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "bad_periods_03": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "bad_periods_04": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "bad_periods_05": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "very_long_01": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "very_long_02": {
+      "found": [
+        "family_rafi"
+      ],
+      "wrongly_sent": []
+    },
+    "very_long_03": {
+      "found": [
+        "food_sesame"
+      ],
+      "wrongly_sent": [
+        "health_wrist",
+        "home_latch",
+        "home_leak"
+      ]
+    },
+    "very_long_04": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "accidental_01": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "accidental_02": {
+      "found": [],
+      "wrongly_sent": [
+        "plan_race"
+      ]
+    },
+    "accidental_03": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "accidental_04": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "accidental_05": {
+      "found": [],
+      "wrongly_sent": [
+        "pet_tansy"
+      ]
+    },
+    "accidental_06": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "accidental_07": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "accidental_08": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "nothing_01": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "nothing_02": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "nothing_03": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "nothing_04": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "nothing_05": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "nothing_06": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "nothing_07": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "nothing_08": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "two_01": {
+      "found": [
+        "hobby_camera",
+        "pet_tansy"
+      ],
+      "wrongly_sent": []
+    },
+    "two_02": {
+      "found": [
+        "health_dental",
+        "plan_ferry"
+      ],
+      "wrongly_sent": []
+    },
+    "two_03": {
+      "found": [
+        "family_ada",
+        "family_leon"
+      ],
+      "wrongly_sent": []
+    },
+    "two_04": {
+      "found": [
+        "hobby_pottery",
+        "home_shelf"
+      ],
+      "wrongly_sent": [
+        "health_wrist"
+      ]
+    },
+    "two_05": {
+      "found": [
+        "food_tea",
+        "work_password"
+      ],
+      "wrongly_sent": [
+        "food_bread"
+      ]
+    },
+    "conversation_01_turn_1": {
+      "found": [
+        "pet_tansy"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_01_turn_2": {
+      "found": [
+        "pet_tansy"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_01_turn_3": {
+      "found": [
+        "hobby_camera"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_02_turn_1": {
+      "found": [
+        "family_leon"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_02_turn_2": {
+      "found": [
+        "family_leon"
+      ],
+      "wrongly_sent": [
+        "work_password"
+      ]
+    },
+    "conversation_02_turn_3": {
+      "found": [
+        "food_tea"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_03_turn_1": {
+      "found": [
+        "plan_ferry"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_03_turn_2": {
+      "found": [
+        "plan_ferry"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_03_turn_3": {
+      "found": [
+        "home_shelf"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_04_turn_1": {
+      "found": [],
+      "wrongly_sent": []
+    },
+    "conversation_04_turn_2": {
+      "found": [
+        "family_ada"
+      ],
+      "wrongly_sent": [
+        "work_budget"
+      ]
+    },
+    "conversation_04_turn_3": {
+      "found": [
+        "pet_brindle"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_05_turn_1": {
+      "found": [
+        "work_budget"
+      ],
+      "wrongly_sent": [
+        "work_archive"
+      ]
+    },
+    "conversation_05_turn_2": {
+      "found": [
+        "work_budget"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_05_turn_3": {
+      "found": [
+        "health_dental"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_06_turn_1": {
+      "found": [
+        "pet_cobalt"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_06_turn_2": {
+      "found": [
+        "pet_cobalt"
+      ],
+      "wrongly_sent": []
+    },
+    "conversation_06_turn_3": {
+      "found": [
+        "plan_eclipse"
+      ],
+      "wrongly_sent": []
+    }
+  }
+}

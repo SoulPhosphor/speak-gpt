@@ -1768,9 +1768,8 @@ code. Conversation recall has its own set, step 0B.
 
 **Rules for whoever builds this step.**
 - Add new files only. Change no app code and no existing test.
-- **One existing file is changed, and only in one place:** this plan,
-  where the counts are recorded under "Baseline" at the end of this
-  step. Nothing else in this plan is edited.
+- **Step 0 results go in `memory baseline.md`.** This plan is changed
+  only to point its Step 0 results instructions to that file.
 - Create no Markdown file.
 - This step adds test code, so it follows the code workflow in
   `CLAUDE.md` section 0 like any other step.
@@ -1906,9 +1905,10 @@ gets better.
 - `./gradlew testDebugUnitTest` passes with the new test included;
 - the pull request description lists the totals for each kind, and any
   expected answer the builder now doubts;
-- the totals are added to this plan under "Baseline" below.
+- the totals and per-sample results are recorded in `memory baseline.md`.
 
-**Baseline.** Not recorded yet.
+**Baseline.** See [memory baseline](<memory baseline.md>) for Step 0
+measurements and verification results.
 
 ### Step 0B: the conversation test set (Routine with these instructions)
 
