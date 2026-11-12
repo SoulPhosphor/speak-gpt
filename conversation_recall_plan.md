@@ -34,7 +34,7 @@ plan disagrees with this document, this document is the current one.
     is marked Proposed, it becomes binding only for the Steps whose
     "Approve first" entry in G.16 is satisfied.
   - **A decision** (Owner, or a row in G.17) overrides both.
-- **If two parts of this plan disagree, or a step cannot meet all of its
+- **If two parts of this plan disagree, or a Step cannot meet all of its
   own conditions, the builder stops and says which parts.** A builder
   never picks one side quietly.
 - **Rows and sections have similar names.** "G10" with no dot is row 10 of
@@ -1633,7 +1633,7 @@ cannot happen and what they can do to fix it.
 
 Correctness tests are written with the component they test, in the same
 pull request. The samples for the quality tests are built first, so no
-step's code is judged by samples written after it: saved-memory samples
+Step's code is judged by samples written after it: saved-memory samples
 in Step 0, and conversation samples in Step 6.
 
 **Three kinds of test.**
@@ -1795,8 +1795,8 @@ code. Conversation recall has its own set, Step 6.
 - **Step 0 results go in `memory baseline.md`.** This plan is changed
   only to point its Step 0 results instructions to that file.
 - Create no Markdown file.
-- This step adds test code, so it follows the code workflow in
-  `CLAUDE.md` section 0 like any other step.
+- Step 0 adds test code, so it follows the code workflow in
+  `CLAUDE.md` section 0 like any other Step.
 - Write every expected answer **before** running anything. Never change an
   expected answer to make a result look better. If an expected answer
   turns out to be wrong, say so in the pull request description and leave
@@ -1975,7 +1975,7 @@ measurements and verification results.
   stopping works, how long a stop takes. Each number is labelled either as
   measured by the automated tests in the build environment or as one that
   must be measured on the owner's Pixel 8.
-- **No screen.** This step adds no screen or visible control without the
+- **No screen.** Step 1 adds no screen or visible control without the
   owner's approval.
 - **Done when:** existing tests pass unchanged; new tests show the count
   matches the real encoding, that a live request is served before every
