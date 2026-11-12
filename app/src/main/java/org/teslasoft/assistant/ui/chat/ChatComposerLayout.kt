@@ -214,6 +214,21 @@ class ChatComposerLayout @JvmOverloads constructor(
         val selectionStart = messageInput.selectionStart
         val selectionEnd = messageInput.selectionEnd
         movingFocusedEditor = true
+        // Taking a focused view out of its parent makes Android look for
+        // another view to focus, and it picks the first one that accepts it,
+        // which can be a message in the transcript. A focused message asks to
+        // be scrolled into view and drags the conversation away from the
+        // composer (chat-keyboard-behavior.md, rule 4). Holding the focus on
+        // the composer itself for the length of the move means the editor is
+        // not focused when it is taken out, so focus never leaves the
+        // composer.
+        val wasFocusable = isFocusable
+        val wasFocusableInTouchMode = isFocusableInTouchMode
+        if (keepEditorFocus) {
+            isFocusable = true
+            isFocusableInTouchMode = true
+            requestFocus()
+        }
         try {
             applyModeInternal()
             // Keep an existing editing gesture, but never focus a background
@@ -230,6 +245,10 @@ class ChatComposerLayout @JvmOverloads constructor(
                 }
             }
         } finally {
+            if (keepEditorFocus) {
+                isFocusableInTouchMode = wasFocusableInTouchMode
+                isFocusable = wasFocusable
+            }
             movingFocusedEditor = wasMovingFocusedEditor
         }
         afterResize?.let { after -> post { after.invoke() } }
