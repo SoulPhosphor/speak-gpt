@@ -104,8 +104,8 @@ class BackupRestoreScreenContractTest {
         assertTrue(row.contains("@+id/category_title"))
         assertTrue(!row.contains("restore_mode_label"))
         assertTrue(row.contains("@string/restore_mode_replace_only"))
-        assertTrue(row.contains("Widget.App.Restore.Category.Mode"))
-        assertTrue(row.contains("Widget.App.Restore.Category.Title"))
+        assertTrue(row.contains("Widget.App.Dropdown.CanonicalValue.Trailing"))
+        assertTrue(row.contains("style=\"@style/Widget.App.Row.Title\""))
         assertTrue(layout.split("org.teslasoft.assistant.ui.views.RestoreCategoryView").size - 1 == 13)
         assertTrue(layout.contains("@+id/restore_model_credentials_note"))
         val view = find(
@@ -113,6 +113,32 @@ class BackupRestoreScreenContractTest {
             "app/src/main/java/org/teslasoft/assistant/ui/views/RestoreCategoryView.kt"
         ).readText()
         assertTrue(view.contains("modeView.visibility = if (mergeSupported) View.VISIBLE else View.GONE"))
+    }
+
+    @Test
+    fun restoreDescriptionsAlignWithTitlesAndFixedModesDoNotTakeHalfTheRow() {
+        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+        factory.isNamespaceAware = true
+        val document = factory.newDocumentBuilder().parse(
+            source("view_restore_category.xml").byteInputStream()
+        )
+        val nodes = document.getElementsByTagName("*")
+        val elements = (0 until nodes.length).map { nodes.item(it) as org.w3c.dom.Element }
+        val android = "http://schemas.android.com/apk/res/android"
+        fun view(id: String) = elements.single {
+            it.getAttributeNS(android, "id") == "@+id/$id"
+        }
+        val title = view("category_title")
+        val description = view("category_description")
+        assertTrue("Description must share its title's text column",
+            title.parentNode.isSameNode(description.parentNode))
+        val column = title.parentNode as org.w3c.dom.Element
+        assertTrue(column.getAttribute("style") == "@style/Widget.App.Row.TextColumn")
+        val fixedMode = view("category_mode_fixed")
+        assertTrue("Fixed mode must size to its text",
+            fixedMode.getAttributeNS(android, "layout_width") == "wrap_content")
+        assertTrue("Fixed mode must leave remaining width for the text column",
+            fixedMode.getAttributeNS(android, "layout_weight") == "0")
     }
 
     @Test

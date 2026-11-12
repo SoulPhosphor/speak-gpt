@@ -50,17 +50,12 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:clipToPadding="false"
-        android:paddingBottom="24dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/action_bar">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp">
+        <LinearLayout style="@style/Widget.App.Page.Content">
 
             <!-- ============ 1. Backup Status ============ -->
             <!-- Moved above Database Health (owner ruling, July 24 2026): this
@@ -71,7 +66,7 @@
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_status_section" />
 
-            <TextView android:id="@+id/text_status_memory" style="@style/Widget.App.BackupStatus.Row.First" />
+            <TextView android:id="@+id/text_status_memory" style="@style/Widget.App.Section.Hint" />
 
             <!-- Per-database recovery actions (owner ruling, July 24 2026):
                  shown ONLY when this database is actually corrupted
@@ -86,178 +81,149 @@
                 android:id="@+id/health_actions_memory"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="8dp"
                 android:orientation="vertical"
                 android:visibility="gone">
 
                 <LinearLayout
                     android:id="@+id/health_buttons_memory"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                    style="@style/Widget.App.Page.ControlRow">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_health_repair_memory"
                         style="@style/AppButton.Primary.Inline"
-                        android:layout_marginEnd="8dp"
                         android:text="@string/health_btn_repair" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_health_revert_memory"
-                        style="@style/AppButton.Primary.Inline"
+                        style="@style/AppButton.Primary.Inline.Trailing"
                         android:text="@string/restore_database" />
                 </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/health_progress_memory"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
+                    style="@style/Widget.App.Page.ControlRow"
                     android:visibility="gone">
 
                     <com.google.android.material.progressindicator.CircularProgressIndicator
                         android:id="@+id/health_spinner_memory"
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:indeterminate="true" />
-
-                    <TextView
-                        android:id="@+id/health_progress_text_memory"
+                        style="@style/Widget.Material3.CircularProgressIndicator.ExtraSmall"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:textColor="@color/text"
-                        android:textSize="14sp" />
+                        android:indeterminate="true" />
+
+                    <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                        <TextView
+                            android:id="@+id/health_progress_text_memory"
+                            style="@style/Widget.App.Row.Subtitle" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
-            <TextView android:id="@+id/text_status_lorebooks" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_status_lorebooks" style="@style/Widget.App.Section.Hint" />
 
             <LinearLayout
                 android:id="@+id/health_actions_lorebook"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="8dp"
                 android:orientation="vertical"
                 android:visibility="gone">
 
                 <LinearLayout
                     android:id="@+id/health_buttons_lorebook"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                    style="@style/Widget.App.Page.ControlRow">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_health_repair_lorebook"
                         style="@style/AppButton.Primary.Inline"
-                        android:layout_marginEnd="8dp"
                         android:text="@string/health_btn_repair" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_health_revert_lorebook"
-                        style="@style/AppButton.Primary.Inline"
+                        style="@style/AppButton.Primary.Inline.Trailing"
                         android:text="@string/restore_database" />
                 </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/health_progress_lorebook"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
+                    style="@style/Widget.App.Page.ControlRow"
                     android:visibility="gone">
 
                     <com.google.android.material.progressindicator.CircularProgressIndicator
                         android:id="@+id/health_spinner_lorebook"
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:indeterminate="true" />
-
-                    <TextView
-                        android:id="@+id/health_progress_text_lorebook"
+                        style="@style/Widget.Material3.CircularProgressIndicator.ExtraSmall"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:textColor="@color/text"
-                        android:textSize="14sp" />
+                        android:indeterminate="true" />
+
+                    <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                        <TextView
+                            android:id="@+id/health_progress_text_lorebook"
+                            style="@style/Widget.App.Row.Subtitle" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
-            <TextView android:id="@+id/text_status_chats" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_status_chats" style="@style/Widget.App.Section.Hint" />
 
             <!-- Chats deliberately get NO recovery buttons here: chats are not
                  a database and never enter the repair/revert flow (the Round-4
                  chat-storage lock system owns that case). -->
 
-            <TextView android:id="@+id/text_status_userimage" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_status_userimage" style="@style/Widget.App.Section.Hint" />
 
             <LinearLayout
                 android:id="@+id/health_actions_userimage"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="8dp"
                 android:orientation="vertical"
                 android:visibility="gone">
 
                 <LinearLayout
                     android:id="@+id/health_buttons_userimage"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                    style="@style/Widget.App.Page.ControlRow">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_health_repair_userimage"
                         style="@style/AppButton.Primary.Inline"
-                        android:layout_marginEnd="8dp"
                         android:text="@string/health_btn_repair" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_health_revert_userimage"
-                        style="@style/AppButton.Primary.Inline"
+                        style="@style/AppButton.Primary.Inline.Trailing"
                         android:text="@string/restore_database" />
                 </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/health_progress_userimage"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
+                    style="@style/Widget.App.Page.ControlRow"
                     android:visibility="gone">
 
                     <com.google.android.material.progressindicator.CircularProgressIndicator
                         android:id="@+id/health_spinner_userimage"
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:indeterminate="true" />
-
-                    <TextView
-                        android:id="@+id/health_progress_text_userimage"
+                        style="@style/Widget.Material3.CircularProgressIndicator.ExtraSmall"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:textColor="@color/text"
-                        android:textSize="14sp" />
+                        android:indeterminate="true" />
+
+                    <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                        <TextView
+                            android:id="@+id/health_progress_text_userimage"
+                            style="@style/Widget.App.Row.Subtitle" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
-            <Space style="@style/Widget.App.BackupStatus.BlankLine" />
-            <TextView style="@style/Widget.App.BackupStatus.Title"
+            <TextView style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_readable_history_title" />
             <LinearLayout android:id="@+id/readable_backup_history_rows"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:orientation="vertical" />
-            <Space style="@style/Widget.App.BackupStatus.BlankLine" />
-            <TextView style="@style/Widget.App.BackupStatus.Title"
+            <TextView style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_database_checks_title" />
-            <TextView android:id="@+id/text_last_database_test" style="@style/Widget.App.BackupStatus.Row" />
-            <TextView android:id="@+id/text_database_test_memory" style="@style/Widget.App.BackupStatus.Row" />
-            <TextView android:id="@+id/text_database_test_lorebook" style="@style/Widget.App.BackupStatus.Row" />
-            <TextView android:id="@+id/text_database_test_userimage" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_last_database_test" style="@style/Widget.App.Section.Hint" />
+            <TextView android:id="@+id/text_database_test_memory" style="@style/Widget.App.Section.Hint" />
+            <TextView android:id="@+id/text_database_test_lorebook" style="@style/Widget.App.Section.Hint" />
+            <TextView android:id="@+id/text_database_test_userimage" style="@style/Widget.App.Section.Hint" />
 
             <!-- ============ 2. Database Health ============ -->
             <!-- Section heading + hint styles: Widget.App.Section.Title/.Hint
@@ -267,7 +233,7 @@
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_db_health_section" />
-            <TextView android:id="@+id/text_databases_last_checked" style="@style/Widget.App.BackupStatus.Row" />
+            <TextView android:id="@+id/text_databases_last_checked" style="@style/Widget.App.Section.Hint" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
@@ -275,49 +241,30 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_check_integrity"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                style="@style/AppButton.Primary.Inline.Centered"
                 android:text="@string/backup_check_integrity" />
 
             <!-- §15.9 verbatim in-progress line: visible only while the check
                  runs, then replaced by the per-database result lines below. -->
             <TextView
                 android:id="@+id/text_check_progress"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="12dp"
+                style="@style/Widget.App.Section.Hint"
                 android:text="@string/health_check_progress"
-                android:textColor="@color/text"
-                android:textSize="15sp"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/text_result_memory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="12dp"
-                android:textColor="@color/text"
-                android:textSize="15sp"
+                style="@style/Widget.App.Section.Hint"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/text_result_lorebook"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="6dp"
-                android:textColor="@color/text"
-                android:textSize="15sp"
+                style="@style/Widget.App.Section.Hint"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/text_result_userimage"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="6dp"
-                android:textColor="@color/text"
-                android:textSize="15sp"
+                style="@style/Widget.App.Section.Hint"
                 android:visibility="gone" />
 
             <!-- ============ 3. Backup ============ -->
@@ -414,10 +361,7 @@
                  migration is complete. -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_legacy_convert"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                style="@style/AppButton.Primary.Inline.Centered"
                 android:text="@string/legacy_convert_action"
                 android:visibility="gone" />
 
@@ -425,11 +369,7 @@
                  the removed toasts). Stays until replaced. -->
             <TextView
                 android:id="@+id/text_portable_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="12dp"
-                android:textColor="@color/text"
-                android:textSize="15sp"
+                style="@style/Widget.App.Section.Hint"
                 android:visibility="gone" />
 
             <!-- ============ 6. Companion & Roleplay Backup ============ -->
@@ -496,11 +436,7 @@
                  replaced. Never a toast. -->
             <TextView
                 android:id="@+id/text_companion_backup_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="12dp"
-                android:textColor="@color/text"
-                android:textSize="15sp"
+                style="@style/Widget.App.Section.Hint"
                 android:visibility="gone" />
 
             <!-- ============ 8. Reset (destructive; bottom, unchanged) ============ -->
