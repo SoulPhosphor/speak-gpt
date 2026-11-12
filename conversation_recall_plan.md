@@ -1766,7 +1766,12 @@ does (`OnnxEmbeddingModel.kt`, `EmbeddingModels.kt`,
    joined with a comma and a space (`RetrievalDocument.semanticDocument`).
    Put `title: none | text: ` in front of it.
 4. For a message, put `task: search result | query: ` in front of it.
-5. Turn the text into token ids with the tokenizer and keep the first 512.
+5. Turn the text into token ids the way `HfTokenizer.encode` does. The
+   tokenizer puts one marker at the start and one at the end. Those two
+   markers are always kept. When the text is too long, it is the text's
+   own tokens that are cut, to 510, so the whole input is never more than
+   512 tokens and always ends with the end marker. Do not simply keep the
+   first 512 ids: that drops the end marker on long text.
 6. Run the model with `input_ids` and an `attention_mask` of ones. Take
    the output named `sentence_embedding`.
 7. Keep its first 256 numbers, then scale them so their length is 1.
@@ -1774,7 +1779,9 @@ does (`OnnxEmbeddingModel.kt`, `EmbeddingModels.kt`,
    id, rounded to 5 decimal places.
 
 **Part 3: prove the script is right before using its output.** The script
-must print these checks and stop if any is off by more than 0.01. The
+must print these checks and stop if any is off by more than 0.01. It must
+also check that every input, long ones included, begins with the start
+marker, ends with the end marker, and holds at most 512 ids. The
 reference values were measured on 2026-11-12 with this recipe:
 
 | Check | Value |
