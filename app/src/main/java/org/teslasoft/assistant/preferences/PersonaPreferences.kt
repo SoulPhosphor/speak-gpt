@@ -93,7 +93,7 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         val additionalLoreBookIds = getString(id + "_additional_lorebook_ids", "")
         val autoLoadLastLoreBooks = getString(id + "_autoload_last_lorebooks", "false") == "true"
         val lastUsedLoreBookIds = getString(id + "_last_used_lorebook_ids", "")
-        val avatarRef = getString(id + "_avatar_ref", "")
+        val avatarRef = getPersonaAvatarRef(id)
         val chatNameFontId = getString(id + "_chat_name_font_id", "")
         val chatNameSizeSp = getString(id + "_chat_name_size_sp", "0").toIntOrNull() ?: 0
         val chatNameFontStyle = getString(id + "_chat_name_font_style", "")
@@ -161,6 +161,14 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
     fun setLastUsedLoreBookIds(personaId: String, joinedIds: String) {
         putString(personaId + "_last_used_lorebook_ids", joinedIds)
     }
+
+    /** The companion's current image assignment, shared by every display surface. */
+    fun getPersonaAvatarRef(id: String): String =
+        if (id.isEmpty()) "" else getString(id + "_avatar_ref", "")
+
+    /** Existing profiles always read their saved assignment; only new profiles own a draft. */
+    fun getEditorAvatarRef(id: String, draftRef: String): String =
+        if (id.isEmpty()) draftRef else getPersonaAvatarRef(id)
 
     /**
      * Commit ONLY the avatar for an existing companion, by its stable [id]

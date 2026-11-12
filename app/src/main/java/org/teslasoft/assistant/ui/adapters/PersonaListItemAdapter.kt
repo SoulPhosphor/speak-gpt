@@ -85,7 +85,7 @@ class PersonaListItemAdapter(private val dataArray: ArrayList<HashMap<String, St
             // The row carries the companion's stable id; never re-derive it from
             // the (mutable) label.
             val personaId = item["id"] ?: ""
-            val avatarRef = if (personaId.isEmpty()) "" else PersonaPreferences.getPersonaPreferences(mContext).getPersona(personaId).avatarRef
+            val avatarRef = if (personaId.isEmpty()) "" else PersonaPreferences.getPersonaPreferences(mContext).getPersonaAvatarRef(personaId)
             val avatarFile = if (avatarRef.isNotEmpty()) ProfileImageStore.getInstance(mContext).imageFile(avatarRef) else null
             val shape = GlobalPreferences.getPreferences(mContext).getProfileImageShape()
             ProfileImageBinder.bind(mContext, avatar, avatarFile, shape) { iv ->

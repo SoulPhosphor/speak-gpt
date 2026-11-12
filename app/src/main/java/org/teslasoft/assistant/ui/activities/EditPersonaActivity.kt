@@ -180,8 +180,8 @@ class EditPersonaActivity : SettingsPageActivity() {
             val hash = result.data?.getStringExtra(ProfileImagesActivity.EXTRA_RESULT_ASSIGNED_HASH)
             if (!hash.isNullOrEmpty()) {
                 selectedAvatarRef = hash
-                updateAvatarUi()
                 persistImageOnlyIfExisting(hash)
+                updateAvatarUi()
             }
         }
     }
@@ -310,7 +310,8 @@ class EditPersonaActivity : SettingsPageActivity() {
         additionalLoreBookIds = savedInstanceState?.getStringArrayList(STATE_ADDITIONAL_LOREBOOKS)
             ?: PersonaObject.splitIds(intent.getStringExtra(EXTRA_ADDITIONAL_LOREBOOKS).orEmpty())
 
-        // Restore the pending pick across recreation; else the saved avatarRef.
+        // Only a new companion owns a draft image. updateAvatarUi reads the
+        // saved assignment for an existing companion, ignoring caller snapshots.
         selectedAvatarRef = savedInstanceState?.getString(STATE_AVATAR_REF)
             ?: (intent.getStringExtra(EXTRA_AVATAR_REF) ?: "")
 
@@ -392,6 +393,8 @@ class EditPersonaActivity : SettingsPageActivity() {
      *  shared binder so the current Default Shape and reset rules apply. */
     private fun updateAvatarUi() {
         val imageView = imgPersonaAvatar ?: return
+        selectedAvatarRef = PersonaPreferences.getPersonaPreferences(this)
+            .getEditorAvatarRef(personaId, selectedAvatarRef)
         val hasPicture = selectedAvatarRef.isNotEmpty()
         val file = if (hasPicture) ProfileImageStore.getInstance(this).imageFile(selectedAvatarRef) else null
         val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
@@ -630,7 +633,8 @@ class EditPersonaActivity : SettingsPageActivity() {
             coreLoreBookId = selectedCoreLoreBookId,
             additionalLoreBookIds = PersonaObject.joinIds(additionalLoreBookIds),
             lastUsedLoreBookIds = PersonaObject.joinIds(lastUsed),
-            avatarRef = selectedAvatarRef,
+            avatarRef = PersonaPreferences.getPersonaPreferences(this)
+                .getEditorAvatarRef(personaId, selectedAvatarRef),
             id = personaId
         ).also { persona ->
             // Name Style owns these overrides and writes them directly; keep

@@ -104,4 +104,35 @@ class PersonaAvatarImmediateSaveTest {
         store.setPersonaAvatarRef(stored.id, "newhash")
         assertTrue("an open companion list is told to re-render", notified)
     }
+    @Test fun existingEditorIgnoresCallerAndRecreatedImageSnapshots() {
+        val companion = PersonaObject(label = "Aria", avatarRef = "saved-picture")
+        store.setPersona(companion)
+        assertEquals("saved-picture", store.getEditorAvatarRef(companion.id, "stale-chat-picture"))
+        assertEquals("saved-picture", store.getEditorAvatarRef(companion.id, ""))
+    }
+
+    @Test fun openEditorAndEveryChatFollowTheLatestSavedAssignment() {
+        val companion = PersonaObject(label = "Aria", avatarRef = "old-picture")
+        store.setPersona(companion)
+        val editorSnapshot = store.getPersona(companion.id).avatarRef
+        val oldChatCompanionId = companion.id
+        val newChatCompanionId = companion.id
+        store.setPersonaAvatarRef(companion.id, "new-picture")
+        assertEquals("new-picture", store.getPersonaAvatarRef(oldChatCompanionId))
+        assertEquals("new-picture", store.getPersonaAvatarRef(newChatCompanionId))
+        assertEquals("new-picture", store.getEditorAvatarRef(companion.id, editorSnapshot))
+        // Saving unrelated fields from an open editor retains the live image.
+        val edited = store.getPersona(companion.id).apply {
+            prompt = "updated prompt"
+            avatarRef = store.getEditorAvatarRef(companion.id, editorSnapshot)
+        }
+        store.setPersona(edited)
+        assertEquals("new-picture", store.getPersonaAvatarRef(companion.id))
+    }
+
+    @Test fun newCompanionRetainsItsUnsavedImageDraft() {
+        assertEquals("draft-picture", store.getEditorAvatarRef("", "draft-picture"))
+        assertTrue(store.getPersonasList().isEmpty())
+    }
+
 }

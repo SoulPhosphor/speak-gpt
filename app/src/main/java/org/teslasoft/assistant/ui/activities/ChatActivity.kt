@@ -1822,7 +1822,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 try {
                     val persona = if (personaId.isEmpty()) null
                         else PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId)
-                    val file = ProfileImageResolver.resolveAiImageFile(this@ChatActivity, persona?.avatarRef ?: "")
+                    val avatarRef = PersonaPreferences.getPersonaPreferences(this@ChatActivity)
+                        .getPersonaAvatarRef(personaId)
+                    val file = ProfileImageResolver.resolveAiImageFile(this@ChatActivity, avatarRef)
                     Triple(
                         file,
                         persona?.label ?: "",
