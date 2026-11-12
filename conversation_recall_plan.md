@@ -2382,7 +2382,7 @@ questions for each situation.
 
 **Agent checklist for this step**
 - **Prerequisites:** Steps 0 and 1B. **Approval gate:** Obtain the Memory Search Test piece/timeout wording and both remaining G26 log-line wordings before changes.
-- **Change:** G.10's bounded overlapping search pieces for typed and dictated messages, using the shared embedding queue and a minimal hookup. Whole-message search still runs first; added piece matches must clear the stronger relevance check.
+- **Change:** G.10's bounded overlapping search pieces for typed and dictated messages, using the shared embedding queue and a minimal hookup. Whole-message search still runs first; a piece's meaning match uses the normal relevance gate, while a piece's keyword match also needs meaning-search agreement.
 - **Preserve:** Existing whole-message matches **and their order**, Memory Assistant search, lorebooks, and current sending when no piece can qualify. Do not add a paid rewrite or trust periods as sentence boundaries.
 - **Verify and report:** Step 0's per-sample quality improves for long messages **without increased wrong memories**; existing tests pass; report time allowance and any missing on-phone performance proof.
 
