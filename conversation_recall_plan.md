@@ -655,8 +655,8 @@ is not asked to choose them.
 
 **Step 1: decide what to search with.**
 - The user's latest message, on its own.
-- A long message is also searched in parts (G.10), up to a limit. Parts
-  do not depend on the message having periods.
+- A small detail inside the message is also searched for through the
+  words around it (G.10), up to a limit. Punctuation plays no part.
 - When the subject check (G.9a) says the message is a short continuation
   with no subject of its own, the previous exchange's user message is
   searched as well, as a separate search. Earlier messages are never glued
@@ -1146,73 +1146,82 @@ does not depend on either of them.
 - Its two numbers (how closely related, and how short is "short") are
   measured when it is built.
 
-## G.10 Long messages (Proposed; rewritten 2026-11-12 after review)
+## G.10 A small detail inside a larger message (Proposed; rewritten 2026-11-12)
 
-**The problem.** A small detail in a long message does not find its saved
-memory or its earlier exchange (G.2).
+**The problem.** A small detail in a message about several things does not
+find its saved memory or its earlier exchange (G.2).
 
-**Parts.** A long message is searched as a whole, as today, and also in
-parts.
-- Where the message has sentence breaks, each sentence is a part.
-- **Dictated text often has no periods.** A voice message can be one long
-  paragraph with no sentence breaks at all. Any stretch longer than a set
-  number of words is divided further: at commas and line breaks where they
-  exist, otherwise into runs of words of that length. Each run overlaps
-  the one before it, so a detail that falls on a boundary is whole in one
-  of them.
-- A part with no informative words is not searched. Repeated parts are
-  searched once.
-- A message short enough to be one part is searched exactly as today.
+**Why it happens.** Long and short messages are not handled differently.
+One rule is applied to every message, and it weakens as a message covers
+more subjects:
+- **On keywords,** a memory is used only when it covers about half of the
+  message's meaningful words. In "Tell me about Pepper", Pepper is all of
+  them. In a message of two hundred words that mentions Pepper once,
+  Pepper is a small fraction, so the memory fails.
+- **On meaning,** the whole message is turned into one summary of what it
+  means. A message about one thing gives a sharp summary. A message about
+  five things gives a blur that is not close to any one memory.
 
-**When a part's match counts.** A wrong memory is worse than a missed one,
-so a part is not simply treated as a message of its own.
-- **By meaning:** a part passes the same gate as a whole message.
-- **By keywords, with an embedding model:** a keyword match from a part
-  counts only when meaning search agrees: the memory must also be close
-  enough in meaning to that part. "I'm worried about Pepper" is close in
-  meaning to the Pepper memory. "It was about spring cleaning" shares the
-  word "spring" with a memory about moving house in spring, and is not
-  close to it in meaning. Keywords alone cannot tell those two apart.
-- **By keywords, with no embedding model, or for a memory that has no
-  vector yet:** nothing can confirm the match, so a part's keyword match
-  does not count. Long messages then behave as today. This is a stated
-  limit (G25).
-- How close is "close enough" is a number, measured on the test set
-  (step 0).
+**Punctuation and word counts are not used to divide a message (Owner,
+2026-11-12).** Speech-to-text leaves periods out of whole paragraphs, and
+it also puts periods in the middle of a thought. Cutting a thought in half
+changes what it means. So a message is never divided at its periods, and
+never chopped into pieces of a fixed number of words.
+
+**The rule: look at the words around the match.**
+- The whole message is searched first, exactly as today.
+- Then, for each word of the message that also appears in a saved memory,
+  the stretch of words around that word is looked at: a set number of
+  words before it and after it, with the word in the middle. The detail is
+  never at a cut edge, because the stretch is centred on it.
+- The memory is used when it is close enough in meaning to that stretch.
+  The words around "Pepper" in "I'm worried about Pepper" are close in
+  meaning to the Pepper memory. The words around "spring" in "it was about
+  spring cleaning" are not close in meaning to a memory about moving house
+  in spring. The shared word alone is never enough.
+- In a short message the stretch is the whole message, so the result is
+  the same as today. There is no line between "long" and "short".
+- **With no embedding model, or for a memory that has no vector yet,**
+  nothing can confirm the match, so only the whole-message search runs, as
+  today. Nothing changes for those users.
+- How many words a stretch holds, and how close is "close enough", are
+  numbers measured on the test set (step 0).
+
+**A detail that shares no word with its memory** ("my kitty" for a memory
+that says "cat") can only be found by meaning, which would need the whole
+message divided into stretches. That is not built. If the test set shows
+real cases are missed this way, the options are shown to the owner first.
 
 **Order and room.**
 - Everything that matches the whole message keeps its place, in today's
   order. Nothing that is sent today is pushed out.
-- Memories found only through a part come after those, best first, in
+- Memories found only through a stretch come after those, best first, in
   whatever room the memory limit leaves.
-- A short part therefore cannot outrank a whole-message match merely
-  because a short text reaches a perfect score easily.
 
 **Time.**
-- The number of parts searched has a limit. When a message has more parts
-  than the limit, the parts holding the rarest words (names and unusual
-  terms) are searched first. Position in the message does not decide it.
-- Searching in parts has a time allowance. When it runs out, the parts not
-  yet searched are skipped and the message is sent with what was found.
+- The number of stretches looked at has a limit. When a message has more
+  matching words than the limit, the rarest words (names and unusual
+  terms) are looked at first. Position in the message does not decide it.
+- This search has a time allowance. When it runs out, the stretches not
+  yet looked at are skipped and the message is sent with what was found.
   The whole-message search always runs.
-- The words of every memory are read once per message and reused for every
-  part, so the keyword work does not multiply with the number of parts.
-- The limit, the part length, and the time allowance are engineering
-  numbers, measured on the test set and on a phone before this ships.
+- The words of every memory are read once per message and reused, so the
+  keyword work does not multiply.
+- The limit and the time allowance are engineering numbers, measured on
+  the test set and on a phone before this ships.
 
 **What the user can see.** The Memory Search Test screen must show which
-part of the message a memory matched, and when parts were skipped for
-time. Without that, the screen can no longer explain why a memory was
-sent. Its wording is shown to the owner before step 4A is built.
+word of the message a memory matched, with the words around it, and when
+the search ran out of time. Without that, the screen can no longer explain
+why a memory was sent. Its wording is shown to the owner before step 4A is
+built.
 
-**When the embedding model cannot read a part.** That part is not searched
-by meaning, and under the rule above it then adds nothing. This is
-reported, never silent. It uses the existing Memory Debug Log line for
-this failure, whose wording is to be replaced with plain English (G26).
-No log line is added or changed without the owner's approval.
+**When the embedding model cannot read a stretch.** That stretch adds
+nothing. This is reported, never silent, using the existing Memory Debug
+Log line for this failure with its plain wording (G26). No log line is
+added or changed without the owner's approval.
 
-**The same parts serve recall** (G.6 step 1): the message being sent is
-divided the same way.
+**The same rule serves recall** (G.6 step 1).
 
 No published study covers this. It is measured here.
 
@@ -1569,7 +1578,8 @@ step (S). Which step is built first is the owner's decision.
 - **Read:** G.15; the memory plan's Step 1.2; `LiveRetrievalTest.kt`.
 - **Build:** tests and test data only. Samples for saved-memory search and
   for each situation in G.15: long typed messages with one small detail;
-  **long dictated messages with no periods**; short sentences that share
+  **long dictated messages with no periods, and dictated messages where a
+  period falls in the middle of a thought**; short sentences that share
   one accidental word with an unrelated memory; follow-ups; topic changes;
   messages where nothing is relevant. The real model's vectors for every
   sample text are generated once and stored as test files. The results on
@@ -1779,13 +1789,13 @@ step (S). Which step is built first is the owner's decision.
   being sent (G.10).
 - **Needs first:** step 0 and step 1B.
 - **Before building, the owner approves:** the Memory Search Test screen
-  wording that shows which part of a message matched and when parts were
-  skipped; G25; G26.
+  wording that shows which word of a message matched and when the search
+  ran out of time; the two remaining lines of G26.
 - **Read:** G.2, G.10; `LiveRetrieval.kt`, `Librarian.kt`,
   `SearchTestReport.kt`.
 - **Build:** G.10, in its own file, with a small hookup. Every use of the
   embedding model goes through 1B's queue.
-- **Must not change:** the result for a message that is one part; the
+- **Must not change:** the result of the whole-message search; the
   presence and order of anything that is sent today; the Memory
   Assistant's own search; the lorebook.
 - **Done when:** on step 0's set, more right memories are found in long
@@ -1896,8 +1906,8 @@ recommendation.
 | G22 | May recall and carry-over add to the existing memory debugging view? | **Decided (owner, 2026-11-11):** yes. No new general application log entries | Decided |
 | G23 | Which step is built first? | **Decided (owner, 2026-11-11):** step 4A, the long-message fix | Decided |
 | G24 | If the user turns Index Conversations off while Conversation Recall is on, what happens to recall? Also undecided: whether turning Conversation Recall on turns Index Conversations on (G.8b says only that it "may"), and what happens to recall when the index is deleted | Open. Indexing is never silently restarted (G.8b) | Step 3 |
-| G25 | With no embedding model, a long message is not searched in parts, because keywords alone cannot tell a real match from an accidental shared word (G.10). Is that limit acceptable? | Open. Recommended: yes, because a wrong memory is worse than a missed one | Step 4A |
-| G26 | The Memory Debug Log line "Query embed failed, using lexical fallback: (cause)" and the two lines like it are not plain English (G.13b). What do they say instead? | Open. Proposed for the first: "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause)." | Step 4A |
+| G25 | Withdrawn on 2026-11-12. With no embedding model nothing can confirm a match, so messages are searched as today (G.10). Nothing changes for those users, so there is nothing to decide | Withdrawn | |
+| G26 | The Memory Debug Log line "Query embed failed, using lexical fallback: (cause)" and the two lines like it are not plain English (G.13b). What do they say instead? | **Owner (2026-11-12):** the plain wording proposed for the first line is fine: "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause)." The two lines like it are still to be proposed | Step 4A |
 | G27 | G.13a says every index error raises a snack bar that stays until acknowledged, and also that most failures are repaired without interrupting the user. Which failures raise a snack bar? | Open. Recommended: a snack bar only when something has stopped working or the user has something to do. Failures the app repairs by itself go to the Error Log only | Step 1F |
 | G28 | Chats that have never been reopened cannot be indexed until they are opened (G.5a rule 7). What does the progress count show for them? | Open. Recommended: count only what can be indexed now, and say plainly how many conversations will be indexed when they are next opened | Step 1F |
 
