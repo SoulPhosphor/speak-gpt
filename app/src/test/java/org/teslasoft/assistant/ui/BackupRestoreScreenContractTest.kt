@@ -104,8 +104,8 @@ class BackupRestoreScreenContractTest {
         assertTrue(row.contains("@+id/category_title"))
         assertTrue(!row.contains("restore_mode_label"))
         assertTrue(row.contains("@string/restore_mode_replace_only"))
-        assertTrue(row.contains("Widget.App.Restore.Category.Mode"))
-        assertTrue(row.contains("Widget.App.Restore.Category.Title"))
+        assertTrue(row.contains("Widget.App.Dropdown.CanonicalValue.Trailing"))
+        assertTrue(row.contains("Widget.App.Row.Title.Fill"))
         assertTrue(layout.split("org.teslasoft.assistant.ui.views.RestoreCategoryView").size - 1 == 13)
         assertTrue(layout.contains("@+id/restore_model_credentials_note"))
         val view = find(
