@@ -6,6 +6,13 @@ the memory plan, `Memory System/dynamic_memory_plan.md`, which remains the recor
 saved-memory search (its Parts A to F). References below to "Part A",
 "Part E", or a step number mean that document.
 
+**State on 2026-11-12.** Nothing in this plan is built. It was reviewed
+and corrected on 2026-11-12: the long-message design (G.10), follow-ups
+(G.9, G.9a), the cutter (G.5b), the build steps (G.16), the wording rule
+(G.13b), and a comparison with established open-source systems (G.18a).
+The open questions are in G.17. Where the "Next steps" list in the memory
+plan disagrees with this document, this document is the current one.
+
 ## G.0 Status and how to read this plan
 
 - **This plan is a proposal.** It was written on 2026-11-10 from the current
@@ -82,6 +89,17 @@ Words used in this plan:
     installed; the index is then built for keyword search. When a model is
     installed later, meaning search is added to the same index without
     rebuilding it.
+16. **Owner (2026-11-12):** conversation recall requires the embedding
+    model. This replaces item 15. Lorebook keyword matching is separate,
+    is not changed by this work, and keeps working whenever the lorebook
+    is on, with or without a model.
+17. **Owner (2026-11-12):** where the right decision is not known, use
+    what established, proven systems do to decide (G.18a). Custom design
+    is acceptable where it is needed.
+18. **Owner (2026-11-12):** the agent's recommendations of that day are
+    accepted: overlapping pieces for long and dictated messages (G29),
+    the simpler cutter, searching with the previous messages, and leaving
+    borrowed context out of the first build.
 
 ## G.2 What the review of #180 found
 
@@ -120,13 +138,42 @@ Smaller issues:
 - one log label says "no model" when the real cause was that the message
   failed to embed;
 - meaning search reads only the first 512 tokens of a memory
-  (`EmbeddingModels.kt`), so a very long memory is partly invisible to it.
-  The model itself can read 2,048;
+  (`EmbeddingModels.kt`), about 375 words, so a longer memory is partly
+  invisible to it. A memory's tags are placed last in the text the model
+  reads (`RetrievalDocument.kt`), so on a long memory they are cut off
+  too. The model itself can read 2,048 tokens, about 1,500 words. No
+  reason for 512 is recorded in the code. See "The reading limit" below;
 - the embedding model must run one request at a time, and `Librarian.kt`
   has a lock for that (`embedLocked`). The live chat search embeds the
   user's message without the lock (`searchInternal`), so it can run at the
   same moment as a background repair. Found in review on 2026-11-10; fixed
   as part of G.5a rule 6.
+
+**The reading limit, measured on 2026-11-12.** The model file the app
+downloads (the q4 variant) was run directly, outside the app, on a cloud
+machine. Phone times will be slower and are not measured yet.
+
+| Text length | Result | Time on the cloud machine |
+|---|---|---|
+| 32 tokens | Read | 35 ms |
+| 128 tokens | Read | 123 ms |
+| 512 tokens (today's limit) | Read | 478 ms |
+| 1,024 tokens | Read | 1,060 ms |
+| 2,048 tokens | Read | 2,532 ms |
+| 2,049 tokens | Refused by the model | |
+
+- The model file accepts any length up to 2,048 tokens. The 512 limit is
+  set in the app's own code, not by the model.
+- Time follows the real length of the text. A short text costs the same
+  whatever the limit is set to.
+- **Proposed (G33):** raise the limit to 2,048 for stored text, meaning
+  saved memories. They are read in the background, never while a message
+  is being sent. The message being sent keeps a short whole-message pass
+  and is covered by pieces (G.10), because one pass over a very long
+  message is slow and blurs its details.
+- **Owner (2026-11-12):** a memory the model cannot read in full must not
+  be allowed silently. Memories are limited to what can be read, and the
+  user is shown how long a memory is (G34).
 
 ## G.3 The whole system at a glance
 
@@ -137,7 +184,7 @@ Smaller issues:
 | Index entries | One entry per passage, pointing to the whole exchange, with labels (G.5) | No. Useful parts exist (G.4) | None |
 | Retrieval | Finds the right passages by meaning and by keywords, and rejects what is not relevant (G.6) | Parts exist for saved memories and for chat search | None |
 | Scope walls | Decide which entries a chat may see | Yes, for saved memories | None |
-| Context assembly | Chooses which exchanges are sent and writes them, labelled, beside the newest message (G.8) | Partly. Saved memories are placed this way | A little more text per message |
+| Context assembly | Chooses which exchanges are sent and writes them, labelled, beside the newest message (G.8) | Partly. Saved memories are placed this way | More text per message, up to recall's own size limit (G.8). With the starting values, up to 3 earlier exchanges |
 | Carry-over | Keeps what was relevant while the subject continues | No | None |
 | Live AI worker | Optional. The Summarizer's model does message-level work during a chat | No. The model connection exists | Paid, only when turned on |
 | Upkeep | Keeps the index correct after edits, deletions, restores | Yes, for chat search | None |
@@ -222,9 +269,9 @@ code changes.
   that, and one call skips it (G.2).
 - The model is downloaded by the user. It can be absent, and it can be
   changed.
-- **Consequences:** a token-counting function must be added. Cutting
-  cannot depend on a model being present (G.5b). Vectors must record which
-  model made them.
+- **Consequences:** a token-counting function must be added, and
+  the cutter uses it (G.5b step 4). Vectors must record which model made
+  them.
 
 **Saved-memory search.** Meaning and keyword search with a relevance gate
 (`LiveRetrieval.kt`, `KeywordText.kt`). It is written for saved memories.
@@ -301,7 +348,7 @@ design:
 | Time written, and position in the chat | Time for dates. Position because some old messages have no time |
 | Fingerprint of the original text | Detects edits |
 | Fingerprint of the search text | Finds the right vector |
-| Messages the search text borrowed from | So the search text is rebuilt when one of them is hidden, edited, or deleted (G.5b) |
+| Messages the search text borrowed from | Not in the first build (G.5b step 6). Needed only if borrowed context is built later |
 | Scope labels | Companion, project, world, campaign, character, or "unknown" (G.7) |
 | Cutter version | Which version of the cutting rules made it (G.5b) |
 | Vector state | Waiting, made, or failed, and for which model |
@@ -374,8 +421,8 @@ Chunking decides what each index entry means, so it is settled before the
 index is built. It runs on the phone, costs the user nothing, and uses no
 AI model beyond the embedding model.
 
-**What the research supports.** A simple rule based on paragraphs and
-sentences. A study of automatic "semantic chunking" found it did no better
+**What the research supports.** A simple rule based on paragraphs, lines,
+and words. A study of automatic "semantic chunking" found it did no better
 than plain sizes on realistic text, and splitting by topic only helped when
 a capable paid model did it (G.18). So the cutter is a plain rule, made
 careful, not a clever one.
@@ -389,9 +436,14 @@ careful, not a clever one.
 
 **Step 1: split the message into natural pieces.** In this order:
 paragraphs (a blank line); then lines, which keeps code, lists, and tables
-intact; then sentences; then clauses; then words; and last, between two
-characters, never through the middle of one. A piece is only split further
-when it is too large for a passage.
+intact; then between words; and last, between two characters, never
+through the middle of one. A piece is only split further when it is too
+large for a passage.
+
+Periods are not used as cut points. Speech-to-text leaves them out of
+whole paragraphs and also puts them in the middle of a thought (Owner,
+2026-11-12). SillyTavern and LangChain's standard splitter cut the same
+way: paragraph, line, then between words (G.18a).
 
 **Step 2: join short neighbouring pieces.** Short pieces next to each other
 in the same message are joined, in order, until the passage reaches the
@@ -407,23 +459,39 @@ ones. Pieces are never joined across two messages.
   counting the instruction prefix and special tokens. No passage's search
   text may exceed it.
 
-**Step 4: cutting does not depend on a model being present.**
-- The model can be absent or changed, and keyword recall must still work
-  without it. So the cutter measures size with a model-independent
-  estimate and aims well under the hard limit.
-- When a vector is about to be made, the search text is measured with the
-  real tokenizer. If it does not fit, that message is cut again with a
-  smaller target and its passages are replaced. A passage is marked as
-  embedded only when the model read all of its search text.
-- A model with a different limit therefore needs no change to the rules.
+**Step 4: sizes are counted with the model's own counter.**
+- Indexing is only on when an embedding model is installed (G30). So the
+  cutter is given that model's real token counter (step 1B) and cuts to
+  real sizes the first time.
+- An earlier version estimated sizes and cut a message again when the
+  estimate proved wrong. That was removed on 2026-11-12: it meant reading
+  and decrypting the chat a second time, and on text with no spaces (a
+  long link, packed code) the estimate could stay wrong however small the
+  target became.
+- A stretch with no spaces that is still too large is cut between
+  characters until it fits.
+- Before a vector is made, the search text is counted once more as a
+  safety check. One that does not fit is recorded as failed (G.13a). It is
+  never embedded cut off, and never retried in a loop.
+- When the user changes to a model with a different limit or a different
+  way of counting, chats are re-cut in the background (G.12).
 
 **Step 5: carry meaning across boundaries.** Two protections, both wanted:
 - **Overlap in the search text only.** The search text of a passage begins
-  with the last sentence of the passage before it, when both are in the
-  same message and it fits. The original text is not overlapped, so no
-  character is delivered twice.
+  with the last words of the passage before it, up to a set number, when
+  both are in the same message and it fits. The original text is not
+  overlapped, so no character is delivered twice.
 - **Neighbour links.** Each passage records the one before and after it, so
   recall can add the neighbour when a match cannot be understood alone.
+
+**Step 6 is not in the first build (2026-11-12).** No established chat
+app adds a neighbouring message's words to a short reply before indexing
+it (G.18a), and it causes most of the upkeep work in this plan: every
+hide, edit, deletion, or scope change has to rebuild its neighbours. Step
+6 and the borrowed-context rules below stay here as the design to use if
+the stage 2 measurements show short replies are being missed. Until then,
+a short reply is found through its exchange, and the only overlap is
+between passages of the same message (step 5).
 
 **Step 6: give short replies their question.** "It needs to survive. Don't
 clear the composer." means little alone. When a passage is short, its
@@ -472,7 +540,7 @@ passage. When the rules or the target size change, chats are re-cut in the
 background and the old passages are replaced. Unchanged search text keeps
 its vector.
 
-**Languages.** Sentence and word boundaries are found with the platform's
+**Languages.** Word boundaries are found with the platform's
 own language-aware tools, so cutting works in any language. The keyword
 word rules are written for English; other languages rely more on meaning
 search. That limit is stated, not hidden.
@@ -490,9 +558,8 @@ cannot read in full.
 - short neighbouring paragraphs share a passage;
 - a detail in the middle of a long message has a passage that contains it;
 - the same message always cuts the same way;
-- no search text borrows from a hidden, unfinished, deleted, or
-  differently scoped message, and hiding a message rebuilds the search
-  text of the passages that borrowed from it.
+- no search text contains words from any message other than its own.
+  (Borrowed context is not in the first build, G.5b step 6.)
 
 ## G.5a Rules the index must guarantee (Proposed)
 
@@ -510,24 +577,35 @@ stage 1, not options.
   indexing, and again at the moment of recall against the stored message.
   Hiding a message therefore takes effect at once, even when background
   indexing has not caught up. The same holds for a deleted message.
-- The rule covers borrowed context as well as the passage's own text: no
-  search text and no vector may contain words from a message the AI may
-  not be sent (G.5b).
+- No search text and no vector may contain words from a message the AI
+  may not be sent. In the first build a passage's search text holds words
+  from its own message only, because borrowed context is not built (G.5b
+  step 6).
+- **Text is never taken by position without a check.** A passage records
+  positions inside the message's text, not the text itself. At the moment
+  of recall, the stored message's text fingerprint is compared with the
+  passage's. If they differ, the passage is not used and the chat is
+  marked for a refresh. A change in how message text is prepared can
+  therefore never cut an excerpt in the wrong place.
 - A test proves that the set of messages the index may recall is the same
-  as the set the chat request may send, and another proves that hiding a
-  message removes its words from every neighbour's search text.
+  as the set the chat request may send.
 
 **2. No text is ever cut off silently.**
 - The tokenizer drops everything past the model's limit without saying so
   (`HfTokenizer.encode`).
 - Rule: before a vector is made, the search text is measured with the real
-  tokenizer, counting the instruction prefix and special tokens. If it does
-  not fit, the message is cut again (G.5b step 4). A passage is recorded
-  as embedded only when all of its search text was read.
+  tokenizer, counting the instruction prefix and special tokens. The
+  cutter already cut to real sizes (G.5b step 4), so this is a safety
+  check: a search text that does not fit is recorded as failed, never
+  embedded cut off. A passage is recorded as embedded only when all of its
+  search text was read.
 
 **3. Vectors have an owner and a lifetime.**
-- A vector is reused only when the search text, the embedding model, the
-  vector size, and the cutter version that prepared the text all match.
+- A vector is reused only when the exact text handed to the embedding
+  model (the search text, with its speaker label), the embedding model,
+  and the vector size all match. The cutter version is not part of this:
+  when the cutting rules change and a passage's search text comes out the
+  same, its vector is kept (G.5b, Versions).
 - When the last passage that uses a vector is deleted or changed, the
   vector is removed.
 - Vectors made by a model that is no longer selected are removed once the
@@ -650,12 +728,12 @@ is not asked to choose them.
 
 **Step 1: decide what to search with.**
 - The user's latest message, on its own.
-- A long message is also searched one sentence at a time (G.10), up to a
-  limit.
-- When the subject check (G.9a) says the message is a short continuation
-  with no subject of its own, the previous exchange's user message is
-  searched as well, as a separate search. Earlier messages are never glued
-  onto the search text.
+- A message longer than one piece is also searched in overlapping pieces
+  (G.10), up to a limit. Periods play no part.
+- The user's previous message is searched as well, as a separate search
+  that counts for less than the newest (G.9a). The number of previous
+  messages is 1 by default and can be set from 0 to 3 (G32). Earlier
+  messages are never glued onto the search text.
 - Each of these is a separate search. A passage qualifies when it passes
   for any one of them.
 
@@ -677,7 +755,8 @@ is not asked to choose them.
   first, by the same rule saved-memory search uses.
 - **Meaning:** the message's vector is compared with the chat's passage
   vectors, in bounded batches, keeping only the best so far (G.5a rule 5).
-- A passage with no vector yet can still be found by keywords.
+- A passage with no vector yet is not a candidate until its vector is
+  made (G30).
 - Each way returns a bounded list. Starting value: the best 50 of each.
 
 **Step 4: the relevance gate. Being the best match is not the same as being
@@ -686,6 +765,14 @@ relevant.** A candidate passes only when one of these is true:
   above this chat's typical similarity for this message. A chat about one
   project has a high typical similarity, so only a passage that is closer
   than the general run of the chat passes.
+  - "Typical" is worked out over **every passage of the chat** as its
+    vectors are read, never over the 50 best. Measuring it over the best
+    matches would raise the bar and reject good ones.
+  - **A certain match always passes.** When a chat is about one subject
+    throughout, nothing stands out, and the rule above would reject
+    everything. That is the fault G.2 lists for saved-memory search. So a
+    passage whose similarity clears a second, higher bar passes whether
+    or not it stands out. That bar is measured in stage 2.
 - **Keywords:** it contains enough of the message's informative words,
   weighted by how rare each word is in this chat. One accidental shared
   word in a long message does not pass.
@@ -735,12 +822,8 @@ best candidate look perfect even when it is poor):
   candidates, never as the score, because it cannot be compared from one
   message to the next.
 
-**When a passage has no vector yet.** Its meaning score is unknown, not
-zero. It can pass the gate on keywords alone. For ordering, its meaning
-score is counted as 0, so it ranks below a passage with the same keyword
-score that also matched by meaning. This is deliberate: a wrong recall is
-worse than a missed one, and the gap closes as soon as the vector is made.
-The inspector shows such a passage as "no vector yet", so a low rank is
+**When a passage has no vector yet.** It is not recalled until its vector
+is made (G30). The inspector shows it as waiting, so a missing result is
 never mistaken for a poor match.
 
 **Step 5a: an optional re-ranker (a place is kept for it; not built
@@ -799,6 +882,20 @@ yet).**
 - When two exchanges say nearly the same thing, the higher-scoring one is
   kept and the other dropped, so the limit is not spent on repeats.
 - Two exchanges that **differ** on the same subject are both kept.
+
+**Step 9 is not in the first build (2026-11-12).** No established system
+does it (G.18a), and review found two faults in it as written:
+- its extra exchange was not put through step 7, so it could add an
+  exchange the AI is already reading, or one that is no longer eligible;
+- it compares one stored passage with another and applies the gate from
+  step 4. That gate is set for comparing a message with a passage. The
+  embedding model prepares a message and a stored text differently, so
+  the two kinds of comparison give different numbers and need separate
+  bars.
+
+Stage 2 measures how often a changed decision is missed without it. If it
+is built, its candidates go through step 7 and it gets bars of its own.
+The text below is kept as that design.
 
 **Step 9: follow a subject to its later turns.** A decision is often made
 in one place and changed in another: "Let's use model A for summaries",
@@ -907,10 +1004,14 @@ exchange that the chat AI now sees only as part of a summary can still be
 found and added in its original words. The summary itself is not changed
 and is not searched.
 
-**Why this helps even when the whole chat is already sent.** Models attend
-most to the start and end of what they are given and least to the middle
-(G.18). An exchange from far back sits in the middle. A copy beside the
-newest message is where the model reads most carefully.
+**When the whole chat is already sent.** The certain benefit of recall is
+in summarized and compacted chats, above. When the whole chat is sent, a
+recalled exchange is a second copy of text the AI already has, and it is
+paid for twice. The evidence that the copy helps is mixed: one study found
+that models attend least to the middle of what they are given, and another
+found that moving passages to "preferred" positions did no better than
+random order (G.18). So this benefit is measured in stage 3 before it is
+relied on, and reported to the owner together with its cost.
 
 **Choosing which exchanges are sent.** When more exchanges qualify than
 fit:
@@ -921,8 +1022,8 @@ fit:
   an excerpt fits. Otherwise it is skipped and the next one is tried, so
   one very large exchange cannot block smaller ones.
 - A neighbouring exchange is added only when the chosen exchange cannot be
-  understood alone: its user message is a short continuation with no
-  subject of its own (G.9a). A neighbour counts against the size limit but
+  understood alone: its user message is only a few words and names no
+  subject ("exactly", "and then?"). A neighbour counts against the size limit but
   not the count limit.
 - An exchange carried over from the previous message (G10) is considered
   after new matches, so new matches are never displaced by old ones.
@@ -1017,8 +1118,9 @@ Decided by the owner on 2026-11-11.
   Recalled text is included in your normal AI requests."
 - Turning it on may also turn on Index Conversations, so one switch is
   enough.
-- It **never downloads an embedding model by itself.** With no model,
-  recall works by keywords.
+- It **never downloads an embedding model by itself.** With no model
+  installed it cannot be turned on, and the user is told why and where to
+  install one (G30, G31).
 - If the user later turns Index Conversations off, indexing is **not
   silently restarted**, by recall or by anything else.
 
@@ -1086,72 +1188,157 @@ shows, so a wrong or missing recall can be explained, not guessed at.
 not kept in the chat history. A memory found for one message is gone for
 the next unless that message finds it again.
 
-**The rule.**
+**The rule (rewritten 2026-11-12 to use an established method, G.9a).**
 
-- Only the memories sent with the previous message are candidates.
-- A candidate stays when the user's new message still relates to it, at an
-  easier bar than a new memory must clear.
-- A candidate also stays when the new message is a short continuation with
-  no subject of its own ("exactly", "and then?") and the AI's previous
-  reply still relates to it.
-- Otherwise it is dropped. This covers a change of subject and a memory
-  that was sent by mistake.
-- The AI's reply alone can never keep a memory alive. The user has to still
-  be on the subject.
-- There is no fixed number of messages after which a memory is dropped.
-- New matches rank ahead of carried ones when the memory limit is full.
+- The user's previous message is searched again, on its own, alongside
+  the new message. The number of previous messages is 1 by default and
+  can be set from 0 to 3 (G32).
+- A memory found through an earlier message must pass the same relevance
+  gate against that message. Nothing is kept merely because it was sent
+  before.
+- Matches for the new message come first. Matches for the message before
+  it come next, and for the one before that last.
+- A memory therefore stays through a follow-up such as "What should I feed
+  her?", and falls away after the subject changes: one message later by
+  default.
+- Only the user's messages are searched. The AI's reply alone can never
+  keep a memory alive.
 - Carried memories obey scope like any other.
 
-**What is not known.** The "easier bar" and the test for "a short
-continuation" have no published answer. They are measured on the test
-conversations before anything is built (G.15).
+**What is not known.** How much less an earlier message counts is measured
+on the test set (step 0). A memory that was sent by mistake stays for as
+many messages as are searched; whether that needs a stricter rule is
+measured too.
 
 **Relation to recall.** Carry-over and conversation recall are separate.
-They share the subject check (G.9a) and the final size check (G.8), and
-nothing else. Each has its own size limit.
+They share this way of searching (G.9a) and the final size check (G.8),
+and nothing else. Each has its own size limit.
 
 A recalled exchange is carried over under the same rule (Owner,
 2026-11-11; G.8b).
 
-## G.9a The subject check (Proposed)
+## G.9a Searching with the previous messages (Proposed; replaces the subject check, 2026-11-12)
 
-One small component, built once and used by both recall and carry-over. It
-does not depend on either of them.
+The earlier version of this plan had a "subject check": a new component
+with two unmeasured numbers that judged whether a message was still on the
+previous subject. No established system does that. It is replaced by what
+RisuAI does (G.18a).
 
-- **What it answers:** is the user's new message still about the subject of
-  the previous exchange?
-- **What it reads:** the new message, the previous exchange, and nothing
-  older.
-- **How it decides:**
-  - the new message relates to the previous exchange by meaning or
-    keywords; or
-  - the new message is a short continuation with no subject of its own, and
-    so cannot be judged alone.
-- **What uses the answer:**
-  - recall searches with the previous exchange's subject as well when the
-    answer is yes and the new message has no subject of its own;
-  - carry-over keeps the previous message's memories when the answer is
-    yes.
-- **What it never does:** glue earlier messages onto every search, or let
-  the AI's reply alone keep a subject alive.
-- Its two numbers (how closely related, and how short is "short") are
-  measured when it is built.
+- **What is searched:** the new message, and the user's previous
+  messages: 1 by default, from 0 to 3 (Owner, 2026-11-12; G32).
+- **How:** each is its own search. They are never joined into one text.
+  #180 measured that joining recent messages hurt saved-memory search in
+  this app; separate searches avoid that.
+- **How results combine:** a match for the newest message outranks a match
+  for an earlier one.
+- **What it adds on the phone:** nothing new to read. The earlier
+  messages' search results from the previous turn are kept and reused.
+- **Used by:** carry-over for saved memories (G.9) and conversation recall
+  (G.6 step 1).
+- **What it never does:** search with the AI's replies, or keep anything
+  that does not pass the relevance gate.
 
-## G.10 Long messages (Proposed)
+## G.10 A small detail inside a larger message (Proposed; rewritten 2026-11-12)
 
-- Each sentence of a long message is searched on its own, as well as the
-  whole message. A memory or an index entry is used when it matches the
-  whole message or any one sentence.
-- "I'm worried about Pepper" inside a long message is then judged as its
-  own short message.
-- An accidental word in a sentence about something else is still only a
-  small part of that sentence, so the protection against wrong matches is
-  kept.
-- **Cost:** each sentence is one more pass through the on-phone model, so a
-  long message takes longer to send. The owner said on 2026-11-10 that it
-  should take longer. The number of sentences searched is limited, and the
-  time is measured on the phone before it ships.
-- No published study covers this. It is measured here.
+**The problem.** A small detail in a message about several things does not
+find its saved memory or its earlier exchange (G.2).
+
+**Why it happens.** Long and short messages are not handled differently.
+One rule is applied to every message, and it weakens as a message covers
+more subjects:
+- **On keywords,** a memory is used only when it covers about half of the
+  message's meaningful words. In "Tell me about Pepper", Pepper is all of
+  them. In a message of two hundred words that mentions Pepper once,
+  Pepper is a small fraction, so the memory fails.
+- **On meaning,** the whole message is turned into one summary of what it
+  means. A message about one thing gives a sharp summary. A message about
+  five things gives a blur that is not close to any one memory.
+
+**The model reads only the start of a long text.** The embedding model
+reads about the first 350 to 400 words of a text and ignores the rest
+(G.4). So today, meaning search sees only the beginning of a longer
+message; only keyword search reads all of it. Searching in pieces is what
+fixes this: every word of the message is inside at least one piece.
+
+**The owner's concern (2026-11-12).** Periods cannot be trusted in
+dictated text: speech-to-text leaves them out of whole paragraphs and also
+puts them in the middle of a thought. Cutting a thought in half changes
+what it means.
+
+**What established systems do (G.18a).** None has a clean answer. They do
+one of two things:
+- search with pieces of the message as well as the whole. Pieces are cut
+  at a paragraph, a line, or between words, never at periods, and each
+  piece overlaps the one before it;
+- or have an AI model rewrite the message into a search, at the cost of a
+  paid call for every message.
+
+**The rule proposed here: overlapping pieces, used only for finding
+(G29).**
+- The whole message is searched first, exactly as today.
+- A message longer than one piece is also searched in pieces. A piece is
+  cut at a paragraph or a line where there is one, otherwise between
+  words. Periods play no part.
+- Each piece overlaps the one before it by half. Any thought shorter than
+  half a piece is therefore whole inside at least one piece.
+- **A piece is only ever used to find a memory. It is never shown to the
+  AI.** What the AI receives is the whole saved memory, or the whole
+  earlier exchange.
+- A message short enough to be one piece is searched exactly as today.
+  There is no line between "long" and "short" beyond that.
+
+**When a piece's match counts.** A wrong memory is worse than a missed
+one. Established systems send their best few matches even when none fits
+well; this app does not.
+- **By meaning:** a piece passes the same gate as a whole message.
+- **By keywords:** a keyword match from a piece counts only when meaning
+  search agrees: the memory must also be close enough in meaning to that
+  piece. "I'm worried about Pepper" is close in meaning to the Pepper
+  memory. "It was about spring cleaning" shares the word "spring" with a
+  memory about moving house in spring, and is not close to it in meaning.
+  This check is this app's own addition and is measured on the test set.
+- **With no embedding model, or for a memory that has no vector yet,**
+  nothing can confirm the match, so only the whole-message search runs, as
+  today.
+
+**Order and room.**
+- Everything that matches the whole message keeps its place, in today's
+  order. Nothing that is sent today is pushed out.
+- Memories found only through a piece come after those, best first, in
+  whatever room the memory limit leaves.
+
+**Time.**
+- The number of pieces searched has a limit. When a message has more
+  pieces than the limit, the pieces holding the rarest words (names and
+  unusual terms) are searched first.
+- This search has a time allowance. When it runs out, the pieces not yet
+  searched are skipped and the message is sent with what was found. The
+  whole-message search always runs.
+- The words of every memory are read once per message and reused, so the
+  keyword work does not multiply.
+- **The message is read by the embedding model once.** The whole message
+  and its pieces are cut and read one time per message sent. Saved-memory
+  search and conversation recall share those results. Neither reads the
+  message again.
+- When the limit or the time allowance leaves part of a message
+  unsearched, the Memory Search Test screen says which part.
+- The piece size, the limit, and the time allowance are engineering
+  numbers, measured on the test set and on a phone before this ships.
+
+**What the user can see.** The Memory Search Test screen must show which
+piece of the message a memory matched, and when the search ran out of
+time. Without that, the screen can no longer explain why a memory was
+sent. Its wording is shown to the owner before step 4A is built.
+
+**When the embedding model cannot read a piece.** That piece adds nothing.
+This is reported, never silent, using the existing Memory Debug Log line
+for this failure with its plain wording (G26). No log line is added or
+changed without the owner's approval.
+
+**The paid rewrite** is not built. It can be offered later as an optional
+setting if the pieces prove not to be enough.
+
+**The same rule serves recall** (G.6 step 1).
 
 ## G.11 The optional live AI worker (Proposed, on the owner's requirement)
 
@@ -1201,20 +1388,20 @@ message-level work while the user chats, as an option.
 | Event | What happens to the index |
 |---|---|
 | New message | Its entries are added in the background |
-| Message edited | Passages for that message are replaced, and the search text of short neighbouring passages that borrowed from it (G.5b step 6). Unchanged search text keeps its vector |
+| Message edited | Passages for that message are replaced. Unchanged search text keeps its vector |
 | Reply regenerated or another version chosen | Entries follow the version that is shown |
 | Message deleted | Its entries and any AI notes on them are removed, and any vector nothing else uses |
-| Message hidden from the AI, or made visible again | Takes effect on recall at once (G.5a rule 1). Neighbouring passages that borrowed its words have their search text and vectors rebuilt |
+| Message hidden from the AI, or made visible again | Takes effect on recall at once (G.5a rule 1) |
 | Chat deleted | All its entries are removed, and any vector nothing else uses |
 | Chat renamed | For older chats a rename changes the chat's ID. Its entries move to the new ID (G.5a rule 9) |
 | Reply finishes streaming | Indexed then, not while streaming. A failed reply is not indexed |
 | Cutting rules or target size changed | Chats are re-cut in the background. Unchanged search text keeps its vector |
 | The user deletes the index | Everything derived is removed. The chats are untouched |
 | Backup restored, or a backup merged into the phone's chats | Each affected chat is checked message by message (G.5a rule 8). Nothing is indexed twice |
-| Embedding model changed | Keyword search keeps working at once. Vectors are remade in the background |
+| Embedding model changed | Vectors are remade in the background, and chats are re-cut first when the new model's size limit or way of counting differs (G.5b step 4). A chat is recalled from again once its vectors are ready |
 | Chat settings changed (companion, project, roleplay) | Scope labels on later messages follow the new settings |
 | Existing chats, first time | **Owner (2026-11-11):** indexed in the background, a little at a time, newest first. Opening a chat never waits for it |
-| Already indexed text | Stays indexed. It is redone only when the message is edited, the embedding model is changed (the meaning half only; keywords keep working), or the index is rebuilt after a restore |
+| Already indexed text | Stays indexed. It is redone only when the message is edited, the embedding model is changed, or the index is rebuilt after a restore |
 
 The index is derived: it can always be rebuilt from the stored chats, and
 losing it loses nothing the user wrote.
@@ -1223,9 +1410,9 @@ losing it loses nothing the user wrote.
 
 | Missing | What still works |
 |---|---|
-| The embedding model was never installed | The index is built and kept up to date for keyword search, and recall works by keywords. Passages wait for their vectors. Installing a model later adds meaning search to the same passages, with no re-cutting and no rebuild |
-| The embedding model is installed but fails | The same keyword path keeps working. This is reported as a failure, separately from "no model installed", because the user's next step is different |
-| A vector for some entries | Those entries are found by keywords until the vector is made |
+| The embedding model is not installed | Index Conversations and Conversation Recall are not available, and the user is told why and where to install it (G31). The chat is sent exactly as today |
+| The embedding model is installed but fails | Recall is skipped for that message and the user is told why (G.13b). This is reported separately from "no model installed", because the user's next step is different |
+| A vector for some entries | Those entries are not recalled until the vector is made |
 | The live AI worker, or its network | Everything except AI notes |
 | The whole index | The chat is sent exactly as today. Sending is never blocked by recall |
 
@@ -1316,10 +1503,39 @@ messages are written and approved by the owner before step 1F (G20).
 `ui-style-guide.md` has no snack bar style yet; the builder creates a
 shared one and adds it to the guide.
 
+## G.13b Plain wording for everything the user reads (Owner, 2026-11-12)
+
+**Owner (2026-11-12):** wording must be plain English, direct, and
+understandable. When something cannot happen, the user is told why it
+cannot happen and what they can do to fix it.
+
+- **Planning words never reach the user,** on a screen or in a log the
+  user reads: passage, vector, lexical, query, embed, cutter, re-ranker.
+- **Every failure message says** what failed, why, what is not affected,
+  and what the user can do next.
+- **The causes are listed before the wording is written.** For each failure
+  in G.13a, the builder first lists every cause the code can tell apart,
+  and the user's next step for each. This plan does not have that list
+  yet, so its failure wording cannot be final.
+- **Wording in this plan that does not meet the rule.** Each is re-proposed
+  to the owner before the step that shows it:
+
+| Wording | What is missing |
+|---|---|
+| "Conversation recall unavailable this turn — continuing without it" (G.13a) | Why it was unavailable, and whether the user needs to do anything |
+| "Indexing and Conversation Recall are off until this is fixed. … See the Error Log for details." (G.13a) | What "fixed" means and how the user fixes it. It sends the user to a log to find out |
+| "meaning search could not be prepared for (number) passages" (G.13a) | "Passages" is a planning word |
+
+- **An existing line has the same fault** and is handled with step 4A
+  (G26): the Memory Debug Log line "Query embed failed, using lexical
+  fallback".
+
 ## G.14 Cost, speed, storage, privacy (Proposed)
 
 - **Tokens.** A recalled exchange is sent once more in that request. Its
-  own size limit bounds the cost.
+  own size limit bounds the cost. With the starting values, up to 3 earlier
+  exchanges can be added to every message. The size limit is not set yet (G.8b). Until it is, the cost per
+  message is not known and is not described as small.
 - **Speed.** Indexing runs in the background and must not slow typing,
   scrolling, or sending. Search time is added to sending, and is measured
   on the owner's Pixel 8. No public figure exists for this model on a
@@ -1347,8 +1563,10 @@ shared one and adds it to the guide.
 
 ## G.15 Testing and measurement
 
-Tests are written with the component they test, in the same pull request.
-There is no separate testing stage in front of the building.
+Correctness tests are written with the component they test, in the same
+pull request. The sample conversations for the quality tests are built
+first, as step 0, so no step's code is judged by samples written after
+it.
 
 **Three kinds of test.**
 
@@ -1362,7 +1580,7 @@ There is no separate testing stage in front of the building.
   so a change that makes recall worse is seen at once.
 - **Measurements** set the numbers research does not give, with the real
   embedding model: the passage target size, the gate, the blend weights,
-  how many exchanges to recall, the subject check's two numbers, the
+  how many exchanges to recall, how many earlier messages are searched, the
   carry-over bar, and speed on the phone.
 
 **What every quality test checks, at three points:**
@@ -1376,24 +1594,26 @@ There is no separate testing stage in front of the building.
 | Situation | What must happen |
 |---|---|
 | An exact detail ("Which model did we choose?") | The original decision is recalled |
-| A follow-up ("Why did we choose that?") | The same discussion is recalled, using the subject check |
+| A follow-up ("Why did we choose that?") | The same discussion is recalled, by also searching with the previous message |
 | A time reference ("What did we change last week?") | Exchanges from that period are favoured |
 | A summarized or compacted chat | The original exchange is recalled although the AI otherwise has only the summary |
 | Nothing relevant | Nothing is added |
 | A long message with one small important detail | The exchange about that detail is recalled |
-| A hidden message | It is never recalled, and neither is anything that borrowed its words |
+| A long dictated message with no periods and one small important detail | The exchange or memory about that detail is found |
+| A short sentence that shares one accidental word with an unrelated memory | That memory is not sent |
+| A hidden message | It is never recalled |
 | An edited message | The new text is recalled, never the old |
 | A deleted message | It is never recalled |
 | A chat that is about one subject throughout | Only exchanges closer than the general run of the chat are recalled |
 | A roleplay chat and a companion chat | Each recalls only its own conversation |
 | A very long exchange | An excerpt is sent, marked as one, and nothing is cut silently |
 | More matches than fit | The most relevant are sent, and the rest are reported as left out |
-| A decision made early and changed later, asked about in words that match only one | Both are recalled, in date order. The hit rate is reported |
+| A decision made early and changed later, asked about in words that match only one | How often both are recalled is measured and reported. The result decides whether G.6 step 9 is built |
 | The same message sent down both request paths | The same text is added by both |
 | Retrieval runs out of time | The message is sent as today, and recall is shown as skipped |
-| A passage with no vector yet | It can be found by keywords, and is shown as waiting for its vector |
-| No embedding model installed | The index is built, and an exchange is recalled by its distinctive words |
-| A model is installed after indexing | Meaning search starts working on the existing passages, and nothing is re-cut |
+| A passage with no vector yet | It is not recalled, and is shown as waiting for its vector |
+| No embedding model installed | Index Conversations and Conversation Recall cannot be turned on, and the user is told why |
+| The model is changed after indexing | Recall resumes once the new vectors are made, and nothing is re-cut |
 
 **How quality is judged.** No pass mark is invented in advance. The first
 run on each stage sets the baseline. After that, a change must not lower
@@ -1420,53 +1640,239 @@ the code files the step names. It builds only that step.
 - **Hard:** many moving parts, or touches the chat screen. Use the
   strongest model available, and expect more than one review round.
 
-### Overview
+### Overview: build order and difficulty
 
-| Step | What is built | Difficulty | The user sees | Depends on |
-|---|---|---|---|---|
-| 1A | The passage cutter | Routine | Nothing | Nothing |
-| 1B | Token counting, and one queue for the embedding model | Careful | Nothing | Nothing |
-| 1C | The passage stores and per-message updating | Hard | Nothing | 1A |
-| 1D | Background embedding of passages | Hard | Nothing | 1B, 1C |
-| 1E | Keeping the index in step with the chats | Hard | Nothing | 1C |
-| 1F | The setting, progress icon, pop-up, notification, and delete | Careful | The approved screens (G.16a) | 1D, 1E |
-| 2A | Retrieval and the subject check | Hard | Nothing | Stage 1 |
-| 2B | The inspector, and the measurements | Careful | A test screen (wording to approve) | 2A |
-| 3 | Context assembly: recall in real requests | Hard | Recall works (wording to approve) | Stage 2 |
-| 4A | Long messages in saved-memory search | Careful | Better memory matches | Nothing |
-| 4B | Carry-over for saved memories | Careful | Memories stay through follow-ups | 2A's subject check |
-| Later | Optional re-ranker; live AI worker; other chats | To be designed | | |
+Steps are listed in the order they are built. Each needs only steps above
+it. "Approve first" is what the owner must approve before that step
+starts; a step with nothing there can start as soon as the ones it needs
+are merged.
 
-Nothing changes for any user until step 1F. Steps 1A to 1E add code that
+| Order | Step | What is built | Difficulty | Model to use | The user sees | Needs | Approve first |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | The test set: sample messages and memories with the real model's numbers | Routine with the written instructions | Lighter | Nothing | Nothing | Nothing |
+| 2 | 1B | Token counting, one queue for the embedding model, and the reading limit raised to 2,048 | Careful | Middle | Nothing | Nothing | Nothing |
+| 3 | 4A | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | 0, 1B | Memory Search Test wording; the two remaining log lines (G26) |
+| 4 | S | Searching with the previous messages | Careful | Middle | Nothing | 0 | The label and place of its setting (G32) |
+| 5 | 4B | Saved memories stay through follow-up messages | Careful | Middle | Memories stay through follow-ups | 0, S | Nothing |
+| 6 | M | The memory word count and length limit | Careful | Middle | A word count under the memory box | 1B | The open parts of G34 |
+| 7 | 1A | The passage cutter | Routine | Lighter | Nothing | Nothing | Nothing |
+| 8 | 1C | The passage stores and per-message updating | Hard | Strongest | Nothing | 1A, 1B | G30 is decided; nothing further |
+| 9 | 1D | Background embedding of passages | Hard | Strongest | Nothing | 1B, 1C | Nothing |
+| 10 | 1E | Keeping the index in step with the chats | Hard | Strongest | Nothing | 1C | Nothing |
+| 11 | 1F | The setting, status, delete, database check line, and error notices | Careful | Middle | The approved settings section (G.16a) | 1D, 1E | G20, G27, G28, G31 |
+| 12 | 1G | The progress icon and pop-up, with pause and resume | Careful | Middle | The approved icon and pop-up (G.16a) | 1F | Nothing |
+| 13 | 1H | Indexing that continues after the app is closed, with its notification | Hard | Strongest | The approved notification (G.16a) | 1G | What the user is told when indexing stops for the day |
+| 14 | 2A | Retrieval | Hard | Strongest | Nothing | 1A to 1E, S | Nothing |
+| 15 | 2B | The inspector, and the measurements | Careful | Middle | A test screen | 2A | The screen's labels |
+| 16 | 3 | Context assembly: recall in real requests | Hard | Strongest | Recall works | 2A, 2B | The text given to the AI; the "what was sent" wording; the recall room setting; G24 |
+| Later | | Optional re-ranker; live AI worker; other chats | To be designed | | | | |
+
+**Stages.** Elsewhere in this plan, "stage 1" means steps 1A to 1H,
+"stage 2" means steps 2A and 2B, and "stage 3" means step 3.
+
+**Model to use.** Lighter: a small, cheap model is enough. Middle: a
+mid-range model. Strongest: the most capable model available, and expect
+more than one review round. Steps 1 to 6 fix faults that are live on the
+beta today and do not need the conversation index. Steps 7 to 16 build
+the conversation index and recall.
+
+For the conversation index, nothing changes for any user until step 1F.
+Steps 1A to 1E add code that
 stays switched off, because Index Conversations starts off and cannot be
 turned on until 1F.
 
-**Keyword-only use is part of every step, not a later one (Owner,
-2026-11-11).** No step may require an embedding model in order to build,
-keep, or search the index. With no model: 1C and 1E work in full, 1D
-leaves passages waiting, 1F shows that search is by keywords only, and 2A
-and 3 recall by keywords. Each step's tests include the no-model case.
+**The embedding model is required (Owner, 2026-11-12; G30).** This
+replaces the earlier rule that every step must work on keywords alone.
+Index Conversations and Conversation Recall need an embedding model
+installed. Keywords are still used together with meaning to find passages
+(G.6). What is dropped is running on keywords alone. What the user sees
+when no model is installed, or when the model is removed later, is shown
+to the owner before step 1F (G31).
 
 Steps 4A and 4B fix gaps that are live on the beta today. **Owner
-(2026-11-11): step 4A is built first.** It depends on nothing.
+(2026-11-11): step 4A is built first.** Review on 2026-11-12 found that
+4A is not safe to build before two other steps: step 0, because without
+the test set it has no test to pass and wrong memories cannot be counted;
+and step 1B, because 4A runs the on-phone model several times per message
+on a path that skips the model's one-at-a-time lock. Step 4B no longer
+waits for the conversation index: the search with previous messages it
+needs is its own step (S). Which step is built first is the owner's decision.
+
+### Step 0: the test set (Routine with these instructions)
+
+**Goal.** Sample memories and messages with known right answers, run in
+the normal unit tests with the real embedding model's numbers. Every later
+step is judged by this set, so it is written before any of their code.
+
+**Rules for whoever builds this step.**
+- Add new files only. Change no app code and no existing test.
+- Create no Markdown file.
+- Write every expected answer **before** running anything. Never change an
+  expected answer to make a result look better. If an expected answer
+  turns out to be wrong, say so in the pull request description and leave
+  the decision to the owner.
+- All sample content is invented. Use a made-up person. Use nothing from
+  any real conversation.
+- Do not commit the model files. Download them to a temporary folder.
+- If any step below cannot be done, stop and say which one. Never make up
+  numbers.
+
+**Files to create.**
+
+| File | What it is |
+|---|---|
+| `app/src/test/resources/recall_test_set/cases.json` | The sample memories and messages, written by hand |
+| `app/src/test/resources/recall_test_set/generate_vectors.py` | The script that turns each text into the real model's numbers |
+| `app/src/test/resources/recall_test_set/vectors.json` | The script's output |
+| `app/src/test/resources/recall_test_set/baseline.json` | How today's search scores on the set |
+| `app/src/test/java/org/teslasoft/assistant/preferences/memory/librarian/RecallTestSetTest.kt` | The unit test that runs the set |
+
+**Part 1: write `cases.json`.**
+
+Memories: at least 30, each with an `id`, `content`, and `tags`. One to
+three sentences each. Spread them over these subjects: a pet, health, work,
+family, home and moving, hobbies, food, and plans with dates. Include
+pairs that share one ordinary word but are about different things, such
+as a move planned for spring and nothing else about spring.
+
+Messages: each with an `id`, a `kind`, its `text`, `expect` (memory ids
+that should be sent), and `must_not` (memory ids that must not be sent).
+
+| Kind | At least | What it is |
+|---|---|---|
+| `short` | 10 | One short message about one memory |
+| `long_typed` | 8 | 150 to 300 words about several things, with normal punctuation, and one small detail that belongs to one memory |
+| `long_dictated` | 8 | 150 to 400 words with **no periods at all**, as speech-to-text writes them, with one small detail that belongs to one memory |
+| `dictated_bad_periods` | 5 | The same, with periods in the middle of thoughts |
+| `very_long` | 4 | More than 450 words, with the detail placed after the 400th word |
+| `accidental_word` | 8 | A short message that shares exactly one ordinary word with an unrelated memory. `expect` is empty and that memory is in `must_not` |
+| `nothing_relevant` | 8 | About something no memory covers. `expect` is empty |
+| `two_subjects` | 5 | About two memories at once. Both are in `expect` |
+
+Conversations: at least 6, each a list of three user messages in order.
+The first names a subject. The second is a follow-up that does not name
+it ("What should I feed her?"). The third changes the subject. Each turn
+has its own `expect` and `must_not`.
+
+**Part 2: write `generate_vectors.py`.** It must do exactly what the app
+does (`OnnxEmbeddingModel.kt`, `EmbeddingModels.kt`,
+`RetrievalDocument.kt`). Read those three files first.
+
+1. Download `onnx/model_q4.onnx`, `onnx/model_q4.onnx_data`, and
+   `tokenizer.json` from the address in `EmbeddingModels.kt` into a
+   temporary folder.
+2. Use Python with the `onnxruntime` and `tokenizers` packages.
+3. For a memory, the text is its content, then a new line, then its tags
+   joined with a comma and a space (`RetrievalDocument.semanticDocument`).
+   Put `title: none | text: ` in front of it.
+4. For a message, put `task: search result | query: ` in front of it.
+5. Turn the text into token ids with the tokenizer and keep the first 512.
+6. Run the model with `input_ids` and an `attention_mask` of ones. Take
+   the output named `sentence_embedding`.
+7. Keep its first 256 numbers, then scale them so their length is 1.
+8. Write every vector to `vectors.json`, keyed by the memory or message
+   id, rounded to 5 decimal places.
+
+**Part 3: prove the script is right before using its output.** The script
+must print these checks and stop if any is off by more than 0.01. The
+reference values were measured on 2026-11-12 with this recipe:
+
+| Check | Value |
+|---|---|
+| "I love drinking coffee in the morning." against "My favorite morning drink is coffee." (both as stored text) | 0.9304 |
+| The first sentence against "The spaceship landed on the distant planet." (both as stored text) | 0.4371 |
+| The message "What should I feed Pepper?" against the stored text "Pepper is the user's cat. She has kidney disease and eats a prescription diet." | 0.6208 |
+
+**Part 4: write `RecallTestSetTest.kt`.**
+- Read the three JSON files with `org.json`, which the unit tests already
+  have.
+- For each message, call `LiveRetrieval.search` with the default
+  `LiveRetrieval.Params()`, the message's vector, every memory as a
+  candidate with its vector and tags, and a limit of 5. Read
+  `LiveRetrievalTest.kt` to see how candidates are made.
+- Count, over the whole set and for each kind: how many expected memories
+  were found, how many were missed, and how many `must_not` memories were
+  sent.
+- For conversations, search each turn on its own, as the app does today.
+- The first time, write those counts to `baseline.json` by hand from the
+  test's printed output.
+- The test passes when the counts are no worse than `baseline.json`:
+  found is not lower and wrongly sent is not higher. It fails with a
+  message naming the message ids that got worse.
+- The test must not require every expected memory to be found. Today's
+  search is known to miss the long messages. Those misses are what the
+  later steps are measured against.
+
+**Done when:**
+- the script's three checks pass;
+- `./gradlew testDebugUnitTest` passes with the new test included;
+- the pull request description lists the counts for each kind, and any
+  expected answer the builder now doubts;
+- the counts are added to this plan under "Baseline" below.
+
+**Baseline.** Not recorded yet.
+
+### Step M: the memory word count and length limit (Careful)
+
+**Owner (2026-11-12).**
+- In the Memory Browser, under the box where a memory is typed, aligned
+  to the right, show how many words the memory holds. This is shown for
+  each memory.
+- When the count reaches 1,500 the line turns red and reads:
+  "Word Limit Reached: 1,500 Words Maximum".
+- The Memory Assistant must split a large subject into separate proposed
+  memories. It must not fail, or throw away a proposed memory, because it
+  is too long.
+
+- **Goal:** no saved memory is longer than the embedding model can read,
+  and the user can always see how long a memory is.
+- **Needs first:** step 1B, which raises the model's reading limit to
+  2,048 tokens (about 1,500 words) and adds the real token count.
+- **Before building, the owner approves (G34):** the exact text of the
+  count before the limit is reached; what happens when the user tries to
+  save a memory that is over the limit; what is shown in the rare case
+  below; how memories that are already too long are marked; and the exact
+  words added to the Memory Assistant's instructions.
+- **The rare case.** The model's limit is counted in its own units, not
+  in words. Ordinary English fits 1,500 words. Text with many unusual
+  names, numbers, or another language can reach the model's limit sooner.
+  The red line must not say 1,500 when the real limit was reached at a
+  lower count, so that case needs its own approved wording.
+- **Read:** `ui-style-guide.md`, "Field error and counter lines" (it has
+  a right-aligned counter under a field, and a counter for a maximum);
+  `ui-style-adoption.md`; `activity_memory_editor.xml` and its screen
+  code; the Memory Assistant's instructions in `archivist/`.
+- **Build:** the count line in every place a memory's text is typed or
+  edited. The builder finds those places in the code and lists them in
+  the pull request. The count uses the shared counter style; no
+  appearance is written into a layout or into Kotlin. The check on
+  saving. The Memory Assistant change, with a test that an over-length
+  proposed memory is split and nothing is discarded.
+- **Must not change:** the text of any existing memory. Nothing is ever
+  shortened automatically.
+- **Done when:** the count updates as the user types; the red line
+  appears at the limit with the approved wording; a memory over the
+  limit cannot be saved without the user being told why and what to do;
+  and the Memory Assistant test passes.
 
 ### Step 1A: the passage cutter (Routine)
 
 - **Goal:** a function that takes one message's text and returns its
   passages, exactly as G.5b describes.
 - **Read:** G.5b; `util/ConversationTokenChunks.kt` to see how the
-  platform's sentence tool is used (do not change or call it).
+  platform's language-aware boundary tool is used (do not change or call
+  it).
 - **Build:** new files only, plain Kotlin with no Android screen code. The
   cutter takes the text, a target size, and a size-estimating function, and
   returns each passage's start and end. It includes splitting, joining
   short pieces, the last-resort cut, and the version number.
-- **Not in this step:** search text, overlap, borrowed context (1C), real
+- **Not in this step:** search text and overlap (1C), real
   token counts (1B), any storage.
 - **Done when:** every test listed at the end of G.5b that concerns cutting
   passes, including that the passages of a message join back into the
   message exactly.
 
-### Step 1B: token counting and one embedding queue (Careful)
+### Step 1B: token counting, one embedding queue, and the reading limit (Careful)
 
 - **Goal:** the app can ask how many tokens a text needs, and every use of
   the embedding model goes through one queue where a live chat request
@@ -1477,18 +1883,29 @@ Steps 4A and 4B fix gaps that are live on the beta today. **Owner
 - **Build:** a counting function on the tokenizer and the model that
   counts the instruction prefix and special tokens and never cuts
   anything off. One queue for all embedding work with two priorities. Move
-  the unlocked call in `Librarian.searchInternal` onto it.
-- **Must not change:** any saved-memory search result, any vector already
-  stored, or what the tokenizer returns for text that fits.
+  the unlocked call in `Librarian.searchInternal` onto it. Raise the
+  reading limit for stored text to 2,048 tokens (G33), and read again only
+  the saved memories that were longer than the old limit, so no other
+  memory loses its place in meaning search while that happens.
+- **The two limits.** Stored text (a saved memory) is read up to 2,048
+  tokens. The message being sent keeps today's 512 for its whole-message
+  pass, because that pass happens while the user waits.
+- **Must not change:** the search result or the stored vector of any
+  memory that fitted inside the old 512 limit, or what the tokenizer
+  returns for text that fits. Only memories longer than the old limit are
+  read again, and only their results may change.
 - **Done when:** existing tests pass unchanged; new tests show the count
-  matches the real encoding, and that a live request is served before
-  queued background work.
+  matches the real encoding, that a live request is served before queued
+  background work, and that a memory longer than 512 tokens is now read
+  in full. The time and memory use of reading a 2,048-token memory on a
+  phone cannot be measured in the build environment; the pull request
+  says so plainly, and the owner is told how to see it on the phone.
 
 ### Step 1C: the passage stores and per-message updating (Hard)
 
 - **Goal:** the four stores exist, and one chat's passages can be brought
   up to date one message at a time (G.5, G.5a rules 1, 3, 4, 7, 9).
-- **Read:** G.4, G.5, G.5a, G.5b steps 5 to 7 and "borrowed context", G.7;
+- **Read:** G.4, G.5, G.5a, G.5b steps 5 and 7, G.7;
   `chatsearch/ChatSearchStore.kt` and `ChatSearchIndexManager.kt` for the
   encrypted-database and revision method; `SummarizerController.kt`
   (`Snapshot`, `Entry`) for the model-facing text; `MessageVisibility.kt`,
@@ -1496,15 +1913,17 @@ Steps 4A and 4B fix gaps that are live on the beta today. **Owner
 - **Build:** the encrypted database with the four stores. A function that
   takes a chat's current messages, compares them with the index by
   permanent ID and fingerprint, and replaces only what changed, in one
-  transaction per message. Eligibility. Search text, including overlap and
-  borrowed context with its rules. Scope stamping from values passed in.
+  transaction per message. Eligibility. Search text, including overlap
+  between passages of the same message. Borrowed context from a
+  neighbouring message is not built (G.5b step 6). Scope stamping from
+  values passed in.
   Vector rows are created as "waiting"; no vectors are made in this step.
 - **Confirm in the code and record in this plan:** which stored field
   holds the reply version the AI is sent.
 - **Must not change:** the chat search feature or its database, the stored
   chats, the saved-memory database.
 - **Done when:** correctness tests pass for new, edited, deleted, hidden,
-  unfinished, and failed messages; for borrowed context; and for a run
+  unfinished, and failed messages; and for a run
   interrupted halfway, which must leave the previous correct state.
 
 ### Step 1D: background embedding of passages (Hard)
@@ -1514,12 +1933,12 @@ Steps 4A and 4B fix gaps that are live on the beta today. **Owner
 - **Read:** G.5a; the queue from 1B; `Librarian.kt` for how missing
   saved-memory vectors are repaired in the background today.
 - **Build:** a background worker that takes waiting passages one at a
-  time, measures the search text with the real tokenizer, re-cuts the
-  message when it does not fit, makes the vector, and stores it by
+  time, checks the search text with the real tokenizer, records as failed
+  any that does not fit, makes the vector, and stores it by
   search-text fingerprint. Vector reuse. Removal of vectors nothing uses
   and of an old model's vectors. Index state per chat. It can be paused
   and resumed, and it survives the app being closed and reopened.
-- **Not in this step:** running after the app is closed (1F), any screen.
+- **Not in this step:** running after the app is closed (1H), any screen.
 - **Done when:** tests show no search text is ever cut off, an edit during
   embedding discards the stale vector, identical search text is embedded
   once, and a live request is never delayed by indexing.
@@ -1545,39 +1964,86 @@ Steps 4A and 4B fix gaps that are live on the beta today. **Owner
 - **Done when:** a test for each row of the G.12 table passes, including
   restore, merge of two histories, and rename of an older chat.
 
-### Step 1F: what the user sees for indexing (Careful)
+### Step 1F: the setting, status, delete, and error notices (Careful)
 
-- **Goal:** the approved screens in G.16a, and indexing that continues
-  after the app is closed.
+- **Goal:** the Conversation Index section of G.16a, the conversation
+  index's line on the Check Database Integrity button (G.13a), and the
+  error notices (G20).
+- **Before building, the owner approves:** the full message for each index
+  error (G20) and the no-model wording (G31), written to the plain-wording rule
+  (G.13b); G27; G28.
+- **Read:** G.16a; G.13a; G.13b; `ui-style-guide.md` in full for the parts
+  used (toggle rows, section headings, destructive buttons, two-action
+  dialogs); `ui-style-adoption.md`.
+- **Build:** exactly what G.16a lists for Advanced Memory Settings, with
+  the approved wording. Every visible value comes from a shared style; a
+  missing style is created and added to the guide. `ui-style-adoption.md`
+  is updated.
+- **Must not change:** any other part of Advanced Memory Settings.
+- **With no embedding model:** the setting cannot be turned on, and the
+  user is told why and where to install one. That wording is approved
+  first (G31).
+- **Done when:** turning the setting on starts indexing while the app is
+  open; deleting the index removes everything derived and turns the
+  setting off.
+
+### Step 1G: the progress icon and pop-up (Careful)
+
+- **Goal:** the chat header icon and the progress pop-up of G.16a, with
+  pause and resume.
 - **Read:** G.16a; `ui-style-guide.md` in full for the parts used
-  (Progress pop-up, toggle rows, section headings, destructive buttons,
-  two-action dialogs, header action icons); `ui-style-adoption.md`;
-  `MemoryAnalysisForegroundService.kt` for how the app already keeps work
-  running with a notification.
-- **Build:** exactly what G.16a lists, with the approved wording, and the
-  conversation index's line on the Check Database Integrity button
-  (G.13a). Every
-  visible value comes from a shared style; a missing style is created and
-  added to the guide. `ui-style-adoption.md` is updated.
-- **Must not change:** any other part of the chat header or of Advanced
-  Memory Settings.
-- **With no embedding model:** the setting can still be turned on. The
-  status says search is by keywords only. The wording for that status is
-  approved by the owner before this step is built.
-- **Done when:** turning the setting on starts indexing; the icon appears
-  only while indexing runs or is paused; the percentage comes from work
-  actually done; deleting the index removes everything derived and turns
-  the setting off.
+  (Progress pop-up, header action icons); `ui-style-adoption.md`.
+- **Build:** the icon and pop-up in their own files, with only the small
+  hookup the chat header needs.
+- **Must not change:** any other part of the chat header.
+- **Done when:** the icon appears only while indexing runs or is paused;
+  the percentage comes from work actually done; pause and resume work.
 
-### Step 2A: retrieval and the subject check (Hard)
+### Step 1H: indexing after the app is closed (Hard)
+
+- **Goal:** indexing continues after the app is closed, with the
+  notification in G.16a.
+- **Read:** G.14 (Battery); `MemoryAnalysisForegroundService.kt` for how
+  the app already keeps work running with a notification.
+- **Build:** the background service and its notification.
+- **Android's limit (checked against Android's documentation,
+  2026-11-12).** For apps built for Android 15 or later, as this one is,
+  background work of this kind may run for 6 hours in any 24. The 6 hours
+  are shared by every such service in the app: Summarizer, image
+  generation, Memory Assistant analysis, and restore already use it. When
+  the time is up the system tells the service, which must stop within a
+  few seconds or the app is crashed. Opening the app resets the clock.
+- **So:** indexing must stop cleanly when told, keep everything it
+  finished, and continue the next time the app is opened. It must not
+  start when the day's time is already used up.
+  `MemoryAnalysisForegroundService.kt` already handles this stop signal.
+- **To decide when this step is built:** whether to use this kind of
+  service or Android's WorkManager, which Android's documentation
+  suggests instead. What the user is told when indexing stops for the day
+  is shown to the owner first.
+- **Done when:** indexing continues with the app closed; the notification
+  shows a real percentage; a stop by the system loses no finished work.
+
+### Step S: searching with the previous messages (Careful)
+
+- **Goal:** the method in G.9a, built on its own, so the fix for follow-up
+  messages (4B) does not wait for the conversation index.
+- **Read:** G.9a; `LiveRetrieval.kt`, `KeywordText.kt`.
+- **Build:** plain Kotlin in its own file, connected to nothing yet. Its
+  numbers are measured on step 0's set.
+- **Done when:** the follow-up and topic-change samples from step 0 give
+  the right memories, and the scores are recorded in this plan.
+
+### Step 2A: retrieval (Hard)
 
 - **Goal:** given a chat and a message, return the exchanges to offer,
   with every score and reason (G.6, G.9a, G.8a points 1 and 2).
 - **Read:** G.6, G.8a, G.9a, G.10; `LiveRetrieval.kt` and
   `KeywordText.kt`.
-- **Build:** all nine steps of G.6 and the subject check, as plain Kotlin
-  behind the G.8a interfaces. The time limit. Nothing is added to any
-  request.
+- **Build:** steps 1 to 8 of G.6 (step 9 is not in the first build),
+  using the method from step S,
+  as plain Kotlin behind the G.8a interfaces. The time limit. Nothing is
+  added to any request.
 - **Done when:** the quality tests in G.15 that concern "found" and "left
   out" run and report their scores.
 
@@ -1606,23 +2072,38 @@ Steps 4A and 4B fix gaps that are live on the beta today. **Owner
 - **Done when:** all quality tests in G.15 pass at the "sent" point, and
   both request paths add the same text.
 
-### Step 4A: long messages in saved-memory search (Careful)
+### Step 4A: long messages in saved-memory search (Hard)
 
-- **Goal:** a small detail in a long message finds its saved memory
-  (G.10).
-- **Read:** G.2, G.10; `LiveRetrieval.kt`, `Librarian.kt`.
-- **Done when:** the long-message test conversations pass, existing
-  saved-memory tests pass unchanged, and added sending time is measured
-  and reported.
+- **Goal:** a small detail in a long message finds its saved memory,
+  whether the message was typed or dictated, without more wrong memories
+  being sent (G.10).
+- **Needs first:** step 0 and step 1B.
+- **Before building, the owner approves:** the Memory Search Test screen
+  wording that shows which piece of a message matched and when the search
+  ran out of time; and the two remaining lines of G26.
+- **Read:** G.2, G.10; `LiveRetrieval.kt`, `Librarian.kt`,
+  `SearchTestReport.kt`.
+- **Build:** G.10, in its own file, with a small hookup. Every use of the
+  embedding model goes through 1B's queue.
+- **Must not change:** the result of the whole-message search; the
+  presence and order of anything that is sent today; the Memory
+  Assistant's own search; the lorebook.
+- **Done when:** on step 0's set, more right memories are found in long
+  messages, dictated ones included, and the number of wrong memories sent
+  has not risen; existing saved-memory tests pass unchanged; and the added
+  sending time is inside the allowance. Time on a real phone cannot be
+  measured in the build environment. It is read once from the Memory
+  Search Test screen on the owner's phone, and reported.
 
 ### Step 4B: carry-over for saved memories (Careful)
 
-- **Goal:** a saved memory stays through follow-up messages and drops on a
-  change of subject (G.9).
+- **Goal:** a saved memory stays through follow-up messages and falls away
+  after the subject changes (G.9).
 - **Read:** G.9, G.9a; `enforcer/Enforcer.kt`; the injection record in
   `MemoryStore.kt`.
-- **Done when:** the carry-over test conversations pass: stays through
-  short replies, drops on a topic change, drops when sent by mistake.
+- **Done when:** the carry-over test conversations pass: a memory stays
+  through short replies and is gone within two messages of a topic change.
+  How long a memory sent by mistake stays is measured and reported.
 
 ## G.16a The approved screens for indexing (Owner, 2026-11-11)
 
@@ -1667,9 +2148,10 @@ Embeddings:
 | Confirmation text | This removes the search index. Your conversations are not changed. |
 | Confirmation buttons | Cancel, Delete |
 
-**With no embedding model installed (Owner, 2026-11-11),** the status
-under the toggle reads: "Keyword search only. Install the embedding model
-to also find conversations by meaning."
+**With no embedding model installed.** The earlier "Keyword search only"
+status is withdrawn. On 2026-11-12 the owner decided that conversation
+recall requires the embedding model (G30), so the toggle cannot be turned
+on without one. The wording that tells the user why is G31.
 
 **Behaviour approved with it:**
 - Index Conversations starts off. Turning it on starts background
@@ -1688,7 +2170,7 @@ the owner with the recall setting (G17).
 ## G.17 Open decisions for the owner
 
 Asked one at a time, and only when the stage that needs the answer is
-about to start. Nothing more is needed before stage 1. Each has a
+about to start. Nothing more is needed before steps 1A to 1E. Each has a
 recommendation.
 
 | # | Question | Recommendation | Needed before |
@@ -1714,8 +2196,18 @@ recommendation.
 | G20 | The snack bar and full message for each index error | **Decided (owner, 2026-11-11):** every index error raises one. The messages are written and approved before step 1F | Step 1F |
 | G21 | Where the recall test screen goes, and its name | **Decided (owner, 2026-11-11):** Advanced Memory Settings, Debug section; Conversation Recall Test | Decided |
 | G22 | May recall and carry-over add to the existing memory debugging view? | **Decided (owner, 2026-11-11):** yes. No new general application log entries | Decided |
-| G23 | Which step is built first? | **Decided (owner, 2026-11-11):** step 4A, the long-message fix | Decided |
-| G24 | If the user turns Index Conversations off while Conversation Recall is on, what happens to recall? | Open. Indexing is never silently restarted (G.8b) | Step 3 |
+| G23 | Which step is built first? | **Decided (owner, 2026-11-11):** step 4A, the long-message fix. Review on 2026-11-12 found 4A needs two steps before it, so the order is step 0, then step 1B, then step 4A (G.16) | Decided |
+| G24 | If the user turns Index Conversations off while Conversation Recall is on, what happens to recall? Also undecided: whether turning Conversation Recall on turns Index Conversations on (G.8b says only that it "may"), and what happens to recall when the index is deleted | Open. Indexing is never silently restarted (G.8b) | Step 3 |
+| G25 | Withdrawn on 2026-11-12. With no embedding model nothing can confirm a match, so messages are searched as today (G.10). Nothing changes for those users, so there is nothing to decide | Withdrawn | |
+| G26 | The Memory Debug Log line "Query embed failed, using lexical fallback: (cause)" and the two lines like it are not plain English (G.13b). What do they say instead? | **Owner (2026-11-12):** the plain wording proposed for the first line is fine: "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause)." The two lines like it are still to be proposed | Step 4A |
+| G27 | G.13a says every index error raises a snack bar that stays until acknowledged, and also that most failures are repaired without interrupting the user. Which failures raise a snack bar? | Open. Recommended: a snack bar only when something has stopped working or the user has something to do. Failures the app repairs by itself go to the Error Log only | Step 1F |
+| G28 | Chats that have never been reopened cannot be indexed until they are opened (G.5a rule 7). What does the progress count show for them? | Open. Recommended: count only what can be indexed now, and say plainly how many conversations will be indexed when they are next opened | Step 1F |
+| G29 | To find a small detail in a long or dictated message, should the app also search with overlapping pieces of the message, cut between words and never at periods (G.10)? | **Decided (owner, 2026-11-12):** yes, on the agent's recommendation | Decided |
+| G30 | Is recall offered without an embedding model? | **Decided (owner, 2026-11-12):** no. Conversation recall requires the embedding model. Lorebook keyword matching is separate and keeps working whenever the lorebook is on | Decided |
+| G31 | What the user sees when Index Conversations or Conversation Recall cannot be turned on because no embedding model is installed, and when the model is removed after indexing | Open. Written to the plain-wording rule (G.13b): why it cannot be turned on, and where to install the model | Step 1F |
+| G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | **Decided (owner, 2026-11-12):** yes. 0 to 3, and it starts at 1. Where the control goes is still open. Recommended: with the other search numbers on the Memory Search Test screen. Its label and explanation are shown to the owner before step S | Step S |
+| G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | Recommended and written into step 1B. The owner's 1,500-word limit (G34) depends on it. Speed and memory use on the phone are checked before it ships | Step 1B |
+| G34 | How is a saved memory limited to what the model can read, and how is its length shown? | **Decided (owner, 2026-11-12):** a word count under the memory box, aligned right, for each memory; at 1,500 it turns red and reads "Word Limit Reached: 1,500 Words Maximum"; the Memory Assistant splits a large subject into separate proposed memories and never fails or discards one for length. Still open, asked before step M: the count's text before the limit; what happens on saving over the limit; the wording when the model's real limit is reached below 1,500 words; how existing over-length memories are marked; the words added to the Memory Assistant's instructions | Step M |
 
 ## G.18 Research behind this plan (2026-11-10)
 
@@ -1764,6 +2256,54 @@ Sources:
 - Fusion functions for hybrid retrieval: https://arxiv.org/abs/2210.11934
 - Positional bias in retrieval: https://arxiv.org/abs/2505.15561
 
+## G.18a What established open-source systems do (2026-11-12)
+
+**Owner (2026-11-12):** where the right decision is not known, look at
+what established, proven systems do and use that to decide. Custom design
+is acceptable. Credit can be given in the app's About screen for anything
+shared. The app is never to be sold, by the owner or by anyone else.
+
+Read on 2026-11-12 from each project's documentation or source code.
+
+| Decision | What they do | This plan |
+|---|---|---|
+| Cutting text into pieces | SillyTavern: 400 characters, cut at a paragraph, a line, or between words, no overlap for chat messages. GPT4All: 512 characters. LangChain's standard splitter: paragraph, line, then between words, with overlap | Same cut points (G.5b) |
+| What the AI is handed | SillyTavern finds a piece and hands over the whole original message, labelled with who said it, under "Past events" | The whole exchange (G.8) |
+| What to search with | SillyTavern: the last 2 messages joined. RisuAI: the last 3 messages, each searched on its own, later ones counting more. AnythingLLM: the latest message only | The newest message and the previous one or two, each on its own (G.9a) |
+| How many are sent | SillyTavern 3, GPT4All 3, AnythingLLM 4 | 3 (G.8) |
+| The cut-off | SillyTavern: a fixed 25% score, then the best 3 | A stricter gate, this app's own, because a wrong result is worse than a missed one (G.6) |
+| Keywords as well as meaning | SillyTavern, GPT4All, AnythingLLM, RisuAI: meaning only. Open WebUI and Mem0: both, with an optional re-ranker | Both (G.6) |
+| No embedding model | None of the chat apps offers recall without one | The embedding model is required (G30) |
+| Follow-up messages | AnythingLLM fills empty room with what was used in recent replies, newest first, with no relevance check. Open WebUI and LlamaIndex have an AI model rewrite the follow-up, a paid call | G.9a |
+| A long message about several things | RisuAI's experimental mode searches each paragraph of the message separately. Others offer a paid rewrite | Overlapping pieces (G.10) |
+| Keeping the index correct | SillyTavern keeps a fingerprint per message; on every edit, deletion, or new message it adds what is missing and deletes what is gone | The same idea (G.5a rule 4) |
+| Prompt caching | SillyTavern's documentation warns that recall works against prompt caching, because it changes text early in the request | Recalled text sits beside the newest message, which leaves the earlier text unchanged. To be confirmed with a caching provider in stage 3 |
+
+**Not verified:** Open WebUI's default numbers.
+
+**Licences.** Only approaches are taken from these projects, which no
+licence restricts. Code is a different matter:
+- SillyTavern and RisuAI are understood to be under licences (AGPL and
+  GPL) that would require this whole app to be released under the same
+  terms, which allow others to sell it. Their code is never copied.
+- AnythingLLM, LlamaIndex, LangChain, GPT4All, and Mem0 are understood to
+  be under permissive licences that allow copying with credit.
+- These licences were not re-read on 2026-11-12. Before any code is
+  copied from any project, its licence file is read and the owner is
+  told.
+
+Sources:
+
+- SillyTavern chat vectorization: https://docs.sillytavern.app/extensions/chat-vectorization/
+- SillyTavern vector extension source: https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/extensions/vectors/index.js
+- RisuAI HypaMemory V3 source: https://github.com/kwaroran/RisuAI/blob/main/src/ts/process/memory/hypav3.ts
+- AnythingLLM chat helper source: https://github.com/Mintplex-Labs/anything-llm/blob/master/server/utils/helpers/chat/index.js
+- GPT4All settings: https://docs.gpt4all.io/gpt4all_desktop/settings.html
+- LangChain recursive text splitter: https://docs.langchain.com/oss/python/integrations/splitters/recursive_text_splitter
+- LlamaIndex chat engines: https://developers.llamaindex.ai/python/framework-api-reference/chat_engines/condense_plus_context/
+- Mem0 search: https://docs.mem0.ai/core-concepts/memory-operations/search
+- Open WebUI retrieval: https://docs.openwebui.com/features/rag
+
 ## G.19 Rules for whoever builds a stage
 
 A stage may be built by a different agent or model than the one that wrote
@@ -1778,8 +2318,9 @@ this plan. These rules keep that safe.
   the user would see, read, or pay for is shown to the owner before it is
   built: wording, screens, settings, defaults, and text sent to the AI.
 - **Never change:** the stored chats; the Summarizer and its summaries; the
-  existing chat search feature; saved-memory search results; the lorebook;
-  what a request contains when recall is off.
+  existing chat search feature; saved-memory search results (except in
+  steps 4A and 4B, which exist to change them); the lorebook; what a
+  request contains when recall is off.
 - **Never remove anything from a request to make room for recall.**
 - **Never add or change a log line** without the owner's approval. The
   owner has ruled which logs are used (G.13a); the exact lines still need
