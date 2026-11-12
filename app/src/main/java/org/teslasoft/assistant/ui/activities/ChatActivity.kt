@@ -11675,6 +11675,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // This chat just produced a successful reply, so its complete
             // model-and-companion snapshot may qualify for the next new chat.
             recordLastSuccessfulConfig()
+            refreshCompanionAvatar()
         }
     }
 
