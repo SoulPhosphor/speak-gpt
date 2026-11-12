@@ -1869,3 +1869,19 @@ chevron, and removes the image-hint top gap so it centers vertically.
 for its start and end gaps too; the body centers within the minimum-height card. The Model Rules screen opts into this
 layout; other manager lists retain their existing rows. Its Add action uses
 the existing far-right header button.
+
+### Model-rule form and tag entry
+
+The model-rule editor uses `Page.Content`, existing field/section/dropdown and
+primary-button families, with `Widget.App.ModelRuleEditor.*` and
+`AppButton.Primary.ModelRule*` only for its form spacing and alignments.
+`Widget.App.Chip.Group` supplies a wrapping chip group's full width and top gap;
+individual chips still use `Widget.App.Chip.Removable`.
+
+`Widget.App.TagEntry.Row` contains a weighted `TagEntry.Frame` and
+`AppButton.Primary.TagEntry`. The frame inherits the standard `Field.Box`
+outline; its `TagEntry.Input` child has no background, retains the normal field
+padding, and grows with font size above its minimum height. Keeping the outline
+on the frame prevents the editable text's scroll from moving the border. Place
+the selected chip group below the entry row. Other tag editors have different
+compositions and do not yet use this family.

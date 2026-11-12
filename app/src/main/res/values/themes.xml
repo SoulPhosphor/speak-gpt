@@ -1,5 +1,5 @@
-Warning: truncated output (original token count: 52217)
-Total output lines: 3731
+Warning: truncated output (original token count: 53088)
+Total output lines: 3794
 
 <resources>
     <!-- Base application theme. -->
@@ -1784,69 +1784,7 @@ Total output lines: 3731
         <item name="android:textStyle">bold</item>
     </style>
     <style name="Widget.App.Usage.ChatDetailLabel" parent="Widget.App.Usage.TableLabel">
-        <item name="android:paddingStart">@dimen/usage_chat_detail_…2217 tokens truncated…ction_size</item>
-        <item name="android:layout_height">@dimen/chat_header_action_size</item>
-        <item name="android:layout_marginEnd">@dimen/chat_header_action_gap</item>
-        <item name="android:background">@drawable/btn_chat_header_action</item>
-        <item name="android:tint">?attr/colorPrimary</item>
-    </style>
-
-    <!-- Count badge on the Summarizer Errors header icon. -->
-    <style name="Widget.App.Chat.HeaderBadge" parent="">
-        <item name="android:layout_width">@dimen/chat_header_badge_size</item>
-        <item name="android:layout_height">@dimen/chat_header_badge_size</item>
-        <item name="android:background">@drawable/bg_summarizer_badge</item>
-        <item name="android:gravity">center</item>
-        <item name="android:textColor">?attr/colorOnPrimary</item>
-        <item name="android:textSize">@dimen/chat_header_badge_text_size</item>
-    </style>
-
-    <!-- The Back/drawer icon at the header's left edge. -->
-    <style name="Widget.App.Chat.HeaderAction.Leading">
-        <item name="android:layout_marginStart">@dimen/chat_header_action_gap</item>
-        <item name="android:layout_marginEnd">0dp</item>
-    </style>
-
-    <!-- Selection Mode area beneath the chat header: the header's own color
-         on a rounded surface. -->
-    <style name="Widget.App.Chat.SelectionBar" parent="">
-        <item name="android:layout_marginStart">@dimen/chat_selection_bar_margin_horizontal</item>
-        <item name="android:layout_marginEnd">@dimen/chat_selection_bar_margin_horizontal</item>
-        <item name="android:layout_marginTop">@dimen/chat_selection_bar_margin_top</item>
-        <item name="android:paddingStart">@dimen/chat_selection_bar_padding_start</item>
-        <item name="android:paddingEnd">@dimen/chat_selection_bar_padding_end</item>
-        <item name="android:paddingTop">@dimen/chat_selection_bar_padding_vertical</item>
-        <item name="android:paddingBottom">@dimen/chat_selection_bar_padding_vertical</item>
-        <item name="android:background">@drawable/bg_chat_header_rounded</item>
-    </style>
-
-    <!-- "N Selected". -->
-    <style name="Widget.App.Chat.SelectionBar.Count" parent="">
-        <item name="android:textColor">?attr/appTitleTextColor</item>
-        <item name="android:textSize">@dimen/chat_selection_count_text_size</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <!-- The hint under the count; shared row-subtitle text. -->
-    <style name="Widget.App.Chat.SelectionBar.Hint" parent="Widget.App.Row.Subtitle">
-        <item name="android:layout_marginTop">@dimen/chat_selection_hint_margin_top</item>
-    </style>
-
-    <!-- Copy, Share, Delete, Export and more-options icons: borderless shared
-         icon buttons, spaced by chat_selection_action_gap, faded while off. -->
-    <style name="Widget.App.Chat.SelectionBar.Action" parent="Widget.App.QuickTile.EditButton">
-        <item name="android:layout_marginEnd">@dimen/chat_selection_action_gap</item>
-        <item name="android:tint">@color/chat_selection_action_tint</item>
-    </style>
-
-    <!-- Chat composer host: the space behind the floating composer stays transparent. -->
-    <style name="Widget.App.Chat.ComposerHost" parent="">
-        <item name="android:background">@color/transparent</item>
-    </style>
-
-    <!-- Phase 5 shared blank-conversation selector. Palette comes from
-         Material roles in ConversationModeSelector; geometry is centralized. -->
-    <style name="Widget.App.ConversationModeSelector" parent="">
+        <item name="android:paddingStart">@dimen/usage_chat_detail_…3088 tokens truncated…App.ConversationModeSelector" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">@dimen/conversation_mode_selector_height</item>
         <item name="android:layout_gravity">center_horizontal</item>
@@ -3559,5 +3497,68 @@ Total output lines: 3731
         <item name="android:layout_marginTop">0dp</item>
         <item name="android:tint">?attr/colorOutlineVariant</item>
         <item name="tint">?attr/colorOutlineVariant</item>
+    </style>
+
+    <!-- Tag-entry borders belong to the frame, outside editable text scrolling. -->
+    <style name="Widget.App.TagEntry.Row" parent="Widget.App.Page.ControlRow">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:baselineAligned">false</item>
+    </style>
+    <style name="Widget.App.TagEntry.Frame" parent="Widget.App.Field.Box">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">3</item>
+        <item name="android:padding">0dp</item>
+    </style>
+    <style name="Widget.App.TagEntry.Input" parent="Widget.App.Field.Box">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:background">@null</item>
+        <item name="android:backgroundTint">@null</item>
+        <item name="backgroundTint">@null</item>
+        <item name="android:minHeight">@dimen/tag_entry_min_height</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:includeFontPadding">true</item>
+    </style>
+    <style name="AppButton.Primary.TagEntry" parent="AppButton.Primary">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">@dimen/tag_entry_action_gap</item>
+        <item name="android:layout_marginTop">6dp</item>
+    </style>
+    <style name="Widget.App.Chip.Group" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/tag_entry_chip_gap</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.Scroll" parent="">
+        <item name="android:clipToPadding">false</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.RuleText" parent="Widget.App.Field.Box">
+        <item name="android:gravity">top</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.Counter" parent="Widget.App.Field.Hint">
+        <item name="android:gravity">end</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.Endpoint" parent="Widget.App.Dropdown.CanonicalValue">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_marginTop">@dimen/model_rule_editor_control_gap</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.ModelRow" parent="Widget.App.Page.ControlRow">
+        <item name="android:layout_marginTop">@dimen/model_rule_editor_control_gap</item>
+    </style>
+    <style name="Widget.App.ModelRuleEditor.SelectedModel" parent="Widget.App.Row.Title">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginStart">@dimen/model_rule_editor_control_gap</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+    <style name="AppButton.Primary.ModelRuleTarget" parent="AppButton.Primary">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/model_rule_editor_control_gap</item>
+    </style>
+    <style name="AppButton.Primary.ModelRuleAccept" parent="AppButton.Primary">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/field_label_page_top_gap</item>
     </style>
 </resources>
