@@ -1667,6 +1667,9 @@ are merged.
 | 16 | 3 | Context assembly: recall in real requests | Hard | Strongest | Recall works | 2A, 2B | The text given to the AI; the "what was sent" wording; the recall room setting; G24 |
 | Later | | Optional re-ranker; live AI worker; other chats | To be designed | | | | |
 
+**Stages.** Elsewhere in this plan, "stage 1" means steps 1A to 1H,
+"stage 2" means steps 2A and 2B, and "stage 3" means step 3.
+
 **Model to use.** Lighter: a small, cheap model is enough. Middle: a
 mid-range model. Strongest: the most capable model available, and expect
 more than one review round. Steps 1 to 6 fix faults that are live on the
@@ -1869,7 +1872,7 @@ reference values were measured on 2026-11-12 with this recipe:
   passes, including that the passages of a message join back into the
   message exactly.
 
-### Step 1B: token counting and one embedding queue (Careful)
+### Step 1B: token counting, one embedding queue, and the reading limit (Careful)
 
 - **Goal:** the app can ask how many tokens a text needs, and every use of
   the embedding model goes through one queue where a live chat request
@@ -1884,11 +1887,19 @@ reference values were measured on 2026-11-12 with this recipe:
   reading limit for stored text to 2,048 tokens (G33), and read again only
   the saved memories that were longer than the old limit, so no other
   memory loses its place in meaning search while that happens.
-- **Must not change:** any saved-memory search result, any vector already
-  stored, or what the tokenizer returns for text that fits.
+- **The two limits.** Stored text (a saved memory) is read up to 2,048
+  tokens. The message being sent keeps today's 512 for its whole-message
+  pass, because that pass happens while the user waits.
+- **Must not change:** the search result or the stored vector of any
+  memory that fitted inside the old 512 limit, or what the tokenizer
+  returns for text that fits. Only memories longer than the old limit are
+  read again, and only their results may change.
 - **Done when:** existing tests pass unchanged; new tests show the count
-  matches the real encoding, and that a live request is served before
-  queued background work.
+  matches the real encoding, that a live request is served before queued
+  background work, and that a memory longer than 512 tokens is now read
+  in full. The time and memory use of reading a 2,048-token memory on a
+  phone cannot be measured in the build environment; the pull request
+  says so plainly, and the owner is told how to see it on the phone.
 
 ### Step 1C: the passage stores and per-message updating (Hard)
 
@@ -2069,7 +2080,7 @@ reference values were measured on 2026-11-12 with this recipe:
 - **Needs first:** step 0 and step 1B.
 - **Before building, the owner approves:** the Memory Search Test screen
   wording that shows which piece of a message matched and when the search
-  ran out of time; G29; the two remaining lines of G26.
+  ran out of time; and the two remaining lines of G26.
 - **Read:** G.2, G.10; `LiveRetrieval.kt`, `Librarian.kt`,
   `SearchTestReport.kt`.
 - **Build:** G.10, in its own file, with a small hookup. Every use of the
