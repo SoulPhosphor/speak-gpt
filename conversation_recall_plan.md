@@ -240,9 +240,9 @@ code changes.
   that, and one call skips it (G.2).
 - The model is downloaded by the user. It can be absent, and it can be
   changed.
-- **Consequences:** a token-counting function must be added. Cutting
-  cannot depend on a model being present (G.5b). Vectors must record which
-  model made them.
+- **Consequences:** a token-counting function must be added, and
+  the cutter uses it (G.5b step 4). Vectors must record which model made
+  them.
 
 **Saved-memory search.** Meaning and keyword search with a relevance gate
 (`LiveRetrieval.kt`, `KeywordText.kt`). It is written for saved memories.
