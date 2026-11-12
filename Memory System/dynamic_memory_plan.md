@@ -6,12 +6,35 @@ documents.**
 
 ## Where things stand (read this first)
 
-**Last updated 2026-11-10** (Inside Joke built on the work branch; the vibe
-moved to each memory; next steps updated). The owner relies on the agent to lead this
-work step by step. A new session reads this section first, then continues
-from "Next steps". Do not re-diagnose what Part A already measured. An
-independent review of the plan and of pull request #180 was folded in on
-2026-11-08; its points are reflected below and in Part E.
+**Last updated 2026-11-10** (a fresh review of #180; carry-over put on hold;
+Part G added for the conversation index and recall). The owner relies on the
+agent to lead this work step by step. A new session reads this section
+first, then continues from "Next steps". Do not re-diagnose what Part A
+already measured. An independent review of the plan and of pull request #180
+was folded in on 2026-11-08; its points are reflected below and in Part E.
+
+### 0. Review on 2026-11-10: read this before anything else
+
+A second agent reviewed #180 and this plan with the owner on 2026-11-10.
+
+- **#180 is a sound foundation but unfinished.** Two gaps are live on the
+  beta: follow-up messages lose their memories, and long messages miss
+  memories. Details: G.2.
+- **On hold (owner, 2026-11-10):** carry-over (step 1.12) and everything
+  else in section 3b. Nothing there is built until the owner approves
+  `conversation_recall_plan.md`.
+- **New work wanted by the owner:** recall of earlier conversation, built on
+  a proper index. The whole design is in `conversation_recall_plan.md`, at
+  the top level of the repository. Its sections are numbered G.0 to G.19.
+  It is a proposal for the owner and outside reviewers to read. Only the
+  items it marks "Owner" are decisions.
+- **Silence is not approval (owner ruling, 2026-11-11).** Part E used to
+  mark rows "Approved" when the owner had seen a recommendation and not
+  objected. Those rows are now marked "Proposed (not approved)". Rows
+  marked "Decided" are the owner's explicit decisions and stand.
+- **Measurements in Part A are small.** The best result quoted in A.10 came
+  from a setup that did not ship (a different model variant, full-size
+  vectors, hand-written tags). G.18 has the published figures.
 
 ### 1. Built (pull request #180 into `beta/new-client`)
 
@@ -119,7 +142,11 @@ Built in the pull request from branch `ccr-985655d1-x68k8w` (owner approval,
   old one's vibe, as it does today for the title. Whether the vibe should
   carry over is an open question.
 
-### 3b. The pull request after that (approved direction, not yet built)
+### 3b. The pull request after that (not built; on hold)
+
+**On hold (owner, 2026-11-10).** Nothing in this section is built until the
+owner approves `conversation_recall_plan.md`. Carry-over is redesigned
+there (G.9).
 
 - **Carry-over** (step 1.12), with the revised rule in B.5: no fixed carry
   length.
@@ -131,7 +158,7 @@ Built in the pull request from branch `ccr-985655d1-x68k8w` (owner approval,
 - **The memory-use instruction** (D41), with its exact text shown to the
   owner before it is built. No crisis or safety wording (owner ruling).
 
-### 4. Later phases (approved designs; built only when the owner says)
+### 4. Later phases (designs; Part E says which points are decided)
 
 - **Rest of Phase 1, only if testing shows a need:**
   - vector size (step 1.14);
@@ -146,7 +173,8 @@ Built in the pull request from branch `ccr-985655d1-x68k8w` (owner approval,
   - Phase 6, Memory Assistant date proposals.
 - **Later features:** the background reviewer, the vibe note, recent-chat
   continuity, the companion journal, and Model Rules adjustments.
-- **Decisions:** the designs are approved (Part E). Before each part is
+- **Decisions:** Part E says which points the owner decided and which are
+  only proposed. Before each part is
   built, the owner sees its exact wording, screens, and AI-facing text.
 
 ### Design corrections after the second review (2026-11-08)
@@ -188,18 +216,19 @@ The specific corrections:
    - tell the agent what looked wrong.
 
    Nothing else is needed from the owner for this step.
-3. **Agent:** if section 3's pull request is still open, merge it when Codex
-   passes it and Android Checks is green. Then ask the owner the follow-up
-   in section 3.
-4. **Agent:** build section 3b: carry-over, the lorebook repeat check on
-   both send paths, the test conversations, and the memory-use instruction.
-   Show the owner the instruction's exact text first.
-5. **Agent, in this order, each when the owner asks for it:** Phase 2 (data
-   control), Phase 3 (the Always tab), Phase 4 (important dates and the
-   Dates tab; settle D55 first), Phase 5 (fading), Phase 6 (Memory Assistant
-   date proposals), then the later features. Before each, show the owner its
-   exact wording, screens, and AI-facing text. The design decisions are
-   already recorded in Part E.
+3. **Done:** section 3's pull request (#182) is merged.
+4. **Owner and outside reviewers:** read `conversation_recall_plan.md` and
+   correct it.
+5. **Agent:** build step 4A first (owner, 2026-11-11), then the steps in
+   G.16 as the owner assigns them. One step at a time.
+6. **Agent:** build nothing until the owner approves that plan. Then build the
+   stages in G.16, in the order the owner chooses, each as its own pull
+   request with its own tests (G.15, G.19).
+7. **Agent, each when the owner asks for it:** Phase 2 (data control),
+   Phase 3 (the Always tab), Phase 4 (important dates and the Dates tab;
+   settle D55 first), Phase 5 (fading), Phase 6 (Memory Assistant date
+   proposals), then the later features. Before each, show the owner its
+   exact wording, screens, and AI-facing text.
 
 ## How to use this document
 
@@ -213,6 +242,10 @@ The specific corrections:
   bring-up setting, dates, fading, Retired, and the briefing. Phases 2–6
   refer to it.
 - **Part E** lists every decision, both decided and open.
+- **Part F** summarizes published memory systems.
+- **Part G** now lives in `conversation_recall_plan.md`: the design for
+  the conversation index, recall, and carry-over (2026-11-10). It is a
+  proposal until the owner approves it.
 
 ## Status
 
@@ -247,11 +280,9 @@ The specific corrections:
     protections, prove other memory features still work, build in
     manageable testable stages, and add no complexity or scope without a
     concrete reason.
-- **Recommendations the owner has seen and not objected to count as
-  approved** (owner ruling, 2026-11-08). Part E records each one. This
-  applies to design choices discussed for this plan only. It is not standing
-  permission for unreviewed changes or for building anything. Exact wording
-  and AI-facing text still need the owner to see the actual text.
+- **Silence does not count as approval** (owner ruling, 2026-11-11). Only
+  what the owner explicitly decided is a decision. Everything else in this
+  plan is a proposal. Part E marks each row accordingly.
 - **Stress-tested (2026-11-08):** the design was tested against the real
   model before being recommended, and changed where the test showed a
   weakness (A.10).
@@ -1148,7 +1179,7 @@ guidance text to the AI (D13) is shown to the owner first.**
 6. If the Memory Assistant is being changed for another reason at the same
    time, coordinate the two changes, because they touch the same code.
 
-## Later features (approved designs; the owner chooses when)
+## Later features (designs; the owner chooses whether and when)
 
 - **The background reviewer** (D51): finds passed events, outdated facts,
   conflicts, and duplicates, with its own owner-approved prompt.
@@ -1164,7 +1195,7 @@ guidance text to the AI (D13) is shown to the owner first.**
 
 ---
 
-# Part D: Design details (approved designs for later phases)
+# Part D: Design details for later phases (Part E says which points are decided)
 
 Simplified after the independent reviews (2026-11-08). One rule runs through
 this part:
@@ -1561,7 +1592,7 @@ earlier version of this plan wrongly said a Status filter showed them.
   - **The user decides, never the system.** There is no cap, and the app
     never picks which dated memories are sent. If 20 are checked and near,
     all 20 are sent.
-  - **Presented 2026-11-09:**
+  - **Proposed 2026-11-09 (not approved):**
     - the tab lists every memory with an important date, checked or not, so
       an unchecked one can be checked again;
     - memories are listed in the order their dates come up next;
@@ -1696,72 +1727,77 @@ per model, once the full system works.
 
 # Part E: Decisions
 
-**How decisions are recorded (owner ruling, 2026-11-08):**
-- A recommendation the owner has seen and not objected to counts as
-  approved. Those rows say **Approved**.
-- Rows marked **Presented 2026-11-08** were first shown to the owner on that
-  date. They count as approved unless the owner objects.
-- Exact wording and text sent to the AI count as approved only once the
-  owner has seen the actual text.
+**How decisions are recorded (owner ruling, 2026-11-11).** Silence does
+not count as approval. An earlier version of this part treated a
+recommendation the owner had seen and not objected to as approved. The
+owner did not make that rule, and it is withdrawn.
+
+- Rows marked **Decided** record what the owner explicitly decided. They
+  stand.
+- Rows marked **Proposed (not approved)** are an agent's recommendation.
+  They are not decisions. Each is put to the owner before anything
+  depending on it is built.
+- Exact wording and text sent to the AI are approved only once the owner
+  has seen the actual text.
 - Approving a design does not start the work. The owner decides what is
   built and when.
 
 | # | Question | Decision |
 |---|---|---|
 | D0 | Approve the recommended search design in Part B as the plan for Phase 1? | **Decided, 2026-11-08:** the direction is approved; details are left to engineering judgment (B.5) |
-| D1 | Is date sharing off or on by default? | **Approved:** off; the user turns it on |
-| D2 | What date format goes to the AI? | **Approved:** weekday, day, month name, year, which can't be misread |
-| D3 | Does date sharing apply in roleplay chats? | **Approved:** no by default; the story may have its own time |
-| D4 | With date sharing off, do dated memories carry relative timing ("tomorrow")? | **Approved:** yes; a reminder is useless without timing |
-| D5 | Is the date-sharing setting app-wide, per chat, or both? | **Approved:** app-wide first; per chat only if wanted later |
+| D1 | Is date sharing off or on by default? | **Proposed (not approved):** off; the user turns it on |
+| D2 | What date format goes to the AI? | **Proposed (not approved):** weekday, day, month name, year, which can't be misread |
+| D3 | Does date sharing apply in roleplay chats? | **Proposed (not approved):** no by default; the story may have its own time |
+| D4 | With date sharing off, do dated memories carry relative timing ("tomorrow")? | **Proposed (not approved):** yes; a reminder is useless without timing |
+| D5 | Is the date-sharing setting app-wide, per chat, or both? | **Proposed (not approved):** app-wide first; per chat only if wanted later |
 | D6 | Are manually created memories lasting or fading by default? | **Superseded:** fading is an optional choice on each memory, off by default (D34) |
 | D7 | How fast does fading go? | **Superseded** by D45 and D49 |
-| D8 | Does editing a fading memory count as it being discussed? | **Approved:** yes; editing is deliberate attention |
-| D9 | Does fading affect search ranking? | **Approved:** no. A fading memory stays fully searchable. Once retired, it is out of use (D43) |
-| D10 | How long are the date windows? | **Decided (owner), 2026-11-08:** each important date has its own range field. **Presented 2026-11-08:** prefilled with 7 days before for yearly dates (through the day), and 3 days before through 2 days after for one-time dates |
+| D8 | Does editing a fading memory count as it being discussed? | **Proposed (not approved):** yes; editing is deliberate attention |
+| D9 | Does fading affect search ranking? | **Proposed (not approved):** no. A fading memory stays fully searchable. Once retired, it is out of use (D43) |
+| D10 | How long are the date windows? | **Decided (owner), 2026-11-08:** each important date has its own range field. **Proposed 2026-11-08 (not approved):** prefilled with 7 days before for yearly dates (through the day), and 3 days before through 2 days after for one-time dates |
 | D11 | Can windows be changed per memory? | **Decided (owner), 2026-11-08:** yes, through the range field (D10) |
-| D12 | How is a 29 February date handled in other years? | **Approved:** 28 February |
+| D12 | How is a 29 February date handled in other years? | **Proposed (not approved):** 28 February |
 | D13 | What does the guidance to the AI about dated memories say? | **Open until drafted:** the owner sees the exact text before it is built |
-| D14 | Does vague timing get a date? | **Approved:** no; the user can add one in Pending |
+| D14 | Does vague timing get a date? | **Proposed (not approved):** no; the user can add one in Pending |
 | D15 | Should memories be sent outside search (Always and due dates)? | **Decided, 2026-11-08:** yes. The owner designed the Always tab and dates (D46, D49, D52) |
 | D16 | How is the size of what is sent outside search limited? | **Decided (owner), 2026-11-08:** Always memories have their own limit, set in Memory Handling Preferences. It does not count against search's Maximum Memories or Memory Space. Memories whose important date is near count against no limit |
-| D17 | Are Always and dated memories sent in roleplay chats? | **Approved:** not by default |
+| D17 | Are Always and dated memories sent in roleplay chats? | **Proposed (not approved):** not by default |
 | D18 | Is there an on/off switch for sending memories outside search? | **Always:** no switch; checking memories is the opt-in (presented 2026-11-08). **Important dates (owner's design):** a toggle in Memory Handling Preferences for all of them (2026-11-08), and a checkbox for each on the Dates tab (2026-11-09). **Presented:** the toggle defaults to on, and a new date starts checked |
-| D19 | What does a memory card show about fading? | **Approved:** no numbers. A fading memory shows when it was last discussed and the date it will retire (D.4) |
+| D19 | What does a memory card show about fading? | **Proposed (not approved):** no numbers. A fading memory shows when it was last discussed and the date it will retire (D.4) |
 | D20 | Which browser filters are added? | **Superseded** by the view dropdown (D.11), the card markers (D.7), and the Dates tab (D54) |
-| D21 | Should a local re-ranker be added? | **Approved:** no; tested and it did not work (A.10). Reconsider only if a suitable small model appears |
-| D22 | Does date sharing ship on its own, before the rest? | **Approved:** it can, if wanted sooner; it doesn't depend on the rest |
+| D21 | Should a local re-ranker be added? | **Proposed (not approved):** no; tested and it did not work (A.10). Reconsider only if a suitable small model appears |
+| D22 | Does date sharing ship on its own, before the rest? | **Proposed (not approved):** it can, if wanted sooner; it doesn't depend on the rest |
 | D23 | When is search fixed? | **Decided, 2026-11-08: first** |
 | D24 | Where does the search test screen open from? | **Decided, 2026-11-08:** its own screen, from Advanced Memory Settings in the Debug section, with adjustable numbers. Built in #180 |
-| D25 | Should the ordinary memory settings also have a Strict / Balanced / Broad match choice? | **Approved:** no; the test screen's tuned numbers are the setting |
+| D25 | Should the ordinary memory settings also have a Strict / Balanced / Broad match choice? | **Proposed (not approved):** no; the test screen's tuned numbers are the setting |
 | D26 | Should roleplay card entries also lose their 10-message cooldown? | **Decided, 2026-11-08: yes.** Card entries ride the same rebuilt message, so the cooldown hid them from the AI. Lorebooks were checked and have no cooldown |
 | D27 | Which memory assembly log lines change when the cooldown and old search are removed? | **Decided, 2026-11-08:** the summary line, the memory cooldown line, the project wording, and the chat-search missing-vector line. The card-cooldown log line stays in the code (it no longer fires) until its removal is approved |
 | D28 | Should the Memory Assistant always add topic tags? | **Decided, 2026-11-08:** not mandatory now. Test independently generated tags first (step 1.15) |
 | D29 | Should the int8 model become the default? | **Decided, 2026-11-08 (revised):** no change to the default. The user already picks q4 or int8 in Advanced Memory Settings |
 | D30 | Which memories may the AI raise unprompted? | **Decided (owner), 2026-11-08:** an Always memory, or a memory whose date is near, as its bring-up setting allows (D48). A date alone is not permission. A searched memory is already about what the user said. A topic is never volunteered just because it was discussed a lot |
-| D31 | What does the user decide per memory? | **Approved:** Always, an optional important date with its range, an optional "past after" date, optional fading, and the bring-up setting for Always and dated memories (D.2). Last-discussed tracking stays internal |
+| D31 | What does the user decide per memory? | **Proposed (not approved):** Always, an optional important date with its range, an optional "past after" date, optional fading, and the bring-up setting for Always and dated memories (D.2). Last-discussed tracking stays internal |
 | D32 | How is repetition of a memory whose date is near controlled? | **Decided (corrected), 2026-11-08:** never by withholding it. It is sent every message while near, marked "already discussed" once it comes up, and the AI is told not to raise it again |
-| D33 | What does the Memory Assistant propose beyond the memory text? | **Approved:** dates only, at first. Always, the bring-up setting, and fading stay the user's choices. **Presented 2026-11-08:** Pending shows the bring-up setting beside a proposed date |
-| D34 | Should memories fade? | **Decided, 2026-11-08: yes,** with Memory Browser markers for fading, not fading, and faded, and with faded memories reinstatable from Retired. **Approved:** fading is an optional choice on each memory, off unless the user turns it on (D.2) |
-| D35 | Should the type name be sent with memories of a "playful" type, such as Inside Joke? | **Approved:** yes, for types the user marks playful, so the AI knows to use them lightly |
+| D33 | What does the Memory Assistant propose beyond the memory text? | **Proposed (not approved):** dates only, at first. Always, the bring-up setting, and fading stay the user's choices. **Proposed 2026-11-08 (not approved):** Pending shows the bring-up setting beside a proposed date |
+| D34 | Should memories fade? | **Decided, 2026-11-08: yes,** with Memory Browser markers for fading, not fading, and faded, and with faded memories reinstatable from Retired. **Proposed (not approved):** fading is an optional choice on each memory, off unless the user turns it on (D.2) |
+| D35 | Should the type name be sent with memories of a "playful" type, such as Inside Joke? | **Proposed (not approved):** yes, for types the user marks playful, so the AI knows to use them lightly |
 | D36 | Should each companion have a short, editable "vibe" note that is always sent? | **Superseded (owner), 2026-11-10:** the vibe is a note on each memory, not on each companion (D58) |
-| D37 | If a whole request is too large for the model, what is trimmed first? | **Presented 2026-11-08 (revised, because the owner treats important dates as important):** the lowest-ranked search results first, then Always memories, then memories whose date is near. Picked memories are never trimmed. This is only a last resort for a request the model cannot accept at all. Otherwise the app never chooses which Always or dated memories are sent; the user's checkboxes do (owner, 2026-11-09) |
-| D38 | Should a companion know what happened in your last few chats with it, through short summaries built from the existing per-chat conversation summaries? | **Approved for design:** it is the main thing ChatGPT does that this app lacks for continuity ("how did the dentist go yesterday?"). It is background knowledge, and the bring-up rules apply |
-| D39 | Should the AI know how long it has been since the last chat with this companion (in days, not times)? | **Approved:** yes, as part of Phase 4, under the date-sharing setting |
-| D40 | Should a companion keep its own short reflections or journal about the relationship? | **Approved:** later and optional, after the vibe note, and visible and editable |
-| D41 | Should the instructions sent with memories teach the four ways of using them (ignore, use silently, mention, ask first)? | **Approved:** yes, in the next pull request. **Owner ruling, 2026-11-08:** no crisis or safety wording; the model uses its own judgment. **Open until drafted:** the owner sees the exact text before it is built |
-| D42 | Should one-time events track upcoming, happened, and settled? | **Approved:** yes, instead of more fading rules. Settling is a user edit or a Memory Assistant suggestion through Pending |
+| D37 | If a whole request is too large for the model, what is trimmed first? | **Proposed 2026-11-08 (revised, because the owner treats important dates as important) (not approved):** the lowest-ranked search results first, then Always memories, then memories whose date is near. Picked memories are never trimmed. This is only a last resort for a request the model cannot accept at all. Otherwise the app never chooses which Always or dated memories are sent; the user's checkboxes do (owner, 2026-11-09) |
+| D38 | Should a companion know what happened in your last few chats with it, through short summaries built from the existing per-chat conversation summaries? | **Proposed (not approved):** it is the main thing ChatGPT does that this app lacks for continuity ("how did the dentist go yesterday?"). It is background knowledge, and the bring-up rules apply |
+| D39 | Should the AI know how long it has been since the last chat with this companion (in days, not times)? | **Proposed (not approved):** yes, as part of Phase 4, under the date-sharing setting |
+| D40 | Should a companion keep its own short reflections or journal about the relationship? | **Proposed (not approved):** later and optional, after the vibe note, and visible and editable |
+| D41 | Should the instructions sent with memories teach the four ways of using them (ignore, use silently, mention, ask first)? | **Proposed (not approved):** yes, in the next pull request. **Owner ruling, 2026-11-08:** no crisis or safety wording; the model uses its own judgment. **Open until drafted:** the owner sees the exact text before it is built |
+| D42 | Should one-time events track upcoming, happened, and settled? | **Proposed (not approved):** yes, instead of more fading rules. Settling is a user edit or a Memory Assistant suggestion through Pending |
 | D43 | When a memory fades fully, what happens? | **Decided, 2026-11-08:** it is retired: it moves to Retired, out of use until the user reinstates it |
-| D44 | Should deleting a memory move it to Retired first, with Delete Permanently from there? What is the default? | **Decided (owner):** a setting in Memory Handling Preferences. **Approved:** default on, so a mistaken delete can be undone |
-| D45 | How fast do memories fade? | **Approved:** one app-wide fade time in Memory Handling Preferences: 2 weeks, 1 month, 3 months, or 6 months. Default 1 month |
+| D44 | Should deleting a memory move it to Retired first, with Delete Permanently from there? What is the default? | **Decided (owner):** a setting in Memory Handling Preferences. **Proposed (not approved):** default on, so a mistaken delete can be undone |
+| D45 | How fast do memories fade? | **Proposed (not approved):** one app-wide fade time in Memory Handling Preferences: 2 weeks, 1 month, 3 months, or 6 months. Default 1 month |
 | D46 | What is the always-sent tab called, and what does it mean? | **Decided, 2026-11-08:** the dropdown entry is "Always". Checked Always memories are sent with every message |
-| D47 | Should an auto mode let the embedding model pick which Always memories to include? | **Approved:** no. Ordinary search already does this every message; checkboxes only |
-| D48 | How does the user say how a memory may be brought up? | **Decided (owner), 2026-11-08:** a dropdown on Always memories: Only if I bring it up, When it fits (the default), Ask me first, or Custom, a written condition. For a searched memory, a condition goes into the memory's own text. **Presented 2026-11-08:** the same dropdown on memories with an important date, because a date alone is not permission. Weaker models are handled through Model Rules (owner ruling) |
-| D49 | Fade timing, and an optional "past after" date per memory? | **Decided (owner):** custom fade timing, and a per-memory date after which the memory is a past event. **Approved:** the preset times plus a custom number of days, and an optional "past after" date on any memory |
-| D50 | How are expiring and passed memories reviewed without overwhelming the user? | **Approved:** one review place, Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, a fading memory retires and a passed event is kept as past. One tap renews |
-| D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | **Approved:** later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
+| D47 | Should an auto mode let the embedding model pick which Always memories to include? | **Proposed (not approved):** no. Ordinary search already does this every message; checkboxes only |
+| D48 | How does the user say how a memory may be brought up? | **Decided (owner), 2026-11-08:** a dropdown on Always memories: Only if I bring it up, When it fits (the default), Ask me first, or Custom, a written condition. For a searched memory, a condition goes into the memory's own text. **Proposed 2026-11-08 (not approved):** the same dropdown on memories with an important date, because a date alone is not permission. Weaker models are handled through Model Rules (owner ruling) |
+| D49 | Fade timing, and an optional "past after" date per memory? | **Decided (owner):** custom fade timing, and a per-memory date after which the memory is a past event. **Proposed (not approved):** the preset times plus a custom number of days, and an optional "past after" date on any memory |
+| D50 | How are expiring and passed memories reviewed without overwhelming the user? | **Proposed (not approved):** one review place, Pending, with a label for each reason ("New suggestion", "Retiring soon", "Event passed"). Nothing needs the user's action: if they do nothing, a fading memory retires and a passed event is kept as past. One tap renews |
+| D51 | Should a background reviewer keep memories current (find passed events, outdated facts, conflicts, duplicates)? | **Proposed (not approved):** later, as its own feature, with its own owner-approved prompt and choices of what it checks. Proposals only, through Pending, never silent changes. It costs tokens, so it runs when the user starts it or on a schedule they choose |
 | D52 | How does the Always tab handle more checked memories than the limit? | **Decided (owner's design), 2026-11-08:** checking is never blocked. At Save, the app shows all checked memories and offers to uncheck some or keep them all as an exception, without changing the preference. Includes a "checked only" view and a running count |
-| D54 | How does the user see and control memories that are sent automatically because of their date? | **Decided (owner), 2026-11-09:** a Dates tab in the browser's view dropdown, with a checkbox on each memory, so the user reviews what will be sent and unchecks what they don't want sent. No cap, and the app never picks among them. **Presented 2026-11-09:** it lists every dated memory, checked or not, in upcoming order, with a marker on the ones being sent now; a new date starts checked |
+| D54 | How does the user see and control memories that are sent automatically because of their date? | **Decided (owner), 2026-11-09:** a Dates tab in the browser's view dropdown, with a checkbox on each memory, so the user reviews what will be sent and unchecks what they don't want sent. No cap, and the app never picks among them. **Proposed 2026-11-09 (not approved):** it lists every dated memory, checked or not, in upcoming order, with a marker on the ones being sent now; a new date starts checked |
 | D55 | Should the "past after" date and a one-time important date be one field? | **Open (raised 2026-11-09), to settle before Phase 4.** Both make a memory past after a date, and two date fields may confuse. Recommended: one date field. A one-time date always makes the memory past afterwards, and its Dates tab checkbox decides whether it is also sent while near |
 | D56 | Should vibes have their own categories, or should inside jokes be a memory Type? | **Decided (owner), 2026-11-10:** Inside Joke is a built-in Type and works like any other Type: scope decides where it is seen, with no extra link requirement. Users do not add types. The AI receives "Inside joke:" before the memory text. The Memory Assistant may suggest it, with a scope |
 | D58 | What does the per-memory vibe look like? | **Decided (owner), 2026-11-10:** an optional note on each memory, typed by the user, under Importance in the memory editor. Label "Vibe", hint "How the AI should treat this memory, like playful or gentle." The AI receives it on its own line under the memory. Empty by default, shown on the memory card, never read by search, and not suggested by the Memory Assistant at first. **Open:** whether a Memory Assistant update that replaces a memory carries the old vibe over |
@@ -1938,3 +1974,10 @@ patterns to learn from, not exact specifications.
 - Memory silently breaking after updates: the test screen and assembly
   log make it visible.
 
+---
+
+# Part G: The conversation index, recall, and carry-over
+
+Moved on 2026-11-10 to its own document at the top level of the repository:
+`conversation_recall_plan.md`. Section numbers there keep the "G." prefix,
+so "G.9" in this document means section G.9 of that one.

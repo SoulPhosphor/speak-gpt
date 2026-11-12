@@ -760,18 +760,17 @@ Read only the documents relevant to the current task.
 
 Examples:
 
+- **conversation index, recall, and carry-over:**
+  `conversation_recall_plan.md`. A proposal until the owner approves it.
+  Only the items it marks "Owner" are decisions.
 - **memory search and dynamic memory:**
   `Memory System/dynamic_memory_plan.md`. Written from a fresh look at the
   code and measurements. Only its dated owner decisions are approvals.
 - **older memory documents, background only, not approvals** (section 2):
-  `project-plan.md`, `Memory System/ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`,
-  `Memory System/memory_controls_and_pending_ui_copy.md`,
-  `Memory System/memory_retrieval_and_analysis_ui_copy.md`,
-  `Memory System/owner_approved_rules.md`,
-  `Memory System/revision_25_binding_clarifications.md`,
-  `Memory System/reference/roleplay_cards_and_tags_spec.md`, and everything
-  under `legacy/`. Use them to understand why something was built a certain
-  way, never to decide for the owner.
+  `project-plan.md` and everything under `legacy/`, including the former
+  `Memory System` documents now in `legacy/memory-system-2026-11/`. Use
+  them to understand why something was built a certain way, never to
+  decide for the owner.
 - UI style definitions and composition: `ui-style-guide.md`
 - current UI conversion and legacy status: `ui-style-adoption.md`
 - broad UI redesign work: `ui-redesign-plan.md`

@@ -13,6 +13,14 @@ not by reading the whole folder.
 
 ## Index
 
+- **`memory-system-2026-11/`** — the documents that sat in the
+  `Memory System` folder until 2026-11-10: the Revision 26 repair
+  contract, the old folder README and its authority map, the two UI copy
+  documents, `owner_approved_rules.md`, the Revision 25 clarifications,
+  and the roleplay cards and tags specification. Moved here on the owner's
+  instruction. Background only, not approvals. The current documents are
+  `Memory System/dynamic_memory_plan.md` and `conversation_recall_plan.md`.
+
 - **`memory-system-integration-plan.md`** — the original Phase 0–8 memory
   system roadmap (architecture decisions D1–D10, phase-by-phase landing
   notes through Phase 7). Superseded by `project-plan.md`.
