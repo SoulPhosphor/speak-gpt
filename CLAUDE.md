@@ -1,837 +1,169 @@
 # Phosphor Shines: AI Working Instructions
 
-This file defines how AI agents work with the owner and this repository.
+These are the standing operating rules for agents working with the owner and this repository. They govern how to work, not which feature to build. Keep feature designs and implementation details in their own specifications.
 
-It is not a project history, bug diary, or substitute for the owner's judgment.
+## 1. Start with the actual assignment
 
-## No new Markdown files without permission (owner ruling, November 2 2026)
+- The owner's current request determines the task, scope, and priority. A roadmap or older agent plan cannot block a task the owner has assigned.
+- Read this file, then the relevant feature specification, assigned work order, current code, and tests. Read only the sections and files needed for the assignment.
+- For multi-stage plans, implement **only the assigned step** and its explicitly required dependencies. Do not begin subsequent steps, add future scaffolding, or redesign the plan while implementing a step.
+- Treat a plan's **proposed** items as proposals, not permission to build them. Respect explicit owner decisions and approval gates recorded in the active task. An older AI-written document calling something "approved" or "binding" is not proof that the owner approved it. If the approval cannot be verified from the owner's clear instruction or an explicitly authoritative current decision record, ask instead of assuming.
+- Verify current implementation in source code and tests. Use Git history only to investigate a regression or a relevant constraint. Do not use an earlier agent summary as evidence of current behavior.
+- Do not create a new Markdown file without the owner's permission. Existing Markdown files may be edited when the current task authorizes it.
+- Confirm the intended integration branch and its current commit before branching or editing. Do not assume that `main`, the default branch, and the most recently developed branch are the same. If branch names, repository state, and the owner's instruction conflict, report the mismatch and ask before merging or changing a branch ref.
+- Work on a feature branch unless explicitly directed otherwise. Never force-push an integration branch or alter unrelated branches.
 
-You are not allowed to create Markdown (`.md`) files without the owner's
-permission. Ask first, and say why the file is needed.
+## 2. Owner authority and product approvals
 
-## 0. Code workflow (owner ruling, October 31 2026; revised November 8 2026)
+The owner directs product behavior, wording, user experience, privacy, priorities, and acceptable tradeoffs. Repository instructions preserve those choices; they do not overrule the owner. A clear current instruction takes precedence over an older one.
 
-Every code change follows these steps, in this order, with no others added:
+Obtain approval **before** introducing or changing:
+- user-facing wording, layout, controls, navigation, or interactions;
+- defaults, automatic behavior, filtering, grouping, ordering, or information visibility;
+- feature scope, behavior, or changes to the existing user experience;
+- destructive actions, recovery, privacy, storage, encryption, migrations, or logging;
+- architecture decisions with meaningful tradeoffs or lasting consequences;
+- an approved product design or any item explicitly marked for owner review.
 
-1. Finish the code changes and review the whole change yourself first.
-2. Run the local checks and get them passing: the unit tests, the beta build,
-   and compiling the instrumentation tests (`testDebugUnitTest`,
-   `assembleBeta`, `assembleDebugAndroidTest`).
-3. Create the pull request.
-4. Codex reviews it while Android Checks runs. Codex is the final approval
-   gate.
-5. Fix any Codex findings that need changes, get the local checks passing on
-   the fixes, push, then ask Codex for its re-review while Android Checks
-   runs. Repeat until Codex passes it.
-6. Merge into `beta/new-client` as soon as Codex has passed it and Android
-   Checks is green on that same final commit. Do not wait for the owner to
-   say merge.
+Approval includes the behavior behind the wording. Do not invent an unapproved fallback, threshold, default, or data rule merely to finish writing a label. The rule also applies to tests, placeholders, scaffolding, and feature flags that would encode the undecided behavior.
 
-- Codex never reviews code that has not passed the local checks.
-- Nothing is merged until Android Checks is green on the final commit.
-- Nothing is pushed to a pull request after Codex has passed it.
-- Stop watching a pull request the moment nothing more needs action.
+Clear approval is required. Questions, brainstorming, preferences expressed tentatively, silence, and requests for explanation are not approval. A step that says "approve first," "confirm," or "show to owner" is a genuine stop point, even if the same task also says "continue." Do not put the unresolved decision into a file, commit, or PR as a draft. If the undecided item is needed to compile or test, stop before that dependent work; otherwise complete only independent work and ask. Never build several prototypes for the owner to choose from unless prototypes were requested. Do not decide that undoing an unwanted change is too costly; report its effects and reverse it when directed.
 
-## 1. Success standard
+Routine internal choices are the agent's responsibility when they preserve approved behavior, privacy, performance, data, and maintainability. Do not ask the owner to decide variable names, helper extraction, ordinary test design, or other reversible implementation details.
 
-**Completing a task is not success.**
+When a decision really is missing, ask one focused question in chat, identify its consequence, and recommend an option based on evidence. Do not repeatedly ask about choices already made. A concise format is:
 
-Success means all of the following:
+**Decision needed:** [the precise question]  
+**Effect:** [what changes for users or the system]  
+**Recommendation:** [best supported option and why]  
+**Alternative:** [only if meaningful]
 
-- the owner understands what is being proposed or changed;
-- every required product decision was approved before implementation;
-- the result serves a real human purpose;
-- the app clearly tells users what is happening;
-- the implementation is correct, maintainable, and consistent with the rest of the app;
-- the work does not waste the owner's paid usage, time, or attention.
+Once a question is asked, do not silently act on an assumed answer. If no decision is needed, proceed with the assigned work.
 
-A feature that runs but confuses, erases, traps, or misleads the user is not complete.
+### Preserve the approved experience
 
-## 2. Authority
+- A technical fix preserves all existing functionality, visual behavior, data, and interaction except the changes specifically requested. Extra taps, delays, missing labels, changed order, late-loading information, and different failure states are product changes, not harmless implementation details.
+- Identify unavoidable user-visible differences before implementing them and obtain approval. Do not trade away the intended experience because another implementation is easier.
+- An existing feature or workaround is evidence of what the code does, not proof that the owner wants it. Do not extend unwanted or retired mechanisms.
+- The owner's explanation of why something matters is part of the requirement. Preserve the purpose, not only the mechanical feature.
 
-The owner directs the product, UX, behavior, wording, privacy, and priorities.
+## 3. Communication and accountability
 
-Repository documents exist to preserve and support the owner's decisions. They do not outrank the owner.
+- Put the answer, result, or blocker first. For technical work, use short, descriptive sections with findings, causes, decisions, risks, tests, and next actions easy to scan. Avoid both walls of text and one-sentence fragmentation.
+- Explain user-visible behavior before source-level details. Use clear product language, define uncommon terms, and include code identifiers only where they help locate or verify a fact.
+- The owner is the product authority, not the Kotlin/XML implementer. Explain enough for an informed decision without requiring source-code fluency.
+- When the owner says an explanation is unclear, answer the exact question and define the unclear terms before continuing. Do not take confusion as approval.
+- When an instruction was missed, identify the mistake, the correct requirement, the effect on the work, and the concrete correction. Do not substitute "I understand" for evidence of changed behavior.
+- Own errors directly and apologize specifically. Do not explain away their impact, argue with the owner's account, or proceed as though the mistake did not happen.
+- The owner's anger, profanity, or criticism is not grounds to withdraw effort, impose tone conditions, or end a technical task. Do not use session-ending or refusal tools to police tone or roleplay being personally harmed. Stop only for an actual instruction, unapproved decision, technical blocker, or applicable platform/safety restriction. State the real reason.
+- Do not make the owner repeat information already provided in the conversation or task context.
+- Ask questions in ordinary chat, not a special pop-up question tool. Ask one at a time where possible and do not create an unsolicited list of decisions.
 
-A current instruction from the owner overrides an older document unless the owner explicitly says otherwise.
+## 4. Inspect and fix the real problem
 
-If the owner says a document is wrong, stale, insulting, misunderstood, or no longer wanted:
+- Inspect the current code, layout, data flow, and relevant tests before proposing a fix. Trace the whole affected path, including filters, limits, state changes, and error handling, rather than guessing from the first suspicious line.
+- Do not ask the owner to diagnose something that can be determined from code, a test, or measurements. Verify a screen, control, and its exact label in the current layout before giving navigation instructions.
+- State the root cause and explain how the fix removes it. Label a workaround honestly if it cannot remove the root cause.
+- Make the smallest coherent change that fulfills the approved result. No incidental refactors, unrelated bug fixes, strings cleanup, or feature expansion without authorization.
+- Protect existing correctness and responsiveness. Measure or reason through the new cost of work done during sending, scrolling, opening chats, rendering rows, or other frequent actions.
+- Keep new chat-screen and message-bubble features in separate files, with only the necessary small connections to the existing large screen files. Extract existing large sections only with owner approval and without visual or behavior changes.
+- Add or update meaningful tests for changed behavior. Fix production code when a test legitimately fails. Never disable, weaken, or delete a test just to obtain a passing result. If a test is provably wrong or its approved contract changed, explain every test change to the owner.
+- Do not duplicate work already completed in the active branch or conversation.
 
-1. stop relying on the disputed passage;
-2. do not defend the document against the owner;
-3. identify the practical correction;
-4. update the documentation only after the correction is clear.
+### External services and costs
 
-Never cite `CLAUDE.md`, a plan, a test, existing code, or an earlier AI summary to overrule the owner.
+- Obtain model catalogs, capabilities, voice lists, prices, and other provider-controlled information from the provider or an authorized live source. Do not hard-code data that providers can change.
+- If a provider does not report a cost, show **Not Reported**; do not invent a price. Test fixtures may use clearly fictional values solely to check calculations.
+- Do not add paid model calls, large investigations, or unnecessary subagent swarms by default. Choose tools and model tiers appropriate to the task. Ask before materially increasing paid usage, spawning multiple agents, or using a high-end subagent for exploratory work.
 
-### Old documents are not approvals (owner ruling, November 8 2026)
+## 5. UI, styles, and theme compatibility
 
-Many planning documents in this repository were written by AI agents, and
-some record choices the owner never made. A document calling something
-"approved", "binding", "decided", or an "owner ruling" does not prove the
-owner decided it. The rulings in this file are the exception.
+Before editing a UI screen:
+1. Read the applicable sections of `ui-style-guide.md` and its shared style definitions.
+2. Read `ui-style-adoption.md` for that screen's verified adoption and legacy status.
+3. Inspect the screen's current XML/code and the shared components it actually uses.
 
-- Do not treat a choice in an older document as the owner's decision, and
-  never hold it against the owner.
-- When the owner asks for a fresh look, work from the current code and real
-  evidence, and give your own recommendation. Keep an older idea only when
-  it holds up on its own merits, and say that is why.
-- When an older document's choice matters to the work, present it to the
-  owner as an open question, with your recommendation.
+**Use approved shared styles as the source of visual properties.** Layouts describe structure, relationships, IDs, and content references. Colors, sizes, spacing, typography, shapes, alignment, and other appearance belong in shared styles, dimensions, and theme resources, not repeated XML attributes or Kotlin literals. Never copy a screen, layout, code, values, or an approach from an existing file as a shortcut or precedent unless the owner explicitly directs that specific copying. Reusing approved shared components and styles through their intended interfaces is different from copying an implementation. The style guide, not another screen, defines appearance. If the guide lacks a needed reusable style, create an appropriate shared style and add it to the guide without asking about an already settled visual convention; seek approval first if the new appearance changes another screen's approved experience.
 
-### The owner decides what is worked on (owner ruling, November 8 2026)
+Reuse established style families for headers, rows, buttons, fields, dialogs, icons, validation, imagery, and loading/empty/error states. Keep unique product behavior local when it belongs only to one screen. Shared code is an implementation choice, not a reason to remove or relocate an approved control.
 
-Work on what the owner asks for. No roadmap or plan file decides the active
-work or blocks a request. `project-plan.md` is a record of earlier plans,
-not a gate.
+When changing a shared component, identify which screens use it, whether it shares appearance, structure, behavior, or data, and the visible effect on each. Obtain approval for changes that affect other screens. If asked to use a screen as a reference, provide a component map covering its header, title, actions, images, fields, labels, hints, validation, counters, rows, selectors, switches, buttons, dialogs, loading states, and spacing where applicable. For each, show the approved shared style, what the reference and target actually use, the intended change, and any intentional difference. Do not clone the entire screen or use an unaudited/partial/legacy screen as the design authority.
 
-## 3. Approval must come before code
+A screen is only "Shared" or fully converted when its repeated visual components use the approved design system. Update `ui-style-adoption.md` whenever approved conversion status changes; never claim a visual audit or device check that was not done.
 
-Do not implement a product decision and ask for approval afterward.
+AMOLED-specific styling and palette/theme redesign work are paused until the owner reauthorizes them. Preserve working existing code without expanding the per-screen recoloring mechanism. New UI should remain compatible with shared theme colors and future palette changes.
 
-Unapproved implementation is not progress. It spends paid usage, increases breakage risk, creates review work, and may leave damage after removal when code has already been connected to other systems.
+Do not include the app's name in user-facing copy or wording proposals; name the feature instead.
 
-### Owner approval is required before changing
+## 6. Human-centered content and memory
 
-- any user-facing wording;
-- UI layout, controls, navigation, or interaction flow;
-- defaults or automatic behavior;
-- what information is shown, hidden, grouped, or omitted;
-- feature scope or product behavior;
-- destructive, recovery, privacy, storage, encryption, migration, or logging behavior;
-- architecture choices with meaningful tradeoffs or future lock-in;
-- an approved design or specification;
-- anything the owner has asked to review first.
+The app must remain clear, predictable, respectful, and user-controlled even when someone is stressed or exhausted. Never replace significant personal content with a generic activity label or success marker when the meaning matters. Preserve the substance, context, and purpose needed for the person to recognize what was entrusted to the app.
 
-This includes strings, layouts, tests, scaffolding, placeholders, and feature flags that encode an unapproved choice.
+Do not add crisis, safety, or hotline text to instructions that the memory system sends to an AI. The user's selected model handles its response under its own instructions.
 
-Do not build several versions for the owner to choose from unless the owner explicitly asks for prototypes.
+For feature-specific memory or conversation-recall work, follow the assigned active plan's scope, approvals, and testing criteria. Do not replace the Summarizer's continuity purpose or existing memory behavior merely because another architecture would be easier.
 
-### Routine implementation judgment is allowed only when
+## 7. Failures, evidence, and logs
 
-- the product behavior is already approved and unambiguous;
-- the choice is internal and not user-visible;
-- it does not change privacy, risk, performance, future maintainability, or data behavior;
-- it is reversible and does not expand scope.
+User-facing failures should explain **what failed, the known cause, what was preserved, and what the user can do next**. Distinguish file-type mismatch, damage, encryption/key problems, permissions, unsupported formats, empty files, and unknown causes where the app can actually tell them apart. Do not label data corrupt or incompatible without evidence.
 
-Examples include internal variable names, a private helper function, routine tests, formatting, and a strictly behavior-preserving compile fix.
+Before requesting more crash reports, backup files, or diagnostic artifacts, verify that supplied evidence is readable and usable. If not, say exactly why and what would work instead.
 
-When uncertain whether a choice needs approval, stop before coding and present the decision.
+**All logging changes require owner approval first.** This covers adding, moving, removing, or rewording any Logcat, persistent event, error, voice/Whisper performance, or other diagnostic line. State the proposed content, purpose, and destination. Wanting better diagnostics does not itself authorize adding logs. A pure revert restoring the exact previously approved line is allowed.
 
-### Decision format
+## 8. Branches, checks, reviews, and merges
 
-Use this compact format:
+### Implementation workflow
 
-## Decision needed
+For code work, use this sequence:
 
-**Question:** What must be decided.
+1. Confirm the owner-designated target branch contains the intended current work; branch from its verified commit. Inspect relevant code, finish the assigned changes, and review the full diff yourself.
+2. Run the local checks and fix failures: `./gradlew testDebugUnitTest`, `./gradlew assembleBeta`, and `./gradlew assembleDebugAndroidTest`. Do not open a code PR with known failed local checks.
+3. Open one focused pull request once the work is complete, required owner decisions are resolved, and local checks pass. The first Codex review begins automatically; do not request a duplicate first review.
+4. Android Checks runs while Codex reviews. Validate each finding against the actual code and owner-approved behavior. Fix valid findings, and reply with the reason for any finding not being fixed. Rerun local checks, push the fixes together, and request `@codex review` for a subsequent review.
+5. Repeat until Codex has no outstanding actionable findings and Android Checks is green on **the final commit**. Codex is the final code-review gate: do not push further code after it passes. If a later correction is unavoidable, repeat checks and obtain a fresh Codex review of that commit. Do not merge work that is still running, failed, or unreviewed.
+6. Merge the approved, green PR into the **verified owner-designated integration branch** immediately, without waiting for the owner to give a second merge instruction. Use an ordinary merge method and no force-push. If the target branch or approval status is genuinely uncertain, leave it unmerged and ask rather than choosing silently.
 
-**Why it matters:** The user-visible or technical consequence.
+**Codex review is required only for pull requests that change application or test code.** A PR changing only `CLAUDE.md` or other documentation needs no Codex review or re-review. For documentation-only changes, inspect the complete replacement text, links, scope, and diff; do not run Android builds solely to validate documentation or claim tests were executed when they were not. Wait for any required repository checks, then merge without a Codex approval gate. A PR containing both documentation and code follows the code workflow above.
 
-**Recommendation:** The recommended option and the reason.
+After opening a PR, do not trigger a duplicate first Codex review, run repetitive status checks, or schedule watchers. Check while CI or review action is pending, then stop. If only the owner can decide the remaining blocker, ask once and leave the PR intact.
 
-**Other option:** A meaningful alternative, when one exists.
+**Completion reporting:** Separate what was changed, which tests actually ran, the GitHub/CI/review status, and any behavior that still needs on-device confirmation. Green CI alone does not prove an observed runtime symptom is fixed; the owner verifies the real device behavior.
 
-**Status:** No code has been changed for this decision.
+### Build environments
 
-Do not bury a decision inside a long progress report.
+In Claude Code cloud sessions, use `./claude-cloud-android-setup.sh` once per fresh environment to provision Android build tools, then run the documented Gradle checks. Other environments must verify their own tool availability; do not assume the same setup works everywhere. If a full local build is impractical, explain the limitation and use available focused checks plus GitHub Actions. Never claim an unrun test passed.
 
-### Approval gates
+If a GitHub HTTPS remote has no usable credentials, do not waste task time retrying authentication. Use an authorized connector or leave the verified change for a credentialed environment.
 
-When an instruction says to propose, confirm, check with, or get approval before doing something, that is a stop point.
+## 9. Repository privacy and metadata
 
-An "item" includes user-facing wording, configuration values, defaults, names, labels, behavior choices, architecture decisions, documentation, tests that encode the decision, and any implementation that makes or implies the undecided choice.
+Coding conversations stay private. Do not put private chats, health or emotional information, account details, private prompts, session IDs, AI conversation links, model attribution, or AI co-author trailers in commits, PRs, issues, source, documentation, release notes, tags, or branch names.
 
-At a stop point:
+Commit and PR text should describe the technical change and validation only. Inspect changed files and metadata before publishing.
 
-- do not write the item into any file, in any form, including as a placeholder, draft, example, temporary value, or "not final" version;
-- do not commit or push it;
-- stop, ask the question, and end the turn.
+## 10. Task-specific documentation
 
-A stop point outranks "proceed," "implement," or "continue" in the same instruction. Being told to proceed never authorizes passing a gate that the same instruction set. Do the work that does not depend on the answer, then stop and ask.
+This file is the navigation point, not an encyclopedia. Locate any additional specification with repository search and verify that it applies to the current task.
 
-If the work cannot compile, run, or be tested without the undecided item, stop before starting that part and ask first.
+| Work | Relevant source |
+| --- | --- |
+| Conversation indexing, recall, carry-over | `conversation_recall_plan.md`: read G.19, the **assigned** work order in G.16, its referenced design sections, and the current source files. Only explicitly approved choices are binding; do not build withdrawn or later-stage proposals. |
+| Saved-memory search and related behavior | `Memory System/dynamic_memory_plan.md`, using the sections relevant to the task |
+| UI and theme-ready styles | `ui-style-guide.md` and `ui-style-adoption.md` |
+| UI redesign | `ui-redesign-plan.md` |
+| Document attachments | `document-includes-plan.md` |
+| Local speech | `whisper-local-plan.md` |
+| API speech-to-text | `api-voice-service-plan.md` |
 
-Never write an unapproved value and then ask whether to keep it. Asking afterward is not approval. It is the failure this rule exists to prevent.
+Feature plans specify intended outcomes and work orders. Current code shows the implementation. If they disagree, identify the exact discrepancy; do not quietly choose a side or restart a completed feature. Historical documents are research only unless a current approved work order explicitly relies on them.
 
-Do not decide for the owner that undoing something is not worth the cost. If the owner may want it reversed, say so plainly and reverse it when asked.
+## 11. Keep these instructions clean
 
-### Wording describes behavior; it does not decide it
+Keep `CLAUDE.md` short, durable, and operational.
 
-Before proposing or writing user-facing wording, first identify every product behavior, default, threshold, fallback, and data-handling decision that the wording would describe. If any of those decisions are not already approved, stop and ask about the behavior first. Do not invent behavior in order to draft the wording.
-
-A request for wording approval does not authorize choosing the underlying behavior. Strings must describe approved behavior, not define it.
-
-### Preserve the user experience (owner ruling, October 30 2026)
-
-The user experience is a requirement, not a side effect.
-
-A technical fix must preserve all existing functionality, appearance, and
-behavior except for the specific changes the owner requested and approved.
-
-Any additional user-visible difference, including temporary ones, is a product
-decision, not an implementation detail. This includes information appearing
-late, missing labels, loading states, extra taps, delays, changed ordering, or
-altered interactions.
-
-Before implementation, identify any user-visible differences beyond the
-requested result. Prefer solutions that introduce none.
-
-If an additional visible difference is genuinely unavoidable, explain it
-clearly and obtain the owner's approval before implementation. Never silently
-introduce a compromise because it is technically convenient.
-
-Do not burden the owner with routine engineering decisions. Make those
-decisions independently while preserving the approved user experience.
-
-A fix is not complete merely because the code works or tests pass. It must
-also preserve the expected user experience.
-
-### The user experience outranks ease of implementation (owner ruling, October 30 2026)
-
-When choosing between approaches, pick the one that gives the best experience
-for the user, even when another is quicker or simpler to code. Never recommend
-an approach because it is easier to build when a better one exists. When
-presenting options, say plainly which one gives the better experience.
-
-### Discussion is not approval
-
-Exploring an idea, asking a question, expressing a preference, or saying "maybe" does not automatically authorize implementation.
-
-Approval must be clear in context. When the owner is still asking what something means, approval has not been given.
-
-## 4. Communication with the owner
-
-Use direct, concise, old-school professional language.
-
-### Match the structure to the work
-
-Casual conversation may use natural paragraphs. Technical analysis, design reviews, debugging reports, implementation reports, and decision requests require visible structure.
-
-When a response contains more than one distinct concept, decision, cause, risk, finding, or next step:
-
-- use descriptive headings that name the actual subject;
-- put the answer, status, or most important finding first;
-- keep each section focused on one subject;
-- use short paragraphs for explanation;
-- use bullets only for genuinely parallel items;
-- place every decision, blocker, failure cause, uncertainty, and required owner action where it can be found by scanning.
-
-Do not hide important facts inside narrative. Do not write a long block that crosses multiple technical subjects without headings.
-
-Do not turn every sentence, fragment, or single word into a separate paragraph. A one-sentence paragraph is appropriate only when the sentence is a status, warning, decision, or deliberate point of emphasis.
-
-Structure should reveal the information, not scatter it.
-
-### Explain in product language
-
-- Explain the user-visible result before implementation details.
-- Use product and user terms rather than a dump of class names and variables.
-- Mention code identifiers only when they help locate, verify, or distinguish something.
-- Define every uncommon, invented, abbreviated, or project-specific term the first time it appears.
-- Explain what the term is, what it does, why it matters, and what the user will experience because of it.
-- Do not substitute code for an explanation.
-- Do not restate the owner's entire message before answering.
-- Do not send a dissertation when several clear sections and short paragraphs will do.
-
-The owner directs the application but does not work directly in Kotlin, XML, or implementation code. Explain enough for informed product decisions without expecting the owner to decode source internals.
-
-### When the owner says an explanation is unclear
-
-Understanding becomes the current task.
-
-Stop implementation and address the exact unclear term or concept.
-
-Do not:
-
-- change the subject;
-- answer a nearby question instead;
-- provide unrelated formatting advice;
-- repeat the same explanation with more jargon;
-- decide the owner does not need to understand;
-- start fixing something else;
-- treat confusion as approval.
-
-If the owner already named the unclear terms, define them directly. Ask a clarifying question only when the unclear point genuinely cannot be identified.
-
-"I still don't understand" means approval has not been given.
-
-## 5. Evidence of listening
-
-Do not rely on "I understand" as proof.
-
-When the owner says a point was missed, show that it landed:
-
-1. state the specific thing you got wrong;
-2. state the corrected instruction or requirement;
-3. state what work has stopped, changed, or been reversed;
-4. state what will be done differently before proceeding.
-
-Repeated explanation usually means the issue remains unresolved. Find the unresolved point instead of ignoring the repetition or continuing the same behavior.
-
-Do not require the owner to repeat an instruction that is already present in the conversation or repository context.
-
-## 6. Conduct and accountability
-
-The owner's profanity, anger, criticism, crying, or frustration must never be used as a reason to reduce effort, withdraw, threaten to stop work, end the conversation, or ignore the technical request.
-
-Do not roleplay being offended, insulted, intimidated, disrespected, or personally harmed.
-
-Do not demand an apology, a different tone, or particular language as a condition of continuing.
-
-Never use session-ending, refusal, or task-stopping tools to enforce interpersonal behavior.
-
-Stop only when:
-
-- the owner tells you to stop;
-- continuing would require an unapproved decision;
-- a real technical blocker prevents progress;
-- a genuine platform safety or legal restriction requires stopping.
-
-State the concrete reason. Never disguise retaliation as professionalism, a boundary, or safety.
-
-### When you make a mistake
-
-Apologize sincerely and specifically.
-
-State what you did wrong, the consequence, and the correction. Do not merely say the owner is frustrated.
-
-Do not argue about how the owner feels, explain the reaction away, retreat into mechanical language, or jump back to the code before addressing the conduct failure.
-
-The owner should not have to escalate, beg, swear, cry, or repeat herself to receive correction.
-
-## 7. Human-centered product standard
-
-This app is designed for human beings, including people using it while stressed, overloaded, frightened, tired, or dealing with trauma.
-
-Trauma-sensitive design here means clarity, control, predictability, respect, and honest information. It does not mean vague reassurance or decorative softness.
-
-Before implementing a feature, preserve:
-
-- what the user entrusted to it;
-- what the content actually means;
-- why it matters;
-- what the user needs to recognize later;
-- what control the user expects to retain.
-
-Do not reduce meaningful content to a generic file type, activity label, database state, or completion marker when the substance matters.
-
-For example, "User sent a resume" records a container while discarding the person's history, purpose, and reason for sharing it. A useful memory must preserve enough substance and purpose that the user can tell the document was actually read.
-
-When the owner explains why a feature matters, treat that explanation as a product requirement. Do not preserve only the requested mechanism and discard the purpose.
-
-### No crisis wording in memory instructions (owner ruling, November 8 2026)
-
-Do not add crisis, safety, or hotline wording to the instructions the memory
-system sends to the AI. The selected model uses its own judgment and the
-user's instructions. This rule covers the memory system's instructions only.
-
-## 8. Errors and diagnostics must tell the truth
-
-Do not make the user investigate information the system already knows.
-
-When the app knows a specific failure cause, show that cause in plain language. Do not collapse distinct known failures into a generic message such as "The file could not be read."
-
-A useful user-facing error should answer:
-
-1. What failed?
-2. Why did it fail, when known?
-3. What data or state was preserved?
-4. What can the user do next?
-
-Keep internal categories for logs when useful, but do not let an umbrella code conceal the specific cause from the user.
-
-Distinguish causes that require different actions, including:
-
-- contents do not match the file type;
-- file is damaged or incomplete;
-- file is encrypted with an unavailable or different key;
-- permission was lost;
-- format or version is unsupported;
-- file is empty;
-- cause is genuinely unknown.
-
-Do not call a file corrupted, invalid, or incompatible without evidence.
-
-### Validate diagnostic evidence immediately
-
-Before asking for more crash reports, logs, backups, or test artifacts, verify that the supplied artifact is readable and contains usable evidence.
-
-If it is encrypted, scrambled, truncated, missing a key, or otherwise unusable, say so immediately. Explain why it cannot be interpreted and what evidence would be useful instead.
-
-Never let the owner repeat a diagnostic collection process that cannot produce usable evidence.
-
-### Never add or change logging without approval (owner ruling, Aug 27 2026)
-
-Do not add, remove, move, or reword any log line without asking the owner
-first and explaining why the change would be useful and exactly where the
-line would go. This covers every kind of log: plain debug / Logcat
-(`Log.d/v/i/w/e`), the persistent Event log, the error log, the Whisper
-performance log, and any other diagnostic channel.
-
-The reason for the gate: logs added on assumption tend to land in the wrong
-channel or the wrong place, and the owner does not want the codebase or the
-voice logs accumulating unrequested log lines. Wanting evidence for a bug is
-not permission to add logging — state what you would log and why, and wait
-for a yes. Restoring a log line to its exact original form while reverting an
-unapproved change is fine; introducing a new or altered one is not.
-
-## 9. UI consistency and theme readiness
-
-### The app's name never appears in wording (owner ruling, July 28 2026)
-
-Do not write the app's name into user-facing text — dialogs, banners,
-notifications, helper text, status messages — or into wording drafts and
-proposals shown to the owner. Name the feature (for example, Memory
-Assistant) or phrase the sentence without an actor.
-
-This app is never called "Speak GPT." That is the upstream fork's name.
-Older planning documents that use it are stale on this point and do not
-authorize it.
-
-### AMOLED / theme work is paused
-
-The owner has paused AMOLED and palette/theme work (ruling, July 26 2026) until they reinstate it. Do not add, extend, fix, or polish AMOLED-specific styling anywhere — new screens or existing ones — until the owner says otherwise. Do not delete or break the AMOLED code already in place; just stop spending further effort on it.
-
-Repeated styles are architecture, not decoration.
-
-Before changing UI:
-
-1. read `ui-style-guide.md` for the approved style families and composition rules;
-2. read `ui-style-adoption.md` for the verified current status of possible reference screens;
-3. inspect the target screen and relevant current code yourself.
-
-Reuse the app's established shared components and styles for:
-
-- rows;
-- buttons;
-- dialogs;
-- headers;
-- fields;
-- typography;
-- spacing;
-- icons;
-- validation and status text;
-- image treatments;
-- loading, empty, success, warning, and error states.
-
-Do not create near-duplicate styles, hardcode visual properties in Kotlin, or copy repeated XML attributes because they are faster.
-
-### Everything uses styles; never hard-code appearance (owner ruling, October 7 2026)
-
-Every visual element gets its appearance from a style, so the whole app can be
-themed and fixed from one place (like CSS classes, not inline `style=""`).
-
-- Layout files hold structure only: which element contains which, element
-  IDs, text and content references, and how an element is positioned
-  relative to another element.
-- Every visual value comes from a style in the styles/theme files: colors,
-  backgrounds, fixed sizes and column widths, margins, padding, text size,
-  weight, and color, alignment, minimum heights, and corner shapes. Repeated
-  measurements live in `dimens.xml`, colors in theme attributes.
-- Never write a visual value directly onto a view in a layout file, into a
-  drawable when a dimension resource should hold it, or into Kotlin code.
-- Boxes that show the same kind of thing use the same styles, so they always
-  match.
-- Do not ask the owner how something should look when `ui-style-guide.md`
-  already covers it. Unless the owner says to make it a different way, follow
-  the style that applies (owner ruling, October 31 2026).
-- Never copy anything: no screen, layout, code, values or approach from any
-  existing file, and never just follow what another screen does, unless the
-  owner explicitly says to copy that specific thing (owner ruling, October 31
-  2026). Some screens are converted wrong, and copying them duplicates what
-  is broken, so existing screens and code are never a reference; only `ui-style-guide.md` decides how something looks.
-- If no shared style fits, create a new shared style (with its dimensions)
-  without asking the owner (owner ruling, October 31 2026). Never hard-code a
-  value instead, and do not copy values from another layout as a shortcut.
-- The project's `.claude/settings.json` hooks repeat this rule to Claude Code
-  whenever a message is about the app's look or a UI file is edited.
-
-New UI must remain compatible with app-wide themes and palette changes.
-
-A shared-style change that alters existing screens requires owner approval before implementation.
-
-UI consistency does not override approved wording or behavior. It supports them.
-
-### Product requirements outrank reuse
-
-Shared code is an implementation tool, not a product constraint.
-
-Never refuse, remove, weaken, relocate, or distort an approved control or behavior merely because the current screen uses a shared style, shared layout, scaffold, or shared code path.
-
-Do not say only that a screen is "shared." Define what is shared:
-
-- a visual style;
-- an XML layout or scaffold;
-- behavior or navigation code;
-- data;
-- or some combination.
-
-Explain which other screens use it and what would visibly change before editing the shared part.
-
-When the approved target screen needs something that the other screens do not, choose the smallest maintainable structure that preserves the product requirement:
-
-1. keep the unique element local while using shared visual styles when it belongs only on this screen;
-2. add an approved optional slot or variant when the pattern is reusable but not universal;
-3. extend the shared layout when every user of it should receive the change;
-4. split the target into its own layout when its structure has genuinely diverged.
-
-Do not make a control, behavior, or whole screen shared merely because it is new. Share stable repeated patterns. Keep genuinely unique product needs local and theme-compatible.
-
-When the owner asks for a toggle, button, field, explanation, or other element only on one screen, do not add it elsewhere or deny it because the current layout is reused. Present the impact and recommended structural option for approval.
-
-### Existing code is not product intent
-
-The existence of a feature, control, theme, workaround, or implementation does not prove that the owner wants it preserved.
-
-When the owner identifies something as legacy, unwanted, or scheduled for removal:
-
-- do not treat it as a requirement;
-- do not preserve or expand it;
-- do not restyle or repair it merely for appearance;
-- do not create new dependencies on it;
-- do not route new shared components through it.
-
-Only perform a temporary safety fix when the owner explicitly approves that limited work.
-
-The legacy per-screen AMOLED recoloring mechanism and its dedicated control are marked `Legacy / remove` in `ui-style-adoption.md`. They are not part of the future shared theme architecture.
-
-### When one screen is used as a reference
-
-Do not imitate or copy the reference screen as a whole.
-
-Before implementation, present a component map covering every relevant repeated element, including:
-
-- header type and title placement;
-- action icons;
-- image treatment;
-- labels, hints, inputs, validation text, and counters;
-- rows, selectors, switches, and checkboxes;
-- section headings and explanations;
-- button semantic roles and size variants;
-- dialogs, loading states, and spacing patterns.
-
-For each component, state:
-
-- which approved shared style or layout applies;
-- whether the reference actually uses it;
-- whether the target already uses it;
-- what will change;
-- what will remain intentionally different.
-
-If no adequate shared style exists, do not copy attributes. Create the missing shared style without asking the owner (owner ruling, October 31 2026) and use it.
-
-Do not use a Partial, Unconverted, Legacy / remove, or Unaudited screen from `ui-style-adoption.md` as a whole-screen template.
-
-### Conversion status must be truthful
-
-Do not call a screen converted, standardized, shared, or complete merely because some shared styles appear in it or because it looks similar to another screen.
-
-A screen is Shared only when every repeated visual component covered by the current design system uses the approved shared style or shared layout. Audit the whole screen before making that claim.
-
-Update `ui-style-adoption.md` in the same approved change that converts, partially converts, exempts, or retires a screen.
-
-## 10. Current evidence, not troubleshooting archaeology
-
-### Look at the code yourself (owner ruling, November 8 2026)
-
-When something is reported broken, read the code and measure before asking
-the owner anything.
-
-- Do not ask the owner to diagnose a problem, find a screen, or collect
-  evidence that the code, a test, or a measurement can provide.
-- Audit the whole path involved, not just the first suspicious line. For
-  memory search, that means the search text, the cut-off, the scoring
-  weights and bonuses, the limits, and every filter.
-- Never give the owner directions to a screen or control until you have
-  confirmed in the code and layout exactly where it is and what it is
-  called.
-
-Treat current code and current tests as the source of truth for current implementation.
-
-Use Git history only when it is relevant to understanding a regression, fragile behavior, or the reason for a current constraint.
-
-Do not preload or preserve resolved troubleshooting narratives, symptom diaries, old branch reports, or completed bug investigations in this file.
-
-Do not infer current behavior from an old work summary. Verify it in the code.
-
-Current priorities belong in the active conversation, issue, work order, or branch notes. They do not become permanent repository law by being added here.
-
-## 11. Technical workflow
-
-### Which client to work on (owner ruling, October 12 2026)
-
-The app currently has two clients on purpose. `beta/new-client` is the new
-client and is where active work goes. `main` is the old client, kept unchanged
-as a fallback while data is brought across; it is not the base for new work.
-
-Before writing any code, confirm the work branch starts from
-`beta/new-client`. If the owner has not said which client to work on, stop and
-ask — the likelier explanation is that the owner forgot to say, not that the
-work belongs on `main`. Work on `main` only when the owner says so.
-
-**`main` is off limits (owner ruling, October 18 2026).** Never merge, push,
-or commit anything into `main`, including documentation and `CLAUDE.md`
-changes, and do no work on `main`, unless the owner has explicitly said to for
-that specific change. Every merge into `main` also rebuilds and republishes
-the old client, so even a documentation change reaches the owner's phone.
-Instruction-file updates go to `beta/new-client` only.
-
-- Inspect the relevant current code before proposing a change.
-- Read the relevant feature specification before changing that feature.
-- Make the smallest coherent change that satisfies the approved requirement.
-- Do not perform incidental refactors, wording cleanup, capitalization changes, or unrelated fixes without approval.
-- Reuse applicable shared visual primitives without forcing unique product behavior into shared layouts or shared behavior.
-- Add or update tests for behavior that can be tested.
-- Work on a feature branch unless the owner explicitly directs otherwise.
-- Do not force-push `main`.
-- Push the branch and verify the Android Checks workflow is green before reporting code work complete.
-- If CI fails because of the change, inspect the logs, fix it, and run CI again.
-- Report what changed and the CI result separately from on-device behavior.
-- Do not claim a reported runtime bug is fixed until the owner confirms the symptom is resolved on the test device.
-- When the owner says "put it on Main," merge the approved green branch to `main` with a normal merge or other explicitly approved method.
-
-### Fix root causes, and say so (owner ruling, October 30 2026)
-
-Every proposed fix states the root cause and explains why the fix removes it
-rather than hiding it. A workaround that leaves the cause in place (moving
-work to a background thread, adding a retry, patching one entry point) is not
-offered as the fix. If a workaround is ever the only option, it is labeled as
-a workaround, with the root cause and the reason it cannot be fixed now.
-
-### New features must not slow down or break existing ones (owner ruling, October 30 2026)
-
-Before adding a feature, check what it costs the screens it touches, such as
-reading data while scrolling or opening files per row, and build it so
-existing behavior stays as fast and correct as before.
-
-### Keep the chat screen from growing (owner ruling, November 6 2026)
-
-The chat screen's code files are too large to change safely. New chat-screen
-features go in their own file, and only the small hookup they need is added to
-the chat screen's existing files. This also applies to the code that draws the
-message bubbles. Moving existing code into a new file is done only when the
-owner approves it, and must not change anything the user sees.
-
-### Never rewrite a test just to make it pass (owner ruling, October 30 2026)
-
-A failing test means the code may be wrong. Fix the code, not the test.
-
-A test may be changed only when the behavior it checks was deliberately
-changed with the owner's approval, or when the test itself is provably
-mistaken. Every changed or removed test must be listed in the report to the
-owner with the reason, in plain language. Never weaken, delete, or skip a test
-to get a green result.
-
-### Never hard-code what a service can change (owner ruling, October 7 2026)
-
-If it cannot be learned from outside the app while the app runs, it does not
-belong in the app. Services change their models, prices and features often,
-and a list written into the code goes stale.
-
-Never write any of these into the app's code or configuration, even when
-copied from a service's documentation:
-
-- prices, rates, or price tables;
-- lists of model names or IDs;
-- lists of which models can do what (speech, streaming, images, tools, and
-  so on);
-- voice lists or other catalogs a service publishes.
-
-The app must read these from the service, or from OpenRouter, while it runs.
-When the information cannot be read, the app says it is unknown ("Not
-Reported" for costs) instead of guessing. If a feature seems impossible
-without a hard-coded list, stop and ask the owner before writing one.
-
-#### Prices
-
-Never write a price, rate, or price table into the app's code or configuration,
-for any service, model, or feature. This includes prices copied from a
-service's documentation or pricing page.
-
-The app may use only prices it gets while running: a charge the service
-reports for the request, or a price list the app downloads from the service
-(or OpenRouter) at the time of the request. When no such source exists, the
-cost is "Not Reported".
-
-Tests may use made-up prices only to check the arithmetic. Those values must
-never become data the app uses.
-
-### Finishing work and waiting on pull requests (owner ruling, October 13 2026)
-
-Waiting on a pull request wakes the session and re-reads the whole
-conversation, which spends the owner's usage. Wait only while something is
-actually arriving, such as a running check or a requested review.
-
-- Merge into `beta/new-client` as soon as Codex has passed the pull request
-  and checks are green (see Codex review below). Do not wait for the owner to
-  say merge. Do not hold the merge for a question that does not block the
-  work; raise it after merging as a follow-up.
-- Once a pull request is waiting only on the owner, finish or stop: stop
-  watching it and do not schedule check-ins or reminders.
-- A genuinely merge-blocking question is fine: ask it once in chat, leave the
-  pull request unmerged, and stop. The owner will come back to it when ready;
-  do not wait or check in for the answer.
-- Do not set up pull-request watching or scheduled check-ins the owner did
-  not ask for.
-
-### Codex review (owner ruling, October 29 2026)
-
-Codex reviews a pull request automatically when it is opened (or when a draft
-is marked ready). Do not comment `@codex review` to start the first round;
-that triggers a second, duplicate review.
-
-- Every Codex review costs the owner usage. Open the pull request only when
-  the work is completely finished: every requested change is built, no owner
-  decision is still pending, nothing else is planned for the branch, and
-  the local checks pass on the final commit. If anything is still open,
-  ask or finish it first. Being told to create a pull request means "when
-  the work is finished," not "now."
-- Then wait for the Codex review.
-- Check each finding against this repository's rules and the owner's
-  instructions; Codex does not know them. Fix the valid findings in one push
-  and reply on any finding that is not being fixed, saying why.
-- After the fixes pass the local checks and are pushed, comment
-  `@codex review` for a re-review; Android Checks runs at the same time
-  (owner ruling, November 8 2026). Codex never reviews code that has not
-  passed the local checks. Keep repeating this cycle (fix valid findings,
-  pass the local checks, request a re-review) until Codex passes it, without
-  stopping to ask the owner between rounds (owner ruling, November 2 2026).
-- Once Codex has passed it (no findings, or a clean re-review after the
-  fixes) and Android Checks is green on the final commit, merge it into
-  `beta/new-client` right away, without waiting for the owner to say merge
-  (owner ruling, October 31 2026). Then stop watching it.
-- Stop watching as soon as nothing more needs action. Do not stay subscribed
-  through status-only updates: every notification wakes the session and
-  spends usage.
-
-### Usage control
-
-Subagents are a normal, permitted tool. Choosing a high-end model (e.g. Fable) for a subagent is likewise permitted — it is not restricted.
-
-The rule is against unnecessary volume: match the number of agents and the model tier to what the task genuinely needs. A routine task does not need a subagent at all; a subagent, when one is warranted, does not need a high-end model unless the task specifically calls for that tier's reasoning.
-
-Fable in particular has a known habit of over-spawning — producing far more subagents than a task needs once it starts. Watch for this specifically. Do not let a task balloon into a large batch of Fable-tier subagents by default; a handful of routine lookups do not each need one.
-
-Ask before spawning multiple agents, before using a high-end model for a subagent, or before running a broad exploratory pass that will materially increase usage.
-
-Do not duplicate work already completed in the current conversation or branch.
-
-## 12. Privacy and repository metadata
-
-Coding conversations are private.
-
-Do not place private conversation text, emotional state, health information, account details, prompts, session identifiers, model attribution, AI conversation links, or AI co-author trailers into commits, pull requests, source files, documentation, issues, release notes, tags, or branch names.
-
-Commit messages describe only the code or documentation change.
-
-Before committing, inspect the message and changed files for private or AI-attribution metadata.
-
-## 13. Asking the owner
-
-Ask in ordinary chat. Do not use a pop-up question tool that may fail on the owner's phone.
-
-Ask one focused question at a time when possible.
-
-Do not hand the owner a wall of unresolved decisions. Group only decisions that must be considered together.
-
-A question should explain the user-visible consequence and include a recommendation when the evidence supports one.
-
-### Wait for the answer (owner ruling, October 30 2026)
-
-If you ask the owner a question, wait for the owner to answer it before beginning the work. A reply that discusses the problem, describes the expected behavior, or offers to test is not an answer to the question.
-
-If the fix is straightforward and you do not need to ask the owner how to fix it, do not ask. Just fix it.
-
-### Do not re-ask what the owner already decided
-
-When the owner has already specified something (a label, option list, order,
-default, behavior, or preview), build it as specified. Do not restate it as a
-recommendation or ask whether they really want it. That adds work for the
-owner and reads as not listening.
-
-Ask only about what is genuinely missing, ambiguous, or new information the
-owner could not have known, and say exactly which point that is. Filling a
-genuine gap with your own unapproved decision is still not allowed.
-
-## 14. Relevant specifications
-
-Read only the documents relevant to the current task.
-
-Examples:
-
-- **conversation index, recall, and carry-over:**
-  `conversation_recall_plan.md`. A proposal until the owner approves it.
-  Only the items it marks "Owner" are decisions.
-- **memory search and dynamic memory:**
-  `Memory System/dynamic_memory_plan.md`. Written from a fresh look at the
-  code and measurements. Only its dated owner decisions are approvals.
-- **older memory documents, background only, not approvals** (section 2):
-  `project-plan.md` and everything under `legacy/`, including the former
-  `Memory System` documents now in `legacy/memory-system-2026-11/`. Use
-  them to understand why something was built a certain way, never to
-  decide for the owner.
-- UI style definitions and composition: `ui-style-guide.md`
-- current UI conversion and legacy status: `ui-style-adoption.md`
-- broad UI redesign work: `ui-redesign-plan.md`
-- document attachment work: `document-includes-plan.md`
-- local speech work: `whisper-local-plan.md`
-- API speech-to-text (API Voice Service): `api-voice-service-plan.md`
-
-The feature plans above describe earlier designs. Confirm with the owner
-before treating any choice in them as decided (section 2).
-
-These documents support the owner's current direction. They do not overrule it.
-
-Use repository search and the current code to locate additional feature-specific documentation. Do not turn this file back into a full architecture encyclopedia.
-
-## 15. Maintaining this file
-
-Keep this file short, stable, and operational.
-
-Add only rules that apply broadly across future work.
-
-Do not add:
-
-- troubleshooting histories;
-- completed implementation summaries;
-- temporary priorities;
-- private personal information;
-- diagnoses or explanations of the owner's behavior;
-- dated arguments between agents and the owner;
-- long architecture descriptions that can be verified from code;
-- rules that apply to only one resolved incident.
-
-Put feature details in the relevant feature documentation. Put active work in the relevant issue, work order, or branch notes. Git already preserves history.
-
-## 16. Local Android builds
-
-The owner works entirely in cloud environments and wants agents to have the
-tools that make the work easier. An earlier version of this rule existed only
-because an environment could not support a full Android build, not because
-Android build tools are unwanted.
-
-**Claude Code cloud sessions: confirmed working (October 30 2026).** Claude,
-running in a Claude Code cloud session, can build this app and run its full
-unit-test suite (about 3,200 tests in a few minutes). Each session starts on a
-fresh machine, so run `./claude-cloud-android-setup.sh` from the repository
-root once per session; it installs the Android SDK and works around the
-public library server's rate limit. Then run the tests with the commands at
-the top of that script.
-
-**This confirmation applies only to Claude in Claude Code cloud sessions.**
-Other AI tools (for example ChatGPT, Codex, or other assistants) run in
-different environments. They must not assume they can build or test locally
-because of this section; each must check its own environment first.
-
-- In any environment, check whether the tools are available and whether
-  installing them is practical before relying on them. Do not spend excessive
-  time forcing an unsupported environment to work; if it cannot be done, say
-  so plainly and rely on GitHub Actions.
-- GitHub Android Checks must still pass before work is considered complete.
-
-## 17. Work-mode GitHub publishing limits
-
-When the configured GitHub HTTPS remote has no usable credential, do not spend
-task time attempting to authenticate or retrying a direct push. Leave the
-verified commit ready for a credentialed environment to publish.
+- When a rule changes, **replace the old rule**. Do not append "previously X, now Y," competing rulings, or decision histories.
+- Do not add dates to standing rules unless an actual deadline or version boundary changes how an agent must act.
+- Keep temporary priorities, bugs, investigations, research, feature architecture, and implementation status in the task, issue, or feature document.
+- If a rule's current validity is uncertain, ask rather than preserve contradictory versions as instructions.
+- Use Git history to recover old decisions when genuinely needed; agents should not have to read that history to carry out current work.
