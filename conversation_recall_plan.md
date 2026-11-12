@@ -1640,28 +1640,41 @@ the code files the step names. It builds only that step.
 - **Hard:** many moving parts, or touches the chat screen. Use the
   strongest model available, and expect more than one review round.
 
-### Overview
+### Overview: build order and difficulty
 
-| Step | What is built | Difficulty | The user sees | Depends on |
-|---|---|---|---|---|
-| 0 | The test set: sample conversations with the real model's numbers | Careful | Nothing | Nothing |
-| 1A | The passage cutter | Routine | Nothing | Nothing |
-| 1B | Token counting, and one queue for the embedding model | Careful | Nothing | Nothing |
-| 1C | The passage stores and per-message updating | Hard | Nothing | 1A, 1B |
-| 1D | Background embedding of passages | Hard | Nothing | 1B, 1C |
-| 1E | Keeping the index in step with the chats | Hard | Nothing | 1C |
-| 1F | The setting, status, delete, database check line, and error notices | Careful | The approved settings section (G.16a) | 1D, 1E |
-| 1G | The progress icon and pop-up, with pause and resume | Careful | The approved icon and pop-up (G.16a) | 1F |
-| 1H | Indexing that continues after the app is closed, with its notification | Hard | The approved notification (G.16a) | 1G |
-| S | Searching with the previous messages | Careful | Nothing | 0 |
-| 2A | Retrieval | Hard | Nothing | Stage 1, S |
-| 2B | The inspector, and the measurements | Careful | A test screen (wording to approve) | 2A |
-| 3 | Context assembly: recall in real requests | Hard | Recall works (wording to approve) | Stage 2 |
-| 4A | Long messages in saved-memory search | Hard | Better memory matches in long messages, typed or dictated | 0, 1B |
-| 4B | Carry-over for saved memories | Careful | Memories stay through follow-ups | 0, S |
-| Later | Optional re-ranker; live AI worker; other chats | To be designed | | |
+Steps are listed in the order they are built. Each needs only steps above
+it. "Approve first" is what the owner must approve before that step
+starts; a step with nothing there can start as soon as the ones it needs
+are merged.
 
-Nothing changes for any user until step 1F. Steps 1A to 1E add code that
+| Order | Step | What is built | Difficulty | Model to use | The user sees | Needs | Approve first |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | The test set: sample messages and memories with the real model's numbers | Routine with the written instructions | Lighter | Nothing | Nothing | Nothing |
+| 2 | 1B | Token counting, one queue for the embedding model, and the reading limit raised to 2,048 | Careful | Middle | Nothing | Nothing | Nothing |
+| 3 | 4A | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | 0, 1B | Memory Search Test wording; the two remaining log lines (G26) |
+| 4 | S | Searching with the previous messages | Careful | Middle | Nothing | 0 | The label and place of its setting (G32) |
+| 5 | 4B | Saved memories stay through follow-up messages | Careful | Middle | Memories stay through follow-ups | 0, S | Nothing |
+| 6 | M | The memory word count and length limit | Careful | Middle | A word count under the memory box | 1B | The open parts of G34 |
+| 7 | 1A | The passage cutter | Routine | Lighter | Nothing | Nothing | Nothing |
+| 8 | 1C | The passage stores and per-message updating | Hard | Strongest | Nothing | 1A, 1B | G30 is decided; nothing further |
+| 9 | 1D | Background embedding of passages | Hard | Strongest | Nothing | 1B, 1C | Nothing |
+| 10 | 1E | Keeping the index in step with the chats | Hard | Strongest | Nothing | 1C | Nothing |
+| 11 | 1F | The setting, status, delete, database check line, and error notices | Careful | Middle | The approved settings section (G.16a) | 1D, 1E | G20, G27, G28, G31 |
+| 12 | 1G | The progress icon and pop-up, with pause and resume | Careful | Middle | The approved icon and pop-up (G.16a) | 1F | Nothing |
+| 13 | 1H | Indexing that continues after the app is closed, with its notification | Hard | Strongest | The approved notification (G.16a) | 1G | What the user is told when indexing stops for the day |
+| 14 | 2A | Retrieval | Hard | Strongest | Nothing | 1A to 1E, S | Nothing |
+| 15 | 2B | The inspector, and the measurements | Careful | Middle | A test screen | 2A | The screen's labels |
+| 16 | 3 | Context assembly: recall in real requests | Hard | Strongest | Recall works | 2A, 2B | The text given to the AI; the "what was sent" wording; the recall room setting; G24 |
+| Later | | Optional re-ranker; live AI worker; other chats | To be designed | | | | |
+
+**Model to use.** Lighter: a small, cheap model is enough. Middle: a
+mid-range model. Strongest: the most capable model available, and expect
+more than one review round. Steps 1 to 6 fix faults that are live on the
+beta today and do not need the conversation index. Steps 7 to 16 build
+the conversation index and recall.
+
+For the conversation index, nothing changes for any user until step 1F.
+Steps 1A to 1E add code that
 stays switched off, because Index Conversations starts off and cannot be
 turned on until 1F.
 
@@ -1682,29 +1695,162 @@ on a path that skips the model's one-at-a-time lock. Step 4B no longer
 waits for the conversation index: the search with previous messages it
 needs is its own step (S). Which step is built first is the owner's decision.
 
-### Step 0: the test set (Careful)
+### Step 0: the test set (Routine with these instructions)
 
-- **Goal:** sample conversations and memories with known right answers,
-  run in the normal unit tests with the real embedding model's numbers, so
-  every later step is judged by tests that existed before its code.
-- **Why it is its own step:** the same agent must not write a step's code
-  and then write the samples that judge it. The memory plan's Step 1.2
-  called for this set and it was never built.
-- **Read:** G.15; the memory plan's Step 1.2; `LiveRetrievalTest.kt`.
-- **Build:** tests and test data only. Samples for saved-memory search and
-  for each situation in G.15: long typed messages with one small detail;
-  **long dictated messages with no periods, and dictated messages where a
-  period falls in the middle of a thought**; short sentences that share
-  one accidental word with an unrelated memory; follow-ups; topic changes;
-  messages where nothing is relevant. The real model's vectors for every
-  sample text are generated once and stored as test files. The results on
-  the current code are recorded as the baseline: how many right memories
-  are found, and how many wrong ones are sent.
-- **If the real model's vectors cannot be generated in the build
-  environment, stop and say so.** Invented numbers are never substituted.
-- **Must not change:** any app code.
-- **Done when:** the set runs in the normal unit tests and the baseline is
-  recorded in this plan.
+**Goal.** Sample memories and messages with known right answers, run in
+the normal unit tests with the real embedding model's numbers. Every later
+step is judged by this set, so it is written before any of their code.
+
+**Rules for whoever builds this step.**
+- Add new files only. Change no app code and no existing test.
+- Create no Markdown file.
+- Write every expected answer **before** running anything. Never change an
+  expected answer to make a result look better. If an expected answer
+  turns out to be wrong, say so in the pull request description and leave
+  the decision to the owner.
+- All sample content is invented. Use a made-up person. Use nothing from
+  any real conversation.
+- Do not commit the model files. Download them to a temporary folder.
+- If any step below cannot be done, stop and say which one. Never make up
+  numbers.
+
+**Files to create.**
+
+| File | What it is |
+|---|---|
+| `app/src/test/resources/recall_test_set/cases.json` | The sample memories and messages, written by hand |
+| `app/src/test/resources/recall_test_set/generate_vectors.py` | The script that turns each text into the real model's numbers |
+| `app/src/test/resources/recall_test_set/vectors.json` | The script's output |
+| `app/src/test/resources/recall_test_set/baseline.json` | How today's search scores on the set |
+| `app/src/test/java/org/teslasoft/assistant/preferences/memory/librarian/RecallTestSetTest.kt` | The unit test that runs the set |
+
+**Part 1: write `cases.json`.**
+
+Memories: at least 30, each with an `id`, `content`, and `tags`. One to
+three sentences each. Spread them over these subjects: a pet, health, work,
+family, home and moving, hobbies, food, and plans with dates. Include
+pairs that share one ordinary word but are about different things, such
+as a move planned for spring and nothing else about spring.
+
+Messages: each with an `id`, a `kind`, its `text`, `expect` (memory ids
+that should be sent), and `must_not` (memory ids that must not be sent).
+
+| Kind | At least | What it is |
+|---|---|---|
+| `short` | 10 | One short message about one memory |
+| `long_typed` | 8 | 150 to 300 words about several things, with normal punctuation, and one small detail that belongs to one memory |
+| `long_dictated` | 8 | 150 to 400 words with **no periods at all**, as speech-to-text writes them, with one small detail that belongs to one memory |
+| `dictated_bad_periods` | 5 | The same, with periods in the middle of thoughts |
+| `very_long` | 4 | More than 450 words, with the detail placed after the 400th word |
+| `accidental_word` | 8 | A short message that shares exactly one ordinary word with an unrelated memory. `expect` is empty and that memory is in `must_not` |
+| `nothing_relevant` | 8 | About something no memory covers. `expect` is empty |
+| `two_subjects` | 5 | About two memories at once. Both are in `expect` |
+
+Conversations: at least 6, each a list of three user messages in order.
+The first names a subject. The second is a follow-up that does not name
+it ("What should I feed her?"). The third changes the subject. Each turn
+has its own `expect` and `must_not`.
+
+**Part 2: write `generate_vectors.py`.** It must do exactly what the app
+does (`OnnxEmbeddingModel.kt`, `EmbeddingModels.kt`,
+`RetrievalDocument.kt`). Read those three files first.
+
+1. Download `onnx/model_q4.onnx`, `onnx/model_q4.onnx_data`, and
+   `tokenizer.json` from the address in `EmbeddingModels.kt` into a
+   temporary folder.
+2. Use Python with the `onnxruntime` and `tokenizers` packages.
+3. For a memory, the text is its content, then a new line, then its tags
+   joined with a comma and a space (`RetrievalDocument.semanticDocument`).
+   Put `title: none | text: ` in front of it.
+4. For a message, put `task: search result | query: ` in front of it.
+5. Turn the text into token ids with the tokenizer and keep the first 512.
+6. Run the model with `input_ids` and an `attention_mask` of ones. Take
+   the output named `sentence_embedding`.
+7. Keep its first 256 numbers, then scale them so their length is 1.
+8. Write every vector to `vectors.json`, keyed by the memory or message
+   id, rounded to 5 decimal places.
+
+**Part 3: prove the script is right before using its output.** The script
+must print these checks and stop if any is off by more than 0.01. The
+reference values were measured on 2026-11-12 with this recipe:
+
+| Check | Value |
+|---|---|
+| "I love drinking coffee in the morning." against "My favorite morning drink is coffee." (both as stored text) | 0.9304 |
+| The first sentence against "The spaceship landed on the distant planet." (both as stored text) | 0.4371 |
+| The message "What should I feed Pepper?" against the stored text "Pepper is the user's cat. She has kidney disease and eats a prescription diet." | 0.6208 |
+
+**Part 4: write `RecallTestSetTest.kt`.**
+- Read the three JSON files with `org.json`, which the unit tests already
+  have.
+- For each message, call `LiveRetrieval.search` with the default
+  `LiveRetrieval.Params()`, the message's vector, every memory as a
+  candidate with its vector and tags, and a limit of 5. Read
+  `LiveRetrievalTest.kt` to see how candidates are made.
+- Count, over the whole set and for each kind: how many expected memories
+  were found, how many were missed, and how many `must_not` memories were
+  sent.
+- For conversations, search each turn on its own, as the app does today.
+- The first time, write those counts to `baseline.json` by hand from the
+  test's printed output.
+- The test passes when the counts are no worse than `baseline.json`:
+  found is not lower and wrongly sent is not higher. It fails with a
+  message naming the message ids that got worse.
+- The test must not require every expected memory to be found. Today's
+  search is known to miss the long messages. Those misses are what the
+  later steps are measured against.
+
+**Done when:**
+- the script's three checks pass;
+- `./gradlew testDebugUnitTest` passes with the new test included;
+- the pull request description lists the counts for each kind, and any
+  expected answer the builder now doubts;
+- the counts are added to this plan under "Baseline" below.
+
+**Baseline.** Not recorded yet.
+
+### Step M: the memory word count and length limit (Careful)
+
+**Owner (2026-11-12).**
+- In the Memory Browser, under the box where a memory is typed, aligned
+  to the right, show how many words the memory holds. This is shown for
+  each memory.
+- When the count reaches 1,500 the line turns red and reads:
+  "Word Limit Reached: 1,500 Words Maximum".
+- The Memory Assistant must split a large subject into separate proposed
+  memories. It must not fail, or throw away a proposed memory, because it
+  is too long.
+
+- **Goal:** no saved memory is longer than the embedding model can read,
+  and the user can always see how long a memory is.
+- **Needs first:** step 1B, which raises the model's reading limit to
+  2,048 tokens (about 1,500 words) and adds the real token count.
+- **Before building, the owner approves (G34):** the exact text of the
+  count before the limit is reached; what happens when the user tries to
+  save a memory that is over the limit; what is shown in the rare case
+  below; how memories that are already too long are marked; and the exact
+  words added to the Memory Assistant's instructions.
+- **The rare case.** The model's limit is counted in its own units, not
+  in words. Ordinary English fits 1,500 words. Text with many unusual
+  names, numbers, or another language can reach the model's limit sooner.
+  The red line must not say 1,500 when the real limit was reached at a
+  lower count, so that case needs its own approved wording.
+- **Read:** `ui-style-guide.md`, "Field error and counter lines" (it has
+  a right-aligned counter under a field, and a counter for a maximum);
+  `ui-style-adoption.md`; `activity_memory_editor.xml` and its screen
+  code; the Memory Assistant's instructions in `archivist/`.
+- **Build:** the count line in every place a memory's text is typed or
+  edited. The builder finds those places in the code and lists them in
+  the pull request. The count uses the shared counter style; no
+  appearance is written into a layout or into Kotlin. The check on
+  saving. The Memory Assistant change, with a test that an over-length
+  proposed memory is split and nothing is discarded.
+- **Must not change:** the text of any existing memory. Nothing is ever
+  shortened automatically.
+- **Done when:** the count updates as the user types; the red line
+  appears at the limit with the approved wording; a memory over the
+  limit cannot be saved without the user being told why and what to do;
+  and the Memory Assistant test passes.
 
 ### Step 1A: the passage cutter (Routine)
 
@@ -2049,8 +2195,8 @@ recommendation.
 | G30 | Is recall offered without an embedding model? | **Decided (owner, 2026-11-12):** no. Conversation recall requires the embedding model. Lorebook keyword matching is separate and keeps working whenever the lorebook is on | Decided |
 | G31 | What the user sees when Index Conversations or Conversation Recall cannot be turned on because no embedding model is installed, and when the model is removed after indexing | Open. Written to the plain-wording rule (G.13b): why it cannot be turned on, and where to install the model | Step 1F |
 | G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | **Decided (owner, 2026-11-12):** yes. 0 to 3, and it starts at 1. Where the control goes is still open. Recommended: with the other search numbers on the Memory Search Test screen. Its label and explanation are shown to the owner before step S | Step S |
-| G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | Open. Recommended: yes, in step 1B. It is an engineering change with no cost for ordinary memories. Speed and memory use on the phone are checked before it ships | Step 1B |
-| G34 | How is a saved memory limited to what the model can read, and how is its length shown? Covers memories the user writes, memories the Memory Assistant proposes, and existing memories that are already too long | Open. Recommended: a memory that is too long cannot be saved, with a message saying why and what to do (shorten it, or split it in two); the editor shows the length as it is typed; existing over-length memories are kept, never shortened automatically, and marked so the user can find them | Before the limit is built |
+| G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | Recommended and written into step 1B. The owner's 1,500-word limit (G34) depends on it. Speed and memory use on the phone are checked before it ships | Step 1B |
+| G34 | How is a saved memory limited to what the model can read, and how is its length shown? | **Decided (owner, 2026-11-12):** a word count under the memory box, aligned right, for each memory; at 1,500 it turns red and reads "Word Limit Reached: 1,500 Words Maximum"; the Memory Assistant splits a large subject into separate proposed memories and never fails or discards one for length. Still open, asked before step M: the count's text before the limit; what happens on saving over the limit; the wording when the model's real limit is reached below 1,500 words; how existing over-length memories are marked; the words added to the Memory Assistant's instructions | Step M |
 
 ## G.18 Research behind this plan (2026-11-10)
 
