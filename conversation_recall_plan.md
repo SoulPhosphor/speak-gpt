@@ -594,7 +594,7 @@ Added after outside reviews and an audit of the code on 2026-11-10 and
 2026-11-11. Each point was checked in the code. This section, with G.5,
 G.5b, and G.7, is the design of the conversation index. It is Proposed
 until the owner approves it as a whole (G35), which is needed before step
-1C. Once approved, these are requirements for stage 1, not options.
+1A. Once approved, these are requirements for stage 1, not options.
 
 **1. Only what the AI may be sent can be recalled.**
 - The app lets the user hide a message from the AI
@@ -843,7 +843,9 @@ ranked first.
 - Rank fusion is run alongside in the stage 2 tests as a comparison. If it
   does better on this app's conversations, it replaces the blend for
   ordering. The gate stays either way.
-- A passage found both ways scores higher than one found one way.
+- A passage found both ways usually scores higher than one found one way,
+  but the blend does not guarantee it: a strong match one way can
+  outscore a weak match both ways. No bonus is added to force it.
 
 **How each score is put on the 0 to 1 scale.** The two scores are not
 comparable as they come, so each is converted by a fixed rule, never by
@@ -1716,8 +1718,8 @@ are merged.
 | 5 | 4B | Saved memories stay through follow-up messages | Careful | Middle | Memories stay through follow-ups | 0, S | The label and place of its setting (G32) |
 | 6 | M | The memory word count and length limit | Careful | Middle | A word count under the memory box | 1B | The open parts of G34 |
 | 7 | 0B | The conversation test set: sample chats with known right answers | Routine with the written instructions | Lighter | Nothing | Nothing | Nothing |
-| 8 | 1A | The passage cutter | Routine | Lighter | Nothing | Nothing | Nothing |
-| 9 | 1C | The passage stores and per-message updating | Hard | Strongest | Nothing | 1A, 1B | The index design as a whole (G35) |
+| 8 | 1A | The passage cutter | Routine | Lighter | Nothing | Nothing | The index design as a whole (G35), because the cutter builds G.5b |
+| 9 | 1C | The passage stores and per-message updating | Hard | Strongest | Nothing | 1A, 1B | Nothing (G35, approved before 1A) |
 | 10 | 1D | Background embedding of passages | Hard | Strongest | Nothing | 1B, 1C | Nothing |
 | 11 | 1E | Keeping the index in step with the chats | Hard | Strongest | Nothing | 1C | Nothing |
 | 12 | 1F | The setting, status, delete, database check line, and error notices | Careful | Middle | The approved settings section (G.16a) | 1D, 1E | G20, G27, G28, G31 |
@@ -1870,12 +1872,13 @@ reference values were measured on 2026-11-12 with this recipe:
   memory ids in the result's ranked list.
 - For conversations, search each turn on its own, as the app does today.
 - The test prints, for every message and every conversation turn, the
-  expected ids that were sent and the `must_not` ids that were sent.
+  expected ids that were sent and every other id that was sent, whether
+  or not it is listed in `must_not`.
 
 **Part 5: write `baseline.json`.** It records today's result for every
 sample one by one, not only totals. For each message id and each
 conversation turn it holds two lists: `found` (expected ids that were
-sent) and `wrongly_sent` (`must_not` ids that were sent). Fill it from
+sent) and `wrongly_sent` (every other id that was sent). Fill it from
 the test's printed output, without changing any expected answer. Until
 `baseline.json` exists, the test prints the results and fails with the
 message that the baseline is not recorded yet.
@@ -1885,8 +1888,8 @@ its own. Totals alone can hide one sample getting worse while another
 gets better.
 - The test fails if, for any sample, an id in the baseline's `found` list
   is no longer sent.
-- The test fails if, for any sample, a `must_not` id is sent that is not
-  in the baseline's `wrongly_sent` list.
+- The test fails if, for any sample, an id it did not expect is sent that
+  is not in the baseline's `wrongly_sent` list.
 - The failure message names each sample and each memory id that got
   worse.
 - The test does not require every expected memory to be found. Today's
@@ -1925,8 +1928,12 @@ code workflow in `CLAUDE.md` section 0.
 **File to create:**
 `app/src/test/resources/recall_test_set/conversations.json`, and a unit
 test that only checks the file is well formed: every id is unique, every
-expected id exists, and every situation below has its minimum number of
-samples. No search is run in this step, because the index does not exist
+expected id exists, every situation below has its minimum number of
+samples, and each sample really has what its situation says: for
+example, the word counts, no periods in a dictated message, the hidden,
+edited, failed, or summarized message it is about, chats of more than 60
+messages, and an expected answer that is empty where nothing is
+relevant. No search is run in this step, because the index does not exist
 yet. Step 2A adds the vectors and the scoring.
 
 **What each chat holds.** An `id`, its scope (a companion, a project, a
@@ -2068,6 +2075,20 @@ questions for each situation.
   measures that wait for the longest text, reports it, and, where the
   model's runtime allows a read to be stopped, stops the background read
   when a live message arrives and does it again afterwards.
+- **How a read might be stopped.** The ONNX Runtime library the app uses
+  (1.20.0) offers `OrtSession.RunOptions.setTerminate(true)`; the app does
+  not use it today. The builder checks that it stops a read safely with
+  this app's model and session before relying on it. If it does not, the
+  live message waits for the running read, and the pull request says so.
+  A stopped background job goes back into the queue and is done again
+  later: no finished work is lost and the queue is never left broken.
+- **Measurements.** The builder reports the time to read a full-length
+  text, how long a live message waits behind a running read, and, where
+  stopping works, how long a stop takes. Each number is labelled either as
+  measured by the automated tests in the build environment or as one that
+  must be measured on the owner's Pixel 8.
+- **No screen.** This step adds no screen or visible control without the
+  owner's approval.
 - **Done when:** existing tests pass unchanged; new tests show the count
   matches the real encoding, that a live request is served before every
   waiting background job and waits for at most one running read, and that
@@ -2131,7 +2152,13 @@ questions for each situation.
   in the new files: after a chat is saved; when a reply finishes; when a
   message is hidden or shown; when a chat is deleted or renamed; after a
   restore or merge; when the embedding model changes. Scope is stamped
-  where the finished turn is already recorded. Indexing existing chats,
+  where the finished turn is already recorded, but not inside
+  `recordTranscriptTurn()` in `ChatActivity.kt`: that function returns at
+  once when the saved-memory database is not set up
+  (`MemoryStore.isProvisioned()` is false), so a hookup there would miss
+  the companion, project, and roleplay scope of every turn in that case.
+  The scope is recorded whether or not the saved-memory database is set
+  up, and a test shows it. Indexing existing chats,
   newest first.
 - **Confirm in the code and record in this plan:** how much existing
   conversation has a recorded scope.
@@ -2197,10 +2224,14 @@ questions for each situation.
   `MemoryAnalysisForegroundService.kt` already handles this stop signal.
 - **To decide at the start of this step, before any code:** whether to
   use this kind of service or Android's WorkManager, which Android's
-  documentation suggests instead. The builder reads Android's current
-  limits for both, including any daily limits on WorkManager jobs, which
-  were not checked for this plan, and reports the choice and the reason
-  to the owner. What the user is told when indexing stops for the day
+  documentation suggests instead. WorkManager has its own limit (checked
+  against Android's documentation, 2026-11-12): from Android 16, a job's
+  running time counts against a quota set by how often the app is used,
+  even when the job started while the app was open or runs alongside a
+  foreground service, and the system stops a job that runs out. The
+  builder reads Android's current limits for both and reports the choice
+  and the reason to the owner. Whichever is chosen must stop safely when
+  told, keep everything finished, and continue later. What the user is told when indexing stops for the day
   is shown to the owner first.
 - **Done when:** indexing continues with the app closed; the notification
   shows a real percentage; a stop by the system loses no finished work;
@@ -2217,8 +2248,9 @@ questions for each situation.
   measured on step 0's conversations.
 - **Done when:** step 0's conversations have been scored with the number
   of previous messages at 0, 1, 2, and 3, and for each the plan records:
-  follow-ups that kept their memory, second follow-ups that kept it, and
-  memories carried into the first message of a new subject.
+  first follow-ups that kept their memory; second and later follow-ups in
+  a row that kept it; memories of the old subject sent after the subject
+  changed; and any other memory sent that the sample did not expect.
 
 ### Step 2A: retrieval (Hard)
 
@@ -2298,6 +2330,10 @@ questions for each situation.
   describes.
 - **Must not change:** anything, when the setting is 0. With the setting
   at 0 every result is the same as before this step.
+- **The starting value stays 1 (G32).** The builder does not change it. If
+  step S's results suggest another value, the builder explains them and
+  asks the owner. No other way of telling that the subject has changed,
+  and no other search method, is added without the owner's approval.
 - **Done when:** on step 0's conversations, with the setting at 1, a
   memory stays through the first follow-up; the memories carried into the
   first message of a new subject are counted and reported; no memory is
@@ -2407,7 +2443,7 @@ about to start. Each has a recommendation.
 | G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | **Decided (owner, 2026-11-12):** yes. 0 to 3, and it starts at 1. Still open: where the control goes, and its label and explanation. Recommended place: with the other search numbers on the Memory Search Test screen | Step 4B |
 | G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | Follows from the owner's decision of 2026-11-12 that a memory may hold 1,500 words (G34): that limit is not true unless the model reads that much. Written into step 1B. Speed and memory use on the phone are checked before it ships | Step 1B |
 | G34 | How is a saved memory limited to what the model can read, and how is its length shown? | **Decided (owner, 2026-11-12):** a word count under the memory box, aligned right, for each memory; at 1,500 it turns red and reads "Word Limit Reached: 1,500 Words Maximum"; the Memory Assistant splits a large subject into separate proposed memories and never fails or discards one for length. Still open, asked before step M: the count's text before the limit; what happens on saving over the limit; the wording when the model's real limit is reached below 1,500 words; how existing over-length memories are marked; the words added to the Memory Assistant's instructions | Step M |
-| G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before step 1C. No builder treats it as approved before then | Step 1C |
+| G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before step 1A. No builder treats it as approved before then | Step 1A |
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before step 2A | Step 2A |
 
 ## G.18 Research behind this plan (2026-11-10)
@@ -2539,5 +2575,11 @@ this plan. These rules keep that safe.
   so.** Do not guess, and do not copy another part of the app to fill the
   gap.
 - **A stage is finished** when its tests pass, the local checks and Android
-  Checks pass, and this plan is updated to say what was built.
+  Checks pass, and one line saying what was built is added under "Build
+  record" at the end of this plan. That is the only other place a builder
+  may edit.
 
+## Build record
+
+One line per finished step: the step, what was built, and the pull
+request. Step 0's results are in `memory baseline.md`.
