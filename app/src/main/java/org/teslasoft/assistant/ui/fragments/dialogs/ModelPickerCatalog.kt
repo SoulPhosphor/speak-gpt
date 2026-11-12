@@ -31,7 +31,8 @@ internal class ModelPickerCatalog(
     private val scope: CoroutineScope,
     private val onChanged: () -> Unit,
     private val onFailure: (ApiEndpointObject, Exception) -> Unit,
-    private val onCatalogReceived: (ApiEndpointObject, String) -> Unit
+    private val onCatalogReceived: (ApiEndpointObject, String) -> Unit,
+    private val rawCatalog: Boolean = false
 ) {
     private enum class Filter { ALL, NEW, FREE }
 
@@ -223,7 +224,7 @@ internal class ModelPickerCatalog(
                 delay(SEARCH_DELAY_MS)
                 val body = transport.models(1, "", newestFirst = false, providers = providers)
                 providerMatches = withContext(Dispatchers.Default) {
-                    ModelBrowserCatalog.parse(body).entries.mapTo(HashSet()) { it.id }
+                    ModelBrowserCatalog.parse(body, includeAllModels = rawCatalog).entries.mapTo(HashSet()) { it.id }
                 }
                 providerLoading = false
                 update()
@@ -254,7 +255,7 @@ internal class ModelPickerCatalog(
             try {
                 if (debounce) delay(SEARCH_DELAY_MS)
                 val body = transport.models(page, search, newestFirst)
-                val response = withContext(Dispatchers.Default) { ModelBrowserCatalog.parse(body, page) }
+                val response = withContext(Dispatchers.Default) { ModelBrowserCatalog.parse(body, page, includeAllModels = rawCatalog) }
                 response.entries.forEach { entries[it.id] = it }
                 paginated = paginated || response.nextPage != null
                 nextPage = response.nextPage

@@ -996,7 +996,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             onFailure = { endpoint, error ->
                 showProviderError(error.message, endpointLabel = endpoint.label.ifBlank { endpoint.host })
             },
-            onCatalogReceived = ::refreshChatCatalogCapabilities
+            onCatalogReceived = ::refreshChatCatalogCapabilities,
+            rawCatalog = rawModelCatalog
         )
         list.setItemsCanFocus(true)
         list.setOnScrollListener(object : AbsListView.OnScrollListener {

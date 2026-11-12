@@ -62,4 +62,36 @@ class ModelBrowserCatalogTest {
         assertEquals(listOf("chat"), page.entries.map { it.id })
         assertNull(ModelBrowserCatalog.parse(body, requestedPage = 3).nextPage)
     }
+    @Test
+    fun rawRuleCatalogKeepsExactCustomIdsThatChatNameFilteringWouldHide() {
+        val body = """
+            {"data":[{"id":"plain"},{"id":"custom-tts-chat"},{"id":"custom-dall-chat"},
+             {"id":"custom-whisper-chat"},{"id":"custom-embedding-chat"}]}
+        """.trimIndent()
+        assertEquals(listOf("plain"), ModelBrowserCatalog.parse(body).entries.map { it.id })
+        assertEquals(
+            listOf("plain", "custom-tts-chat", "custom-dall-chat", "custom-whisper-chat", "custom-embedding-chat"),
+            ModelBrowserCatalog.parse(body, includeAllModels = true).entries.map { it.id }
+        )
+    }
+
+    @Test
+    fun rawRuleCatalogPreservesPaginationAndMetadataWithoutFilteringModalities() {
+        val body = """
+            {"data":[{"id":"custom","name":"Custom name","endpoints":["/other"],
+             "architecture":{"output_modalities":["image"]},"providers":["host"],
+             "capabilities":{"reasoning":true},"created":"2026-11-01T00:00:00Z"},
+             {"id":""},{"name":"missing id"},{"id":"custom","endpoints":["/other"]}],
+             "pagination":{"current_page":2,"total_pages":3}}
+        """.trimIndent()
+        val page = ModelBrowserCatalog.parse(body, requestedPage = 2, includeAllModels = true)
+        assertEquals(3, page.nextPage)
+        val model = page.entries.single()
+        assertEquals("custom", model.id)
+        assertEquals("Custom name", model.name)
+        assertEquals(Instant.parse("2026-11-01T00:00:00Z"), model.created)
+        assertEquals(listOf("host"), model.providers.map { it.id })
+        assertTrue(model.advertisesReasoning)
+        assertTrue(ModelBrowserCatalog.parse(body).entries.isEmpty())
+    }
 }
