@@ -353,6 +353,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ChatOutlineActivity"
+            android:exported="false"
+            android:label="@string/chat_outline_title">
+        </activity>
+
+        <activity
             android:name=".ui.activities.SummarizerPromptsActivity"
             android:exported="false"
             android:label="@string/title_summarizer_prompts">

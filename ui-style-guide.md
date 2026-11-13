@@ -328,7 +328,10 @@ with `Status` and `Dots` (the three looping dots). The title is left-aligned
 beside the percentage by the owner's design (Nov 2 2026), an approved
 exception to centered dialog titles. The percentage must come from work
 actually done, never a guess. Spacing and sizes live in `progress_dialog_*`
-dimensions. Current user: the compaction pop-up (`dialog_compaction_progress.xml`).
+dimensions, and the dots' step time in `progress_dialog_dots_step_ms`. Current
+users: the compaction pop-up (`dialog_compaction_progress.xml`) and the Chat
+Outline screen, which shows the same layout with its own title and completion
+text.
 
 ### Title and explanatory text
 
@@ -818,6 +821,17 @@ On the Compaction Summary screen, one prompt tab per saved compaction version, t
 - `Widget.App.VersionTabs.Field` — the version's text, transparent inside the frame (`version_tab_field_padding`).
 
 The shown tab uses `Widget.App.PromptTab.Active`; other tabs use `Widget.App.PromptTab`, or `Widget.App.PromptTab.Unused` when Unused.
+
+### Chat Outline screen
+
+The Chat Outline screen (`activity_chat_outline.xml`, owner design Nov 13 2026) is laid out like the Compaction Summary screen from shared families: the header (`ActionBar`, `BackButton`, `Title.NearBack`, a `ChainedButton` trash can, `SaveButton`), `Widget.App.Page.Content`, the chat's title as `Widget.App.Section.Title`, Generate New Outline and Replace All Outlines With New as `AppButton.Primary.Inline.Centered.BelowIntro`, and the outline tabs on the `VersionTabs` family with `PromptTab` / `PromptTab.Active`. It adds only:
+
+- `Widget.App.ChatOutline.TagsLabel` and `TagsField` — the "Tags:" line in a `Widget.App.Page.ControlRow`: the field label at its own width, then an underlined writing blank (`chat_outline_tags_gap`, `chat_outline_text_size`).
+- `Widget.App.ChatOutline.Text` — a tab's outline shown as formatted markdown inside `VersionTabs.Frame` (`version_tab_field_padding`, `chat_outline_text_size`).
+- `Widget.App.ChatOutline.Field` — the same tab's raw markdown while Edit is on (`VersionTabs.Field` with the outline text size and color).
+- `Widget.App.ChatOutline.StatusSpinner` — the small spinner before the "Creating outline…" status, which uses `Widget.App.Screen.Intro` (`chat_outline_status_spinner_gap`).
+
+Its run progress uses the shared progress pop-up (`dialog_compaction_progress.xml`) with the outline's title and completion text.
 
 ### Prompt tab row
 

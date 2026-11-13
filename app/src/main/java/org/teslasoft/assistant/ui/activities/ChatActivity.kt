@@ -5407,13 +5407,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** View Outline opens the outlines; Create Outline also starts the first. */
     private fun openChatOutline() {
         if (chatId.isBlank()) return
-        if (!hasChatOutline()) {
-            startChatOutline(
-                org.teslasoft.assistant.util.summarizer.SummarizerController.OutlineMode.GENERATE_NEW,
-                -1
-            )
-        }
-        startActivity(ChatOutlineActivity.createIntent(this, chatId, chatName))
+        startActivity(ChatOutlineActivity.createIntent(this, chatId, chatName, create = !hasChatOutline()))
     }
 
     /** Starts a Chat Outline run over the whole stored conversation. */

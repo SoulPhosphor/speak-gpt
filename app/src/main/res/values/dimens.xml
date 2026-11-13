@@ -351,4 +351,8 @@
          attachment is highlighted (Widget.App.Chat.ComposerAction.Includes). -->
     <dimen name="chat_composer_includes_highlight_stroke">1.5dp</dimen>
     <dimen name="chat_composer_includes_highlight_inset">6dp</dimen>
+    <!-- Chat Outline screen (Widget.App.ChatOutline.*). -->
+    <dimen name="chat_outline_text_size">16sp</dimen>
+    <dimen name="chat_outline_tags_gap">8dp</dimen>
+    <dimen name="chat_outline_status_spinner_gap">8dp</dimen>
 </resources>
