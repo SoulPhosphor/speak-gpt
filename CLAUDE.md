@@ -10,7 +10,7 @@ These are the standing operating rules for agents working with the owner and thi
 - Treat a plan's **proposed** items as proposals, not permission to build them. Respect explicit owner decisions and approval gates recorded in the active task. An older AI-written document calling something "approved" or "binding" is not proof that the owner approved it. If the approval cannot be verified from the owner's clear instruction or an explicitly authoritative current decision record, ask instead of assuming.
 - Verify current implementation in source code and tests. Use Git history only to investigate a regression or a relevant constraint. Do not use an earlier agent summary as evidence of current behavior.
 - Do not create a new Markdown file without the owner's permission. Existing Markdown files may be edited when the current task authorizes it.
-- Confirm the intended integration branch and its current commit before branching or editing. Do not assume that `main`, the default branch, and the most recently developed branch are the same. If branch names, repository state, and the owner's instruction conflict, report the mismatch and ask before merging or changing a branch ref.
+- `main` is the sole active integration branch for the current client and the source for current plans and instructions. Fetch it and verify its current commit before branching or editing. Base new work on `main` and target pull requests to `main`. `archive/old-main` preserves the old client for reference only; never use it or a stale work branch as the starting point for current work. If a checkout predates this transition, fetch and compare its unmerged work with current `main` before continuing; preserve that work rather than silently overwriting either version.
 - Work on a feature branch unless explicitly directed otherwise. Never force-push an integration branch or alter unrelated branches.
 
 ## 2. Owner authority and product approvals
@@ -117,18 +117,22 @@ Before requesting more crash reports, backup files, or diagnostic artifacts, ver
 
 For code work, use this sequence:
 
-1. Confirm the owner-designated target branch contains the intended current work; branch from its verified commit. Inspect relevant code, finish the assigned changes, and review the full diff yourself.
+1. Fetch `main`, confirm its current commit, and branch from that commit unless the owner explicitly names a different target. Inspect relevant code, finish the assigned changes, and review the full diff yourself.
 2. Run the local checks and fix failures: `./gradlew testDebugUnitTest`, `./gradlew assembleBeta`, and `./gradlew assembleDebugAndroidTest`. Do not open a code PR with known failed local checks.
 3. Open one focused pull request once the work is complete, required owner decisions are resolved, and local checks pass. The first Codex review begins automatically; do not request a duplicate first review.
 4. Android Checks runs while Codex reviews. Validate each finding against the actual code and owner-approved behavior. Fix valid findings, and reply with the reason for any finding not being fixed. Rerun local checks, push the fixes together, and request `@codex review` for a subsequent review.
 5. Repeat until Codex has no outstanding actionable findings and Android Checks is green on **the final commit**. Codex is the final code-review gate: do not push further code after it passes. If a later correction is unavoidable, repeat checks and obtain a fresh Codex review of that commit. Do not merge work that is still running, failed, or unreviewed.
-6. Merge the approved, green PR into the **verified owner-designated integration branch** immediately, without waiting for the owner to give a second merge instruction. Use an ordinary merge method and no force-push. If the target branch or approval status is genuinely uncertain, leave it unmerged and ask rather than choosing silently.
+6. Merge the approved, green PR into **`main`** (or a different integration branch explicitly designated by the owner) immediately, without waiting for the owner to give a second merge instruction. Use an ordinary merge method and no force-push. If the target branch or approval status is genuinely uncertain, leave it unmerged and ask rather than choosing silently.
 
 **Codex review is required only for pull requests that change application or test code.** A PR changing only `CLAUDE.md` or other documentation needs no Codex review or re-review. For documentation-only changes, inspect the complete replacement text, links, scope, and diff; do not run Android builds solely to validate documentation or claim tests were executed when they were not. Wait for any required repository checks, then merge without a Codex approval gate. A PR containing both documentation and code follows the code workflow above.
 
 After opening a PR, do not trigger a duplicate first Codex review, run repetitive status checks, or schedule watchers. Check while CI or review action is pending, then stop. If only the owner can decide the remaining blocker, ask once and leave the PR intact.
 
 **Completion reporting:** Separate what was changed, which tests actually ran, the GitHub/CI/review status, and any behavior that still needs on-device confirmation. Green CI alone does not prove an observed runtime symptom is fixed; the owner verifies the real device behavior.
+
+### App build identity
+
+`main` continues to produce the side-by-side Beta app: use `assembleBeta`, package `com.soulphosphor.phosphorshines.beta`, and label `Phosphor Shines Beta`. The branch name does not change the app identity. Do not substitute the old client, a standard release build, or the old pre-release package. Automatic publishing from `main` uses the Beta workflow; the legacy release workflow is not an automatic publishing path for current work.
 
 ### Build environments
 
