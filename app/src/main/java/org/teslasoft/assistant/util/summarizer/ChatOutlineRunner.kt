@@ -21,6 +21,12 @@ package org.teslasoft.assistant.util.summarizer
  * owns the conversation snapshot a run reads, so it registers a starter for
  * its chat while it exists; the Chat Outline screen, opened on top of it,
  * calls [start].
+ *
+ * If Android recreated the app while the Chat Outline screen was open, the
+ * chat screen underneath has not been rebuilt yet and no starter exists.
+ * The outline screen then leaves the run with [request] and closes; the chat
+ * screen picks it up with [takePending] once its messages are loaded, starts
+ * it, and opens the outline screen again.
  */
 object ChatOutlineRunner {
 
@@ -29,7 +35,10 @@ object ChatOutlineRunner {
         fun start(mode: SummarizerController.OutlineMode, redoIndex: Int): Boolean
     }
 
+    data class Request(val mode: SummarizerController.OutlineMode, val redoIndex: Int)
+
     private val starters = HashMap<String, Starter>()
+    private val pending = HashMap<String, Request>()
 
     @Synchronized
     fun register(chatId: String, starter: Starter) {
@@ -45,4 +54,16 @@ object ChatOutlineRunner {
     @Synchronized
     fun start(chatId: String, mode: SummarizerController.OutlineMode, redoIndex: Int = -1): Boolean =
         starters[chatId]?.start(mode, redoIndex) ?: false
+
+    @Synchronized
+    fun hasStarter(chatId: String): Boolean = starters.containsKey(chatId)
+
+    /** Leaves a run for the chat screen to start when it is rebuilt. */
+    @Synchronized
+    fun request(chatId: String, mode: SummarizerController.OutlineMode, redoIndex: Int = -1) {
+        if (chatId.isNotBlank()) pending[chatId] = Request(mode, redoIndex)
+    }
+
+    @Synchronized
+    fun takePending(chatId: String): Request? = pending.remove(chatId)
 }

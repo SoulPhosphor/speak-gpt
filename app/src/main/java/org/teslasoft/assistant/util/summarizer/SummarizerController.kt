@@ -460,9 +460,15 @@ class SummarizerController(
         job = scope.launch {
             var committed = false
             try {
-                committed = outlineSnapshot(snapshot, chatName, mode, redoIndex)
+                val saved = outlineSnapshot(snapshot, chatName, mode, redoIndex)
+                committed = saved != null
+                // The outline is saved and the run counts as done from here.
+                // Tags are separate work after it: cancelling them only
+                // leaves the Tags line empty.
+                if (saved != null) fillEmptyOutlineTags(saved)
             } catch (_: CancellationException) {
-                // A cancelled outline keeps nothing.
+                // A cancelled outline keeps nothing; a cancelled tag
+                // suggestion after the outline was saved keeps the outline.
             } catch (e: Exception) {
                 recordUnexpectedFailure(e, OperationKind.OUTLINING, chatName)
             } finally {
@@ -491,9 +497,9 @@ class SummarizerController(
         chatName: String,
         mode: OutlineMode,
         redoIndex: Int
-    ): Boolean {
+    ): String? {
         val chatId = chatIdProvider()
-        if (chatId.isBlank() || snapshot.entries.isEmpty()) return false
+        if (chatId.isBlank() || snapshot.entries.isEmpty()) return null
         val prefs = Preferences.getPreferences(appContext, chatId)
         val target = snapshot.entries.size
         var outline = ""
@@ -503,7 +509,7 @@ class SummarizerController(
         var tokenBudget = configuredBatchTokens
         try {
             val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.CHAT_OUTLINE)
-                ?: return false
+                ?: return null
             while (done < target) {
                 when (val result = foldBatch(
                     runtime = runtime,
@@ -524,14 +530,14 @@ class SummarizerController(
                             OperationState.Running(OperationKind.OUTLINING, chatName, target, done)
                         )
                     }
-                    FoldBatchResult.Failed -> return false
+                    FoldBatchResult.Failed -> return null
                 }
             }
         } catch (cancelled: CancellationException) {
             setOperationState(OperationState.Cancelled(OperationKind.OUTLINING, chatName, 0))
             throw cancelled
         }
-        if (outline.isBlank() || chatIdProvider() != chatId) return false
+        if (outline.isBlank() || chatIdProvider() != chatId) return null
 
         // Read the saved outlines only now, so edits made while this ran stay.
         val current = ChatOutlines.fromJson(prefs.getChatOutlines())
@@ -543,13 +549,21 @@ class SummarizerController(
                 else ChatOutlines.afterGenerateNew(current, outline)
         }
         prefs.setChatOutlines(ChatOutlines.toJson(updated))
-        if (prefs.getChatOutlineTags().isBlank()) {
-            suggestOutlineTags(outline)?.let { tags ->
-                if (prefs.getChatOutlineTags().isBlank()) prefs.setChatOutlineTags(tags)
-            }
-        }
         notifyStateChanged()
-        return true
+        return outline
+    }
+
+    /** Fills an empty Tags line from [outline]; tags the user wrote are never replaced. */
+    private suspend fun fillEmptyOutlineTags(outline: String) {
+        val chatId = chatIdProvider()
+        if (chatId.isBlank()) return
+        val prefs = Preferences.getPreferences(appContext, chatId)
+        if (prefs.getChatOutlineTags().isNotBlank()) return
+        val tags = suggestOutlineTags(outline) ?: return
+        if (chatIdProvider() == chatId && prefs.getChatOutlineTags().isBlank()) {
+            prefs.setChatOutlineTags(tags)
+            notifyStateChanged()
+        }
     }
 
     /** Suggested tags for the Tags line, or null when the request fails. A

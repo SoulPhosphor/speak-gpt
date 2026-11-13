@@ -422,6 +422,16 @@ class ChatOutlineActivity : FragmentActivity() {
 
     private fun startRun(mode: OutlineMode, redoIndex: Int = -1) {
         if (running) return
+        if (!ChatOutlineRunner.hasStarter(chatId) && SummarizerController.isConfigured(this)) {
+            // Android rebuilt the app and the chat screen underneath is not
+            // ready yet: hand it the run; it starts it and reopens this screen.
+            // Closing this screen first asks about unsaved changes.
+            withSavedEdits {
+                ChatOutlineRunner.request(chatId, mode, redoIndex)
+                finish()
+            }
+            return
+        }
         if (ChatOutlineRunner.start(chatId, mode, redoIndex)) return
         // Without a Summary Model nothing can run; say so the way a failed run would.
         if (!SummarizerController.isConfigured(this)) {

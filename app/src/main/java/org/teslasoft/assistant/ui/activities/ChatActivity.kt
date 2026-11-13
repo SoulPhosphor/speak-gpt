@@ -1670,6 +1670,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             refreshPersistentIncludeControls()
             // The chat may have been renamed since the outline starter was registered.
             org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.register(chatId, chatOutlineStarter)
+            // A Chat Outline screen restored without this screen left its run here.
+            org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.takePending(chatId)?.let { request ->
+                startChatOutline(request.mode, request.redoIndex)
+                startActivity(ChatOutlineActivity.createIntent(this, chatId, chatName))
+            }
             // The summary / compaction review may have just closed: run any
             // held update, or the catch-up owed after Resummarize.
             releaseHeldSummarizerCycle()
