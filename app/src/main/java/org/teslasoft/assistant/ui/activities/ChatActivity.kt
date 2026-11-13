@@ -2109,14 +2109,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     R.drawable.btn_accent_tonal_v5_amoled
                 )!!, this
             )
-
-
-            btnPersistentIncludes?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
         } else {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
                 window.navigationBarColor = getColor(R.color.accent_100)
@@ -2130,7 +2122,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             activityTitle?.setBackgroundResource(R.drawable.bg_chat_header)
             btnBack?.setBackgroundResource(R.drawable.btn_chat_header_action)
             btnSettings?.setBackgroundResource(R.drawable.btn_chat_header_action)
-            btnPersistentIncludes?.setBackgroundResource(R.drawable.btn_accent_tonal_v5)
         }
     }
 
@@ -3676,17 +3667,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return drawable
     }
 
-    private fun getAmoledAccentDrawableV2(drawable: Drawable, context: Context) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getAmoledSurfaceColorV2(context))
-        return drawable
-    }
-
     private fun getAmoledSurfaceColor(context: Context) : Int {
         return ResourcesCompat.getColor(context.resources, R.color.amoled_accent_100, null)
-    }
-
-    private fun getAmoledSurfaceColorV2(context: Context) : Int {
-        return ResourcesCompat.getColor(context.resources, R.color.amoled_accent_200, null)
     }
 
     /**

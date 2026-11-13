@@ -139,10 +139,8 @@
                                 app:srcCompat="@drawable/ic_history_edu" />
 
                             <ImageButton
+                                style="@style/Widget.App.Chat.ComposerAction"
                                 android:id="@+id/btn_persistent_includes"
-                                android:layout_width="48dp"
-                                android:layout_height="48dp"
-                                android:background="@drawable/btn_accent_tonal_v5"
                                 android:contentDescription="@string/composer_includes_action"
                                 android:src="@drawable/ic_attach"
                                 android:visibility="gone"

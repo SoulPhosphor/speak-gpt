@@ -59,4 +59,13 @@ object PersistentIncludeContext {
         }
         return result
     }
+
+    /**
+     * True when any sent image or document is still in its full size, meaning
+     * it has been neither reduced/condensed nor removed.
+     */
+    fun hasFullSize(
+        messages: List<Map<String, Any>>,
+        includesKey: String = INCLUDES_KEY
+    ): Boolean = allSent(messages, includesKey).any { it.form == IncludeForm.FULL }
 }
