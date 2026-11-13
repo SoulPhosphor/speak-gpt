@@ -1668,6 +1668,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             refreshComposerTools()
             // Chat Settings may have turned the full-size highlight on or off.
             refreshPersistentIncludeControls()
+            // The chat may have been renamed since the outline starter was registered.
+            org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.register(chatId, chatOutlineStarter)
+            // A Chat Outline screen restored without this screen left its run here.
+            org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.takePending(chatId)?.let { request ->
+                startChatOutline(request.mode, request.redoIndex)
+                startActivity(ChatOutlineActivity.createIntent(this, chatId, chatName))
+            }
             // The summary / compaction review may have just closed: run any
             // held update, or the catch-up owed after Resummarize.
             releaseHeldSummarizerCycle()
@@ -3095,6 +3102,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
+        org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.unregister(chatOutlineStarter)
         bookmarkNavigation?.dispose()
         bookmarkNavigation = null
         PortableRestoreOutcomeFlow.onActivityDestroyed(this)
@@ -5322,6 +5330,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Same order as Delete and added before it, so Selection Mode
                 // sits directly above Delete.
                 menu.add(Menu.NONE, 9, 5, R.string.chat_menu_selection_mode)
+                // Chat Outline sits directly under Selection Mode (owner
+                // ruling, Nov 13 2026); it reads View Outline once one exists.
+                if (savedChat != null) {
+                    menu.add(
+                        Menu.NONE, 10, 5,
+                        if (hasChatOutline()) R.string.chat_menu_view_outline
+                        else R.string.chat_menu_create_outline
+                    )
+                }
                 if (savedChat != null) {
                     menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)
                     menu.add(Menu.NONE, 3, 5, R.string.btn_delete)
@@ -5368,6 +5385,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             selectionMode.enter()
                             true
                         }
+                        10 -> {
+                            openChatOutline()
+                            true
+                        }
                         8 -> {
                             confirmShowAllHiddenMessages()
                             true
@@ -5383,6 +5404,42 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
     }
+
+    private fun hasChatOutline(): Boolean =
+        org.teslasoft.assistant.util.summarizer.ChatOutlines
+            .fromJson(preferences?.getChatOutlines()).isNotEmpty()
+
+    /** View Outline opens the outlines; Create Outline also starts the first. */
+    private fun openChatOutline() {
+        if (chatId.isBlank()) return
+        startActivity(ChatOutlineActivity.createIntent(this, chatId, chatName, create = !hasChatOutline()))
+    }
+
+    /** Starts a Chat Outline run over the whole stored conversation. */
+    private fun startChatOutline(
+        mode: org.teslasoft.assistant.util.summarizer.SummarizerController.OutlineMode,
+        redoIndex: Int
+    ): Boolean {
+        if (!org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)) {
+            return false
+        }
+        val controller = summarizerController ?: return false
+        if (controller.isManualCompactionRunning() || controller.isOutlineRunning()) return false
+        val snapshot = summarizerSnapshot() ?: return false
+        if (snapshot.entries.isEmpty()) return false
+        controller.runOutline(
+            snapshot = snapshot.copy(entries = snapshot.entries.toList()),
+            chatName = chatName,
+            mode = mode,
+            redoIndex = redoIndex
+        )
+        return true
+    }
+
+    private val chatOutlineStarter =
+        org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.Starter { mode, redoIndex ->
+            startChatOutline(mode, redoIndex)
+        }
 
     private fun showChatExportDialog() {
         ChatExportDialog.show(this) { options ->
@@ -5493,6 +5550,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 .controller(applicationContext, chatId)
         org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
             .attach(chatId, summarizerListener)
+        org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.register(chatId, chatOutlineStarter)
         summarizerOperationCancel?.setOnClickListener {
             org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
         }
@@ -5509,6 +5567,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
     ) {
         if (renderCompactionDialog(state)) return
+        // A Chat Outline run shows its progress on the Chat Outline screen and
+        // in its notification, not in the chat's summarizer status.
+        if (org.teslasoft.assistant.util.summarizer.SummarizerController.kindOf(state) ==
+            org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.OUTLINING
+        ) return
         val preserveProjectionNotice = projectionStatusVisible &&
             (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Idle ||
                 state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled)

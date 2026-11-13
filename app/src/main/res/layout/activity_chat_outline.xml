@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chat Outline screen (owner design, Nov 13 2026). Header: Back, "Chat
+     Outline", Delete Outlines, Save. Content: the chat's full title, Generate
+     New Outline, Replace All Outlines With New, the run status, the Tags
+     line, then one tab per outline above a frame showing it as markdown (or
+     its raw text while Edit is on). Every appearance comes from shared
+     styles; this layout holds structure only. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/chat_outline_title"
+            app:layout_constraintEnd_toStartOf="@+id/btn_delete_outlines" />
+
+        <ImageButton
+            android:id="@+id/btn_delete_outlines"
+            style="@style/Widget.App.ActionBar.ChainedButton"
+            android:contentDescription="@string/chat_outline_delete_all_desc"
+            android:src="@drawable/ic_delete"
+            android:tooltipText="@string/chat_outline_delete_all_desc"
+            app:layout_constraintEnd_toStartOf="@+id/btn_save"
+            app:srcCompat="@drawable/ic_delete" />
+
+        <ImageButton
+            android:id="@+id/btn_save"
+            style="@style/Widget.App.ActionBar.SaveButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save"
+            app:srcCompat="@drawable/ic_save" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout style="@style/Widget.App.Page.Content">
+
+            <TextView
+                android:id="@+id/text_chat_title"
+                style="@style/Widget.App.Section.Title" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_generate_new_outline"
+                style="@style/AppButton.Primary.Inline.Centered.BelowIntro"
+                android:text="@string/chat_outline_generate_new" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_replace_all_outlines"
+                style="@style/AppButton.Primary.Inline.Centered.BelowIntro"
+                android:text="@string/chat_outline_replace_all" />
+
+            <LinearLayout
+                android:id="@+id/row_outline_status"
+                style="@style/Widget.App.Page.ControlRow"
+                android:visibility="gone">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    style="@style/Widget.App.ChatOutline.StatusSpinner" />
+
+                <TextView
+                    style="@style/Widget.App.Screen.Intro"
+                    android:text="@string/chat_outline_creating" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.ChatOutline.TagsLabel"
+                    android:labelFor="@+id/field_outline_tags"
+                    android:text="@string/chat_outline_tags_label" />
+
+                <EditText
+                    android:id="@+id/field_outline_tags"
+                    style="@style/Widget.App.ChatOutline.TagsField"
+                    android:autofillHints="" />
+            </LinearLayout>
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/outline_tabs"
+                style="@style/Widget.App.VersionTabs.Row" />
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/outline_frame"
+                style="@style/Widget.App.VersionTabs.Frame">
+
+                <ImageButton
+                    android:id="@+id/btn_outline_menu"
+                    style="@style/Widget.App.VersionTabs.Menu"
+                    android:contentDescription="@string/message_more_actions"
+                    android:src="@drawable/ic_more_vert"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <TextView
+                    android:id="@+id/text_outline"
+                    style="@style/Widget.App.ChatOutline.Text"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/btn_outline_menu" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_outline"
+                    style="@style/Widget.App.ChatOutline.Field"
+                    android:visibility="gone"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/btn_outline_menu" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

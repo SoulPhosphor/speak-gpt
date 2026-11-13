@@ -1192,6 +1192,7 @@
     <string name="usage_function_reducing">Reducing</string>
     <string name="usage_function_image_description">Image Description</string>
     <string name="usage_function_removal">Removal</string>
+    <string name="usage_function_outlining">Chat Outline</string>
     <string name="token_pricing_group_title" translatable="false">%1$s · %2$s</string>
     <string name="prompt_no_model_provided" translatable="false">No model has been provided.</string>
 
@@ -3709,6 +3710,68 @@
     <string name="summarizer_prompt_kind_image">Image Prompt</string>
     <string name="summarizer_prompts_summary_intro">This prompt gives instructions to the Summarizer Model so it properly helps your AI what\'s important in your conversation.</string>
     <string name="summarizer_prompts_compaction_intro">This prompt gives instructions to the Summarizer Model when you compact a conversation. Compacting condenses everything up to that point into one summary, which your AI then receives instead of those earlier messages.</string>
+    <!-- Summarizer Prompts dropdown (owner ruling, Nov 13 2026): just the
+         names, without "Prompt". Quick Settings keeps its own row labels. -->
+    <string name="summarizer_prompts_option_summary">Summarizer</string>
+    <string name="summarizer_prompts_option_compaction">Compaction</string>
+    <string name="summarizer_prompts_option_image">Image</string>
+    <string name="summarizer_prompts_option_chat_outline">Chat Outline</string>
+    <string name="summarizer_prompts_chat_outline_intro">This prompt gives instructions to the Summarizer Model when you create a chat outline. The outline lists what the conversation covers so you can scan it quickly. It is never sent to your AI.</string>
+    <!-- Chat Outline (owner-approved wording, Nov 13 2026). -->
+    <string name="chat_menu_create_outline">Create Outline</string>
+    <string name="chat_menu_view_outline">View Outline</string>
+    <string name="chat_outline_title">Chat Outline</string>
+    <string name="chat_outline_tab_first">Chat Outline</string>
+    <string name="chat_outline_tab_numbered">Outline %1$d</string>
+    <string name="chat_outline_tags_label">Tags:</string>
+    <string name="chat_outline_generate_new">Generate New Outline</string>
+    <string name="chat_outline_replace_all">Replace All Outlines With New</string>
+    <string name="chat_outline_creating">Creating outline…</string>
+    <string name="chat_outline_menu_edit">Edit</string>
+    <string name="chat_outline_menu_redo">Redo This Outline</string>
+    <string name="chat_outline_menu_delete">Delete</string>
+    <string name="chat_outline_delete_all_desc">Delete Outlines</string>
+    <string name="chat_outline_replace_all_title">Replace All Outlines?</string>
+    <string name="chat_outline_replace_all_body">This will delete all previously existing outlines and replace them with a single new one. This cannot be undone.</string>
+    <string name="chat_outline_delete_all_title">Delete Outlines?</string>
+    <string name="chat_outline_delete_all_body">This will delete all tags and current outlines. You will still be allowed to create new outlines in the future.</string>
+    <string name="chat_outline_delete_one_title">Delete Outline?</string>
+    <string name="chat_outline_delete_one_body">This outline will be permanently deleted. This cannot be undone.</string>
+    <string name="outline_dialog_title">Creating Outline</string>
+    <string name="outline_dialog_complete">Outline complete!</string>
+    <!-- The words in an outline error message that open the Error Log. -->
+    <string name="outline_err_log_link">Error Log</string>
+    <!-- What the Error Log and Provider Failure Log call a failed tag suggestion. -->
+    <string name="chat_outline_tags_log_function">Chat Outline Tags</string>
+    <!-- Chat Outline error box: what failed, what was kept, what to do next. -->
+    <string name="outline_err_model_missing_title">Summary Model Configuration Needed</string>
+    <string name="outline_err_model_missing">The outline couldn\'t be created because the Summary Model configuration is missing or incomplete. Check the model, endpoint, and routing in Summarizer Settings.</string>
+    <string name="outline_err_unreachable_title">AI Service Unreachable</string>
+    <string name="outline_err_unreachable">The outline couldn\'t reach the selected AI service. Your existing outlines were not changed. Check your connection and the selected endpoint, then try again.</string>
+    <string name="outline_err_connect_timeout_title">Connection Timed Out</string>
+    <string name="outline_err_connect_timeout">The outline couldn\'t connect before the endpoint\'s Connection Timeout expired. Your existing outlines were not changed. Check your connection or increase Connection Timeout for the selected endpoint, then try again.</string>
+    <string name="outline_err_response_timeout_title">Response Timed Out</string>
+    <string name="outline_err_response_timeout">The outline response did not finish before the endpoint\'s Response Time expired. Your existing outlines were not changed. Increase Response Time for the selected endpoint or choose another Summary Model, then try again.</string>
+    <string name="outline_err_access_rejected_title">Access Rejected</string>
+    <string name="outline_err_access_rejected">The selected AI service rejected access, so the outline couldn\'t be created. Your existing outlines were not changed. Check the endpoint\'s API key, authentication mode, and model access.</string>
+    <string name="outline_err_model_unavailable_title">Model Unavailable</string>
+    <string name="outline_err_model_unavailable">The selected AI service couldn\'t use the Summary Model, so the outline couldn\'t be created. Your existing outlines were not changed. Check the model name and access, or choose another model in Summarizer Settings.</string>
+    <string name="outline_err_rate_limit_title">Rate Limit Reached</string>
+    <string name="outline_err_rate_limit">The selected AI service is temporarily limiting requests, so the outline stopped. Your existing outlines were not changed. Wait a moment and try again, or choose another Summary Model.</string>
+    <string name="outline_err_quota_title">Quota or Spending Limit Reached</string>
+    <string name="outline_err_quota">The selected AI account reached its quota or spending limit, so the outline stopped. Your existing outlines were not changed. Check the provider account\'s usage and billing, or choose another Summary Model.</string>
+    <string name="outline_err_too_large_title">Outline Request Too Large</string>
+    <string name="outline_err_too_large">Part of this chat is still too large for the selected model or provider, even after sending fewer messages at a time. Your existing outlines were not changed. Lower Maximum Compaction Token Amount in Summarizer Settings so long messages are split into smaller pieces, or choose a Summary Model with a larger input limit.</string>
+    <string name="outline_err_rejected_title">Outline Request Rejected</string>
+    <string name="outline_err_rejected">The selected AI service refused the outline request because of its content rules. Your existing outlines were not changed. Choose another Summary Model and try again.</string>
+    <string name="outline_err_service_title">Provider Error</string>
+    <string name="outline_err_service">The AI service returned an error while creating the outline. Your existing outlines were not changed. Try again, and if it continues, check the endpoint or choose another Summary Model.</string>
+    <string name="outline_err_unreadable_title">Outline Response Unreadable</string>
+    <string name="outline_err_unreadable">The AI service sent back a response that couldn\'t be used as an outline, so nothing was saved. Your existing outlines were not changed. Try another Summary Model or check whether the endpoint supports chat completions.</string>
+    <string name="outline_err_save_title">Couldn\'t Save Outline</string>
+    <string name="outline_err_save">The app couldn\'t save the outline on this device. Your existing outlines were not changed. Technical details were recorded in the Error Log. Check available storage and try again.</string>
+    <string name="outline_err_unexpected_title">Outline Stopped Unexpectedly</string>
+    <string name="outline_err_unexpected">Something went wrong inside the app while creating the outline, so nothing was saved. Your existing outlines were not changed. Technical details were recorded in the Error Log. Try again.</string>
     <string name="summarizer_prompts_image_intro">This single prompt tells the Summarizer Model how to shorten an image prompt. The short version is what the AI receives each turn as a reminder of the image, instead of the full prompt.</string>
     <string name="summarizer_prompts_how_it_works">Only one prompt can be active at a time. The first two prompts are suggested styles.\n\nPresets one and two can always be reverted back to the original preset. Presets 3 through 5 will revert to the last saved prompt text.</string>
     <string name="summarizer_prompts_field_hint">Write your prompt here…</string>
@@ -3828,6 +3891,7 @@
     <string name="summarizer_notification_channel">Summarization and Compaction</string>
     <string name="summarizer_notification_text">Summarizing “%1$s”…</string>
     <string name="compaction_notification_text">Compacting “%1$s”…</string>
+    <string name="outline_notification_text">Creating outline for “%1$s”…</string>
     <string name="large_summarization_title">Large Summarization</string>
     <string name="large_summarization_body">This operation is unusually large and is estimated to send about %1$s input tokens to the summarization model. It may require multiple requests and use significantly more API credits than usual.</string>
     <string name="summarize_anyway">Summarize Anyway</string>

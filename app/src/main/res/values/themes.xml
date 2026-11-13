@@ -3126,6 +3126,48 @@
         <item name="android:tint">?attr/appSubtleTextColor</item>
     </style>
 
+    <!-- Chat Outline screen (owner design, Nov 13 2026). Laid out like the
+         compaction screen from the shared Page, Section, AppButton and
+         VersionTabs families; these add only what those do not cover. -->
+    <!-- The Tags line: a label-sized "Tags:" then a writing blank. -->
+    <style name="Widget.App.ChatOutline.TagsLabel" parent="Widget.App.Field.Label">
+        <item name="android:layout_width">wrap_content</item>
+    </style>
+
+    <style name="Widget.App.ChatOutline.TagsField" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">@dimen/chat_outline_tags_gap</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">@dimen/chat_outline_text_size</item>
+        <item name="android:inputType">text|textCapWords</item>
+    </style>
+
+    <!-- An outline tab shown as formatted markdown, inside VersionTabs.Frame. -->
+    <style name="Widget.App.ChatOutline.Text" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:padding">@dimen/version_tab_field_padding</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">@dimen/chat_outline_text_size</item>
+        <item name="android:textIsSelectable">true</item>
+    </style>
+
+    <!-- The same tab while Edit shows its raw markdown. -->
+    <style name="Widget.App.ChatOutline.Field" parent="Widget.App.VersionTabs.Field">
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">@dimen/chat_outline_text_size</item>
+    </style>
+
+    <!-- "Creating outline…" status line: a small spinner, then Screen.Intro text. -->
+    <style name="Widget.App.ChatOutline.StatusSpinner" parent="Widget.Material3.CircularProgressIndicator.ExtraSmall">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginEnd">@dimen/chat_outline_status_spinner_gap</item>
+        <item name="android:indeterminate">true</item>
+    </style>
+
     <style name="Widget.App.VersionTabs.Field" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>

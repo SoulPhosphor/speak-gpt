@@ -106,6 +106,7 @@ class TokenPricingDetailsActivity : FragmentActivity() {
         UsageFunction.REDUCING -> R.string.usage_function_reducing
         UsageFunction.IMAGE_DESCRIPTION -> R.string.usage_function_image_description
         UsageFunction.REMOVAL -> R.string.usage_function_removal
+        UsageFunction.OUTLINING -> R.string.usage_function_outlining
     }
 
     private data class ModelSection(

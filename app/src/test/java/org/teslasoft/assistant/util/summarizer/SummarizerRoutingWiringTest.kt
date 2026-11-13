@@ -56,11 +56,12 @@ class SummarizerRoutingWiringTest {
         assertFalse(controller.contains("FavoriteModelsPreferences"))
         assertTrue(controller.contains("ProviderRoutingResolver.resolve"))
         assertTrue(controller.contains("ProviderRoutingSerializer.augmentBody"))
-        // Image summaries and backup titles both carry dedicated routing and
-        // request-local response evidence. Sections and compaction do likewise,
-        // all through the one request helper that builds the client.
+        // Image summaries, backup titles and Chat Outline tag suggestions all
+        // carry dedicated routing and request-local response evidence. Sections
+        // and compaction do likewise, all through the one request helper that
+        // builds the client.
         fun calls(text: String) = Regex(Regex.escape(text)).findAll(controller).count()
-        assertEquals(2, calls("routingResolution.providerJson, UsageFunction."))
+        assertEquals(3, calls("routingResolution.providerJson, UsageFunction."))
         assertEquals(2, calls("runtime.providerJson, UsageFunction."))
         assertEquals(1, calls("buildClient(endpoint, providerJson, evidence, attempt)"))
     }

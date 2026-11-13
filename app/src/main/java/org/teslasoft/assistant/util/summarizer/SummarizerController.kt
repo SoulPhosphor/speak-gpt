@@ -98,7 +98,13 @@ class SummarizerController(
     private val chatIdProvider: () -> String
 ) {
 
-    enum class OperationKind { SUMMARIZING, COMPACTING }
+    enum class OperationKind { SUMMARIZING, COMPACTING, OUTLINING }
+
+    /** What a Chat Outline run does with its result. */
+    enum class OutlineMode { GENERATE_NEW, REPLACE_ALL, REDO }
+
+    /** What a batched request is for: its request text and usage label. */
+    private enum class FoldPurpose { COMPACTION, OUTLINE }
 
     sealed interface OperationState {
         data object Idle : OperationState
@@ -184,12 +190,22 @@ class SummarizerController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
     private var manualCompactionRunning = false
+    private var outlineRunning = false
     @Volatile private var operationState: OperationState = OperationState.Idle
     private var lastFailureCategory: SummarizerErrorCategory? = null
     private var lastFailureProviderError: String? = null
     private var terminalClearJob: Job? = null
 
     companion object {
+        /** Which kind of work [state] reports, or null for Idle. */
+        fun kindOf(state: OperationState): OperationKind? = when (state) {
+            is OperationState.Running -> state.kind
+            is OperationState.Succeeded -> state.kind
+            is OperationState.Failed -> state.kind
+            is OperationState.Cancelled -> state.kind
+            OperationState.Idle -> null
+        }
+
         /** Internal fold-in batch size (decision 15) — not a user setting. */
         const val BATCH_SIZE = 10
 
@@ -221,6 +237,8 @@ class SummarizerController(
     fun isRunning(): Boolean = job?.isActive == true
 
     fun isManualCompactionRunning(): Boolean = manualCompactionRunning
+
+    fun isOutlineRunning(): Boolean = outlineRunning
 
     fun currentOperationState(): OperationState = operationState
 
@@ -273,7 +291,7 @@ class SummarizerController(
      * messages it froze were changed.
      */
     suspend fun cancelSummarizingAndWait() {
-        if (manualCompactionRunning) return
+        if (manualCompactionRunning || outlineRunning) return
         val running = job ?: return
         running.cancelAndJoin()
         if (job === running) job = null
@@ -293,7 +311,7 @@ class SummarizerController(
         snapshotProvider: () -> Snapshot?,
         onFinished: ((Boolean) -> Unit)? = null
     ) {
-        if (manualCompactionRunning || isRunning()) return
+        if (manualCompactionRunning || outlineRunning || isRunning()) return
         job = scope.launch {
             var advancedAny = false
             try {
@@ -355,7 +373,7 @@ class SummarizerController(
          *  from the text it started from, replacing that newest version. */
         redoNewest: Boolean = false
     ) {
-        if (manualCompactionRunning) return
+        if (manualCompactionRunning || outlineRunning) return
         cancel()
         manualCompactionRunning = true
         lastFailureCategory = null
@@ -410,6 +428,185 @@ class SummarizerController(
                 onFinished(committed)
             }
         }
+    }
+
+    /**
+     * Writes a Chat Outline of [snapshot] (owner request, Nov 13 2026). Like a
+     * compaction run it goes through the conversation oldest first, in
+     * batches sized by the compaction token settings, shows its percentage,
+     * and keeps running in the background. Each reply is added after the
+     * outline so far. Nothing is saved until every batch has succeeded; a
+     * cancelled or failed run keeps nothing. [mode] decides where the new
+     * outline goes; [redoIndex] is the tab Redo This Outline replaces. An
+     * automatic summary update in progress is stopped first and picks up
+     * again on its next cycle. After saving, an empty Tags line is filled
+     * with suggested tags; a failed suggestion leaves it empty.
+     */
+    fun runOutline(
+        snapshot: Snapshot,
+        chatName: String,
+        mode: OutlineMode,
+        redoIndex: Int = -1,
+        onFinished: (Boolean) -> Unit = {}
+    ) {
+        if (manualCompactionRunning || outlineRunning) return
+        cancel()
+        outlineRunning = true
+        lastFailureCategory = null
+        lastFailureProviderError = null
+        setOperationState(
+            OperationState.Running(OperationKind.OUTLINING, chatName, snapshot.entries.size, 0)
+        )
+        job = scope.launch {
+            var committed = false
+            try {
+                val saved = outlineSnapshot(snapshot, chatName, mode, redoIndex)
+                committed = saved != null
+                // The outline is saved and the run counts as done from here.
+                // Tags are separate work after it: cancelling them only
+                // leaves the Tags line empty.
+                if (saved != null) fillEmptyOutlineTags(saved)
+            } catch (_: CancellationException) {
+                // A cancelled outline keeps nothing; a cancelled tag
+                // suggestion after the outline was saved keeps the outline.
+            } catch (e: Exception) {
+                recordUnexpectedFailure(e, OperationKind.OUTLINING, chatName)
+            } finally {
+                outlineRunning = false
+                if (operationState is OperationState.Running) {
+                    setOperationState(
+                        if (committed) {
+                            OperationState.Succeeded(OperationKind.OUTLINING, chatName)
+                        } else {
+                            OperationState.Failed(
+                                OperationKind.OUTLINING,
+                                chatName,
+                                lastFailureCategory ?: SummarizerErrorCategory.UNEXPECTED,
+                                lastFailureProviderError
+                            )
+                        }
+                    )
+                }
+                onFinished(committed)
+            }
+        }
+    }
+
+    private suspend fun outlineSnapshot(
+        snapshot: Snapshot,
+        chatName: String,
+        mode: OutlineMode,
+        redoIndex: Int
+    ): String? {
+        val chatId = chatIdProvider()
+        if (chatId.isBlank() || snapshot.entries.isEmpty()) return null
+        val prefs = Preferences.getPreferences(appContext, chatId)
+        val target = snapshot.entries.size
+        var outline = ""
+        var done = 0
+        val configuredBatchTokens = prefs.getCompactionAverageTokens()
+        val maximumTokens = prefs.getCompactionMaximumTokens()
+        var tokenBudget = configuredBatchTokens
+        try {
+            val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.CHAT_OUTLINE)
+                ?: return null
+            while (done < target) {
+                when (val result = foldBatch(
+                    runtime = runtime,
+                    entries = snapshot.entries,
+                    folded = done,
+                    target = target,
+                    summary = outline,
+                    tokenBudget = tokenBudget,
+                    configuredBatchTokens = configuredBatchTokens,
+                    maximumTokens = maximumTokens,
+                    purpose = FoldPurpose.OUTLINE
+                )) {
+                    is FoldBatchResult.Advanced -> {
+                        outline = SummarizerPrompts.appendCompaction(outline, result.summary)
+                        tokenBudget = result.tokenBudget
+                        done = result.foldedCount
+                        setOperationState(
+                            OperationState.Running(OperationKind.OUTLINING, chatName, target, done)
+                        )
+                    }
+                    FoldBatchResult.Failed -> return null
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            setOperationState(OperationState.Cancelled(OperationKind.OUTLINING, chatName, 0))
+            throw cancelled
+        }
+        if (outline.isBlank() || chatIdProvider() != chatId) return null
+
+        // Read the saved outlines only now, so edits made while this ran stay.
+        val current = ChatOutlines.fromJson(prefs.getChatOutlines())
+        val updated = when (mode) {
+            OutlineMode.REPLACE_ALL -> ChatOutlines.afterReplaceAll(outline)
+            OutlineMode.GENERATE_NEW -> ChatOutlines.afterGenerateNew(current, outline)
+            OutlineMode.REDO ->
+                if (redoIndex in current.indices) ChatOutlines.afterReplace(current, redoIndex, outline)
+                else ChatOutlines.afterGenerateNew(current, outline)
+        }
+        prefs.setChatOutlines(ChatOutlines.toJson(updated))
+        notifyStateChanged()
+        return outline
+    }
+
+    /** Fills an empty Tags line from [outline]; tags the user wrote are never replaced. */
+    private suspend fun fillEmptyOutlineTags(outline: String) {
+        val chatId = chatIdProvider()
+        if (chatId.isBlank()) return
+        val prefs = Preferences.getPreferences(appContext, chatId)
+        if (prefs.getChatOutlineTags().isNotBlank()) return
+        val tags = suggestOutlineTags(outline) ?: return
+        if (chatIdProvider() == chatId && prefs.getChatOutlineTags().isBlank()) {
+            prefs.setChatOutlineTags(tags)
+            notifyStateChanged()
+        }
+    }
+
+    /** Suggested tags for the Tags line, or null when the request fails. A
+     *  failure is silent on screen and recorded in exactly one log, like the
+     *  image prompt summary. */
+    private suspend fun suggestOutlineTags(outline: String): String? {
+        val prefs = Preferences.getPreferences(appContext, "")
+        val (endpoint, model, requestFavorite, routingResolution) =
+            resolveOneShotTarget(prefs) ?: return null
+        val body = SummarizerPrompts.outlineTagsRequestBody(outline)
+        val evidence = SummarizerDiagnostics.RequestEvidence()
+        val privateValues = listOf(body, outline, endpoint.apiKey)
+        val text = try {
+            withContext(Dispatchers.IO) {
+                summarizerCompletion(
+                    Preferences.getPreferences(appContext, chatIdProvider()),
+                    endpoint, model, requestFavorite?.selectedProvider.orEmpty(),
+                    routingResolution.providerJson, UsageFunction.OUTLINING, evidence,
+                    listOf(ChatMessage(role = ChatRole.User, content = body))
+                )
+            }.trim()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Recorded like the image summary; the Tags line simply stays
+            // empty for the user to fill in.
+            val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
+            recordOneShotFailure(
+                prefs, SummarizerDiagnostics.owner(e, classified, evidence), e, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues,
+                appContext.getString(R.string.chat_outline_tags_log_function)
+            )
+            return null
+        }
+        if (text.isBlank()) {
+            recordOneShotFailure(
+                prefs, SummarizerDiagnostics.Owner.EXTERNAL, null, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues,
+                appContext.getString(R.string.chat_outline_tags_log_function)
+            )
+            return null
+        }
+        return ChatOutlineTags.clean(text)
     }
 
     /**
@@ -1028,7 +1225,8 @@ class SummarizerController(
         summary: String,
         tokenBudget: Int,
         configuredBatchTokens: Int,
-        maximumTokens: Int
+        maximumTokens: Int,
+        purpose: FoldPurpose = FoldPurpose.COMPACTION
     ): FoldBatchResult {
         val budgetAtStart = tokenBudget.coerceIn(1, maximumTokens)
         // A flat 2,000-token allowance finishes the last prompt/reply pair.
@@ -1040,7 +1238,7 @@ class SummarizerController(
         val exchangeEnd = CompactionBatches.exchangeEnd(entries, folded, target)
         if (CompactionBatches.tokens(entries, folded, exchangeEnd) <= requestLimit) {
             return foldRequest(runtime, entries, folded, target, summary,
-                budgetAtStart, configuredBatchTokens, allowance)
+                budgetAtStart, configuredBatchTokens, allowance, purpose)
         }
         var addition = ""
         var context = summary
@@ -1052,7 +1250,7 @@ class SummarizerController(
             while (done < request.size) {
                 val remainingAllowance = if (budget >= configuredBatchTokens) allowance else 0
                 when (val result = foldRequest(runtime, request, done, request.size, context,
-                    budget, configuredBatchTokens, remainingAllowance)) {
+                    budget, configuredBatchTokens, remainingAllowance, purpose)) {
                     is FoldBatchResult.Advanced -> {
                         addition = SummarizerPrompts.appendCompaction(addition, result.summary)
                         context = SummarizerPrompts.appendCompaction(context, result.summary)
@@ -1078,7 +1276,8 @@ class SummarizerController(
          *  the same run. */
         tokenBudget: Int,
         configuredBatchTokens: Int,
-        overrunTokens: Int = 0
+        overrunTokens: Int = 0,
+        purpose: FoldPurpose = FoldPurpose.COMPACTION
     ): FoldBatchResult {
         var budget = tokenBudget.coerceAtLeast(1)
         var end = CompactionBatches.batchEnd(entries, folded, target, budget, overrunTokens)
@@ -1095,11 +1294,18 @@ class SummarizerController(
                 return FoldBatchResult.Advanced("", end, budget)
             }
 
-            val body = SummarizerPrompts.foldInRequestBody(
-                runtime.prompt,
-                summary,
-                departing
-            )
+            val body = when (purpose) {
+                FoldPurpose.COMPACTION -> SummarizerPrompts.foldInRequestBody(
+                    runtime.prompt,
+                    summary,
+                    departing
+                )
+                FoldPurpose.OUTLINE -> SummarizerPrompts.outlineRequestBody(
+                    runtime.prompt,
+                    summary,
+                    departing
+                )
+            }
             val requestSize = SummarizerRequestSize.capture(
                 body, departing.map { it.second }, summary, configuredBatchTokens, budget
             )
@@ -1110,7 +1316,8 @@ class SummarizerController(
                 text = withContext(Dispatchers.IO) {
                     summarizerCompletion(
                         runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider,
-                        runtime.providerJson, UsageFunction.COMPACTING, evidence,
+                        runtime.providerJson, UsageFunction.COMPACTING.takeIf { purpose == FoldPurpose.COMPACTION }
+                            ?: UsageFunction.OUTLINING, evidence,
                         listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
                 }.trim()
@@ -1233,6 +1440,14 @@ class SummarizerController(
             )
         }
 
+        // A Chat Outline failure goes to the Error Log or Provider Failure Log
+        // above and to the outline's own error box, not to this chat's
+        // Summarizer Errors, which describe the automatic summary.
+        if (running?.kind == OperationKind.OUTLINING) {
+            notifyStateChanged()
+            return
+        }
+
         var newEpisode = false
         try {
             val current = SummarizerErrorLog.fromJson(prefs.getSummarizerErrors())
@@ -1271,7 +1486,7 @@ class SummarizerController(
         rawResponseBody: String? = null,
         requestSize: SummarizerRequestSize? = null
     ) {
-        val function = if (state.kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
+        val function = functionName(state.kind)
         SummarizerDiagnostics.record(
             failureOwner,
             logProviders = failureOwner != SummarizerDiagnostics.Owner.EXTERNAL || prefs.getLogChatFailures(),
@@ -1324,7 +1539,7 @@ class SummarizerController(
     }
 
     private fun recordUnexpectedFailure(error: Exception, kind: OperationKind, chatName: String) {
-        val function = if (kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
+        val function = functionName(kind)
         org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
             SummarizerDiagnostics.localDetail(function, error))
         lastFailureCategory = SummarizerErrorCategory.UNEXPECTED
@@ -1344,6 +1559,13 @@ class SummarizerController(
         }
     }
 
+    /** What the Error Log and Provider Failure Log call this work. */
+    private fun functionName(kind: OperationKind): String = when (kind) {
+        OperationKind.COMPACTING -> "Compacting"
+        OperationKind.SUMMARIZING -> "Summarizing"
+        OperationKind.OUTLINING -> appContext.getString(R.string.usage_function_outlining)
+    }
+
     private fun notifyStateChanged() {
         listener?.onSummarizerStateChanged()
     }
@@ -1361,7 +1583,7 @@ class SummarizerController(
                     state.kind
                 )
             }
-            if (state.kind == OperationKind.COMPACTING) {
+            if (state.kind != OperationKind.SUMMARIZING) {
                 org.teslasoft.assistant.service.SummarizerForegroundService.progress(
                     appContext,
                     chatIdProvider(),

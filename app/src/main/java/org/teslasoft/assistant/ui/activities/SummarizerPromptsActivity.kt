@@ -137,9 +137,10 @@ class SummarizerPromptsActivity : SettingsPageActivity() {
 
     private fun kindLabel(kind: SummarizerPromptSets.Kind): String = getString(
         when (kind) {
-            SummarizerPromptSets.Kind.SUMMARY -> R.string.summarizer_prompt_kind_summary
-            SummarizerPromptSets.Kind.COMPACTION -> R.string.summarizer_prompt_kind_compaction
-            SummarizerPromptSets.Kind.IMAGE -> R.string.summarizer_prompt_kind_image
+            SummarizerPromptSets.Kind.SUMMARY -> R.string.summarizer_prompts_option_summary
+            SummarizerPromptSets.Kind.COMPACTION -> R.string.summarizer_prompts_option_compaction
+            SummarizerPromptSets.Kind.IMAGE -> R.string.summarizer_prompts_option_image
+            SummarizerPromptSets.Kind.CHAT_OUTLINE -> R.string.summarizer_prompts_option_chat_outline
         }
     )
 
@@ -148,6 +149,7 @@ class SummarizerPromptsActivity : SettingsPageActivity() {
             SummarizerPromptSets.Kind.SUMMARY -> R.string.summarizer_prompts_summary_intro
             SummarizerPromptSets.Kind.COMPACTION -> R.string.summarizer_prompts_compaction_intro
             SummarizerPromptSets.Kind.IMAGE -> R.string.summarizer_prompts_image_intro
+            SummarizerPromptSets.Kind.CHAT_OUTLINE -> R.string.summarizer_prompts_chat_outline_intro
         }
     )
 
