@@ -347,4 +347,8 @@
     <dimen name="tag_entry_action_gap">8dp</dimen>
     <dimen name="tag_entry_chip_gap">8dp</dimen>
     <dimen name="model_rule_editor_control_gap">12dp</dimen>
+    <!-- Thin accent ring around the composer paperclip while a full-size
+         attachment is highlighted (Widget.App.Chat.ComposerAction.Includes). -->
+    <dimen name="chat_composer_includes_highlight_stroke">1.5dp</dimen>
+    <dimen name="chat_composer_includes_highlight_inset">6dp</dimen>
 </resources>

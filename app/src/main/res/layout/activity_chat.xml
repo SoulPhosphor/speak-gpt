@@ -139,7 +139,7 @@
                                 app:srcCompat="@drawable/ic_history_edu" />
 
                             <ImageButton
-                                style="@style/Widget.App.Chat.ComposerAction"
+                                style="@style/Widget.App.Chat.ComposerAction.Includes"
                                 android:id="@+id/btn_persistent_includes"
                                 android:contentDescription="@string/composer_includes_action"
                                 android:src="@drawable/ic_attach"

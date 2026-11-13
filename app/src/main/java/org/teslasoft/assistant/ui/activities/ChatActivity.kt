@@ -1666,6 +1666,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatStartupComplete && chatId != "") {
             refreshSummarizerIcons()
             refreshComposerTools()
+            // Chat Settings may have turned the full-size highlight on or off.
+            refreshPersistentIncludeControls()
             // The summary / compaction review may have just closed: run any
             // held update, or the catch-up owed after Resummarize.
             releaseHeldSummarizerCycle()
@@ -3853,11 +3855,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // one of them has been removed there is nothing left for it to manage —
         // only the sentence or two each left behind, which the transcript's own
         // bookmark opens — so this control goes away rather than changing icon.
-        val visible = PersistentIncludeContext
-            .allSent(messages, INCLUDES_KEY)
-            .any { it.form != IncludeForm.ARTIFACT }
+        val sent = PersistentIncludeContext.allSent(messages, INCLUDES_KEY)
+        val visible = sent.any { it.form != IncludeForm.ARTIFACT }
         button.visibility = if (visible) View.VISIBLE else View.GONE
         button.isEnabled = visible
+        // Chat Settings > Highlight Icon for Full Size Attachments: the
+        // activated state draws the shared highlight ring while anything sent
+        // is still full size, so it is not forgotten and kept costing tokens.
+        button.isActivated = visible &&
+            preferences?.getHighlightFullSizeAttachments() == true &&
+            PersistentIncludeContext.hasFullSize(messages, INCLUDES_KEY)
     }
 
     /**

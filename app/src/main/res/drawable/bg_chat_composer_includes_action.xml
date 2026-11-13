@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paperclip composer action. Icon only; while activated (a sent attachment
+     is still full size and the Chat Settings highlight is on) a thin accent
+     ring is drawn around the glyph. Colors and sizes come from the theme and
+     chat_composer_includes_highlight_* dimensions. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_activated="true">
+        <inset android:inset="@dimen/chat_composer_includes_highlight_inset">
+            <shape android:shape="oval">
+                <solid android:color="@color/transparent" />
+                <stroke
+                    android:width="@dimen/chat_composer_includes_highlight_stroke"
+                    android:color="?attr/colorPrimary" />
+            </shape>
+        </inset>
+    </item>
+    <item android:drawable="@color/transparent" />
+</selector>
