@@ -552,13 +552,16 @@ class SummarizerController(
         return true
     }
 
-    /** Suggested tags for the Tags line, or null when the request fails. */
+    /** Suggested tags for the Tags line, or null when the request fails. A
+     *  failure is silent on screen and recorded in exactly one log, like the
+     *  image prompt summary. */
     private suspend fun suggestOutlineTags(outline: String): String? {
         val prefs = Preferences.getPreferences(appContext, "")
         val (endpoint, model, requestFavorite, routingResolution) =
             resolveOneShotTarget(prefs) ?: return null
         val body = SummarizerPrompts.outlineTagsRequestBody(outline)
         val evidence = SummarizerDiagnostics.RequestEvidence()
+        val privateValues = listOf(body, outline, endpoint.apiKey)
         val text = try {
             withContext(Dispatchers.IO) {
                 summarizerCompletion(
@@ -570,9 +573,23 @@ class SummarizerController(
             }.trim()
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
-            // Not logged (logging changes need the owner's approval); the
-            // Tags line simply stays empty for the user to fill in.
+        } catch (e: Exception) {
+            // Recorded like the image summary; the Tags line simply stays
+            // empty for the user to fill in.
+            val classified = GenerationErrorClassifier.classify(e, evidence.snapshot())
+            recordOneShotFailure(
+                prefs, SummarizerDiagnostics.owner(e, classified, evidence), e, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues,
+                appContext.getString(R.string.chat_outline_tags_log_function)
+            )
+            return null
+        }
+        if (text.isBlank()) {
+            recordOneShotFailure(
+                prefs, SummarizerDiagnostics.Owner.EXTERNAL, null, evidence,
+                endpoint, model, requestFavorite?.selectedProvider, privateValues,
+                appContext.getString(R.string.chat_outline_tags_log_function)
+            )
             return null
         }
         return ChatOutlineTags.clean(text)
@@ -1376,10 +1393,6 @@ class SummarizerController(
         lastFailureProviderError = if (failureOwner == SummarizerDiagnostics.Owner.EXTERNAL)
             SummarizerDetailSanitizer.sanitize(providerEvidence?.errorMessages?.joinToString("\n")
                 ?.ifBlank { null } ?: rawProviderError, privateValues) else null
-        // A Chat Outline failure is reported only by the outline's error box:
-        // no log entry and no Summarizer Errors entry (logging changes need
-        // the owner's approval).
-        if ((operationState as? OperationState.Running)?.kind == OperationKind.OUTLINING) return
         val safeDetail = SummarizerDetailSanitizer.sanitize(lastFailureProviderError ?: detail, privateValues)
         val responseDetail = if (httpStatus != null) {
             "HTTP status: $httpStatus" + (safeDetail?.let { "\n$it" } ?: "")
@@ -1412,6 +1425,14 @@ class SummarizerController(
                 rawResponseBody = rawResponseBody,
                 requestSize = requestSize
             )
+        }
+
+        // A Chat Outline failure goes to the Error Log or Provider Failure Log
+        // above and to the outline's own error box, not to this chat's
+        // Summarizer Errors, which describe the automatic summary.
+        if (running?.kind == OperationKind.OUTLINING) {
+            notifyStateChanged()
+            return
         }
 
         var newEpisode = false
@@ -1452,7 +1473,7 @@ class SummarizerController(
         rawResponseBody: String? = null,
         requestSize: SummarizerRequestSize? = null
     ) {
-        val function = if (state.kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
+        val function = functionName(state.kind)
         SummarizerDiagnostics.record(
             failureOwner,
             logProviders = failureOwner != SummarizerDiagnostics.Owner.EXTERNAL || prefs.getLogChatFailures(),
@@ -1505,13 +1526,9 @@ class SummarizerController(
     }
 
     private fun recordUnexpectedFailure(error: Exception, kind: OperationKind, chatName: String) {
-        val function = if (kind == OperationKind.COMPACTING) "Compacting" else "Summarizing"
-        // Chat Outline failures are not logged anywhere yet (logging changes
-        // need the owner's approval); the outline's own error box reports them.
-        if (kind != OperationKind.OUTLINING) {
-            org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
-                SummarizerDiagnostics.localDetail(function, error))
-        }
+        val function = functionName(kind)
+        org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
+            SummarizerDiagnostics.localDetail(function, error))
         lastFailureCategory = SummarizerErrorCategory.UNEXPECTED
         if (operationState !is OperationState.Running)
             setOperationState(OperationState.Running(kind, chatName, 0, 0))
@@ -1527,6 +1544,13 @@ class SummarizerController(
             org.teslasoft.assistant.preferences.Logger.logAsync(appContext, "crash", function, "error",
                 SummarizerDiagnostics.localDetail("$function: record failure status", statusError))
         }
+    }
+
+    /** What the Error Log and Provider Failure Log call this work. */
+    private fun functionName(kind: OperationKind): String = when (kind) {
+        OperationKind.COMPACTING -> "Compacting"
+        OperationKind.SUMMARIZING -> "Summarizing"
+        OperationKind.OUTLINING -> appContext.getString(R.string.usage_function_outlining)
     }
 
     private fun notifyStateChanged() {

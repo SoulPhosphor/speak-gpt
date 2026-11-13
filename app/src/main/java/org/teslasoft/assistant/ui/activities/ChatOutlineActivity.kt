@@ -551,32 +551,33 @@ class ChatOutlineActivity : FragmentActivity() {
     private fun showFailure(state: OperationState.Failed) {
         val (title, reason) = when (state.category) {
             SummarizerErrorCategory.MODEL_MISSING ->
-                R.string.compaction_err_model_missing_title to R.string.compaction_err_model_missing
+                R.string.outline_err_model_missing_title to R.string.outline_err_model_missing
             SummarizerErrorCategory.SERVICE_UNREACHABLE ->
-                R.string.compaction_err_unreachable_title to R.string.compaction_err_unreachable
+                R.string.outline_err_unreachable_title to R.string.outline_err_unreachable
             SummarizerErrorCategory.CONNECT_TIMEOUT ->
-                R.string.compaction_err_connect_timeout_title to R.string.compaction_err_connect_timeout
+                R.string.outline_err_connect_timeout_title to R.string.outline_err_connect_timeout
             SummarizerErrorCategory.RESPONSE_TIMEOUT ->
-                R.string.compaction_err_response_timeout_title to R.string.compaction_err_response_timeout
+                R.string.outline_err_response_timeout_title to R.string.outline_err_response_timeout
             SummarizerErrorCategory.ACCESS_REJECTED ->
-                R.string.compaction_err_access_rejected_title to R.string.compaction_err_access_rejected
+                R.string.outline_err_access_rejected_title to R.string.outline_err_access_rejected
             SummarizerErrorCategory.MODEL_UNAVAILABLE ->
-                R.string.compaction_err_model_unavailable_title to R.string.compaction_err_model_unavailable
+                R.string.outline_err_model_unavailable_title to R.string.outline_err_model_unavailable
             SummarizerErrorCategory.RATE_LIMIT ->
-                R.string.compaction_err_rate_limit_title to R.string.compaction_err_rate_limit
+                R.string.outline_err_rate_limit_title to R.string.outline_err_rate_limit
             SummarizerErrorCategory.QUOTA ->
-                R.string.compaction_err_quota_title to R.string.compaction_err_quota
+                R.string.outline_err_quota_title to R.string.outline_err_quota
             SummarizerErrorCategory.REQUEST_TOO_LARGE ->
-                R.string.compaction_err_too_large_title to R.string.outline_err_too_large
+                R.string.outline_err_too_large_title to R.string.outline_err_too_large
             SummarizerErrorCategory.CONTENT_REJECTED ->
-                R.string.compaction_err_rejected_title to R.string.compaction_err_rejected
+                R.string.outline_err_rejected_title to R.string.outline_err_rejected
             SummarizerErrorCategory.SERVICE_ERROR ->
-                R.string.compaction_err_service_title to R.string.compaction_err_service
+                R.string.outline_err_service_title to R.string.outline_err_service
             SummarizerErrorCategory.RESPONSE_UNREADABLE ->
-                R.string.compaction_err_unreadable_title to R.string.compaction_err_unreadable
-            SummarizerErrorCategory.SAVE_FAILED,
+                R.string.outline_err_unreadable_title to R.string.outline_err_unreadable
+            SummarizerErrorCategory.SAVE_FAILED ->
+                R.string.outline_err_save_title to R.string.outline_err_save
             SummarizerErrorCategory.UNEXPECTED ->
-                R.string.compaction_err_unexpected_title to R.string.outline_err_unexpected
+                R.string.outline_err_unexpected_title to R.string.outline_err_unexpected
         }
         val message = buildString {
             append(getString(reason))
