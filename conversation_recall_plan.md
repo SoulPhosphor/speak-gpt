@@ -1473,24 +1473,37 @@ losing it loses nothing the user wrote.
 
 ## G.13 When a part is unavailable (Proposed)
 
-| Missing | What still works |
-|---|---|
-| The embedding model is not installed | Index Conversations and Conversation Recall are not available, and the user is told why and where to install it (G31). The chat is sent exactly as today |
-| The embedding model is installed but fails | Recall is skipped for that message and the user is told why (G.13b). This is reported separately from "no model installed", because the user's next step is different |
-| A vector for some entries | Those entries are not recalled until the vector is made |
-| The live AI worker, or its network | Everything except AI notes |
-| The whole index | The chat is sent exactly as today. Sending is never blocked by recall |
+**Owner (2026-11-12):** an automatic repair that succeeds does not need a
+snack bar, dialog, or other interruption. The repair is recorded in the
+Error Log and may appear in an existing status or progress view. The user
+is notified when a failure changes what happened for their message, stops
+a feature, prevents a setting from being used, or gives the user something
+real they can do to fix it.
 
-Failures are shown in plain words where the user would otherwise be
-misled, and never as a generic error.
+| Condition | What still works | User interruption |
+|---|---|---|
+| The embedding model is not installed | Ordinary chat and lorebook matching work as today. Index Conversations and Conversation Recall are unavailable | When the user tries to turn either feature on, explain what is needed and provide a direct way to open the model settings |
+| The embedding model was removed or cannot be loaded | Ordinary chat still works. Saved-memory search may use keywords; Conversation Recall stops because it requires the model | One notice for the ongoing condition, with a direct settings action. Do not repeat it every turn |
+| Recall fails for one message | The message is sent normally without recalled conversation | Tell the user that this turn was affected, why in plain words, and what to do if an action exists. If no action is needed, say so |
+| Some index work is waiting or is being retried | Chatting continues. The app repairs or resumes it in the background | No snack bar or dialog. Show it only in the Error Log and existing progress/status views |
+| Index damage is found and the rebuild succeeds | Chatting continues; the derived index is rebuilt from stored chats | No snack bar or dialog. A user who started Check Database Integrity still receives that check's result |
+| The index cannot be rebuilt or indexing cannot continue | Chatting continues, but Index Conversations and Conversation Recall stop | A persistent notice explains what stopped, confirms that conversations are safe, and gives a real recovery action |
+| Search or indexing reaches its time allowance | The message is sent or finished work is kept | Not an error. Record the effect in the relevant test/status or "what was sent" view; interrupt only when the user can take an action, such as reopening the app to continue indexing |
+| The optional live AI worker or its network is unavailable | Everything except the optional AI notes | Follow that feature's separately approved failure behavior when it is designed |
 
-## G.13a Damage, failures, and logs (Owner direction, 2026-11-11)
+Failures are never shown as a generic error. The same ongoing failure does
+not create a new notice on every message. It may be shown again only after
+the condition recovered and failed again, or when the user explicitly asks
+for a check.
 
-**Owner (2026-11-11):** a damaged index must be detectable without the
-user having to start anything; it also belongs on the existing database
-check button; and whatever repair is possible follows. Errors must be
-written to a log. Provider logs must stay accurate when a request fails.
-Critical failures must be told to the user.
+## G.13a Damage, failures, logs, and notices (Owner direction, 2026-11-11 and 2026-11-12)
+
+**Owner direction.** A damaged index must be detectable without the user
+having to start anything; it also belongs on the existing database check
+button; and whatever repair is possible follows. Errors are written to the
+Error Log. Provider logs stay accurate when a request fails. A user-facing
+notice follows G.13: automatic repairs stay quiet, while affected turns,
+stopped features, and actionable failures are explained.
 
 **How damage is found.**
 - **By itself.** The database reports damage whenever the app opens or
@@ -1503,99 +1516,131 @@ Critical failures must be told to the user.
   button checks the memory, lorebook, and user image databases.
 
 **How it is repaired.** The index is derived from the stored chats, so
-repair is always a rebuild, started automatically. No backup is needed, no
-choice is asked of the user, and nothing the user wrote can be lost. Stored
+repair is a rebuild, started automatically. No backup is needed, no choice
+is asked of the user, and nothing the user wrote can be lost. Stored
 vectors are kept when they can still be read, so a rebuild does not always
 mean embedding everything again.
 
 **Where failures are written.**
-- **Error Log:** failures of indexing and recall that happen on the phone:
-  damage found, a rebuild that failed, a chat that could not be indexed,
-  vectors that could not be made, and recall failing for a message.
-- **Provider Failure Log:** unchanged. Indexing and recall make no
-  provider requests of their own. Recalled text travels inside the
-  ordinary chat request; if that request fails it is logged exactly as
-  today, under the chat's own function name. The optional AI worker, when
-  it is built, logs its failures under a function name of its own, so a
-  failure is never attributed to the wrong feature.
-- **Never logged:** the text of any message or passage.
-- Being skipped for the time limit is not an error. It is shown in the
-  "what was sent" view, not in the Error Log.
+- **Error Log:** failures and automatic repairs of indexing and recall:
+  damage found, rebuild started or failed, a chat that could not be
+  indexed, meaning search that could not be prepared, and recall failing
+  for a message.
+- **Provider Failure Log:** unchanged. Indexing and recall make no provider
+  requests of their own. Recalled text travels inside the ordinary chat
+  request; if that request fails it is logged exactly as today, under the
+  chat's own function name. The optional AI worker, when it is built, logs
+  its failures under a function name of its own.
+- **Never logged:** the text of any message or recalled conversation.
+- A search time limit is not an error. It is shown in the relevant test,
+  status, or "what was sent" view instead.
 
-**What the user is told.**
-- **Critical:** the index is damaged and could not be rebuilt, so indexing
-  and recall have stopped. The user is told directly, once.
-- **For one message:** recall failed and the message was sent without it.
-  The user sees a short notice, as happens today when memory is
-  unavailable for a message.
-- **Everything else** is repaired without interrupting the user and
-  recorded in the Error Log.
+**Error Log wording.** These entries explain the effect in plain words.
+"(technical cause)" is the real technical detail and belongs in the log,
+not in the snackbar or dialog.
 
-**Approved wording (Owner, 2026-11-11).** "(cause)" and "(number)" are
-filled in with the real cause and number.
-
-Error Log entries:
-
-| When | Entry |
+| When | Error Log entry |
 |---|---|
-| Damage found | Conversation index is damaged: (cause). Rebuilding from the stored chats. |
-| Rebuild failed | Conversation index could not be rebuilt: (cause). |
-| A chat could not be indexed | Conversation index: a chat could not be indexed: (cause). |
-| Vectors could not be made | Conversation index: meaning search could not be prepared for (number) passages: (cause). |
-| Recall failed for a message | Conversation recall failed: (cause). The message was sent without recall. |
+| Damage found; automatic rebuild begins | Conversation index problem found: (technical cause). Automatic rebuild started. Conversations are unchanged. |
+| Automatic rebuild succeeds | Conversation index rebuilt successfully. Conversations were not changed. |
+| Rebuild fails | Conversation index could not be rebuilt: (technical cause). Index Conversations and Conversation Recall were turned off. Conversations are unchanged. |
+| One chat could not be indexed but will be retried | A conversation could not be indexed: (technical cause). The app will try it again automatically. |
+| Meaning search could not be prepared for some indexed text | Meaning search could not be prepared for (number) parts of conversations: (technical cause). The app will try them again automatically. |
+| Recall fails for one message | Conversation Recall could not check earlier messages for this turn: (technical cause). The message was sent normally without recalled conversation. |
 
-Check Database Integrity:
+**What produces a notice.**
+
+| Situation | Notice behavior |
+|---|---|
+| Automatic rebuild, retry, or missing-vector repair succeeds or is still progressing | No snack bar or dialog |
+| One message is sent without recall | One plain notice for the affected turn or ongoing condition; the "what was sent" view also records it |
+| The model is missing, removed, or unusable | Notice when the user tries the setting, or once when an installed feature becomes unavailable; include a direct model-settings action |
+| Indexing or recall is turned off because recovery failed | Persistent notice with a direct recovery/settings action |
+| The user runs Check Database Integrity | Its result reports healthy, rebuilding, or stopped, because the user requested the check |
+| Android pauses background indexing until the app is reopened | The indexing notification/status explains that opening the app continues it; this is not logged as damage |
+
+The exact snackbar, dialog, notification, and button wording below remains
+subject to the owner's approval before Step 11 or Step 13 builds it. A
+notice is shown once per unchanged condition, not once per message.
+
+**Check Database Integrity wording:**
 
 | Part | Wording |
 |---|---|
 | Hint under the button, replacing today's | Checks the memory, lorebook, user image, and conversation index databases for problems. Chats are not included. |
 | Name in the report | Conversation index |
-| When damage is found there | The conversation index is being rebuilt. Your conversations are not affected. |
+| Healthy | No problems found. |
+| Automatic repair running | The conversation index is being rebuilt. Your conversations are safe and unchanged. |
+| Repair failed | The conversation index could not be rebuilt. Index Conversations and Conversation Recall are off. Your conversations are safe and unchanged. Open Advanced Memory Settings to try indexing again. |
 
-What the user is told:
+The former rule that every index error raises a persistent snack bar is
+superseded by the owner's 2026-11-12 decision above. Step 11 may create a
+shared snack-bar style if its approved notices need one; it does not create
+or show snackbars for log-only automatic repairs.
 
-| When | Wording |
-|---|---|
-| Critical: the index could not be rebuilt | Title: Conversation Index Could Not Be Rebuilt. Text: Indexing and Conversation Recall are off until this is fixed. Your conversations are not affected. See the Error Log for details. Button: Okay |
-| Recall failed for one message | Conversation recall unavailable this turn — continuing without it |
-
-**A snack bar for every index error (Owner, 2026-11-11).** Any error in
-the index system is brought to the user in a snack bar that stays until
-the user acknowledges it. G27 preserves the later conflict about
-self-repaired failures; Step 11 must resolve G27 with the owner before
-building either behavior. The user must be able to tell what is happening
-behind the scenes. Each error has a full message, in plain words, saying
-what happened, what is not affected, and what the user should do. The
-messages are written and approved by the owner before Step 11 (G20).
-`ui-style-guide.md` has no snack bar style yet; the builder creates a
-shared one and adds it to the guide.
-
-## G.13b Plain wording for everything the user reads (Owner, 2026-11-12)
+## G.13b Plain wording and reviewed message proposals (Owner rule; exact proposals not yet approved)
 
 **Owner (2026-11-12):** wording must be plain English, direct, and
 understandable. When something cannot happen, the user is told why it
 cannot happen and what they can do to fix it.
 
-- **Planning words never reach the user,** on a screen or in a log the
-  user reads: passage, vector, lexical, query, embed, cutter, re-ranker.
-- **Every failure message says** what failed, why, what is not affected,
-  and what the user can do next.
-- **The causes are listed before the wording is written.** For each failure
-  in G.13a, the builder first lists every cause the code can tell apart,
-  and the user's next step for each. This plan does not have that list
-  yet, so its failure wording cannot be final.
-- **Wording in this plan that does not meet the rule.** Each is re-proposed
-  to the owner before the Step that shows it:
+Every user-facing failure message follows this order:
 
-| Wording | What is missing |
+1. what did not work;
+2. what changed for this message or feature;
+3. what is safe and unaffected;
+4. the exact action the user can take, when one exists;
+5. when no action is needed, say that instead of inventing one.
+
+Additional rules:
+- Planning words never reach the user on a screen or in a user-readable
+  log: passage, vector, lexical, query, embed, cutter, and re-ranker.
+- Raw exception text is never placed in a snackbar, dialog, notification,
+  or inline setting message. It goes in the Error Log. User-facing text
+  uses a plain cause the code can actually distinguish.
+- "See the Error Log" may be offered for technical detail, but is never the
+  only recovery instruction.
+- A button opens the exact screen that can help. Do not say "check your
+  settings" when the app can take the user there.
+- Identical ongoing failures are not repeated every turn. Per-turn effects
+  remain visible in the "what was sent" record.
+
+**Proposed user-facing wording for review:**
+
+| Situation | Proposed wording and actions |
 |---|---|
-| "Conversation recall unavailable this turn — continuing without it" (G.13a) | Why it was unavailable, and whether the user needs to do anything |
-| "Indexing and Conversation Recall are off until this is fixed. … See the Error Log for details." (G.13a) | What "fixed" means and how the user fixes it. It sends the user to a log to find out |
-| "meaning search could not be prepared for (number) passages" (G.13a) | "Passages" is a planning word |
+| Turning on Index Conversations or Conversation Recall with no model installed | **Title:** On-Device Search Model Needed. **Text:** Conversation Recall needs an on-device search model. Install one under Librarian / Embeddings, then turn this setting on again. Your conversations were not changed. **Buttons:** Open Model Settings, Close |
+| The installed model was removed or no longer loads | **Title:** Conversation Recall Is Off. **Text:** Conversation Recall is off because its on-device search model is no longer available. Your conversations and saved memories are safe and unchanged. Reinstall or choose a model under Librarian / Embeddings to use recall again. **Buttons:** Open Model Settings, Close |
+| Recall fails for one turn and no user action is available | Conversation Recall could not check earlier messages this time. Your message was sent normally without recalled conversation. No action is needed unless this keeps happening. |
+| Recall fails for one turn and the code knows an action | Conversation Recall could not check earlier messages because (plain cause). Your message was sent normally without recalled conversation. (Specific action.) |
+| The index cannot be rebuilt | **Title:** Conversation Recall Is Off. **Text:** The conversation index could not be rebuilt, so Index Conversations and Conversation Recall were turned off. Your conversations are safe and unchanged. Open Advanced Memory Settings to try indexing again. **Buttons:** Open Advanced Memory Settings, Close |
+| Recall reaches its sending-time allowance | **What was sent:** Conversation Recall did not finish in time, so this message was sent normally without recalled conversation. |
+| Android pauses background indexing until the app is reopened | **Notification/status:** Background indexing is paused. Open the app to continue. Finished work was saved. |
+| Long-message piece search reaches its allowance | **Memory Search Test:** The additional long-message search reached its time limit. The whole message was still searched. Checked (number) of (number) additional parts. |
+| The on-device model cannot read one additional part of a long message | **Memory Debug Log:** Memory search could not read one additional part of this message with the on-device model, so that part was skipped. The whole message was still searched. Cause: (technical cause). |
 
-- **An existing line has the same fault** and is handled with Step 2
-  (G26): the Memory Debug Log line "Query embed failed, using lexical
-  fallback".
+**Existing saved-memory diagnostic wording reviewed for Step 2:**
+
+| Current wording | Proposed replacement |
+|---|---|
+| Query embed failed, using lexical fallback: (cause) | **Owner-approved 2026-11-12:** Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause). |
+| Vector load failed, using lexical fallback: (cause) | Memory search could not use its saved meaning index, so it searched by keywords only. Cause: (cause). |
+| keyword only — no model | keywords only — on-device meaning search unavailable |
+| Vector index incomplete — (missing) of (total) eligible memories lack a current vector; those memories use keyword search only this turn | Some memories were not ready for meaning search, so (missing) of (total) used keyword search for this message. The app is preparing them in the background. |
+| Embedding self-check FAILED; semantic retrieval disabled, using keyword fallback: (cause) | The on-device memory-search model did not pass its check, so saved-memory search is using keywords only. Cause: (cause). |
+| Embedding model failed to load: (cause) | The on-device memory-search model could not be loaded. Saved-memory search is using keywords only, and Conversation Recall is unavailable. Cause: (cause). |
+
+Step 2 must replace the first three lines together so the summary never
+claims that no model is installed when the actual cause was a failed read.
+The incomplete-index line is log-only because it starts automatic repair.
+Step 11 applies the same plain-cause rule to model-load and model-check
+failures before it creates any notice.
+
+Before Step 11, the builder lists every failure cause the code can
+distinguish and maps each one to: automatic repair with no notice; affected
+turn with a one-time notice; or stopped/actionable feature with a recovery
+action. A builder never fills a user-facing "(plain cause)" or "(specific
+action)" with a guess.
 
 ## G.14 Cost, speed, storage, privacy (Proposed)
 
@@ -1732,7 +1777,7 @@ rewrite its expected answers. Its authoritative results are in
 | 8 | Waiting | Passage stores and per-message updating | Hard | Strongest | Nothing | Steps 1 and 7 | Nothing after G35 |
 | 9 | Waiting | Background embedding of passages | Hard | Strongest | Nothing | Steps 1 and 8 | Nothing |
 | 10 | Waiting | Keep the index synchronized with chats | Hard | Strongest | Nothing | Steps 8–9 | Nothing |
-| 11 | Waiting | Settings, status, deletion, database check, and errors | Careful | Middle | Approved settings section (G.16a) | Steps 9–10 | G20, G27, G28, G31 |
+| 11 | Waiting | Settings, status, deletion, database check, and errors | Careful | Middle | Approved settings section (G.16a) | Steps 9–10 | G20, G28, G31 |
 | 12 | Waiting | Progress icon and pop-up with pause/resume | Careful | Middle | Approved icon and pop-up (G.16a) | Step 11 | Nothing |
 | 13 | Waiting | Indexing after the app closes | Hard | Strongest | Approved notification (G.16a) | Step 12 | Background mechanism and stopped-for-the-day wording |
 | 14 | Waiting | Retrieval | Hard | Strongest | Nothing | Steps 3 and 6–10 | Retrieval and assembly design as a whole (G36) |
@@ -1990,9 +2035,9 @@ measurements and verification results.
   whether the message was typed or dictated, without more wrong memories
   being sent (G.10).
 - **Needs first:** Step 0 and Step 1.
-- **Before building, the owner approves:** the Memory Search Test screen
-  wording that shows which piece of a message matched and when the search
-  ran out of time; and the two remaining lines of G26.
+- **Before building, the owner approves:** the Memory Search Test wording
+  and the remaining saved-memory diagnostic wording proposed in G.13b
+  (G26).
 - **Read:** G.2, G.10; `LiveRetrieval.kt`, `Librarian.kt`,
   `SearchTestReport.kt`.
 - **Build:** G.10, in its own file, with a small hookup. Every use of the
@@ -2267,14 +2312,15 @@ questions for each situation.
 - **Goal:** the Conversation Index section of G.16a, the conversation
   index's line on the Check Database Integrity button (G.13a), and the
   error notices (G20).
-- **Before building, the owner approves:** the full message for each index
-  error (G20) and the no-model wording (G31), written to the plain-wording rule
-  (G.13b); G27; G28.
+- **Before building, the owner approves:** the final wording and actions
+  for every user-facing notice (G20, G31), written to G.13b; and G28.
+  G27 is decided: automatic repairs do not interrupt the user.
 - **Read:** G.16a; G.13a; G.13b; `ui-style-guide.md` in full for the parts
   used (toggle rows, section headings, destructive buttons, two-action
   dialogs); `ui-style-adoption.md`.
 - **Build:** exactly what G.16a lists for Advanced Memory Settings, with
-  the approved wording. Every visible value comes from a shared style; a
+  the approved wording; the notification classification in G.13a; and
+  one-notice-per-ongoing-condition deduplication. Every visible value comes from a shared style; a
   missing style is created and added to the guide. `ui-style-adoption.md`
   is updated.
 - **Must not change:** any other part of Advanced Memory Settings.
@@ -2461,18 +2507,18 @@ about to start. Each has a recommendation.
 | G17 | Which settings screen holds the recall setting, what is it called, what does its explanation say, and does it start on or off? | **Decided (owner, 2026-11-11):** as recorded in G.8b | Decided |
 | G18 | Does the per-chat memory switch also stop recall in that chat? | **Decided (owner, 2026-11-11):** yes | Decided |
 | G19 | The exact Error Log lines, the database check's line and hint for the conversation index, and the wording that tells the user of a failure | **Decided (owner, 2026-11-11):** as recorded in G.13a | Decided |
-| G20 | The snack bar and full message for each index error | **Decided (owner, 2026-11-11):** every index error raises one. The messages are written and approved before Step 11 | Step 11 |
+| G20 | Which failures receive a user-facing notice, and what does each notice say? | **Partly decided (owner, 2026-11-12):** automatic repairs do not interrupt the user. An affected turn, stopped feature, prevented setting, or failure with a real user action receives a plain notice under G.13a. Exact proposed wording and actions in G.13b are approved before Step 11 or Step 13 builds them | Step 11 and Step 13 |
 | G21 | Where the recall test screen goes, and its name | **Decided (owner, 2026-11-11):** Advanced Memory Settings, Debug section; Conversation Recall Test | Decided |
 | G22 | May recall and carry-over add to the existing memory debugging view? | **Decided (owner, 2026-11-11):** yes. No new general application log entries | Decided |
 | G23 | Which Step is built first? | **Decided (owner, 2026-11-11):** the long-message fix is the first user-visible fix. In the corrected numbering it is Step 2, after completed Step 0 and the Step 1 queue-safety prerequisite (G.16) | Decided |
 | G24 | If the user turns Index Conversations off while Conversation Recall is on, what happens to recall? Also undecided: whether turning Conversation Recall on turns Index Conversations on (G.8b says only that it "may"), and what happens to recall when the index is deleted | Open. Indexing is never silently restarted (G.8b) | Step 16 |
 | G25 | Withdrawn on 2026-11-12. With no embedding model nothing can confirm a match, so messages are searched as today (G.10). Nothing changes for those users, so there is nothing to decide | Withdrawn | |
-| G26 | The Memory Debug Log line "Query embed failed, using lexical fallback: (cause)" and the two lines like it are not plain English (G.13b). What do they say instead? | **Owner (2026-11-12):** the plain wording proposed for the first line is fine: "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause)." The two lines like it are still to be proposed | Step 2 |
-| G27 | G.13a says every index error raises a snack bar that stays until acknowledged, and also that most failures are repaired without interrupting the user. Which failures raise a snack bar? | Open. Recommended: a snack bar only when something has stopped working or the user has something to do. Failures the app repairs by itself go to the Error Log only | Step 11 |
+| G26 | What replaces the inaccurate or technical saved-memory diagnostic lines? | **Partly decided (owner, 2026-11-12):** "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause)." is approved. G.13b now names the other affected lines and proposes exact replacements; those remaining replacements still need approval before Step 2 | Step 2 |
+| G27 | Which failures interrupt the user? | **Decided (owner, 2026-11-12):** automatic repairs do not raise a notice. Notify the user when the failure affected a turn, stopped a feature, prevented a setting, or has a real action the user can take. Say what happened, what is safe, and the action when one exists. Do not repeat the same ongoing failure every turn | Decided |
 | G28 | Chats that have never been reopened cannot be indexed until they are opened (G.5a rule 7). What does the progress count show for them? | Open. Recommended: count only what can be indexed now, and say plainly how many conversations will be indexed when they are next opened | Step 11 |
 | G29 | To find a small detail in a long or dictated message, should the app also search with overlapping pieces of the message, cut between words and never at periods (G.10)? | **Decided (owner, 2026-11-12):** yes, on the agent's recommendation | Decided |
 | G30 | Is recall offered without an embedding model? | **Decided (owner, 2026-11-12):** no. Conversation recall requires the embedding model. Lorebook keyword matching is separate and keeps working whenever the lorebook is on | Decided |
-| G31 | What the user sees when Index Conversations or Conversation Recall cannot be turned on because no embedding model is installed, and when the model is removed after indexing | Open. Written to the plain-wording rule (G.13b): why it cannot be turned on, and where to install the model | Step 11 |
+| G31 | What the user sees when the required on-device model is missing, removed, or unusable | Open for exact approval. G.13b proposes separate wording for trying to enable the feature with no model and for an installed feature becoming unavailable, each with an Open Model Settings action | Step 11 |
 | G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | **Decided (owner, 2026-11-12):** yes. 0 to 3, and it starts at 1. Still open: where the control goes, and its label and explanation. Recommended place: with the other search numbers on the Memory Search Test screen | Step 4 |
 | G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | Follows from the owner's decision of 2026-11-12 that a memory may hold 1,500 words (G34): that limit is not true unless the model reads that much. Written into Step 1. Speed and memory use on the phone are checked before it ships | Step 1 |
 | G34 | How is a saved memory limited to what the model can read, and how is its length shown? | **Decided (owner, 2026-11-12):** a word count under the memory box, aligned right, for each memory; at 1,500 it turns red and reads "Word Limit Reached: 1,500 Words Maximum"; the Memory Assistant splits a large subject into separate proposed memories and never fails or discards one for length. Still open, asked before Step 5: the count's text before the limit; what happens on saving over the limit; the wording when the model's real limit is reached below 1,500 words; how existing over-length memories are marked; the words added to the Memory Assistant's instructions | Step 5 |
