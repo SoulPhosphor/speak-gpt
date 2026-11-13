@@ -1302,9 +1302,8 @@ class SummarizerController(
                 text = withContext(Dispatchers.IO) {
                     summarizerCompletion(
                         runtime.prefs, runtime.endpoint, runtime.model, runtime.requestedProvider,
-                        runtime.providerJson,
-                        if (purpose == FoldPurpose.OUTLINE) UsageFunction.OUTLINING else UsageFunction.COMPACTING,
-                        evidence,
+                        runtime.providerJson, UsageFunction.COMPACTING.takeIf { purpose == FoldPurpose.COMPACTION }
+                            ?: UsageFunction.OUTLINING, evidence,
                         listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
                 }.trim()
