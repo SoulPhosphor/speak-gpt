@@ -146,6 +146,8 @@ object PerChatSettingKeys {
         "summary_resummarize_choice",
         "compaction_stale",
         "compaction_versions",
+        "chat_outlines",
+        "chat_outline_tags",
         "condensed_conversation_kind",
         "summarizer_catch_up_pending",
         "auto_name_attempts",

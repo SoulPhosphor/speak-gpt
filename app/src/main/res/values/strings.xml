@@ -1192,6 +1192,7 @@
     <string name="usage_function_reducing">Reducing</string>
     <string name="usage_function_image_description">Image Description</string>
     <string name="usage_function_removal">Removal</string>
+    <string name="usage_function_outlining">Chat Outline</string>
     <string name="token_pricing_group_title" translatable="false">%1$s · %2$s</string>
     <string name="prompt_no_model_provided" translatable="false">No model has been provided.</string>
 
@@ -3709,6 +3710,35 @@
     <string name="summarizer_prompt_kind_image">Image Prompt</string>
     <string name="summarizer_prompts_summary_intro">This prompt gives instructions to the Summarizer Model so it properly helps your AI what\'s important in your conversation.</string>
     <string name="summarizer_prompts_compaction_intro">This prompt gives instructions to the Summarizer Model when you compact a conversation. Compacting condenses everything up to that point into one summary, which your AI then receives instead of those earlier messages.</string>
+    <!-- Summarizer Prompts dropdown (owner ruling, Nov 13 2026): just the
+         names, without "Prompt". Quick Settings keeps its own row labels. -->
+    <string name="summarizer_prompts_option_summary">Summarizer</string>
+    <string name="summarizer_prompts_option_compaction">Compaction</string>
+    <string name="summarizer_prompts_option_image">Image</string>
+    <string name="summarizer_prompts_option_chat_outline">Chat Outline</string>
+    <string name="summarizer_prompts_chat_outline_intro">This prompt gives instructions to the Summarizer Model when you create a chat outline. The outline lists what the conversation covers so you can scan it quickly. It is never sent to your AI.</string>
+    <!-- Chat Outline (owner-approved wording, Nov 13 2026). -->
+    <string name="chat_menu_create_outline">Create Outline</string>
+    <string name="chat_menu_view_outline">View Outline</string>
+    <string name="chat_outline_title">Chat Outline</string>
+    <string name="chat_outline_tab_first">Chat Outline</string>
+    <string name="chat_outline_tab_numbered">Outline %1$d</string>
+    <string name="chat_outline_tags_label">Tags:</string>
+    <string name="chat_outline_generate_new">Generate New Outline</string>
+    <string name="chat_outline_replace_all">Replace All Outlines With New</string>
+    <string name="chat_outline_creating">Creating outline…</string>
+    <string name="chat_outline_menu_edit">Edit</string>
+    <string name="chat_outline_menu_redo">Redo This Outline</string>
+    <string name="chat_outline_menu_delete">Delete</string>
+    <string name="chat_outline_delete_all_desc">Delete Outlines</string>
+    <string name="chat_outline_replace_all_title">Replace All Outlines?</string>
+    <string name="chat_outline_replace_all_body">This will delete all previously existing outlines and replace them with a single new one. This cannot be undone.</string>
+    <string name="chat_outline_delete_all_title">Delete Outlines?</string>
+    <string name="chat_outline_delete_all_body">This will delete all tags and current outlines. You will still be allowed to create new outlines in the future.</string>
+    <string name="chat_outline_delete_one_title">Delete Outline?</string>
+    <string name="chat_outline_delete_one_body">This outline will be permanently deleted. This cannot be undone.</string>
+    <string name="outline_dialog_title">Creating Outline</string>
+    <string name="outline_dialog_complete">Outline complete!</string>
     <string name="summarizer_prompts_image_intro">This single prompt tells the Summarizer Model how to shorten an image prompt. The short version is what the AI receives each turn as a reminder of the image, instead of the full prompt.</string>
     <string name="summarizer_prompts_how_it_works">Only one prompt can be active at a time. The first two prompts are suggested styles.\n\nPresets one and two can always be reverted back to the original preset. Presets 3 through 5 will revert to the last saved prompt text.</string>
     <string name="summarizer_prompts_field_hint">Write your prompt here…</string>
@@ -3828,6 +3858,7 @@
     <string name="summarizer_notification_channel">Summarization and Compaction</string>
     <string name="summarizer_notification_text">Summarizing “%1$s”…</string>
     <string name="compaction_notification_text">Compacting “%1$s”…</string>
+    <string name="outline_notification_text">Creating outline for “%1$s”…</string>
     <string name="large_summarization_title">Large Summarization</string>
     <string name="large_summarization_body">This operation is unusually large and is estimated to send about %1$s input tokens to the summarization model. It may require multiple requests and use significantly more API credits than usual.</string>
     <string name="summarize_anyway">Summarize Anyway</string>

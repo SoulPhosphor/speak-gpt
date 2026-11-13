@@ -288,6 +288,8 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
     /** While the summarizer or compactor runs for this chat the text is read
      *  only; when the run ends the newest saved text is loaded for editing. */
     private fun renderOperation(state: SummarizerController.OperationState) {
+        // A Chat Outline run does not touch the summary or compacted text.
+        if (SummarizerController.kindOf(state) == SummarizerController.OperationKind.OUTLINING) return
         val running = state as? SummarizerController.OperationState.Running
         val wasLocked = locked
         locked = running != null

@@ -43,7 +43,8 @@ enum class UsageFunction(val key: String) {
     CONDENSING("condensing"),
     REDUCING("reducing"),
     IMAGE_DESCRIPTION("image_description"),
-    REMOVAL("removal");
+    REMOVAL("removal"),
+    OUTLINING("outlining");
 
     companion object {
         fun fromKey(key: String?): UsageFunction? = entries.firstOrNull { it.key == key }

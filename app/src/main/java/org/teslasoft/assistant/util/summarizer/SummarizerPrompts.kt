@@ -235,6 +235,71 @@ Use brief bullet points, with one fact per bullet. Keep the list as short as the
      * The complete user-message body of one image-prompt summary call: the
      * instruction followed by the image prompt under a plain label.
      */
+    const val CHAT_OUTLINE_NAME = "Chat Outline"
+
+    /** The shipped Chat Outline prompt (owner request, Nov 13 2026): a
+     *  markdown outline with headers and bullet points, easy to scan. */
+    val CHAT_OUTLINE = """
+You write an outline of this conversation so the user can quickly see what it covers. Below are the outline written so far, for context, and the next messages in the conversation. Write the outline for these messages.
+
+Write in markdown. Use headers for the main topics and bullet points beneath them for the details, so the outline is easy to scan:
+
+- one header for each main topic, in the order the topics come up;
+- short bullet points for what was discussed, decided, made, or left open;
+- nested bullet points only where a detail belongs to another bullet.
+
+Keep each bullet short. Include names, titles, and specific details the user would need to recognize what was discussed. Do not repeat topics already in the outline unless something new happened with them. Do not present suggestions, guesses, or possibilities as settled facts.
+
+You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
+
+Reply only with the outline.
+    """.trimIndent()
+
+    /**
+     * App scaffolding for every Chat Outline request, not an editable prompt:
+     * the outline is built one batch of messages at a time, in order, and the
+     * app adds each reply after the outline so far.
+     */
+    val OUTLINE_CONTEXT_RULE = """
+CHAT OUTLINE INSTRUCTIONS
+
+The outline written so far is kept exactly as saved. Your reply will be added after it. Use it only as context: to understand the conversation and to avoid repeating it. Do not rewrite or reproduce any of it.
+
+Outline only the new messages. Reply with the new part of the outline only, with no introduction or comments about this process.
+    """.trimIndent()
+
+    /** App scaffolding: suggests the Tags line after an outline is made. */
+    val OUTLINE_TAGS_INSTRUCTION = """
+Read the chat outline below and suggest up to five short tags that would help the user find this conversation later, such as the main subjects, projects, people, or places in it.
+
+Reply with only the tags, separated by commas, with no other text.
+    """.trimIndent()
+
+    fun outlineRequestBody(
+        renderedPrompt: String,
+        existingOutline: String,
+        messages: List<Pair<String, String>>
+    ): String {
+        val sb = StringBuilder(renderedPrompt)
+        if (messages.any { (_, text) ->
+                SummarizerSafeIncludeProjectionBuilder.containsAttachmentReference(text)
+            }
+        ) {
+            sb.append("\n\n").append(ATTACHMENT_RULE)
+        }
+        sb.append("\n\n").append(OUTLINE_CONTEXT_RULE)
+        sb.append("\n\nOutline so far:\n")
+        sb.append(existingOutline.ifBlank { "None yet." })
+        sb.append("\n\nNew messages to outline:\n")
+        for ((role, text) in messages) {
+            sb.append('\n').append(role).append(": ").append(text).append('\n')
+        }
+        return sb.toString()
+    }
+
+    fun outlineTagsRequestBody(outline: String): String =
+        OUTLINE_TAGS_INSTRUCTION + "\n\nChat outline:\n" + outline
+
     fun imageSummaryRequestBody(instruction: String, imagePrompt: String): String =
         instruction + "\n\nImage prompt:\n" + imagePrompt
 

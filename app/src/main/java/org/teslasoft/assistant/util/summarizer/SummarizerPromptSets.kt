@@ -36,13 +36,15 @@ object SummarizerPromptSets {
     enum class Kind(val storageKey: String) {
         SUMMARY("summary"),
         COMPACTION("compaction"),
-        IMAGE("image")
+        IMAGE("image"),
+        CHAT_OUTLINE("chat_outline")
     }
 
     const val STORYTELLER_ID = "builtin_storyteller"
     const val REPORTER_ID = "builtin_reporter"
     const val IMAGE_SUMMARY_ID = "builtin_image_summary"
     const val IMAGE_SUMMARY_NAME = "Image Summary"
+    const val CHAT_OUTLINE_ID = "builtin_chat_outline"
 
     /** The shipped prompts of a collection, in display order. */
     fun builtIns(kind: Kind): List<CompanionPromptVariant> = when (kind) {
@@ -79,6 +81,14 @@ object SummarizerPromptSets {
                 id = IMAGE_SUMMARY_ID,
                 name = IMAGE_SUMMARY_NAME,
                 text = SummarizerPrompts.IMAGE_SUMMARY,
+                isDefault = true
+            )
+        )
+        Kind.CHAT_OUTLINE -> listOf(
+            CompanionPromptVariant(
+                id = CHAT_OUTLINE_ID,
+                name = SummarizerPrompts.CHAT_OUTLINE_NAME,
+                text = SummarizerPrompts.CHAT_OUTLINE,
                 isDefault = true
             )
         )
@@ -135,6 +145,7 @@ object SummarizerPromptSets {
                     savedSummary.ifEmpty { legacySlots(prefs) }
                 }
                 Kind.IMAGE -> fromLegacyImagePrompt(prefs.getImageSummaryPrompt())
+                Kind.CHAT_OUTLINE -> builtIns(Kind.CHAT_OUTLINE)
             }
         }
         return normalize(kind, base)

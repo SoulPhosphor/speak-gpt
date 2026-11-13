@@ -34,7 +34,7 @@ class SummarizerForegroundService : Service() {
         private data class Notice(
             val name: String,
             val kind: SummarizerController.OperationKind,
-            /** Compaction progress, 0-100; null for the Summarizer. */
+            /** Compaction or Chat Outline progress, 0-100; null for the Summarizer. */
             val percent: Int? = null
         )
         private val active = ConcurrentHashMap<String, Notice>()
@@ -42,7 +42,7 @@ class SummarizerForegroundService : Service() {
         @Volatile private var shownChatId: String? = null
 
         fun begin(context: Context, chatId: String, chatName: String, kind: SummarizerController.OperationKind) {
-            val percent = if (kind == SummarizerController.OperationKind.COMPACTING) {
+            val percent = if (kind != SummarizerController.OperationKind.SUMMARIZING) {
                 active[chatId]?.percent ?: 0
             } else null
             active[chatId] = Notice(chatName, kind, percent)
@@ -96,9 +96,11 @@ class SummarizerForegroundService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val text = context.getString(
-                if (kind == SummarizerController.OperationKind.COMPACTING) {
-                    R.string.compaction_notification_text
-                } else R.string.summarizer_notification_text,
+                when (kind) {
+                    SummarizerController.OperationKind.COMPACTING -> R.string.compaction_notification_text
+                    SummarizerController.OperationKind.OUTLINING -> R.string.outline_notification_text
+                    SummarizerController.OperationKind.SUMMARIZING -> R.string.summarizer_notification_text
+                },
                 chatName.ifBlank { context.getString(R.string.label_untitled_chat) }
             )
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -112,9 +114,12 @@ class SummarizerForegroundService : Service() {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             if (percent != null) {
-                // Matches the compaction pop-up: its title, its status line,
-                // the percentage done and a bar filled to it.
-                builder.setContentTitle(context.getString(R.string.compaction_dialog_title))
+                // Matches the compaction or outline pop-up: its title, its
+                // status line, the percentage done and a bar filled to it.
+                builder.setContentTitle(context.getString(
+                    if (kind == SummarizerController.OperationKind.OUTLINING) R.string.outline_dialog_title
+                    else R.string.compaction_dialog_title
+                ))
                     .setContentText(context.getString(R.string.compaction_dialog_processing))
                     .setSubText(context.getString(R.string.compaction_dialog_percent, percent))
                     .setProgress(100, percent, false)

@@ -3655,6 +3655,20 @@ class Preferences internal constructor(
     /** The compaction version tabs, as stored (CompactionVersions JSON). */
     fun getCompactionVersions(): String = getString("compaction_versions", "")
 
+    /** This chat's outlines (ChatOutlines JSON), newest tab last. */
+    fun getChatOutlines(): String = getString("chat_outlines", "")
+
+    fun setChatOutlines(json: String) {
+        putString("chat_outlines", json)
+    }
+
+    /** The Chat Outline screen's Tags line, exactly as written. */
+    fun getChatOutlineTags(): String = getString("chat_outline_tags", "")
+
+    fun setChatOutlineTags(tags: String) {
+        putString("chat_outline_tags", tags)
+    }
+
     /** Direct realignment of the version tabs after a deletion. */
     fun setCompactionVersions(json: String) {
         putString("compaction_versions", json)
