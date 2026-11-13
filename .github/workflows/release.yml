@@ -1,9 +1,6 @@
 name: Release APK
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
@@ -12,6 +9,8 @@ concurrency:
 
 jobs:
   build-and-release:
+    # Legacy releases are manual and may only run from the archived client.
+    if: github.ref == 'refs/heads/archive/old-main'
     runs-on: ubuntu-latest
     permissions:
       contents: write

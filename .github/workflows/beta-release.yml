@@ -3,7 +3,7 @@ name: Side-by-side Beta APK
 on:
   push:
     branches:
-      - beta/new-client
+      - main
 
 concurrency:
   group: side-by-side-beta
