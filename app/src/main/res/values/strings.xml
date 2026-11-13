@@ -3739,6 +3739,8 @@
     <string name="chat_outline_delete_one_body">This outline will be permanently deleted. This cannot be undone.</string>
     <string name="outline_dialog_title">Creating Outline</string>
     <string name="outline_dialog_complete">Outline complete!</string>
+    <!-- The words in an outline error message that open the Error Log. -->
+    <string name="outline_err_log_link">Error Log</string>
     <!-- What the Error Log and Provider Failure Log call a failed tag suggestion. -->
     <string name="chat_outline_tags_log_function">Chat Outline Tags</string>
     <!-- Chat Outline error box: what failed, what was kept, what to do next. -->

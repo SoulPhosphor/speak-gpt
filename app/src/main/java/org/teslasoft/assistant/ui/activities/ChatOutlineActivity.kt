@@ -597,6 +597,29 @@ class ChatOutlineActivity : FragmentActivity() {
             setOnClickListener { dialog.dismiss() }
         }
         dialog.show()
+        linkErrorLog(dialog, message)
+    }
+
+    /** Makes "Error Log" in the message a link that opens the Error Log
+     *  (owner request, Nov 13 2026). The link takes the theme's link color. */
+    private fun linkErrorLog(dialog: AlertDialog, message: String) {
+        val phrase = getString(R.string.outline_err_log_link)
+        val start = message.indexOf(phrase)
+        if (start < 0) return
+        val messageView = dialog.findViewById<TextView>(android.R.id.message) ?: return
+        val text = android.text.SpannableString(message)
+        text.setSpan(object : android.text.style.ClickableSpan() {
+            override fun onClick(widget: View) {
+                dialog.dismiss()
+                startActivity(
+                    Intent(this@ChatOutlineActivity, LogsActivity::class.java)
+                        .putExtra("type", "crash")
+                        .putExtra("chatId", chatId)
+                )
+            }
+        }, start, start + phrase.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        messageView.text = text
+        messageView.movementMethod = android.text.method.LinkMovementMethod.getInstance()
     }
 
     companion object {
