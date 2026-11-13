@@ -2043,6 +2043,12 @@
         <item name="android:tint">?attr/colorPrimary</item>
     </style>
 
+    <!-- Persistent Includes paperclip: a bare composer action whose activated
+         state draws the full-size attachment highlight ring. -->
+    <style name="Widget.App.Chat.ComposerAction.Includes">
+        <item name="android:background">@drawable/bg_chat_composer_includes_action</item>
+    </style>
+
     <!-- Shared camera/image/document and conversation-tools pop-up family. -->
     <style name="Widget.App.Chat.ActionMenu.Popup" parent="">
         <item name="android:layout_width">wrap_content</item>

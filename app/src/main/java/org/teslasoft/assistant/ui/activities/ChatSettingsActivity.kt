@@ -98,6 +98,12 @@ class ChatSettingsActivity : SettingsPageActivity() {
             preferences.setShowUserTokens(it)
         }
         bindSwitch(
+            R.id.switch_highlight_full_size_attachments,
+            preferences.getHighlightFullSizeAttachments()
+        ) {
+            preferences.setHighlightFullSizeAttachments(it)
+        }
+        bindSwitch(
             R.id.switch_hardware_keyboard_shortcuts,
             preferences.getHardwareKeyboardShortcuts()
         ) {

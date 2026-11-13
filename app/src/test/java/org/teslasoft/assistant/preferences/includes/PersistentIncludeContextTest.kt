@@ -65,6 +65,29 @@ class PersistentIncludeContextTest {
     }
 
     @Test
+    fun fullSizeIsReportedOnlyWhileAnIncludeIsStillFull() {
+        assertFalse(PersistentIncludeContext.hasFullSize(arrayListOf(message(false))))
+        assertFalse(
+            PersistentIncludeContext.hasFullSize(
+                arrayListOf(
+                    message(false, include("condensed", IncludeForm.CONDENSED)),
+                    message(true),
+                    message(false, include("removed", IncludeForm.ARTIFACT))
+                )
+            )
+        )
+        assertTrue(
+            PersistentIncludeContext.hasFullSize(
+                arrayListOf(
+                    message(false, include("condensed", IncludeForm.CONDENSED)),
+                    message(true),
+                    message(false, include("full"))
+                )
+            )
+        )
+    }
+
+    @Test
     fun assistantRowsNeverReceiveInheritedIncludes() {
         val messages = arrayListOf(
             message(false, include("document")),

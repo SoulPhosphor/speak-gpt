@@ -178,6 +178,16 @@
 
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/chat_settings_highlight_full_size_attachments" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/chat_settings_highlight_full_size_attachments_hint" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_highlight_full_size_attachments"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_hardware_keyboard_shortcuts" />
                     <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/appearance_hardware_keyboard_shortcuts_hint" />
                 </LinearLayout>

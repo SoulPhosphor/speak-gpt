@@ -1666,6 +1666,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatStartupComplete && chatId != "") {
             refreshSummarizerIcons()
             refreshComposerTools()
+            // Chat Settings may have turned the full-size highlight on or off.
+            refreshPersistentIncludeControls()
             // The summary / compaction review may have just closed: run any
             // held update, or the catch-up owed after Resummarize.
             releaseHeldSummarizerCycle()
@@ -2109,14 +2111,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     R.drawable.btn_accent_tonal_v5_amoled
                 )!!, this
             )
-
-
-            btnPersistentIncludes?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
         } else {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
                 window.navigationBarColor = getColor(R.color.accent_100)
@@ -2130,7 +2124,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             activityTitle?.setBackgroundResource(R.drawable.bg_chat_header)
             btnBack?.setBackgroundResource(R.drawable.btn_chat_header_action)
             btnSettings?.setBackgroundResource(R.drawable.btn_chat_header_action)
-            btnPersistentIncludes?.setBackgroundResource(R.drawable.btn_accent_tonal_v5)
         }
     }
 
@@ -3676,17 +3669,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return drawable
     }
 
-    private fun getAmoledAccentDrawableV2(drawable: Drawable, context: Context) : Drawable {
-        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getAmoledSurfaceColorV2(context))
-        return drawable
-    }
-
     private fun getAmoledSurfaceColor(context: Context) : Int {
         return ResourcesCompat.getColor(context.resources, R.color.amoled_accent_100, null)
-    }
-
-    private fun getAmoledSurfaceColorV2(context: Context) : Int {
-        return ResourcesCompat.getColor(context.resources, R.color.amoled_accent_200, null)
     }
 
     /**
@@ -3871,11 +3855,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // one of them has been removed there is nothing left for it to manage —
         // only the sentence or two each left behind, which the transcript's own
         // bookmark opens — so this control goes away rather than changing icon.
-        val visible = PersistentIncludeContext
-            .allSent(messages, INCLUDES_KEY)
-            .any { it.form != IncludeForm.ARTIFACT }
+        val sent = PersistentIncludeContext.allSent(messages, INCLUDES_KEY)
+        val visible = sent.any { it.form != IncludeForm.ARTIFACT }
         button.visibility = if (visible) View.VISIBLE else View.GONE
         button.isEnabled = visible
+        // Chat Settings > Highlight Icon for Full Size Attachments: the
+        // activated state draws the shared highlight ring while anything sent
+        // is still full size, so it is not forgotten and kept costing tokens.
+        button.isActivated = visible &&
+            preferences?.getHighlightFullSizeAttachments() == true &&
+            PersistentIncludeContext.hasFullSize(messages, INCLUDES_KEY)
     }
 
     /**

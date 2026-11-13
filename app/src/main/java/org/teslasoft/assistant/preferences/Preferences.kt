@@ -798,6 +798,13 @@ class Preferences internal constructor(
         setDesktopMode(state)
     }
 
+    fun getHighlightFullSizeAttachments(): Boolean =
+        getGlobalBoolean("chat_highlight_full_size_attachments", false)
+
+    fun setHighlightFullSizeAttachments(state: Boolean) {
+        putGlobalBoolean("chat_highlight_full_size_attachments", state, false)
+    }
+
     fun getUserChatNameFont(): String = getGlobalString("chat_user_name_font", "roboto")
 
     fun setUserChatNameFont(fontId: String) {

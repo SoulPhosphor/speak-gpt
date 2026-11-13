@@ -4045,6 +4045,8 @@
     <string name="make_current_title">Make Current Response?</string>
     <string name="make_current_body">This will replace the original response in the conversation and make it the canonical response. This will destroy all chat history after this response.</string>
     <string name="make_current_confirm">Okay</string>
+    <string name="chat_settings_highlight_full_size_attachments">Highlight Icon for Full Size Attachments</string>
+    <string name="chat_settings_highlight_full_size_attachments_hint">If there are any images or documents that have been attached to a message in chat that have not been reduced from their full size highlight the paper clip icon</string>
     <string name="appearance_hardware_keyboard_shortcuts">Hardware Keyboard Shortcuts</string>
     <string name="appearance_hardware_keyboard_shortcuts_hint">Press Enter to send and Shift+Enter for a new line.</string>
     <string name="appearance_section_name_style">Name Style</string>
