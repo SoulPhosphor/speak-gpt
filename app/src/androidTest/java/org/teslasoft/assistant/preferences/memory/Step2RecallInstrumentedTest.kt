@@ -30,7 +30,6 @@ import org.teslasoft.assistant.preferences.memory.enforcer.Enforcer
 import org.teslasoft.assistant.preferences.memory.librarian.*
 import org.teslasoft.assistant.ui.activities.MemorySearchTestActivity
 import java.io.File
-import android.os.ParcelFileDescriptor
 import java.security.MessageDigest
 import kotlin.math.sqrt
 
@@ -203,7 +202,7 @@ class Step2RecallInstrumentedTest {
         // instrumentation can omit the argument to run only deterministic
         // integration/UI checks without downloading a model.
         assumeTrue(InstrumentationRegistry.getArguments().getString("step2_real_model") == "true")
-        val supplied = File(base.getExternalFilesDir(null), "step2-model")
+        val supplied = File(base.filesDir, "step2-model")
         val runtimeContext = object : ContextWrapper(base) {
             override fun getApplicationContext(): Context = this
             override fun getFilesDir(): File = File(base.filesDir, "step2-runtime-$prefix").apply { mkdirs() }
@@ -217,18 +216,10 @@ class Step2RecallInstrumentedTest {
         for ((name, expectedHash) in hashes) {
             val source = File(supplied, name)
             val target = File(installed, name)
-            // adb supplies these public model files as the shell UID. On
-            // scoped-storage emulators the app may not read shell-created
-            // files directly. Transfer through the instrumentation shell's
-            // pipe into app-private storage; production loading is unchanged.
-            val shellCopy = !source.isFile || !source.canRead()
-            if (!shellCopy) source.copyTo(target, overwrite = true) else {
-                val quoted = "'" + source.absolutePath.replace("'", "'\\''") + "'"
-                ParcelFileDescriptor.AutoCloseInputStream(InstrumentationRegistry.getInstrumentation()
-                    .uiAutomation.executeShellCommand("cat $quoted")).use { input ->
-                    target.outputStream().use { output -> input.copyTo(output) }
-                }
-            }
+            // CI provisions these files as the app UID with run-as, avoiding
+            // scoped shared storage and its shell/app visibility differences.
+            assertTrue("Missing or unreadable validation file $source", source.isFile && source.canRead())
+            source.copyTo(target, overwrite = true)
             val digest = MessageDigest.getInstance("SHA-256")
             target.inputStream().use { input ->
                 val buffer = ByteArray(64 * 1024)
@@ -238,7 +229,7 @@ class Step2RecallInstrumentedTest {
                     digest.update(buffer, 0, count)
                 }
             }
-            assertEquals("Validation file $source (shell copy=$shellCopy)", expectedHash,
+            assertEquals("Validation file $source", expectedHash,
                 digest.digest().joinToString("") { "%02x".format(it) })
         }
         val real = OnnxEmbeddingModel.create(runtimeContext, EmbeddingModels.GEMMA_Q4)

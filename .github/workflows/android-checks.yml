@@ -197,11 +197,18 @@ jobs:
           4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47  tokenizer.json
           HASHES
           )
-          target=/sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-model
-          adb shell mkdir -p "$target"
-          adb push "$model_dir/model.onnx" "$target/model.onnx"
-          adb push "$model_dir/model_q4.onnx_data" "$target/model_q4.onnx_data"
-          adb push "$model_dir/tokenizer.json" "$target/tokenizer.json"
+          # Shared external storage can present empty/unreadable files across
+          # shell and app UIDs. Stream into app-private storage as the app UID.
+          package=com.soulphosphor.phosphorshines
+          adb shell run-as "$package" mkdir -p files/step2-model
+          for name in model.onnx model_q4.onnx_data tokenizer.json; do
+            adb shell -T "run-as $package sh -c 'cat > files/step2-model/$name'" < "$model_dir/$name"
+          done
+          adb shell "run-as $package sh -c 'cd files/step2-model && sha256sum model.onnx model_q4.onnx_data tokenizer.json'" \
+            | tr -d '\r' > "$model_dir/device-hashes.txt"
+          (cd "$model_dir" && sha256sum model.onnx model_q4.onnx_data tokenizer.json) \
+            > "$model_dir/host-hashes.txt"
+          diff -u "$model_dir/host-hashes.txt" "$model_dir/device-hashes.txt"
 
       - name: Run recovery instrumentation and fault suite
         env:
@@ -245,7 +252,7 @@ jobs:
             if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
               if [ "$wifi_before" = 1 ]; then adb shell svc wifi enable; fi
               if [ "$data_before" = 1 ]; then adb shell svc data enable; fi
-              adb shell rm -rf /sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-model
+              adb shell run-as com.soulphosphor.phosphorshines rm -rf files/step2-model
             fi
             adb logcat -d -v threadtime \
               > "$RUNNER_TEMP/recovery-results/$result_name-logcat.txt"
