@@ -30,6 +30,8 @@ import org.teslasoft.assistant.preferences.memory.enforcer.Enforcer
 import org.teslasoft.assistant.preferences.memory.librarian.*
 import org.teslasoft.assistant.ui.activities.MemorySearchTestActivity
 import java.io.File
+import android.os.ParcelFileDescriptor
+import java.security.MessageDigest
 import kotlin.math.sqrt
 
 /** Real encrypted-store -> Librarian -> Enforcer -> prompt boundary, using a
@@ -51,6 +53,7 @@ class Step2RecallInstrumentedTest {
     private lateinit var enforcer: Enforcer
     private lateinit var fake: FakeModel
     private val oldSingletons = mutableListOf<Pair<java.lang.reflect.Field, Any?>>()
+    private val runtimeModelDirs = mutableListOf<File>()
     private val whole = floatArrayOf(0f, 1f, 0f)
     private val section = floatArrayOf(1f, 0f, 0f)
     private val message = (1..180).joinToString(" ") { "filler$it" } +
@@ -114,6 +117,7 @@ class Step2RecallInstrumentedTest {
         if (::store.isInitialized) store.close()
         base.databaseList().filter { it.startsWith(prefix) }.forEach { base.deleteDatabase(it) }
         ctx.filesDir.deleteRecursively()
+        runtimeModelDirs.forEach { it.deleteRecursively() }
     }
 
     private fun sectionVector(sim: Double) = floatArrayOf(sim.toFloat(), 0f, sqrt(1 - sim * sim).toFloat())
@@ -126,6 +130,12 @@ class Step2RecallInstrumentedTest {
     private fun send(manual: List<String> = emptyList()) = enforcer.assembleTurnWithAttribution(
         Enforcer.TurnInput("step2-chat", "", message, "", "test", emptyList(), null, null, null, null, null,
             manualMemoryIds = manual))
+
+    private fun logSince(before: String): String {
+        val current = Logger.getMemoryLog(ctx)
+        assertTrue("Memory log unexpectedly truncated during one operation", current.startsWith(before))
+        return current.substring(before.length)
+    }
 
     @Test fun sectionMemoryReachesFinalPromptAndReportAgrees() {
         val output = send()!!
@@ -149,9 +159,10 @@ class Step2RecallInstrumentedTest {
     @Test fun brokenSectionsPreserveWholeMatchesAndStopRepeatedWork() {
         add("whole", "the primary whole message memory", whole)
         fake.failSections = true
+        val before = Logger.getMemoryLog(ctx)
         assertEquals(listOf("whole"), send()!!.memoryIds)
         assertEquals(2, fake.sectionCalls)
-        assertEquals(1, Regex("test broken model").findAll(Logger.getMemoryLog(ctx)).count())
+        assertEquals(1, Regex("test broken model").findAll(logSince(before)).count())
     }
 
     @Test fun queryFailureAndUnavailableModelStillUseKeywords() {
@@ -166,14 +177,16 @@ class Step2RecallInstrumentedTest {
 
     @Test fun assistantErrorsAndIncompleteIndexDescribeActualBackgroundOperation() {
         fake.failQuery = true
+        val before = Logger.getMemoryLog(ctx)
         librarian.searchForReconciliation(RetrievalScope(null, null, null, null), listOf(message), 5)
-        val errorLog = Logger.getMemoryLog(ctx)
+        val errorLog = logSince(before)
         assertTrue(errorLog.contains("Memory Assistant could not process its background search"))
         assertFalse(errorLog.contains("could not read this message"))
         assertEquals(0, fake.sectionCalls)
         store.writableDatabase.execSQL("DELETE FROM embeddings")
+        val beforeIncomplete = Logger.getMemoryLog(ctx)
         librarian.searchForReconciliation(RetrievalScope(null, null, null, null), listOf("juniper"), 5)
-        val incompleteLog = Logger.getMemoryLog(ctx)
+        val incompleteLog = logSince(beforeIncomplete)
         assertTrue(incompleteLog.contains("Memory Assistant searched the complete eligible set by keyword instead"))
         // No installed catalog model exists in this isolated context, so the
         // repair scheduler returns false and must not claim preparation.
@@ -195,11 +208,38 @@ class Step2RecallInstrumentedTest {
             override fun getApplicationContext(): Context = this
             override fun getFilesDir(): File = File(base.filesDir, "step2-runtime-$prefix").apply { mkdirs() }
         }
+        runtimeModelDirs.add(runtimeContext.filesDir)
         val installed = EmbeddingModelStorage.modelDir(runtimeContext, EmbeddingModels.GEMMA_Q4)
-        for (name in listOf("model.onnx", "model_q4.onnx_data", "tokenizer.json")) {
+        val hashes = mapOf(
+            "model.onnx" to "ad1dfee81a70f7944b9b9d1cc6e48075b832881cf33fab2f2b248be78f3f0043",
+            "model_q4.onnx_data" to "599962c3143b040de2dd05e5975be3e9091dd067cacc6a8f7186e3203bab9e02",
+            "tokenizer.json" to "4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47")
+        for ((name, expectedHash) in hashes) {
             val source = File(supplied, name)
-            check(source.isFile) { "Supply $name in the target app's external step2-model directory" }
-            source.copyTo(File(installed, name), overwrite = true)
+            val target = File(installed, name)
+            // adb supplies these public model files as the shell UID. On
+            // scoped-storage emulators the app may not read shell-created
+            // files directly. Transfer through the instrumentation shell's
+            // pipe into app-private storage; production loading is unchanged.
+            val shellCopy = !source.isFile || !source.canRead()
+            if (!shellCopy) source.copyTo(target, overwrite = true) else {
+                val quoted = "'" + source.absolutePath.replace("'", "'\\''") + "'"
+                ParcelFileDescriptor.AutoCloseInputStream(InstrumentationRegistry.getInstrumentation()
+                    .uiAutomation.executeShellCommand("cat $quoted")).use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            val digest = MessageDigest.getInstance("SHA-256")
+            target.inputStream().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            assertEquals("Validation file $source (shell copy=$shellCopy)", expectedHash,
+                digest.digest().joinToString("") { "%02x".format(it) })
         }
         val real = OnnxEmbeddingModel.create(runtimeContext, EmbeddingModels.GEMMA_Q4)
         try {
