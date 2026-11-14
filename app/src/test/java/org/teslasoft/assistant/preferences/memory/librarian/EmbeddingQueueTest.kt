@@ -180,6 +180,39 @@ class EmbeddingQueueTest {
 
     @Test
     fun stoppedBackgroundReadStaysAheadOfLaterBackgroundReads() {
+        stoppedReadKeepsItsPlace()
+    }
+
+    @Test
+    fun stoppedReadKeepsItsPlaceWhileItsThreadIsBetweenTurns() {
+        // Deterministic: the stopped read's thread is held exactly between the
+        // end of its turn and its next wait, while the live read runs and
+        // finishes. A later background read must still not take its place.
+        val queue = EmbeddingQueue()
+        val order = Collections.synchronizedList(ArrayList<String>())
+        val attempts = AtomicInteger(0)
+        val started = CountDownLatch(1)
+        val liveDone = CountDownLatch(1)
+        val laterStarted = CountDownLatch(1)
+        var laterRanWhileHeld = false
+        queue.afterStoppedForTest = {
+            assertTrue(liveDone.await(timeout, TimeUnit.SECONDS))
+            // The queue is now idle with the stopped read at its head. The
+            // later read must not start, however long this thread is held.
+            laterRanWhileHeld = laterStarted.await(300, TimeUnit.MILLISECONDS)
+        }
+        val first = startThread("b1") { queue.run(BACKGROUND, stoppableRead("b1", order, attempts, started)) }
+        assertTrue(started.await(timeout, TimeUnit.SECONDS))
+        val later = startThread("b2") { queue.run(BACKGROUND) { laterStarted.countDown(); order.add("b2") } }
+        awaitWaiting(queue, 1)
+        val live = startThread("live") { queue.run(LIVE) { order.add("live") }; liveDone.countDown() }
+        for (t in listOf(live, first, later)) t.join(timeout * 1000)
+
+        assertFalse("a later background read took the stopped read's place", laterRanWhileHeld)
+        assertEquals(listOf("b1-started", "b1-stopped", "live", "b1-done", "b2"), order)
+    }
+
+    private fun stoppedReadKeepsItsPlace() {
         val queue = EmbeddingQueue()
         val order = Collections.synchronizedList(ArrayList<String>())
         val attempts = AtomicInteger(0)

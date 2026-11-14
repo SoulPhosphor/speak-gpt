@@ -98,21 +98,31 @@ class EmbeddingQueue {
      */
     fun <T> run(priority: Priority, work: (ReadControl) -> T): T {
         val ticket = lock.withLock { Ticket(priority, nextOrder++) }
+        var alreadyQueued = false
         while (true) {
-            val control = awaitTurn(ticket)
+            val control = awaitTurn(ticket, alreadyQueued)
+            var requeue = false
             try {
                 return work(control)
             } catch (e: ReadStoppedException) {
                 // Only a stop the queue asked for is retried; anything else is
-                // a real failure for the caller. The retry re-enters the queue
-                // with the read's original order, so it stays ahead of later
-                // background reads.
+                // a real failure for the caller.
                 if (!control.stopRequested || priority != Priority.BACKGROUND) throw e
+                requeue = true
             } finally {
-                finishTurn(ticket)
+                // A stopped read goes back into the queue, with its original
+                // order, in the same step that ends its turn, so no later
+                // background read can take its place in between.
+                finishTurn(ticket, requeue)
+                alreadyQueued = requeue
             }
+            afterStoppedForTest?.invoke()
         }
     }
+
+    /** Test seam: runs on a stopped read's thread after its turn ends and
+     *  before it waits again. Null outside tests. */
+    @Volatile internal var afterStoppedForTest: (() -> Unit)? = null
 
     /** True while a read is running. For tests and measurements. */
     fun isBusy(): Boolean = lock.withLock { running != null }
@@ -120,12 +130,12 @@ class EmbeddingQueue {
     /** Reads waiting for their turn. For tests and measurements. */
     fun waitingCount(): Int = lock.withLock { waiting.size }
 
-    private fun awaitTurn(ticket: Ticket): ReadControl {
+    private fun awaitTurn(ticket: Ticket, alreadyQueued: Boolean): ReadControl {
         var toStop: ReadControl? = null
         val control: ReadControl
         lock.lock()
         try {
-            waiting.add(ticket)
+            if (!alreadyQueued) waiting.add(ticket)
             val current = running
             if (ticket.priority == Priority.LIVE && current != null &&
                 current.priority == Priority.BACKGROUND
@@ -158,12 +168,13 @@ class EmbeddingQueue {
         return control
     }
 
-    private fun finishTurn(ticket: Ticket) {
+    private fun finishTurn(ticket: Ticket, requeue: Boolean) {
         lock.withLock {
             if (running === ticket) {
                 running = null
                 runningControl = null
             }
+            if (requeue) waiting.add(ticket)
             turnChanged.signalAll()
         }
     }
