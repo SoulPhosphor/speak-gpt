@@ -57,6 +57,36 @@ class ProviderDiscoveryResolverTest {
     }
 
     @Test
+    fun variantModelKeepsItsOwnEndpointsInsteadOfTheBaseModelDetailsLink() {
+        val body = """{"data":{"id":"nvidia/nemotron-3-ultra:free",""" +
+            """"links":{"details":"/api/v1/models/nvidia/nemotron-3-ultra-20260604/endpoints"}}}"""
+        assertEquals(
+            "https://openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra:free/endpoints",
+            ProviderDiscoveryResolver.detailsUrl("https://openrouter.ai/api/v1/", body)
+        )
+    }
+
+    @Test
+    fun variantDetailsLinkThatAlreadyKeepsTheVariantIsUsedAsIs() {
+        val body = """{"data":{"id":"vendor/model:free",""" +
+            """"links":{"details":"/api/v1/models/vendor/model:free/endpoints"}}}"""
+        assertEquals(
+            "https://openrouter.ai/api/v1/models/vendor/model:free/endpoints",
+            ProviderDiscoveryResolver.detailsUrl("https://openrouter.ai/api/v1", body)
+        )
+    }
+
+    @Test
+    fun nonVariantIdStillUsesCanonicalDetailsLink() {
+        val body = """{"data":{"id":"deepseek/deepseek-chat-v3.1",""" +
+            """"links":{"details":"/api/v1/models/deepseek/deepseek-v3.1/endpoints"}}}"""
+        assertEquals(
+            "https://openrouter.ai/api/v1/models/deepseek/deepseek-v3.1/endpoints",
+            ProviderDiscoveryResolver.detailsUrl("https://openrouter.ai/api/v1", body)
+        )
+    }
+
+    @Test
     fun missingOrMalformedDetailsLinkReturnsNull() {
         assertNull(ProviderDiscoveryResolver.detailsUrl("https://openrouter.ai/api/v1", "{}"))
         assertNull(ProviderDiscoveryResolver.detailsUrl("https://openrouter.ai/api/v1", "not json"))

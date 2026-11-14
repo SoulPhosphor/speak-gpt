@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Compact progress (owner rulings, Oct 4 and Nov 2 2026): title with the
      real percentage done, a bar showing it, and "Processing Conversation
-     History" with three looping dots, plus a single Cancel. After success
+     History" with three looping dots, "Using Summarizer Model: <model>"
+     beneath it, plus a single Cancel. After success
      the status reads "Compaction complete!" with Cancel (undo the
      compaction) and Okay. Styles: Widget.App.ProgressDialog.* -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -38,6 +39,10 @@
                 android:id="@+id/compaction_dots"
                 style="@style/Widget.App.ProgressDialog.Dots" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/progress_dialog_model"
+            style="@style/Widget.App.ProgressDialog.Model" />
     </LinearLayout>
 
     <include layout="@layout/dialog_single_action" />

@@ -18,63 +18,65 @@
             style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
     </LinearLayout>
 
-    <androidx.constraintlayout.widget.ConstraintLayout style="@style/Widget.App.ModelPicker.ControlRow">
+    <!-- One pill: the search scope dropdown, a divider, then the search
+         field (Widget.App.SearchPill.*). -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/model_browser_search_box"
+        style="@style/Widget.App.SearchPill">
 
         <TextView
             android:id="@+id/model_browser_search_scope"
-            style="@style/Widget.App.Dropdown.CanonicalValue"
+            style="@style/Widget.App.SearchPill.Scope"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
 
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/model_browser_search_box"
-            style="@style/Widget.App.Bookmark.SearchBox"
-            app:layout_constraintStart_toEndOf="@id/model_browser_search_scope"
+        <View
+            android:id="@+id/model_browser_search_divider"
+            style="@style/Widget.App.SearchPill.Divider"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            app:layout_constraintStart_toEndOf="@id/model_browser_search_scope" />
 
-            <ImageView
-                android:id="@+id/model_browser_search_icon"
-                style="@style/Widget.App.Bookmark.SearchIcon"
-                android:src="@drawable/ic_search"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
+        <ImageView
+            android:id="@+id/model_browser_search_icon"
+            style="@style/Widget.App.SearchPill.Icon"
+            android:src="@drawable/ic_search"
+            app:layout_constraintStart_toEndOf="@id/model_browser_search_divider"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/model_browser_search"
-                style="@style/Widget.App.ModelPicker.SearchField"
-                android:hint="@string/label_search_models"
-                android:inputType="text"
-                android:imeOptions="actionSearch"
-                app:layout_constraintStart_toEndOf="@id/model_browser_search_icon"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
-        </androidx.constraintlayout.widget.ConstraintLayout>
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/model_browser_search"
+            style="@style/Widget.App.SearchPill.Field"
+            android:hint="@string/label_search_models"
+            android:inputType="text"
+            android:imeOptions="actionSearch"
+            app:layout_constraintStart_toEndOf="@id/model_browser_search_icon"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <LinearLayout
+    <org.teslasoft.assistant.ui.widgets.SegmentedPill
         android:id="@+id/model_browser_filters"
-        style="@style/Widget.App.ModelPicker.ControlRow">
+        style="@style/Widget.App.ModelPicker.FilterPill">
 
-        <com.google.android.material.button.MaterialButton
+        <TextView
             android:id="@+id/model_browser_all"
-            style="@style/Widget.App.ModelPicker.Tab"
+            style="@style/Widget.App.SegmentedPill.Option"
             android:text="@string/cat_all" />
 
-        <com.google.android.material.button.MaterialButton
+        <TextView
             android:id="@+id/model_browser_new"
-            style="@style/Widget.App.ModelPicker.Tab.Spaced"
+            style="@style/Widget.App.SegmentedPill.Option"
             android:text="@string/model_browser_new" />
 
-        <com.google.android.material.button.MaterialButton
+        <TextView
             android:id="@+id/model_browser_free"
-            style="@style/Widget.App.ModelPicker.Tab.Spaced"
+            style="@style/Widget.App.SegmentedPill.Option"
             android:text="@string/model_browser_free" />
-    </LinearLayout>
+    </org.teslasoft.assistant.ui.widgets.SegmentedPill>
 
     <LinearLayout
         android:id="@+id/model_browser_sort_row"

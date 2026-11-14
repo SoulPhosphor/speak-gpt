@@ -5409,10 +5409,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         org.teslasoft.assistant.util.summarizer.ChatOutlines
             .fromJson(preferences?.getChatOutlines()).isNotEmpty()
 
-    /** View Outline opens the outlines; Create Outline also starts the first. */
+    /** View Outline and Create Outline both open the outlines screen; a
+     *  run starts only when the user taps Generate New there. */
     private fun openChatOutline() {
         if (chatId.isBlank()) return
-        startActivity(ChatOutlineActivity.createIntent(this, chatId, chatName, create = !hasChatOutline()))
+        startActivity(ChatOutlineActivity.createIntent(this, chatId, chatName))
     }
 
     /** Starts a Chat Outline run over the whole stored conversation. */
@@ -5648,6 +5649,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     return true
                 }
                 val view = layoutInflater.inflate(R.layout.dialog_compaction_progress, null)
+                org.teslasoft.assistant.ui.util.SummarizerModelLine.bind(view, chatId)
                 val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                     .setView(view)
                     .setCancelable(false)

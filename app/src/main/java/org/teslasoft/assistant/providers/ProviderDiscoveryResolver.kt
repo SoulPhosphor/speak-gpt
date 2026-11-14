@@ -30,16 +30,25 @@ object ProviderDiscoveryResolver {
         baseHost.trimEnd('/') + "/model/" + modelId
 
     fun detailsUrl(baseHost: String, responseBody: String): String? {
-        val details = try {
-            JSONObject(responseBody)
-                .optJSONObject("data")
-                ?.optJSONObject("links")
-                ?.optString("details")
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
+        val data = try {
+            JSONObject(responseBody).optJSONObject("data")
         } catch (_: Exception) {
             null
         } ?: return null
+        val details = data.optJSONObject("links")
+            ?.optString("details")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: return null
+
+        // A variant id such as "author/model:free" is its own set of
+        // endpoints, but its details link points at the base model's
+        // endpoints (paid providers, or none at all). Keep the variant: ask
+        // for the variant's own endpoints on the same host instead.
+        val modelId = data.optString("id").trim()
+        if (modelId.contains(':') && !details.contains(modelId)) {
+            return baseHost.trimEnd('/') + "/models/" + modelId + "/endpoints"
+        }
 
         return try {
             val base = URI(baseHost.trimEnd('/') + "/")

@@ -3803,6 +3803,7 @@
     <string name="compaction_dialog_complete">Compaction complete!</string>
     <string name="compaction_dialog_title">Compacting Conversation</string>
     <string name="compaction_dialog_processing">Processing Conversation History</string>
+    <string name="progress_dialog_summarizer_model">Using Summarizer Model: %1$s</string>
     <string name="compaction_dialog_percent">%1$d%%</string>
     <!-- Compact error box (owner-approved wording, Oct 4 2026). -->
     <string name="compaction_err_model_missing_title">Summary Model Configuration Needed</string>

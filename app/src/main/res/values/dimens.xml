@@ -235,6 +235,9 @@
     <dimen name="progress_dialog_bar_radius">4dp</dimen>
     <dimen name="progress_dialog_status_gap">12dp</dimen>
     <dimen name="progress_dialog_status_size">15sp</dimen>
+    <dimen name="progress_dialog_model_gap">4dp</dimen>
+    <!-- The smallest text the app allows (message information size). -->
+    <dimen name="progress_dialog_model_size">@dimen/chat_message_metadata_text_size</dimen>
     <!-- Expandable text box (Widget.App.Field.ExpandableBox / ExpandedPanel).
          The expanded panel uses the chat message box's expanded measurements. -->
     <dimen name="field_label_page_top_gap">16dp</dimen>
@@ -319,6 +322,28 @@
     <dimen name="memory_attachment_strip_elevation">10dp</dimen>
     <dimen name="model_picker_gutter">16dp</dimen>
     <dimen name="model_picker_section_gap">12dp</dimen>
+    <!-- Widget.App.SearchPill.*: a search scope dropdown and search field in
+         one pill-shaped outline, all one height. -->
+    <!-- Widget.App.SegmentedPill.*: one-choice words in a pill with a
+         sliding highlight capsule. -->
+    <dimen name="segmented_pill_height">48dp</dimen>
+    <dimen name="segmented_pill_radius">24dp</dimen>
+    <dimen name="segmented_pill_inset">4dp</dimen>
+    <dimen name="segmented_pill_option_padding">12dp</dimen>
+    <dimen name="segmented_pill_text_size">14sp</dimen>
+    <dimen name="search_pill_height">48dp</dimen>
+    <dimen name="search_pill_corner_radius">24dp</dimen>
+    <dimen name="search_pill_stroke_width">1dp</dimen>
+    <dimen name="search_pill_scope_padding_start">16dp</dimen>
+    <dimen name="search_pill_scope_padding_end">10dp</dimen>
+    <dimen name="search_pill_scope_chevron_gap">6dp</dimen>
+    <dimen name="search_pill_scope_text_size">14sp</dimen>
+    <dimen name="search_pill_divider_width">1dp</dimen>
+    <dimen name="search_pill_divider_inset">10dp</dimen>
+    <dimen name="search_pill_icon_size">48dp</dimen>
+    <dimen name="search_pill_icon_padding">12dp</dimen>
+    <dimen name="search_pill_field_padding_end">16dp</dimen>
+    <dimen name="search_pill_text_size">14sp</dimen>
     <dimen name="model_picker_tab_gap">4dp</dimen>
     <dimen name="model_picker_search_padding_end">12dp</dimen>
     <dimen name="model_picker_card_radius">16dp</dimen>
@@ -353,6 +378,5 @@
     <dimen name="chat_composer_includes_highlight_inset">6dp</dimen>
     <!-- Chat Outline screen (Widget.App.ChatOutline.*). -->
     <dimen name="chat_outline_text_size">16sp</dimen>
-    <dimen name="chat_outline_tags_gap">8dp</dimen>
     <dimen name="chat_outline_status_spinner_gap">8dp</dimen>
 </resources>

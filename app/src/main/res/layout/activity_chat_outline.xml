@@ -81,18 +81,23 @@
                     android:text="@string/chat_outline_creating" />
             </LinearLayout>
 
-            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+            <TextView
+                style="@style/Widget.App.Field.Label.AfterRow"
+                android:labelFor="@+id/field_outline_tags"
+                android:text="@string/chat_outline_tags_label" />
 
-                <TextView
-                    style="@style/Widget.App.ChatOutline.TagsLabel"
-                    android:labelFor="@+id/field_outline_tags"
-                    android:text="@string/chat_outline_tags_label" />
-
-                <EditText
-                    android:id="@+id/field_outline_tags"
-                    style="@style/Widget.App.ChatOutline.TagsField"
-                    android:autofillHints="" />
-            </LinearLayout>
+            <!-- One line tall, growing with the tags up to ten lines, then
+                 scrolling inside the box. -->
+            <EditText
+                android:id="@+id/field_outline_tags"
+                style="@style/Widget.App.Field.Box"
+                android:autofillHints=""
+                android:gravity="top|start"
+                android:inputType="textMultiLine|textCapWords"
+                android:isScrollContainer="true"
+                android:maxLines="10"
+                android:minLines="1"
+                android:scrollbars="vertical" />
 
             <com.google.android.material.chip.ChipGroup
                 android:id="@+id/outline_tabs"

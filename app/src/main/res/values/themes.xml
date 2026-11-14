@@ -447,6 +447,16 @@
         <item name="android:importantForAccessibility">no</item>
     </style>
 
+    <!-- "Using Summarizer Model: <model>" under the status line. -->
+    <style name="Widget.App.ProgressDialog.Model" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/progress_dialog_model_gap</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/progress_dialog_model_size</item>
+        <item name="android:visibility">gone</item>
+    </style>
+
     <style name="Widget.App.Dialog.Actions.EndRow" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -3130,20 +3140,6 @@
          compaction screen from the shared Page, Section, AppButton and
          VersionTabs families; these add only what those do not cover. -->
     <!-- The Tags line: a label-sized "Tags:" then a writing blank. -->
-    <style name="Widget.App.ChatOutline.TagsLabel" parent="Widget.App.Field.Label">
-        <item name="android:layout_width">wrap_content</item>
-    </style>
-
-    <style name="Widget.App.ChatOutline.TagsField" parent="">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_weight">1</item>
-        <item name="android:layout_marginStart">@dimen/chat_outline_tags_gap</item>
-        <item name="android:textColor">?attr/appTextColor</item>
-        <item name="android:textSize">@dimen/chat_outline_text_size</item>
-        <item name="android:inputType">text|textCapWords</item>
-    </style>
-
     <!-- An outline tab shown as formatted markdown, inside VersionTabs.Frame. -->
     <style name="Widget.App.ChatOutline.Text" parent="">
         <item name="android:layout_width">0dp</item>
@@ -3650,6 +3646,97 @@
     <style name="Widget.App.ModelPicker.CatalogControls" parent="Widget.App.ModelPicker.CardInset">
         <item name="android:orientation">vertical</item>
     </style>
+    <!-- A search scope dropdown and its search field joined in one pill-shaped
+         outline (owner request, Nov 14 2026), every part the same height. -->
+    <style name="Widget.App.SearchPill" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/search_pill_height</item>
+        <item name="android:layout_marginTop">@dimen/model_picker_section_gap</item>
+        <item name="android:background">@drawable/bg_search_pill</item>
+    </style>
+
+    <!-- The dropdown part: text and chevron in the dropdown colors, no box of
+         its own; the pill's outline is its border. -->
+    <style name="Widget.App.SearchPill.Scope" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:drawableEnd">@drawable/ic_chevron_down</item>
+        <item name="android:drawableTint">@color/dropdown_text</item>
+        <item name="android:drawablePadding">@dimen/search_pill_scope_chevron_gap</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingStart">@dimen/search_pill_scope_padding_start</item>
+        <item name="android:paddingEnd">@dimen/search_pill_scope_padding_end</item>
+        <item name="android:textColor">@color/dropdown_text</item>
+        <item name="android:textSize">@dimen/search_pill_scope_text_size</item>
+    </style>
+
+    <!-- The thin line between the dropdown part and the search part. -->
+    <style name="Widget.App.SearchPill.Divider" parent="">
+        <item name="android:layout_width">@dimen/search_pill_divider_width</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:layout_marginTop">@dimen/search_pill_divider_inset</item>
+        <item name="android:layout_marginBottom">@dimen/search_pill_divider_inset</item>
+        <item name="android:background">?attr/colorOutline</item>
+    </style>
+
+    <style name="Widget.App.SearchPill.Icon" parent="">
+        <item name="android:layout_width">@dimen/search_pill_icon_size</item>
+        <item name="android:layout_height">@dimen/search_pill_icon_size</item>
+        <item name="android:padding">@dimen/search_pill_icon_padding</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:tint">?attr/appSubtleTextColor</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+
+    <style name="Widget.App.SearchPill.Field" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:paddingEnd">@dimen/search_pill_field_padding_end</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textColorHint">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">@dimen/search_pill_text_size</item>
+    </style>
+
+    <!-- One-choice words in a pill; the chosen word sits on a highlight
+         capsule that slides to the next choice (owner request, Nov 14 2026,
+         in the look of the blank chat's Chat / Playground selector). -->
+    <style name="Widget.App.SegmentedPill" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/segmented_pill_height</item>
+        <item name="android:background">@drawable/bg_segmented_pill</item>
+        <item name="android:padding">@dimen/segmented_pill_inset</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="segmentThumbColor">?attr/colorSecondaryContainer</item>
+        <item name="segmentAnimationMs">@integer/segmented_pill_animation_ms</item>
+    </style>
+
+    <style name="Widget.App.SegmentedPill.Option" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:paddingHorizontal">@dimen/segmented_pill_option_padding</item>
+        <item name="android:textColor">@color/segmented_pill_text</item>
+        <item name="android:textSize">@dimen/segmented_pill_text_size</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <!-- The full model list's All / New / Free filter. -->
+    <style name="Widget.App.ModelPicker.FilterPill" parent="Widget.App.SegmentedPill">
+        <item name="android:layout_marginTop">@dimen/model_picker_section_gap</item>
+    </style>
+
     <style name="Widget.App.ModelPicker.ControlRow" parent="Widget.App.Page.ControlRow">
         <item name="android:layout_marginTop">@dimen/model_picker_section_gap</item>
     </style>
