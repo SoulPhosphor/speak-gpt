@@ -202,6 +202,7 @@ class LongMessageSearchTest {
         }
         assertEquals(1, reading.failures.size)
         assertEquals("model busy", reading.failures.single().cause)
+        assertTrue(RecallDiagnostics.sectionFailure(reading)!!.contains("(section ${reading.failures.single().section.number})"))
         assertEquals(reading.sections.size, reading.checked)
         assertEquals(reading.sections.size - 1, reading.vectors.size)
         assertFalse(reading.failures.single().section.number in reading.vectors.keys)
@@ -316,4 +317,67 @@ class LongMessageSearchTest {
             LongMessageSearch.matches(LongMessageSearch.Reading.NONE, index, LiveRetrieval.Params(), emptyList()).isEmpty()
         )
     }
+    @Test
+    fun repeatedIdenticalFailuresStopAndProduceOneAggregatedLog() {
+        val index = LiveRetrieval.index(listOf(cand("pepper", .55)) + noise())
+        var calls = 0
+        val reading = LongMessageSearch.read(filler(700), index) {
+            calls++
+            throw IllegalStateException("broken session")
+        }
+        assertEquals(2, calls)
+        assertEquals(2, reading.checked)
+        assertTrue(reading.repeatedFailure)
+        assertFalse(reading.sectionLimitReached)
+        assertFalse(reading.timedOut)
+        val log = RecallDiagnostics.sectionFailure(reading)!!
+        assertTrue(log.contains("2 additional sections"))
+        assertEquals(1, Regex("broken session").findAll(log).count())
+        assertTrue(log.contains("sections 1, 2"))
+    }
+
+    @Test
+    fun cooperativeDeadlineIsNotReportedAsEmbeddingFailure() {
+        val index = LiveRetrieval.index(listOf(cand("pepper", .55)) + noise())
+        val reading = LongMessageSearch.read(filler(200), index,
+            budgetedEmbed = { _, remaining ->
+                assertTrue(remaining > 0)
+                throw EmbeddingQueue.DeadlineExceededException()
+            }) { error("unbudgeted path") }
+        assertTrue(reading.timedOut)
+        assertTrue(reading.failures.isEmpty())
+        assertEquals(1, reading.deadlineSection)
+        assertEquals(1, reading.checked)
+        assertFalse(reading.sectionLimitReached)
+    }
+
+    @Test
+    fun cancellationIsPropagatedInsteadOfLoggedAsASectionFailure() {
+        val index = LiveRetrieval.index(listOf(cand("pepper", .55)))
+        org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
+            LongMessageSearch.read(filler(200), index) { throw java.util.concurrent.CancellationException() }
+        }
+    }
+
+    @Test
+    fun excerptBoundsPathologicalDictationAndRetainsSectionNumber() {
+        val section = LongMessageSearch.Section(7, "x".repeat(500) + " next words")
+        assertEquals(96, section.opening().length)
+        assertEquals(7, section.number)
+        val unicode = LongMessageSearch.Section(2, "a" + "🐺".repeat(100)).opening()
+        assertEquals(96, unicode.codePointCount(0, unicode.length))
+        assertFalse(unicode.last().isHighSurrogate())
+    }
+
+    @Test
+    fun boundedPrioritizationPreservesTheFullOrdersPrefix() {
+        val index = LiveRetrieval.index(listOf(cand("pepper", .55, "Pepper is a cat")) + noise())
+        val message = filler(1960) + " Pepper seems unwell " + filler(37, 1960)
+        val sections = LongMessageSearch.cut(message)
+        assertTrue(sections.size > 8)
+        assertEquals(LongMessageSearch.readingOrder(sections, index).take(8),
+            LongMessageSearch.readingOrder(sections, index, 8))
+        assertTrue(LongMessageSearch.readingOrder(sections, index, 0).isEmpty())
+    }
+
 }

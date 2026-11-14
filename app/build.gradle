@@ -37,6 +37,14 @@ android {
         buildConfig true
     }
 
+    // Android runtime parity uses the same invented cases/vectors as the JVM
+    // checks. This adds test assets only, never model weights to the app.
+    sourceSets {
+        androidTest {
+            assets.srcDir 'src/test/resources'
+        }
+    }
+
     testOptions {
         unitTests.all {
             // Keep framework regression failures diagnosable in CI logs.

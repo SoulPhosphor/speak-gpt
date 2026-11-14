@@ -34,6 +34,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.RetrievalScope
+import org.teslasoft.assistant.preferences.memory.librarian.LongMessageSearch
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.preferences.memory.librarian.LiveRetrieval
 import org.teslasoft.assistant.preferences.memory.librarian.SearchTestReport
@@ -316,15 +317,18 @@ class MemorySearchTestActivity : SettingsPageActivity() {
 
     private fun runTest() {
         val message = fieldMessage.text?.toString()?.trim().orEmpty()
+        prepared = null
+        val generation = ++testGeneration
         sectionResult.visibility = View.VISIBLE
         if (message.isEmpty()) {
+            btnRun.isEnabled = true
+            btnRun.text = getString(R.string.memory_search_test_run)
             showMessageOnly(getString(R.string.memory_search_test_message_needed))
             return
         }
         btnRun.isEnabled = false
         btnRun.text = getString(R.string.memory_search_test_running)
         val scope = currentScope()
-        val generation = ++testGeneration
         lifecycleScope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 try {
@@ -402,21 +406,34 @@ class MemorySearchTestActivity : SettingsPageActivity() {
             s.sectionLimitReached -> R.string.memory_search_test_sections_limit
             else -> null
         }
-        textSectionSearch.visibility = if (stopped == null) View.GONE else View.VISIBLE
-        if (stopped != null) textSectionSearch.text = getString(stopped, s.checked, s.sections.size)
-        textSectionTiming.visibility = if (s.checked == 0) View.GONE else View.VISIBLE
-        if (s.checked > 0) {
-            textSectionTiming.text = getString(R.string.memory_search_test_sections_timing, s.checked, s.millis)
+        val sectionStatus = buildList {
+            if (stopped != null) add(getString(stopped, s.checked, s.sections.size))
+            if (s.failures.isNotEmpty() || s.deadlineSection != null) {
+                val details = s.failures.joinToString("\n") {
+                    getString(R.string.memory_search_test_sections_failure, it.section.number, it.cause)
+                }
+                add(resources.getQuantityString(R.plurals.memory_search_test_sections_processing, s.checked, s.vectors.size, s.checked, details))
+            }
+            s.deadlineSection?.let { add(getString(R.string.memory_search_test_sections_deadline, it)) }
+            if (s.repeatedFailure) add(getString(R.string.memory_search_test_sections_repeated_failure))
+        }
+        textSectionSearch.visibility = if (sectionStatus.isEmpty()) View.GONE else View.VISIBLE
+        textSectionSearch.text = sectionStatus.joinToString("\n")
+        textSectionTiming.visibility = if (s.sections.isEmpty()) View.GONE else View.VISIBLE
+        if (s.sections.isNotEmpty()) {
+            textSectionTiming.text = resources.getQuantityString(R.plurals.memory_search_test_sections_timing,
+                s.checked, s.checked, s.millis) + "\n" + getString(R.string.memory_search_test_sections_performance,
+                s.queueMillis, s.modelMillis, s.scoringMillis)
         }
 
         headerSent.visibility = if (report.sent.isEmpty()) View.GONE else View.VISIBLE
         headerNotSent.visibility = if (report.notSent.isEmpty()) View.GONE else View.VISIBLE
-        fill(listSent, report.sent, d)
-        fill(listNotSent, report.notSent, d)
+        fill(listSent, report.sent, d, s.settings)
+        fill(listNotSent, report.notSent, d, s.settings)
         textPreview.text = report.preview.ifBlank { getString(R.string.memory_search_test_preview_empty) }
     }
 
-    private fun fill(list: LinearLayout, rows: List<SearchTestReport.Row>, d: LiveRetrieval.Diagnostics) {
+    private fun fill(list: LinearLayout, rows: List<SearchTestReport.Row>, d: LiveRetrieval.Diagnostics, sectionSettings: LongMessageSearch.Settings) {
         list.removeAllViews()
         val inflater = LayoutInflater.from(this)
         val params = trial.params
@@ -425,16 +442,39 @@ class MemorySearchTestActivity : SettingsPageActivity() {
             val e = row.explanation
             val card = inflater.inflate(R.layout.view_memory_search_result, list, false)
             card.findViewById<TextView>(R.id.text_memory).text = e.memory.content.trim()
-            card.findViewById<TextView>(R.id.text_outcome).text = getString(outcomeText(row, small))
-            row.section?.let { match ->
+            card.findViewById<TextView>(R.id.text_outcome).text = if (
+                row.outcome == SearchTestReport.Outcome.NOT_A_MATCH && row.sectionEvaluation != null
+            ) {
+                val reasons = row.sectionEvaluation.rejectedBy.map { reason ->
+                    getString(when (reason) {
+                        LongMessageSearch.Rejection.SIMILARITY -> R.string.memory_search_test_reject_similarity
+                        LongMessageSearch.Rejection.NO_SHARED_WORD -> R.string.memory_search_test_reject_words
+                        LongMessageSearch.Rejection.RELEVANCE_GATE -> R.string.memory_search_test_reject_gate
+                    })
+                }
+                getString(R.string.memory_search_test_section_rejected, reasons.joinToString(", "))
+            } else getString(outcomeText(row, small))
+            val section = row.section ?: row.sectionEvaluation?.match
+            section?.let { match ->
                 val found = card.findViewById<TextView>(R.id.text_section)
                 found.visibility = View.VISIBLE
                 found.text = getString(
-                    R.string.memory_search_test_detail_section,
+                    if (row.section != null) R.string.memory_search_test_detail_section
+                    else R.string.memory_search_test_detail_section_candidate,
                     match.section.number, match.sectionCount, match.section.opening()
                 )
             }
+            val sectionEvaluation = row.sectionEvaluation
+            val sectionMinimum = sectionEvaluation?.requiredSimilarity ?: sectionSettings.sectionSimilarityMin
             card.findViewById<TextView>(R.id.text_meaning).text = when {
+                section != null -> getString(R.string.memory_search_test_section_requirements,
+                    sectionSimilarity(e.similarity ?: 0.0, sectionMinimum), num(sectionMinimum),
+                    getString(if (e.matchedTerms.isEmpty()) R.string.memory_search_test_section_no else R.string.memory_search_test_section_yes),
+                    getString(if (e.passed) R.string.memory_search_test_gate_pass else R.string.memory_search_test_gate_fail)) + "\n" +
+                    getString(R.string.memory_search_test_section_gate_details, if (small) getString(R.string.memory_search_test_detail_meaning_small,
+                        num(e.similarity ?: 0.0), num(maxOf(params.similarityFloor, params.smallLibraryFloor)))
+                    else getString(R.string.memory_search_test_detail_meaning,
+                        num(e.similarity ?: 0.0), num(params.similarityFloor), num(e.standout ?: 0.0, 1), num(params.standoutMin, 1)))
                 e.similarity == null && d.meaningRan -> getString(R.string.memory_search_test_detail_meaning_no_vector)
                 e.similarity == null -> getString(R.string.memory_search_test_detail_meaning_not_run)
                 small -> getString(
@@ -466,6 +506,7 @@ class MemorySearchTestActivity : SettingsPageActivity() {
     private fun outcomeText(row: SearchTestReport.Row, small: Boolean): Int = when (row.outcome) {
         SearchTestReport.Outcome.SENT -> R.string.memory_search_test_outcome_sent
         SearchTestReport.Outcome.SENT_PAST_LIMIT -> R.string.memory_search_test_outcome_sent_past_limit
+        SearchTestReport.Outcome.SCAN_LIMIT -> R.string.memory_search_test_outcome_scan_limit
         SearchTestReport.Outcome.LIMIT_FULL -> R.string.memory_search_test_outcome_limit_full
         SearchTestReport.Outcome.NO_SPACE -> R.string.memory_search_test_outcome_no_space
         SearchTestReport.Outcome.NOT_A_MATCH -> {
@@ -478,6 +519,16 @@ class MemorySearchTestActivity : SettingsPageActivity() {
                 else -> R.string.memory_search_test_outcome_no_match
             }
         }
+    }
+
+    /** Keep ordinary scores compact, but never round a below-threshold
+     * section score into an apparently qualifying value such as 0.48. */
+    private fun sectionSimilarity(value: Double, minimum: Double): String {
+        for (decimals in listOf(2, 4, 8)) {
+            val shown = num(value, decimals)
+            if (value >= minimum || shown != num(minimum, decimals)) return shown
+        }
+        return num(value, 8)
     }
 
     private fun num(value: Double, decimals: Int = 2): String =

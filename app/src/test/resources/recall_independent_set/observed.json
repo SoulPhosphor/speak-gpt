@@ -1,0 +1,25 @@
+{
+  "cases_sha256": "74f56afcff32fd87aa4d4fd7f81ee16c6aa07cd1615f73b3ac2d8f5dac6ea852",
+  "with_sections": {
+    "found": 4,
+    "incorrect": 0,
+    "missed": 5
+  },
+  "whole": {
+    "found": 4,
+    "incorrect": 0,
+    "missed": 5
+  },
+  "by_message": {
+    "ending": [],
+    "several_topics": ["sky"],
+    "misleading_word": [],
+    "beginning": ["pet"],
+    "nothing_relevant": [],
+    "middle_paraphrase": ["loom"],
+    "different_words": ["bike"],
+    "shared_name_wrong_subject": [],
+    "no_shared_vocabulary": [],
+    "bad_periods": []
+  }
+}

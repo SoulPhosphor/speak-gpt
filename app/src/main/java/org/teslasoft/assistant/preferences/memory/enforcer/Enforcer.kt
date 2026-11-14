@@ -38,6 +38,7 @@ import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
 import org.teslasoft.assistant.preferences.memory.WorldRecord
+import org.teslasoft.assistant.preferences.memory.librarian.RecallDiagnostics
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.preferences.memory.librarian.RetrievalDocument
 import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
@@ -228,7 +229,6 @@ class Enforcer private constructor(private val appContext: Context) {
         // the search text raised every memory's similarity and pulled in
         // unrelated memories (dynamic_memory_plan.md A.4).
         val query = input.userMessage
-        if (!librarian.hasUsableModel()) notes.add("no embedding model — keyword retrieval")
         // Fetch one candidate MORE than the walk below may examine: the walk
         // never looks past its scan cap, and the extra row is what lets the
         // selection tell "relevance exhausted" apart from "cap reached with
@@ -457,15 +457,8 @@ class Enforcer private constructor(private val appContext: Context) {
         // deterministic reason each omitted one was dropped. Stable ids sit on
         // the injected/cut lines below.
         retrievalDiag?.let { d ->
-            val mode = when {
-                !d.hasModel || (!d.semantic && d.withVector > 0) -> "Keyword search only (embedding model unavailable)"
-                d.withVector < d.eligible -> "meaning + keyword, ${d.withVector} of ${d.eligible} have vectors"
-                else -> "meaning + keyword"
-            }
-            notes.add(
-                "saved memories: eligible ${d.eligible}, passed ${pool.size} ($mode), " +
-                    "injected ${kept.size}, omitted budget ${budgetCut.size} / lore-overlap ${suppressed.size}"
-            )
+            val mode = RecallDiagnostics.mode(d.hasModel, d.semantic, d.withVector, d.eligible)
+            notes.add(RecallDiagnostics.summary(d.eligible, pool.size, mode, kept.size, budgetCut.size, suppressed.size))
         }
 
         var pullRemaining = (memoryAvailable - memoryChars).coerceAtLeast(0)
