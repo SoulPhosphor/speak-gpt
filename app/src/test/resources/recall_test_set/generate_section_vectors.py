@@ -73,7 +73,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=Path, default=here / "cases.json")
     parser.add_argument("--output", type=Path, default=here / "section_vectors.json")
-    parser.add_argument("--section-words", type=int, default=60)
+    parser.add_argument("--section-words", type=int, default=80)
     parser.add_argument("--model-dir", type=Path)
     args = parser.parse_args()
     cases = json.loads(args.cases.read_text(encoding="utf-8"))
