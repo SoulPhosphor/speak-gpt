@@ -102,8 +102,12 @@ object EmbeddingModels {
         val queryPrefix: String,
         val documentPrefix: String,
         val pooling: Pooling,
-        /** Encoder token budget per text; content is truncated beyond this. */
+        /** Token budget for the message being sent (and other texts read
+         *  while the user waits); content is truncated beyond this. */
         val maxTokens: Int,
+        /** Token budget for stored text (a saved memory's retrieval
+         *  document). Must not exceed what the model file accepts. */
+        val storedTextMaxTokens: Int,
         val description: String
     ) {
         /** Sidecar key: identifies exactly which model+dim produced a vector, so
@@ -145,6 +149,8 @@ object EmbeddingModels {
         documentPrefix = GEMMA_DOCUMENT_PREFIX,
         pooling = Pooling.MEAN,
         maxTokens = 512,
+        // The model file accepts up to 2,048 tokens (measured 2026-11-12).
+        storedTextMaxTokens = 2048,
         description = "Recommended for the Pixel: smallest, runs in well under 200 MB RAM."
     )
 
@@ -177,6 +183,8 @@ object EmbeddingModels {
         documentPrefix = GEMMA_DOCUMENT_PREFIX,
         pooling = Pooling.MEAN,
         maxTokens = 512,
+        // The model file accepts up to 2,048 tokens (measured 2026-11-12).
+        storedTextMaxTokens = 2048,
         description = "Higher quality than q4, larger and a little slower."
     )
 

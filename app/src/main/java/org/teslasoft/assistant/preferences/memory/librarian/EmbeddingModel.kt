@@ -38,12 +38,38 @@ interface EmbeddingModel {
     /** Output vector length after any Matryoshka truncation. */
     val dimensions: Int
 
+    /** Most tokens read for the message being sent and for other texts read
+     *  while the user waits. Longer texts are cut to this length. */
+    val messageTokenLimit: Int
+
+    /** Most tokens read for stored text: a saved memory's retrieval document
+     *  (conversation_recall_plan.md G33). Never above what the model accepts. */
+    val storedTextTokenLimit: Int
+
     /**
-     * Embed one text into a normalized vector of length [dimensions].
-     * [isQuery] lets models that use asymmetric prompts (EmbeddingGemma's
-     * "search query:" vs "title: none | text:") pick the right prefix.
+     * How many tokens the model would read for [text] with no limit,
+     * counting the instruction prefix chosen by [isQuery] and the template's
+     * special tokens. Nothing is cut.
      */
-    fun embed(text: String, isQuery: Boolean): FloatArray
+    fun countTokens(text: String, isQuery: Boolean): Int
+
+    /**
+     * Embed one text into a normalized vector of length [dimensions], reading
+     * at most [tokenLimit] tokens. [isQuery] lets models that use asymmetric
+     * prompts (EmbeddingGemma's "search query:" vs "title: none | text:")
+     * pick the right prefix. A model that can stop a running read does so
+     * through [control] and then throws [EmbeddingQueue.ReadStoppedException].
+     */
+    fun embed(
+        text: String,
+        isQuery: Boolean,
+        tokenLimit: Int,
+        control: EmbeddingQueue.ReadControl? = null
+    ): FloatArray
+
+    /** Embed with [messageTokenLimit]. */
+    fun embed(text: String, isQuery: Boolean): FloatArray =
+        embed(text, isQuery, messageTokenLimit)
 
     /** Batch convenience; default is a simple loop (models may override for
      *  a genuine batched session run). */

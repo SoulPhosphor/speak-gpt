@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.memory.librarian
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtException
 import ai.onnxruntime.OrtSession
 import android.content.Context
 import java.nio.LongBuffer
@@ -41,8 +42,10 @@ import java.nio.LongBuffer
  * poisoning the index.
  *
  * The environment and session are heavy; [create] builds them once and the
- * Librarian keeps the instance for the process. Not thread-safe: the Librarian
- * serializes embed calls.
+ * Librarian keeps the instance for the process. Not thread-safe: every call
+ * goes through the Librarian's [EmbeddingQueue], one read at a time. A read
+ * given a [EmbeddingQueue.ReadControl] can be stopped by the queue through
+ * ONNX Runtime's per-run terminate flag.
  */
 class OnnxEmbeddingModel private constructor(
     private val env: OrtEnvironment,
@@ -54,15 +57,26 @@ class OnnxEmbeddingModel private constructor(
     private val queryPrefix: String,
     private val documentPrefix: String,
     private val pooling: EmbeddingModels.Pooling,
-    private val maxTokens: Int
+    override val messageTokenLimit: Int,
+    override val storedTextTokenLimit: Int
 ) : EmbeddingModel {
 
-    override fun embed(text: String, isQuery: Boolean): FloatArray {
+    override fun countTokens(text: String, isQuery: Boolean): Int =
+        tokenizer.countTokens((if (isQuery) queryPrefix else documentPrefix) + text)
+
+    override fun embed(
+        text: String,
+        isQuery: Boolean,
+        tokenLimit: Int,
+        control: EmbeddingQueue.ReadControl?
+    ): FloatArray {
         val prepared = (if (isQuery) queryPrefix else documentPrefix) + text
-        val ids = tokenizer.encode(prepared, maxTokens)
+        // Never ask the model for more than it accepts.
+        val limit = tokenLimit.coerceIn(1, maxOf(messageTokenLimit, storedTextTokenLimit))
+        val ids = tokenizer.encode(prepared, limit)
         if (ids.isEmpty()) throw IllegalStateException("tokenizer produced no ids")
         val mask = LongArray(ids.size) { 1L }
-        val pooled = runModel(ids, mask)
+        val pooled = runModel(ids, mask, control)
         val truncated = VectorMath.truncate(pooled, dimensions)
         return VectorMath.normalize(truncated)
     }
@@ -100,7 +114,8 @@ class OnnxEmbeddingModel private constructor(
         return null
     }
 
-    private fun runModel(ids: LongArray, mask: LongArray): FloatArray {
+    private fun runModel(ids: LongArray, mask: LongArray, control: EmbeddingQueue.ReadControl?): FloatArray {
+        if (control?.stopRequested == true) throw EmbeddingQueue.ReadStoppedException()
         val seq = ids.size
         val shape = longArrayOf(1, seq.toLong())
         val tensors = HashMap<String, OnnxTensor>()
@@ -120,7 +135,23 @@ class OnnxEmbeddingModel private constructor(
                 tensors[name] = tensor
             }
 
-            modelSession.run(tensors).use { result ->
+            val runResult = try {
+                if (control == null) {
+                    modelSession.run(tensors)
+                } else {
+                    OrtSession.RunOptions().use { options ->
+                        control.whileRunning({ options.setTerminate(true) }) {
+                            modelSession.run(tensors, options)
+                        }
+                    }
+                }
+            } catch (e: OrtException) {
+                // A read stopped by the queue's request is retried later; any
+                // other failure is a real one.
+                if (control?.stopRequested == true) throw EmbeddingQueue.ReadStoppedException(e)
+                throw e
+            }
+            runResult.use { result ->
                 val outputs = modelSession.outputNames.toList()
                 // Prefer a ready sentence embedding; otherwise pool the token states.
                 val sentenceName = outputs.firstOrNull {
@@ -219,7 +250,8 @@ class OnnxEmbeddingModel private constructor(
             return OnnxEmbeddingModel(
                 env, tokenizer, session,
                 model.embeddingTag, model.dimensions, model.fullDimensions,
-                model.queryPrefix, model.documentPrefix, model.pooling, model.maxTokens
+                model.queryPrefix, model.documentPrefix, model.pooling,
+                model.maxTokens, model.storedTextMaxTokens
             )
         }
     }
