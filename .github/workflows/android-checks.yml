@@ -50,6 +50,7 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt -print | sort -V | tail -n 1)"
           test -x "$AAPT"
           test "$(apkanalyzer manifest application-id "$APK")" = "com.soulphosphor.phosphorshines.beta"
+          test "$(apkanalyzer manifest debuggable "$APK")" = "false"
           "$AAPT" dump badging "$APK" | grep -F "application-label:'Phosphor Shines Beta'"
 
       - name: Compile instrumentation tests
@@ -179,6 +180,7 @@ jobs:
       - name: Install recovery test APKs
         run: |
           set -euo pipefail
+          test "$(apkanalyzer manifest debuggable app/build/outputs/apk/debug/app-debug.apk)" = "true"
           adb install -t app/build/outputs/apk/debug/app-debug.apk
           adb install -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 

@@ -128,7 +128,9 @@ android {
         }
 
         debug {
-            debuggable false
+            // Only the disposable emulator fixture needs run-as to provision
+            // private model inputs. Normal Debug/Beta artifacts stay unchanged.
+            debuggable instrumentationAbi != null
             // The disposable x86_64 test APK shares its classloader with the
             // separately built instrumentation APK. R8 cannot see those test-
             // only calls and would remove runner APIs such as Trace.beginSection.
