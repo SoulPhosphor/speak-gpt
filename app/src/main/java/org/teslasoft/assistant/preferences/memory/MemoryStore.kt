@@ -5206,6 +5206,36 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         )
     }
 
+    /** Replaces an existing vector only while the memory is still active, still
+     *  has a vector under [embeddingModel], and [stillCurrent] accepts its
+     *  current record. The check and the write share one write transaction,
+     *  so an edit cannot land between them. Returns true when replaced, false
+     *  when [stillCurrent] rejected the record, and null when the memory is not
+     *  active or has no vector to replace (nothing is written). */
+    fun replaceEmbeddingIfCurrent(
+        memoryId: String,
+        embeddingModel: String,
+        vector: ByteArray,
+        stillCurrent: (MemoryRecord) -> Boolean
+    ): Boolean? {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val record = getMemory(memoryId)?.takeIf { it.status == "active" } ?: return null
+            val hasVector = db.rawQuery(
+                "SELECT 1 FROM embeddings WHERE memory_id = ? AND embedding_model = ? LIMIT 1",
+                arrayOf(memoryId, embeddingModel)
+            ).use { it.moveToFirst() }
+            if (!hasVector) return null
+            if (!stillCurrent(record)) return false
+            upsertEmbedding(memoryId, embeddingModel, vector)
+            db.setTransactionSuccessful()
+            return true
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /** The archive rule: when a memory leaves 'active' its vectors go (the
      *  librarian can no longer see it); re-embed on reactivation. */
     fun deleteEmbeddings(memoryId: String) {

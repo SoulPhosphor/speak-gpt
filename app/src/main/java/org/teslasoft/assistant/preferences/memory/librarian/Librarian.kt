@@ -71,6 +71,22 @@ class Librarian private constructor(private val appContext: Context) {
          *  across the drafts compared in one Memory Browser session. */
         private const val COMPARISON_VECTOR_CACHE_MAX = 256
 
+        /** The reading limit stored memory vectors were made with before
+         *  conversation_recall_plan.md Step 1. A memory whose document fits
+         *  inside it has exactly the same vector under the new limit, so only
+         *  longer memories are read again. */
+        internal const val PREVIOUS_STORED_TEXT_TOKEN_LIMIT = 512
+
+        /** The meta value that marks the long-memory re-read complete. */
+        internal fun storedTextReadMarker(tokenLimit: Int, embeddingKey: String): String =
+            "$tokenLimit|$embeddingKey"
+
+        /** Whether a stored vector made under the previous limit was cut, so
+         *  the memory must be read again. [documentTokens] is the full count
+         *  from [EmbeddingModel.countTokens]. Pure. */
+        internal fun needsLongerRead(documentTokens: Int): Boolean =
+            documentTokens > PREVIOUS_STORED_TEXT_TOKEN_LIMIT
+
         /** Whole word tokens of [text], lowercased. Pure. */
         fun lexicalTokens(text: String): Set<String> =
             text.lowercase().split(TOKEN_BOUNDARY).filter { it.isNotEmpty() }.toSet()
@@ -369,15 +385,35 @@ class Librarian private constructor(private val appContext: Context) {
     @Volatile private var model: EmbeddingModel? = null
     @Volatile private var modelLoadFailed = false
 
-    // The ONNX model is not thread-safe (OnnxEmbeddingModel: "the Librarian
-    // serializes embed calls"). Every embed — query, reindex, rebuild, lore
-    // overlap, and the background repair below — passes through [embedLocked]
-    // so at most one inference runs at a time. Locking per call, not per batch,
-    // lets a live turn's query embed interleave between a repair's items.
-    private val embedLock = Any()
+    // The ONNX model is not thread-safe and reads one text at a time. Every
+    // read — the live query, lore overlap, the self-check, reindex, rebuild,
+    // comparison, and the background repairs below — goes through this one
+    // queue (conversation_recall_plan.md G.5a rule 6). A live read goes ahead
+    // of every waiting background read, and background work is queued one
+    // text at a time, so a live turn waits for at most one running read; a
+    // running background read is stopped for it where the model allows.
+    private val embeddingQueue = EmbeddingQueue()
 
-    private fun embedLocked(m: EmbeddingModel, text: String, isQuery: Boolean): FloatArray =
-        synchronized(embedLock) { m.embed(text, isQuery) }
+    /** A read the user is waiting on: the message being sent, lore overlap,
+     *  the Memory Search Test. Uses the message reading limit. */
+    private fun embedLive(m: EmbeddingModel, text: String, isQuery: Boolean): FloatArray =
+        embeddingQueue.run(EmbeddingQueue.Priority.LIVE) { control ->
+            m.embed(text, isQuery, m.messageTokenLimit, control)
+        }
+
+    /** A background read of a query-side text (Archivist reconciliation),
+     *  with the message reading limit. */
+    private fun embedBackgroundQuery(m: EmbeddingModel, text: String): FloatArray =
+        embeddingQueue.run(EmbeddingQueue.Priority.BACKGROUND) { control ->
+            m.embed(text, isQuery = true, tokenLimit = m.messageTokenLimit, control = control)
+        }
+
+    /** A background read of stored text — a saved memory's retrieval
+     *  document — with the stored-text reading limit. */
+    private fun embedStoredText(m: EmbeddingModel, document: String): FloatArray =
+        embeddingQueue.run(EmbeddingQueue.Priority.BACKGROUND) { control ->
+            m.embed(document, isQuery = false, tokenLimit = m.storedTextTokenLimit, control = control)
+        }
 
     // Lore-overlap vectors cached by content + model tag so the same authored
     // lore note is not re-embedded every turn (counterplan Step 1.4). The key
@@ -429,7 +465,7 @@ class Librarian private constructor(private val appContext: Context) {
             // fallback — rather than silently index garbage vectors.
             val marker = EmbeddingModelStorage.selfCheckMarker(appContext, catalog)
             if (!marker.exists()) {
-                val failure = m.selfCheck()
+                val failure = embeddingQueue.run(EmbeddingQueue.Priority.LIVE) { m.selfCheck() }
                 if (failure != null) {
                     try { m.close() } catch (_: Throwable) { }
                     modelLoadFailed = true
@@ -443,6 +479,7 @@ class Librarian private constructor(private val appContext: Context) {
                 MemoryLog.log(appContext, "Librarian", "info", "Embedding self-check passed for ${catalog.id}")
             }
             model = m
+            requestLongMemoryReread()
             m
         } catch (t: Throwable) {
             modelLoadFailed = true
@@ -460,7 +497,7 @@ class Librarian private constructor(private val appContext: Context) {
     fun embedOrNull(text: String, isQuery: Boolean): FloatArray? {
         val m = ensureModel() ?: return null
         return try {
-            embedLocked(m, text, isQuery)
+            embedLive(m, text, isQuery)
         } catch (t: Throwable) {
             MemoryLog.log(appContext, "Librarian", "error", "Embed failed: ${t.message}")
             null
@@ -478,7 +515,7 @@ class Librarian private constructor(private val appContext: Context) {
         val key = m.tag + " " + text
         synchronized(loreCacheLock) { loreVectorCache[key]?.let { return it } }
         val vec = try {
-            embedLocked(m, text, false)
+            embedLive(m, text, false)
         } catch (t: Throwable) {
             MemoryLog.log(appContext, "Librarian", "error", "Lore embed failed: ${t.message}")
             return null
@@ -500,7 +537,7 @@ class Librarian private constructor(private val appContext: Context) {
         val key = m.tag + " " + text
         synchronized(comparisonCacheLock) { comparisonVectorCache[key]?.let { return it } }
         val vec = try {
-            embedLocked(m, text, false)
+            embedStoredText(m, text)
         } catch (t: Throwable) {
             MemoryLog.log(appContext, "Librarian", "error", "Comparison embed failed: ${t.message}")
             return null
@@ -525,7 +562,7 @@ class Librarian private constructor(private val appContext: Context) {
             val doc = RetrievalDocument.semanticDocument(
                 mem.content, mem.embeddingText, parseTags(mem.tagsJson)
             )
-            val vec = embedLocked(m, doc, false)
+            val vec = embedStoredText(m, doc)
             store.upsertEmbedding(memoryId, RetrievalDocument.effectiveKey(m.tag), VectorMath.toBlob(vec))
         } catch (t: Throwable) {
             MemoryLog.log(appContext, "Librarian", "error", "Reindex of $memoryId failed: ${t.message}")
@@ -717,7 +754,10 @@ class Librarian private constructor(private val appContext: Context) {
         val embedQuery: () -> FloatArray? = embed@{
             val model = m ?: return@embed null
             try {
-                model.embed(query, isQuery = true)
+                // The live search is the message being sent; Archivist
+                // reconciliation runs in the background behind it.
+                if (reconciliation) embedBackgroundQuery(model, query)
+                else embedLive(model, query, isQuery = true)
             } catch (t: Throwable) {
                 MemoryLog.log(appContext, "Librarian", "error", "Query embed failed, using lexical fallback: ${t.message}")
                 null
@@ -824,10 +864,15 @@ class Librarian private constructor(private val appContext: Context) {
         val loadMillis = (System.nanoTime() - started) / 1_000_000
         var embedMillis = 0L
         val queryVector = if (m != null && vectors.isNotEmpty()) {
-            val embedStarted = System.nanoTime()
-            val v = try { embedLocked(m, query, isQuery = true) } catch (_: Throwable) { null }
-            embedMillis = (System.nanoTime() - embedStarted) / 1_000_000
-            v
+            try {
+                embeddingQueue.run(EmbeddingQueue.Priority.LIVE) { control ->
+                    // Timed inside the queue: the read itself, not the wait.
+                    val embedStarted = System.nanoTime()
+                    val v = m.embed(query, true, m.messageTokenLimit, control)
+                    embedMillis = (System.nanoTime() - embedStarted) / 1_000_000
+                    v
+                }
+            } catch (_: Throwable) { null }
         } else null
         return PreparedSearchTest(query, queryVector, corpus, m != null, embedMillis, loadMillis)
     }
@@ -853,20 +898,28 @@ class Librarian private constructor(private val appContext: Context) {
         store.deleteEmbeddingsNotModel(key)
         val memories = store.allActiveMemories()
         var done = 0
+        var failed = 0
         for (mem in memories) {
             try {
                 val doc = RetrievalDocument.semanticDocument(
                     mem.content, mem.embeddingText, parseTags(mem.tagsJson)
                 )
-                val vec = embedLocked(m, doc, false)
+                val vec = embedStoredText(m, doc)
                 store.upsertEmbedding(mem.memoryId, key, VectorMath.toBlob(vec))
             } catch (t: Throwable) {
+                failed++
                 MemoryLog.log(appContext, "Librarian", "error", "Embed failed for ${mem.memoryId}: ${t.message}")
             }
             done++
             progress(done, memories.size)
         }
         store.setMeta(MemoryStore.META_INDEX_MODEL_TAG, key)
+        // Every vector was just made with the stored-text limit, so no long
+        // memory needs reading again.
+        if (failed == 0) {
+            store.setMeta(LongMemoryReread.META_COMPLETE, storedTextReadMarker(m.storedTextTokenLimit, key))
+            store.deleteMeta(LongMemoryReread.META_PROGRESS)
+        }
         return done
     }
 
@@ -918,7 +971,7 @@ class Librarian private constructor(private val appContext: Context) {
                 val doc = RetrievalDocument.semanticDocument(
                     mem.content, mem.embeddingText, parseTags(mem.tagsJson)
                 )
-                val vec = embedLocked(m, doc, false)
+                val vec = embedStoredText(m, doc)
                 store.upsertEmbedding(mem.memoryId, key, VectorMath.toBlob(vec))
                 repaired++
             } catch (t: Throwable) {
@@ -931,6 +984,74 @@ class Librarian private constructor(private val appContext: Context) {
                 "Missing-vector repair re-embedded $repaired memory vector(s) for $key"
             )
         }
+    }
+
+    // Single-flight re-read of memories longer than the previous reading
+    // limit (conversation_recall_plan.md Step 1, G33).
+    private val rereadInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Ask the background worker to read again, with the stored-text limit,
+     * every saved memory whose vector was cut at the previous 512-token limit.
+     * A no-op once that is done for the current model and limit (recorded in
+     * meta), when unprovisioned, or while a pass is already running.
+     */
+    private fun requestLongMemoryReread() {
+        if (!MemoryStore.isProvisioned(appContext)) return
+        if (!rereadInFlight.compareAndSet(false, true)) return
+        try {
+            repairExecutor.execute {
+                try { rereadLongMemories() } catch (_: Throwable) { } finally { rereadInFlight.set(false) }
+            }
+        } catch (_: Throwable) {
+            rereadInFlight.set(false)
+        }
+    }
+
+    /**
+     * Runs the long-memory re-read ([LongMemoryReread]) against the memory
+     * store and the active model. Progress is saved after each memory, so an
+     * interrupted or failed pass continues where it stopped the next time the
+     * model loads.
+     */
+    private fun rereadLongMemories() {
+        val m = ensureModel() ?: return
+        val key = RetrievalDocument.effectiveKey(m.tag)
+        val store = MemoryStore.getInstance(appContext)
+        LongMemoryReread(object : LongMemoryReread.Host {
+            override val marker = storedTextReadMarker(m.storedTextTokenLimit, key)
+            override fun readMeta(key: String): String? = store.getMeta(key)
+            override fun writeMeta(key: String, value: String) = store.setMeta(key, value)
+            override fun deleteMeta(key: String) = store.deleteMeta(key)
+            override fun memoriesWithVector(): List<LongMemoryReread.Item> {
+                val memories = store.allActiveMemories()
+                val withVector = store.embeddingsForMemories(memories.map { it.memoryId }, key).keys
+                return memories.filter { it.memoryId in withVector }.map {
+                    LongMemoryReread.Item(
+                        it.memoryId,
+                        RetrievalDocument.semanticDocument(it.content, it.embeddingText, parseTags(it.tagsJson))
+                    )
+                }
+            }
+            override fun countTokens(document: String): Int = m.countTokens(document, isQuery = false)
+            override fun read(document: String): FloatArray = embedStoredText(m, document)
+            override fun replaceIfCurrent(
+                memoryId: String,
+                document: String,
+                vector: FloatArray
+            ): LongMemoryReread.WriteResult =
+                when (store.replaceEmbeddingIfCurrent(memoryId, key, VectorMath.toBlob(vector)) { record ->
+                    RetrievalDocument.semanticDocument(record.content, record.embeddingText, parseTags(record.tagsJson)) == document
+                }) {
+                    true -> LongMemoryReread.WriteResult.REPLACED
+                    false -> LongMemoryReread.WriteResult.CHANGED
+                    null -> LongMemoryReread.WriteResult.GONE
+                }
+            override fun currentDocument(memoryId: String): String? =
+                store.getMemory(memoryId)?.takeIf { it.status == "active" }?.let {
+                    RetrievalDocument.semanticDocument(it.content, it.embeddingText, parseTags(it.tagsJson))
+                }
+        }).run()
     }
 
     /** True when the installed model's tag or the retrieval document version

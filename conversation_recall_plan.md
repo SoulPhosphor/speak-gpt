@@ -2802,3 +2802,7 @@ request. Detailed results stay in the file named by G.16.
 
 - Step 0 — saved-memory benchmark completed for 86 samples; detailed
   results are in `memory baseline.md`.
+- Step 1 — token counting, one priority queue for every embedding read
+  (a live read can stop a running background read), and saved memories
+  read up to 2,048 tokens with a resumable re-read of memories cut at 512;
+  pull request #199. Measurements are in `memory baseline.md`.

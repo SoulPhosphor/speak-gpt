@@ -71,11 +71,7 @@ class HfTokenizer private constructor(
      * template specials preserved (content is cut, never the specials).
      */
     fun encode(text: String, maxTokens: Int): LongArray {
-        var s = text
-        for (n in normalizers) s = n(s)
-        val pieces = preTokenizer?.split(s) ?: listOf(s)
-        val content = ArrayList<Long>()
-        for (p in pieces) if (p.isNotEmpty()) model.encodePiece(p, content)
+        val content = encodeContent(text)
 
         val budget = maxTokens - prefixIds.size - suffixIds.size
         val kept = if (budget in 0 until content.size) content.subList(0, budget) else content
@@ -85,6 +81,23 @@ class HfTokenizer private constructor(
         for (id in kept) out[i++] = id
         for (id in suffixIds) out[i++] = id
         return out
+    }
+
+    /**
+     * How many ids [encode] would produce for [text] with no limit: the
+     * template's special tokens plus every content token. Nothing is cut, so
+     * a caller can tell whether a text fits before reading it.
+     */
+    fun countTokens(text: String): Int =
+        prefixIds.size + encodeContent(text).size + suffixIds.size
+
+    private fun encodeContent(text: String): ArrayList<Long> {
+        var s = text
+        for (n in normalizers) s = n(s)
+        val pieces = preTokenizer?.split(s) ?: listOf(s)
+        val content = ArrayList<Long>()
+        for (p in pieces) if (p.isNotEmpty()) model.encodePiece(p, content)
+        return content
     }
 
     /* ----------------------------- models ----------------------------- */

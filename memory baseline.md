@@ -157,3 +157,41 @@ This table also shows the missed expected IDs.
 | `conversation_09_turn_2` | `plan_concert` | — | `work_archive`, `work_budget`, `work_password` |
 | `conversation_09_turn_3` | — | `plan_concert` | — |
 | `conversation_09_turn_4` | `health_dental` | — | — |
+
+## Step 1: reading limit and embedding queue
+
+Step 1 does not change any result above. All 32 test memories fit inside
+the previous 512-token limit, so their vectors and every per-sample result
+stay the same. The four `very_long` messages are still cut at 512 tokens,
+because the message being sent keeps that limit. `baseline.json` is
+unchanged and the test set passes against it.
+
+**How these were measured.** The app's own compiled classes ran with the
+real q4 model and ONNX Runtime 1.20.0 (the app's version) on a 4-core
+cloud machine in the build environment, not on a phone. Model files were
+downloaded to a temporary folder and not added to the repository.
+
+| Check | Result (build environment) |
+|---|---|
+| Token counts against the reference tokenizer (all 118 test-set inputs with their prefixes, a 4,653-token text, and an accent, emoji and ligature text) | 120 of 120 match |
+| A 512-token memory read under the 512 and 2,048 limits | Identical vector |
+| A 2,048-token memory: cut at 512 compared with read in full | Cosine 0.927, so the cut vector was missing part of the memory |
+| Read time, 128 tokens | 117 ms |
+| Read time, 512 tokens | 542 ms |
+| Read time, 1,024 tokens | 1,465 ms |
+| Read time, 2,048 tokens | 4,075 ms |
+| Live message waiting behind a running 2,048-token background read, without stopping it | 3,957 ms average, 4,032 ms longest |
+| The same wait when the background read is stopped | 1,287 ms average, 1,346 ms longest |
+| Time for a stop to take effect, 20 stops at random points in the read | 443 ms average, 1,245 ms longest |
+| Vectors from the same model session after each of the 20 stops | 20 of 20 identical to an uninterrupted read |
+
+ONNX Runtime checks for a stop between the model's internal steps, so a
+stop waits for the step that is running. Stops requested 100 ms into a
+read took about 1.3 seconds, longer than stops requested later, which
+suggests the first step of a read is long. Which step that is was not
+measured.
+
+**Still to measure on the owner's Pixel 8:** the read time of a
+2,048-token memory, the memory used during that read, the wait of a live
+message behind it, and how long a stop takes. The phone will be slower
+than the build environment.
