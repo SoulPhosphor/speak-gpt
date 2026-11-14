@@ -1327,7 +1327,7 @@ RisuAI does (G.18a).
 - **What it never does:** search with the AI's replies, or keep anything
   that does not pass the relevance gate.
 
-## G.10 A small detail inside a larger message (Step 2 implemented; repair verification pending)
+## G.10 A small detail inside a larger message (Step 2 implemented; repairs in #201)
 
 **The problem.** A small detail in a message about several things does not
 find its saved memory or its earlier exchange (G.2).
@@ -1421,9 +1421,21 @@ well; this app does not.
 - When the limit or the time allowance leaves part of a message
   unsearched, the Memory Search Test screen says which part.
 - Size, cap, similarity threshold and allowance are provisional engineering
-  numbers. Android device performance remains unverified until actually measured.
+  numbers. The CI x86_64 Android emulator measured a 1,507 ms additional
+  search (one attempt, no completed section) after a 7,899 ms whole-message
+  embedding. These are emulator observations, not physical-phone timings.
   The test screen separates queue waiting, model work and total section-read
   elapsed time (including section preparation and relevance scoring); report-only diagnostics and rendering are outside that line.
+
+**Runtime validation.** The original Python ORT 1.29 fixture baseline remains
+69 correct / 6 missed / 19 incorrect. Android ORT 1.20 measured 54/21/21 for
+the whole message and 69/6/21 with sections, with no additional incorrect
+matches from sections. All 313 input-token hashes matched independent
+references. Small native-runtime vector differences change three whole-message
+results; the original gold answers and fixtures remain unchanged. Separate
+Android observations protect that platform from unexpected regressions.
+Details, runtime comparisons and physical-phone limits are in `memory baseline.md`;
+final CI, review and merge status are tracked in PR #201. No parameter was retuned.
 
 **What the user can see.** The Memory Search Test screen must show which
 piece of the message a memory matched, and when the search ran out of
@@ -1678,7 +1690,8 @@ separates failed processing from timeout/cap, and uses context-specific Memory
 Assistant complete-set fallback wording. The complete-set Assistant search is
 unchanged. Diagnostics do not claim that an unsearched section failed relevance.
 Near-miss labels explain the existing gate, similarity and meaningful-word rules;
-they do not change those rules. Device timing remains pending.
+they do not change those rules. Physical-phone timing remains pending;
+the emulator measurements are recorded in `memory baseline.md`.
 
 The two model-load/self-check messages remain assigned to Step 11; their
 proposed replacements are not implemented by Step 2:
@@ -1819,13 +1832,13 @@ Only a new owner decision may change this order.
 
 Step 0 is already complete. Do not rebuild it, regenerate its vectors, or
 rewrite its expected answers. Its authoritative results are in
-[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200. The current work order is the Step 2 repair audit; do not begin Step 3 until its verification is complete.
+[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200; the Step 2 repairs and verification record are in #201. Its final CI, review and merge state are tracked on that PR. Step 3 is outside the repair assignment.
 
 | Step | Status | What is built | Difficulty | Model | The user sees | Needs | Approve first |
 |---:|---|---|---|---|---|---|---|
 | 0 | **Complete** | Saved-memory test set with the real model's vectors | Routine with written instructions | Lighter | Nothing | Nothing | Nothing |
 | 1 | **Complete (#199)** | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle | Nothing | Step 0 complete | Nothing (G33) |
-| 2 | Implemented in #200; repair verification pending | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
+| 2 | Implemented (#200); repaired (#201) | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
 | 3 | Waiting | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
 | 4 | Waiting | Saved memories stay through follow-up messages | Careful | Middle | Follow-up continuity | Steps 0 and 3 | Label and placement of its setting (G32) |
 | 5 | Waiting | Memory word count and length limit | Careful | Middle | Word count under memory fields | Step 1 | Open parts of G34 |
@@ -2787,7 +2800,7 @@ this plan. These rules keep that safe.
   plan (`Memory System/dynamic_memory_plan.md`) is background for
   saved-memory work and is not needed for the conversation index.
 - **Build exactly one numbered Step from G.16, as one pull request.** Do
-  not start the next Step. Steps 0–2 have implementations; Step 2 repair verification is pending. Do not begin Step 3 during repairs. Every Step follows the code
+  not start the next Step. Steps 0–2 have implementations; Step 2 repairs and verification are tracked in #201 and `memory baseline.md`. Do not begin Step 3 during repairs. Every Step follows the code
   workflow in `CLAUDE.md`.
 - **Do not start a Step out of order or while its "Approve first" entry in
   G.16 is not satisfied.** Say what is waiting and stop.
@@ -2842,4 +2855,4 @@ request. Detailed results stay in the file named by G.16.
   Debug Log wording is the owner-approved wording, not the G.13b proposals.
   Results are in `memory baseline.md`.
 
-- Step 2 repair audit — accurate section thresholds/near-misses/failures, bounded queue waiting with cooperative termination, native model lifetime protection, shared live/test matching and retrieval-to-prompt coverage. ONNX startup/API telemetry opt-outs also cover Silero. Original 69/6/19 preserved; independent untuned model evaluation 4/5/0. All three required local tasks passed; Android execution, CI/review and phone-specific limits are recorded in `memory baseline.md`. No Step 3 implementation.
+- Step 2 repair audit (#201) — accurate section thresholds/near-misses/failures, bounded queue waiting with cooperative termination, native model lifetime protection, shared live/test matching and retrieval-to-prompt coverage. ONNX startup/API telemetry opt-outs also cover Silero. Original Python fixture baseline 69/6/19 preserved; Android ORT 1.20 measured 54/21/21 before sections and 69/6/21 with sections. Independent untuned model evaluation is 4/5/0 on both runtimes. Original vectors reproduce byte for byte offline; all 313 token references match Android. Prior local checks and final CI/review evidence, emulator latency and physical-phone limits are recorded in `memory baseline.md` and PR #201. No Step 3 implementation.
