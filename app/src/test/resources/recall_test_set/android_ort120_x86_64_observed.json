@@ -1,0 +1,650 @@
+{
+  "runtime": "1.20.0",
+  "abi": "x86_64",
+  "source_commit": "66a40a683f8c3a8bf739dc46f752155994b56706",
+  "run_id": 43631334204,
+  "meaning": "Observed runtime results, not correct-answer labels. Gold remains in cases.json.",
+  "totals": {
+    "whole": [
+      54,
+      21,
+      21
+    ],
+    "with_sections": [
+      69,
+      6,
+      21
+    ]
+  },
+  "messages": {
+    "short_01": {
+      "whole": [
+        "pet_tansy"
+      ],
+      "with_sections": [
+        "pet_tansy"
+      ]
+    },
+    "short_02": {
+      "whole": [
+        "pet_brindle"
+      ],
+      "with_sections": [
+        "pet_brindle"
+      ]
+    },
+    "short_03": {
+      "whole": [
+        "pet_cobalt"
+      ],
+      "with_sections": [
+        "pet_cobalt"
+      ]
+    },
+    "short_04": {
+      "whole": [
+        "health_knee",
+        "health_wrist"
+      ],
+      "with_sections": [
+        "health_knee",
+        "health_wrist"
+      ]
+    },
+    "short_05": {
+      "whole": [
+        "health_dental"
+      ],
+      "with_sections": [
+        "health_dental"
+      ]
+    },
+    "short_06": {
+      "whole": [
+        "work_archive",
+        "work_password",
+        "work_budget"
+      ],
+      "with_sections": [
+        "work_archive",
+        "work_password",
+        "work_budget"
+      ]
+    },
+    "short_07": {
+      "whole": [
+        "family_ada"
+      ],
+      "with_sections": [
+        "family_ada"
+      ]
+    },
+    "short_08": {
+      "whole": [
+        "home_move"
+      ],
+      "with_sections": [
+        "home_move"
+      ]
+    },
+    "short_09": {
+      "whole": [
+        "hobby_camera"
+      ],
+      "with_sections": [
+        "hobby_camera"
+      ]
+    },
+    "short_10": {
+      "whole": [
+        "plan_ferry"
+      ],
+      "with_sections": [
+        "plan_ferry"
+      ]
+    },
+    "typed_01": {
+      "whole": [],
+      "with_sections": []
+    },
+    "dictated_01": {
+      "whole": [],
+      "with_sections": []
+    },
+    "typed_02": {
+      "whole": [],
+      "with_sections": [
+        "health_wrist"
+      ]
+    },
+    "dictated_02": {
+      "whole": [],
+      "with_sections": [
+        "health_wrist"
+      ]
+    },
+    "typed_03": {
+      "whole": [
+        "work_budget"
+      ],
+      "with_sections": [
+        "work_budget"
+      ]
+    },
+    "dictated_03": {
+      "whole": [
+        "work_budget"
+      ],
+      "with_sections": [
+        "work_budget"
+      ]
+    },
+    "typed_04": {
+      "whole": [],
+      "with_sections": [
+        "family_leon"
+      ]
+    },
+    "dictated_04": {
+      "whole": [
+        "home_latch"
+      ],
+      "with_sections": [
+        "home_latch",
+        "family_leon"
+      ]
+    },
+    "typed_05": {
+      "whole": [],
+      "with_sections": [
+        "home_shelf"
+      ]
+    },
+    "dictated_05": {
+      "whole": [],
+      "with_sections": [
+        "home_shelf"
+      ]
+    },
+    "typed_06": {
+      "whole": [
+        "hobby_chess"
+      ],
+      "with_sections": [
+        "hobby_chess"
+      ]
+    },
+    "dictated_06": {
+      "whole": [
+        "hobby_chess"
+      ],
+      "with_sections": [
+        "hobby_chess"
+      ]
+    },
+    "typed_07": {
+      "whole": [],
+      "with_sections": [
+        "food_stew"
+      ]
+    },
+    "dictated_07": {
+      "whole": [
+        "food_stew"
+      ],
+      "with_sections": [
+        "food_stew"
+      ]
+    },
+    "typed_08": {
+      "whole": [],
+      "with_sections": [
+        "plan_eclipse"
+      ]
+    },
+    "dictated_08": {
+      "whole": [],
+      "with_sections": [
+        "plan_eclipse"
+      ]
+    },
+    "bad_periods_01": {
+      "whole": [],
+      "with_sections": []
+    },
+    "bad_periods_02": {
+      "whole": [],
+      "with_sections": [
+        "health_wrist"
+      ]
+    },
+    "bad_periods_03": {
+      "whole": [],
+      "with_sections": [
+        "work_budget"
+      ]
+    },
+    "bad_periods_04": {
+      "whole": [],
+      "with_sections": [
+        "family_leon"
+      ]
+    },
+    "bad_periods_05": {
+      "whole": [],
+      "with_sections": [
+        "home_shelf"
+      ]
+    },
+    "very_long_01": {
+      "whole": [],
+      "with_sections": [
+        "pet_cobalt"
+      ]
+    },
+    "very_long_02": {
+      "whole": [
+        "family_rafi"
+      ],
+      "with_sections": [
+        "family_rafi"
+      ]
+    },
+    "very_long_03": {
+      "whole": [
+        "home_latch",
+        "food_sesame",
+        "health_wrist",
+        "home_leak"
+      ],
+      "with_sections": [
+        "home_latch",
+        "food_sesame",
+        "health_wrist",
+        "home_leak"
+      ]
+    },
+    "very_long_04": {
+      "whole": [],
+      "with_sections": [
+        "plan_concert"
+      ]
+    },
+    "accidental_01": {
+      "whole": [],
+      "with_sections": []
+    },
+    "accidental_02": {
+      "whole": [
+        "plan_race"
+      ],
+      "with_sections": [
+        "plan_race"
+      ]
+    },
+    "accidental_03": {
+      "whole": [],
+      "with_sections": []
+    },
+    "accidental_04": {
+      "whole": [],
+      "with_sections": []
+    },
+    "accidental_05": {
+      "whole": [
+        "pet_tansy"
+      ],
+      "with_sections": [
+        "pet_tansy"
+      ]
+    },
+    "accidental_06": {
+      "whole": [],
+      "with_sections": []
+    },
+    "accidental_07": {
+      "whole": [],
+      "with_sections": []
+    },
+    "accidental_08": {
+      "whole": [],
+      "with_sections": []
+    },
+    "nothing_01": {
+      "whole": [],
+      "with_sections": []
+    },
+    "nothing_02": {
+      "whole": [],
+      "with_sections": []
+    },
+    "nothing_03": {
+      "whole": [],
+      "with_sections": []
+    },
+    "nothing_04": {
+      "whole": [],
+      "with_sections": []
+    },
+    "nothing_05": {
+      "whole": [],
+      "with_sections": []
+    },
+    "nothing_06": {
+      "whole": [],
+      "with_sections": []
+    },
+    "nothing_07": {
+      "whole": [],
+      "with_sections": []
+    },
+    "nothing_08": {
+      "whole": [],
+      "with_sections": []
+    },
+    "two_01": {
+      "whole": [
+        "pet_tansy",
+        "hobby_camera"
+      ],
+      "with_sections": [
+        "pet_tansy",
+        "hobby_camera"
+      ]
+    },
+    "two_02": {
+      "whole": [
+        "plan_ferry",
+        "health_dental"
+      ],
+      "with_sections": [
+        "plan_ferry",
+        "health_dental"
+      ]
+    },
+    "two_03": {
+      "whole": [
+        "family_ada",
+        "family_leon"
+      ],
+      "with_sections": [
+        "family_ada",
+        "family_leon"
+      ]
+    },
+    "two_04": {
+      "whole": [
+        "home_shelf",
+        "hobby_pottery",
+        "health_wrist"
+      ],
+      "with_sections": [
+        "home_shelf",
+        "hobby_pottery",
+        "health_wrist"
+      ]
+    },
+    "two_05": {
+      "whole": [
+        "food_tea",
+        "work_password",
+        "food_bread"
+      ],
+      "with_sections": [
+        "food_tea",
+        "work_password",
+        "food_bread"
+      ]
+    },
+    "conversation_01_turn_1": {
+      "whole": [
+        "pet_tansy"
+      ],
+      "with_sections": [
+        "pet_tansy"
+      ]
+    },
+    "conversation_01_turn_2": {
+      "whole": [
+        "pet_tansy"
+      ],
+      "with_sections": [
+        "pet_tansy"
+      ]
+    },
+    "conversation_01_turn_3": {
+      "whole": [
+        "hobby_camera"
+      ],
+      "with_sections": [
+        "hobby_camera"
+      ]
+    },
+    "conversation_02_turn_1": {
+      "whole": [
+        "family_leon"
+      ],
+      "with_sections": [
+        "family_leon"
+      ]
+    },
+    "conversation_02_turn_2": {
+      "whole": [
+        "family_leon",
+        "work_password"
+      ],
+      "with_sections": [
+        "family_leon",
+        "work_password"
+      ]
+    },
+    "conversation_02_turn_3": {
+      "whole": [
+        "food_tea"
+      ],
+      "with_sections": [
+        "food_tea"
+      ]
+    },
+    "conversation_03_turn_1": {
+      "whole": [
+        "plan_ferry"
+      ],
+      "with_sections": [
+        "plan_ferry"
+      ]
+    },
+    "conversation_03_turn_2": {
+      "whole": [
+        "plan_ferry"
+      ],
+      "with_sections": [
+        "plan_ferry"
+      ]
+    },
+    "conversation_03_turn_3": {
+      "whole": [
+        "home_shelf"
+      ],
+      "with_sections": [
+        "home_shelf"
+      ]
+    },
+    "conversation_04_turn_1": {
+      "whole": [],
+      "with_sections": []
+    },
+    "conversation_04_turn_2": {
+      "whole": [
+        "family_ada",
+        "work_budget"
+      ],
+      "with_sections": [
+        "family_ada",
+        "work_budget"
+      ]
+    },
+    "conversation_04_turn_3": {
+      "whole": [
+        "pet_brindle"
+      ],
+      "with_sections": [
+        "pet_brindle"
+      ]
+    },
+    "conversation_05_turn_1": {
+      "whole": [
+        "work_budget",
+        "work_archive"
+      ],
+      "with_sections": [
+        "work_budget",
+        "work_archive"
+      ]
+    },
+    "conversation_05_turn_2": {
+      "whole": [
+        "work_budget"
+      ],
+      "with_sections": [
+        "work_budget"
+      ]
+    },
+    "conversation_05_turn_3": {
+      "whole": [
+        "health_dental"
+      ],
+      "with_sections": [
+        "health_dental"
+      ]
+    },
+    "conversation_06_turn_1": {
+      "whole": [
+        "pet_cobalt"
+      ],
+      "with_sections": [
+        "pet_cobalt"
+      ]
+    },
+    "conversation_06_turn_2": {
+      "whole": [
+        "pet_cobalt",
+        "food_bread"
+      ],
+      "with_sections": [
+        "pet_cobalt",
+        "food_bread"
+      ]
+    },
+    "conversation_06_turn_3": {
+      "whole": [
+        "plan_eclipse"
+      ],
+      "with_sections": [
+        "plan_eclipse"
+      ]
+    },
+    "conversation_07_turn_1": {
+      "whole": [
+        "pet_brindle"
+      ],
+      "with_sections": [
+        "pet_brindle"
+      ]
+    },
+    "conversation_07_turn_2": {
+      "whole": [
+        "hobby_camera"
+      ],
+      "with_sections": [
+        "hobby_camera"
+      ]
+    },
+    "conversation_07_turn_3": {
+      "whole": [
+        "family_leon",
+        "pet_brindle"
+      ],
+      "with_sections": [
+        "family_leon",
+        "pet_brindle"
+      ]
+    },
+    "conversation_07_turn_4": {
+      "whole": [
+        "family_ada"
+      ],
+      "with_sections": [
+        "family_ada"
+      ]
+    },
+    "conversation_08_turn_1": {
+      "whole": [
+        "hobby_spring"
+      ],
+      "with_sections": [
+        "hobby_spring"
+      ]
+    },
+    "conversation_08_turn_2": {
+      "whole": [
+        "hobby_spring"
+      ],
+      "with_sections": [
+        "hobby_spring"
+      ]
+    },
+    "conversation_08_turn_3": {
+      "whole": [
+        "hobby_spring"
+      ],
+      "with_sections": [
+        "hobby_spring"
+      ]
+    },
+    "conversation_08_turn_4": {
+      "whole": [
+        "pet_cobalt",
+        "work_password"
+      ],
+      "with_sections": [
+        "pet_cobalt",
+        "work_password"
+      ]
+    },
+    "conversation_09_turn_1": {
+      "whole": [
+        "plan_concert"
+      ],
+      "with_sections": [
+        "plan_concert"
+      ]
+    },
+    "conversation_09_turn_2": {
+      "whole": [
+        "work_archive",
+        "work_budget",
+        "work_password",
+        "plan_concert"
+      ],
+      "with_sections": [
+        "work_archive",
+        "work_budget",
+        "work_password",
+        "plan_concert"
+      ]
+    },
+    "conversation_09_turn_3": {
+      "whole": [],
+      "with_sections": []
+    },
+    "conversation_09_turn_4": {
+      "whole": [
+        "health_dental"
+      ],
+      "with_sections": [
+        "health_dental"
+      ]
+    }
+  }
+}

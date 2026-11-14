@@ -194,4 +194,77 @@ class SearchTestReportTest {
         )
         assertTrue(r.notSent.any { it.explanation.memory.memoryId == "pepper" && it.section != null })
     }
+    @Test
+    fun belowSectionThresholdIsNotMislabelledAsMaximumMemories() {
+        val corpus = listOf(cand("pepper", .47, "Pepper is a cat")) + noise()
+        val report = buildLong(corpus)
+        val row = report.notSent.first { it.explanation.memory.memoryId == "pepper" }
+        assertEquals(SearchTestReport.Outcome.NOT_A_MATCH, row.outcome)
+        assertNull(row.section)
+        assertEquals(.48, row.sectionEvaluation!!.requiredSimilarity, 0.0)
+        assertTrue(row.sectionEvaluation!!.rejectedBy.contains(LongMessageSearch.Rejection.SIMILARITY))
+        assertEquals(.47, row.explanation.similarity!!, .001)
+    }
+
+    @Test
+    fun highSimilarityWithoutWordsExplainsMissingOverlap() {
+        val corpus = listOf(cand("gate", .55, "The garden latch is stiff")) + noise()
+        val report = buildLong(corpus)
+        val row = report.notSent.first { it.explanation.memory.memoryId == "gate" }
+        assertEquals(SearchTestReport.Outcome.NOT_A_MATCH, row.outcome)
+        assertTrue(row.sectionEvaluation!!.rejectedBy.contains(LongMessageSearch.Rejection.NO_SHARED_WORD))
+        assertFalse(row.sectionEvaluation!!.rejectedBy.contains(LongMessageSearch.Rejection.SIMILARITY))
+    }
+
+    @Test
+    fun unsearchedSectionsAreNeverPresentedAsFailedRelevance() {
+        val corpus = listOf(pepper()) + noise()
+        val reading = LongMessageSearch.read(longMessage, LiveRetrieval.index(corpus),
+            LongMessageSearch.Settings(timeAllowanceMillis = 0)) { error("must not read") }
+        val report = SearchTestReport.build(longMessage, elsewhere, corpus, SearchTuning(), true, sections = reading)
+        assertTrue(report.notSent.all { it.sectionEvaluation == null })
+    }
+
+    @Test
+    fun effectiveSettingsTravelWithReadingIntoDiagnosticsAndMatcher() {
+        val corpus = listOf(pepper()) + noise()
+        val reading = sections(corpus).copy(settings = LongMessageSearch.Settings(sectionSimilarityMin = .7))
+        val report = SearchTestReport.build(longMessage, elsewhere, corpus, SearchTuning(), true, sections = reading)
+        val row = report.notSent.first { it.explanation.memory.memoryId == "pepper" }
+        assertEquals(.7, row.sectionEvaluation!!.requiredSimilarity, 0.0)
+        assertEquals(SearchTestReport.Outcome.NOT_A_MATCH, row.outcome)
+    }
+
+    @Test
+    fun qualifyingMatchesBeyondScanCapAreNotCalledRelevanceFailures() {
+        val oversized = (0..70).map { i -> cand("large$i", .58, "zq0 ".repeat(3000)) }
+        val corpus = oversized + listOf(pepper()) + noise()
+        // All large memories match the whole message on the semantic gate,
+        // consume candidate scanning, and are rejected by character budget.
+        val report = SearchTestReport.build(longMessage, q, corpus,
+            SearchTuning(maxMemories = 1, memorySpace = 500,
+                params = LiveRetrieval.Params(standoutMin = 0.0)), true, notSentShown = 100, sections = sections(corpus))
+        assertTrue(report.notSent.any { it.outcome == SearchTestReport.Outcome.SCAN_LIMIT })
+    }
+
+    @Test
+    fun nearMissesAreNotHiddenByUnrelatedWholeMessageScores() {
+        val corpus = noise() + noise().map { it.copy(memory = it.memory.copy(memoryId = it.memory.memoryId + "b")) } +
+            cand("pepper", .47, "Pepper is a cat")
+        val report = SearchTestReport.build(longMessage, elsewhere, corpus, SearchTuning(), true,
+            notSentShown = 2, sections = sections(corpus))
+        assertTrue(report.notSent.any { it.explanation.memory.memoryId == "pepper" && it.sectionEvaluation != null })
+    }
+
+    @Test
+    fun largeSectionMatchSetsDoNotCreateUnboundedDiagnosticCards() {
+        val corpus = (0 until 200).map { cand("pepper$it", .55, "Pepper is a cat") }
+        val report = SearchTestReport.build(longMessage, floatArrayOf(-1f, 0f), corpus,
+            SearchTuning(maxMemories = 1, params = LiveRetrieval.Params(standoutMin = 0.0)), true,
+            sections = sections(corpus))
+        assertEquals(1, report.sent.size)
+        assertTrue(report.notSent.size <= 75)
+        assertTrue(report.notSent.all { it.section != null && it.outcome == SearchTestReport.Outcome.LIMIT_FULL })
+    }
+
 }

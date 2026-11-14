@@ -187,14 +187,17 @@ class RecallTestSetTest {
                 val array = recorded.single { it.getString("text") == text }.getJSONArray("vector")
                 FloatArray(array.length()) { array.getDouble(it).toFloat() }
             }
-            val bySection = LongMessageSearch.matches(reading, index, LiveRetrieval.Params(), whole.explanations)
-                .take((5 - wholeSent.size).coerceAtLeast(0))
+            val integrated = SavedMemorySearch.search(message.getString("text"), vector(id), index,
+                LiveRetrieval.Params(), 5, true) { reading }
+            assertEquals("$id: shared live path changed whole-message ranking", wholeSent,
+                integrated.whole.ranked.map { it.memory.memoryId })
+            val bySection = integrated.sectionMatches.filter { it.explanation.memory.memoryId in integrated.sectionIds }
             for (match in bySection) {
                 val e = match.explanation
                 println("RECALL SECTION $id ${e.memory.memoryId} section ${match.section.number} of " +
                     "${match.sectionCount} similarity ${"%.2f".format(e.similarity)} words ${e.matchedTerms}")
             }
-            val sentInOrder = wholeSent + bySection.map { it.explanation.memory.memoryId }
+            val sentInOrder = integrated.ranked.map { it.memory.memoryId }
             assertEquals("$id: whole-message matches must keep their place and order",
                 wholeSent, sentInOrder.take(wholeSent.size))
             val sent = sentInOrder.toSet()

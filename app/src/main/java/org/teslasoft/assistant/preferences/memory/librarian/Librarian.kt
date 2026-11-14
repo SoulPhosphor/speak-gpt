@@ -729,7 +729,8 @@ class Librarian private constructor(private val appContext: Context) {
                     MemoryLog.log(
                         appContext, "Librarian", "info",
                         if (reconciliation) {
-                            "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} vector; lexical retrieval over the complete set this turn"
+                            "$missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} embedding. Memory Assistant searched the complete eligible set by keyword instead." +
+                                if (repairing) " The app is preparing them in the background." else ""
                         } else {
                             "$missing of ${candidates.size} eligible memories aren't ready for embedding search. They were searched by keyword instead." +
                                 if (repairing) " The app is preparing them in the background." else ""
@@ -763,7 +764,7 @@ class Librarian private constructor(private val appContext: Context) {
                 if (reconciliation) embedBackgroundQuery(model, query)
                 else embedLive(model, query, isQuery = true)
             } catch (t: Throwable) {
-                MemoryLog.log(appContext, "Librarian", "error", "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: ${t.message}.")
+                MemoryLog.log(appContext, "Librarian", "error", RecallDiagnostics.queryFailure(reconciliation, t.message ?: t.javaClass.simpleName))
                 null
             }
         }
@@ -780,39 +781,15 @@ class Librarian private constructor(private val appContext: Context) {
                 corpus.map { LiveRetrieval.Candidate(it.memory, it.vector, it.tags, it.aliases) }
             )
             val params = liveParams(store)
-            val live = LiveRetrieval.search(
-                query = query,
-                queryVector = queryVector,
-                index = index,
-                params = params,
-                limit = topK,
-                useImportanceRatings = useImportanceRatings,
-                includeMandatoryImportance = useImportanceRatings
-            )
-            // A long message is also searched in sections, after the whole
-            // message and only when the whole message could be read.
-            val sections = if (m != null && queryVector != null) {
-                LongMessageSearch.read(query, index) { text -> embedLive(m, text, isQuery = true) }
-            } else LongMessageSearch.Reading.NONE
-            for (failure in sections.failures) {
-                MemoryLog.log(
-                    appContext, "Librarian", "error",
-                    "The embedding model couldn't process one additional section. That section was skipped, but the full-message search still ran. Error: ${failure.cause}"
-                )
+            val result = SavedMemorySearch.search(query, queryVector, index, params, topK, useImportanceRatings) {
+                if (m == null) LongMessageSearch.Reading.NONE else readSections(m, query, index)
             }
-            val bySection = LongMessageSearch.matches(
-                sections, index, params, live.explanations, useImportanceRatings
-            ).take((topK - live.ranked.size).coerceAtLeast(0))
-            diag?.invoke(
-                RetrievalDiagnostics(
-                    eligible = candidates.size,
-                    withVector = withVector,
-                    semantic = live.diagnostics.meaningRan,
-                    hasModel = m != null,
-                    foundBySection = bySection.map { it.explanation.memory.memoryId }.toSet()
-                )
-            )
-            return live.ranked + bySection.map { it.scored }
+            RecallDiagnostics.sectionFailure(result.sections)?.let { message ->
+                MemoryLog.log(appContext, "Librarian", "error", message)
+            }
+            diag?.invoke(RetrievalDiagnostics(candidates.size, withVector,
+                result.whole.diagnostics.meaningRan, m != null, result.sectionIds))
+            return result.ranked
         }
         val result = searchCore(
             query = query,
@@ -835,6 +812,32 @@ class Librarian private constructor(private val appContext: Context) {
             )
         }
         return result
+    }
+
+    /** Measures waiting separately from model work, including failed reads.
+     * The total also includes cutting and rare-word prioritization. */
+    private fun readSections(m: EmbeddingModel, query: String, index: LiveRetrieval.Index): LongMessageSearch.Reading {
+        var queueNanos = 0L
+        var modelNanos = 0L
+        val started = System.nanoTime()
+        val reading = LongMessageSearch.read(query, index, budgetedEmbed = { text, remaining ->
+            val queued = System.nanoTime()
+            var entered = false
+            try {
+                embeddingQueue.runWithin(remaining) { control ->
+                    entered = true
+                    val running = System.nanoTime()
+                    queueNanos += running - queued
+                    try { m.embed(text, true, m.messageTokenLimit, control) }
+                    finally { modelNanos += System.nanoTime() - running }
+                }
+            } finally {
+                if (!entered) queueNanos += System.nanoTime() - queued
+            }
+        }) { text -> embedLive(m, text, isQuery = true) }
+        return if (reading.sections.isEmpty()) reading else reading.copy(
+            millis = (System.nanoTime() - started) / 1_000_000,
+            queueMillis = queueNanos / 1_000_000, modelMillis = modelNanos / 1_000_000)
     }
 
     /** Live search tuning from the stored policy's `live_search` object.
@@ -902,7 +905,7 @@ class Librarian private constructor(private val appContext: Context) {
         // The same section reads a chat makes, with the same limits. A
         // section that cannot be read is skipped; the test writes no log.
         val sections = if (m != null && queryVector != null) {
-            LongMessageSearch.read(query, LiveRetrieval.index(corpus)) { text -> embedLive(m, text, isQuery = true) }
+            readSections(m, query, LiveRetrieval.index(corpus))
         } else LongMessageSearch.Reading.NONE
         return PreparedSearchTest(query, queryVector, corpus, m != null, embedMillis, loadMillis, sections)
     }

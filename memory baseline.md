@@ -273,7 +273,7 @@ match counts only when all of these hold:
 a memory in entirely different words does not find it. That was accepted
 because a wrong memory is worse than a missed one.
 
-**The 0.48 is provisional.** It was chosen from this test set, where the
+**The 80-word size, eight-section cap, and 0.48 threshold are all provisional.** It was chosen from this test set, where the
 correct section matches scored 0.49 to 0.58. It has not been validated on
 any real memory library and may need adjusting.
 
@@ -308,11 +308,7 @@ messages, with the approved rule. "All" means no section limit.
 
 ### Time
 
-The section search may add at most 1,500 ms to sending a message. The
-limit is checked before each section is read, so one read can finish past
-it; the sections not reached are skipped and the message is sent with
-what was found. The 1,500 ms is an engineering starting value and has not
-been checked on a phone.
+The original section search used a provisional 1,500 ms soft allowance. It checked elapsed time only before each read, so one queued/model operation could finish past it. It was not a maximum sending delay. The repair adds bounded queue waiting and cooperative model termination, described below; phone performance remains unmeasured.
 
 | Check | Result (build environment) |
 |---|---|
@@ -325,5 +321,191 @@ These times come from the real q4 model on a 4-core cloud machine with
 onnxruntime 1.29.0 in Python, two threads, not from the app on a phone.
 
 **Still to measure on the owner's Pixel 8:** the added sending time for a
-long message. The Memory Search Test screen shows it after a test of a
-long message, on the line that begins "Additional section search".
+long message. The Memory Search Test line "Additional section search" measures section preparation, reads and matching, including queue waits; it does not include the full-message search, report-only diagnostic scoring, prompt assembly, or provider latency. Those must be included when measuring total sending latency.
+
+## Step 2 repair audit
+
+Base: PR #200 merge `693cca9f7a56a13753fe18843a2b1c82b90681b3`, fetched from `origin/main`.
+Work branch: `repair/step2-recall-audit`. Implementation, emulator evidence and verification limits are recorded below. Final-commit CI, code review and merge status are tracked in [PR #201](https://github.com/SoulPhosphor/speak-gpt/pull/201). Step 3 is outside this repair.
+Historical measurements and fixtures above are preserved; their Python timings are not Android measurements.
+
+| Item | Finding / repair | Verification state |
+|---|---|---|
+| 1 | Section rows need the actual section threshold and complete gate | Shared rule and runtime threshold carried into report; automated coverage added |
+| 2 | Failed candidates were discarded; diagnostic evaluation now retains searched section candidates | Shared rule and runtime threshold carried into report; automated coverage added |
+| 3 | Attempted counts included failed reads without any indication | Processing, deadline and repeated-error state separated; automated coverage added |
+| 4 | Timing string always used plural | Android plural resources and rendering assertions added |
+| 5 | Keyword-only fragment is embedded inside a larger sentence | Actual summary formatter extracted for testing; no added internal period |
+| 6 | Assistant incomplete-index wording was obsolete | Complete-set keyword fallback described explicitly; preparation sentence conditional |
+| 7 | Enforcer had an obsolete no-model diagnostic | Removed the duplicate pre-search note; the actual retrieval summary identifies keyword-only operation |
+| 8 | Background failures referred to the sent message | Background/live error contexts separated |
+| 9 | Each section failure wrote another log | Aggregate failures with section IDs; stop after consecutive identical failures; unit coverage added |
+| 10 | Typed and voice sending wait synchronously for retrieval | Both enter the same typed-turn funnel; final request paths await Enforcer on IO; encrypted-store/Enforcer integration coverage added |
+| 11 | Allowance only checked before reads | Deadline bounds queue waiting and requests cooperative ONNX termination; caller retains model ownership until unwind; exact hard deadline cannot be guaranteed |
+| 12 | Six-word excerpt unbounded by character count | Six words retained, capped at 96 Unicode code points; numbering preserved |
+| 13 | Section-only +3 must obey Maximum Memories | Existing Enforcer policy retained; final assembly covered by Android integration tests |
+| 14 | Size, cap and threshold selected on evaluation data | All provisional; independent real-model set measured at 4/5/0; no retuning |
+| 15 | Status, G.10, G.13b, G26 and Build record contradict implementation | Status, matching rule, approved wording, resolved decisions and provisional parameters reconciled |
+| 16 | Prior unfinished commit is merged history | History preserved; no unfinished repair commit created |
+| 17 | Two prohibited generated footers in PR #200 | Removed from reply 4572452629 and comment 6874288698; review evidence retained |
+| 18 | Prior subscription may be outside this connection | No PR #200 task found among accessible automations; GitHub subscription mutation is not exposed; unrelated tasks unchanged |
+| 19 | Checks were not repeated after generator correction | Original fixtures reproduced byte for byte offline; final local checks, CI and final review recorded below |
+| 20 | Screen never launched | CI emulator resource/screen-state tests passed; downloaded match/result screenshot visually inspected; local software emulator remained impractical without KVM |
+| 21 | Retrieval-to-prompt integration missing | Actual encrypted-store/Librarian/Enforcer prompt integration passed on the emulator; runtime-specific observations and per-message regression guards described below |
+| 22 | Python ORT 1.29 timings were presented as performance evidence | App uses Android ORT 1.20.0; all 313 token references match, native output differences measured, emulator queue/model/total timing recorded below; physical-phone timing remains pending |
+
+### Additional independently established issues
+
+- Near-misses could remain hidden under the ten-row whole-message diagnostic ranking. Unsent diagnostic rows now prioritize qualified exclusions and then the fewest failed section requirements, within the existing row limit. Sent-memory ranking is unchanged.
+- Report attribution previously discarded qualifying section candidates beyond its pool cap and could call a relevance failure a memory-limit failure. Diagnostic matches are separate from the selection pool; regression coverage added.
+- The summary called a failed message embedding "model unavailable" even when a model was loaded. Separate unavailable-model, failed-message, and no-ready-embedding paths.
+- The summary called its bounded candidate-pool count “passed,” although that was not the total passing the relevance gate. The label is now “candidates.”
+- Section reads swallowed cancellation/interruption as ordinary embedding failures. Propagate cancellation and preserve interrupt status.
+
+### Validation record
+
+Initial checks were blocked by Gradle network routing, an absent Android SDK and a Java runtime without a compiler. These environment blockers were resolved by provisioning the requested Gradle distribution, Android SDK and a full JDK locally. Robolectric downloads were routed through the available Maven mirror. Earlier runs passed all three required tasks. Two intermediate combined-task repeats lost the Gradle daemon during APK shrinking, and an overlapping attempt hit the shared Gradle cache lock. Final packaging tasks are therefore run serially in fresh 3 GB Gradle processes; this is a local build-environment adjustment, not a repository build-setting change.
+
+**Initial repair implementation, before later instrumentation corrections:** the local JVM run executed **3,652 tests, zero failures/errors/skips**. `assembleBeta` subsequently passed in a fresh process (7m 13s). `aapt` verified package `com.soulphosphor.phosphorshines.beta`, version `4.38-stable-beta`, and label `Phosphor Shines Beta`. The local `assembleDebugAndroidTest` invocation passed in a fresh process (6m 5s). The local `testDebugUnitTest` task passed before those builds; a separate final invocation also completed successfully (1m 6s, reusing the unchanged final-source test result). No code changed between these checks. All three required local tasks passed for that implementation. Later fixture/build corrections, emulator measurements, screenshot inspection and fresh-environment limitations are recorded below. Final-commit CI/review status is tracked on PR #201. Its original recall benchmark remains **69 correct / 6 missed / 19 incorrect**. The independent fixed-parameter evaluation remains **4 / 5 / 0**, with no additional section recoveries.
+
+Offline regeneration used Python ONNX Runtime 1.29.0 with the recorded q4 files inside a network namespace without an outbound route. Both generated fixtures compare byte for byte with the original committed files: 118 whole-message/stored vectors and 136 section vectors. Reference checks were 0.9304, 0.4371 and 0.6208; all 123 tokenizer/length checks passed, including four truncated inputs.
+
+### ONNX telemetry opt-out
+
+The owner explicitly requested disabling all Microsoft ONNX telemetry during this repair. All application ONNX environment access (saved-memory embeddings and Silero voice activity detection) now goes through one environment that calls the actual ONNX Runtime Android 1.20.0 `setTelemetry(false)` API before returning an environment for session creation. Failure to apply the opt-out propagates into existing model-unavailable fallback. The environment also sets `ORT_DISABLE_TELEMETRY=1` before calling into ONNX Runtime. Both Python fixture tools set that startup variable **before importing** ONNX Runtime, then apply the API opt-out immediately after import and before model sessions. Microsoft's [current privacy documentation](https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md) explains that the API alone may allow a minimal initialization event, whereas the startup variable prevents the 1DS uploader, events and persistent identifier from being created. The shipped [1.20.0 privacy documentation](https://github.com/microsoft/onnxruntime/blob/v1.20.0/docs/Privacy.md) says telemetry was implemented only on Windows; the newer Python runtime has a broader provider. No telemetry-enabling call is introduced. The startup guard also protects a future runtime upgrade; no runtime version change is made here.
+
+The earlier fixture regeneration attempt was stopped by automatic approval review for an attempted Microsoft telemetry connection despite the existing generator's `disable_telemetry_events()` call. That attempt produced no regenerated fixture. The initial blocked attempt is preserved in this record; the later network-isolated check below establishes reproducibility without external disclosure. Native opt-out APIs are not a packet-capture proof of zero network activity; model-download traffic is separate from telemetry. A materially safer regeneration was subsequently run in a new Linux network namespace with no outbound route (a socket check returned ENETUNREACH), using previously downloaded model files and ONNX Runtime 1.29.0. It regenerated all 136 section vectors for 25 messages; `cmp` confirmed byte-for-byte equality with the committed fixture. No Microsoft telemetry connection could leave that isolated namespace.
+
+### Additional outbound-traffic audit requested during repair
+
+- **Confirmed SDK metrics:** `com.google.mlkit:language-id:17.0.6` and `com.google.mlkit:text-recognition:16.0.1` are dependencies. `DefaultPromptsParser`, auto-language TTS in `ChatActivity`, and `PdfFallbackExtractor` use them. Google's [ML Kit disclosure](https://developers.google.com/ml-kit/android-data-disclosure) and [privacy terms](https://developers.google.com/ml-kit/terms) describe device/app information, installation identifiers, utilization/performance metrics, and detected-language metrics. Google says input text/images and resulting content are processed on-device rather than uploaded. The merged manifest includes ML Kit initialization and Google Data Transport components. No supported collection opt-out has yet been established for these exact SDKs; do not invent an internal preference or silently remove OCR/language detection.
+- **Automatic public price lookup:** `TokenPricingCatalogClient.loadFirstParty` downloads OpenRouter's public model catalog even for first-party OpenAI, Anthropic and some xAI price lookups. The request has no API key, prompt, or message body; normal connection metadata is still disclosed. Matching the requested model happens locally after fetching the full catalog. Cache TTL is six hours within the process.
+- **Other expected network work:** configured chat/image/speech services, optional Memory Assistant background provider calls, model/voice catalogs and pricing documentation, and user-requested model downloads. Public TTS documentation requests are built without credentials; `OkHttpTtsExecutor` does not add credentials to them.
+- **Crash handling inspected:** `CrashHandler` displays/copies and stores reports locally through `Logger`; no automatic upload path was found in that code. Manually copied crash reports include device information and Android ID.
+- **Disclosure gap:** the built-in `assets/www/privacy.html` and light counterpart contain only an OpenAI terms link; they do not describe ML Kit metrics or auxiliary catalog requests.
+
+This is a source/dependency audit, not a complete packet-capture verification of every third-party binary. Apart from the explicitly requested ONNX telemetry opt-out, these findings do not change unrelated product behavior during the Step 2 repair.
+
+Actual app tokenizer parity was checked against independent Python-tokenizer references for all 254 stored-memory, message and section inputs: every token ID matched, including asymmetric prefixes, template markers and truncation. This verifies preprocessing compatibility; it does not by itself establish Android inference parity or phone timing.
+
+Model artifacts used for the network-isolated reproducibility and tokenizer checks (no model artifact is committed):
+
+| Artifact | SHA-256 |
+|---|---|
+| model_q4.onnx | ad1dfee81a70f7944b9b9d1cc6e48075b832881cf33fab2f2b248be78f3f0043 |
+| model_q4.onnx_data | 599962c3143b040de2dd05e5975be3e9091dd067cacc6a8f7186e3203bab9e02 |
+| tokenizer.json | 4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47 |
+
+### Sending, queue and cancellation audit
+
+Typed sends call `prepareTypedTurn` from the editor and send button; hands-free transcription calls that same method. It freezes the stored message before generation. Both the prepared-request and legacy request builders await `Enforcer.assembleTurnWithAttribution` on `Dispatchers.IO` and add its returned prompt as a system message. The Librarian's new shared `SavedMemorySearch` boundary searches the whole message first, then invokes section preparation at most once for that retrieval. Test-screen rescoring reuses the prepared vectors and does no model work.
+
+The embedding queue is synchronous and FIFO within LIVE priority. It puts LIVE ahead of waiting BACKGROUND work and requests termination of a running BACKGROUND inference. A live read can also wait behind earlier LIVE reads; the older “at most one running read” comments are not a guarantee against contention from peer live requests. Section queue waits now expire within the remaining allowance. Inference termination remains cooperative through ONNX RunOptions; the queue is released only after the native call unwinds. Tokenization and native unwind can exceed the allowance, so no hard sending-latency promise is made. All background preparation continues using the existing single-flight scheduler and existing background priority. No result is injected asynchronously into a different turn.
+
+The timing line measures section preparation, embedding and matching, with queue waiting, model-processing and scoring shown separately. Model-processing time includes tokenization, inference and vector postprocessing inside `EmbeddingModel.embed`; it is not a CPU-only kernel measurement. The shared live/test search now measures section relevance scoring too and includes it in the total. Whole-message search, report-only near-miss diagnostics, Enforcer filtering and provider latency remain outside that line. A section that finishes after its deadline does not add a result; already completed sections and whole-message results remain usable. Slow hardware can therefore search fewer sections than the original fixture-backed, zero-time benchmark.
+
+### Independent regression scope
+
+Six new independent contract tests use a new weaving/astronomy/spice setting, including punctuation-free dictation, details near the beginning/middle/end, unrelated topics, semantic paraphrases without shared vocabulary, accidental lexical overlap, relevance-gate rejection despite overlap/similarity, keyword fallback, and rendered diagnostics. They use synthetic vectors to isolate the approved contract; they are **not independent empirical model-accuracy measurements**. No section size, cap, threshold or baseline answer was retuned against them.
+
+Additional confirmed lifetime defect: `Librarian.invalidateModel()` called `OnnxEmbeddingModel.close()` directly while a queued/native read could be active. Inspection of the shipped ORT 1.20 Java session bytecode confirmed that `run` and `close` do not serialize that lifetime for the caller. `ModelReadLifecycle` now retires the model immediately, rejects later reads, and defers native close to the last active reader, exactly once. No asynchronous result or additional UI wait is introduced. A replacement can briefly coexist with a retiring model until that read unwinds; native cancellation and real-device memory behavior remain relevant to hardware validation. Latch-based concurrency tests exercise running-read retirement and failure cleanup.
+
+### Independent model evaluation (fixed parameters, no retuning)
+
+A separate nine-memory, ten-message gold set was written before generating its real q4 vectors. Its topics and wording are new; it was not used to select section size, cap or threshold. The original 32-memory/86-sample set and its expected answers are unchanged. Generation ran offline in the network-isolated environment using the same model artifact hashes and Python ORT 1.29.0. These are accuracy measurements from fixture vectors, not Android performance measurements.
+
+| Measure | Whole message | With section search |
+|---|---:|---:|
+| Correct matches | 4 | 4 |
+| Missed matches | 5 | 5 |
+| Incorrect matches | 0 | 0 |
+
+Section search recovered none of the five misses in this set. This is weaker generalization than the original 69/6/19 result and reinforces that all parameters remain provisional. The approved rule was preserved rather than retuned against these new cases. Zero incorrect matches here is a measurement on this set, not a universal guarantee. The observed snapshot is separate from the frozen gold answers; future regressions are checked against it without redefining correctness.
+
+| Case | Gold memory IDs | Retrieved IDs |
+|---|---|---|
+| beginning | pet | pet |
+| middle_paraphrase | loom | loom |
+| ending | ferry | None |
+| several_topics | pet, sky | sky |
+| shared_name_wrong_subject | spice | None |
+| no_shared_vocabulary | pet | None |
+| misleading_word | None | None |
+| nothing_relevant | None | None |
+| bad_periods | ferry | None |
+| different_words | bike | bike |
+
+Additional confirmed preparation cost: the original `readingOrder` ranked every section, then discarded everything after eight. For a very long message this performed quadratic prioritization work outside the read allowance. Runtime preparation now stops choosing as soon as the existing eight-section cap is filled, preserving exactly the original order's prefix. The full ordering remains available for comparison tests; a new regression test verifies prefix equality on a long message. Size, cap, relevance gate and ordering policy are unchanged.
+
+The existing Android Checks workflow runs the Step 2 encrypted-store, prompt-assembly, logging, plural-resource and screen-state tests on its x86_64 emulator and archives the synthetic result-card screenshot. The CI emulator temporarily downloads the pinned q4 validation model, verifies its hashes, and includes actual Android 1.20.0 vector/decision comparison and timing. Initial setup attempts failed before inference; subsequent measurements are recorded below. Wi-Fi and mobile data are disabled during the Step 2 class and restored afterwards. Model files are kept out of artifacts; the real-model test uses an isolated internal directory and removes it after closing its session. Public model inputs are supplied under the app UID in private storage. Model artifacts are temporary CI inputs, not distributed in the application or uploaded in test artifacts. The original and independent fixtures are bundled only in the instrumentation APK for runtime comparison.
+
+Section scores immediately below the minimum use extra decimal precision when normal two-decimal formatting would show an apparently equal threshold (for example, 0.479 is shown as 0.4790 rather than 0.48). This changes diagnostic formatting only; matching still uses the original unrounded value and approved threshold. Android screen coverage includes this boundary-display case.
+
+Diagnostic data retains qualification/exclusion reasons beyond the candidate-pool cap, while extra on-screen cards remain restricted to the existing bounded candidate pool plus the closest-row allowance. A 200-match regression case prevents comprehensive diagnostic evaluation from accidentally rendering an unbounded list of cards.
+
+### First Android CI execution
+
+Commit `38b43f33`, Android Checks run 43589400696: the standard test/build job passed (3,652 tests in each of Debug, Beta and Release, zero failures/errors/skips; debug/Beta packaging, Beta identity and instrumentation compilation). The emulator executed nine new Step 2 tests: seven passed, including real retrieval-to-prompt injection, whole/manual-memory limits, repeated section failure handling, keyword fallback, JNI telemetry opt-out, Android plurals and screen states. The synthetic screenshot was downloaded and visually inspected: card order, wrapping, section 4-of-7 attribution, 0.55 similarity versus required 0.48, separate relevance-gate details, normalized shared words and rejected-candidate reasons were visible. This is an emulator debug screen, not a physical-phone Beta inspection.
+
+Two tests failed. The background-context test inspected the complete accumulated encrypted log, whose filename cache spans the test contexts, so an earlier valid live-search entry caused its negative assertion. It now asserts only entries appended by the operation under test, without changing production wording or expected behavior. The real-model test could not read the shell-supplied external model files, despite the workflow's successful push and hash verification. The first follow-up attempted the instrumentation shell's file pipe; that also failed, as recorded below. The final fixture uses app-private provisioning, verifies all three hashes before model creation, and removes temporary runtime files even after setup failure.
+
+Follow-up fixture corrections: all three required local tasks passed again after the final test changes (`testDebugUnitTest`: 4m 8s; `assembleBeta`: 7m 18s; `assembleDebugAndroidTest`: 6m 38s). Beta compilation was prepared in a separate Gradle process to keep compiler and shrinking memory peaks separate. No production matching or diagnostic code, historical gold answers, model parameters or vector fixture changed during this follow-up. Android re-execution was the next gate at that point; subsequent runs are recorded below.
+
+### Android model provisioning correction
+
+PR #201 commit `b43ea53`, Android Checks run 43594131058: the unit/build job passed, including Debug and Beta packaging, Beta identity and instrumentation compilation. Eight of nine Step 2 Android tests passed. The remaining real-model test failed before inference: the instrumentation shell copy returned an empty `model.onnx`, caught by the unchanged SHA-256 assertion. Therefore this run does not establish Android vector parity or model latency. Codex completed its review of that commit with no findings.
+
+The workflow now streams the pinned, host-hash-verified model inputs through `adb shell -T run-as` directly into app-private storage as the app UID, before instrumentation starts. It compares hashes from that storage against the host files. The test reads those private inputs directly, copies them to its isolated runtime directory, and retains all three original hash assertions. The external-storage shell-copy fallback is removed. Cleanup removes the supplied private inputs after the class. Production loading, telemetry controls, matching rules, fixtures and expected answers are unchanged.
+
+Local validation for this correction: workflow YAML parses; every workflow shell step passes `bash -n`; a shell-boundary simulation preserved binary bytes (including NUL and CR/LF) and passed the host/device hash comparison; `git diff --check` passes. A fresh local Gradle invocation stopped before execution because the distribution download returned `Network is unreachable`; this environment also lacks an Android SDK. No local Android or Gradle test pass is claimed for this correction. At that point, CI, the emulator suite and a fresh review were still required; subsequent outcomes are recorded below.
+
+Run 43628720653 at `d5560f9` caught a further provisioning prerequisite: the repository explicitly sets Debug APKs non-debuggable, so Android rejected `run-as` before file transfer. The existing `recoveryInstrumentationAbi` flag now enables debugging only for the disposable emulator fixture, alongside its already test-only ABI and minification settings. Without that flag, normal Debug and Beta remain non-debuggable. CI asserts both the emulator Debug APK's debug flag and the normal Beta APK's non-debuggable identity. Production behavior and model hash checks are unchanged. Codex reviewed `d5560f9` with no findings; the build-configuration correction was subsequently reviewed and exercised at `fa32b1b`, as recorded below.
+
+Run 43629503476 at `fa32b1b` verified the private model hashes and reached real Android inference. Eight of nine Step 2 tests passed, but the real-runtime comparison found a genuine unresolved difference: for `very_long_03`, the fixture whole-message results were `[home_latch, food_sesame]`, while Android returned `[home_latch, food_sesame, health_wrist, home_leak]`. The immediate assertion prevented a complete comparison and latency output, so no complete Android benchmark or parity claim is made from that run. Codex reviewed this commit with no findings. The emulator screenshot was independently inspected again: section attribution, 0.55 versus required 0.48, the separate relevance gate, shared words and rejection reasons are visible with correct wrapping.
+
+At `66a40a6`, the runtime test collected all decision differences across both datasets, recorded per-input vector differences and independently generated token-ID hashes, and measured latency before asserting exact cross-runtime decision equality. New `token_hashes.json` files contain SHA-256 references for 254 original and 59 independent inputs. `generate_token_hashes.py` uses tokenizers 0.21.2 and verifies the pinned tokenizer hash; it imports no ONNX runtime and makes no network requests. Both hash fixtures regenerated byte for byte locally. Original vectors, gold answers, thresholds and production inference are unchanged. Per-input and decision reports are archived as test artifacts; all content derives from the existing invented cases. The completed investigation and corrected test contract follow.
+
+### Android runtime results and corrected comparison contract
+
+Run 43631334204 at `66a40a6`: the standard unit/build job passed, including normal Debug/Beta packaging, non-debuggable Beta identity and instrumentation compilation. Eight of nine Step 2 Android tests passed. The remaining test completed both real-model datasets and latency measurements, then failed its unproven assumption that Android ORT 1.20 and Python ORT 1.29 must make identical retrieval decisions.
+
+All **313 input-token hashes matched** their independent references. All three model-file hashes matched. The minimum Android/Python vector cosine was **0.99957734** on the original set and **0.9996953** on the independent set; maximum absolute component differences were **0.0063216463** and **0.005674582**. Close vectors can still change a decision near a gate.
+
+| Runtime / set | Whole-message correct / missed / incorrect | With sections correct / missed / incorrect |
+|---|---|---|
+| Python ORT 1.29, original frozen fixtures | 54 / 21 / 19 | 69 / 6 / 19 |
+| Android ORT 1.20, x86_64 emulator | 54 / 21 / 21 | 69 / 6 / 21 |
+| Python ORT 1.29, independent fixtures | 4 / 5 / 0 | 4 / 5 / 0 |
+| Android ORT 1.20, independent set | 4 / 5 / 0 | 4 / 5 / 0 |
+
+On Android, sections recover the same 15 additional correct matches and add **no incorrect matches** to the whole-message result on either set. This accuracy comparison reuses measured vectors without a wall-clock allowance, so it tests retrieval quality separately from device speed. It does not claim a slow device will finish all those sections within 1,500 ms. Original gold labels and all original vector fixtures are unchanged; the original 69/6/19 measurement is preserved, not relabelled as an Android measurement.
+
+The three cross-runtime result changes are all in the pre-existing whole-message search:
+
+| Sample | Python whole-message IDs | Android whole-message IDs | Gate evidence |
+|---|---|---|---|
+| very_long_03 | home_latch, food_sesame | home_latch, food_sesame, health_wrist, home_leak | health_wrist standout 2.414→2.719; home_leak 2.419→2.600, crossing the existing 2.5 gate |
+| conversation_01_turn_2 | pet_tansy, food_tea | pet_tansy | food_tea standout 2.557→2.398 |
+| conversation_06_turn_2 | pet_cobalt | pet_cobalt, food_bread | food_bread standout 2.499784→2.529728 |
+
+An independent version-only experiment used the same pinned model, tokenizer, Python preprocessing and postprocessing under Python ORT 1.20.0 and 1.29.0. Version 1.29 regenerated the original fixtures byte for byte. Version 1.20 produced small vector differences and reproduced both added `very_long_03` matches: their standouts became 2.681 and 2.626. Android's compiled native kernels differ slightly from Linux's too, but the same unchanged gate explains the observed result. No evidence of tokenization drift, different model files, a section-rule regression, or a reason to retune the approved parameters was found.
+
+The cross-runtime equality assertion was therefore a wrong test assumption, rather than a product contract. It is replaced by **exact, separately labelled Android x86_64 ORT 1.20 observations** in `android_ort120_x86_64_observed.json`, captured from run 43631334204. These are observed retrieval lists and totals, not correct-answer labels. The final test still requires every input hash to match, retains the original minimum vector cosine of 0.99, checks every native result list and accuracy total against that platform's observations, preserves whole-message ordering, and rejects any new section-only incorrect match against the unchanged gold answers. Python differences remain visible in the artifacts. Other Android ABIs execute the input/vector and per-message regression checks but do not pretend that an x86_64 observation is a physical-phone baseline. The runtime-version assertion requires fresh validation if the shipped runtime is upgraded. No production inference, whole-message rule, threshold or expected gold answer was changed to obtain a pass.
+
+### Measured emulator latency and remaining limits
+
+The same Android run measured the real `prepareSearchTest` path with the configured 1,500 ms allowance:
+
+| Measure | Observed value |
+|---|---:|
+| Whole-message model processing, excluding queue wait | 7,899 ms |
+| Additional section queue wait | 0 ms |
+| Additional section model processing | 1,501 ms |
+| Section scoring | 0 ms |
+| Total additional search | 1,507 ms |
+| Attempted / successful sections | 1 / 0 |
+| Time limit reached | Yes |
+
+The native read was stopped cooperatively, and no unfinished section result was injected. The total exceeded the allowance by 7 ms in this run; this is a measurement, not a hard-deadline guarantee. The inference input is the invented long filler message from the integration fixture. The constrained x86_64 emulator is not a Pixel 8 or a physical-phone Beta measurement. Physical-phone latency, hardware-dependent retrieval variation and practical section recovery within the allowance remain provisional. Parameters remain unchanged, as required.
+
+Independent fixture verification during this investigation used ONNX startup/API opt-outs plus a Linux seccomp filter denying socket creation, connect and send syscalls before importing the runtime. A socket probe returned `ENETUNREACH`. All four original/independent whole-message and section vector files reproduced byte for byte under ORT 1.29.0. This verifies reproducibility without allowing runtime network traffic; these Python runs are not Android performance measurements. Local full Gradle checks remained unavailable in the fresh environment as documented above. Final code-check/review results are tracked on PR #201; no physical-phone or packet-capture verification is claimed.

@@ -1,0 +1,77 @@
+{
+  "runtime": "1.20.0",
+  "abi": "x86_64",
+  "source_commit": "66a40a683f8c3a8bf739dc46f752155994b56706",
+  "run_id": 43631334204,
+  "meaning": "Observed runtime results, not correct-answer labels. Gold remains in cases.json.",
+  "totals": {
+    "whole": [
+      4,
+      5,
+      0
+    ],
+    "with_sections": [
+      4,
+      5,
+      0
+    ]
+  },
+  "messages": {
+    "beginning": {
+      "whole": [
+        "pet"
+      ],
+      "with_sections": [
+        "pet"
+      ]
+    },
+    "middle_paraphrase": {
+      "whole": [
+        "loom"
+      ],
+      "with_sections": [
+        "loom"
+      ]
+    },
+    "ending": {
+      "whole": [],
+      "with_sections": []
+    },
+    "several_topics": {
+      "whole": [
+        "sky"
+      ],
+      "with_sections": [
+        "sky"
+      ]
+    },
+    "shared_name_wrong_subject": {
+      "whole": [],
+      "with_sections": []
+    },
+    "no_shared_vocabulary": {
+      "whole": [],
+      "with_sections": []
+    },
+    "misleading_word": {
+      "whole": [],
+      "with_sections": []
+    },
+    "nothing_relevant": {
+      "whole": [],
+      "with_sections": []
+    },
+    "bad_periods": {
+      "whole": [],
+      "with_sections": []
+    },
+    "different_words": {
+      "whole": [
+        "bike"
+      ],
+      "with_sections": [
+        "bike"
+      ]
+    }
+  }
+}

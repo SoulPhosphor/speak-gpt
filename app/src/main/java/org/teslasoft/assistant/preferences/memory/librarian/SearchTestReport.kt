@@ -46,6 +46,8 @@ object SearchTestReport {
         NOT_A_MATCH,
         /** Passed the gate, but the memory limit was already full. */
         LIMIT_FULL,
+        /** Candidate scanning ended with slots still open. */
+        SCAN_LIMIT,
         /** Passed the gate, but did not fit in the remaining memory space. */
         NO_SPACE
     }
@@ -55,7 +57,8 @@ object SearchTestReport {
         val outcome: Outcome,
         /** Set when only a section of the message found this memory; the
          *  explanation's numbers are then the memory against that section. */
-        val section: LongMessageSearch.Match? = null
+        val section: LongMessageSearch.Match? = null,
+        val sectionEvaluation: LongMessageSearch.Evaluation? = null
     )
 
     data class Report(
@@ -80,19 +83,26 @@ object SearchTestReport {
     ): Report {
         val scanCap = RetrievalBackfill.scanCap(tuning.maxMemories)
         val index = LiveRetrieval.index(corpus)
-        val live = LiveRetrieval.search(
-            query, queryVector, index, tuning.params, scanCap + 1,
-            useImportanceRatings, includeMandatoryImportance = useImportanceRatings
-        )
+        val result = SavedMemorySearch.search(query, queryVector, index, tuning.params, scanCap + 1,
+            useImportanceRatings) { sections }
+        val live = result.whole
         val byId = live.explanations.associateBy { it.memory.memoryId }
-        // Memories only a section found come after everything the whole
-        // message matched, and never go past the memory limit.
-        val bySection = LongMessageSearch.matches(
-            sections, index, tuning.params, live.explanations, useImportanceRatings
-        ).take((scanCap + 1 - live.ranked.size).coerceAtLeast(0))
-            .associateBy { it.explanation.memory.memoryId }
-        val pool = live.ranked.map { byId.getValue(it.memory.memoryId) } +
-            bySection.values.map { it.explanation }
+        // Keep all qualifying section matches for truthful exclusion reasons,
+        // even when the live candidate pool's scan cap prevents selection.
+        val bySection = result.sectionMatches.associateBy { it.explanation.memory.memoryId }
+        val evaluations = HashMap<String, LongMessageSearch.Evaluation>()
+        val closestFirst = compareBy<LongMessageSearch.Evaluation> { it.rejectedBy.size }
+            .thenByDescending { it.explanation.matchedTerms.isNotEmpty() }
+            .thenByDescending { it.explanation.similarity ?: -1.0 }
+            .thenByDescending { it.explanation.score }
+        for (evaluation in LongMessageSearch.evaluate(result.sections, index, tuning.params, useImportanceRatings)) {
+            if (evaluation.explanation.similarity == null) continue
+            val id = evaluation.explanation.memory.memoryId
+            val previous = evaluations[id]
+            if (previous == null || closestFirst.compare(evaluation, previous) < 0) evaluations[id] = evaluation
+        }
+
+        val pool = result.ranked.map { bySection[it.memory.memoryId]?.explanation ?: byId.getValue(it.memory.memoryId) }
 
         val noSpace = HashSet<String>()
         val assembled = HashMap<String, AssembledMemory>()
@@ -121,28 +131,45 @@ object SearchTestReport {
             Row(
                 e,
                 if (index >= tuning.maxMemories) Outcome.SENT_PAST_LIMIT else Outcome.SENT,
-                bySection[e.memory.memoryId]
+                bySection[e.memory.memoryId],
+                bySection[e.memory.memoryId]?.let { LongMessageSearch.Evaluation(it, result.sections.settings.sectionSimilarityMin) }
             )
         }
         val unsent = live.explanations
             .filter { it.memory.memoryId !in sentIds }
             .map { whole ->
                 val match = bySection[whole.memory.memoryId]
-                val e = match?.explanation ?: whole
+                val evaluation = match?.let { LongMessageSearch.Evaluation(it, result.sections.settings.sectionSimilarityMin) }
+                    ?: if (whole.passed) null else evaluations[whole.memory.memoryId]
+                val e = match?.explanation ?: evaluation?.explanation ?: whole
                 val outcome = when {
                     e.memory.memoryId in noSpace -> Outcome.NO_SPACE
-                    e.passed -> Outcome.LIMIT_FULL
+                    whole.passed || match != null -> if (selection.kept.size < tuning.maxMemories)
+                        Outcome.SCAN_LIMIT else Outcome.LIMIT_FULL
                     else -> Outcome.NOT_A_MATCH
                 }
-                Row(e, outcome, match)
-            }
+                Row(e, outcome, match, evaluation)
+            }.sortedWith(compareBy<Row> {
+                when {
+                    it.outcome == Outcome.NOT_A_MATCH -> 2
+                    it.section != null -> 1
+                    else -> 0
+                }
+            }.thenBy { if (it.outcome == Outcome.NOT_A_MATCH)
+                it.sectionEvaluation?.rejectedBy?.size ?: LongMessageSearch.Rejection.entries.size else 0 }
+                .thenByDescending { it.explanation.score })
+        // Qualified exclusions come first, followed by candidates closest to
+        // the complete section rule. Whole-message scores alone can hide the
+        // useful near-misses below ten unrelated, high-similarity rows.
         // A match that was not sent is always shown, even when its
         // whole-message score would place it below the rows shown.
         val notSent = unsent.take(notSentShown) +
-            unsent.drop(notSentShown).filter { it.section != null }
+            unsent.drop(notSentShown).filter {
+                it.section != null && it.explanation.memory.memoryId in result.sectionIds
+            }
         val preview = PromptAssembler.render(
             AssemblyComponents(memories = selection.kept.map { assembled.getValue(it.memory.memoryId) })
         )
-        return Report(sent, notSent, preview, live.diagnostics, sections)
+        return Report(sent, notSent, preview, live.diagnostics, result.sections)
     }
 }

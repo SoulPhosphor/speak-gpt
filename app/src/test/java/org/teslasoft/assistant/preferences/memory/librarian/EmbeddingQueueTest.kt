@@ -337,4 +337,43 @@ class EmbeddingQueueTest {
         assertEquals("next", queue.run(LIVE) { "next" })
         assertEquals(listOf("running"), order)
     }
+    @Test
+    fun boundedWaitRemovesItsTicketAndDoesNotRunModelWork() {
+        val queue = EmbeddingQueue()
+        val release = CountDownLatch(1)
+        val holder = holdQueue(queue, LIVE, Collections.synchronizedList(mutableListOf()), "holder", release)
+        try {
+            org.junit.Assert.assertThrows(EmbeddingQueue.DeadlineExceededException::class.java) {
+                queue.runWithin(30) { fail("expired queued read ran") }
+            }
+            assertEquals(0, queue.waitingCount())
+        } finally { release.countDown(); holder.join(5000) }
+        assertEquals("next", queue.run(LIVE) { "next" })
+    }
+
+    @Test
+    fun deadlineRequestsStopButHoldsTurnUntilInferenceUnwinds() {
+        val queue = EmbeddingQueue()
+        val stopped = CountDownLatch(1)
+        val unwind = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>()
+        val worker = startThread("budgeted") {
+            try {
+                queue.runWithin(500) { control ->
+                    control.whileRunning({ stopped.countDown() }) {
+                        assertTrue(unwind.await(5, TimeUnit.SECONDS))
+                        "late vector"
+                    }
+                }
+            } catch (t: Throwable) { failure.set(t) }
+        }
+        try {
+            assertTrue(stopped.await(5, TimeUnit.SECONDS))
+            assertTrue(queue.isBusy())
+        } finally { unwind.countDown(); worker.join(5000) }
+        assertTrue(failure.get() is EmbeddingQueue.DeadlineExceededException)
+        assertFalse(queue.isBusy())
+        assertEquals("safe", queue.run(LIVE) { "safe" })
+    }
+
 }

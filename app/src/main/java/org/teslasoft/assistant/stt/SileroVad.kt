@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.stt
 
 import ai.onnxruntime.OnnxTensor
+import org.teslasoft.assistant.runtime.OnnxRuntimeEnvironment
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.content.Context
@@ -75,7 +76,7 @@ object SileroVadRuntime {
             if (loadFailed) return false
             try {
                 val bytes = context.applicationContext.assets.open(ASSET_NAME).use { it.readBytes() }
-                val env = OrtEnvironment.getEnvironment()
+                val env = OnnxRuntimeEnvironment.get()
                 val s = env.createSession(bytes, OrtSession.SessionOptions())
 
                 // Probe the interface with silence. Try (context+input, scalar
@@ -164,7 +165,7 @@ object SileroVadRuntime {
         }
     }
 
-    fun environment(): OrtEnvironment = OrtEnvironment.getEnvironment()
+    fun environment(): OrtEnvironment = OnnxRuntimeEnvironment.get()
     fun sessionOrNull(): OrtSession? = session
 }
 

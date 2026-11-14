@@ -17,6 +17,8 @@
 package org.teslasoft.assistant.preferences.memory.librarian
 
 import java.util.PriorityQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -29,8 +31,8 @@ import kotlin.concurrent.withLock
  * - a [Priority.LIVE] read (the message being sent, or anything else the
  *   user is waiting on) goes ahead of every waiting [Priority.BACKGROUND]
  *   read; reads of the same priority keep their arrival order;
- * - a live read therefore waits for at most the one read already running.
- *   When that running read is background work and the model can stop it
+ * - a live read waits behind the current read and any earlier live tickets,
+ *   but never behind waiting background work. When the running read is background work and the model can stop it
  *   ([ReadControl.whileRunning]), the queue asks it to stop. The stopped
  *   background read throws [ReadStoppedException], goes back into the queue
  *   ahead of later background work, and is read again after the live read.
@@ -40,6 +42,14 @@ import kotlin.concurrent.withLock
  * Kotlin, unit tested (EmbeddingQueueTest).
  */
 class EmbeddingQueue {
+
+    class DeadlineExceededException : RuntimeException("section search time allowance reached")
+
+    companion object {
+        private val deadlines = Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "embedding-deadline").apply { isDaemon = true }
+        }
+    }
 
     enum class Priority { LIVE, BACKGROUND }
 
@@ -96,20 +106,40 @@ class EmbeddingQueue {
      * for a live request is retried here automatically, keeping its place
      * ahead of later background reads.
      */
-    fun <T> run(priority: Priority, work: (ReadControl) -> T): T {
+    fun <T> run(priority: Priority, work: (ReadControl) -> T): T =
+        runInternal(priority, null, work)
+
+    /** Bounds queue waiting and requests cooperative model termination. The
+     * caller retains its turn until native inference actually returns; no
+     * abandoned inference can race a later read. Native termination is not a
+     * guaranteed wall-clock deadline. */
+    fun <T> runWithin(millis: Long, work: (ReadControl) -> T): T {
+        if (millis <= 0) throw DeadlineExceededException()
+        return runInternal(Priority.LIVE, System.nanoTime() + millis * 1_000_000, work)
+    }
+
+    private fun <T> runInternal(priority: Priority, deadline: Long?, work: (ReadControl) -> T): T {
         val ticket = lock.withLock { Ticket(priority, nextOrder++) }
         var alreadyQueued = false
         while (true) {
-            val control = awaitTurn(ticket, alreadyQueued)
+            val control = awaitTurn(ticket, alreadyQueued, deadline)
+            val timer = deadline?.let { end ->
+                deadlines.schedule({ control.requestStop() }, (end - System.nanoTime()).coerceAtLeast(0), TimeUnit.NANOSECONDS)
+            }
             var requeue = false
             try {
-                return work(control)
+                if (deadline != null && System.nanoTime() >= deadline) throw DeadlineExceededException()
+                val value = work(control)
+                if (deadline != null && System.nanoTime() >= deadline) throw DeadlineExceededException()
+                return value
             } catch (e: ReadStoppedException) {
                 // Only a stop the queue asked for is retried; anything else is
                 // a real failure for the caller.
+                if (deadline != null && System.nanoTime() >= deadline) throw DeadlineExceededException()
                 if (!control.stopRequested || priority != Priority.BACKGROUND) throw e
                 requeue = true
             } finally {
+                timer?.cancel(false)
                 // A stopped read goes back into the queue, with its original
                 // order, in the same step that ends its turn, so no later
                 // background read can take its place in between.
@@ -130,7 +160,7 @@ class EmbeddingQueue {
     /** Reads waiting for their turn. For tests and measurements. */
     fun waitingCount(): Int = lock.withLock { waiting.size }
 
-    private fun awaitTurn(ticket: Ticket, alreadyQueued: Boolean): ReadControl {
+    private fun awaitTurn(ticket: Ticket, alreadyQueued: Boolean, deadline: Long?): ReadControl {
         var toStop: ReadControl? = null
         val control: ReadControl
         lock.lock()
@@ -152,8 +182,15 @@ class EmbeddingQueue {
         lock.lock()
         try {
             try {
-                while (running != null || waiting.peek() !== ticket) turnChanged.await()
-            } catch (e: InterruptedException) {
+                while (running != null || waiting.peek() !== ticket) {
+                    if (deadline == null) turnChanged.await() else {
+                        val left = deadline - System.nanoTime()
+                        if (left <= 0) throw DeadlineExceededException()
+                        turnChanged.awaitNanos(left)
+                    }
+                }
+                if (deadline != null && System.nanoTime() >= deadline) throw DeadlineExceededException()
+            } catch (e: Exception) {
                 waiting.remove(ticket)
                 turnChanged.signalAll()
                 throw e
