@@ -261,6 +261,10 @@ jobs:
             if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
               adb pull /sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-match.png \
                 "$RUNNER_TEMP/recovery-results/step2-match.png" || true
+              for folder in recall_test_set recall_independent_set; do
+                adb pull "/sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-$folder-parity.json" \
+                  "$RUNNER_TEMP/recovery-results/step2-$folder-parity.json" || true
+              done
             fi
             if [ "$instrument_status" -ne 0 ] || \
               ! grep -Fq "OK (" "$RUNNER_TEMP/recovery-results/$result_name.txt"; then

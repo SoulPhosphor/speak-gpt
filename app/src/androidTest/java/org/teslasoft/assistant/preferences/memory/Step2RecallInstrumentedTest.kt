@@ -234,8 +234,10 @@ class Step2RecallInstrumentedTest {
         }
         val real = OnnxEmbeddingModel.create(runtimeContext, EmbeddingModels.GEMMA_Q4)
         try {
-            verifyAndroidVectorsAndDecisions(real, "recall_test_set")
-            verifyAndroidVectorsAndDecisions(real, "recall_independent_set")
+            val tokenizer = OnnxEmbeddingModel::class.java.getDeclaredField("tokenizer")
+                .apply { isAccessible = true }.get(real) as HfTokenizer
+            val runtimeDifferences = verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_test_set") +
+                verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_independent_set")
             val reference = VectorMath.cosine(
                 real.embed("What should I feed Pepper?", true),
                 real.embed("Pepper is the user's cat. She has kidney disease and eats a prescription diet.", false))
@@ -259,6 +261,9 @@ class Step2RecallInstrumentedTest {
                     "successful=${reading.vectors.size}; timed_out=${reading.timedOut}")
             }
             InstrumentationRegistry.getInstrumentation().sendStatus(0, metrics)
+            // Gather both datasets and latency before failing. Exact retrieval
+            // parity remains mandatory; diagnostics never redefine gold answers.
+            assertTrue(runtimeDifferences.joinToString("\n"), runtimeDifferences.isEmpty())
         } finally { model(fake); real.close(); runtimeContext.filesDir.deleteRecursively() }
     }
 
@@ -268,28 +273,49 @@ class Step2RecallInstrumentedTest {
 
     /** Compare actual Android JNI outputs and retrieval decisions with the
      * Python fixture pipeline. Gold answers remain unchanged. */
-    private fun verifyAndroidVectorsAndDecisions(real: EmbeddingModel, folder: String) {
+    private fun verifyAndroidVectorsAndDecisions(
+        real: EmbeddingModel, tokenizer: HfTokenizer, folder: String
+    ): List<String> {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         fun fixture(name: String) = JSONObject(instrumentation.context.assets
             .open("$folder/$name").bufferedReader().use { it.readText() })
         val cases = fixture("cases.json")
         val vectors = fixture("vectors.json")
         val sections = fixture("section_vectors.json").getJSONObject("messages")
+        val tokenHashes = fixture("token_hashes.json").getJSONObject("hashes")
+        val differences = mutableListOf<String>()
+        val inputDiagnostics = JSONArray()
+        val decisionDiagnostics = JSONArray()
         val queue = EmbeddingQueue()
         val cache = HashMap<Pair<String, Boolean>, FloatArray>()
         var compared = 0
         var largestDifference = 0f
         var minimumCosine = 1f
-        fun compare(text: String, query: Boolean, reference: FloatArray): FloatArray {
+        fun compare(label: String, text: String, query: Boolean, reference: FloatArray): FloatArray {
+            val limit = if (query) real.messageTokenLimit else real.storedTextTokenLimit
+            val prefix = if (query) EmbeddingModels.GEMMA_Q4.queryPrefix else EmbeddingModels.GEMMA_Q4.documentPrefix
+            val ids = tokenizer.encode(prefix + text, limit)
+            val tokenHash = MessageDigest.getInstance("SHA-256")
+                .digest(ids.joinToString(",").toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+            val tokensMatch = tokenHash == tokenHashes.getString(label)
+            if (!tokensMatch) differences.add("$folder/$label token IDs differ from the independent reference")
             val actual = cache.getOrPut(text to query) {
                 queue.run(EmbeddingQueue.Priority.LIVE) { control ->
-                    real.embed(text, query, if (query) real.messageTokenLimit else real.storedTextTokenLimit, control)
+                    real.embed(text, query, limit, control)
                 }
             }
             assertEquals(reference.size, actual.size)
             assertTrue(actual.all { it.isFinite() })
-            minimumCosine = minOf(minimumCosine, VectorMath.cosine(actual, reference))
-            for (i in actual.indices) largestDifference = maxOf(largestDifference, abs(actual[i] - reference[i]))
+            val cosine = VectorMath.cosine(actual, reference)
+            minimumCosine = minOf(minimumCosine, cosine)
+            var maxDifference = 0f
+            for (i in actual.indices) maxDifference = maxOf(maxDifference, abs(actual[i] - reference[i]))
+            largestDifference = maxOf(largestDifference, maxDifference)
+            inputDiagnostics.put(JSONObject().put("input", label).put("tokens_match", tokensMatch)
+                .put("token_count", ids.size).put("actual_token_sha256", tokenHash)
+                .put("expected_token_sha256", tokenHashes.getString(label))
+                .put("cosine", cosine.toDouble()).put("max_abs_difference", maxDifference.toDouble()))
             compared++
             return actual
         }
@@ -299,7 +325,7 @@ class Step2RecallInstrumentedTest {
                 m.getJSONArray("tags").strings(), emptyList())
         }
         val androidCorpus = pythonCorpus.map { c -> c.copy(vector = compare(
-            RetrievalDocument.semanticDocument(c.memory.content, null, c.tags), false, c.vector!!)) }
+            "memory:${c.memory.memoryId}", RetrievalDocument.semanticDocument(c.memory.content, null, c.tags), false, c.vector!!)) }
         val pythonIndex = LiveRetrieval.index(pythonCorpus)
         val androidIndex = LiveRetrieval.index(androidCorpus)
         val messages = cases.getJSONArray("messages").objects() + cases.getJSONArray("conversations")
@@ -310,10 +336,10 @@ class Step2RecallInstrumentedTest {
             val query = m.getString("text")
             val expected = m.getJSONArray("expect").strings().toSet()
             val pythonQuery = vectors.getJSONArray(id).vector()
-            val androidQuery = compare(query, true, pythonQuery)
+            val androidQuery = compare("query:$id", query, true, pythonQuery)
             val recorded = sections.optJSONArray(id)?.objects().orEmpty()
-            val androidSections = recorded.associate { s -> s.getString("text") to
-                compare(s.getString("text"), true, s.getJSONArray("vector").vector()) }
+            val androidSections = recorded.mapIndexed { position, s -> s.getString("text") to
+                compare("section:$id:$position", s.getString("text"), true, s.getJSONArray("vector").vector()) }.toMap()
             val pythonSections = recorded.associate { it.getString("text") to it.getJSONArray("vector").vector() }
             fun search(index: LiveRetrieval.Index, vector: FloatArray, sectionVectors: Map<String, FloatArray>) =
                 SavedMemorySearch.search(query, vector, index, LiveRetrieval.Params(), 5, true) {
@@ -321,10 +347,27 @@ class Step2RecallInstrumentedTest {
                 }
             val python = search(pythonIndex, pythonQuery, pythonSections)
             val android = search(androidIndex, androidQuery, androidSections)
-            assertEquals("$folder/$id whole-message runtime difference",
-                python.whole.ranked.map { it.memory.memoryId }, android.whole.ranked.map { it.memory.memoryId })
-            assertEquals("$folder/$id section-retrieval runtime difference",
-                python.ranked.map { it.memory.memoryId }, android.ranked.map { it.memory.memoryId })
+            val pythonWhole = python.whole.ranked.map { it.memory.memoryId }
+            val androidWhole = android.whole.ranked.map { it.memory.memoryId }
+            val pythonSent = python.ranked.map { it.memory.memoryId }
+            val androidSent = android.ranked.map { it.memory.memoryId }
+            if (pythonWhole != androidWhole)
+                differences.add("$folder/$id whole-message runtime difference: expected=$pythonWhole actual=$androidWhole")
+            if (pythonSent != androidSent)
+                differences.add("$folder/$id section-retrieval runtime difference: expected=$pythonSent actual=$androidSent")
+            val scores = JSONArray()
+            val androidExplanations = android.whole.explanations.associateBy { it.memory.memoryId }
+            for (p in python.whole.explanations) {
+                val a = androidExplanations.getValue(p.memory.memoryId)
+                scores.put(JSONObject().put("memory", p.memory.memoryId)
+                    .put("python_similarity", p.similarity ?: JSONObject.NULL)
+                    .put("android_similarity", a.similarity ?: JSONObject.NULL)
+                    .put("python_passed", p.passed).put("android_passed", a.passed))
+            }
+            decisionDiagnostics.put(JSONObject().put("message", id)
+                .put("python_whole", JSONArray(pythonWhole)).put("android_whole", JSONArray(androidWhole))
+                .put("python_sent", JSONArray(pythonSent)).put("android_sent", JSONArray(androidSent))
+                .put("whole_scores", scores))
             val sent = android.ranked.map { it.memory.memoryId }.toSet()
             correct += (sent intersect expected).size
             missed += (expected - sent).size
@@ -332,12 +375,17 @@ class Step2RecallInstrumentedTest {
         }
         // Fixture rounding and different native kernels need not be bitwise
         // identical; the separate exact decision assertions above are binding.
-        assertTrue("$folder vectors diverged from the fixture model", minimumCosine >= .99f)
+        if (minimumCosine < .99f) differences.add("$folder vectors diverged from the fixture model: minimum cosine=$minimumCosine")
+        File(base.getExternalFilesDir(null), "step2-$folder-parity.json").writeText(
+            JSONObject().put("inputs", inputDiagnostics).put("decisions", decisionDiagnostics)
+                .put("differences", JSONArray(differences)).put("correct", correct)
+                .put("missed", missed).put("incorrect", incorrect).toString(2))
         instrumentation.sendStatus(0, Bundle().apply {
             putString("step2_android_vector_parity", "$folder; compared=$compared; " +
                 "max_abs_difference=$largestDifference; minimum_cosine=$minimumCosine; " +
                 "correct=$correct; missed=$missed; incorrect=$incorrect")
         })
+        return differences
     }
 
     @Test fun resourcesRenderSingularPluralAndApprovedPlaceholders() {
