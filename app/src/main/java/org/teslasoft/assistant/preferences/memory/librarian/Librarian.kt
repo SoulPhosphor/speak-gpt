@@ -77,11 +77,6 @@ class Librarian private constructor(private val appContext: Context) {
          *  longer memories are read again. */
         internal const val PREVIOUS_STORED_TEXT_TOKEN_LIMIT = 512
 
-        /** Meta key recording "<stored-text limit>|<embedding key>" once every
-         *  memory longer than [PREVIOUS_STORED_TEXT_TOKEN_LIMIT] has been read
-         *  again with that limit. */
-        internal const val META_STORED_TEXT_READ_LIMIT = "stored_text_read_limit"
-
         /** The meta value that marks the long-memory re-read complete. */
         internal fun storedTextReadMarker(tokenLimit: Int, embeddingKey: String): String =
             "$tokenLimit|$embeddingKey"
@@ -921,7 +916,10 @@ class Librarian private constructor(private val appContext: Context) {
         store.setMeta(MemoryStore.META_INDEX_MODEL_TAG, key)
         // Every vector was just made with the stored-text limit, so no long
         // memory needs reading again.
-        if (failed == 0) store.setMeta(META_STORED_TEXT_READ_LIMIT, storedTextReadMarker(m.storedTextTokenLimit, key))
+        if (failed == 0) {
+            store.setMeta(LongMemoryReread.META_COMPLETE, storedTextReadMarker(m.storedTextTokenLimit, key))
+            store.deleteMeta(LongMemoryReread.META_PROGRESS)
+        }
         return done
     }
 
@@ -1011,44 +1009,49 @@ class Librarian private constructor(private val appContext: Context) {
     }
 
     /**
-     * Reads again only the memories longer than the previous limit. Each keeps
-     * its current (cut) vector until the new one replaces it, so no memory
-     * leaves meaning search while this runs; memories that fit inside the
-     * previous limit are never touched. A memory with no vector is left to the
-     * missing-vector repair, which already reads at the new limit. The pass is
-     * recorded complete only when every long memory was read; otherwise it
-     * runs again the next time the model loads.
+     * Runs the long-memory re-read ([LongMemoryReread]) against the memory
+     * store and the active model. Progress is saved after each memory, so an
+     * interrupted or failed pass continues where it stopped the next time the
+     * model loads.
      */
     private fun rereadLongMemories() {
         val m = ensureModel() ?: return
         val key = RetrievalDocument.effectiveKey(m.tag)
-        val marker = storedTextReadMarker(m.storedTextTokenLimit, key)
         val store = MemoryStore.getInstance(appContext)
-        if (store.getMeta(META_STORED_TEXT_READ_LIMIT) == marker) return
-        val memories = store.allActiveMemories()
-        val withVector = store.embeddingsForMemories(memories.map { it.memoryId }, key).keys
-        var incomplete = false
-        for (listed in memories) {
-            if (listed.memoryId !in withVector) continue
-            try {
-                val doc = RetrievalDocument.semanticDocument(
-                    listed.content, listed.embeddingText, parseTags(listed.tagsJson)
-                )
-                if (!needsLongerRead(m.countTokens(doc, isQuery = false))) continue
-                val vec = embedStoredText(m, doc)
-                // An edit during the read re-indexes the memory itself; never
-                // overwrite that with a vector of the old text.
-                val current = store.getMemory(listed.memoryId)?.takeIf { it.status == "active" } ?: continue
-                val currentDoc = RetrievalDocument.semanticDocument(
-                    current.content, current.embeddingText, parseTags(current.tagsJson)
-                )
-                if (currentDoc != doc) continue
-                store.upsertEmbedding(listed.memoryId, key, VectorMath.toBlob(vec))
-            } catch (_: Throwable) {
-                incomplete = true
+        LongMemoryReread(object : LongMemoryReread.Host {
+            override val marker = storedTextReadMarker(m.storedTextTokenLimit, key)
+            override fun readMeta(key: String): String? = store.getMeta(key)
+            override fun writeMeta(key: String, value: String) = store.setMeta(key, value)
+            override fun deleteMeta(key: String) = store.deleteMeta(key)
+            override fun memoriesWithVector(): List<LongMemoryReread.Item> {
+                val memories = store.allActiveMemories()
+                val withVector = store.embeddingsForMemories(memories.map { it.memoryId }, key).keys
+                return memories.filter { it.memoryId in withVector }.map {
+                    LongMemoryReread.Item(
+                        it.memoryId,
+                        RetrievalDocument.semanticDocument(it.content, it.embeddingText, parseTags(it.tagsJson))
+                    )
+                }
             }
-        }
-        if (!incomplete) store.setMeta(META_STORED_TEXT_READ_LIMIT, marker)
+            override fun countTokens(document: String): Int = m.countTokens(document, isQuery = false)
+            override fun read(document: String): FloatArray = embedStoredText(m, document)
+            override fun replaceIfCurrent(
+                memoryId: String,
+                document: String,
+                vector: FloatArray
+            ): LongMemoryReread.WriteResult =
+                when (store.replaceEmbeddingIfCurrent(memoryId, key, VectorMath.toBlob(vector)) { record ->
+                    RetrievalDocument.semanticDocument(record.content, record.embeddingText, parseTags(record.tagsJson)) == document
+                }) {
+                    true -> LongMemoryReread.WriteResult.REPLACED
+                    false -> LongMemoryReread.WriteResult.CHANGED
+                    null -> LongMemoryReread.WriteResult.GONE
+                }
+            override fun currentDocument(memoryId: String): String? =
+                store.getMemory(memoryId)?.takeIf { it.status == "active" }?.let {
+                    RetrievalDocument.semanticDocument(it.content, it.embeddingText, parseTags(it.tagsJson))
+                }
+        }).run()
     }
 
     /** True when the installed model's tag or the retrieval document version
