@@ -125,6 +125,7 @@ class ChatOutlineActivity : FragmentActivity() {
         btnReplaceAll = findViewById(R.id.btn_replace_all_outlines)
         rowStatus = findViewById(R.id.row_outline_status)
         fieldTags = findViewById(R.id.field_outline_tags)
+        fieldTags?.let { org.teslasoft.assistant.ui.util.BoundedFieldScroll.attach(it) }
         tabs = findViewById(R.id.outline_tabs)
         frame = findViewById(R.id.outline_frame)
         btnMenu = findViewById(R.id.btn_outline_menu)
@@ -168,10 +169,6 @@ class ChatOutlineActivity : FragmentActivity() {
         render()
         renderOperation(SummarizerControllerRegistry.operationState(chatId))
         SummarizerControllerRegistry.addAppListener(operationListener)
-        // Create Outline from the chat menu starts the first outline here.
-        if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_CREATE, false) && outlines.isEmpty()) {
-            startRun(OutlineMode.GENERATE_NEW)
-        }
     }
 
     override fun onDestroy() {
@@ -512,6 +509,7 @@ class ChatOutlineActivity : FragmentActivity() {
         if (isFinishing || isDestroyed) return
         val view = layoutInflater.inflate(R.layout.dialog_compaction_progress, null)
         view.findViewById<TextView>(R.id.compaction_title)?.setText(R.string.outline_dialog_title)
+        org.teslasoft.assistant.ui.util.SummarizerModelLine.bind(view, chatId)
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setView(view)
             .setCancelable(false)
@@ -635,7 +633,6 @@ class ChatOutlineActivity : FragmentActivity() {
     companion object {
         private const val EXTRA_CHAT_ID = "chatId"
         private const val EXTRA_CHAT_NAME = "chatName"
-        private const val EXTRA_CREATE = "createOutline"
         private const val STATE_SHOWN = "state_shown_outline"
         private const val STATE_EDITING = "state_editing_outline"
         private const val STATE_TAGS = "state_outline_tags"
@@ -644,11 +641,9 @@ class ChatOutlineActivity : FragmentActivity() {
         private const val MENU_REDO = 2
         private const val MENU_DELETE = 3
 
-        /** [create]: Create Outline, which also starts the first outline. */
-        fun createIntent(context: Context, chatId: String, chatName: String, create: Boolean = false): Intent =
+        fun createIntent(context: Context, chatId: String, chatName: String): Intent =
             Intent(context, ChatOutlineActivity::class.java)
                 .putExtra(EXTRA_CHAT_ID, chatId)
                 .putExtra(EXTRA_CHAT_NAME, chatName)
-                .putExtra(EXTRA_CREATE, create)
     }
 }

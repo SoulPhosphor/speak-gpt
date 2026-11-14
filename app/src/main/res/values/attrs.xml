@@ -57,6 +57,11 @@
         <attr name="parameterTitle" format="string" />
         <attr name="parameterInfo" format="string" />
     </declare-styleable>
+    <!-- SegmentedPill: the sliding highlight capsule's color and slide time. -->
+    <declare-styleable name="SegmentedPill">
+        <attr name="segmentThumbColor" format="color" />
+        <attr name="segmentAnimationMs" format="integer" />
+    </declare-styleable>
     <!-- MaxHeightScrollView: tallest the box may grow before it scrolls. -->
     <declare-styleable name="MaxHeightScrollView">
         <attr name="scrollMaxHeight" format="dimension" />

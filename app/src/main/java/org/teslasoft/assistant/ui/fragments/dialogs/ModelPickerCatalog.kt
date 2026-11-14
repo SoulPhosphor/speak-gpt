@@ -4,7 +4,6 @@ import android.view.View
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +20,7 @@ import org.teslasoft.assistant.providers.ModelBrowserEntry
 import org.teslasoft.assistant.providers.ModelBrowserProvider
 import org.teslasoft.assistant.providers.newModelCutoff
 import org.teslasoft.assistant.ui.widgets.AppDropdown
+import org.teslasoft.assistant.ui.widgets.SegmentedPill
 import java.time.Instant
 
 /** Owns the scrollable controls and requests for the chat picker's View All tab. */
@@ -45,11 +45,12 @@ internal class ModelPickerCatalog(
     private val profileRow = header.findViewById<View>(R.id.model_browser_profile_row)
     private val profileValue = header.findViewById<TextView>(R.id.model_browser_profile)
     private val searchScope = header.findViewById<TextView>(R.id.model_browser_search_scope)
+    private val searchDivider = header.findViewById<View>(R.id.model_browser_search_divider)
     private val searchField = header.findViewById<TextInputEditText>(R.id.model_browser_search)
-    private val filterRow = header.findViewById<View>(R.id.model_browser_filters)
+    private val filterRow = header.findViewById<SegmentedPill>(R.id.model_browser_filters)
     private val filterButtons = Filter.entries.zip(
         listOf(R.id.model_browser_all, R.id.model_browser_new, R.id.model_browser_free).map {
-            header.findViewById<MaterialButton>(it)
+            header.findViewById<TextView>(it)
         }
     )
     private val sortRow = header.findViewById<View>(R.id.model_browser_sort_row)
@@ -303,6 +304,7 @@ internal class ModelPickerCatalog(
         profileRow.isVisible = profiles.size > 1
         profileValue.text = profile?.let(::profileLabel)
         searchScope.isVisible = hasInlineProviders || providerDirectory.size > 1
+        searchDivider.isVisible = searchScope.isVisible
         searchScope.setText(if (searchProviders) R.string.provider_col_provider else R.string.model_browser_ai_models)
         searchField.setHint(if (searchProviders) R.string.model_browser_search_providers else R.string.label_search_models)
         val showNew = hasNew && (!paginated || client?.supportsServerSearch == true)
@@ -314,8 +316,8 @@ internal class ModelPickerCatalog(
                 Filter.NEW -> showNew
                 Filter.FREE -> showFree
             }
-            button.isChecked = filter == choice
         }
+        filterButtons.firstOrNull { it.first == filter }?.second?.let { filterRow.select(it, animate = true) }
         sortRow.isVisible = hasModels && sortOptions().size > 1
         sortValue.setText(sort.label)
     }

@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <integer name="conversation_mode_selector_animation_ms">220</integer>
+    <!-- Widget.App.SegmentedPill: the highlight capsule's slide time. -->
+    <integer name="segmented_pill_animation_ms">220</integer>
     <!-- A full-width chat drawer settles in (1 + 1) x 256 ms (DrawerLayout's ViewDragHelper). -->
     <integer name="drawer_slide_duration">512</integer>
     <!-- Shared opening and closing time for Settings and its main pages. -->

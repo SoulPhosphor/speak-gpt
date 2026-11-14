@@ -324,7 +324,11 @@ parameter headings or set their text size in Kotlin.
 Use `Widget.App.ProgressDialog.*` for a pop-up that shows real progress:
 `Content` (the column), `HeaderRow` with `Title` and `Percent` on one line,
 `Bar` (a `LinearProgressIndicator` filled to the percentage), and `StatusRow`
-with `Status` and `Dots` (the three looping dots). The title is left-aligned
+with `Status` and `Dots` (the three looping dots). `Model` is an optional
+line under the status row naming the model doing the work ("Using Summarizer
+Model: <model>", model name only, no provider) at the smallest text size the
+app allows (`progress_dialog_model_size`, the message information size); it
+stays hidden when there is no model to name. The title is left-aligned
 beside the percentage by the owner's design (Nov 2 2026), an approved
 exception to centered dialog titles. The percentage must come from work
 actually done, never a guess. Spacing and sizes live in `progress_dialog_*`
@@ -699,7 +703,7 @@ rest of this session."
 
 ### Bounded, internally-scrolling variant
 
-Set `minLines`/`maxLines` and `android:scrollbars="vertical"` (plus `android:isScrollContainer="true"`, or the field never actually scrolls) on the individual `Widget.App.Field.Box` input to pin it to a fixed number of visible lines instead of letting it grow the dialog taller — the same bounded-height-scrolls-past-that idea as the Prompt Editor's `field_prompt`/`bg_prompt_editor` skin above, applied here to the standard `bg_field_box` skin instead. Current example: `dialog_edit_chat_title.xml` (ChatActivity's title-edit dialog, opened by tapping the chat header title) — a 4-line field, since an AI-generated chat title can run far longer than the header ever shows.
+Set `minLines`/`maxLines` and `android:scrollbars="vertical"` (plus `android:isScrollContainer="true"`, or the field never actually scrolls) on the individual `Widget.App.Field.Box` input to pin it to a fixed number of visible lines instead of letting it grow the dialog taller — the same bounded-height-scrolls-past-that idea as the Prompt Editor's `field_prompt`/`bg_prompt_editor` skin above, applied here to the standard `bg_field_box` skin instead. Current examples: `dialog_edit_chat_title.xml` (ChatActivity's title-edit dialog, opened by tapping the chat header title) — a 4-line field, since an AI-generated chat title can run far longer than the header ever shows; and the Chat Outline Tags box (1 to 10 lines). When the field sits inside a scrolling page, attach `org.teslasoft.assistant.ui.util.BoundedFieldScroll` so a drag inside the full box scrolls the box rather than the page.
 
 ### Expandable text box
 
@@ -826,10 +830,11 @@ The shown tab uses `Widget.App.PromptTab.Active`; other tabs use `Widget.App.Pro
 
 The Chat Outline screen (`activity_chat_outline.xml`, owner design Nov 13 2026) is laid out like the Compaction Summary screen from shared families: the header (`ActionBar`, `BackButton`, `Title.NearBack`, a `ChainedButton` trash can, `SaveButton`), `Widget.App.Page.Content`, the chat's title as `Widget.App.Section.Title`, Generate New Outline and Replace All Outlines With New as `AppButton.Primary.Inline.Centered.BelowIntro`, and the outline tabs on the `VersionTabs` family with `PromptTab` / `PromptTab.Active`. It adds only:
 
-- `Widget.App.ChatOutline.TagsLabel` and `TagsField` — the "Tags:" line in a `Widget.App.Page.ControlRow`: the field label at its own width, then an underlined writing blank (`chat_outline_tags_gap`, `chat_outline_text_size`).
 - `Widget.App.ChatOutline.Text` — a tab's outline shown as formatted markdown inside `VersionTabs.Frame` (`version_tab_field_padding`, `chat_outline_text_size`).
 - `Widget.App.ChatOutline.Field` — the same tab's raw markdown while Edit is on (`VersionTabs.Field` with the outline text size and color).
 - `Widget.App.ChatOutline.StatusSpinner` — the small spinner before the "Creating outline…" status, which uses `Widget.App.Screen.Intro` (`chat_outline_status_spinner_gap`).
+
+Its Tags box is the standard label-above-box field (`Widget.App.Field.Label.AfterRow`, then `Widget.App.Field.Box`) in the bounded, internally-scrolling form: one line tall, growing with the tags up to ten lines, then scrolling inside the box (`BoundedFieldScroll` lets it scroll inside the page).
 
 Its run progress uses the shared progress pop-up (`dialog_compaction_progress.xml`) with the outline's title and completion text.
 
@@ -1027,6 +1032,20 @@ height. It opens the shared `AppDropdown` menu. When there is nothing to
 choose, the same line shows the provider as plain `SubtitleText`. Favorites
 cards list the model's favorite providers; Recent cards list the last five
 providers used with the model.
+
+#### Search pill (dropdown joined to a search field)
+
+`Widget.App.SearchPill` joins a search scope dropdown and its search field in
+one fully rounded outline (`bg_search_pill`, `?attr/colorOutline`), every part
+the same height (`search_pill_height`) by owner request (Nov 14 2026). It is
+the one place a dropdown is drawn this way. Inside it, in order:
+`Widget.App.SearchPill.Scope` (the dropdown's value and chevron in the
+dropdown text color, no box of its own; it opens the shared `AppDropdown`
+menu), `Widget.App.SearchPill.Divider` (a thin vertical line), then
+`Widget.App.SearchPill.Icon` and `Widget.App.SearchPill.Field`. When there is
+no scope to choose, the code hides the scope and the divider together and the
+pill holds only the search. Sizes live in `search_pill_*`. Current user: the
+full model list's Model/Provider search (`view_model_browser_controls.xml`).
 
 #### Font previews in a dropdown
 
@@ -1467,6 +1486,26 @@ Geometry and motion are centralized in
 The custom view owns the sliding/resizing selected capsule and exposes the two
 labels as mutually exclusive accessible choices. A host supplies only current
 mode, visibility, and a selection listener.
+
+## Segmented pill (sliding one-choice row)
+
+`Widget.App.SegmentedPill` with `org.teslasoft.assistant.ui.widgets.SegmentedPill`
+holds a row of `Widget.App.SegmentedPill.Option` words of which exactly one is
+chosen. The chosen word sits on a highlight capsule that slides over to the
+next word chosen (owner request, Nov 14 2026, in the look of the blank chat's
+Chat / Playground selector). The words share the width equally; a hidden word
+takes no space and the capsule stays on the chosen visible word.
+
+- track: `bg_segmented_pill` (`colorSurfaceContainerHigh`);
+- capsule: `segmentThumbColor` (`colorSecondaryContainer`);
+- chosen word: `colorOnSecondaryContainer`; other words:
+  `colorOnSurfaceVariant` (`color/segmented_pill_text`).
+
+Sizes live in `segmented_pill_*` and the slide time in
+`segmented_pill_animation_ms`. Layouts declare the words; code only calls
+`select(word, animate)` and shows or hides words. Each word is announced as a
+radio choice. Current user: the full model list's All / New / Free filter
+(`Widget.App.ModelPicker.FilterPill`, `view_model_browser_controls.xml`).
 
 ## Text link
 
