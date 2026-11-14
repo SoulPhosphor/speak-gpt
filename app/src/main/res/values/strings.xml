@@ -4421,6 +4421,10 @@
     <string name="memory_search_test_mode_embed_failed">Only keyword search ran, because the embedding model could not read this message.</string>
     <string name="memory_search_test_mode_partial">%1$d of %2$d memories have no embedding yet, so they were checked by keywords only.</string>
     <string name="memory_search_test_timing">Reading your message took %1$d ms. Loading %2$d memories took %3$d ms.</string>
+    <string name="memory_search_test_sections_time_limit">Time limit reached while searching your message in sections. The full-message search still ran, but only %1$d of %2$d additional sections were checked.</string>
+    <string name="memory_search_test_sections_limit">Section search limit reached. Checked %1$d of %2$d additional sections. The full-message search still ran.</string>
+    <string name="memory_search_test_sections_timing">Additional section search: %1$d sections in %2$d ms.</string>
+    <string name="memory_search_test_detail_section">Match found while searching section %1$d of %2$d, starting with “%3$s…”</string>
     <string name="memory_search_test_scope_note">Lorebook entries, roleplay cards, and memories you pick before sending are not part of this test. In a real chat, lorebook entries and cards are added first and can leave less room for memories.</string>
     <string name="memory_search_test_no_memories">There are no saved memories this chat type can use.</string>
     <string name="memory_search_test_not_set_up">Memory is not set up yet, so there is nothing to search.</string>

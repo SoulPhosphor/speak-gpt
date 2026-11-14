@@ -92,6 +92,16 @@
                     style="@style/Widget.App.Section.Hint" />
 
                 <TextView
+                    android:id="@+id/text_section_search"
+                    style="@style/Widget.App.Section.Hint"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/text_section_timing"
+                    style="@style/Widget.App.Section.Hint"
+                    android:visibility="gone" />
+
+                <TextView
                     style="@style/Widget.App.Section.Hint"
                     android:text="@string/memory_search_test_scope_note" />
 

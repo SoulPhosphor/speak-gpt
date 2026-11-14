@@ -2806,3 +2806,11 @@ request. Detailed results stay in the file named by G.16.
   (a live read can stop a running background read), and saved memories
   read up to 2,048 tokens with a resumable re-read of memories cut at 512;
   pull request #199. Measurements are in `memory baseline.md`.
+- Step 2 — a message longer than 80 words is also searched in overlapping
+  80-word sections (at most 8, within 1,500 ms) after the whole message.
+  By owner decision a section's match counts only when its meaning match
+  is at least 0.48 (provisional) and it shares a meaningful word with the
+  memory; this replaces G.10's "same gate as a whole message", which sent
+  more wrong memories on the test set. The Memory Search Test and Memory
+  Debug Log wording is the owner-approved wording, not the G.13b proposals.
+  Results are in `memory baseline.md`.

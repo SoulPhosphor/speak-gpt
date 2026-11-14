@@ -13,6 +13,11 @@
         style="@style/Widget.App.SearchTest.Outcome" />
 
     <TextView
+        android:id="@+id/text_section"
+        style="@style/Widget.App.SearchTest.Detail"
+        android:visibility="gone" />
+
+    <TextView
         android:id="@+id/text_meaning"
         style="@style/Widget.App.SearchTest.Detail" />
 

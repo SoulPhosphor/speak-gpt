@@ -177,6 +177,31 @@ object LiveRetrieval {
     )
 
     /**
+     * The keyword side of one library, worked out once: every memory's
+     * searchable words and how rare each word is. One message can be searched
+     * several times (the whole message, then its sections in
+     * [LongMessageSearch]) against the same index without reading the
+     * memories' words again.
+     */
+    class Index internal constructor(val corpus: List<Candidate>) {
+        internal val docs: Map<String, Set<String>> =
+            corpus.associate { c -> c.memory.memoryId to documentTerms(c) }
+        internal val idf: Map<String, Double> = inverseDocumentFrequency(docs.values)
+        /** Weight of a message word that no memory contains. */
+        internal val unseenWeight: Double = ln(1.0 + (docs.size - 0.5) / 1.5)
+        val withVector: Int = corpus.count { it.vector != null }
+
+        /** How rare [term] is in this library, or null when no memory has it. */
+        fun rarity(term: String): Double? = idf[term]
+    }
+
+    fun index(corpus: List<Candidate>): Index = Index(corpus)
+
+    /** The informative words of a message, as keyword search uses them. */
+    fun queryTerms(query: String): Set<String> =
+        KeywordText.terms(query).filter { it.length >= 3 }.toSet()
+
+    /**
      * Searches [corpus] for [query]. [queryVector] is the query's embedding,
      * or null when meaning search is unavailable — keyword search then runs
      * alone with the same gate. Returns the memories that passed the gate,
@@ -191,11 +216,53 @@ object LiveRetrieval {
         limit: Int,
         useImportanceRatings: Boolean = true,
         includeMandatoryImportance: Boolean = true
+    ): Result = search(
+        query, queryVector, index(corpus), params, limit,
+        useImportanceRatings, includeMandatoryImportance
+    )
+
+    /** [search] against an [Index] made once for this library. */
+    fun search(
+        query: String,
+        queryVector: FloatArray?,
+        index: Index,
+        params: Params,
+        limit: Int,
+        useImportanceRatings: Boolean = true,
+        includeMandatoryImportance: Boolean = true
     ): Result {
+        val corpus = index.corpus
         if (corpus.isEmpty()) {
             return Result(emptyList(), emptyList(), Diagnostics(0, 0, queryVector != null, 0))
         }
+        val explanations = explain(query, queryVector, index, params, useImportanceRatings)
+        val meaningRan = queryVector != null && index.withVector > 0
 
+        val passed = explanations.filter { it.passed }.sortedByDescending { it.score }
+        val ranked = ImportanceRanking.includeMandatory(passed, limit) { e ->
+            includeMandatoryImportance &&
+                ImportanceRanking.isMandatory(e.memory.importance.toDouble(), useImportanceRatings)
+        }.map { e -> ScoredMemory(e.memory, (e.similarity ?: 0.0).toFloat(), e.score.toFloat()) }
+
+        return Result(
+            ranked = ranked,
+            explanations = explanations.sortedByDescending { it.score },
+            diagnostics = Diagnostics(corpus.size, index.withVector, meaningRan, passed.size)
+        )
+    }
+
+    /**
+     * Every memory's numbers for [query], in library order: the relevance
+     * gate and the ordering score, before anything is ranked or limited.
+     */
+    fun explain(
+        query: String,
+        queryVector: FloatArray?,
+        index: Index,
+        params: Params,
+        useImportanceRatings: Boolean = true
+    ): List<Explanation> {
+        val corpus = index.corpus
         // Meaning search over every memory that has a current vector. A
         // missing vector removes only that memory from meaning search.
         val sims: Map<String, Double> = if (queryVector == null) emptyMap() else {
@@ -203,8 +270,6 @@ object LiveRetrieval {
                 c.vector?.let { v -> c.memory.memoryId to VectorMath.cosine(queryVector, v).toDouble() }
             }.toMap()
         }
-        val withVector = corpus.count { it.vector != null }
-        val meaningRan = queryVector != null && sims.isNotEmpty()
         val small = sims.size < params.smallLibrarySize
         val median = if (sims.isEmpty()) 0.0 else median(sims.values.toList())
         val spread = if (sims.isEmpty()) params.minSpread else max(
@@ -213,18 +278,17 @@ object LiveRetrieval {
         )
 
         // Keyword search over every memory, meaning search or not.
-        val docs = corpus.associate { c -> c.memory.memoryId to documentTerms(c) }
-        val idf = inverseDocumentFrequency(docs.values)
-        val queryTerms = KeywordText.terms(query).filter { it.length >= 3 }.toSet()
+        val docs = index.docs
+        val idf = index.idf
+        val queryTerms = queryTerms(query)
         // Keyword strength is coverage: the rarity-weighted share of the
         // message's informative words that a memory contains. A word no
         // memory contains weighs as much as the rarest library word, so one
         // accidental match in a longer message cannot reach full strength,
         // while a short message about one name ("tell me about Pepper") can.
-        val unseenWeight = ln(1.0 + (docs.size - 0.5) / 1.5)
-        val queryWeight = queryTerms.sumOf { idf[it] ?: unseenWeight }.coerceAtLeast(1e-9)
+        val queryWeight = queryTerms.sumOf { idf[it] ?: index.unseenWeight }.coerceAtLeast(1e-9)
 
-        val explanations = corpus.map { c ->
+        return corpus.map { c ->
             val id = c.memory.memoryId
             val sim = sims[id]
             val standout = sim?.let { (it - median) / spread }
@@ -261,18 +325,6 @@ object LiveRetrieval {
                 score = relevance + importanceBonus
             )
         }
-
-        val passed = explanations.filter { it.passed }.sortedByDescending { it.score }
-        val ranked = ImportanceRanking.includeMandatory(passed, limit) { e ->
-            includeMandatoryImportance &&
-                ImportanceRanking.isMandatory(e.memory.importance.toDouble(), useImportanceRatings)
-        }.map { e -> ScoredMemory(e.memory, (e.similarity ?: 0.0).toFloat(), e.score.toFloat()) }
-
-        return Result(
-            ranked = ranked,
-            explanations = explanations.sortedByDescending { it.score },
-            diagnostics = Diagnostics(corpus.size, withVector, meaningRan, passed.size)
-        )
     }
 
     /** The searchable words of one memory: its content, its condensed hint,

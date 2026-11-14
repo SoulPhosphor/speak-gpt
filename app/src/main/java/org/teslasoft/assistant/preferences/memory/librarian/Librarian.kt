@@ -345,7 +345,11 @@ class Librarian private constructor(private val appContext: Context) {
         val eligible: Int,
         val withVector: Int,
         val semantic: Boolean,
-        val hasModel: Boolean
+        val hasModel: Boolean,
+        /** Memories in the result that only a section of a long message
+         *  found ([LongMessageSearch]); they are listed after everything the
+         *  whole message matched and never go past the memory limit. */
+        val foundBySection: Set<String> = emptySet()
     )
 
     /** One ranked candidate: the memory, its stored vector, a 0..1 recency
@@ -719,22 +723,22 @@ class Librarian private constructor(private val appContext: Context) {
                 )
                 val missing = candidates.count { !vectors.containsKey(it.memoryId) }
                 if (missing > 0) {
-                    val consequence = if (reconciliation) {
-                        "lexical retrieval over the complete set this turn"
-                    } else {
-                        "those memories use keyword search only this turn"
-                    }
-                    MemoryLog.log(
-                        appContext, "Librarian", "info",
-                        "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} vector; $consequence"
-                    )
                     // Self-repairing search: fill the gaps in the background so
                     // later turns can use semantic ranking again.
-                    requestMissingVectorRepair()
+                    val repairing = requestMissingVectorRepair()
+                    MemoryLog.log(
+                        appContext, "Librarian", "info",
+                        if (reconciliation) {
+                            "Vector index incomplete — $missing of ${candidates.size} eligible memories lack a current ${RetrievalDocument.effectiveKey(m.tag)} vector; lexical retrieval over the complete set this turn"
+                        } else {
+                            "$missing of ${candidates.size} eligible memories aren't ready for embedding search. They were searched by keyword instead." +
+                                if (repairing) " The app is preparing them in the background." else ""
+                        }
+                    )
                 }
             } catch (t: Throwable) {
                 vectors = emptyMap()
-                MemoryLog.log(appContext, "Librarian", "error", "Vector load failed, using lexical fallback: ${t.message}")
+                MemoryLog.log(appContext, "Librarian", "error", "Couldn't load the embedding index. Used keyword search instead. Error: ${t.message}")
             }
         }
         val withVector = candidates.count { vectors.containsKey(it.memoryId) }
@@ -759,7 +763,7 @@ class Librarian private constructor(private val appContext: Context) {
                 if (reconciliation) embedBackgroundQuery(model, query)
                 else embedLive(model, query, isQuery = true)
             } catch (t: Throwable) {
-                MemoryLog.log(appContext, "Librarian", "error", "Query embed failed, using lexical fallback: ${t.message}")
+                MemoryLog.log(appContext, "Librarian", "error", "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: ${t.message}.")
                 null
             }
         }
@@ -772,24 +776,43 @@ class Librarian private constructor(private val appContext: Context) {
             // A missing vector removes only that memory from meaning search.
             // Scope, project, tag, and freshness boosts play no part here.
             val queryVector = if (withVector > 0) embedQuery() else null
+            val index = LiveRetrieval.index(
+                corpus.map { LiveRetrieval.Candidate(it.memory, it.vector, it.tags, it.aliases) }
+            )
+            val params = liveParams(store)
             val live = LiveRetrieval.search(
                 query = query,
                 queryVector = queryVector,
-                corpus = corpus.map { LiveRetrieval.Candidate(it.memory, it.vector, it.tags, it.aliases) },
-                params = liveParams(store),
+                index = index,
+                params = params,
                 limit = topK,
                 useImportanceRatings = useImportanceRatings,
                 includeMandatoryImportance = useImportanceRatings
             )
+            // A long message is also searched in sections, after the whole
+            // message and only when the whole message could be read.
+            val sections = if (m != null && queryVector != null) {
+                LongMessageSearch.read(query, index) { text -> embedLive(m, text, isQuery = true) }
+            } else LongMessageSearch.Reading.NONE
+            for (failure in sections.failures) {
+                MemoryLog.log(
+                    appContext, "Librarian", "error",
+                    "The embedding model couldn't process one additional section. That section was skipped, but the full-message search still ran. Error: ${failure.cause}"
+                )
+            }
+            val bySection = LongMessageSearch.matches(
+                sections, index, params, live.explanations, useImportanceRatings
+            ).take((topK - live.ranked.size).coerceAtLeast(0))
             diag?.invoke(
                 RetrievalDiagnostics(
                     eligible = candidates.size,
                     withVector = withVector,
                     semantic = live.diagnostics.meaningRan,
-                    hasModel = m != null
+                    hasModel = m != null,
+                    foundBySection = bySection.map { it.explanation.memory.memoryId }.toSet()
                 )
             )
-            return live.ranked
+            return live.ranked + bySection.map { it.scored }
         }
         val result = searchCore(
             query = query,
@@ -832,7 +855,9 @@ class Librarian private constructor(private val appContext: Context) {
         val corpus: List<LiveRetrieval.Candidate>,
         val hasModel: Boolean,
         val embedMillis: Long,
-        val loadMillis: Long
+        val loadMillis: Long,
+        /** The message's sections as read for the long-message search. */
+        val sections: LongMessageSearch.Reading = LongMessageSearch.Reading.NONE
     )
 
     /**
@@ -874,7 +899,12 @@ class Librarian private constructor(private val appContext: Context) {
                 }
             } catch (_: Throwable) { null }
         } else null
-        return PreparedSearchTest(query, queryVector, corpus, m != null, embedMillis, loadMillis)
+        // The same section reads a chat makes, with the same limits. A
+        // section that cannot be read is skipped; the test writes no log.
+        val sections = if (m != null && queryVector != null) {
+            LongMessageSearch.read(query, LiveRetrieval.index(corpus)) { text -> embedLive(m, text, isQuery = true) }
+        } else LongMessageSearch.Reading.NONE
+        return PreparedSearchTest(query, queryVector, corpus, m != null, embedMillis, loadMillis, sections)
     }
 
     /** tags_json -> list; a garbled column degrades to "no tags", never an error. */
@@ -929,21 +959,24 @@ class Librarian private constructor(private val appContext: Context) {
      * single-flight: a no-op when unprovisioned, when no model is installed,
      * or when a pass is already running, so a burst of incomplete-index turns
      * schedules one pass, not one per turn. Safe to call from a retrieval turn
-     * — the work runs off the caller's thread.
+     * — the work runs off the caller's thread. Returns true when a repair
+     * pass is now running or scheduled.
      */
-    fun requestMissingVectorRepair() {
-        if (!MemoryStore.isProvisioned(appContext)) return
-        if (activeTag() == null) return
-        if (!repairInFlight.compareAndSet(false, true)) return
-        try {
+    fun requestMissingVectorRepair(): Boolean {
+        if (!MemoryStore.isProvisioned(appContext)) return false
+        if (activeTag() == null) return false
+        if (!repairInFlight.compareAndSet(false, true)) return true
+        return try {
             repairExecutor.execute {
                 try { repairMissingVectors() } finally { repairInFlight.set(false) }
             }
+            true
         } catch (t: Throwable) {
             // Executor rejected (e.g. shutdown) — release the guard so a later
             // turn can try again.
             repairInFlight.set(false)
             MemoryLog.log(appContext, "Librarian", "error", "Could not schedule missing-vector repair: ${t.message}")
+            false
         }
     }
 

@@ -195,3 +195,135 @@ measured.
 2,048-token memory, the memory used during that read, the wait of a live
 message behind it, and how long a stop takes. The phone will be slower
 than the build environment.
+
+## Step 2: long messages searched in sections
+
+A message longer than 80 words is now also searched in overlapping
+80-word sections, after the whole message. The whole-message search is
+unchanged: on every sample it returns the same memories in the same order
+as before, and the test checks this. Memories found only through a section
+are placed after the whole-message matches.
+
+### Result on this test set
+
+| Kind | Correct before | Correct now | Missed now | Incorrect before | Incorrect now |
+|---|---:|---:|---:|---:|---:|
+| long_typed | 2 | 7 | 1 | 0 | 0 |
+| long_dictated | 3 | 7 | 1 | 1 | 1 |
+| dictated_bad_periods | 0 | 4 | 1 | 0 | 0 |
+| very_long | 2 | 4 | 0 | 1 | 1 |
+| All other kinds | 47 | 47 | 3 | 17 | 17 |
+| **Total, 86 samples** | **54** | **69** | **6** | **19** | **19** |
+
+Fifteen of the 18 memories missed in long messages are now found, and no
+sample sends an incorrect memory it did not send before. This is what this
+test set of 32 invented memories shows. It is not a guarantee that no
+wrong memory is ever sent from a real memory library.
+
+Every changed sample, with the section that found the memory:
+
+| Sample | Memory now found | Section | Meaning match | Shared words |
+|---|---|---|---:|---|
+| `typed_02` | `health_wrist` | 4 of 4 | 0.57 | brace, typ, wrist |
+| `dictated_02` | `health_wrist` | 4 of 4 | 0.56 | brace, typ, wrist |
+| `typed_04` | `family_leon` | 4 of 4 | 0.54 | birthday, leon, need |
+| `dictated_04` | `family_leon` | 4 of 4 | 0.52 | birthday, leon, need |
+| `typed_05` | `home_shelf` | 2 of 4 | 0.50 | bookshelf, dowel, miss, number, part |
+| `dictated_05` | `home_shelf` | 2 of 4 | 0.49 | bookshelf, dowel, miss, number, part |
+| `typed_07` | `food_stew` | 3 of 4 | 0.54 | container, fit, lentil, lid, square, stew |
+| `typed_08` | `plan_eclipse` | 2 of 4 | 0.54 | astronomy, hall, lecture, rowan, seat, ticket |
+| `dictated_08` | `plan_eclipse` | 2 of 4 | 0.54 | astronomy, hall, lecture, rowan, seat, ticket |
+| `bad_periods_02` | `health_wrist` | 4 of 4 | 0.57 | brace, typ, wrist |
+| `bad_periods_03` | `work_budget` | 3 of 4 | 0.58 | budget, equipment, ivo, need, quote, request, scanner |
+| `bad_periods_04` | `family_leon` | 3 of 4 | 0.52 | birthday, entrance, leon, need, restaurant, use |
+| `bad_periods_05` | `home_shelf` | 2 of 4 | 0.49 | bookshelf, dowel, miss, number, part |
+| `very_long_01` | `pet_cobalt` | 12 of 13 | 0.57 | aquarium, cobalt, heater, keep |
+| `very_long_04` | `plan_concert` | 12 of 13 | 0.51 | chamber, concert, music, november, paper, require, ticket |
+
+Shared words are shown as keyword search compares them: common words
+dropped and word endings removed, so "typing" appears as "typ".
+
+Still missed: `pet_tansy` in `typed_01`, `dictated_01` and
+`bad_periods_01`. No 80-word section of those messages passed the
+relevance check for that memory, under the plan's original rule or the
+chosen one.
+
+`baseline.json` records the 15 improvements. Each improved sample also
+lists the memory under `found_by_section`, so the test can still check the
+whole-message search on its own against what it found before Step 2.
+
+### The rule for when a section's match counts, and why
+
+The plan's original rule let a section pass the same meaning check as a
+whole message. Measured here with 60-word sections and at most 8 sections,
+it found 16 of the 18 missed memories and sent 29 more incorrect
+memories. Nearly all of the incorrect ones were sections loosely similar
+in meaning to an unrelated memory (meaning match 0.41 to 0.46) with no
+word in common. The owner approved a stricter rule for Step 2. A section's
+match counts only when all of these hold:
+
+- the memory passes the section's normal relevance check, by meaning or
+  by keywords;
+- its meaning match with the section is at least 0.48;
+- the section and the memory share at least one meaningful word. Common
+  filler words are dropped and word endings are normalized first, by the
+  same keyword rules the whole-message search already uses.
+
+**The tradeoff.** Requiring a shared word means a section that describes
+a memory in entirely different words does not find it. That was accepted
+because a wrong memory is worse than a missed one.
+
+**The 0.48 is provisional.** It was chosen from this test set, where the
+correct section matches scored 0.49 to 0.58. It has not been validated on
+any real memory library and may need adjusting.
+
+### Section size, section limit, and minimum meaning match
+
+Additional correct and additional incorrect memories on the 25 long
+messages, with the approved rule. "All" means no section limit.
+
+| Section size | Minimum | Limit 6 | Limit 8 | All |
+|---|---:|---|---|---|
+| 40 words | 0.48 | +12 / +1 | +15 / +1 | +15 / +1 |
+| 60 words | 0.48 | +15 / +2 | +15 / +2 | +15 / +2 |
+| **80 words** | 0.44 | +14 / 0 | +15 / 0 | +15 / 0 |
+| **80 words** | 0.46 | +14 / 0 | +15 / 0 | +15 / 0 |
+| **80 words** | **0.48** | +14 / 0 | **+15 / 0** | +15 / 0 |
+| **80 words** | 0.50 | +12 / 0 | +13 / 0 | +13 / 0 |
+| **80 words** | 0.52 | +11 / 0 | +11 / 0 | +11 / 0 |
+| 100 words | 0.48 | +11 / 0 | +11 / 0 | +12 / 0 |
+
+- **80-word sections** were chosen because they were the only size that
+  found 15 with no additional incorrect memory. Smaller sections added
+  incorrect memories; 100-word sections found fewer.
+- **At most 8 sections** are read for one message. Eight found as many as
+  reading every section; six found one fewer. A 500-word message has 13
+  sections, so the sections holding the rarest words in the memory
+  library are read first. Both `very_long` improvements were found in
+  section 12 of 13 this way.
+- **0.48** sits at the top of the range that kept all 15 (0.44 to 0.48
+  gave the same result with 80-word sections). The highest value in that
+  range was chosen because the smaller section sizes sent more incorrect
+  memories as the minimum was lowered.
+
+### Time
+
+The section search may add at most 1,500 ms to sending a message. The
+limit is checked before each section is read, so one read can finish past
+it; the sections not reached are skipped and the message is sent with
+what was found. The 1,500 ms is an engineering starting value and has not
+been checked on a phone.
+
+| Check | Result (build environment) |
+|---|---|
+| Length of the 136 test-set sections as the model reads them | 89 tokens average, 100 longest |
+| Time to read one section | 114 ms average, 141 ms longest |
+| A 150 to 300 word message (4 sections) | about 460 ms added |
+| A message with 8 or more sections | about 910 ms added |
+
+These times come from the real q4 model on a 4-core cloud machine with
+onnxruntime 1.29.0 in Python, two threads, not from the app on a phone.
+
+**Still to measure on the owner's Pixel 8:** the added sending time for a
+long message. The Memory Search Test screen shows it after a test of a
+long message, on the line that begins "Additional section search".
