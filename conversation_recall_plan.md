@@ -1175,8 +1175,13 @@ included, for the "what was sent" view and for carry-over; how much room
 was used; and what qualified but was left out, with the reason (no room,
 duplicate, limit reached).
 
-The scores and reasons at points 2 and 3 are what the Step 15 inspector
-shows, so a wrong or missing recall can be explained, not guessed at.
+The Step 15 inspector shows the retrieval scores and reasons from point 2.
+Point 3 comes from assembly, which is built only in Step 16: that Step
+extends the same inspector with what was included, what was left out
+because of no room, a duplicate, or a count limit, and what was actually
+sent. Step 15 must not pretend to know assembly outcomes or implement
+assembly early. This staging lets wrong or missing recall be explained
+without duplicating assembly logic.
 
 ## G.8b The recall setting and where recall applies (Owner, 2026-11-11)
 
@@ -1289,15 +1294,34 @@ RisuAI does (G.18a).
   this app; separate searches avoid that.
 - **How results combine:** a match for the newest message outranks a match
   for an earlier one.
-- **What it adds on the phone:** nothing new for the embedding model to
-  read. The numbers the model made for an earlier message are kept while
-  the chat is open and used again. Only those numbers are kept. The
-  search itself is run again for every message sent, against the memories
-  and the scope as they are at that moment, so an edited or deleted
-  memory, a change of companion or project, or a different chat is always
-  respected. The kept numbers are dropped when the chat is closed, when
-  that earlier message is edited or deleted, and when the embedding model
-  changes.
+- **Prepare when composing:** When the user begins entering a non-empty
+  message, prepare any missing embeddings for the configured 0–3 previous
+  **user** messages in the background, through Step 1's shared embedding
+  queue. For dictated input, begin when transcribed text first appears.
+  Prepare each unchanged earlier message only once, not on every
+  keystroke. Do not repeatedly embed the unfinished draft. This uses the
+  existing on-device model, not a paid AI request.
+- **Keep across screens:** Keep only those earlier-message embeddings in
+  a small, bounded in-memory cache for as long as the app's process stays
+  alive. Navigating to the Summarizer, companion or profile settings, or
+  another chat does **not** clear the cache. Do not persist it to disk.
+  Android may end the app process even when the user has not explicitly
+  closed the app; a new process starts with an empty cache. Key cached
+  entries to the original chat, user-message ID/content, and embedding
+  model so data from one chat or model is never reused for another.
+  Discard an entry if its earlier message is edited or deleted, its chat
+  is deleted, or the embedding model changes; older entries may also be
+  evicted to respect the cache's size bound.
+- **At send time:** Reuse prepared embeddings. If a needed earlier-message
+  embedding is missing (for example, after reopening the app or sending
+  immediately), calculate it through the shared live-priority queue,
+  subject to the existing request time allowance; never treat a cache
+  miss alone as a reason to omit follow-up search. If the time allowance
+  is genuinely exceeded, use the plan's existing timeout/fallback
+  behavior. Run the **search itself again for every message sent**,
+  against the memories, scope, chat, and index as they exist then.
+  Never cache a prior search result: edits, deletes, companion/project
+  changes, and switching chats must take effect immediately.
 - **Used by:** carry-over for saved memories (G.9) and conversation recall
   (G.6 retrieval stage 1).
 - **What it never does:** search with the AI's replies, or keep anything
@@ -1702,6 +1726,11 @@ in Step 0, and conversation samples in Step 6.
 3. **What was sent:** the text added to the request is the right exchange,
    in its original words, correctly labelled, within the limits.
 
+Step 14 measures retrieval results; Step 15 displays and measures the
+retrieval results (points 1 and 2). Point 3 and its assembly-specific
+reasons are measured and added to the inspector only in Step 16, when
+context assembly exists. Do not claim a real "sent" result in Step 15.
+
 **The situations the sample conversations must cover:**
 
 | Situation | What must happen |
@@ -2074,7 +2103,7 @@ measurements and verification results.
 **Agent checklist for this step**
 - **Prerequisite:** Step 0 test cases and baseline. No new UI or owner wording is required here.
 - **Change only:** A standalone Kotlin search helper following G.9a, taking 0–3 previous **user** messages as an input. Search each independently and give newer matches priority; do not join messages.
-- **Preserve:** Existing live search: this helper is **not connected to sending** in Step 3. Retain earlier-message vectors where applicable and respect changing memory/scope eligibility when the helper is later used.
+- **Preserve:** Existing live search: this helper is **not connected to sending** in Step 3. Accept/reuse earlier-message vectors where available and respect changing memory/scope eligibility when the helper is later used. Composition-triggered preparation and app-process cache wiring belong to Step 4, not Step 3.
 - **Verify and report:** Run Step 0 conversations at 0, 1, 2, and 3 previous messages. Record first and later follow-ups kept, carry-over after subject changes, and every unexpected memory sent.
 
 - **Goal:** the method in G.9a, built on its own, so the fix for follow-up
@@ -2095,9 +2124,9 @@ measurements and verification results.
 
 **Agent checklist for this step**
 - **Prerequisites:** Step 0 and Step 3. **Approval gate:** After examining Step 3's 0/1/2/3 results, get owner approval for the G32 setting's placement, label, and explanation.
-- **Change:** Use Step 3 at send time with **0–3 previous user messages**, default **1**; retain reusable earlier-message vectors while respecting edits, deletes, scopes, and chat changes.
+- **Change:** Use Step 3 at send time with **0–3 previous user messages**, default **1**. As described in G.9a, prepare missing previous-message embeddings when typing or transcription begins; keep a bounded in-memory cache across screen/chat navigation for the app process's lifetime. Invalidate changed inputs, prepare missing embeddings at send if needed, and rerun the actual search against current memories and scope each time.
 - **Preserve:** Setting **0** must match the pre-step baseline exactly. Do not independently change the default from 1 or invent a separate subject-detection algorithm.
-- **Verify and report:** First follow-up retention, old-subject spillover when topics change, no carry-over beyond the configured count, and no carry-over of edited/deleted memories. Report the known second-follow-up limitations rather than hiding them.
+- **Verify and report:** First follow-up retention, old-subject spillover when topics change, no carry-over beyond the configured count, and no carry-over of edited/deleted memories. Also test leaving/reentering a chat through settings, switching chats, an empty cache after process restart, sending before preparation finishes, and changes to earlier messages or embedding model. Report the known second-follow-up limitations rather than hiding them.
 
 - **Goal:** a saved memory stays through follow-up messages and falls away
   after the subject changes (G.9).
@@ -2109,8 +2138,9 @@ measurements and verification results.
   `MemoryStore.kt`.
 - **Build:** the hookup that uses Step 3 when a message is sent, in its
   own file with a small connection; the setting (0 to 3, starting at 1);
-  and keeping the embedding model's numbers for earlier messages as G.9a
-  describes.
+  and preparing/caching earlier-message embeddings as G.9a describes.
+  Leaving the chat screen must not clear these calculations; Android
+  process termination naturally clears them. Do not cache search results.
 - **Must not change:** anything when the setting is 0. With the setting
   at 0 every result is the same as before Step 4.
 - **The starting value stays 1 (G32).** The builder does not change it. If
@@ -2484,7 +2514,7 @@ questions for each situation.
 
 **Agent checklist for this step**
 - **Prerequisite:** Step 14, with Step 6 quality cases available. **Approval gate:** Show all inspector-screen labels to the owner as one list before implementation.
-- **Change:** The **Conversation Recall Test** inspector in Advanced Memory Settings > Debug (G.8b), showing which exchanges a typed question would find and why; measure the G.15 starting values.
+- **Change:** The **Conversation Recall Test** inspector in Advanced Memory Settings > Debug (G.8b), showing which exchanges a typed question would find and why; measure the G.15 retrieval starting values. Do not show assembly exclusions or "what was sent" as if computed; Step 16 adds those after assembly exists.
 - **Preserve:** This is a debugging and measurement step, **not** live request injection. Do not add recall to outgoing requests until Step 16.
 - **Verify and report:** Record the measured starting values in `conversation_recall_baseline.md`, and distinguish build-environment measurements from actual search time on the owner's phone.
 
@@ -2492,15 +2522,16 @@ questions for each situation.
   recalled and why, and measured starting values for the numbers.
 - **Placement and name are decided (G.8b).** Before building, the screen's
   labels are shown to the owner as one list.
-- **Done when:** the numbers in G.15 have measured starting values recorded
-  in `conversation_recall_baseline.md`, with search time on the owner's
-  phone.
+- **Done when:** the retrieval-related numbers in G.15 have measured
+  starting values recorded in `conversation_recall_baseline.md`, with
+  search time on the owner's phone. Assembly-related measurements and
+  inspector fields wait for Step 16.
 
 ### Step 16: context assembly (Hard)
 
 **Agent checklist for this step**
 - **Prerequisites:** Steps 14 and 15. **Approval gate:** Obtain the AI-facing text, “what was sent” wording, recall-room control wording, debug lines, and the G24 decision **before** coding any undecided behavior.
-- **Change:** One shared assembly implementation connected minimally to **both** request-building paths. Add only eligible original exchanges, within recall's independent limits; label speaker/date/excerpts, show what was sent, and perform the final whole-request size check.
+- **Change:** One shared assembly implementation connected minimally to **both** request-building paths. Add only eligible original exchanges, within recall's independent limits; label speaker/date/excerpts, show what was sent, and perform the final whole-request size check. Extend Step 15's inspector with actual assembly outcomes, including exclusions and their reasons.
 - **Preserve:** When recall is off, the request is **identical** to today's request. Never displace history, summaries, saved memories, or other content to make room for recall; never store recalled text as new chat content.
 - **Verify:** Every applicable G.15 “what was sent” test passes, both request paths add identical recall text, and timeout/overflow produce the existing request without losing its other content.
 
@@ -2514,6 +2545,8 @@ questions for each situation.
 - **Build:** assembly in its own file, called from both request builders
   with the smallest possible hookup. The size limits, the final size
   check, excerpts, date order, labels, and the "what was sent" view.
+  Extend the Step 15 inspector using this shared assembly's real outcomes,
+  not a second implementation or guessed pre-assembly exclusions.
 - **Must not change:** anything a request contains when recall is off.
 - **Done when:** all quality tests in G.15 pass at the "sent" point, both
   request paths add the same text, and the final "sent" results are
@@ -2739,9 +2772,11 @@ this plan. These rules keep that safe.
   the user would see, read, or pay for is shown to the owner before it is
   built: wording, screens, settings, defaults, and text sent to the AI.
 - **Never change:** the stored chats; the Summarizer and its summaries; the
-  existing chat search feature; saved-memory search results (except in
-  Steps 2 and 4, which exist to change them); the lorebook; what a
-  request contains when recall is off.
+  existing chat search feature; saved-memory search results (except Step 1
+  only for memories that exceeded the old 512-token reading limit, and
+  Steps 2 and 4 as their work orders specify); the lorebook; what a
+  request contains when recall is off. In Step 1, stored vectors and search
+  results for memories that fitted inside the old limit remain unchanged.
 - **Never remove anything from a request to make room for recall.**
 - **Never add or change a log line** without the owner's approval. The
   owner has ruled which logs are used (G.13a). The lines recorded there
