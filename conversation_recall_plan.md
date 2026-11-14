@@ -1327,7 +1327,7 @@ RisuAI does (G.18a).
 - **What it never does:** search with the AI's replies, or keep anything
   that does not pass the relevance gate.
 
-## G.10 A small detail inside a larger message (Proposed; rewritten 2026-11-12)
+## G.10 A small detail inside a larger message (Step 2 implemented; repair verification pending)
 
 **The problem.** A small detail in a message about several things does not
 find its saved memory or its earlier exchange (G.2).
@@ -1362,8 +1362,8 @@ one of two things:
 - or have an AI model rewrite the message into a search, at the cost of a
   paid call for every message.
 
-**The rule proposed here: overlapping pieces, used only for finding
-(G29).**
+**Approved rule: overlapping sections, used only for finding (G29).**
+Step 2 applies this to saved memories only. Earlier-exchange recall remains future work.
 - The whole message is searched first, exactly as today.
 - A message longer than one piece is also searched in pieces. A piece is
   cut at a paragraph or a line where there is one, otherwise between
@@ -1379,13 +1379,17 @@ one of two things:
 **When a piece's match counts.** A wrong memory is worse than a missed
 one. Established systems send their best few matches even when none fits
 well; this app does not.
-- **By meaning:** a piece passes the same gate as a whole message.
-- **By keywords:** a keyword match from a piece counts only when meaning
-  search agrees: the memory must also be close enough in meaning to that
-  piece. "I'm worried about Pepper" is close in meaning to the Pepper
-  memory. "It was about spring cleaning" shares the word "spring" with a
-  memory about moving house in spring, and is not close to it in meaning.
-  This check is this app's own addition and is measured on the test set.
+- A section must pass the existing relevance gate (meaning OR keywords),
+  AND have semantic similarity at least **0.48**, AND share at least one
+  meaningful normalized word with the memory. All three requirements apply.
+  Common words are excluded by `KeywordText`. A high semantic similarity
+  alone, a shared word alone, or the usual whole-message gate alone is not enough.
+- This owner-approved combined rule replaced the original proposal after
+  that proposal added 29 incorrect matches on the original test set.
+- The **80-word size, eight-section maximum, and 0.48 threshold are all
+  provisional**: selection and evaluation used the same 32-memory set.
+  This is not independent validation and does not guarantee zero additional
+  incorrect matches on other libraries. Do not retune during repairs.
 - **With no embedding model, or for a memory that has no vector yet,**
   nothing can confirm the match, so only the whole-message search runs, as
   today.
@@ -1394,15 +1398,20 @@ well; this app does not.
 - Everything that matches the whole message keeps its place, in today's
   order. Nothing that is sent today is pushed out.
 - Memories found only through a piece come after those, best first, in
-  whatever room the memory limit leaves.
+  whatever room the memory limit leaves. Section-only matches, including +3
+  importance, never bypass Maximum Memories. Entire memories are sent.
 
 **Time.**
 - The number of pieces searched has a limit. When a message has more
   pieces than the limit, the pieces holding the rarest words (names and
   unusual terms) are searched first.
-- This search has a time allowance. When it runs out, the pieces not yet
-  searched are skipped and the message is sent with what was found. The
-  whole-message search always runs.
+- The provisional allowance is **1,500 ms**. Queue waiting is bounded;
+  during inference the queue requests cooperative ONNX termination at the
+  deadline. Native inference must unwind before the model is released.
+  This is **not a guaranteed hard deadline**: tokenization, native cancellation
+  latency, section preparation, and scoring can extend total elapsed time.
+  No detached embedding task may race a later message. Preserve whole-message
+  results and successfully completed sections on timeout or section failure.
 - The words of every memory are read once per message and reused, so the
   keyword work does not multiply.
 - **The message is read by the embedding model once.** The whole message
@@ -1411,13 +1420,18 @@ well; this app does not.
   message again.
 - When the limit or the time allowance leaves part of a message
   unsearched, the Memory Search Test screen says which part.
-- The piece size, the limit, and the time allowance are engineering
-  numbers, measured on the test set and on a phone before this ships.
+- Size, cap, similarity threshold and allowance are provisional engineering
+  numbers. Android device performance remains unverified until actually measured.
+  The test screen separates queue waiting, model work and total section-read
+  elapsed time (including section preparation and relevance scoring); report-only diagnostics and rendering are outside that line.
 
 **What the user can see.** The Memory Search Test screen must show which
 piece of the message a memory matched, and when the search ran out of
 time. Without that, the screen can no longer explain why a memory was
-sent. Its wording is shown to the owner before Step 2 is built.
+sent. Approved wording is recorded in G.13b. The repair also shows evaluated
+section near-misses, all failed relevance requirements, attempted/successful
+counts, processing failures and deadline cancellation. Unsearched sections are
+not labelled as relevance failures.
 
 **When the embedding model cannot read a piece.** That piece adds nothing.
 This is reported, never silent, using the existing Memory Debug Log line
@@ -1602,7 +1616,7 @@ superseded by the owner's 2026-11-12 decision above. Step 11 may create a
 shared snack-bar style if its approved notices need one; it does not create
 or show snackbars for log-only automatic repairs.
 
-## G.13b Plain wording and reviewed message proposals (Owner rule; exact proposals not yet approved)
+## G.13b Plain wording, approved Step 2 messages, and later-step proposals
 
 **Owner (2026-11-12):** wording must be plain English, direct, and
 understandable. When something cannot happen, the user is told why it
@@ -1618,7 +1632,9 @@ Every user-facing failure message follows this order:
 
 Additional rules:
 - Planning words never reach the user on a screen or in a user-readable
-  log: passage, vector, lexical, query, embed, cutter, and re-ranker.
+  log when they obscure the operation. Embedding, embedding model and embedding
+  index are explicitly allowed for accurate diagnostics. Prefer context-specific
+  language over obsolete implementation shorthand.
 - Raw exception text is never placed in a snackbar, dialog, notification,
   or inline setting message. It goes in the Error Log. User-facing text
   uses a plain cause the code can actually distinguish.
@@ -1640,25 +1656,37 @@ Additional rules:
 | The index cannot be rebuilt | **Title:** Conversation Recall Is Off. **Text:** The conversation index could not be rebuilt, so Index Conversations and Conversation Recall were turned off. Your conversations are safe and unchanged. Open Advanced Memory Settings to try indexing again. **Buttons:** Open Advanced Memory Settings, Close |
 | Recall reaches its sending-time allowance | **What was sent:** Conversation Recall did not finish in time, so this message was sent normally without recalled conversation. |
 | Android pauses background indexing until the app is reopened | **Notification/status:** Background indexing is paused. Open the app to continue. Finished work was saved. |
-| Long-message piece search reaches its allowance | **Memory Search Test:** The additional long-message search reached its time limit. The whole message was still searched. Checked (number) of (number) additional parts. |
-| The on-device model cannot read one additional part of a long message | **Memory Debug Log:** Memory search could not read one additional part of this message with the on-device model, so that part was skipped. The whole message was still searched. Cause: (technical cause). |
+| Long-message section search reaches its allowance | **Approved Step 2:** Time limit reached while searching your message in sections. The full-message search still ran, but only {checked} of {total} additional sections were checked. |
+| The embedding model cannot process one section | **Approved Step 2:** The embedding model couldn't process one additional section. That section was skipped, but the full-message search still ran. Error: {cause} |
 
-**Existing saved-memory diagnostic wording reviewed for Step 2:**
+**Approved Step 2 wording and implemented locations:**
 
-| Current wording | Proposed replacement |
+| Situation | Final approved wording / location |
 |---|---|
-| Query embed failed, using lexical fallback: (cause) | **Owner-approved 2026-11-12:** Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause). |
-| Vector load failed, using lexical fallback: (cause) | Memory search could not use its saved meaning index, so it searched by keywords only. Cause: (cause). |
-| keyword only — no model | keywords only — on-device meaning search unavailable |
-| Vector index incomplete — (missing) of (total) eligible memories lack a current vector; those memories use keyword search only this turn | Some memories were not ready for meaning search, so (missing) of (total) used keyword search for this message. The app is preparing them in the background. |
-| Embedding self-check FAILED; semantic retrieval disabled, using keyword fallback: (cause) | The on-device memory-search model did not pass its check, so saved-memory search is using keywords only. Cause: (cause). |
-| Embedding model failed to load: (cause) | The on-device memory-search model could not be loaded. Saved-memory search is using keywords only, and Conversation Recall is unavailable. Cause: (cause). |
+| Section match | Match found while searching section {number} of {total}, starting with “{first few words}…” — Memory Search Test result card |
+| Section cap | Section search limit reached. Checked {checked} of {total} additional sections. The full-message search still ran. — Memory Search Test |
+| Section timing | Additional section search: {checked} sections in {ms} ms. — Memory Search Test; Android plurals use “1 section” |
+| Index load failure | Couldn't load the embedding index. Used keyword search instead. Error: {cause} — Librarian, Memory Debug Log |
+| Model unavailable | Keyword search only (embedding model unavailable) — Enforcer summary fragment; punctuation belongs to the containing sentence |
+| Live incomplete index | {missing} of {total} eligible memories aren't ready for embedding search. They were searched by keyword instead. — Librarian, Memory Debug Log |
+| Preparation suffix | The app is preparing them in the background. — append only when a preparation pass is running or scheduled |
+| Live query failure | Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: {cause}. — Librarian |
+| Background query failure | Memory Assistant could not process its background search with the on-device model, so it searched by keywords only. Cause: {cause}. — Librarian reconciliation |
 
-Step 2 must replace the first three lines together so the summary never
-claims that no model is installed when the actual cause was a failed read.
-The incomplete-index line is log-only because it starts automatic repair.
-Step 11 applies the same plain-cause rule to model-load and model-check
-failures before it creates any notice.
+The repair aggregates multiple section failures with section numbers and causes,
+separates failed processing from timeout/cap, and uses context-specific Memory
+Assistant complete-set fallback wording. The complete-set Assistant search is
+unchanged. Diagnostics do not claim that an unsearched section failed relevance.
+Near-miss labels explain the existing gate, similarity and meaningful-word rules;
+they do not change those rules. Device timing remains pending.
+
+The two model-load/self-check messages remain assigned to Step 11; their
+proposed replacements are not implemented by Step 2:
+- self-check: The on-device memory-search model did not pass its check, so
+  saved-memory search is using keywords only. Cause: {cause}.
+- model load: The on-device memory-search model could not be loaded.
+  Saved-memory search is using keywords only, and Conversation Recall is
+  unavailable. Cause: {cause}.
 
 Before Step 11, the builder lists every failure cause the code can
 distinguish and maps each one to: automatic repair with no notice; affected
@@ -1791,13 +1819,13 @@ Only a new owner decision may change this order.
 
 Step 0 is already complete. Do not rebuild it, regenerate its vectors, or
 rewrite its expected answers. Its authoritative results are in
-[memory baseline](<memory baseline.md>). The next work order is **Step 1**.
+[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200. The current work order is the Step 2 repair audit; do not begin Step 3 until its verification is complete.
 
 | Step | Status | What is built | Difficulty | Model | The user sees | Needs | Approve first |
 |---:|---|---|---|---|---|---|---|
 | 0 | **Complete** | Saved-memory test set with the real model's vectors | Routine with written instructions | Lighter | Nothing | Nothing | Nothing |
-| 1 | **Next** | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle | Nothing | Step 0 complete | Nothing (G33) |
-| 2 | Waiting | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Memory Search Test wording; two remaining log lines (G26) |
+| 1 | **Complete (#199)** | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle | Nothing | Step 0 complete | Nothing (G33) |
+| 2 | Implemented in #200; repair verification pending | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
 | 3 | Waiting | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
 | 4 | Waiting | Saved memories stay through follow-up messages | Careful | Middle | Follow-up continuity | Steps 0 and 3 | Label and placement of its setting (G32) |
 | 5 | Waiting | Memory word count and length limit | Careful | Middle | Word count under memory fields | Step 1 | Open parts of G34 |
@@ -2069,8 +2097,8 @@ measurements and verification results.
 ### Step 2: long messages in saved-memory search (Hard)
 
 **Agent checklist for this step**
-- **Prerequisites:** Steps 0 and 1. **Approval gate:** Obtain the Memory Search Test piece/timeout wording and the remaining G26 diagnostic wordings proposed in G.13b before changes.
-- **Change:** G.10's bounded overlapping search pieces for typed and dictated messages, using the shared embedding queue and a minimal hookup. Whole-message search still runs first; a piece's meaning match uses the normal relevance gate, while a piece's keyword match also needs meaning-search agreement.
+- **Prerequisites:** Steps 0 and 1. **Approval gate:** Resolved by the owner; final wording is in G.13b. Routine repair corrections are authorized.
+- **Change:** G.10's bounded overlapping search pieces for typed and dictated messages, using the shared embedding queue and a minimal hookup. Whole-message search still runs first; each section must pass the relevance gate, similarity ≥0.48 and meaningful shared-word overlap.
 - **Preserve:** Existing whole-message matches **and their order**, Memory Assistant search, lorebooks, and current sending when no piece can qualify. Do not add a paid rewrite or trust periods as sentence boundaries.
 - **Verify and report:** Step 0's per-sample quality improves for long messages **without increased wrong memories**; existing tests pass; report time allowance and any missing on-phone performance proof.
 
@@ -2078,9 +2106,7 @@ measurements and verification results.
   whether the message was typed or dictated, without more wrong memories
   being sent (G.10).
 - **Needs first:** Step 0 and Step 1.
-- **Before building, the owner approves:** the Memory Search Test wording
-  and the remaining saved-memory diagnostic wording proposed in G.13b
-  (G26).
+- **Approved:** Memory Search Test and saved-memory diagnostics in G.13b; G26 is resolved for Step 2. Model-load notices remain Step 11.
 - **Read:** G.2, G.10; `LiveRetrieval.kt`, `Librarian.kt`,
   `SearchTestReport.kt`.
 - **Build:** G.10, in its own file, with a small hookup. Every use of the
@@ -2093,10 +2119,10 @@ measurements and verification results.
   improvements, never to permit a regression.
 - **Done when:** on Step 0's set, more right memories are found in long
   messages, dictated ones included, and the number of wrong memories sent
-  has not risen; existing saved-memory tests pass unchanged; and the added
-  sending time is inside the allowance. Time on a real phone cannot be
-  measured in the build environment. It is read once from the Memory
-  Search Test screen on the owner's phone, and reported.
+  has not risen; existing saved-memory tests pass unchanged; and timing, queue/cancellation behavior and verification limitations are
+  reported accurately. The provisional allowance is cooperative, not a hard
+  wall-clock guarantee. Measure real Android queue/model/total timing when
+  hardware or an emulator is available; never substitute Python timings.
 
 ### Step 3: searching with the previous messages (Careful)
 
@@ -2645,7 +2671,7 @@ about to start. Each has a recommendation.
 | G23 | Which Step is built first? | **Decided (owner, 2026-11-11):** the long-message fix is the first user-visible fix. In the corrected numbering it is Step 2, after completed Step 0 and the Step 1 queue-safety prerequisite (G.16) | Decided |
 | G24 | If the user turns Index Conversations off while Conversation Recall is on, what happens to recall? Also undecided: whether turning Conversation Recall on turns Index Conversations on (G.8b says only that it "may"), and what happens to recall when the index is deleted | Open. Indexing is never silently restarted (G.8b) | Step 16 |
 | G25 | Withdrawn on 2026-11-12. With no embedding model nothing can confirm a match, so messages are searched as today (G.10). Nothing changes for those users, so there is nothing to decide | Withdrawn | |
-| G26 | What replaces the inaccurate or technical saved-memory diagnostic lines? | **Partly decided (owner, 2026-11-12):** "Memory search could not read this message with the on-device model, so it searched by keywords only. Cause: (cause)." is approved. G.13b now names the other affected lines and proposes exact replacements; those remaining replacements still need approval before Step 2 | Step 2 |
+| G26 | What replaces inaccurate saved-memory diagnostic lines? | **Decided for Step 2:** G.13b records approved wording and its locations, including context-specific repair corrections. Technical embedding terminology is allowed. Model-load and self-check notices remain Step 11 | Decided for Step 2 |
 | G27 | Which failures interrupt the user? | **Decided (owner, 2026-11-12):** automatic repairs do not raise a notice. Notify the user when the failure affected a turn, stopped a feature, prevented a setting, or has a real action the user can take. Say what happened, what is safe, and the action when one exists. Do not repeat the same ongoing failure every turn | Decided |
 | G28 | Chats that have never been reopened cannot be indexed until they are opened (G.5a rule 7). What does the progress count show for them? | Open. Recommended: count only what can be indexed now, and say plainly how many conversations will be indexed when they are next opened | Step 11 |
 | G29 | To find a small detail in a long or dictated message, should the app also search with overlapping pieces of the message, cut between words and never at periods (G.10)? | **Decided (owner, 2026-11-12):** yes, on the agent's recommendation | Decided |
@@ -2761,7 +2787,7 @@ this plan. These rules keep that safe.
   plan (`Memory System/dynamic_memory_plan.md`) is background for
   saved-memory work and is not needed for the conversation index.
 - **Build exactly one numbered Step from G.16, as one pull request.** Do
-  not start the next Step. Step 0 is complete; the next Step is Step 1. Every Step follows the code
+  not start the next Step. Steps 0–2 have implementations; Step 2 repair verification is pending. Do not begin Step 3 during repairs. Every Step follows the code
   workflow in `CLAUDE.md`.
 - **Do not start a Step out of order or while its "Approve first" entry in
   G.16 is not satisfied.** Say what is waiting and stop.
@@ -2807,10 +2833,13 @@ request. Detailed results stay in the file named by G.16.
   read up to 2,048 tokens with a resumable re-read of memories cut at 512;
   pull request #199. Measurements are in `memory baseline.md`.
 - Step 2 — a message longer than 80 words is also searched in overlapping
-  80-word sections (at most 8, within 1,500 ms) after the whole message.
+  80-word sections (at most 8, provisional 1,500 ms allowance) after the whole message; PR #200. The allowance was initially soft; repair requests cooperative termination and bounds queue waiting, not native unwind time.
   By owner decision a section's match counts only when its meaning match
-  is at least 0.48 (provisional) and it shares a meaningful word with the
-  memory; this replaces G.10's "same gate as a whole message", which sent
+  is at least 0.48 and it shares a meaningful word with the
+  memory, in addition to the existing relevance gate. Size, cap and threshold
+  are provisional; this replaced the original "same gate as a whole message" proposal, which sent
   more wrong memories on the test set. The Memory Search Test and Memory
   Debug Log wording is the owner-approved wording, not the G.13b proposals.
   Results are in `memory baseline.md`.
+
+- Step 2 repair audit — accurate section thresholds/near-misses/failures, bounded queue waiting with cooperative termination, native model lifetime protection, shared live/test matching and retrieval-to-prompt coverage. ONNX startup/API telemetry opt-outs also cover Silero. Original 69/6/19 preserved; independent untuned model evaluation 4/5/0. All three required local tasks passed; Android execution, CI/review and phone-specific limits are recorded in `memory baseline.md`. No Step 3 implementation.

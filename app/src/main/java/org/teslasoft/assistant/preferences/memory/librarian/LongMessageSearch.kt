@@ -51,7 +51,7 @@ import org.teslasoft.assistant.preferences.memory.ScoredMemory
  */
 object LongMessageSearch {
 
-    /** The engineering numbers of the section search. */
+    /** Provisional engineering parameters, selected on the original test set. */
     data class Settings(
         /** Words in one section. A message of at most this many words is
          *  searched whole only. */
@@ -59,9 +59,10 @@ object LongMessageSearch {
         /** Most sections read for one message. When a message has more, the
          *  sections holding the rarest library words are read first. */
         val maxSections: Int = 8,
-        /** Time the section search may add to sending one message. Checked
-         *  before each read, so one read can finish past it. Not yet
-         *  measured on a phone. */
+        /** Provisional section-read allowance. A budgeted caller bounds queue
+         *  waiting and requests cooperative inference termination. Native
+         *  unwind and subsequent scoring can extend total elapsed time; this
+         *  is not a hard sending deadline. */
         val timeAllowanceMillis: Long = 1_500,
         /** Similarity a memory must reach against a section before the
          *  section's match counts. Provisional: chosen on the saved-memory
@@ -73,7 +74,9 @@ object LongMessageSearch {
     data class Section(val number: Int, val text: String) {
         /** The first few words, for telling the user which section it was. */
         fun opening(words: Int = 6): String =
-            WORD.findAll(text).take(words).joinToString(" ") { it.value }
+            WORD.findAll(text).take(words).joinToString(" ") { it.value }.let { opening ->
+                opening.substring(0, opening.offsetByCodePoints(0, minOf(96, opening.codePointCount(0, opening.length))))
+            }
     }
 
     /** A section the embedding model could not read. */
@@ -98,8 +101,17 @@ object LongMessageSearch {
         /** True when the message has more sections than one search reads
          *  and the time allowance did not end the search first. */
         val sectionLimitReached: Boolean,
-        /** Time spent on the section reads, waiting for the model included. */
-        val millis: Long
+        /** Section preparation/reads, including queue waits. The shared
+         *  search pipeline adds [scoringMillis] before reporting its total. */
+        val millis: Long,
+        val settings: Settings = Settings(),
+        /** Search stopped after consecutive identical processing failures. */
+        val repeatedFailure: Boolean = false,
+        /** Sections cancelled while waiting or running at the deadline. */
+        val deadlineSection: Int? = null,
+        val queueMillis: Long = 0,
+        val modelMillis: Long = 0,
+        val scoringMillis: Long = 0
     ) {
         companion object {
             val NONE = Reading(emptyList(), emptyMap(), emptyList(), 0, false, false, 0)
@@ -172,14 +184,16 @@ object LongMessageSearch {
      * no earlier pick already covers; sections with nothing left to add
      * follow in message order.
      */
-    fun readingOrder(sections: List<Section>, index: LiveRetrieval.Index): List<Section> {
+    fun readingOrder(sections: List<Section>, index: LiveRetrieval.Index, limit: Int = sections.size): List<Section> {
+        val count = limit.coerceIn(0, sections.size)
+        if (count == 0) return emptyList()
         val known = sections.associate { s ->
             s.number to LiveRetrieval.queryTerms(s.text).mapNotNull { t -> index.rarity(t)?.let { t to it } }.toMap()
         }
         val remaining = sections.toMutableList()
         val covered = HashSet<String>()
         val order = ArrayList<Section>(sections.size)
-        while (remaining.isNotEmpty()) {
+        while (remaining.isNotEmpty() && order.size < count) {
             var best: Section? = null
             var bestGain = 0.0
             for (s in remaining) {
@@ -194,7 +208,7 @@ object LongMessageSearch {
             remaining.remove(best)
             covered.addAll(known.getValue(best.number).keys)
         }
-        order.addAll(remaining)
+        order.addAll(remaining.take(count - order.size))
         return order
     }
 
@@ -209,17 +223,20 @@ object LongMessageSearch {
         index: LiveRetrieval.Index,
         settings: Settings = Settings(),
         now: () -> Long = { System.nanoTime() / 1_000_000 },
+        budgetedEmbed: ((String, Long) -> FloatArray)? = null,
         embed: (String) -> FloatArray
     ): Reading {
         if (index.withVector == 0) return Reading.NONE
         val sections = cut(message, settings.sectionWords)
         if (sections.isEmpty()) return Reading.NONE
-        val planned = readingOrder(sections, index).take(settings.maxSections.coerceAtLeast(0))
+        val planned = readingOrder(sections, index, settings.maxSections.coerceAtLeast(0))
         val vectors = LinkedHashMap<Int, FloatArray>()
         val failures = ArrayList<Failure>()
         var timedOut = false
         var checked = 0
         val started = now()
+        var repeatedFailure = false
+        var deadlineSection: Int? = null
         for (section in planned) {
             if (now() - started >= settings.timeAllowanceMillis) {
                 timedOut = true
@@ -227,15 +244,37 @@ object LongMessageSearch {
             }
             checked++
             try {
-                vectors[section.number] = embed(section.text)
-            } catch (t: Throwable) {
-                failures.add(Failure(section, t.message ?: t.javaClass.simpleName))
+                val remaining = settings.timeAllowanceMillis - (now() - started)
+                vectors[section.number] = budgetedEmbed?.invoke(section.text, remaining) ?: embed(section.text)
+            } catch (_: EmbeddingQueue.DeadlineExceededException) {
+                timedOut = true
+                deadlineSection = section.number
+                break
+            } catch (t: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw t
+            } catch (t: java.util.concurrent.CancellationException) {
+                throw t
+            } catch (t: Exception) {
+                val cause = t.message ?: t.javaClass.simpleName
+                val previous = failures.lastOrNull()
+                failures.add(Failure(section, cause))
+                // One isolated failure does not stop recall. Consecutive
+                // identical errors indicate further immediate retries are
+                // unproductive; preserve every vector already obtained.
+                if (previous?.cause == cause && failures.size >= 2 &&
+                    checked - vectors.size == failures.size &&
+                    previous.section == planned.getOrNull(checked - 2)) {
+                    repeatedFailure = true
+                    break
+                }
             }
         }
         return Reading(
             sections, vectors, failures, checked, timedOut,
-            sectionLimitReached = !timedOut && planned.size < sections.size,
-            millis = now() - started
+            sectionLimitReached = !timedOut && !repeatedFailure && checked == planned.size && planned.size < sections.size,
+            millis = now() - started, settings = settings,
+            repeatedFailure = repeatedFailure, deadlineSection = deadlineSection
         )
     }
 
@@ -250,26 +289,43 @@ object LongMessageSearch {
         params: LiveRetrieval.Params,
         wholeMessage: List<LiveRetrieval.Explanation>,
         useImportanceRatings: Boolean = true,
-        settings: Settings = Settings()
+        settings: Settings = reading.settings
     ): List<Match> {
-        if (reading.vectors.isEmpty()) return emptyList()
         val alreadyMatched = wholeMessage.filter { it.passed }.map { it.memory.memoryId }.toSet()
-        val byNumber = reading.sections.associateBy { it.number }
         val best = LinkedHashMap<String, Match>()
+        for (evaluation in evaluate(reading, index, params, useImportanceRatings, settings)) {
+            val e = evaluation.explanation
+            val id = e.memory.memoryId
+            if (id in alreadyMatched || !evaluation.qualifies) continue
+            val previous = best[id]
+            if (previous == null || e.score > previous.explanation.score) best[id] = evaluation.match
+        }
+        return best.values.sortedByDescending { it.explanation.score }
+    }
+
+    enum class Rejection { RELEVANCE_GATE, SIMILARITY, NO_SHARED_WORD }
+
+    data class Evaluation(val match: Match, val requiredSimilarity: Double) {
+        val explanation get() = match.explanation
+        val rejectedBy: Set<Rejection> get() = buildSet {
+            if (!explanation.passed) add(Rejection.RELEVANCE_GATE)
+            val similarity = explanation.similarity
+            if (similarity == null || !similarity.isFinite() || similarity < requiredSimilarity) add(Rejection.SIMILARITY)
+            if (explanation.matchedTerms.isEmpty()) add(Rejection.NO_SHARED_WORD)
+        }
+        val qualifies get() = rejectedBy.isEmpty()
+    }
+
+    fun evaluate(
+        reading: Reading, index: LiveRetrieval.Index, params: LiveRetrieval.Params,
+        useImportanceRatings: Boolean = true, settings: Settings = reading.settings
+    ): Sequence<Evaluation> = sequence {
+        val byNumber = reading.sections.associateBy { it.number }
         for ((number, vector) in reading.vectors.entries.sortedBy { it.key }) {
             val section = byNumber[number] ?: continue
             for (e in LiveRetrieval.explain(section.text, vector, index, params, useImportanceRatings)) {
-                val id = e.memory.memoryId
-                if (id in alreadyMatched) continue
-                val counts = e.passed && e.matchedTerms.isNotEmpty() &&
-                    (e.similarity ?: 0.0) >= settings.sectionSimilarityMin
-                if (!counts) continue
-                val previous = best[id]
-                if (previous == null || e.score > previous.explanation.score) {
-                    best[id] = Match(section, reading.sections.size, e)
-                }
+                yield(Evaluation(Match(section, reading.sections.size, e), settings.sectionSimilarityMin))
             }
         }
-        return best.values.sortedByDescending { it.explanation.score }
     }
 }

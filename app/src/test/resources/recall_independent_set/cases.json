@@ -1,0 +1,231 @@
+{
+  "note": "Independent gold answers frozen after Step 2 parameter selection. Do not retune against this set or rewrite gold answers to match observed retrieval.",
+  "memories": [
+    {
+      "id": "pet",
+      "content": "Juniper is a rabbit with dental problems and eats timothy hay.",
+      "tags": []
+    },
+    {
+      "id": "loom",
+      "content": "Saffron owns an antique maple loom kept in the workshop.",
+      "tags": []
+    },
+    {
+      "id": "spice",
+      "content": "The saffron spice is stored in a sealed jar in a dark kitchen cupboard.",
+      "tags": []
+    },
+    {
+      "id": "sky",
+      "content": "The Dobsonian telescope needs a red filter for observing Mars.",
+      "tags": []
+    },
+    {
+      "id": "ferry",
+      "content": "The island ferry runs on Saturdays but has no Sunday service.",
+      "tags": []
+    },
+    {
+      "id": "seeds",
+      "content": "Heirloom tomato seeds are planted beside the window in February.",
+      "tags": []
+    },
+    {
+      "id": "music",
+      "content": "Brass concerts require earplugs because the trumpet section is loud.",
+      "tags": []
+    },
+    {
+      "id": "gate",
+      "content": "The garden gate has a stiff bolt that needs graphite lubricant.",
+      "tags": []
+    },
+    {
+      "id": "bike",
+      "content": "The blue bicycle has a punctured rear tire and needs a replacement tube.",
+      "tags": []
+    }
+  ],
+  "messages": [
+    {
+      "id": "beginning",
+      "kind": "long_dictated",
+      "text": "Juniper has stopped chewing her timothy hay normally and I am wondering about her dental problems I went to the grocery store this morning and the checkout line was longer than usual so I spent most of the wait trying to remember whether there was enough detergent at home then I got distracted by a display of notebooks and bought one with plain pages because the ruled ones never seem to have enough space for diagrams After that I took the bus across town and had to stand for part of the journey because every seat was occupied the person next to the door had an enormous bag of wrapping paper which kept unfolding every time we turned a corner when I finally got back I made lunch and put the shopping away before answering a few emails There are still several ordinary things to finish later including sorting the receipts charging my headphones and checking whether the parcel arrived I also want to choose something to watch tonight but I keep spending more time looking at the list than actually watching anything perhaps I will just put on an old comedy and fold the laundry while it plays",
+      "expect": [
+        "pet"
+      ],
+      "must_not": [
+        "loom",
+        "spice",
+        "sky",
+        "ferry",
+        "seeds",
+        "music",
+        "gate",
+        "bike"
+      ]
+    },
+    {
+      "id": "middle_paraphrase",
+      "kind": "long_dictated",
+      "text": "I went to the grocery store this morning and the checkout line was longer than usual so I spent most of the wait trying to remember whether there was enough detergent at home then I got distracted by a display of notebooks and bought one with plain pages because the ruled ones never seem to have enough space for diagrams Do you remember the wooden weaving frame that Saffron keeps in the workshop I want to repair it without damaging the maple After that I took the bus across town and had to stand for part of the journey because every seat was occupied the person next to the door had an enormous bag of wrapping paper which kept unfolding every time we turned a corner when I finally got back I made lunch and put the shopping away before answering a few emails There are still several ordinary things to finish later including sorting the receipts charging my headphones and checking whether the parcel arrived I also want to choose something to watch tonight but I keep spending more time looking at the list than actually watching anything perhaps I will just put on an old comedy and fold the laundry while it plays",
+      "expect": [
+        "loom"
+      ],
+      "must_not": [
+        "pet",
+        "spice",
+        "sky",
+        "ferry",
+        "seeds",
+        "music",
+        "gate",
+        "bike"
+      ]
+    },
+    {
+      "id": "ending",
+      "kind": "long_dictated",
+      "text": "I went to the grocery store this morning and the checkout line was longer than usual so I spent most of the wait trying to remember whether there was enough detergent at home then I got distracted by a display of notebooks and bought one with plain pages because the ruled ones never seem to have enough space for diagrams After that I took the bus across town and had to stand for part of the journey because every seat was occupied the person next to the door had an enormous bag of wrapping paper which kept unfolding every time we turned a corner when I finally got back I made lunch and put the shopping away before answering a few emails There are still several ordinary things to finish later including sorting the receipts charging my headphones and checking whether the parcel arrived I also want to choose something to watch tonight but I keep spending more time looking at the list than actually watching anything perhaps I will just put on an old comedy and fold the laundry while it plays Before I book anything remind me whether the island ferry actually operates on Sunday or only Saturdays",
+      "expect": [
+        "ferry"
+      ],
+      "must_not": [
+        "pet",
+        "loom",
+        "spice",
+        "sky",
+        "seeds",
+        "music",
+        "gate",
+        "bike"
+      ]
+    },
+    {
+      "id": "several_topics",
+      "kind": "long_dictated",
+      "text": "I went to the grocery store this morning and the checkout line was longer than usual so I spent most of the wait trying to remember whether there was enough detergent at home then I got distracted by a display of notebooks and bought one with plain pages because the ruled ones never seem to have enough space for diagrams After that I took the bus across town and had to stand for part of the journey because every seat was occupied the person next to the door had an enormous bag of wrapping paper which kept unfolding every time we turned a corner when I finally got back I made lunch and put the shopping away before answering a few emails Juniper needs her usual hay checked and separately I want to observe Mars with the Dobsonian telescope which filter was needed There are still several ordinary things to finish later including sorting the receipts charging my headphones and checking whether the parcel arrived I also want to choose something to watch tonight but I keep spending more time looking at the list than actually watching anything perhaps I will just put on an old comedy and fold the laundry while it plays",
+      "expect": [
+        "pet",
+        "sky"
+      ],
+      "must_not": [
+        "loom",
+        "spice",
+        "ferry",
+        "seeds",
+        "music",
+        "gate",
+        "bike"
+      ]
+    },
+    {
+      "id": "shared_name_wrong_subject",
+      "kind": "long_dictated",
+      "text": "I went to the grocery store this morning and the checkout line was longer than usual so I spent most of the wait trying to remember whether there was enough detergent at home then I got distracted by a display of notebooks and bought one with plain pages because the ruled ones never seem to have enough space for diagrams For dinner I want to cook rice with saffron from the sealed spice jar in the kitchen cupboard After that I took the bus across town and had to stand for part of the journey because every seat was occupied the person next to the door had an enormous bag of wrapping paper which kept unfolding every time we turned a corner when I finally got back I made lunch and put the shopping away before answering a few emails There are still several ordinary things to finish later including sorting the receipts charging my headphones and checking whether the parcel arrived I also want to choose something to watch tonight but I keep spending more time looking at the list than actually watching anything perhaps I will just put on an old comedy and fold the laundry while it plays",
+      "expect": [
+        "spice"
+      ],
+      "must_not": [
+        "pet",
+        "loom",
+        "sky",
+        "ferry",
+        "seeds",
+        "music",
+        "gate",
+        "bike"
+      ]
+    },
+    {
+      "id": "no_shared_vocabulary",
+      "kind": "long_dictated",
+      "text": "I went to the grocery store this morning and the checkout line was longer than usual so I spent most of the wait trying to remember whether there was enough detergent at home then I got distracted by a display of notebooks and bought one with plain pages because the ruled ones never seem to have enough space for diagrams After that I took the bus across town and had to stand for part of the journey because every seat was occupied the person next to the door had an enormous bag of wrapping paper which kept unfolding every time we turned a corner when I finally got back I made lunch and put the shopping away before answering a few emails The long eared creature has troublesome incisors and its molars require frequent attention There are still several ordinary things to finish later including sorting the receipts charging my headphones and checking whether the parcel arrived I also want to choose something to watch tonight but I keep spending more time looking at the list than actually watching anything perhaps I will just put on an old comedy and fold the laundry while it plays",
+      "expect": [
+        "pet"
+      ],
+      "must_not": [
+        "loom",
+        "spice",
+        "sky",
+        "ferry",
+        "seeds",
+        "music",
+        "gate",
+        "bike"
+      ]
+    },
+    {
+      "id": "misleading_word",
+      "kind": "long_dictated",
+      "text": "I went to the grocery store this morning and the checkout line was longer than usual so I spent most of the wait trying to remember whether there was enough detergent at home then I got distracted by a display of notebooks and bought one with plain pages because the ruled ones never seem to have enough space for diagrams Juniper is the fictional name of a JavaScript framework in an article about browser rendering and software packaging After that I took the bus across town and had to stand for part of the journey because every seat was occupied the person next to the door had an enormous bag of wrapping paper which kept unfolding every time we turned a corner when I finally got back I made lunch and put the shopping away before answering a few emails There are still several ordinary things to finish later including sorting the receipts charging my headphones and checking whether the parcel arrived I also want to choose something to watch tonight but I keep spending more time looking at the list than actually watching anything perhaps I will just put on an old comedy and fold the laundry while it plays",
+      "expect": [],
+      "must_not": [
+        "pet",
+        "loom",
+        "spice",
+        "sky",
+        "ferry",
+        "seeds",
+        "music",
+        "gate",
+        "bike"
+      ]
+    },
+    {
+      "id": "nothing_relevant",
+      "kind": "long_dictated",
+      "text": "I went to the grocery store this morning and the checkout line was longer than usual so I spent most of the wait trying to remember whether there was enough detergent at home then I got distracted by a display of notebooks and bought one with plain pages because the ruled ones never seem to have enough space for diagrams After that I took the bus across town and had to stand for part of the journey because every seat was occupied the person next to the door had an enormous bag of wrapping paper which kept unfolding every time we turned a corner when I finally got back I made lunch and put the shopping away before answering a few emails There are still several ordinary things to finish later including sorting the receipts charging my headphones and checking whether the parcel arrived I also want to choose something to watch tonight but I keep spending more time looking at the list than actually watching anything perhaps I will just put on an old comedy and fold the laundry while it plays",
+      "expect": [],
+      "must_not": [
+        "pet",
+        "loom",
+        "spice",
+        "sky",
+        "ferry",
+        "seeds",
+        "music",
+        "gate",
+        "bike"
+      ]
+    },
+    {
+      "id": "bad_periods",
+      "kind": "dictated_bad_periods",
+      "text": "I went to the grocery store this morning and the checkout line was longer than usual so I spent most of the wait trying to remember whether there was enough detergent at home then I got distracted by a display of notebooks and bought one with plain pages because the ruled ones never seem to have enough space for diagrams After that I took the bus across town and had to stand for part of the journey because every seat was occupied the person next to the door had an enormous bag of wrapping paper which kept unfolding every time we turned a corner when I finally got back I made lunch and put the shopping away before answering a few emails the island ferry. I meant to travel on Sunday but. maybe the timetable only allows Saturdays There are still several ordinary things to finish later including sorting the receipts charging my headphones and checking whether the parcel arrived I also want to choose something to watch tonight but I keep spending more time looking at the list than actually watching anything perhaps I will just put on an old comedy and fold the laundry while it plays",
+      "expect": [
+        "ferry"
+      ],
+      "must_not": [
+        "pet",
+        "loom",
+        "spice",
+        "sky",
+        "seeds",
+        "music",
+        "gate",
+        "bike"
+      ]
+    },
+    {
+      "id": "different_words",
+      "kind": "short",
+      "text": "Can you help patch the back wheel on my blue bicycle?",
+      "expect": [
+        "bike"
+      ],
+      "must_not": [
+        "pet",
+        "loom",
+        "spice",
+        "sky",
+        "ferry",
+        "seeds",
+        "music",
+        "gate"
+      ]
+    }
+  ],
+  "conversations": []
+}

@@ -4423,7 +4423,30 @@
     <string name="memory_search_test_timing">Reading your message took %1$d ms. Loading %2$d memories took %3$d ms.</string>
     <string name="memory_search_test_sections_time_limit">Time limit reached while searching your message in sections. The full-message search still ran, but only %1$d of %2$d additional sections were checked.</string>
     <string name="memory_search_test_sections_limit">Section search limit reached. Checked %1$d of %2$d additional sections. The full-message search still ran.</string>
-    <string name="memory_search_test_sections_timing">Additional section search: %1$d sections in %2$d ms.</string>
+    <plurals name="memory_search_test_sections_timing">
+        <item quantity="one">Additional section search: %1$d section in %2$d ms.</item>
+        <item quantity="other">Additional section search: %1$d sections in %2$d ms.</item>
+    </plurals>
+    <plurals name="memory_search_test_sections_processing">
+        <item quantity="one">Successfully searched %1$d of %2$d attempted section. The full-message search still ran. %3$s</item>
+        <item quantity="other">Successfully searched %1$d of %2$d attempted sections. The full-message search still ran. %3$s</item>
+    </plurals>
+    <string name="memory_search_test_section_gate_details">Section relevance gate: %1$s</string>
+    <string name="memory_search_test_sections_failure">Section %1$d failed: %2$s</string>
+    <string name="memory_search_test_sections_repeated_failure">Further sections were not attempted after repeated identical processing failures.</string>
+    <string name="memory_search_test_sections_deadline">Section %1$d did not complete before the time allowance.</string>
+    <string name="memory_search_test_sections_performance">Queue waiting: %1$d ms. Model processing: %2$d ms. Search scoring: %3$d ms. Cancellation is cooperative; total time can exceed the allowance.</string>
+    <string name="memory_search_test_detail_section_candidate">Closest searched section: %1$d of %2$d, starting with “%3$s…”</string>
+    <string name="memory_search_test_section_requirements">Section similarity %1$s (required %2$s). At least one meaningful shared word required: %3$s. Relevance gate: %4$s.</string>
+    <string name="memory_search_test_section_yes">present</string>
+    <string name="memory_search_test_section_no">absent</string>
+    <string name="memory_search_test_gate_pass">passed</string>
+    <string name="memory_search_test_gate_fail">failed</string>
+    <string name="memory_search_test_section_rejected">Section did not qualify: %1$s.</string>
+    <string name="memory_search_test_reject_similarity">below required section similarity</string>
+    <string name="memory_search_test_reject_words">no meaningful shared word</string>
+    <string name="memory_search_test_outcome_scan_limit">Not sent: candidate search limit reached before this memory could be selected.</string>
+    <string name="memory_search_test_reject_gate">relevance gate failed</string>
     <string name="memory_search_test_detail_section">Match found while searching section %1$d of %2$d, starting with “%3$s…”</string>
     <string name="memory_search_test_scope_note">Lorebook entries, roleplay cards, and memories you pick before sending are not part of this test. In a real chat, lorebook entries and cards are added first and can leave less room for memories.</string>
     <string name="memory_search_test_no_memories">There are no saved memories this chat type can use.</string>

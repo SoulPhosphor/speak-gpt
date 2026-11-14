@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.preferences.memory.librarian
 
 import ai.onnxruntime.OnnxTensor
+import org.teslasoft.assistant.runtime.OnnxRuntimeEnvironment
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtException
 import ai.onnxruntime.OrtSession
@@ -61,6 +62,10 @@ class OnnxEmbeddingModel private constructor(
     override val storedTextTokenLimit: Int
 ) : EmbeddingModel {
 
+    private val lifecycle = ModelReadLifecycle {
+        try { modelSession.close() } catch (_: Throwable) { }
+    }
+
     override fun countTokens(text: String, isQuery: Boolean): Int =
         tokenizer.countTokens((if (isQuery) queryPrefix else documentPrefix) + text)
 
@@ -69,7 +74,7 @@ class OnnxEmbeddingModel private constructor(
         isQuery: Boolean,
         tokenLimit: Int,
         control: EmbeddingQueue.ReadControl?
-    ): FloatArray {
+    ): FloatArray = lifecycle.read {
         val prepared = (if (isQuery) queryPrefix else documentPrefix) + text
         // Never ask the model for more than it accepts.
         val limit = tokenLimit.coerceIn(1, maxOf(messageTokenLimit, storedTextTokenLimit))
@@ -78,7 +83,7 @@ class OnnxEmbeddingModel private constructor(
         val mask = LongArray(ids.size) { 1L }
         val pooled = runModel(ids, mask, control)
         val truncated = VectorMath.truncate(pooled, dimensions)
-        return VectorMath.normalize(truncated)
+        VectorMath.normalize(truncated)
     }
 
     /**
@@ -215,7 +220,7 @@ class OnnxEmbeddingModel private constructor(
     }
 
     override fun close() {
-        try { modelSession.close() } catch (_: Throwable) { }
+        lifecycle.close()
     }
 
     companion object {
@@ -244,7 +249,7 @@ class OnnxEmbeddingModel private constructor(
                     throw IllegalStateException("tokenizer id $id out of range (vocab ${tokenizer.vocabSize})")
             }
 
-            val env = OrtEnvironment.getEnvironment()
+            val env = OnnxRuntimeEnvironment.get()
             val session = env.createSession(modelFile.path, OrtSession.SessionOptions())
 
             return OnnxEmbeddingModel(

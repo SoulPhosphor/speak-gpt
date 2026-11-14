@@ -182,11 +182,35 @@ jobs:
           adb install -t app/build/outputs/apk/debug/app-debug.apk
           adb install -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 
+      - name: Prepare q4 Android validation
+        run: |
+          set -euo pipefail
+          model_dir="$RUNNER_TEMP/step2-model"
+          mkdir -p "$model_dir"
+          base=https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/5090578d9565bb06545b4552f76e6bc2c93e4a66
+          curl --fail --location --retry 3 "$base/onnx/model_q4.onnx" -o "$model_dir/model.onnx"
+          curl --fail --location --retry 3 "$base/onnx/model_q4.onnx_data" -o "$model_dir/model_q4.onnx_data"
+          curl --fail --location --retry 3 "$base/tokenizer.json" -o "$model_dir/tokenizer.json"
+          (cd "$model_dir" && sha256sum --check <<'HASHES'
+          ad1dfee81a70f7944b9b9d1cc6e48075b832881cf33fab2f2b248be78f3f0043  model.onnx
+          599962c3143b040de2dd05e5975be3e9091dd067cacc6a8f7186e3203bab9e02  model_q4.onnx_data
+          4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47  tokenizer.json
+          HASHES
+          )
+          target=/sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-model
+          adb shell mkdir -p "$target"
+          adb push "$model_dir/model.onnx" "$target/model.onnx"
+          adb push "$model_dir/model_q4.onnx_data" "$target/model_q4.onnx_data"
+          adb push "$model_dir/tokenizer.json" "$target/tokenizer.json"
+
       - name: Run recovery instrumentation and fault suite
+        env:
+          STEP2_REAL_MODEL: 'true'
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/recovery-results"
           classes=(
+            org.teslasoft.assistant.preferences.memory.Step2RecallInstrumentedTest
             org.teslasoft.assistant.ui.util.PromptLibrarySearchInstrumentedTest
             org.teslasoft.assistant.preferences.backup.PortableRecoveryMatrixInstrumentedTest
             org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreInstrumentedTest
@@ -203,15 +227,32 @@ jobs:
           for class_name in "${classes[@]}"; do
             result_name="${class_name##*.}"
             adb logcat -c
+            extra_args=()
+            if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
+              wifi_before=$(adb shell settings get global wifi_on | tr -d '\r')
+              data_before=$(adb shell settings get global mobile_data | tr -d '\r')
+              adb shell svc wifi disable
+              adb shell svc data disable
+              if [ "$STEP2_REAL_MODEL" = true ]; then extra_args=(-e step2_real_model true); fi
+            fi
             set +e
             adb shell am instrument -w -r \
-              -e class "$class_name" \
+              "${extra_args[@]}" -e class "$class_name" \
               com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner \
               | tee "$RUNNER_TEMP/recovery-results/$result_name.txt"
             instrument_status=${PIPESTATUS[0]}
             set -e
+            if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
+              if [ "$wifi_before" = 1 ]; then adb shell svc wifi enable; fi
+              if [ "$data_before" = 1 ]; then adb shell svc data enable; fi
+              adb shell rm -rf /sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-model
+            fi
             adb logcat -d -v threadtime \
               > "$RUNNER_TEMP/recovery-results/$result_name-logcat.txt"
+            if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
+              adb pull /sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-match.png \
+                "$RUNNER_TEMP/recovery-results/step2-match.png" || true
+            fi
             if [ "$instrument_status" -ne 0 ] || \
               ! grep -Fq "OK (" "$RUNNER_TEMP/recovery-results/$result_name.txt"; then
               failed=1

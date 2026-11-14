@@ -15,13 +15,18 @@ never committed. vectors.json is not read or changed.
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import re
 import tempfile
 import urllib.request
 
+# The API alone can be too late to suppress the native initialization event.
+os.environ["ORT_DISABLE_TELEMETRY"] = "1"
 import numpy as np
 import onnxruntime as ort
+# Apply the process-wide opt-out immediately, including when imported as a tool.
+ort.disable_telemetry_events()
 from tokenizers import Tokenizer
 
 

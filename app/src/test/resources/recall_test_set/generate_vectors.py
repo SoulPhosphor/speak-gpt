@@ -9,12 +9,17 @@ The normal unit tests read vectors.json and need no model or network access.
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import tempfile
 import urllib.request
 
+# The API alone can be too late to suppress the native initialization event.
+os.environ["ORT_DISABLE_TELEMETRY"] = "1"
 import numpy as np
 import onnxruntime as ort
+# Apply the process-wide opt-out immediately, including when imported as a tool.
+ort.disable_telemetry_events()
 from tokenizers import Tokenizer
 
 
@@ -30,14 +35,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("cases.json"))
     parser.add_argument("--output", type=Path, default=Path(__file__).with_name("vectors.json"))
+    parser.add_argument("--model-dir", type=Path, help="Use existing model files without downloading anything")
     args = parser.parse_args()
     cases = json.loads(args.cases.read_text(encoding="utf-8"))
 
     with tempfile.TemporaryDirectory(prefix="recall-embedding-") as temporary:
-        folder = Path(temporary)
-        for remote in ("onnx/model_q4.onnx", "onnx/model_q4.onnx_data", "tokenizer.json"):
-            print(f"Downloading {remote}", flush=True)
-            urllib.request.urlretrieve(f"{BASE}/{remote}", folder / Path(remote).name)
+        folder = args.model_dir or Path(temporary)
+        if args.model_dir is None:
+            for remote in ("onnx/model_q4.onnx", "onnx/model_q4.onnx_data", "tokenizer.json"):
+                print(f"Downloading {remote}", flush=True)
+                urllib.request.urlretrieve(f"{BASE}/{remote}", folder / Path(remote).name)
 
         tokenizer_path = folder / "tokenizer.json"
         definition = json.loads(tokenizer_path.read_text(encoding="utf-8"))
