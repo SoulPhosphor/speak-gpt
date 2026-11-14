@@ -35,11 +35,19 @@ import org.teslasoft.assistant.preferences.memory.ScoredMemory
  *  - a section is only used to FIND a memory. What is sent is the whole
  *    memory; a section's text never reaches the AI.
  *
- * A section's match counts when it passes the same meaning gate as a whole
- * message, or when it passes the keyword gate AND meaning search agrees
- * ([Settings.agreementStandout]); a shared word alone is never enough.
- * Memories found only through a section are placed after everything the
- * whole message matched.
+ * A section's match counts only when meaning search and keyword search
+ * agree (owner decision for Step 2, measured on the saved-memory test set):
+ *  - the memory passes the section's relevance gate, by meaning or by
+ *    keywords, the same gate a whole message uses; and
+ *  - the memory's similarity to the section is at least
+ *    [Settings.sectionSimilarityMin]; and
+ *  - the section and the memory share at least one informative word (common
+ *    words are dropped and word forms normalized by [KeywordText]).
+ * A section that is only loosely similar to a memory, with no word in
+ * common, sent many wrong memories on the test set. The cost of this rule is
+ * that a section describing a memory in entirely different words does not
+ * find it. Memories found only through a section are placed after everything
+ * the whole message matched.
  */
 object LongMessageSearch {
 
@@ -47,20 +55,18 @@ object LongMessageSearch {
     data class Settings(
         /** Words in one section. A message of at most this many words is
          *  searched whole only. */
-        val sectionWords: Int = 60,
+        val sectionWords: Int = 80,
         /** Most sections read for one message. When a message has more, the
          *  sections holding the rarest library words are read first. */
         val maxSections: Int = 8,
         /** Time the section search may add to sending one message. Checked
-         *  before each read, so one read can finish past it. */
+         *  before each read, so one read can finish past it. Not yet
+         *  measured on a phone. */
         val timeAllowanceMillis: Long = 1_500,
-        /** How far a memory's similarity to a section must stand out from
-         *  that section's other similarities before a keyword match from
-         *  the section counts. Not used for small libraries, which have too
-         *  few memories to compare. */
-        val agreementStandout: Double = 1.0,
-        val xFloor: Double = 0.0,
-        val xShared: Boolean = false
+        /** Similarity a memory must reach against a section before the
+         *  section's match counts. Provisional: chosen on the saved-memory
+         *  test set (memory baseline.md), not validated on other libraries. */
+        val sectionSimilarityMin: Double = 0.48
     )
 
     /** One section of a message. [number] counts from 1 in message order. */
@@ -89,11 +95,14 @@ object LongMessageSearch {
         val checked: Int,
         /** True when the time allowance ended the search early. */
         val timedOut: Boolean,
+        /** True when the message has more sections than one search reads
+         *  and the time allowance did not end the search first. */
+        val sectionLimitReached: Boolean,
         /** Time spent on the section reads, waiting for the model included. */
         val millis: Long
     ) {
         companion object {
-            val NONE = Reading(emptyList(), emptyMap(), emptyList(), 0, false, 0)
+            val NONE = Reading(emptyList(), emptyMap(), emptyList(), 0, false, false, 0)
         }
     }
 
@@ -223,7 +232,11 @@ object LongMessageSearch {
                 failures.add(Failure(section, t.message ?: t.javaClass.simpleName))
             }
         }
-        return Reading(sections, vectors, failures, checked, timedOut, now() - started)
+        return Reading(
+            sections, vectors, failures, checked, timedOut,
+            sectionLimitReached = !timedOut && planned.size < sections.size,
+            millis = now() - started
+        )
     }
 
     /**
@@ -241,7 +254,6 @@ object LongMessageSearch {
     ): List<Match> {
         if (reading.vectors.isEmpty()) return emptyList()
         val alreadyMatched = wholeMessage.filter { it.passed }.map { it.memory.memoryId }.toSet()
-        val small = index.withVector < params.smallLibrarySize
         val byNumber = reading.sections.associateBy { it.number }
         val best = LinkedHashMap<String, Match>()
         for ((number, vector) in reading.vectors.entries.sortedBy { it.key }) {
@@ -249,9 +261,8 @@ object LongMessageSearch {
             for (e in LiveRetrieval.explain(section.text, vector, index, params, useImportanceRatings)) {
                 val id = e.memory.memoryId
                 if (id in alreadyMatched) continue
-                val counts = ((e.passedMeaning && (!settings.xShared || e.matchedTerms.isNotEmpty())) ||
-                    (e.passedKeyword && meaningAgrees(e, params, small, settings))) &&
-                    (e.similarity ?: 0.0) >= settings.xFloor
+                val counts = e.passed && e.matchedTerms.isNotEmpty() &&
+                    (e.similarity ?: 0.0) >= settings.sectionSimilarityMin
                 if (!counts) continue
                 val previous = best[id]
                 if (previous == null || e.score > previous.explanation.score) {
@@ -260,22 +271,5 @@ object LongMessageSearch {
             }
         }
         return best.values.sortedByDescending { it.explanation.score }
-    }
-
-    /** Whether meaning search confirms a section's keyword match: the memory
-     *  must also be close in meaning to that section. A memory with no
-     *  vector cannot be confirmed. */
-    private fun meaningAgrees(
-        e: LiveRetrieval.Explanation,
-        params: LiveRetrieval.Params,
-        small: Boolean,
-        settings: Settings
-    ): Boolean {
-        val similarity = e.similarity ?: return false
-        return if (small) {
-            similarity >= maxOf(params.similarityFloor, params.smallLibraryFloor)
-        } else {
-            similarity >= params.similarityFloor && (e.standout ?: 0.0) >= settings.agreementStandout
-        }
     }
 }

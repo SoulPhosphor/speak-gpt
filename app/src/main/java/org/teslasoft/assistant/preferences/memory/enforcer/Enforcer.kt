@@ -244,6 +244,7 @@ class Enforcer private constructor(private val appContext: Context) {
             notes.add("retrieval failed: ${e.message}")
             emptyList()
         }
+        val foundBySection = retrievalDiag?.foundBySection.orEmpty()
         val manualIds = manualMemories.map { it.memoryId }.toSet()
         val pool = poolScored.filterNot { it.memory.memoryId in manualIds }
             .map { toAssembled(it.memory, it.score, it.similarity) }
@@ -420,7 +421,10 @@ class Enforcer private constructor(private val appContext: Context) {
                 ManualMemoryPriority.remainingSlots(policy.topK, manualMemories.size),
                 scanCap,
                 isMandatory = {
-                    ImportanceRanking.isMandatory(it.importance.toDouble(), useImportanceRatings)
+                    // A memory only a section of a long message found never
+                    // goes past the memory limit (conversation_recall_plan.md G.10).
+                    it.memoryId !in foundBySection &&
+                        ImportanceRanking.isMandatory(it.importance.toDouble(), useImportanceRatings)
                 }
             ) { mem ->
                 val dup = loreDupOf(mem)
@@ -454,7 +458,7 @@ class Enforcer private constructor(private val appContext: Context) {
         // the injected/cut lines below.
         retrievalDiag?.let { d ->
             val mode = when {
-                !d.hasModel || (!d.semantic && d.withVector > 0) -> "keyword only — no model"
+                !d.hasModel || (!d.semantic && d.withVector > 0) -> "Keyword search only (embedding model unavailable)"
                 d.withVector < d.eligible -> "meaning + keyword, ${d.withVector} of ${d.eligible} have vectors"
                 else -> "meaning + keyword"
             }

@@ -32,7 +32,8 @@ import org.teslasoft.assistant.preferences.memory.enforcer.RetrievalBackfill
  * and memory-space walk ([RetrievalBackfill.select] with
  * [PromptAssembler.memoryCost]) that the chat's Enforcer uses, so the screen
  * shows what chats actually do. Lorebook entries, roleplay cards, and memories
- * picked before sending are not part of the test.
+ * picked before sending are not part of the test. A long message is also
+ * searched in sections ([LongMessageSearch]), as chats do.
  */
 object SearchTestReport {
 
@@ -49,7 +50,13 @@ object SearchTestReport {
         NO_SPACE
     }
 
-    data class Row(val explanation: LiveRetrieval.Explanation, val outcome: Outcome)
+    data class Row(
+        val explanation: LiveRetrieval.Explanation,
+        val outcome: Outcome,
+        /** Set when only a section of the message found this memory; the
+         *  explanation's numbers are then the memory against that section. */
+        val section: LongMessageSearch.Match? = null
+    )
 
     data class Report(
         val sent: List<Row>,
@@ -57,7 +64,9 @@ object SearchTestReport {
         val notSent: List<Row>,
         /** The memory text the AI would receive (memories only). */
         val preview: String,
-        val diagnostics: LiveRetrieval.Diagnostics
+        val diagnostics: LiveRetrieval.Diagnostics,
+        /** What the section search of a long message did. */
+        val sections: LongMessageSearch.Reading = LongMessageSearch.Reading.NONE
     )
 
     fun build(
@@ -66,15 +75,24 @@ object SearchTestReport {
         corpus: List<LiveRetrieval.Candidate>,
         tuning: SearchTuning,
         useImportanceRatings: Boolean,
-        notSentShown: Int = 10
+        notSentShown: Int = 10,
+        sections: LongMessageSearch.Reading = LongMessageSearch.Reading.NONE
     ): Report {
         val scanCap = RetrievalBackfill.scanCap(tuning.maxMemories)
+        val index = LiveRetrieval.index(corpus)
         val live = LiveRetrieval.search(
-            query, queryVector, corpus, tuning.params, scanCap + 1,
+            query, queryVector, index, tuning.params, scanCap + 1,
             useImportanceRatings, includeMandatoryImportance = useImportanceRatings
         )
         val byId = live.explanations.associateBy { it.memory.memoryId }
-        val pool = live.ranked.map { byId.getValue(it.memory.memoryId) }
+        // Memories only a section found come after everything the whole
+        // message matched, and never go past the memory limit.
+        val bySection = LongMessageSearch.matches(
+            sections, index, tuning.params, live.explanations, useImportanceRatings
+        ).take((scanCap + 1 - live.ranked.size).coerceAtLeast(0))
+            .associateBy { it.explanation.memory.memoryId }
+        val pool = live.ranked.map { byId.getValue(it.memory.memoryId) } +
+            bySection.values.map { it.explanation }
 
         val noSpace = HashSet<String>()
         val assembled = HashMap<String, AssembledMemory>()
@@ -82,7 +100,8 @@ object SearchTestReport {
         val selection = RetrievalBackfill.select(
             pool, tuning.maxMemories, scanCap,
             isMandatory = { e ->
-                ImportanceRanking.isMandatory(e.memory.importance.toDouble(), useImportanceRatings)
+                e.memory.memoryId !in bySection &&
+                    ImportanceRanking.isMandatory(e.memory.importance.toDouble(), useImportanceRatings)
             }
         ) { e ->
             val a = ManualMemoryPriority.assemble(e.memory, e.score.toFloat(), (e.similarity ?: 0.0).toFloat())
@@ -99,22 +118,31 @@ object SearchTestReport {
 
         val sentIds = selection.kept.map { it.memory.memoryId }.toSet()
         val sent = selection.kept.mapIndexed { index, e ->
-            Row(e, if (index >= tuning.maxMemories) Outcome.SENT_PAST_LIMIT else Outcome.SENT)
+            Row(
+                e,
+                if (index >= tuning.maxMemories) Outcome.SENT_PAST_LIMIT else Outcome.SENT,
+                bySection[e.memory.memoryId]
+            )
         }
-        val notSent = live.explanations
+        val unsent = live.explanations
             .filter { it.memory.memoryId !in sentIds }
-            .take(notSentShown)
-            .map { e ->
+            .map { whole ->
+                val match = bySection[whole.memory.memoryId]
+                val e = match?.explanation ?: whole
                 val outcome = when {
                     e.memory.memoryId in noSpace -> Outcome.NO_SPACE
                     e.passed -> Outcome.LIMIT_FULL
                     else -> Outcome.NOT_A_MATCH
                 }
-                Row(e, outcome)
+                Row(e, outcome, match)
             }
+        // A match that was not sent is always shown, even when its
+        // whole-message score would place it below the rows shown.
+        val notSent = unsent.take(notSentShown) +
+            unsent.drop(notSentShown).filter { it.section != null }
         val preview = PromptAssembler.render(
             AssemblyComponents(memories = selection.kept.map { assembled.getValue(it.memory.memoryId) })
         )
-        return Report(sent, notSent, preview, live.diagnostics)
+        return Report(sent, notSent, preview, live.diagnostics, sections)
     }
 }

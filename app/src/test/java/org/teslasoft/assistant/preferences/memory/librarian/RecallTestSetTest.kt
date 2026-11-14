@@ -150,9 +150,20 @@ class RecallTestSetTest {
                 vector(id), memory.getJSONArray("tags").strings(), emptyList()
             )
         }
+        // Long messages are also searched in sections (LongMessageSearch).
+        // Their vectors come from the real model, made by
+        // generate_section_vectors.py; the app's own cutter must produce
+        // exactly the section texts recorded there.
+        val sectionFixture = JSONObject(resource("section_vectors.json"))
+        val settings = LongMessageSearch.Settings()
+        assertEquals("Section vectors were made for another section size",
+            settings.sectionWords, sectionFixture.getInt("section_words"))
+        val sectionVectors = sectionFixture.getJSONObject("messages")
+        val index = LiveRetrieval.index(corpus)
         val byMessage = linkedMapOf<String, Counts>()
         val byKind = linkedMapOf<String, Counts>()
         val outcomes = linkedMapOf<String, Outcome>()
+        val wholeOutcomes = linkedMapOf<String, Outcome>()
         for (message in allMessages) {
             val id = message.getString("id")
             val kind = message.getString("kind")
@@ -163,9 +174,30 @@ class RecallTestSetTest {
             assertTrue("$id has conflicting answers", expected.intersect(forbidden).isEmpty())
             // Each conversation turn is intentionally searched on its own:
             // no previous message is concatenated and no result is carried over.
-            val sent = LiveRetrieval.search(
+            val whole = LiveRetrieval.search(
                 message.getString("text"), vector(id), corpus, LiveRetrieval.Params(), limit = 5
-            ).ranked.map { it.memory.memoryId }.toSet()
+            )
+            val wholeSent = whole.ranked.map { it.memory.memoryId }
+            wholeOutcomes[id] = outcome(expected, wholeSent.toSet())
+            val recorded = sectionVectors.optJSONArray(id)?.objects().orEmpty()
+            assertEquals("$id is cut differently from the recorded sections",
+                recorded.map { it.getString("text") },
+                LongMessageSearch.cut(message.getString("text")).map { it.text })
+            val reading = LongMessageSearch.read(message.getString("text"), index, settings, now = { 0L }) { text ->
+                val array = recorded.single { it.getString("text") == text }.getJSONArray("vector")
+                FloatArray(array.length()) { array.getDouble(it).toFloat() }
+            }
+            val bySection = LongMessageSearch.matches(reading, index, LiveRetrieval.Params(), whole.explanations)
+                .take((5 - wholeSent.size).coerceAtLeast(0))
+            for (match in bySection) {
+                val e = match.explanation
+                println("RECALL SECTION $id ${e.memory.memoryId} section ${match.section.number} of " +
+                    "${match.sectionCount} similarity ${"%.2f".format(e.similarity)} words ${e.matchedTerms}")
+            }
+            val sentInOrder = wholeSent + bySection.map { it.explanation.memory.memoryId }
+            assertEquals("$id: whole-message matches must keep their place and order",
+                wholeSent, sentInOrder.take(wholeSent.size))
+            val sent = sentInOrder.toSet()
             val result = outcome(expected, sent)
             val counts = result.counts()
             outcomes[id] = result
@@ -206,6 +238,13 @@ class RecallTestSetTest {
             assertTrue("$id baseline mislabels an expected id as incorrect", incorrect.intersect(expected).isEmpty())
             assertTrue("$id baseline refers to unknown memories", memoryIds.containsAll(found + incorrect))
             failures.addAll(regressions(id, found, incorrect, current))
+            // The whole-message search on its own must still find everything
+            // it found before sections were searched, and add nothing wrong.
+            val foundBySection = previous.optJSONArray("found_by_section")?.strings()?.toSet().orEmpty()
+            assertTrue("$id found_by_section must be part of found", found.containsAll(foundBySection))
+            failures.addAll(
+                regressions("$id (whole message only)", found - foundBySection, incorrect, wholeOutcomes.getValue(id))
+            )
         }
         failures.addAll((previousMessages.keySet() - outcomes.keys).map { "$it is missing from the test set" })
         assertTrue(

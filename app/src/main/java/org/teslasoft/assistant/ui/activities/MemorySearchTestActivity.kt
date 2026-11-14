@@ -63,6 +63,8 @@ class MemorySearchTestActivity : SettingsPageActivity() {
     private lateinit var textSummary: TextView
     private lateinit var textMode: TextView
     private lateinit var textTiming: TextView
+    private lateinit var textSectionSearch: TextView
+    private lateinit var textSectionTiming: TextView
     private lateinit var headerSent: View
     private lateinit var listSent: LinearLayout
     private lateinit var headerNotSent: View
@@ -151,6 +153,8 @@ class MemorySearchTestActivity : SettingsPageActivity() {
         textSummary = findViewById(R.id.text_summary)
         textMode = findViewById(R.id.text_mode)
         textTiming = findViewById(R.id.text_timing)
+        textSectionSearch = findViewById(R.id.text_section_search)
+        textSectionTiming = findViewById(R.id.text_section_timing)
         headerSent = findViewById(R.id.header_sent)
         listSent = findViewById(R.id.list_sent)
         headerNotSent = findViewById(R.id.header_not_sent)
@@ -354,7 +358,9 @@ class MemorySearchTestActivity : SettingsPageActivity() {
             showMessageOnly(getString(R.string.memory_search_test_no_memories))
             return
         }
-        val report = SearchTestReport.build(p.query, p.queryVector, p.corpus, trial, useImportanceRatings)
+        val report = SearchTestReport.build(
+            p.query, p.queryVector, p.corpus, trial, useImportanceRatings, sections = p.sections
+        )
         showReport(p, report)
     }
 
@@ -362,6 +368,8 @@ class MemorySearchTestActivity : SettingsPageActivity() {
         textSummary.text = text
         textMode.visibility = View.GONE
         textTiming.visibility = View.GONE
+        textSectionSearch.visibility = View.GONE
+        textSectionTiming.visibility = View.GONE
         headerSent.visibility = View.GONE
         headerNotSent.visibility = View.GONE
         listSent.removeAllViews()
@@ -386,6 +394,20 @@ class MemorySearchTestActivity : SettingsPageActivity() {
         }
         textTiming.visibility = View.VISIBLE
         textTiming.text = getString(R.string.memory_search_test_timing, p.embedMillis, d.eligible, p.loadMillis)
+        // A long message is also searched in sections. Say when that search
+        // stopped early, and how long it took.
+        val s = report.sections
+        val stopped = when {
+            s.timedOut -> R.string.memory_search_test_sections_time_limit
+            s.sectionLimitReached -> R.string.memory_search_test_sections_limit
+            else -> null
+        }
+        textSectionSearch.visibility = if (stopped == null) View.GONE else View.VISIBLE
+        if (stopped != null) textSectionSearch.text = getString(stopped, s.checked, s.sections.size)
+        textSectionTiming.visibility = if (s.checked == 0) View.GONE else View.VISIBLE
+        if (s.checked > 0) {
+            textSectionTiming.text = getString(R.string.memory_search_test_sections_timing, s.checked, s.millis)
+        }
 
         headerSent.visibility = if (report.sent.isEmpty()) View.GONE else View.VISIBLE
         headerNotSent.visibility = if (report.notSent.isEmpty()) View.GONE else View.VISIBLE
@@ -404,6 +426,14 @@ class MemorySearchTestActivity : SettingsPageActivity() {
             val card = inflater.inflate(R.layout.view_memory_search_result, list, false)
             card.findViewById<TextView>(R.id.text_memory).text = e.memory.content.trim()
             card.findViewById<TextView>(R.id.text_outcome).text = getString(outcomeText(row, small))
+            row.section?.let { match ->
+                val found = card.findViewById<TextView>(R.id.text_section)
+                found.visibility = View.VISIBLE
+                found.text = getString(
+                    R.string.memory_search_test_detail_section,
+                    match.section.number, match.sectionCount, match.section.opening()
+                )
+            }
             card.findViewById<TextView>(R.id.text_meaning).text = when {
                 e.similarity == null && d.meaningRan -> getString(R.string.memory_search_test_detail_meaning_no_vector)
                 e.similarity == null -> getString(R.string.memory_search_test_detail_meaning_not_run)

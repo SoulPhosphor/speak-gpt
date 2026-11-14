@@ -1,6 +1,8 @@
 package org.teslasoft.assistant.preferences.memory.librarian
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -88,5 +90,108 @@ class SearchTestReportTest {
         val strict = SearchTuning(params = LiveRetrieval.Params(similarityFloor = 0.6))
         assertTrue(build(corpus, strict).sent.isEmpty())
         assertEquals(1, build(corpus).sent.size)
+    }
+
+    /* ---------------------- long messages in sections ---------------------- */
+
+    private val elsewhere = floatArrayOf(0f, 1f)
+
+    /** A 300-word message that mentions Pepper only in its third hundred. */
+    private val longMessage = (0 until 200).joinToString(" ") { "zq$it" } + " Pepper seems unwell " +
+        (200 until 297).joinToString(" ") { "zq$it" }
+
+    /** Reads every section: the ones naming Pepper as [q], the rest as
+     *  unrelated to every memory. */
+    private fun sections(corpus: List<LiveRetrieval.Candidate>) =
+        LongMessageSearch.read(longMessage, LiveRetrieval.index(corpus), now = { 0L }) { text ->
+            if ("Pepper" in text) q else elsewhere
+        }
+
+    private fun pepper(importance: Int = 0) =
+        cand("pepper", 0.55, content = "Pepper is the user's cat.", importance = importance)
+
+    private fun buildLong(corpus: List<LiveRetrieval.Candidate>, tuning: SearchTuning = SearchTuning()) =
+        SearchTestReport.build(
+            longMessage, elsewhere, corpus, tuning, useImportanceRatings = true, sections = sections(corpus)
+        )
+
+    @Test
+    fun aMemoryFoundOnlyBySectionIsSentAndNamesItsSection() {
+        val corpus = listOf(pepper()) + noise()
+        val withoutSections = SearchTestReport.build(longMessage, elsewhere, corpus, SearchTuning(), true)
+        assertTrue(withoutSections.sent.isEmpty())
+
+        val r = buildLong(corpus)
+        val row = r.sent.single()
+        assertEquals("pepper", row.explanation.memory.memoryId)
+        assertEquals(SearchTestReport.Outcome.SENT, row.outcome)
+        val match = row.section!!
+        assertTrue("Pepper" in match.section.text)
+        assertEquals(r.sections.sections.size, match.sectionCount)
+        // The row's numbers are the memory against that section.
+        assertEquals(0.55, row.explanation.similarity!!, 0.001)
+        assertTrue(r.preview.contains("Pepper is the user's cat."))
+        assertTrue(r.notSent.none { it.explanation.memory.memoryId == "pepper" })
+    }
+
+    @Test
+    fun wholeMessageMatchesKeepTheirPlaceAheadOfSectionMatches() {
+        // "whole" is matched by the whole message through its keywords; the
+        // stronger Pepper match is found only by section and still comes after.
+        val whole = LiveRetrieval.Candidate(
+            RetrievableMemory(
+                memoryId = "whole", scope = "global",
+                content = (0 until 297).joinToString(" ") { "zq$it" },
+                embeddingText = null, importance = 0,
+                createdAt = "2026-07-01T00:00:00Z", worldId = null
+            ),
+            vec(0.1), emptyList(), emptyList()
+        )
+        val corpus = listOf(pepper(), whole) + noise()
+        val r = buildLong(corpus)
+        assertEquals(listOf("whole", "pepper"), r.sent.map { it.explanation.memory.memoryId })
+        assertNull(r.sent[0].section)
+        assertNotNull(r.sent[1].section)
+
+        // With room for one memory, the whole-message match is the one sent.
+        val one = buildLong(corpus, SearchTuning(maxMemories = 1))
+        assertEquals(listOf("whole"), one.sent.map { it.explanation.memory.memoryId })
+        val left = one.notSent.single { it.explanation.memory.memoryId == "pepper" }
+        assertEquals(SearchTestReport.Outcome.LIMIT_FULL, left.outcome)
+        assertNotNull(left.section)
+    }
+
+    @Test
+    fun aPlusThreeMemoryFoundOnlyBySectionDoesNotGoPastTheLimit() {
+        val whole = LiveRetrieval.Candidate(
+            RetrievableMemory(
+                memoryId = "whole", scope = "global",
+                content = (0 until 297).joinToString(" ") { "zq$it" },
+                embeddingText = null, importance = 0,
+                createdAt = "2026-07-01T00:00:00Z", worldId = null
+            ),
+            vec(0.1), emptyList(), emptyList()
+        )
+        val r = buildLong(listOf(pepper(importance = 3), whole) + noise(), SearchTuning(maxMemories = 1))
+        assertEquals(listOf("whole"), r.sent.map { it.explanation.memory.memoryId })
+    }
+
+    @Test
+    fun aSectionMatchThatWasNotSentIsShownEvenBelowTheRowsShown() {
+        val whole = LiveRetrieval.Candidate(
+            RetrievableMemory(
+                memoryId = "whole", scope = "global",
+                content = (0 until 297).joinToString(" ") { "zq$it" },
+                embeddingText = null, importance = 0,
+                createdAt = "2026-07-01T00:00:00Z", worldId = null
+            ),
+            vec(0.1), emptyList(), emptyList()
+        )
+        val corpus = listOf(pepper(), whole) + noise()
+        val r = SearchTestReport.build(
+            longMessage, elsewhere, corpus, SearchTuning(maxMemories = 1), true,
+            notSentShown = 2, sections = sections(corpus)
+        )
+        assertTrue(r.notSent.any { it.explanation.memory.memoryId == "pepper" && it.section != null })
     }
 }
