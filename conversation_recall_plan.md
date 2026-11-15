@@ -1439,7 +1439,7 @@ requirement. The repair branch `repair/step2-contract-audit` restores original
 per-message quality checks for every ABI without changing gold labels or
 thresholds; newly wrong memories must fail.
 Details, runtime comparisons and physical-phone limits are in `memory baseline.md`;
-final CI, review and merge status are tracked in PR #201. No parameter was retuned.
+PR #201 is merged. The renewed contract-audit run and isolated Android 1.29 comparison both fail the original accuracy gate with 69/6/21; 1.29 is not an accuracy fix and 1.20 remains the shipping dependency. No parameter was retuned.
 
 **What the user can see.** The Memory Search Test screen must show which
 piece of the message a memory matched, and when the search ran out of
@@ -1842,7 +1842,7 @@ rewrite its expected answers. Its authoritative results are in
 |---:|---|---|---|---|---|---|---|
 | 0 | **Complete** | Saved-memory test set with the real model's vectors | Routine with written instructions | Lighter | Nothing | Nothing | Nothing |
 | 1 | **Complete (#199)** | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle | Nothing | Step 0 complete | Nothing (G33) |
-| 2 | Implemented (#200); repaired (#201) | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
+| 2 | Acceptance reopened; repairs under verification | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
 | 3 | Waiting | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
 | 4 | Waiting | Saved memories stay through follow-up messages | Careful | Middle | Follow-up continuity | Steps 0 and 3 | Label and placement of its setting (G32) |
 | 5 | Waiting | Memory word count and length limit | Careful | Middle | Word count under memory fields | Step 1 | Open parts of G34 |
@@ -2113,7 +2113,7 @@ measurements and verification results.
 
 ### Step 2: long messages in saved-memory search (Hard)
 
-**Status:** Implemented in #200 and repaired in #201, but acceptance remains open. The Android 1.20 result adds wrong matches against the original baseline; no lowered acceptance target is approved. Current repair work is on `repair/step2-contract-audit`, with no runtime or model switch yet.
+**Status:** Implemented in #200 and repaired in #201, but acceptance remains open. The Android 1.20 result adds wrong matches against the original baseline; no lowered acceptance target is approved. Current repair work is on `repair/step2-contract-audit`, with no shipping runtime or model switch approved. An isolated Android 1.29 candidate is recorded in `memory baseline.md`.
 
 **Agent checklist for this step**
 - **Prerequisites:** Steps 0 and 1. **Approval gate:** Resolved by the owner; final wording is in G.13b. Routine repair corrections are authorized.
