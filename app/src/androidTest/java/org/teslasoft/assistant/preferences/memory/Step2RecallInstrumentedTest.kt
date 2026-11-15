@@ -1,7 +1,6 @@
 package org.teslasoft.assistant.preferences.memory
 
 import android.os.Bundle
-import android.os.Build
 import android.graphics.Bitmap
 import android.content.Context
 import android.content.ContextWrapper
@@ -14,12 +13,16 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
 import org.junit.After
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,6 +35,8 @@ import org.teslasoft.assistant.preferences.memory.librarian.*
 import org.teslasoft.assistant.ui.activities.MemorySearchTestActivity
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.math.sqrt
 
 /** Real encrypted-store -> Librarian -> Enforcer -> prompt boundary, using a
@@ -68,10 +73,14 @@ class Step2RecallInstrumentedTest {
         var queryCalls = 0
         var failSections = false
         var failQuery = false
+        var queryStarted: CountDownLatch? = null
+        var queryRelease: CountDownLatch? = null
         override fun countTokens(text: String, isQuery: Boolean) = text.split(' ').size
         override fun embed(text: String, isQuery: Boolean, tokenLimit: Int, control: EmbeddingQueue.ReadControl?): FloatArray {
             if (text == message) {
                 queryCalls++
+                queryStarted?.countDown()
+                queryRelease?.let { check(it.await(10, TimeUnit.SECONDS)) { "Test query was not released" } }
                 if (failQuery) error("test query failure")
                 return whole
             }
@@ -198,11 +207,60 @@ class Step2RecallInstrumentedTest {
         assertSame(OnnxRuntimeEnvironment.get(), OnnxRuntimeEnvironment.get())
     }
 
+    @Test fun indexReadFailureRetainsKeywordResultsAndActualCause() {
+        // Only this isolated test database is altered.
+        store.writableDatabase.execSQL("DROP TABLE embeddings")
+        val prepared = librarian.prepareSearchTest(RetrievalScope(null, null, null, null), "juniper")!!
+        assertTrue(prepared.hasModel)
+        assertTrue("Index error was discarded", !prepared.indexFailureCause.isNullOrBlank())
+        assertNull(prepared.queryVector)
+        val report = SearchTestReport.build("juniper", null, prepared.corpus,
+            SearchTuning(maxMemories = 1), true, sections = prepared.sections)
+        assertEquals(listOf("section"), report.sent.map { it.explanation.memory.memoryId })
+        ActivityScenario.launch(MemorySearchTestActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val render = MemorySearchTestActivity::class.java.getDeclaredMethod("showReport",
+                    Librarian.PreparedSearchTest::class.java, SearchTestReport.Report::class.java).apply { isAccessible = true }
+                render.invoke(activity, prepared, report)
+                assertEquals(activity.getString(R.string.memory_search_test_mode_index_failed, prepared.indexFailureCause),
+                    activity.findViewById<TextView>(R.id.text_mode).text.toString())
+            }
+        }
+    }
+
+    @Test fun editedMessageCannotReceiveThePreviousTestsResult() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        fake.queryStarted = started
+        fake.queryRelease = release
+        ActivityScenario.launch(MemorySearchTestActivity::class.java).use { scenario ->
+            var jobs = emptyList<Job>()
+            try {
+                scenario.onActivity { activity ->
+                    activity.findViewById<android.widget.EditText>(R.id.field_message).setText(message)
+                    val scopeJob = activity.lifecycleScope.coroutineContext[Job]!!
+                    val existingJobs = scopeJob.children.toSet()
+                    MemorySearchTestActivity::class.java.getDeclaredMethod("runTest")
+                        .apply { isAccessible = true }.invoke(activity)
+                    jobs = scopeJob.children.filterNot { it in existingJobs }.toList()
+                }
+                assertTrue("The old query did not start", started.await(10, TimeUnit.SECONDS))
+                scenario.onActivity { activity ->
+                    activity.findViewById<android.widget.EditText>(R.id.field_message).setText("a different message")
+                }
+            } finally { release.countDown() }
+            runBlocking { withTimeout(10_000) { jobs.joinAll() } }
+            scenario.onActivity { activity ->
+                assertEquals(View.GONE, activity.findViewById<View>(R.id.section_result).visibility)
+                assertNull(MemorySearchTestActivity::class.java.getDeclaredField("prepared")
+                    .apply { isAccessible = true }.get(activity))
+            }
+        }
+    }
+
     @Test fun realAndroidModelReferenceAndMeasuredSectionLatency() {
-        // CI supplies temporary q4 artifacts and runs this offline. Local
-        // instrumentation can omit the argument to run only deterministic
-        // integration/UI checks without downloading a model.
-        assumeTrue(InstrumentationRegistry.getArguments().getString("step2_real_model") == "true")
+        // Full class runs require the pinned model fixtures. Missing inputs
+        // must fail rather than silently skip the actual Android accuracy gate.
         val supplied = File(base.filesDir, "step2-model")
         val runtimeContext = object : ContextWrapper(base) {
             override fun getApplicationContext(): Context = this
@@ -237,7 +295,7 @@ class Step2RecallInstrumentedTest {
         try {
             val tokenizer = OnnxEmbeddingModel::class.java.getDeclaredField("tokenizer")
                 .apply { isAccessible = true }.get(real) as HfTokenizer
-            val runtimeDifferences = verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_test_set") +
+            val accuracyFailures = verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_test_set") +
                 verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_independent_set")
             val reference = VectorMath.cosine(
                 real.embed("What should I feed Pepper?", true),
@@ -264,7 +322,7 @@ class Step2RecallInstrumentedTest {
             InstrumentationRegistry.getInstrumentation().sendStatus(0, metrics)
             // Gather both datasets and latency before failing. Runtime
             // observations stay separate from the unchanged correct answers.
-            assertTrue(runtimeDifferences.joinToString("\n"), runtimeDifferences.isEmpty())
+            assertTrue(accuracyFailures.joinToString("\n"), accuracyFailures.isEmpty())
         } finally { model(fake); real.close(); runtimeContext.filesDir.deleteRecursively() }
     }
 
@@ -278,16 +336,20 @@ class Step2RecallInstrumentedTest {
         real: EmbeddingModel, tokenizer: HfTokenizer, folder: String
     ): List<String> {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        fun fixture(name: String) = JSONObject(instrumentation.context.assets
-            .open("$folder/$name").bufferedReader().use { it.readText() })
-        val cases = fixture("cases.json")
+        fun fixtureText(name: String) = instrumentation.context.assets
+            .open("$folder/$name").bufferedReader().use { it.readText() }
+        fun fixture(name: String) = JSONObject(fixtureText(name))
+        val casesText = fixtureText("cases.json")
+        val cases = JSONObject(casesText)
         val vectors = fixture("vectors.json")
         val sections = fixture("section_vectors.json").getJSONObject("messages")
         val tokenHashes = fixture("token_hashes.json").getJSONObject("hashes")
-        val observed = fixture("android_ort120_x86_64_observed.json")
-        assertEquals("Runtime changes require fresh validation", observed.getString("runtime"),
-            OnnxRuntimeEnvironment.get().version)
-        val compareObserved = Build.SUPPORTED_ABIS.firstOrNull() == observed.getString("abi")
+        // New observations are evidence, never permission to lower accuracy.
+        val accuracyBaseline = fixture(if (folder == "recall_test_set") "baseline.json" else "observed.json")
+        val baselineMessages = accuracyBaseline.getJSONObject("by_message")
+        val casesHash = MessageDigest.getInstance("SHA-256").digest(casesText.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        assertEquals("Correct-answer labels must stay fixed", accuracyBaseline.getString("cases_sha256"), casesHash)
         val failures = mutableListOf<String>()
         val runtimeDifferences = mutableListOf<String>()
         val inputDiagnostics = JSONArray()
@@ -362,16 +424,22 @@ class Step2RecallInstrumentedTest {
                 runtimeDifferences.add("$folder/$id whole-message runtime difference: Python=$pythonWhole Android=$androidWhole")
             if (pythonSent != androidSent)
                 runtimeDifferences.add("$folder/$id section-retrieval runtime difference: Python=$pythonSent Android=$androidSent")
-            // Native 1.20 and Python 1.29 differ slightly even with identical
-            // tokens/weights. Freeze measured CI-platform observations, without
-            // relabelling any incorrect match as a correct answer. Other ABIs
-            // still run input/vector and per-message regression checks below.
-            if (compareObserved) {
-                val prior = observed.getJSONObject("messages").getJSONObject(id)
-                if (prior.getJSONArray("whole").strings() != androidWhole)
-                    failures.add("$folder/$id unexpected Android whole-message regression: $androidWhole")
-                if (prior.getJSONArray("with_sections").strings() != androidSent)
-                    failures.add("$folder/$id unexpected Android section-retrieval regression: $androidSent")
+            val prior = if (folder == "recall_test_set") baselineMessages.getJSONObject(id) else null
+            val previousSent = if (prior == null) baselineMessages.getJSONArray(id).strings().toSet() else emptySet()
+            val requiredCorrect = prior?.getJSONArray("found")?.strings()?.toSet() ?: (previousSent intersect expected)
+            val previouslyIncorrect = prior?.getJSONArray("wrongly_sent")?.strings()?.toSet() ?: (previousSent - expected)
+            assertTrue("$folder/$id baseline mislabels correct memories", requiredCorrect.all { it in expected })
+            assertTrue("$folder/$id baseline mislabels incorrect memories", previouslyIncorrect.none { it in expected })
+            val lostCorrect = requiredCorrect - androidSent.toSet()
+            val addedIncorrect = (androidSent.toSet() - expected) - previouslyIncorrect
+            if (lostCorrect.isNotEmpty()) failures.add("$folder/$id lost required correct memories: $lostCorrect")
+            if (addedIncorrect.isNotEmpty()) failures.add("$folder/$id added incorrect memories against original baseline: $addedIncorrect")
+            if (prior != null) {
+                val previouslySectionOnly = prior.optJSONArray("found_by_section")?.strings()?.toSet().orEmpty()
+                val lostWholeCorrect = (requiredCorrect - previouslySectionOnly) - androidWhole.toSet()
+                val addedWholeIncorrect = (androidWhole.toSet() - expected) - previouslyIncorrect
+                if (lostWholeCorrect.isNotEmpty()) failures.add("$folder/$id whole search lost required correct memories: $lostWholeCorrect")
+                if (addedWholeIncorrect.isNotEmpty()) failures.add("$folder/$id whole search added incorrect memories: $addedWholeIncorrect")
             }
             if (androidSent.take(androidWhole.size) != androidWhole)
                 failures.add("$folder/$id whole-message matches/order were not preserved")
@@ -402,19 +470,10 @@ class Step2RecallInstrumentedTest {
         // Original vector-similarity tolerance is unchanged. Runtime-specific
         // lists, whole-message preservation and no-new-wrong checks are above.
         if (minimumCosine < .99f) failures.add("$folder vectors diverged from the fixture model: minimum cosine=$minimumCosine")
-        if (compareObserved) {
-            val totals = observed.getJSONObject("totals")
-            for ((kind, actual) in mapOf("whole" to listOf(wholeCorrect, wholeMissed, wholeIncorrect),
-                "with_sections" to listOf(correct, missed, incorrect))) {
-                val recordedTotals = totals.getJSONArray(kind)
-                if ((0 until recordedTotals.length()).map { recordedTotals.getInt(it) } != actual)
-                    failures.add("$folder unexpected Android $kind accuracy totals: $actual")
-            }
-        }
         File(base.getExternalFilesDir(null), "step2-$folder-parity.json").writeText(
             JSONObject().put("inputs", inputDiagnostics).put("decisions", decisionDiagnostics)
                 .put("runtime_differences", JSONArray(runtimeDifferences)).put("failures", JSONArray(failures))
-                .put("observed_platform_checked", compareObserved).put("correct", correct)
+                .put("accuracy_baseline", if (folder == "recall_test_set") "baseline.json" else "observed.json").put("correct", correct)
                 .put("missed", missed).put("incorrect", incorrect).toString(2))
         instrumentation.sendStatus(0, Bundle().apply {
             putString("step2_android_vector_parity", "$folder; compared=$compared; " +

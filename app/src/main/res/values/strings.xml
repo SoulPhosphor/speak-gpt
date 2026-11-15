@@ -4419,6 +4419,7 @@
     <string name="memory_search_test_mode_both">Meaning search and keyword search both ran.</string>
     <string name="memory_search_test_mode_no_model">Only keyword search ran, because no embedding model is installed.</string>
     <string name="memory_search_test_mode_embed_failed">Only keyword search ran, because the embedding model could not read this message.</string>
+    <string name="memory_search_test_mode_index_failed">Couldn\'t load the embedding index. Used keyword search instead. Error: %1$s</string>
     <string name="memory_search_test_mode_partial">%1$d of %2$d memories have no embedding yet, so they were checked by keywords only.</string>
     <string name="memory_search_test_timing">Reading your message took %1$d ms. Loading %2$d memories took %3$d ms.</string>
     <string name="memory_search_test_sections_time_limit">Time limit reached while searching your message in sections. The full-message search still ran, but only %1$d of %2$d additional sections were checked.</string>

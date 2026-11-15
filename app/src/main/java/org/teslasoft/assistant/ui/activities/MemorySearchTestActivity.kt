@@ -166,6 +166,15 @@ class MemorySearchTestActivity : SettingsPageActivity() {
         fieldMemorySpace = findViewById(R.id.field_memory_space)
         fieldSmallLibrary = findViewById(R.id.field_small_library)
 
+        fieldMessage.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                prepared = null
+                sectionResult.visibility = View.GONE
+            }
+        })
+
         sliders = listOf(
             findViewById<SamplingParameterControl>(R.id.slider_minimum_match) to Slot(
                 SamplingParameterSpec.MEMORY_MINIMUM_MATCH, { it.similarityFloor }, { p, v -> p.copy(similarityFloor = v) }
@@ -340,6 +349,11 @@ class MemorySearchTestActivity : SettingsPageActivity() {
             if (generation != testGeneration) return@launch
             btnRun.isEnabled = true
             btnRun.text = getString(R.string.memory_search_test_run)
+            if (fieldMessage.text?.toString()?.trim().orEmpty() != message || currentScope() != scope) {
+                prepared = null
+                sectionResult.visibility = View.GONE
+                return@launch
+            }
             outcome.onSuccess { p ->
                 prepared = p
                 if (p == null) {
@@ -391,6 +405,7 @@ class MemorySearchTestActivity : SettingsPageActivity() {
         val d = report.diagnostics
         textMode.visibility = View.VISIBLE
         textMode.text = when {
+            p.indexFailureCause != null -> getString(R.string.memory_search_test_mode_index_failed, p.indexFailureCause)
             !p.hasModel -> getString(R.string.memory_search_test_mode_no_model)
             d.withVector > 0 && !d.meaningRan -> getString(R.string.memory_search_test_mode_embed_failed)
             d.withVector < d.eligible -> getString(R.string.memory_search_test_mode_partial, d.eligible - d.withVector, d.eligible)

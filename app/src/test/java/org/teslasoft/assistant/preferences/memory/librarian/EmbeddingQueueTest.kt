@@ -362,7 +362,8 @@ class EmbeddingQueueTest {
                 queue.runWithin(500) { control ->
                     control.whileRunning({ stopped.countDown() }) {
                         assertTrue(unwind.await(5, TimeUnit.SECONDS))
-                        "late vector"
+                        // Actual cancellation has no completed result.
+                        throw EmbeddingQueue.ReadStoppedException()
                     }
                 }
             } catch (t: Throwable) { failure.set(t) }
@@ -374,6 +375,21 @@ class EmbeddingQueueTest {
         assertTrue(failure.get() is EmbeddingQueue.DeadlineExceededException)
         assertFalse(queue.isBusy())
         assertEquals("safe", queue.run(LIVE) { "safe" })
+    }
+
+    @Test
+    fun completedResultSurvivesWhenCooperativeStoppingArrivesLate() {
+        val queue = EmbeddingQueue()
+        val stopped = CountDownLatch(1)
+        val result = queue.runWithin(500) { control ->
+            control.whileRunning({ stopped.countDown() }) {
+                assertTrue(stopped.await(5, TimeUnit.SECONDS))
+                "completed vector"
+            }
+        }
+        assertEquals("completed vector", result)
+        assertFalse(queue.isBusy())
+        assertEquals("next", queue.run(LIVE) { "next" })
     }
 
 }

@@ -1,18 +1,32 @@
 #!/usr/bin/env python3
 """Generate the Step 0 fixtures with the app's real q4 embedding model.
 
-Requires Python, numpy, onnxruntime and tokenizers. Run this file directly;
+Requires Python, numpy, tokenizers, and the app-pinned ONNX runtime version. Run this file directly;
 model artifacts are downloaded into a TemporaryDirectory and never committed.
 The normal unit tests read vectors.json and need no model or network access.
+Python outputs are diagnostics, not Android accuracy measurements.
+An explicit new output path is required; historical fixtures are not overwritten.
 """
 
 import argparse
 import json
 import math
 import os
+from importlib.metadata import version
 from pathlib import Path
+import re
 import tempfile
 import urllib.request
+
+# Reject a version mismatch before importing Microsoft native code.
+app_build = Path(__file__).resolve().parents[4] / "build.gradle"
+runtime_match = re.search(r"onnxruntime-android:([^'\"]+)", app_build.read_text())
+if runtime_match is None:
+    raise SystemExit("Cannot determine the app's exact ONNX Runtime version.")
+required_runtime = runtime_match.group(1)
+installed_runtime = version("onnxruntime")
+if installed_runtime != required_runtime:
+    raise SystemExit(f"App requires ONNX Runtime {required_runtime}; installed Python runtime is {installed_runtime}. Refusing mismatched inference.")
 
 # The API alone can be too late to suppress the native initialization event.
 os.environ["ORT_DISABLE_TELEMETRY"] = "1"
@@ -34,9 +48,11 @@ def main():
     ort.disable_telemetry_events()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("cases.json"))
-    parser.add_argument("--output", type=Path, default=Path(__file__).with_name("vectors.json"))
+    parser.add_argument("--output", type=Path, required=True, help="New output path; existing fixtures are never overwritten")
     parser.add_argument("--model-dir", type=Path, help="Use existing model files without downloading anything")
     args = parser.parse_args()
+    if args.output.exists():
+        parser.error("Output already exists. Choose a new path; historical fixtures must stay unchanged.")
     cases = json.loads(args.cases.read_text(encoding="utf-8"))
 
     with tempfile.TemporaryDirectory(prefix="recall-embedding-") as temporary:
@@ -129,7 +145,8 @@ def main():
 
         print(f"CHECK input markers and length: {checked_inputs} passed, "
               f"including {truncated_inputs} truncated inputs", flush=True)
-        args.output.write_text(json.dumps(vectors, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        with args.output.open("x", encoding="utf-8") as output:
+            output.write(json.dumps(vectors, indent=2, allow_nan=False) + "\n")
         print(f"Wrote {len(vectors)} vectors to {args.output}", flush=True)
 
 

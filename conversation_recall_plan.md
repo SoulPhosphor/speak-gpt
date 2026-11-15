@@ -1327,7 +1327,7 @@ RisuAI does (G.18a).
 - **What it never does:** search with the AI's replies, or keep anything
   that does not pass the relevance gate.
 
-## G.10 A small detail inside a larger message (Step 2 implemented; repairs in #201)
+## G.10 A small detail inside a larger message (Step 2 acceptance reopened)
 
 **The problem.** A small detail in a message about several things does not
 find its saved memory or its earlier exchange (G.2).
@@ -1432,8 +1432,12 @@ well; this app does not.
 the whole message and 69/6/21 with sections, with no additional incorrect
 matches from sections. All 313 input-token hashes matched independent
 references. Small native-runtime vector differences change three whole-message
-results; the original gold answers and fixtures remain unchanged. Separate
-Android observations protect that platform from unexpected regressions.
+results; the original gold answers and fixtures remain unchanged. Recorded
+Android observations are evidence only: accepting the worse result in PR #201
+was an acceptance error. Step 2 remains incomplete against its original quality
+requirement. The repair branch `repair/step2-contract-audit` restores original
+per-message quality checks for every ABI without changing gold labels or
+thresholds; newly wrong memories must fail.
 Details, runtime comparisons and physical-phone limits are in `memory baseline.md`;
 final CI, review and merge status are tracked in PR #201. No parameter was retuned.
 
@@ -1832,7 +1836,7 @@ Only a new owner decision may change this order.
 
 Step 0 is already complete. Do not rebuild it, regenerate its vectors, or
 rewrite its expected answers. Its authoritative results are in
-[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200; the Step 2 repairs and verification record are in #201. Its final CI, review and merge state are tracked on that PR. Step 3 is outside the repair assignment.
+[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200; the Step 2 repairs and verification record are in #201. PR #201 is merged, but its passing checks accepted worse native accuracy. Step 2 acceptance is reopened on `repair/step2-contract-audit`; the original quality target remains binding. Step 3 is outside the repair assignment.
 
 | Step | Status | What is built | Difficulty | Model | The user sees | Needs | Approve first |
 |---:|---|---|---|---|---|---|---|
@@ -2108,6 +2112,8 @@ measurements and verification results.
   says so plainly, and the owner is told how to see it on the phone.
 
 ### Step 2: long messages in saved-memory search (Hard)
+
+**Status:** Implemented in #200 and repaired in #201, but acceptance remains open. The Android 1.20 result adds wrong matches against the original baseline; no lowered acceptance target is approved. Current repair work is on `repair/step2-contract-audit`, with no runtime or model switch yet.
 
 **Agent checklist for this step**
 - **Prerequisites:** Steps 0 and 1. **Approval gate:** Resolved by the owner; final wording is in G.13b. Routine repair corrections are authorized.

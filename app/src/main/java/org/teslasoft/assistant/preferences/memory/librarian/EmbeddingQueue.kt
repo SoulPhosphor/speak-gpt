@@ -129,9 +129,10 @@ class EmbeddingQueue {
             var requeue = false
             try {
                 if (deadline != null && System.nanoTime() >= deadline) throw DeadlineExceededException()
-                val value = work(control)
-                if (deadline != null && System.nanoTime() >= deadline) throw DeadlineExceededException()
-                return value
+                // A completed result still belongs to this caller even when
+                // cooperative stopping was late. Discarding it saves no time
+                // and would lose a valid memory after the wait was paid.
+                return work(control)
             } catch (e: ReadStoppedException) {
                 // Only a stop the queue asked for is retried; anything else is
                 // a real failure for the caller.
