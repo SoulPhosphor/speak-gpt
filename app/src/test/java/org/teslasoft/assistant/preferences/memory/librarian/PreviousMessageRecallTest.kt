@@ -21,7 +21,10 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.preferences.memory.ImportanceRanking
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
+import org.teslasoft.assistant.preferences.memory.RetrievalPolicy
+import org.teslasoft.assistant.preferences.memory.enforcer.RetrievalBackfill
 import java.security.MessageDigest
 import kotlin.math.sqrt
 
@@ -31,19 +34,30 @@ import kotlin.math.sqrt
  * (conversation_recall_plan.md Step 3). Each conversation is its own chat, so
  * its first turn has no previous message.
  *
- * Two sets of measured inputs are scored, both recorded before this step:
- *  - "reference_vectors": the frozen full vectors in vectors.json;
- *  - "android_ort120_scores": the similarities the real model produced on
- *    Android ONNX Runtime 1.20, replayed as in NativeMemoryGateRegressionTest.
- * Nothing here is new model output, and no expected answer is changed.
+ * Every turn goes the way a sent message goes: the search hands on its
+ * candidates (Maximum Memories + the enforcer's scan margin + 1), and the
+ * enforcer's own selection ([RetrievalBackfill.select]) applies Maximum
+ * Memories and the +3 rule. The test set has no lore and no memory too large
+ * for the memory space, so no candidate is filtered out here; those filters
+ * are exercised in PreviousMessageSearchTest and PlusThreeSelectionRuleTest.
  *
- * The exact memories sent for every turn at every count are recorded in
- * previous_message_results.json; the test fails when they change.
+ * Two sets of inputs recorded before this step are scored. Neither is a new
+ * run of the model, and nothing here runs on Android:
+ *  - "android_ort120_scores": the similarities the real model produced on
+ *    Android ONNX Runtime 1.20, replayed as in NativeMemoryGateRegressionTest;
+ *  - "reference_vectors": the frozen full vectors in vectors.json.
+ *
+ * Results are checked against the test set's expected answers (cases.json,
+ * never changed here), and the exact memories sent for every turn are also
+ * recorded in previous_message_results.json so any change is seen.
  */
 class PreviousMessageRecallTest {
 
-    private val limit = 5
     private val params = LiveRetrieval.Params()
+    private val defaultMaximum = RetrievalPolicy.DEFAULT_TOP_K
+    private val maximums = listOf(1, 2, 3, 5, defaultMaximum)
+    private val counts = 0..PreviousMessageSearch.MAX_PREVIOUS_MESSAGES
+    private val sources = listOf("android_ort120_scores", "reference_vectors")
 
     private fun resource(name: String): String = checkNotNull(
         javaClass.classLoader!!.getResourceAsStream("recall_test_set/$name")
@@ -73,9 +87,9 @@ class PreviousMessageRecallTest {
     private fun own(text: String, vector: FloatArray, index: LiveRetrieval.Index, limit: Int) =
         SavedMemorySearch.search(text, vector, index, params, limit, true) { LongMessageSearch.Reading.NONE }
 
-    /** One way of searching a turn with its [count] nearest previous turns. */
+    /** The candidates for a turn searched with its [count] nearest previous turns. */
     private fun interface Source {
-        fun search(turns: List<Turn>, position: Int, count: Int): PreviousMessageSearch.Result
+        fun candidates(turns: List<Turn>, position: Int, count: Int, candidateLimit: Int): PreviousMessageSearch.Result
     }
 
     /** The frozen reference vectors: one library, as the app holds it. */
@@ -88,21 +102,22 @@ class PreviousMessageRecallTest {
         val index = LiveRetrieval.index(memories.map {
             LiveRetrieval.Candidate(memory(it), vector(it.getString("id")), it.getJSONArray("tags").strings(), emptyList())
         })
-        return Source { turns, position, count ->
+        return Source { turns, position, count, candidateLimit ->
             val current = turns[position]
             val previous = turns.subList(0, position).reversed()
             val result = PreviousMessageSearch.search(
-                PreviousMessageSearch.Message(current.text, vector(current.id)),
-                previous.map { PreviousMessageSearch.Message(it.text, vector(it.id)) },
-                count, index, params, limit, true
+                PreviousMessageSearch.Message.withVector(current.text, vector(current.id)),
+                previous.map { PreviousMessageSearch.Message.withVector(it.text, vector(it.id)) },
+                count, index, params, candidateLimit, true
             )
             // The same answer when the searches are run first and combined after.
             val combined = PreviousMessageSearch.combine(
-                own(current.text, vector(current.id), index, limit),
+                own(current.text, vector(current.id), index, candidateLimit),
                 previous.take(count).map { own(it.text, vector(it.id), index, index.corpus.size) },
-                limit, true
+                candidateLimit, true
             )
             assertEquals("${current.id} at $count", result.found, combined.found)
+            assertTrue("${current.id}: every message had its vector", result.searchedByKeywordsOnly.isEmpty())
             result
         }
     }
@@ -129,114 +144,227 @@ class PreviousMessageRecallTest {
                 )
             })
         }
-        return Source { turns, position, count ->
+        return Source { turns, position, count, candidateLimit ->
             val current = turns[position]
             PreviousMessageSearch.combine(
-                own(current.text, query, index(current.id), limit),
+                own(current.text, query, index(current.id), candidateLimit),
                 turns.subList(0, position).reversed().take(count).map {
                     own(it.text, query, index(it.id), memories.size)
                 },
-                limit, true
+                candidateLimit, true
             )
         }
     }
 
-    private class Tally {
-        var firstFollowUpsKept = 0
-        var firstFollowUps = 0
-        var laterFollowUpsKept = 0
-        var laterFollowUps = 0
-        var newSubjectsFound = 0
-        var subjectChanges = 0
-        val oldSubjectAfterChange = ArrayList<String>()
-        val otherUnexpected = ArrayList<String>()
-        var correct = 0
-        var missed = 0
-        var leftOutByLimit = 0
+    private fun source(name: String) = if (name == "reference_vectors") referenceVectors() else androidScores()
+
+    /** One sent memory: its id and how many messages back it was found. */
+    private class Sent(val id: String, val messagesBack: Int)
+
+    /** A turn's candidates, then the enforcer's selection at [maximum]. */
+    private fun send(source: Source, turns: List<Turn>, position: Int, count: Int, maximum: Int): List<Sent> {
+        val result = source.candidates(turns, position, count, RetrievalBackfill.scanCap(maximum) + 1)
+        val back = result.found.associate { it.scored.memory.memoryId to it.messagesBack }
+        return RetrievalBackfill.select(
+            result.ranked, maximum, RetrievalBackfill.scanCap(maximum),
+            isMandatory = { ImportanceRanking.isMandatory(it.memory.importance.toDouble(), true) }
+        ) { true }.kept.map { Sent(it.memory.memoryId, back.getValue(it.memory.memoryId)) }
     }
 
-    private fun score(source: Source, count: Int, record: JSONObject): Tally {
-        val tally = Tally()
+    private data class Tally(
+        /** Expected memories sent, over all 30 turns. */
+        val correct: Int,
+        /** Expected memories not sent. */
+        val missed: Int,
+        /** Every memory sent that the turn did not expect. */
+        val incorrect: Int,
+        val firstFollowUpsKept: Int,
+        val laterFollowUpsKept: Int,
+        val newSubjectsFound: Int,
+        /** Of [incorrect]: the old subject's memory, sent after the change. */
+        val oldSubjectAfterChange: Int
+    ) {
+        override fun toString() = "correct=$correct missed=$missed incorrect=$incorrect " +
+            "first_follow_ups_kept=$firstFollowUpsKept/9 later_follow_ups_kept=$laterFollowUpsKept/3 " +
+            "new_subjects_found=$newSubjectsFound/9 old_subject_after_change=$oldSubjectAfterChange " +
+            "other_unexpected=${incorrect - oldSubjectAfterChange}"
+    }
+
+    private fun score(source: Source, count: Int, maximum: Int, record: JSONObject? = null): Tally {
+        var correct = 0
+        var missed = 0
+        var incorrect = 0
+        var first = 0
+        var later = 0
+        var newSubjects = 0
+        var oldSubject = 0
         for (turns in conversations) {
-            val oldSubject = turns.first().expect
             for (position in turns.indices) {
                 val turn = turns[position]
-                val result = source.search(turns, position, count)
-                val sent = result.ranked.map { it.memory.memoryId }
-                val own = source.search(turns, position, 0).ranked.map { it.memory.memoryId }
+                val sent = send(source, turns, position, count, maximum)
+                val ids = sent.map { it.id }
+                val alone = send(source, turns, position, 0, maximum).map { it.id }
 
                 // What the step must guarantee, whatever the numbers are.
-                assertEquals("${turn.id}: listed twice", sent.size, sent.toSet().size)
+                assertEquals("${turn.id}: listed twice", ids.size, ids.toSet().size)
                 assertEquals("${turn.id}: the new message's own result must come first, unchanged",
-                    own, sent.take(own.size))
-                assertEquals("${turn.id}: its own result is attributed to it",
-                    own.size, result.found.count { it.messagesBack == 0 })
+                    alone, ids.take(alone.size))
                 assertEquals("${turn.id}: older matches must follow newer ones",
-                    result.found.map { it.messagesBack }.sorted(), result.found.map { it.messagesBack })
+                    sent.map { it.messagesBack }.sorted(), sent.map { it.messagesBack })
                 assertTrue("${turn.id}: nothing is carried further than the count",
-                    result.found.all { it.messagesBack <= minOf(count, position) })
-                for (found in result.found.filter { it.messagesBack > 0 }) {
-                    val earlier = source.search(turns, position - found.messagesBack, 0)
-                    assertTrue("${turn.id}: ${found.scored.memory.memoryId} did not pass for the earlier message",
-                        found.scored.memory.memoryId in earlier.ranked.map { it.memory.memoryId })
+                    sent.all { it.messagesBack <= minOf(count, position) })
+                assertTrue("${turn.id}: Maximum Memories (no memory here is rated +3)", ids.size <= maximum)
+                for (carried in sent.filter { it.messagesBack > 0 }) {
+                    // Passed the gate for that earlier message, on its own.
+                    val earlier = source.candidates(turns, position - carried.messagesBack, 0, memories.size)
+                    assertTrue("${turn.id}: ${carried.id} did not pass for the earlier message",
+                        carried.id in earlier.ranked.map { it.memory.memoryId })
                 }
-                if (count == 0) assertTrue(result.previous.isEmpty())
 
-                val kept = sent.containsAll(turn.expect)
-                val last = position == turns.lastIndex
+                val kept = ids.containsAll(turn.expect)
                 when {
                     position == 0 -> Unit
-                    last -> {
-                        tally.subjectChanges++
-                        if (kept) tally.newSubjectsFound++
-                    }
-                    position == 1 -> {
-                        tally.firstFollowUps++
-                        if (kept) tally.firstFollowUpsKept++
-                    }
-                    else -> {
-                        tally.laterFollowUps++
-                        if (kept) tally.laterFollowUpsKept++
-                    }
+                    position == turns.lastIndex -> if (kept) newSubjects++
+                    position == 1 -> if (kept) first++
+                    else -> if (kept) later++
                 }
-                tally.correct += sent.count { it in turn.expect }
-                tally.missed += turn.expect.count { it !in sent }
-                tally.leftOutByLimit += result.leftOutByLimit.size
-                for (found in result.found) {
-                    val id = found.scored.memory.memoryId
-                    if (id in turn.expect) continue
-                    val entry = "${turn.id}:$id@${found.messagesBack}"
-                    if (last && id in oldSubject) tally.oldSubjectAfterChange.add(entry)
-                    else tally.otherUnexpected.add(entry)
-                }
-                record.put(turn.id, JSONArray(result.found.map { "${it.scored.memory.memoryId}@${it.messagesBack}" }))
+                correct += ids.count { it in turn.expect }
+                missed += turn.expect.count { it !in ids }
+                incorrect += ids.count { it !in turn.expect }
+                if (position == turns.lastIndex) oldSubject += ids.count { it in turns.first().expect && it !in turn.expect }
+                record?.put(turn.id, JSONArray(sent.map { "${it.id}@${it.messagesBack}" }))
             }
         }
-        return tally
+        return Tally(correct, missed, incorrect, first, later, newSubjects, oldSubject)
     }
 
     @Test
-    fun conversationsScoredAtZeroToThreePreviousMessagesMatchTheRecord() {
-        assertEquals("Six three-turn and three four-turn conversations",
-            listOf(3, 3, 3, 3, 3, 3, 4, 4, 4), conversations.map { it.size })
-        val measured = JSONObject().put("cases_sha256", hash(casesText)).put("memory_limit", limit)
-        for ((name, source) in listOf("reference_vectors" to referenceVectors(), "android_ort120_scores" to androidScores())) {
-            val bySetting = JSONObject()
-            for (count in 0..PreviousMessageSearch.MAX_PREVIOUS_MESSAGES) {
-                val record = JSONObject()
-                val t = score(source, count, record)
-                bySetting.put(count.toString(), record)
-                println("PREVIOUS $name count=$count first_follow_ups_kept=${t.firstFollowUpsKept}/${t.firstFollowUps} " +
-                    "later_follow_ups_kept=${t.laterFollowUpsKept}/${t.laterFollowUps} " +
-                    "new_subjects_found=${t.newSubjectsFound}/${t.subjectChanges} " +
-                    "old_subject_after_change=${t.oldSubjectAfterChange.size} other_unexpected=${t.otherUnexpected.size} " +
-                    "correct=${t.correct} missed=${t.missed} left_out_by_limit=${t.leftOutByLimit}")
-                println("PREVIOUS $name count=$count old_subject_after_change ${t.oldSubjectAfterChange}")
-                println("PREVIOUS $name count=$count other_unexpected ${t.otherUnexpected}")
-            }
-            measured.put(name, bySetting)
+    fun theTestSetHasTheConversationsTheseResultsDescribe() {
+        assertEquals(listOf(3, 3, 3, 3, 3, 3, 4, 4, 4), conversations.map { it.size })
+        assertEquals(30, conversations.sumOf { it.size })
+        assertTrue("Every turn expects exactly one memory", conversations.flatten().all { it.expect.size == 1 })
+        assertTrue("No test memory is rated", memories.none { it.has("importance") })
+        // The last turn changes the subject; every turn before it shares one.
+        for (turns in conversations) {
+            assertTrue(turns.dropLast(1).all { it.expect == turns.first().expect })
+            assertTrue(turns.last().expect != turns.first().expect)
         }
-        println("PREVIOUS RECORD ${measured.toString()}")
+    }
+
+    @Test
+    fun withNoPreviousMessagesEveryTurnIsExactlyTheExistingSearchAndSelection() {
+        for (name in sources) {
+            val source = source(name)
+            for (maximum in maximums) for (turns in conversations) for (position in turns.indices) {
+                val limit = RetrievalBackfill.scanCap(maximum) + 1
+                val result = source.candidates(turns, position, 0, limit)
+                assertEquals(result.current.ranked, result.ranked)
+                assertTrue(result.previous.isEmpty())
+                // Offering previous messages changes nothing while the count is 0.
+                assertEquals(result.ranked.map { it.memory.memoryId },
+                    source.candidates(turns, position, 0, limit).current.ranked.map { it.memory.memoryId })
+            }
+        }
+    }
+
+    /**
+     * Checked against the expected answers at the default Maximum Memories.
+     * These are requirements, not a record of whatever the search returns.
+     */
+    @Test
+    fun followUpsKeepTheirExpectedMemoryAndNothingExpectedIsLost() {
+        for (name in sources) {
+            val source = source(name)
+            val alone = score(source, 0, defaultMaximum)
+            // Searched alone, two follow-ups and one first message miss their
+            // memory: the starting point this step is measured against.
+            assertEquals("$name alone", 27, alone.correct)
+            assertEquals("$name alone", 3, alone.missed)
+            for (count in 1..PreviousMessageSearch.MAX_PREVIOUS_MESSAGES) {
+                val t = score(source, count, defaultMaximum)
+                assertEquals("$name at $count: every first follow-up keeps its memory", 9, t.firstFollowUpsKept)
+                assertEquals("$name at $count: every second follow-up keeps its memory", 3, t.laterFollowUpsKept)
+                assertEquals("$name at $count: every new subject finds its own memory", 9, t.newSubjectsFound)
+                // The one remaining miss is a first message, which has
+                // nothing before it.
+                assertEquals("$name at $count", 29, t.correct)
+                assertEquals("$name at $count", 1, t.missed)
+            }
+            // An expected memory found at one count is found at every higher one.
+            for (turns in conversations) for (position in turns.indices) {
+                var found = emptySet<String>()
+                for (count in counts) {
+                    val now = send(source, turns, position, count, defaultMaximum).map { it.id }
+                        .filter { it in turns[position].expect }.toSet()
+                    assertTrue("${turns[position].id} lost an expected memory at $count", now.containsAll(found))
+                    found = now
+                }
+            }
+        }
+    }
+
+    /**
+     * The measured cost, counted against the expected answers: memories sent
+     * that the turn did not expect. These numbers are what was measured, kept
+     * exact so that a change in either direction is seen and reported.
+     */
+    @Test
+    fun unexpectedMemoriesCarriedFromEarlierMessagesAreCounted() {
+        // source -> for 0, 1, 2, 3 previous messages: incorrect, of which old subject.
+        val measured = mapOf(
+            "android_ort120_scores" to listOf(9 to 0, 25 to 8, 31 to 9, 31 to 9),
+            "reference_vectors" to listOf(10 to 0, 27 to 8, 33 to 9, 33 to 9)
+        )
+        for (name in sources) {
+            val source = source(name)
+            for (count in counts) {
+                val t = score(source, count, defaultMaximum)
+                assertEquals("$name at $count: incorrect", measured.getValue(name)[count].first, t.incorrect)
+                assertEquals("$name at $count: old subject", measured.getValue(name)[count].second, t.oldSubjectAfterChange)
+            }
+        }
+    }
+
+    /**
+     * Maximum Memories changes the result, because a carried memory comes
+     * after everything the new message matched, right or wrong.
+     */
+    @Test
+    fun aLowMaximumMemoriesDropsCarriedMemoriesFirst() {
+        val source = androidScores()
+        val turns = conversations[6]
+        assertEquals("conversation_07_turn_2", turns[1].id)
+        // "Where should I take him?" matches the wrong memory on its own. The
+        // right one is carried from the turn before, in second place.
+        assertEquals(listOf("hobby_camera"), send(source, turns, 1, 1, 1).map { it.id })
+        assertEquals(listOf("hobby_camera", "pet_brindle"), send(source, turns, 1, 1, 2).map { it.id })
+        assertEquals(listOf("hobby_camera", "pet_brindle"), send(source, turns, 1, 1, defaultMaximum).map { it.id })
+        // Fewer follow-ups are kept at Maximum Memories 1 than at the default.
+        assertTrue(score(source, 1, 1).firstFollowUpsKept < score(source, 1, defaultMaximum).firstFollowUpsKept)
+        // From 5 upward nothing differs on this set: no turn has more than
+        // five candidates at any count.
+        for (count in counts) assertEquals(score(source, count, 5), score(source, count, defaultMaximum))
+    }
+
+    @Test
+    fun everyTurnAtEveryCountAndMaximumMatchesTheRecord() {
+        val measured = JSONObject().put("cases_sha256", hash(casesText))
+        for (name in sources) {
+            val source = source(name)
+            val byMaximum = JSONObject()
+            for (maximum in maximums) {
+                val byCount = JSONObject()
+                for (count in counts) {
+                    val record = JSONObject()
+                    val t = score(source, count, maximum, record)
+                    byCount.put(count.toString(), record)
+                    println("PREVIOUS $name maximum=$maximum count=$count $t")
+                }
+                byMaximum.put(maximum.toString(), byCount)
+            }
+            measured.put(name, byMaximum)
+        }
+        println("PREVIOUS RECORD $measured")
 
         // Results are printed before this read. Record measured results by
         // hand; never invent a passing record here.
@@ -244,16 +372,13 @@ class PreviousMessageRecallTest {
         checkNotNull(stream) { "The results are not recorded yet; record the printed PREVIOUS RECORD line." }
         val recorded = JSONObject(stream.bufferedReader(Charsets.UTF_8).use { it.readText() })
         assertEquals("Expected answers must stay fixed", recorded.getString("cases_sha256"), hash(casesText))
-        assertEquals(recorded.getInt("memory_limit"), limit)
-        for (name in listOf("reference_vectors", "android_ort120_scores")) {
-            for (count in 0..PreviousMessageSearch.MAX_PREVIOUS_MESSAGES) {
-                val was = recorded.getJSONObject(name).getJSONObject(count.toString())
-                val now = measured.getJSONObject(name).getJSONObject(count.toString())
-                assertEquals("$name at $count: recorded turns", was.keySet(), now.keySet())
-                for (turn in was.keySet()) {
-                    assertEquals("$name at $count previous messages, $turn",
-                        was.getJSONArray(turn).strings(), now.getJSONArray(turn).strings())
-                }
+        for (name in sources) for (maximum in maximums) for (count in counts) {
+            val was = recorded.getJSONObject(name).getJSONObject(maximum.toString()).getJSONObject(count.toString())
+            val now = measured.getJSONObject(name).getJSONObject(maximum.toString()).getJSONObject(count.toString())
+            assertEquals("$name at $maximum/$count: recorded turns", was.keySet(), now.keySet())
+            for (turn in was.keySet()) {
+                assertEquals("$name, Maximum Memories $maximum, $count previous messages, $turn",
+                    was.getJSONArray(turn).strings(), now.getJSONArray(turn).strings())
             }
         }
     }

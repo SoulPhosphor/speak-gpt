@@ -244,7 +244,6 @@ class Enforcer private constructor(private val appContext: Context) {
             notes.add("retrieval failed: ${e.message}")
             emptyList()
         }
-        val foundBySection = retrievalDiag?.foundBySection.orEmpty()
         val manualIds = manualMemories.map { it.memoryId }.toSet()
         val pool = poolScored.filterNot { it.memory.memoryId in manualIds }
             .map { toAssembled(it.memory, it.score, it.similarity) }
@@ -421,10 +420,10 @@ class Enforcer private constructor(private val appContext: Context) {
                 ManualMemoryPriority.remainingSlots(policy.topK, manualMemories.size),
                 scanCap,
                 isMandatory = {
-                    // A memory only a section of a long message found never
-                    // goes past the memory limit (conversation_recall_plan.md G.10).
-                    it.memoryId !in foundBySection &&
-                        ImportanceRanking.isMandatory(it.importance.toDouble(), useImportanceRatings)
+                    // A matching +3 memory is added past Maximum Memories
+                    // however it was found: by the whole message or by a
+                    // section of a long message (owner rule).
+                    ImportanceRanking.isMandatory(it.importance.toDouble(), useImportanceRatings)
                 }
             ) { mem ->
                 val dup = loreDupOf(mem)

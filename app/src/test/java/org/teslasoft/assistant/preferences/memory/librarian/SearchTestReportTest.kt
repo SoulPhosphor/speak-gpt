@@ -162,7 +162,7 @@ class SearchTestReportTest {
     }
 
     @Test
-    fun aPlusThreeMemoryFoundOnlyBySectionDoesNotGoPastTheLimit() {
+    fun aPlusThreeMemoryFoundOnlyBySectionIsSentPastTheLimit() {
         val whole = LiveRetrieval.Candidate(
             RetrievableMemory(
                 memoryId = "whole", scope = "global",
@@ -173,7 +173,20 @@ class SearchTestReportTest {
             vec(0.1), emptyList(), emptyList()
         )
         val r = buildLong(listOf(pepper(importance = 3), whole) + noise(), SearchTuning(maxMemories = 1))
-        assertEquals(listOf("whole"), r.sent.map { it.explanation.memory.memoryId })
+        assertEquals(listOf("whole", "pepper"), r.sent.map { it.explanation.memory.memoryId })
+        assertEquals(SearchTestReport.Outcome.SENT, r.sent[0].outcome)
+        assertEquals(SearchTestReport.Outcome.SENT_PAST_LIMIT, r.sent[1].outcome)
+        assertNotNull(r.sent[1].section)
+
+        // +2 gets no such protection, and neither does +3 with ratings off.
+        val two = buildLong(listOf(pepper(importance = 2), whole) + noise(), SearchTuning(maxMemories = 1))
+        assertEquals(listOf("whole"), two.sent.map { it.explanation.memory.memoryId })
+        val corpus = listOf(pepper(importance = 3), whole) + noise()
+        val off = SearchTestReport.build(
+            longMessage, elsewhere, corpus, SearchTuning(maxMemories = 1),
+            useImportanceRatings = false, sections = sections(corpus)
+        )
+        assertEquals(listOf("whole"), off.sent.map { it.explanation.memory.memoryId })
     }
 
     @Test

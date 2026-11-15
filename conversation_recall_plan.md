@@ -18,8 +18,8 @@ plan disagrees with this document, this document is the current one.
 ## G.0 Status and how to read this plan
 
 - **This plan is a proposal.** It was written on 2026-11-10 from the current
-  code, the review of #180, and published research. Step 0 is complete; no
-  application feature in it is built.
+  code, the review of #180, and published research. Steps 0–3 are built;
+  the status of every Step is in the G.16 table.
 - **Two labels are used throughout:**
   - **Owner** means the owner said it on the date shown, or on 2026-11-10
     where no date is given. These are decisions.
@@ -1327,7 +1327,7 @@ RisuAI does (G.18a).
 - **What it never does:** search with the AI's replies, or keep anything
   that does not pass the relevance gate.
 
-## G.10 A small detail inside a larger message (Step 2 repair validated; review pending)
+## G.10 A small detail inside a larger message (Step 2 built; repair merged in #202)
 
 **The problem.** A small detail in a message about several things does not
 find its saved memory or its earlier exchange (G.2).
@@ -1397,8 +1397,18 @@ well; this app does not.
 **Order and room.**
 - Whole-message matches under the current tuning retain their order. Sections never push them out. The quality repair preserves every originally correct whole-message match and may remove incorrect matches; gold answers are unchanged.
 - Memories found only through a piece come after those, best first, in
-  whatever room the memory limit leaves. Section-only matches, including +3
-  importance, never bypass Maximum Memories. Entire memories are sent.
+  whatever room the memory limit leaves. Entire memories are sent.
+- **+3 importance (Owner, 2026-11-15; replaces the earlier section-only
+  exception).** Maximum Memories applies normally to every matching memory,
+  +2 and +3 included, and +2 and +3 rank alike. After the highest-ranked
+  memories up to that limit are selected, every further matching +3 memory
+  is added, each once. +2 never passes the limit. +3 always passes the count
+  limit, subject to the existing relevance, scope and physical
+  request-capacity requirements. This is the same for whole-message,
+  section and previous-message matches: a +3 memory found only through a
+  section is no longer held to Maximum Memories. Example: Maximum Memories
+  5, ten matching +2 memories and three further matching +3 memories send
+  eight.
 
 **Time.**
 - The number of pieces searched has a limit. When a message has more
@@ -1451,8 +1461,7 @@ tokenizer and dimensions remain unchanged; saved custom tuning is retained.
 Quality evaluation searches all sections without a time allowance; a separate
 timed emulator example completed one section before the cooperative limit.
 Physical-phone timing remains unmeasured. Details and every changed sample are
-in `memory baseline.md`. PR review and integration remain pending; Step 3 has
-not started.
+in `memory baseline.md`. This repair is merged in #202.
 
 **What the user can see.** The Memory Search Test screen must show which
 piece of the message a memory matched, and when the search ran out of
@@ -1849,14 +1858,14 @@ Only a new owner decision may change this order.
 
 Step 0 is already complete. Do not rebuild it, regenerate its vectors, or
 rewrite its expected answers. Its authoritative results are in
-[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200; the first Step 2 repair is merged in #201, whose checks incorrectly accepted worse native accuracy. The follow-up on `repair/step2-contract-audit` restores the original quality gate and passes real Android validation at 69/6/17 with the original runtime/model. PR review and integration remain pending; the original quality target remains binding. Step 3 is outside the repair assignment.
+[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200; the first Step 2 repair is merged in #201, whose checks incorrectly accepted worse native accuracy. The follow-up, merged in #202, restores the original quality gate and passes real Android validation at 69/6/17 with the original runtime/model; the original quality target remains binding. Step 3 was merged in #203; its repair corrects how its helper relates to the enforcer's selection and applies the owner's +3 rule (results in `memory baseline.md`).
 
 | Step | Status | What is built | Difficulty | Model | The user sees | Needs | Approve first |
 |---:|---|---|---|---|---|---|---|
 | 0 | **Complete** | Saved-memory test set with the real model's vectors | Routine with written instructions | Lighter | Nothing | Nothing | Nothing |
 | 1 | **Complete (#199)** | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle | Nothing | Step 0 complete | Nothing (G33) |
-| 2 | Native quality gate passed; repair review/integration pending | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
-| 3 | Waiting | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
+| 2 | **Complete (#200; repairs #201, #202)** | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
+| 3 | **Built (#203); repair awaiting owner approval** | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
 | 4 | Waiting | Saved memories stay through follow-up messages | Careful | Middle | Follow-up continuity | Steps 0 and 3 | Label and placement of its setting (G32) |
 | 5 | Waiting | Memory word count and length limit | Careful | Middle | Word count under memory fields | Step 1 | Open parts of G34 |
 | 6 | Waiting | Conversation-recall test chats with known answers | Routine with written instructions | Lighter | Nothing | Steps 0–5 complete | Nothing |
@@ -2126,7 +2135,7 @@ measurements and verification results.
 
 ### Step 2: long messages in saved-memory search (Hard)
 
-**Status:** Implemented in #200 with an initial repair in #201. The follow-up on `repair/step2-contract-audit` passes the restored original per-message quality gate on real Android 1.20: 69 correct / 6 missed / 17 incorrect, retaining all originally required correct matches. No acceptance requirement or gold answer was weakened. All 85 Android tests passed at `4d4c646`; PR review and integration remain pending. Runtime/model stay unchanged, and rejected runtime/precision experiments remain documented in `memory baseline.md`. Physical-phone timing is still unmeasured.
+**Status:** Implemented in #200 with an initial repair in #201. The follow-up on `repair/step2-contract-audit` passes the restored original per-message quality gate on real Android 1.20: 69 correct / 6 missed / 17 incorrect, retaining all originally required correct matches. No acceptance requirement or gold answer was weakened. All 85 Android tests passed at `4d4c646`; the repair is merged in #202. Runtime/model stay unchanged, and rejected runtime/precision experiments remain documented in `memory baseline.md`. Physical-phone timing is still unmeasured.
 
 **Repair scope after later-step review:** Steps 3–4 add separate previous-message searches; Steps 14–15 build and measure conversation-passage recall. Neither is a later work order to recalibrate this existing saved-memory gate. The existing gate was already built in #180. The current repair may therefore adjust its existing default calibration while preserving all original correct matches and rejecting newly incorrect matches per sample. Android 1.20, the original q4 model, vector size, keyword rule, section size/cap/0.48 threshold and gold answers remain fixed. No later Step is started here.
 
@@ -2819,7 +2828,7 @@ this plan. These rules keep that safe.
   plan (`Memory System/dynamic_memory_plan.md`) is background for
   saved-memory work and is not needed for the conversation index.
 - **Build exactly one numbered Step from G.16, as one pull request.** Do
-  not start the next Step. Steps 0–2 have implementations; Step 2 repairs and verification are tracked in #201 and `memory baseline.md`. Do not begin Step 3 during repairs. Every Step follows the code
+  not start the next Step. Steps 0–3 have implementations; their repairs and verification are recorded in `memory baseline.md`. Do not begin Step 4 until the Step 3 repair is merged and the owner has approved Step 4's setting (G32). Every Step follows the code
   workflow in `CLAUDE.md`.
 - **Do not start a Step out of order or while its "Approve first" entry in
   G.16 is not satisfied.** Say what is waiting and stop.
@@ -2874,6 +2883,8 @@ request. Detailed results stay in the file named by G.16.
   Debug Log wording is the owner-approved wording, not the G.13b proposals.
   Results are in `memory baseline.md`.
 
-- Step 2 repair audit (#201 and follow-up branch) — accurate section thresholds/near-misses/failures, bounded queue waiting with cooperative termination, native model lifetime protection, shared live/test matching and retrieval-to-prompt coverage. ONNX startup/API telemetry opt-outs also cover Silero. Original Python fixture baseline 69/6/19 is preserved. Initial Android ORT 1.20 results were 54/21/21 before sections and 69/6/21 with sections. The follow-up retains the same runtime/model and calibrates existing defaults: real Android results are now 54/21/17 and 69/6/17, with the restored per-message quality gate passing. Independent evaluation stays 4/5/0. All 313 token references and all 85 Android tests pass. PR review/integration and physical-phone timing remain pending. Full evidence and timing limits are in `memory baseline.md`. No Step 3 implementation.
+- Step 2 repair audit (#201 and follow-up branch) — accurate section thresholds/near-misses/failures, bounded queue waiting with cooperative termination, native model lifetime protection, shared live/test matching and retrieval-to-prompt coverage. ONNX startup/API telemetry opt-outs also cover Silero. Original Python fixture baseline 69/6/19 is preserved. Initial Android ORT 1.20 results were 54/21/21 before sections and 69/6/21 with sections. The follow-up retains the same runtime/model and calibrates existing defaults: real Android results are now 54/21/17 and 69/6/17, with the restored per-message quality gate passing. Independent evaluation stays 4/5/0. All 313 token references and all 85 Android tests pass. Merged in #202; physical-phone timing remains unmeasured. Full evidence and timing limits are in `memory baseline.md`.
 
-- Step 3 — a standalone search helper (`PreviousMessageSearch.kt`) that searches the new message and 0–3 previous user messages separately through the existing saved-memory search, lists newer matches first and each memory once, and leaves the new message's own result unchanged. It is connected to nothing: no setting, no screen, no change to sending. The Step 0 conversations were scored at 0, 1, 2 and 3 previous messages; results are in `memory baseline.md`.
+- Step 3 — a standalone search helper (`PreviousMessageSearch.kt`) that searches the new message and 0–3 previous user messages separately through the existing saved-memory search and returns candidates for the enforcer's selection: the new message's candidates first and unchanged, then older messages' in order of age, each memory once. It is connected to nothing: no setting, no screen, no change to sending. PR #203.
+
+- Step 3 repair — the helper as merged in #203 described and measured its limit as Maximum Memories; it now only supplies candidates, and Maximum Memories, backfill and the +3 rule stay in the enforcer's selection. The owner's +3 rule (G.10) is applied to section matches in the search, the enforcer and the Memory Search Test, replacing the section-only exception. A message searched without its embedding is reported instead of passing unnoticed. The Step 0 conversations are scored through the enforcer's selection at Maximum Memories 1, 2, 3, 5 and 8 and checked against the expected answers. Results, costs and what Step 4 must verify are in `memory baseline.md`.

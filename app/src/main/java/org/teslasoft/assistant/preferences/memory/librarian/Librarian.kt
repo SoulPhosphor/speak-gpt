@@ -348,7 +348,7 @@ class Librarian private constructor(private val appContext: Context) {
         val hasModel: Boolean,
         /** Memories in the result that only a section of a long message
          *  found ([LongMessageSearch]); they are listed after everything the
-         *  whole message matched and never go past the memory limit. */
+         *  whole message matched. */
         val foundBySection: Set<String> = emptySet()
     )
 
