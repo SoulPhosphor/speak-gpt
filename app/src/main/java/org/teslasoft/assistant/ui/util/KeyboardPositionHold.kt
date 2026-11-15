@@ -7,7 +7,9 @@
 
 package org.teslasoft.assistant.ui.util
 
+import android.graphics.Rect
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ScrollView
 import androidx.core.widget.NestedScrollView
 
@@ -17,8 +19,9 @@ import androidx.core.widget.NestedScrollView
  * screen holds the conversation against the message box. Whatever sat just
  * above the bottom edge rises with the keyboard and stays just above it, and
  * comes back down when the keyboard closes. The page is not moved to the
- * cursor; Android only scrolls on its own if the cursor would otherwise be
- * out of view. A page that still fits above the keyboard does not move.
+ * cursor, except that it never rises so far that the place being typed in
+ * leaves the top of the view. A page that still fits above the keyboard
+ * does not move.
  *
  * [ScreenChrome.fitSystemBarsAndKeyboard] calls [capture] just before it
  * changes the page's bottom space for the keyboard; the next layout of the
@@ -52,9 +55,21 @@ internal class KeyboardPositionHold private constructor(
     ) {
         val held = heldBottom ?: return
         heldBottom = null
+        val visibleHeight = scroll.height - hiddenBottom
+        var target = heldScrollY(held, scroll.height, hiddenBottom)
+        // The focused field's cursor (its whole bounds for other views) stays
+        // in view; Android's own correction cannot do this here because the
+        // hold replaces the position it chose.
+        val focused = scroll.findFocus()
+        if (focused != null && focused !== scroll && scroll is ViewGroup) {
+            val cursor = Rect()
+            focused.getFocusedRect(cursor)
+            scroll.offsetDescendantRectToMyCoords(focused, cursor)
+            target = keepInView(target, cursor.top, cursor.bottom, visibleHeight)
+        }
         // scrollTo clamps to the page's scroll range, so a page that fits
         // moves only as far as it has to.
-        scroll.scrollTo(scroll.scrollX, heldScrollY(held, scroll.height, hiddenBottom))
+        scroll.scrollTo(scroll.scrollX, target)
         setSmoothScrolling(smoothScrollingWas)
     }
 
@@ -76,5 +91,13 @@ internal class KeyboardPositionHold private constructor(
         /** Scroll position that puts [visibleBottom] back at the uncovered bottom edge. */
         fun heldScrollY(visibleBottom: Int, height: Int, hiddenBottom: Int): Int =
             visibleBottom - (height - hiddenBottom)
+
+        /** Smallest change to [scrollY] that keeps [top]..[bottom] within a
+         *  [visibleHeight] view; the top wins when both cannot fit. */
+        fun keepInView(scrollY: Int, top: Int, bottom: Int, visibleHeight: Int): Int = when {
+            top < scrollY -> top
+            bottom > scrollY + visibleHeight -> minOf(top, bottom - visibleHeight)
+            else -> scrollY
+        }
     }
 }

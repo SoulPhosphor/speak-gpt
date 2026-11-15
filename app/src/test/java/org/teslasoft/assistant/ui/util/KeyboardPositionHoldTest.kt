@@ -33,4 +33,19 @@ class KeyboardPositionHoldTest {
         // only as far as its content requires.
         assertEquals(keyboard - nav, KeyboardPositionHold.heldScrollY(held, pageHeight - keyboard, 0))
     }
+
+    @Test
+    fun cursorThatWouldLeaveTheTopStaysAtTheTopEdge() {
+        assertEquals(300, KeyboardPositionHold.keepInView(scrollY = 852, top = 300, bottom = 350, visibleHeight = 1100))
+    }
+
+    @Test
+    fun visibleCursorDoesNotChangeTheHeldPosition() {
+        assertEquals(852, KeyboardPositionHold.keepInView(scrollY = 852, top = 1200, bottom = 1250, visibleHeight = 1100))
+    }
+
+    @Test
+    fun cursorBelowTheViewIsBroughtJustAboveTheBottomEdge() {
+        assertEquals(250, KeyboardPositionHold.keepInView(scrollY = 0, top = 1300, bottom = 1350, visibleHeight = 1100))
+    }
 }
