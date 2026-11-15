@@ -142,7 +142,7 @@ If a GitHub HTTPS remote has no usable credentials, do not waste task time retry
 
 ## 9. Repository privacy and metadata
 
-Coding conversations stay private. Do not put private chats, health or emotional information, account details, private prompts, session IDs, AI conversation links, model attribution, or AI co-author trailers in commits, PRs, issues, source, documentation, release notes, tags, or branch names.
+Coding conversations stay private. Do not put private chats, health or emotional information, account details, private prompts, session IDs, AI conversation links, model attribution, or AI co-author trailers in commits, PRs, issues, source, documentation, release notes, or tags.
 
 Commit and PR text should describe the technical change and validation only. Inspect changed files and metadata before publishing.
 
