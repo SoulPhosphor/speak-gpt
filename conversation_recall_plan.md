@@ -1439,7 +1439,7 @@ requirement. The repair branch `repair/step2-contract-audit` restores original
 per-message quality checks for every ABI without changing gold labels or
 thresholds; newly wrong memories must fail.
 Details, runtime comparisons and physical-phone limits are in `memory baseline.md`;
-PR #201 is merged. The renewed contract-audit run and isolated Android 1.29 comparison both fail the original accuracy gate with 69/6/21; 1.29 is not an accuracy fix and 1.20 remains the shipping dependency. No parameter was retuned.
+PR #201 is merged. The renewed contract-audit run, isolated Android 1.29 comparison, and explicit FP32-activation comparison on Android 1.20 all fail the original accuracy gate with 69/6/21. Neither experimental change is an accuracy fix; Android 1.20 and the original model configuration remain the shipping choices. The extra incorrect matches originate in whole-message search before sections run. No parameter was retuned.
 
 **What the user can see.** The Memory Search Test screen must show which
 piece of the message a memory matched, and when the search ran out of
