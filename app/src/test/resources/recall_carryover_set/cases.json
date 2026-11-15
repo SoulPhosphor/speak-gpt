@@ -1,0 +1,1155 @@
+{
+ "note": "Independent carry-over test set (owner-approved, 2026-11-15) for measuring how previous-message search behaves before Step 4. The Step 0 set and its expected answers are untouched. Expected answers here were written before any search method was run on this set. Do not tune against this set or rewrite its answers to match results.",
+ "how_to_read": {
+  "expect": "Memories that should be sent with this message. For a follow-up that names nothing, the subject still under discussion.",
+  "acceptable": "Memories that are reasonable to send but not required. They count neither as correct nor as incorrect.",
+  "incorrect": "Every other memory.",
+  "kinds": {
+   "first": "First message of a chat.",
+   "follow_up_unnamed": "Continues the subject without naming it.",
+   "follow_up_named": "Continues the conversation and names what it is about.",
+   "subject_change": "Starts a different subject.",
+   "return": "Goes back to an earlier subject by name.",
+   "aside": "Small talk or acknowledgement; nothing is required."
+  },
+  "importance": "Rating on the app's -2..+3 scale; 0 when absent."
+ },
+ "person": "Orla Brandt (fictional)",
+ "memories": [
+  {
+   "id": "pet_mabel",
+   "content": "Orla Brandt has a greyhound named Mabel. Mabel takes a joint supplement with breakfast and must not have grapes.",
+   "tags": [
+    "Mabel",
+    "greyhound"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "pet_otis",
+   "content": "Orla's cat Otis is diabetic and gets insulin at 7 am and 7 pm.",
+   "tags": [
+    "Otis",
+    "cat",
+    "insulin"
+   ],
+   "importance": 3
+  },
+  {
+   "id": "pet_vet",
+   "content": "Mabel and Otis both see Dr. Hale at Fernside Veterinary. The clinic is closed on Wednesdays.",
+   "tags": [
+    "vet",
+    "Fernside"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "health_allergy",
+   "content": "Orla is allergic to penicillin and carries a card in her wallet saying so.",
+   "tags": [
+    "allergy",
+    "penicillin"
+   ],
+   "importance": 3
+  },
+  {
+   "id": "health_migraine",
+   "content": "Orla gets migraines triggered by strong perfume and skipped meals. Sumatriptan works if she takes it early.",
+   "tags": [
+    "migraine"
+   ],
+   "importance": 2
+  },
+  {
+   "id": "health_physio",
+   "content": "Orla does shoulder physiotherapy exercises twice a day after a rotator cuff injury.",
+   "tags": [
+    "shoulder",
+    "physiotherapy"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "health_glasses",
+   "content": "Orla's reading glasses prescription is +1.75 and she keeps a spare pair in the car.",
+   "tags": [
+    "glasses"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "work_role",
+   "content": "Orla is a structural engineer at Lindqvist & Moor and leads the Harbour Street footbridge project.",
+   "tags": [
+    "work",
+    "footbridge"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "work_deadline",
+   "content": "The Harbour Street footbridge drawings are due to the council on the 14th of March.",
+   "tags": [
+    "deadline",
+    "footbridge"
+   ],
+   "importance": 2
+  },
+  {
+   "id": "work_boss",
+   "content": "Orla's manager is Teodor. He prefers short written updates on Mondays.",
+   "tags": [
+    "Teodor",
+    "manager"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "work_colleague",
+   "content": "Priya is Orla's colleague who checks her load calculations.",
+   "tags": [
+    "Priya"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "work_software",
+   "content": "Orla's analysis software licence renews every January and the dongle lives in the top desk drawer.",
+   "tags": [
+    "software",
+    "licence"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "family_mother",
+   "content": "Orla's mother Ingrid lives in Tromsø and calls on Sunday evenings.",
+   "tags": [
+    "Ingrid",
+    "mother"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "family_brother",
+   "content": "Orla's brother Casper is a pastry chef who cannot eat nuts.",
+   "tags": [
+    "Casper",
+    "brother"
+   ],
+   "importance": 3
+  },
+  {
+   "id": "family_niece",
+   "content": "Orla's niece Saga turns seven in June and loves dinosaurs.",
+   "tags": [
+    "Saga",
+    "niece"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "family_partner",
+   "content": "Orla's partner Jonah works night shifts at the hospital on Thursdays and Fridays.",
+   "tags": [
+    "Jonah",
+    "partner"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "home_boiler",
+   "content": "The boiler in Orla's flat loses pressure. She tops it up to 1.5 bar with the silver tap underneath it.",
+   "tags": [
+    "boiler"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "home_landlord",
+   "content": "Orla's landlord is Mr. Okafor. Repairs are requested through the Tenora app.",
+   "tags": [
+    "landlord",
+    "Okafor"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "home_bins",
+   "content": "Recycling is collected on alternate Tuesdays and general waste every Friday.",
+   "tags": [
+    "bins",
+    "recycling"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "home_wifi",
+   "content": "The router is in the hall cupboard and must be restarted from the black switch, not unplugged.",
+   "tags": [
+    "router",
+    "wifi"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "home_spare_key",
+   "content": "A spare key to Orla's flat is with her neighbour Mrs. Adeyemi in flat 4.",
+   "tags": [
+    "key",
+    "neighbour"
+   ],
+   "importance": 2
+  },
+  {
+   "id": "hobby_cello",
+   "content": "Orla is learning the cello. Her lesson is on Wednesdays at 6 pm with Mr. Varga.",
+   "tags": [
+    "cello",
+    "lesson"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "hobby_climbing",
+   "content": "Orla climbs at the Granite Works wall and is working on a 6b route. Her harness is a size small.",
+   "tags": [
+    "climbing",
+    "Granite Works"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "hobby_sourdough",
+   "content": "Orla's sourdough starter is called Bruno and is fed with rye flour every morning.",
+   "tags": [
+    "sourdough",
+    "Bruno"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "hobby_bookclub",
+   "content": "Orla's book club meets on the first Thursday of the month. This month's book is a Finnish crime novel.",
+   "tags": [
+    "book club"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "food_coffee",
+   "content": "Orla drinks oat-milk flat whites and stops caffeine after 2 pm.",
+   "tags": [
+    "coffee"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "food_dislike",
+   "content": "Orla dislikes coriander and aubergine.",
+   "tags": [
+    "food"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "food_recipe",
+   "content": "Orla's fallback dinner is a miso noodle soup with tofu and spring greens.",
+   "tags": [
+    "dinner",
+    "recipe"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "plan_trip",
+   "content": "Orla is travelling to Lisbon from the 3rd to the 9th of May and has an aisle seat booked.",
+   "tags": [
+    "Lisbon",
+    "trip"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "plan_wedding",
+   "content": "Orla is a witness at her friend Maren's wedding on the 21st of September in Bergen.",
+   "tags": [
+    "Maren",
+    "wedding"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "plan_dentist",
+   "content": "Orla has a dental hygienist appointment on the 12th of April at 8:30 am.",
+   "tags": [
+    "dentist"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "plan_car",
+   "content": "Orla's car is due for its inspection in October and pulls slightly to the left.",
+   "tags": [
+    "car"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "money_savings",
+   "content": "Orla is saving for a flat deposit and moves 400 a month into the account named Brick.",
+   "tags": [
+    "savings"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "money_tax",
+   "content": "Orla's accountant is Hedda and tax documents are due to her by the end of February.",
+   "tags": [
+    "tax",
+    "Hedda"
+   ],
+   "importance": 0
+  }
+ ],
+ "messages": [],
+ "conversations": [
+  {
+   "id": "carry_01",
+   "messages": [
+    {
+     "id": "carry_01_turn_1",
+     "kind": "first",
+     "text": "Mabel has been limping a little after her walks this week.",
+     "expect": [
+      "pet_mabel"
+     ],
+     "acceptable": [
+      "pet_vet"
+     ]
+    },
+    {
+     "id": "carry_01_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "Should I rest her for a few days?",
+     "expect": [
+      "pet_mabel"
+     ],
+     "acceptable": [
+      "pet_vet"
+     ]
+    },
+    {
+     "id": "carry_01_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "How long before I should worry?",
+     "expect": [
+      "pet_mabel"
+     ],
+     "acceptable": [
+      "pet_vet"
+     ]
+    },
+    {
+     "id": "carry_01_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "Is it worth getting her checked?",
+     "expect": [
+      "pet_mabel",
+      "pet_vet"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_01_turn_5",
+     "kind": "follow_up_named",
+     "text": "Can you remind me which day the clinic is closed?",
+     "expect": [
+      "pet_vet"
+     ],
+     "acceptable": [
+      "pet_mabel"
+     ]
+    },
+    {
+     "id": "carry_01_turn_6",
+     "kind": "subject_change",
+     "text": "Separately, when are the footbridge drawings due?",
+     "expect": [
+      "work_deadline"
+     ],
+     "acceptable": [
+      "work_role"
+     ]
+    },
+    {
+     "id": "carry_01_turn_7",
+     "kind": "follow_up_unnamed",
+     "text": "Who should look them over before they go out?",
+     "expect": [
+      "work_colleague"
+     ],
+     "acceptable": [
+      "work_deadline",
+      "work_role",
+      "work_boss"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "carry_02",
+   "messages": [
+    {
+     "id": "carry_02_turn_1",
+     "kind": "first",
+     "text": "Otis seems thirstier than usual today.",
+     "expect": [
+      "pet_otis"
+     ],
+     "acceptable": [
+      "pet_vet"
+     ]
+    },
+    {
+     "id": "carry_02_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What time is his next dose?",
+     "expect": [
+      "pet_otis"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_02_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "And if I'm late home tonight?",
+     "expect": [
+      "pet_otis"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_02_turn_4",
+     "kind": "aside",
+     "text": "Okay, thanks.",
+     "expect": [],
+     "acceptable": [
+      "pet_otis"
+     ]
+    },
+    {
+     "id": "carry_02_turn_5",
+     "kind": "subject_change",
+     "text": "By the way, what's the name of the account I'm saving into?",
+     "expect": [
+      "money_savings"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "carry_03",
+   "messages": [
+    {
+     "id": "carry_03_turn_1",
+     "kind": "first",
+     "text": "I need to send Teodor an update on the footbridge.",
+     "expect": [
+      "work_boss",
+      "work_role"
+     ],
+     "acceptable": [
+      "work_deadline"
+     ]
+    },
+    {
+     "id": "carry_03_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "How does he like them written?",
+     "expect": [
+      "work_boss"
+     ],
+     "acceptable": [
+      "work_role"
+     ]
+    },
+    {
+     "id": "carry_03_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "And when should it reach him?",
+     "expect": [
+      "work_boss"
+     ],
+     "acceptable": [
+      "work_deadline",
+      "work_role"
+     ]
+    },
+    {
+     "id": "carry_03_turn_4",
+     "kind": "follow_up_named",
+     "text": "Priya still has to check my load calculations first.",
+     "expect": [
+      "work_colleague"
+     ],
+     "acceptable": [
+      "work_role"
+     ]
+    },
+    {
+     "id": "carry_03_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "Do you think she'll be done in time?",
+     "expect": [
+      "work_colleague"
+     ],
+     "acceptable": [
+      "work_deadline",
+      "work_role"
+     ]
+    },
+    {
+     "id": "carry_03_turn_6",
+     "kind": "subject_change",
+     "text": "Unrelated: my shoulder is sore again.",
+     "expect": [
+      "health_physio"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_03_turn_7",
+     "kind": "follow_up_unnamed",
+     "text": "How often am I supposed to do them?",
+     "expect": [
+      "health_physio"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "carry_04",
+   "messages": [
+    {
+     "id": "carry_04_turn_1",
+     "kind": "first",
+     "text": "The boiler pressure has dropped again.",
+     "expect": [
+      "home_boiler"
+     ],
+     "acceptable": [
+      "home_landlord"
+     ]
+    },
+    {
+     "id": "carry_04_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What do I top it up to?",
+     "expect": [
+      "home_boiler"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_04_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Which tap was it?",
+     "expect": [
+      "home_boiler"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_04_turn_4",
+     "kind": "follow_up_named",
+     "text": "If it keeps happening I'll report it to Mr. Okafor.",
+     "expect": [
+      "home_landlord"
+     ],
+     "acceptable": [
+      "home_boiler"
+     ]
+    },
+    {
+     "id": "carry_04_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "How do I send that request?",
+     "expect": [
+      "home_landlord"
+     ],
+     "acceptable": [
+      "home_boiler"
+     ]
+    },
+    {
+     "id": "carry_04_turn_6",
+     "kind": "subject_change",
+     "text": "Also, is it recycling week?",
+     "expect": [
+      "home_bins"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_04_turn_7",
+     "kind": "return",
+     "text": "Back to the boiler, is 1.5 the right number?",
+     "expect": [
+      "home_boiler"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "carry_05",
+   "messages": [
+    {
+     "id": "carry_05_turn_1",
+     "kind": "first",
+     "text": "I'm starting to pack for Lisbon.",
+     "expect": [
+      "plan_trip"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_05_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What dates am I away again?",
+     "expect": [
+      "plan_trip"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_05_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Did I book a window or an aisle?",
+     "expect": [
+      "plan_trip"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_05_turn_4",
+     "kind": "follow_up_named",
+     "text": "Someone needs to look after Otis and Mabel while I'm gone.",
+     "expect": [
+      "pet_otis",
+      "pet_mabel"
+     ],
+     "acceptable": [
+      "plan_trip",
+      "home_spare_key",
+      "family_partner",
+      "pet_vet"
+     ]
+    },
+    {
+     "id": "carry_05_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "What will they need to know about his injections?",
+     "expect": [
+      "pet_otis"
+     ],
+     "acceptable": [
+      "pet_vet"
+     ]
+    },
+    {
+     "id": "carry_05_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "And how would they get in?",
+     "expect": [
+      "home_spare_key"
+     ],
+     "acceptable": [
+      "plan_trip"
+     ]
+    },
+    {
+     "id": "carry_05_turn_7",
+     "kind": "subject_change",
+     "text": "Different topic: what's this month's book club book?",
+     "expect": [
+      "hobby_bookclub"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "carry_06",
+   "messages": [
+    {
+     "id": "carry_06_turn_1",
+     "kind": "first",
+     "text": "The doctor wants to prescribe me an antibiotic for this chest infection.",
+     "expect": [
+      "health_allergy"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_06_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "Is there anything I should tell her first?",
+     "expect": [
+      "health_allergy"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_06_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Where do I keep the card?",
+     "expect": [
+      "health_allergy"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_06_turn_4",
+     "kind": "subject_change",
+     "text": "I also keep losing my reading glasses.",
+     "expect": [
+      "health_glasses"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_06_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "Do I have a spare pair anywhere?",
+     "expect": [
+      "health_glasses"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_06_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "What strength are they?",
+     "expect": [
+      "health_glasses"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "carry_07",
+   "messages": [
+    {
+     "id": "carry_07_turn_1",
+     "kind": "first",
+     "text": "Casper is coming over for dinner on Saturday.",
+     "expect": [
+      "family_brother"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_07_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What do I need to keep out of the dessert?",
+     "expect": [
+      "family_brother"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_07_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "What could I make as a main that's easy?",
+     "expect": [
+      "food_recipe"
+     ],
+     "acceptable": [
+      "family_brother",
+      "food_dislike"
+     ]
+    },
+    {
+     "id": "carry_07_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "Would he be able to eat that?",
+     "expect": [
+      "family_brother"
+     ],
+     "acceptable": [
+      "food_recipe"
+     ]
+    },
+    {
+     "id": "carry_07_turn_5",
+     "kind": "subject_change",
+     "text": "On another note, my cello lesson, what time is it?",
+     "expect": [
+      "hobby_cello"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_07_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "And who is my teacher?",
+     "expect": [
+      "hobby_cello"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "carry_08",
+   "messages": [
+    {
+     "id": "carry_08_turn_1",
+     "kind": "first",
+     "text": "I can feel a migraine starting.",
+     "expect": [
+      "health_migraine"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_08_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What usually sets them off?",
+     "expect": [
+      "health_migraine"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_08_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Should I take something now or wait?",
+     "expect": [
+      "health_migraine"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_08_turn_4",
+     "kind": "follow_up_named",
+     "text": "I skipped lunch because of the council meeting.",
+     "expect": [
+      "health_migraine"
+     ],
+     "acceptable": [
+      "work_deadline",
+      "work_role"
+     ]
+    },
+    {
+     "id": "carry_08_turn_5",
+     "kind": "subject_change",
+     "text": "Anyway, what do I normally cook when I can't be bothered?",
+     "expect": [
+      "food_recipe"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_08_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "Does it have anything in it I dislike?",
+     "expect": [
+      "food_dislike"
+     ],
+     "acceptable": [
+      "food_recipe"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "carry_09",
+   "messages": [
+    {
+     "id": "carry_09_turn_1",
+     "kind": "first",
+     "text": "I'm heading to the Granite Works tonight.",
+     "expect": [
+      "hobby_climbing"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_09_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What grade was I working on?",
+     "expect": [
+      "hobby_climbing"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_09_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "I think I need new gear before I try it again.",
+     "expect": [
+      "hobby_climbing"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_09_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "What size did I buy last time?",
+     "expect": [
+      "hobby_climbing"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_09_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "Will my shoulder cope with it?",
+     "expect": [
+      "health_physio",
+      "hobby_climbing"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_09_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "Maybe I should do the exercises before I go.",
+     "expect": [
+      "health_physio"
+     ],
+     "acceptable": [
+      "hobby_climbing"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "carry_10",
+   "messages": [
+    {
+     "id": "carry_10_turn_1",
+     "kind": "first",
+     "text": "When is Saga's birthday?",
+     "expect": [
+      "family_niece"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_10_turn_2",
+     "kind": "subject_change",
+     "text": "What day does Mum usually call?",
+     "expect": [
+      "family_mother"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_10_turn_3",
+     "kind": "subject_change",
+     "text": "Which nights is Jonah on shift?",
+     "expect": [
+      "family_partner"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_10_turn_4",
+     "kind": "subject_change",
+     "text": "When is Maren's wedding?",
+     "expect": [
+      "plan_wedding"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_10_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "Where is it being held?",
+     "expect": [
+      "plan_wedding"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_10_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "What am I doing at it?",
+     "expect": [
+      "plan_wedding"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "carry_11",
+   "messages": [
+    {
+     "id": "carry_11_turn_1",
+     "kind": "first",
+     "text": "My sourdough starter looks sluggish.",
+     "expect": [
+      "hobby_sourdough"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_11_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What flour do I feed it?",
+     "expect": [
+      "hobby_sourdough"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_11_turn_3",
+     "kind": "aside",
+     "text": "Hang on, the doorbell just rang.",
+     "expect": [],
+     "acceptable": [
+      "hobby_sourdough"
+     ]
+    },
+    {
+     "id": "carry_11_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "Right, where were we, how often does it need feeding?",
+     "expect": [
+      "hobby_sourdough"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_11_turn_5",
+     "kind": "subject_change",
+     "text": "It's nearly three, should I still have a coffee?",
+     "expect": [
+      "food_coffee"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_11_turn_6",
+     "kind": "aside",
+     "text": "Ha, fair enough.",
+     "expect": [],
+     "acceptable": [
+      "food_coffee"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "carry_12",
+   "messages": [
+    {
+     "id": "carry_12_turn_1",
+     "kind": "first",
+     "text": "I need to get my tax papers together.",
+     "expect": [
+      "money_tax"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_12_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "Who do they go to?",
+     "expect": [
+      "money_tax"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_12_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "By when?",
+     "expect": [
+      "money_tax"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_12_turn_4",
+     "kind": "subject_change",
+     "text": "The car is pulling to one side again.",
+     "expect": [
+      "plan_car"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_12_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "When is it due to be looked at?",
+     "expect": [
+      "plan_car"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_12_turn_6",
+     "kind": "subject_change",
+     "text": "And the dentist, what time was that appointment?",
+     "expect": [
+      "plan_dentist"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_12_turn_7",
+     "kind": "follow_up_unnamed",
+     "text": "What date?",
+     "expect": [
+      "plan_dentist"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "carry_13",
+   "messages": [
+    {
+     "id": "carry_13_turn_1",
+     "kind": "first",
+     "text": "so today was one of those days where nothing went in the order I planned it I got up late and the tram was diverted because of roadworks near the station so I walked the last part and got to the office just as everyone was going into the morning meeting which ran long because nobody could agree on the room booking system and then lunch was a sandwich at my desk and somewhere in the middle of the afternoon I remembered I still have not practised the piece for my cello lesson and Mr. Varga will definitely notice because he always asks me to play the opening bars first and I can never get the bowing even after that I answered a pile of email and helped the new starter find the printer and then it rained on the way home and I forgot my umbrella at work again so I am now sitting here with wet shoes wondering what to make for dinner and whether there is anything good to watch tonight",
+     "expect": [
+      "hobby_cello"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_13_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What time does it start?",
+     "expect": [
+      "hobby_cello"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "carry_13_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Who teaches it?",
+     "expect": [
+      "hobby_cello"
+     ],
+     "acceptable": []
+    }
+   ]
+  }
+ ]
+}
