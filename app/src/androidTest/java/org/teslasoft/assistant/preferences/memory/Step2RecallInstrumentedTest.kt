@@ -309,6 +309,46 @@ class Step2RecallInstrumentedTest {
         }
     }
 
+    @Test fun matchingCompletionReappearsAfterWhitespaceOrRestoredMessageEdit() {
+        for (restoreOriginal in listOf(false, true)) {
+            val started = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            fake.queryStarted = started
+            fake.queryRelease = release
+            val callsBefore = fake.queryCalls
+            ActivityScenario.launch(MemorySearchTestActivity::class.java).use { scenario ->
+                var jobs = emptyList<Job>()
+                try {
+                    scenario.onActivity { activity ->
+                        activity.findViewById<android.widget.EditText>(R.id.field_message).setText(message)
+                        val scopeJob = activity.lifecycleScope.coroutineContext[Job]!!
+                        val existingJobs = scopeJob.children.toSet()
+                        MemorySearchTestActivity::class.java.getDeclaredMethod("runTest")
+                            .apply { isAccessible = true }.invoke(activity)
+                        jobs = scopeJob.children.filterNot { it in existingJobs }.toList()
+                    }
+                    assertTrue("The query did not start", started.await(10, TimeUnit.SECONDS))
+                    scenario.onActivity { activity ->
+                        val field = activity.findViewById<android.widget.EditText>(R.id.field_message)
+                        if (restoreOriginal) {
+                            field.setText("a different message")
+                            field.setText(message)
+                        } else field.setText("$message ")
+                        assertEquals(View.GONE, activity.findViewById<View>(R.id.section_result).visibility)
+                    }
+                } finally { release.countDown() }
+                runBlocking { withTimeout(10_000) { jobs.joinAll() } }
+                scenario.onActivity { activity ->
+                    assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.section_result).visibility)
+                    val prepared = MemorySearchTestActivity::class.java.getDeclaredField("prepared")
+                        .apply { isAccessible = true }.get(activity) as Librarian.PreparedSearchTest
+                    assertEquals(message, prepared.query)
+                    assertEquals(callsBefore + 1, fake.queryCalls)
+                }
+            }
+        }
+    }
+
     @Test fun realAndroidModelReferenceAndMeasuredSectionLatency() {
         // Full class runs require the pinned model fixtures. Missing inputs
         // must fail rather than silently skip the actual Android accuracy gate.

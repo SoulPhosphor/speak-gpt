@@ -354,6 +354,7 @@ class MemorySearchTestActivity : SettingsPageActivity() {
                 sectionResult.visibility = View.GONE
                 return@launch
             }
+            sectionResult.visibility = View.VISIBLE
             outcome.onSuccess { p ->
                 prepared = p
                 if (p == null) {

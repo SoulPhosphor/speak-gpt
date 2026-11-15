@@ -640,3 +640,7 @@ Current upstream model metadata was also checked: revision `5090578d9565bb06545b
 The standard unit/build job also passed: all Gradle unit-test tasks, Debug packaging, `assembleBeta`, non-debuggable Beta identity (`com.soulphosphor.phosphorshines.beta`, label `Phosphor Shines Beta`) and instrumentation compilation. Both jobs in run `43669339130` completed successfully.
 
 The ONNX startup/API opt-out test passed in this run. No new packet capture was performed, so this is not a claim of universal zero-network behavior. The rejected 1.29 runtime and forced-FP32 experiments are not included in this repair. PR review and integration remain pending.
+
+### PR #202 review follow-up
+
+Both final-document-commit checks passed at `d7c303e`: push run `43671204545` and pull-request run `43671253028`. Review found a test-screen visibility edge case: editing a running query and restoring it (or adding trailing whitespace) hides the old result, but its matching completion was accepted without showing the result container again. The completion now restores visibility only after the existing normalized-message and scope checks pass. The different-message rejection remains unchanged. A new Android regression checks both accepted edit sequences, including visible completion, the prepared query and exactly one whole-message model call. No matching defaults, model/runtime, gold answers or accuracy requirements change in this follow-up. Android execution and renewed review of this correction remain pending.
