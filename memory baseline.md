@@ -835,3 +835,117 @@ Step 4 must verify on Android: that with the setting at 0 the request is identic
 - **Empty and attachment-only user messages.** The helper searches exactly the previous messages it is given and decides nothing about which those are. A message with no text finds nothing and, if passed in, still uses one of the 0–3 places (unit-tested, so the behavior is stated, not hidden). Proposed for Step 4, not built: skip user messages that have no text when choosing the previous messages, so that "1 previous message" means the last message the user actually wrote. The alternative is to count every user message, in which case a photo sent between a question and its follow-up ends the carry-over.
 - **+3 memories left out by memory space or lore overlap** are reported only in debugging records (above). Whether the user should be told is an owner decision involving wording and logging.
 - **Incorrect memories carried forward** (9 to 25 at one previous message on this set) are the result to weigh when approving Step 4's setting and its default.
+
+## Independent carry-over evaluation (before Step 4)
+
+An evaluation only. Nothing in the app, its defaults or the retrieval method was changed, and no Step 4 code exists. The Step 0 set and its expected answers are untouched.
+
+### The set
+
+`app/src/test/resources/recall_carryover_set/`, written for this purpose with the owner's approval:
+
+- 34 invented memories for a fictional person, three rated +3 (`pet_otis`, `health_allergy`, `family_brother`) and three rated +2. Several are deliberately close to one another (four work memories, three about the pets, three about food).
+- 13 conversations, 79 turns, 80 expected memories. 43 follow-ups that name nothing, 5 that name their subject, 14 subject changes, 13 first messages, 3 asides ("Okay, thanks."), 1 return to an earlier subject. Conversations run up to seven turns; one stays on a single subject; one changes subject on every turn; one opens with a 174-word dictated message whose subject is in the middle.
+- Each turn lists the memories that should be sent (`expect`) and, where a memory is reasonable but not required, `acceptable`. An acceptable memory counts as neither correct nor incorrect. Every other memory sent is incorrect.
+
+**Order of work.** The cases, expected answers and the list of nine methods were committed first (`1a81910`), before any vector for this set existed and before any method was run on it. Expected answers were not edited afterwards; the test pins both files by hash.
+
+**Vectors.** From the app's real q4 model (file hashes match the ones pinned in Android Checks), made with the existing `generate_vectors.py` and `generate_section_vectors.py` on ONNX Runtime 1.20.0, the app's version. The three reference checks read 0.9308 / 0.4354 / 0.6191 against 0.9304 / 0.4371 / 0.6208. **These are desktop vectors, not Android output.** Step 2 showed that Android's small differences can change individual results, so every number below may shift by a few memories on a phone. Android similarities have not been recorded for this set.
+
+**Measurement code.** `CarryOverEvaluationTest` runs every method at Maximum Memories 1, 2, 3, 5 and 8 through the enforcer's selection and compares the result with `results.json`. To reproduce: `./gradlew :app:testDebugUnitTest --tests '*CarryOverEvaluationTest' -i`.
+
+### The methods
+
+Only the first four are the app's helper and the plan's method (G.9a). The others exist only in the evaluation test and are not approved; they were chosen and fixed before this set was run, from what the Step 0 conversations suggested.
+
+| Method | What is added after the new message's own matches |
+|---|---|
+| none | Nothing. The app today. |
+| plan 1 / 2 / 3 | Everything the 1, 2 or 3 previous user messages matched. |
+| only if nothing | Plan 1, but only when the new message matched nothing itself. |
+| inherit if nothing | When the new message matched nothing, whatever was sent with the previous message, without searching again. |
+| meaning and keyword | Only what the previous message matched by meaning and by keywords together. |
+| similar to new message | Only what the previous message matched that is also at least 0.30 similar to the new message. |
+| previous top match | Only the previous message's single best match. |
+
+### Results at the default Maximum Memories (8)
+
+| Method | Correct (of 80) | Missed | Incorrect | from the new message itself | carried: an earlier subject of the chat | carried: other | Turns with nothing incorrect (of 79) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| none (today) | 51 | 29 | 32 | 32 | 0 | 0 | 54 |
+| plan 1 | 65 | 15 | 70 | 32 | 9 | 29 | 35 |
+| plan 2 | 70 | 10 | 106 | 32 | 22 | 52 | 25 |
+| plan 3 | 73 | 7 | 138 | 32 | 34 | 72 | 19 |
+| only if nothing | 60 | 20 | 40 | 32 | 0 | 8 | 47 |
+| inherit if nothing | 62 | 18 | 45 | 32 | 0 | 13 | 43 |
+| meaning and keyword | 55 | 25 | 38 | 32 | 6 | 0 | 50 |
+| similar to new message | 65 | 15 | 52 | 32 | 4 | 16 | 44 |
+| previous top match | 62 | 18 | 50 | 32 | 8 | 10 | 42 |
+
+Follow-ups that name nothing, by where they sit in the conversation (turns where every expected memory was sent):
+
+| Method | Right after a message that named the subject (of 23) | After another unnamed follow-up or an aside (of 20) |
+|---|---:|---:|
+| none (today) | 12 | 7 |
+| plan 1 | 21 | 12 |
+| plan 2 | 21 | 17 |
+| plan 3 | 21 | 18 |
+| only if nothing | 17 | 11 |
+| inherit if nothing | 17 | 13 |
+| meaning and keyword | 14 | 9 |
+| similar to new message | 21 | 12 |
+| previous top match | 20 | 10 |
+
+Subject changes found their own memory in 14 of 14 turns under every method. First messages were complete in 11 of 13 under every method: those two misses are the existing search's, and with nothing before them no carry-over method can reach them. Follow-ups that name their subject were complete in 3 of 5 under every method except plan 3 (4 of 5).
+
+### What this shows
+
+- **The follow-up problem is much larger here than on the Step 0 conversations.** Searched alone, 24 of the 43 unnamed follow-ups lose their memory. On the Step 0 set it was 2 of 12, because most of those follow-ups happened to match on their own.
+- **Today's search already sends 32 incorrect memories on this set**, before any carry-over. Many come from the follow-ups themselves: "Should I rest her for a few days?" matches the shoulder-physiotherapy memory, "How long before I should worry?" the car inspection.
+- **Plan 1 repairs the first follow-up and little after it.** Right after a naming message it takes 12 of 23 to 21. For later follow-ups it reaches only 12 of 20: the previous message names nothing either, so searching it again finds nothing useful. This is the second-follow-up limit the plan predicted, now measured (`carry_01_turn_3`, `carry_08_turn_3`, `carry_09_turn_4`, `carry_12_turn_3` and others).
+- **Plan 2 and 3 reach those later follow-ups by sending far more wrong memories.** Plan 3 finds 73 of 80 and sends 138 incorrect; only 19 of 79 turns have nothing incorrect.
+- **Two different things are carried wrongly, and they have different causes.**
+  - *An earlier subject's memory*, correctly matched at the time and no longer wanted (9 with plan 1, 34 with plan 3). This is a consequence of the carry-over design itself. Fixing the search's false matches would not remove it.
+  - *A memory the earlier message matched wrongly* (29 with plan 1, 72 with plan 3). This repeats an existing false match and would shrink if those false matches were reduced.
+- **One alternative matched plan 1's benefit at lower cost on this set.** "Similar to new message" finds the same 65 and keeps the same follow-ups as plan 1, with 52 incorrect instead of 70. It removes both kinds of wrong carry (earlier subjects 9 to 4, other 29 to 16).
+- **The cheapest gain per wrong memory is "only if nothing"**: 9 more correct for 8 more incorrect. It never carries an earlier subject, but it cannot help when the new message matched something wrong on its own, which is common here.
+- **No method tested solves long runs of unnamed follow-ups cleanly.** The best at them (plan 3, 18 of 20) is also the worst for wrong memories.
+
+Incorrect memories added for each additional correct one, against today:
+
+| Method | Correct gained | Incorrect added | Incorrect per correct |
+|---|---:|---:|---:|
+| only if nothing | 9 | 8 | 0.9 |
+| inherit if nothing | 11 | 13 | 1.2 |
+| similar to new message | 14 | 20 | 1.4 |
+| meaning and keyword | 4 | 6 | 1.5 |
+| previous top match | 11 | 18 | 1.6 |
+| plan 1 | 14 | 38 | 2.7 |
+| plan 2 | 19 | 74 | 3.9 |
+| plan 3 | 22 | 106 | 4.8 |
+
+### +3 importance
+
+- **Two expected +3 memories are missed by every method.** "The doctor wants to prescribe me an antibiotic for this chest infection" and the follow-up "Is there anything I should tell her first?" do not find the penicillin-allergy memory. The existing search does not match it, so there is nothing to carry. Carry-over cannot protect a +3 memory that was never found.
+- **Carry-over recovers the other two.** `pet_otis` is missed today in two unnamed follow-ups about his insulin and found by every plan method.
+- At Maximum Memories 8 no turn exceeds the limit, so the +3 protection is never exercised. At Maximum Memories 1 it is: 2 memories are sent past the limit today and 7 with plan 1, all rated +3. A carried +3 memory is therefore kept at a low limit where a carried ordinary memory is dropped.
+
+### Maximum Memories
+
+| Maximum Memories | none: correct / incorrect | plan 1: correct / incorrect | similar to new message: correct / incorrect |
+|---:|---:|---:|---:|
+| 1 | 48 / 13 | 56 / 19 | 56 / 18 |
+| 2 | 51 / 28 | 64 / 48 | 64 / 41 |
+| 3 | 51 / 32 | 64 / 64 | 64 / 50 |
+| 5 | 51 / 32 | 65 / 70 | 65 / 52 |
+| 8 | 51 / 32 | 65 / 70 | 65 / 52 |
+
+A lower limit sends fewer wrong memories under every method, and costs little here because the new message's own matches come first. Every method at every limit is in `results.json`.
+
+### Limits of this evaluation
+
+- 79 invented turns and 34 invented memories, written by the same agent that ran the methods. The expected answers were fixed first, but the conversations still reflect one author's idea of how people follow up.
+- Desktop vectors from the real model, not Android output.
+- The alternatives were picked after looking at the Step 0 conversations. The 0.30 in "similar to new message" was one of four values tried there. It was not adjusted on this set, but one fixed value on one set is not evidence that it is the right value.
+- These results show how the nine tested methods compare on this set. They do not show that no better simple method exists.
+- No lore, no oversized memories and no real chat history are involved, and nothing was timed.
