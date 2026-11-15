@@ -46,6 +46,8 @@ import kotlin.math.sqrt
 class Step2RecallInstrumentedTest {
     private val base: Context = ApplicationProvider.getApplicationContext()
     private val prefix = "step2_${System.nanoTime()}_"
+    // Isolated FP32-activation comparison: original q4 weights and tokenizer.
+    private val validationModelSha256 = "fb08ff24b5291bb88ced003b8c3e292d3e69859ea2c4485edcc419eede64a81f"
     private val ctx = object : ContextWrapper(base) {
         override fun getApplicationContext(): Context = this
         override fun getFilesDir(): File = File(base.filesDir, prefix).apply { mkdirs() }
@@ -269,7 +271,7 @@ class Step2RecallInstrumentedTest {
         runtimeModelDirs.add(runtimeContext.filesDir)
         val installed = EmbeddingModelStorage.modelDir(runtimeContext, EmbeddingModels.GEMMA_Q4)
         val hashes = mapOf(
-            "model.onnx" to "ad1dfee81a70f7944b9b9d1cc6e48075b832881cf33fab2f2b248be78f3f0043",
+            "model.onnx" to validationModelSha256,
             "model_q4.onnx_data" to "599962c3143b040de2dd05e5975be3e9091dd067cacc6a8f7186e3203bab9e02",
             "tokenizer.json" to "4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47")
         for ((name, expectedHash) in hashes) {
@@ -293,6 +295,7 @@ class Step2RecallInstrumentedTest {
         }
         val real = OnnxEmbeddingModel.create(runtimeContext, EmbeddingModels.GEMMA_Q4)
         try {
+            assertEquals("Precision comparison must retain the app runtime", "1.20.0", OnnxRuntimeEnvironment.get().version)
             val tokenizer = OnnxEmbeddingModel::class.java.getDeclaredField("tokenizer")
                 .apply { isAccessible = true }.get(real) as HfTokenizer
             val accuracyFailures = verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_test_set") +
@@ -314,6 +317,7 @@ class Step2RecallInstrumentedTest {
             assertTrue(reading.vectors.values.all { it.size == 256 })
             val metrics = Bundle().apply {
                 putString("step2_android_measurement", "ORT=${OnnxRuntimeEnvironment.get().version}; " +
+                    "compute_precision=fp32-activations; graph_sha256=$validationModelSha256; " +
                     "model=${real.tag}; reference=$reference; whole_model_ms=${prepared.embedMillis}; " +
                     "section_queue_ms=${reading.queueMillis}; section_model_ms=${reading.modelMillis}; " +
                     "section_scoring_ms=${reading.scoringMillis}; section_total_ms=${reading.millis}; attempted=${reading.checked}; " +
@@ -473,6 +477,10 @@ class Step2RecallInstrumentedTest {
         File(base.getExternalFilesDir(null), "step2-$folder-parity.json").writeText(
             JSONObject().put("inputs", inputDiagnostics).put("decisions", decisionDiagnostics)
                 .put("runtime_differences", JSONArray(runtimeDifferences)).put("failures", JSONArray(failures))
+                .put("runtime", OnnxRuntimeEnvironment.get().version)
+                .put("abi", android.os.Build.SUPPORTED_ABIS.first())
+                .put("compute_precision", "fp32-activations").put("graph_sha256", validationModelSha256)
+                .put("whole", JSONObject().put("correct", wholeCorrect).put("missed", wholeMissed).put("incorrect", wholeIncorrect))
                 .put("accuracy_baseline", if (folder == "recall_test_set") "baseline.json" else "observed.json").put("correct", correct)
                 .put("missed", missed).put("incorrect", incorrect).toString(2))
         instrumentation.sendStatus(0, Bundle().apply {

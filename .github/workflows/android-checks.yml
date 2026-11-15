@@ -199,6 +199,21 @@ jobs:
           4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47  tokenizer.json
           HASHES
           )
+          # Isolated precision experiment: parse the original protobuf, change
+          # only MatMulNBits accuracy_level 4 -> 1, and preserve q4 weights.
+          # The preparation tool never imports or executes ONNX Runtime.
+          prep_env="$RUNNER_TEMP/step2-model-prep"
+          python -m venv "$prep_env"
+          "$prep_env/bin/python" -m pip install onnx==1.23.2
+          "$prep_env/bin/python" .github/scripts/prepare_step2_fp32_model.py \
+            "$model_dir/model.onnx" "$model_dir/model-fp32.onnx"
+          mv "$model_dir/model-fp32.onnx" "$model_dir/model.onnx"
+          (cd "$model_dir" && sha256sum --check <<'FP32_HASHES'
+          fb08ff24b5291bb88ced003b8c3e292d3e69859ea2c4485edcc419eede64a81f  model.onnx
+          599962c3143b040de2dd05e5975be3e9091dd067cacc6a8f7186e3203bab9e02  model_q4.onnx_data
+          4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47  tokenizer.json
+          FP32_HASHES
+          )
           # Shared external storage can present empty/unreadable files across
           # shell and app UIDs. Stream into app-private storage as the app UID.
           package=com.soulphosphor.phosphorshines
