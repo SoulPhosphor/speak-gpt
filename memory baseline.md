@@ -644,3 +644,110 @@ The ONNX startup/API opt-out test passed in this run. No new packet capture was 
 ### PR #202 review follow-up
 
 Both final-document-commit checks passed at `d7c303e`: push run `43671204545` and pull-request run `43671253028`. Review found a test-screen visibility edge case: editing a running query and restoring it (or adding trailing whitespace) hides the old result, but its matching completion was accepted without showing the result container again. The completion now restores visibility only after the existing normalized-message and scope checks pass. The different-message rejection remains unchanged. A new Android regression checks both accepted edit sequences, including visible completion, the prepared query and exactly one whole-message model call. No matching defaults, model/runtime, gold answers or accuracy requirements change in this follow-up. Android execution and renewed review of this correction remain pending.
+
+## Step 3: searching with the previous messages
+
+Step 3 adds a search helper (`PreviousMessageSearch.kt`) and nothing else. It is **not connected to sending**: chat, the Memory Search Test and every other screen behave exactly as before, and there is no setting. Using it when a message is sent, the setting, and preparing and keeping earlier-message vectors are Step 4. The runtime, model, matching defaults, expected answers and `baseline.json` are unchanged.
+
+### What the helper does
+
+- It searches the new message, then each of the user's 0–3 previous messages **separately**, with the same search a message gets today (whole message, then sections for a long message). Messages are never joined.
+- A memory found through an earlier message passed the existing relevance gate against that message. The helper keeps nothing between calls, so nothing is returned because it was sent before.
+- The new message's own result is returned first and exactly as it is today. Matches for the message before it follow, then the one before that. A memory matched by several messages is listed once, at its newest match.
+- Earlier messages only fill the room the new message leaves under the memory limit. Beyond the limit only a +3 memory is added, the existing rule for every search.
+- The caller supplies the user's messages, any vectors it already has for them, and the memories eligible at that moment. A message without a vector is searched by keywords alone, as a new message is today when meaning search is unavailable.
+
+### How the conversations were scored
+
+The nine Step 0 conversations (30 turns) were scored with 0, 1, 2 and 3 previous messages, with the memory limit of 5 used throughout this file. Each conversation is its own chat, so its first turn has no previous message. Turn 2 of every conversation is a first follow-up (9). Turn 3 of the three four-turn conversations is a second follow-up in a row (3). The last turn of every conversation changes the subject (9).
+
+Two sets of already-recorded inputs were scored. No new model output was produced for this step.
+
+- **Android scores:** the similarities the real model produced on Android ONNX Runtime 1.20 (`android_ort120_similarity_scores.json`), replayed as in the Step 2 repair. This is a replay of measured numbers through the unchanged matching code, not a new run on a device.
+- **Reference vectors:** the frozen Step 0 vectors (`vectors.json`).
+
+Every conversation turn is shorter than 80 words, so section search plays no part in these numbers.
+
+### Results
+
+| Android scores | 0 | 1 | 2 | 3 |
+|---|---:|---:|---:|---:|
+| First follow-ups that kept their memory (of 9) | 8 | 9 | 9 | 9 |
+| Second follow-ups in a row that kept it (of 3) | 2 | 3 | 3 | 3 |
+| New subject's own memory found after the change (of 9) | 9 | 9 | 9 | 9 |
+| Old-subject memories sent after the subject changed (of 9 changes) | 0 | 8 | 9 | 9 |
+| Other memories sent that the turn did not expect | 9 | 17 | 22 | 22 |
+| Expected memories found / missed, all 30 turns | 27 / 3 | 29 / 1 | 29 / 1 | 29 / 1 |
+| Earlier-message matches left out by the memory limit | 0 | 0 | 0 | 0 |
+
+| Reference vectors | 0 | 1 | 2 | 3 |
+|---|---:|---:|---:|---:|
+| First follow-ups that kept their memory (of 9) | 8 | 9 | 9 | 9 |
+| Second follow-ups in a row that kept it (of 3) | 2 | 3 | 3 | 3 |
+| New subject's own memory found after the change (of 9) | 9 | 9 | 9 | 9 |
+| Old-subject memories sent after the subject changed (of 9 changes) | 0 | 8 | 9 | 9 |
+| Other memories sent that the turn did not expect | 10 | 19 | 24 | 24 |
+| Expected memories found / missed, all 30 turns | 27 / 3 | 29 / 1 | 29 / 1 | 29 / 1 |
+| Earlier-message matches left out by the memory limit | 0 | 0 | 0 | 0 |
+
+With 0 previous messages every turn returns exactly what the existing search returns for it, in the same order; the test checks this for all 30 turns on both inputs. The two inputs differ in one memory only: on reference vectors `conversation_01_turn_2` also sends `food_tea` on its own (already recorded in Step 0), and that carries into turn 3 from 1 previous message upward.
+
+What the numbers show on this set:
+
+- **Follow-ups.** With 1 previous message both follow-ups that lost their memory are repaired: `conversation_07_turn_2` ("Where should I take him?") and `conversation_09_turn_3` ("Will showing it on my phone be enough?"). The one remaining miss, `conversation_04_turn_1`, is a first message and has nothing before it.
+- **The second-follow-up limit did not occur here, and that is not evidence it cannot.** `conversation_09_turn_3` is kept at 1 because turn 2 found the memory on its own. The other two second follow-ups find their memory on their own. This set has no second follow-up that follows a first follow-up which also names nothing and finds nothing.
+- **Old subject after a change.** With 1 previous message, 8 of the 9 subject changes also send the old subject's memory, after the new subject's own match. The ninth, `conversation_09_turn_4`, does not, only because the turn before it matched nothing. With 2 it is sent there too.
+- **Incorrect memories are carried as well.** A memory an earlier message matched wrongly passed that message's gate, so it is sent again with the next message. Other unexpected memories go from 9 to 17 with 1 previous message and to 22 with 2 (10, 19 and 24 on reference vectors). No turn's own search sends a wrong memory it did not send before; every added one comes from an earlier turn's own result.
+- **2 against 1** adds only carried memories on this set: one more old subject and five more unexpected memories, with no additional follow-up kept.
+- **3 is identical to 2 on this set.** Only the last turn of a four-turn conversation has a third previous message, and each of those first turns matched only a memory already listed.
+
+### How much less an earlier message counts
+
+The rule gives an earlier message's match one disadvantage: it is listed after every newer match, and it is dropped first when the memory limit is reached. On these conversations the limit was never reached by an earlier match (the longest list was exactly 5, at `conversation_09_turn_4` with 2 or 3), so the only measured effect is the order. This set therefore cannot show whether an earlier message should count less than that, for example through a stricter gate. No such number was added: the plan keeps the same gate for an earlier message, and a different one would need the owner's decision.
+
+### Every turn
+
+Android scores. Expected memories are bold. "Added at 1" lists what one previous message adds to the turn's own result, "added at 2" what a second adds; nothing is added at 3. Order within a cell is the order sent.
+
+| Turn | Own result (0) | Added at 1 | Added at 2 |
+|---|---|---|---|
+| 01.1 | **`pet_tansy`** | — | — |
+| 01.2 | **`pet_tansy`** | — | — |
+| 01.3 | **`hobby_camera`** | `pet_tansy` | — |
+| 02.1 | **`family_leon`** | — | — |
+| 02.2 | **`family_leon`**, `work_password` | — | — |
+| 02.3 | **`food_tea`** | `family_leon`, `work_password` | — |
+| 03.1 | **`plan_ferry`** | — | — |
+| 03.2 | **`plan_ferry`** | — | — |
+| 03.3 | **`home_shelf`** | `plan_ferry` | — |
+| 04.1 | — | — | — |
+| 04.2 | **`family_ada`**, `work_budget` | — | — |
+| 04.3 | **`pet_brindle`** | `family_ada`, `work_budget` | — |
+| 05.1 | **`work_budget`**, `work_archive` | — | — |
+| 05.2 | **`work_budget`** | `work_archive` | — |
+| 05.3 | **`health_dental`** | `work_budget` | `work_archive` |
+| 06.1 | **`pet_cobalt`** | — | — |
+| 06.2 | **`pet_cobalt`** | — | — |
+| 06.3 | **`plan_eclipse`** | `pet_cobalt` | — |
+| 07.1 | **`pet_brindle`** | — | — |
+| 07.2 | `hobby_camera` | **`pet_brindle`** | — |
+| 07.3 | `family_leon`, **`pet_brindle`** | `hobby_camera` | — |
+| 07.4 | **`family_ada`** | `family_leon`, `pet_brindle` | `hobby_camera` |
+| 08.1 | **`hobby_spring`** | — | — |
+| 08.2 | **`hobby_spring`** | — | — |
+| 08.3 | **`hobby_spring`** | — | — |
+| 08.4 | **`pet_cobalt`**, `work_password` | `hobby_spring` | — |
+| 09.1 | **`plan_concert`** | — | — |
+| 09.2 | `work_archive`, `work_budget`, `work_password`, **`plan_concert`** | — | — |
+| 09.3 | — | `work_archive`, `work_budget`, `work_password`, **`plan_concert`** | — |
+| 09.4 | **`health_dental`** | — | `work_archive`, `work_budget`, `work_password`, `plan_concert` |
+
+On reference vectors the table is the same except that 01.2 also sends `food_tea` on its own and 01.3 adds `pet_tansy`, `food_tea` at 1.
+
+The exact list for every turn, input and count, with the message that found each memory, is recorded in `previous_message_results.json`. `PreviousMessageRecallTest` fails if any of them changes. That file is a record of measured results, not of expected answers.
+
+### Limits of this measurement
+
+- Nine short invented conversations and 32 invented memories. The counts describe this set, not a real library.
+- Scored from recorded similarities and vectors. Nothing was run on a phone or emulator for this step, and no timing was measured: the helper performs no model work itself, and when earlier-message vectors are made is Step 4.
+- Long earlier messages are supported (their sections are searched like any message's) and covered by a unit test, but no conversation in this set has one, so their effect on results is unmeasured.
