@@ -10158,6 +10158,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private suspend fun finalizeLifecycleSuccess(): ProviderDiagnosticSnapshot? {
         val usageAttempt = currentProviderUsageAttempt
         val providerDiagnostics = usageAttempt?.diagnosticSnapshot()
+        // A provider can report its failure as an error event inside a
+        // successful (HTTP 200) stream and then close it with no finish
+        // reason. The stream ending on its own does not make that a reply:
+        // hand it to the normal generation-failure path with this attempt's
+        // evidence, before anything here treats it as a completion.
+        if (providerDiagnostics != null &&
+            ResponseLifecycle.endedOnProviderError(
+                providerDiagnostics.errorEvents.isNotEmpty(), providerDiagnostics.finishReason
+            )
+        ) {
+            throw org.teslasoft.assistant.preferences.ProviderStreamTerminalException(
+                attempt = usageAttempt,
+                providerFinishReason = "missing"
+            )
+        }
         usageAttempt?.let {
             pendingProviderUsageSnapshot = it.snapshot()
             pendingCompletedPricingCatalog = currentPricingCatalog

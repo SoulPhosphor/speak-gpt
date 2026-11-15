@@ -92,6 +92,15 @@ object ResponseLifecycle {
     )
 
     /**
+     * A stream that returned normally still failed when the provider sent an
+     * error event and never sent a finish reason (e.g. an upstream 504 carried
+     * inside an HTTP 200 stream). A finish reason means the provider finished
+     * the reply itself, so its own terminal semantics apply instead.
+     */
+    fun endedOnProviderError(providerErrorReceived: Boolean, finishReason: String?): Boolean =
+        providerErrorReceived && finishReason?.trim().isNullOrEmpty()
+
+    /**
      * Classify a typed Flow that returned normally. Missing finish_reason is
      * intentionally checked BEFORE zero-content handling: EOF + zero characters
      * does not prove the provider intentionally generated an empty answer.
