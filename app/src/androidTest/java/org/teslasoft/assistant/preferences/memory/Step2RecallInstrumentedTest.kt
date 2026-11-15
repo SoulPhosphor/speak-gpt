@@ -398,6 +398,7 @@ class Step2RecallInstrumentedTest {
             val accuracyFailures = verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_test_set") +
                 verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_independent_set")
             recordAndroidSimilarities(real, "recall_carryover_set")
+            recordAndroidSimilarities(real, "recall_carryover_holdout")
             val reference = VectorMath.cosine(
                 real.embed("What should I feed Pepper?", true),
                 real.embed("Pepper is the user's cat. She has kidney disease and eats a prescription diet.", false))
