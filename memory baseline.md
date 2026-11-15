@@ -949,3 +949,67 @@ A lower limit sends fewer wrong memories under every method, and costs little he
 - The alternatives were picked after looking at the Step 0 conversations. The 0.30 in "similar to new message" was one of four values tried there. It was not adjusted on this set, but one fixed value on one set is not evidence that it is the right value.
 - These results show how the nine tested methods compare on this set. They do not show that no better simple method exists.
 - No lore, no oversized memories and no real chat history are involved, and nothing was timed.
+
+## Final carry-over evaluation: Android similarities and held-out set
+
+An evaluation only. No app code, default, threshold, method or expected answer was changed. The methods and +3 rules were fixed in `recall_carryover_holdout/final_methods.json` before any of them ran on the held-out set; the test pins the cases and methods by hash.
+
+**Inputs.** Android similarities from the emulator job of Android Checks (ONNX Runtime 1.20.0, the app's real q4 model), saved unchanged from the job log as `android_ort120_similarities.json` in `recall_carryover_set` and `recall_carryover_holdout`. Their recorded case hashes match the committed cases. Android agreed with the desktop reference within 0.0047 (development) and 0.0056 (held-out), minimum cosine 0.9997.
+
+**Records.** `CarryOverFinalEvaluationTest` printed one `FINAL RECORD` per set; each is saved unchanged as `final_results.json`. A second run reproduced both byte for byte. To reproduce: `./gradlew :app:testDebugUnitTest --tests '*CarryOverFinalEvaluationTest' -i`.
+
+**What is in the app.** Only the previous-message search (plan 1/2/3, `PreviousMessageSearch`) exists in app code, and it is not connected to sending. "Similar to new message", subject tracking and the two lowered +3 bars exist only in the evaluation test.
+
+### Results at the default Maximum Memories (8), Android similarities
+
+Development set: 79 turns, 80 expected memories. Held-out set: 73 turns, 69 expected memories.
+
+| Method | Correct | Missed | Acceptable sent | Incorrect | from the new message | carried: earlier subject | carried: other | Incorrect rated +3 | Expected +3 missed | Turns with nothing incorrect |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **Development** | | | | | | | | | | |
+| none (today) | 51 | 29 | 4 | 31 | 31 | 0 | 0 | 1 | 5 | 55 |
+| plan 1 | 66 | 14 | 13 | 69 | 31 | 9 | 29 | 4 | 2 | 36 |
+| plan 3 | 73 | 7 | 19 | 137 | 31 | 34 | 72 | 12 | 2 | 20 |
+| similar to new message | 66 | 14 | 12 | 52 | 31 | 4 | 17 | 4 | 2 | 44 |
+| subject tracking | 67 | 13 | 10 | 33 | 31 | 1 | 1 | 1 | 3 | 54 |
+| subject tracking, 3 turns | 67 | 13 | 10 | 32 | 31 | 0 | 1 | 1 | 3 | 55 |
+| **Held-out** | | | | | | | | | | |
+| none (today) | 40 | 29 | 8 | 43 | 43 | 0 | 0 | 12 | 13 | 43 |
+| plan 1 | 55 | 14 | 13 | 88 | 43 | 7 | 38 | 21 | 10 | 26 |
+| plan 3 | 60 | 9 | 18 | 146 | 43 | 30 | 73 | 31 | 7 | 18 |
+| similar to new message | 53 | 16 | 12 | 74 | 43 | 1 | 30 | 19 | 11 | 29 |
+| subject tracking | 58 | 11 | 11 | 50 | 43 | 6 | 1 | 12 | 8 | 37 |
+| subject tracking, 3 turns | 57 | 12 | 10 | 50 | 43 | 6 | 1 | 12 | 8 | 37 |
+
+Plan 2 lies between plan 1 and plan 3 (development 71 / 105, held-out 57 / 125 correct / incorrect). The desktop reference vectors give the same picture within 1–8 memories per cell; both inputs are in `final_results.json`. Subject changes, first messages and asides were complete in the same number of turns under every method.
+
+Incorrect memories added for each additional correct one, against today (Android):
+
+| Method | Development | Held-out |
+|---|---:|---:|
+| subject tracking | 2 for 16 (0.1) | 7 for 18 (0.4) |
+| similar to new message | 21 for 15 (1.4) | 31 for 13 (2.4) |
+| plan 1 | 38 for 15 (2.5) | 45 for 15 (3.0) |
+| plan 3 | 106 for 22 (4.8) | 103 for 20 (5.2) |
+
+### What this shows
+
+- **Subject tracking held up on the held-out set.** It finds the most expected memories of any method except plan 2/3, and adds 7 incorrect where plan 1 adds 45. It added no incorrect +3 memory on either set.
+- **Its cost is old-subject carry-over in specific places.** The 6 held-out cases are: a named follow-up that names a new subject without a confident match (`hold_04_turn_4`, "Would that clash with my course?"), two unnamed follow-ups after a weak subject change (`hold_08_turn_5`, `hold_08_turn_6`), and three unrelated messages ("What's the capital of Australia?", "Tell me a joke about penguins.", the van keys) that receive the previous subject's memory. Code cannot tell an unrelated message from a follow-up that names nothing; that is the limit of this approach.
+- **"Similar to new message" did not hold up.** On the development set it matched plan 1 with fewer incorrect; on the held-out set it found fewer than plan 1 and still carried 30 wrong memories.
+- **Plan 1 (the plan's current method) roughly doubles incorrect memories** on both sets and sends 9 more incorrect +3 memories on the held-out set than today.
+- **Long runs of unnamed follow-ups remain unsolved** by every method (held-out, third or later in a row: today 8 of 16, subject tracking 13, plan 3 14).
+
+### +3 relevance experiments (single message, no carry-over)
+
+| Rule | Development: expected +3 found / wrong +3 sent | Held-out: expected +3 found / wrong +3 sent |
+|---|---:|---:|
+| today (same gate as every memory) | 0 / 0 | 0 / 0 |
+| lower bar (stand-out ≥ 2.0) | 2 / 3 | 3 / 8 (+1 acceptable) |
+| lower bar, top match only | 1 / 0 | 2 / 0 |
+
+The plain lower bar is rejected: on the held-out set it sends the custody memory into seven unrelated turns and the epilepsy memory into one. "Top match only" recovered 1 and 2 expected +3 memories with no wrong +3 match on either set, which is a small gain from a small sample. Neither is in the app.
+
+### Limits
+
+Two invented sets (152 turns) written by agents; Android similarities replayed on a desktop JVM, not a send through the app; no lore, oversized memories, real chat history or timing. Subject tracking's 4.0 stand-out was chosen on the development set and was not adjusted for the held-out set.
