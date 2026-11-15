@@ -261,6 +261,8 @@ jobs:
                 adb pull "/sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-$folder-parity.json" \
                   "$RUNNER_TEMP/recovery-results/step2-$folder-parity.json" || true
               done
+              adb pull /sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-recall_carryover_set-similarities.json \
+                "$RUNNER_TEMP/recovery-results/step2-recall_carryover_set-similarities.json" || true
             fi
             if [ "$instrument_status" -ne 0 ] || \
               ! grep -Fq "OK (" "$RUNNER_TEMP/recovery-results/$result_name.txt"; then
@@ -281,6 +283,15 @@ jobs:
             echo "- Instrumentation output: archived by this job"
             echo "- Recovery assertions: logical content, reference closure, integrity, journal cleanup"
           } >> "$GITHUB_STEP_SUMMARY"
+          # Measured similarities for the carry-over evaluation set, printed
+          # so they can be recorded as a fixture. Measurement only.
+          similarities="$RUNNER_TEMP/recovery-results/step2-recall_carryover_set-similarities.json"
+          if [ -s "$similarities" ]; then
+            echo "CARRYOVER_ANDROID_SIMILARITIES_BEGIN"
+            cat "$similarities"
+            echo
+            echo "CARRYOVER_ANDROID_SIMILARITIES_END"
+          fi
 
       - name: Archive instrumentation and fault evidence
         if: always()
