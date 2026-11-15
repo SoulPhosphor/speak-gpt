@@ -235,7 +235,9 @@ dependencies {
     // companion memory librarian (EmbeddingGemma). The model is ~2 MB and the
     // arm64 runtime ~12 MB — the price of voice detection that doesn't need
     // per-room energy-gate tuning.
-    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
+    // Experimental branch: compare the actual Android runtime against 1.20.0
+    // with the same model and accuracy gate. Not an approved shipping upgrade.
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.29.0'
     // Embedding-model tokenization is pure Kotlin (librarian/HfTokenizer reads
     // the downloaded tokenizer.json) — no ONNX Runtime Extensions dependency.
     // Do not reintroduce it (or a bundled tokenizer graph): the app must not

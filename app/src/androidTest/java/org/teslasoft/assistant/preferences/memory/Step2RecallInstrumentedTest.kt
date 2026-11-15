@@ -27,6 +27,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.teslasoft.assistant.runtime.OnnxRuntimeEnvironment
+import org.teslasoft.assistant.stt.SileroVadRuntime
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
@@ -205,6 +206,30 @@ class Step2RecallInstrumentedTest {
     @Test fun onnxEnvironmentAppliesTelemetryOptOutBeforeSessionUse() {
         // Executes the actual Android JNI opt-out, not a mocked method.
         assertSame(OnnxRuntimeEnvironment.get(), OnnxRuntimeEnvironment.get())
+        assertEquals("1", android.system.Os.getenv("ORT_DISABLE_TELEMETRY"))
+    }
+
+    @Test fun shippedSileroModelStillRunsWithTheSharedRuntime() {
+        // Native compatibility only: silence is not a speech-accuracy corpus.
+        assertTrue("The shipped voice detector failed to load", SileroVadRuntime.ensureLoaded(base))
+        val env = OnnxRuntimeEnvironment.get()
+        assertSame(env, SileroVadRuntime.environment())
+        assertEquals("1", android.system.Os.getenv("ORT_DISABLE_TELEMETRY"))
+        val session = checkNotNull(SileroVadRuntime.sessionOrNull())
+        val state = FloatArray(2 * 128)
+        val probabilities = JSONArray()
+        repeat(8) {
+            val probability = SileroVadRuntime.runFrame(env, session,
+                FloatArray(SileroVadRuntime.FRAME_SAMPLES),
+                FloatArray(SileroVadRuntime.CONTEXT_SAMPLES), state)
+            assertTrue("Invalid voice probability: $probability", probability.isFinite() && probability in 0f..1f)
+            assertTrue("Silence classified as speech: $probability", probability < .5f)
+            assertTrue("Invalid recurrent voice state", state.all { it.isFinite() })
+            probabilities.put(probability.toDouble())
+        }
+        InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+            putString("step2_silero_native_compatibility", "ORT=${env.version}; silence=$probabilities")
+        })
     }
 
     @Test fun indexReadFailureRetainsKeywordResultsAndActualCause() {
@@ -473,6 +498,10 @@ class Step2RecallInstrumentedTest {
         File(base.getExternalFilesDir(null), "step2-$folder-parity.json").writeText(
             JSONObject().put("inputs", inputDiagnostics).put("decisions", decisionDiagnostics)
                 .put("runtime_differences", JSONArray(runtimeDifferences)).put("failures", JSONArray(failures))
+                .put("runtime", OnnxRuntimeEnvironment.get().version)
+                .put("abi", android.os.Build.SUPPORTED_ABIS.first())
+                .put("model", real.tag).put("cases_sha256", casesHash)
+                .put("whole", JSONObject().put("correct", wholeCorrect).put("missed", wholeMissed).put("incorrect", wholeIncorrect))
                 .put("accuracy_baseline", if (folder == "recall_test_set") "baseline.json" else "observed.json").put("correct", correct)
                 .put("missed", missed).put("incorrect", incorrect).toString(2))
         instrumentation.sendStatus(0, Bundle().apply {
