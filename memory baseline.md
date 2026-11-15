@@ -609,3 +609,34 @@ Every original required correct match is retained per message and no newly incor
 The calibration is in production defaults, shared by chat and Memory Search Test; no test-only precision/model substitution is used. Existing saved custom values are respected. The shared numeric control supports the required third decimal for Minimum Spread only, leaving other controls at their existing two-place precision. Score diagnostics retain enough digits to distinguish a rejected standout of 2.5297 from a requirement of 2.53.
 
 Local focused verification used the project's Kotlin compiler version 2.0.21 and the actual application source, without Android SDK stubs or embedding runtime substitution. **77 JUnit tests passed**, covering live retrieval, section search, queue/cancellation, the unchanged original 86-case baseline, measured-native score regressions and numeric control precision. Full Gradle builds remain impractical locally because the wrapper distribution download is blocked and the Android SDK is unavailable. Full unit/build/Beta identity and real Android model validation are pending GitHub Actions; no PR, merge or completed native accuracy claim is made at this checkpoint.
+
+### Real Android validation of the calibrated defaults
+
+[Android Checks run 43669339130](https://github.com/SoulPhosphor/speak-gpt/actions/runs/43669339130), source commit `4d4c646e190ca59dc488ba40bf34acaee20c3b31`, runs the original graph and q4 weights on **Android ONNX Runtime 1.20.0**, x86_64. The restored original quality gate passes. Correct-answer labels and historical fixtures are unchanged.
+
+| Real Android dataset | Whole message only: correct / missed / incorrect | With all sections: correct / missed / incorrect |
+| --- | --- | --- |
+| Original 86-message set | **54 / 21 / 17** | **69 / 6 / 17** |
+| Independent 10-message set | **4 / 5 / 0** | **4 / 5 / 0** |
+
+Every originally required correct match is retained per message, with no newly incorrect ID against the original baseline. Sections recover 15 correct matches and add no incorrect match on this set. Compared with the earlier Android 1.20 control, exactly three messages change; the same removals occur in whole-only and whole-plus-section lists. Retained matches keep their order. Every other message and the entire independent set are unchanged.
+
+| Message | Earlier Android IDs | Calibrated Android IDs | Effect |
+| --- | --- | --- | --- |
+| `very_long_03` | `home_latch`, `food_sesame`, `health_wrist`, `home_leak` | `home_latch`, `food_sesame` | Removes two incorrect matches |
+| `two_04` | `home_shelf`, `hobby_pottery`, `health_wrist` | `home_shelf`, `hobby_pottery` | Removes one incorrect match |
+| `conversation_06_turn_2` | `pet_cobalt`, `food_bread` | `pet_cobalt` | Removes one incorrect match |
+
+Compared with the original Python baseline, the calibrated native result also omits the previously incorrect `food_tea` on `conversation_01_turn_2` and `health_wrist` on `two_04`, reducing the original 19 incorrect matches to 17 without losing correct matches. The three runtime-induced incorrect IDs from the initial Android run are rejected.
+
+All **85 Android tests passed**: 12 Step 2 tests and 73 existing instrumentation/fault tests. The Step 2 checks include actual native model/token references and accuracy, startup/API telemetry opt-out, index-read failure with preserved keyword results/cause, stale-message result rejection, and three-decimal Minimum Spread/rejected-standout display. The archived result-card screenshot was inspected: section attribution, the independent 0.48 requirement, calibrated 2.53 standout requirement, rejection causes and wrapping are visible. This is an emulator Debug screen, not a physical-phone Beta inspection.
+
+All 313 token references match. Original-set vector-reference diagnostics remain maximum absolute difference 0.0063216463 and minimum cosine 0.99957734; independent-set diagnostics remain 0.005674582 and 0.9996953. Default calibration changes selection, not model-generated vectors.
+
+**Timing is a separate measurement.** Accuracy above evaluates all sections without an elapsed-time allowance; it does not establish that all 15 recoveries fit the live allowance. In the run's separate timed emulator example, whole-message model work was **5,840 ms**; additional section queue/model/scoring/total were **0 / 1,770 / 0 / 1,775 ms**, with two sections attempted, one completed and the cooperative time limit reported. Native cancellation/unwind can exceed the provisional 1,500 ms allowance. Physical Pixel timing and end-to-end user behavior remain unmeasured.
+
+Current upstream model metadata was also checked: revision `5090578d9565bb06545b4552f76e6bc2c93e4a66` still matches the CI-pinned graph, external weights and tokenizer hashes: `ad1dfee81a70f7944b9b9d1cc6e48075b832881cf33fab2f2b248be78f3f0043`, `599962c3143b040de2dd05e5975be3e9091dd067cacc6a8f7186e3203bab9e02`, and `4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47`. The app catalog's unversioned URL is unchanged; this metadata check does not individually verify pre-existing installed copies. No model change, re-download or index rebuild is required by the calibration. Existing saved custom tuning remains untouched; defaults and Reset to Defaults use the calibrated numbers.
+
+The standard unit/build job also passed: all Gradle unit-test tasks, Debug packaging, `assembleBeta`, non-debuggable Beta identity (`com.soulphosphor.phosphorshines.beta`, label `Phosphor Shines Beta`) and instrumentation compilation. Both jobs in run `43669339130` completed successfully.
+
+The ONNX startup/API opt-out test passed in this run. No new packet capture was performed, so this is not a claim of universal zero-network behavior. The rejected 1.29 runtime and forced-FP32 experiments are not included in this repair. PR review and integration remain pending.

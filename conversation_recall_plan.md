@@ -1327,7 +1327,7 @@ RisuAI does (G.18a).
 - **What it never does:** search with the AI's replies, or keep anything
   that does not pass the relevance gate.
 
-## G.10 A small detail inside a larger message (Step 2 acceptance reopened)
+## G.10 A small detail inside a larger message (Step 2 repair validated; review pending)
 
 **The problem.** A small detail in a message about several things does not
 find its saved memory or its earlier exchange (G.2).
@@ -1433,12 +1433,26 @@ matches from sections. All 313 input-token hashes matched independent
 references. Small native-runtime vector differences change three whole-message
 results; the original gold answers and fixtures remain unchanged. Recorded
 Android observations are evidence only: accepting the worse result in PR #201
-was an acceptance error. Step 2 remains incomplete against its original quality
-requirement. The repair branch `repair/step2-contract-audit` restores original
-per-message quality checks for every ABI without changing gold labels or
-thresholds; newly wrong memories must fail.
-Details, runtime comparisons and physical-phone limits are in `memory baseline.md`;
-PR #201 is merged. The renewed contract-audit run, isolated Android 1.29 comparison, and explicit FP32-activation comparison on Android 1.20 all fail the original accuracy gate with 69/6/21. Neither experimental change is an accuracy fix; Android 1.20 and the original model configuration remain the shipping choices. The extra incorrect matches originate in whole-message search before sections run. No parameter was retuned.
+was an acceptance error. The repair branch `repair/step2-contract-audit` restores
+original per-message quality checks for every ABI without changing gold labels
+or acceptance requirements; newly wrong memories must fail. The initial repair
+control, isolated Android 1.29 comparison, and explicit FP32-activation comparison
+on Android 1.20 all failed that gate with 69/6/21. Neither experimental change
+was adopted.
+
+After reviewing later-step scope, the existing whole-message defaults were
+calibrated to Stand-Out Strength 2.53 and Minimum Spread 0.034. Real Android
+1.20 validation at `4d4c646` (run `43669339130`) now passes the original
+per-message quality gate: **54/21/17 whole only; 69/6/17 with sections**. Every
+original required correct match is retained and no newly incorrect ID is sent.
+The independent set stays 4/5/0. All 85 Android tests passed, including telemetry
+opt-out, queue/store/prompt and screen checks. Runtime, original model/weights,
+tokenizer and dimensions remain unchanged; saved custom tuning is retained.
+Quality evaluation searches all sections without a time allowance; a separate
+timed emulator example completed one section before the cooperative limit.
+Physical-phone timing remains unmeasured. Details and every changed sample are
+in `memory baseline.md`. PR review and integration remain pending; Step 3 has
+not started.
 
 **What the user can see.** The Memory Search Test screen must show which
 piece of the message a memory matched, and when the search ran out of
@@ -1835,13 +1849,13 @@ Only a new owner decision may change this order.
 
 Step 0 is already complete. Do not rebuild it, regenerate its vectors, or
 rewrite its expected answers. Its authoritative results are in
-[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200; the Step 2 repairs and verification record are in #201. PR #201 is merged, but its passing checks accepted worse native accuracy. Step 2 acceptance is reopened on `repair/step2-contract-audit`; the original quality target remains binding. Step 3 is outside the repair assignment.
+[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200; the first Step 2 repair is merged in #201, whose checks incorrectly accepted worse native accuracy. The follow-up on `repair/step2-contract-audit` restores the original quality gate and passes real Android validation at 69/6/17 with the original runtime/model. PR review and integration remain pending; the original quality target remains binding. Step 3 is outside the repair assignment.
 
 | Step | Status | What is built | Difficulty | Model | The user sees | Needs | Approve first |
 |---:|---|---|---|---|---|---|---|
 | 0 | **Complete** | Saved-memory test set with the real model's vectors | Routine with written instructions | Lighter | Nothing | Nothing | Nothing |
 | 1 | **Complete (#199)** | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle | Nothing | Step 0 complete | Nothing (G33) |
-| 2 | Acceptance reopened; repairs under verification | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
+| 2 | Native quality gate passed; repair review/integration pending | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
 | 3 | Waiting | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
 | 4 | Waiting | Saved memories stay through follow-up messages | Careful | Middle | Follow-up continuity | Steps 0 and 3 | Label and placement of its setting (G32) |
 | 5 | Waiting | Memory word count and length limit | Careful | Middle | Word count under memory fields | Step 1 | Open parts of G34 |
@@ -2112,7 +2126,7 @@ measurements and verification results.
 
 ### Step 2: long messages in saved-memory search (Hard)
 
-**Status:** Implemented in #200 and repaired in #201, but acceptance remains open. The Android 1.20 result adds wrong matches against the original baseline; no lowered acceptance target is approved. Current repair work is on `repair/step2-contract-audit`, with no shipping runtime or model switch approved. An isolated Android 1.29 candidate is recorded in `memory baseline.md`.
+**Status:** Implemented in #200 with an initial repair in #201. The follow-up on `repair/step2-contract-audit` passes the restored original per-message quality gate on real Android 1.20: 69 correct / 6 missed / 17 incorrect, retaining all originally required correct matches. No acceptance requirement or gold answer was weakened. All 85 Android tests passed at `4d4c646`; PR review and integration remain pending. Runtime/model stay unchanged, and rejected runtime/precision experiments remain documented in `memory baseline.md`. Physical-phone timing is still unmeasured.
 
 **Repair scope after later-step review:** Steps 3–4 add separate previous-message searches; Steps 14–15 build and measure conversation-passage recall. Neither is a later work order to recalibrate this existing saved-memory gate. The existing gate was already built in #180. The current repair may therefore adjust its existing default calibration while preserving all original correct matches and rejecting newly incorrect matches per sample. Android 1.20, the original q4 model, vector size, keyword rule, section size/cap/0.48 threshold and gold answers remain fixed. No later Step is started here.
 
@@ -2860,4 +2874,4 @@ request. Detailed results stay in the file named by G.16.
   Debug Log wording is the owner-approved wording, not the G.13b proposals.
   Results are in `memory baseline.md`.
 
-- Step 2 repair audit (#201) — accurate section thresholds/near-misses/failures, bounded queue waiting with cooperative termination, native model lifetime protection, shared live/test matching and retrieval-to-prompt coverage. ONNX startup/API telemetry opt-outs also cover Silero. Original Python fixture baseline 69/6/19 preserved; Android ORT 1.20 measured 54/21/21 before sections and 69/6/21 with sections. Independent untuned model evaluation is 4/5/0 on both runtimes. Original vectors reproduce byte for byte offline; all 313 token references match Android. Prior local checks and final CI/review evidence, emulator latency and physical-phone limits are recorded in `memory baseline.md` and PR #201. No Step 3 implementation.
+- Step 2 repair audit (#201 and follow-up branch) — accurate section thresholds/near-misses/failures, bounded queue waiting with cooperative termination, native model lifetime protection, shared live/test matching and retrieval-to-prompt coverage. ONNX startup/API telemetry opt-outs also cover Silero. Original Python fixture baseline 69/6/19 is preserved. Initial Android ORT 1.20 results were 54/21/21 before sections and 69/6/21 with sections. The follow-up retains the same runtime/model and calibrates existing defaults: real Android results are now 54/21/17 and 69/6/17, with the restored per-message quality gate passing. Independent evaluation stays 4/5/0. All 313 token references and all 85 Android tests pass. PR review/integration and physical-phone timing remain pending. Full evidence and timing limits are in `memory baseline.md`. No Step 3 implementation.
