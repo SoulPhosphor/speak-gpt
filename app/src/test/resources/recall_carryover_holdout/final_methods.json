@@ -1,0 +1,17 @@
+{
+ "note": "The methods and +3 rules checked on the held-out set, fixed in this file before any of them was run on it. They were developed on recall_carryover_set and the Step 0 conversations only. Only plan_1, plan_2 and plan_3 are the method in conversation_recall_plan.md G.9a; everything else exists only in the evaluation test, is not in the app, and is not approved.",
+ "methods": [
+  {"id": "none", "description": "No carry-over: each message searched on its own, as the app does today."},
+  {"id": "plan_1", "previous_messages": 1, "description": "The plan's rule: also search the previous user message; add everything it matches."},
+  {"id": "plan_2", "previous_messages": 2, "description": "The plan's rule with two previous user messages."},
+  {"id": "plan_3", "previous_messages": 3, "description": "The plan's rule with three previous user messages."},
+  {"id": "similar_to_new_message", "minimum_similarity": 0.30, "description": "Add only memories the previous message matched whose similarity to the new message is at least the stated minimum."},
+  {"id": "subject_anchor", "confident_standout": 4.0, "description": "A message sets the subject when it matches a memory confidently: by meaning and keywords together, by meaning with a stand-out of at least the stated value, or through a section of a long message. Those memories are kept as the current subject. A message with no confident match of its own is sent its own matches and then the current subject's memories. A later confident match replaces the subject."},
+  {"id": "subject_anchor_3_turns", "confident_standout": 4.0, "turns": 3, "description": "subject_anchor, but the subject is dropped after it has been carried for the stated number of messages in a row."}
+ ],
+ "plus_three_rules": [
+  {"id": "today", "description": "A +3 memory must pass the same relevance gate as any other memory."},
+  {"id": "lower_bar", "standout": 2.0, "description": "A +3 memory also passes when its similarity is at least the ordinary floor and its stand-out is at least the stated value."},
+  {"id": "lower_bar_top_match_only", "standout": 2.0, "description": "lower_bar, but only when that +3 memory is the single most similar memory to the message."}
+ ]
+}
