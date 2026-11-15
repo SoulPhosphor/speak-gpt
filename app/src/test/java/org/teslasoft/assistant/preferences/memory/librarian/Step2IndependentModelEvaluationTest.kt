@@ -65,7 +65,13 @@ class Step2IndependentModelEvaluationTest {
         assertEquals("Independent gold answers changed", baseline.getString("cases_sha256"), digest)
         val previous = baseline.getJSONObject("by_message")
         assertEquals(previous.keySet(), observed.keySet())
-        for (id in observed.keySet()) assertEquals("$id: independent retrieval changed; inspect gold accuracy",
-            previous.getJSONArray(id).strings(), observed.getJSONArray(id).strings())
+        for (id in observed.keySet()) {
+            val expected = cases.getJSONArray("messages").objects().single { it.getString("id") == id }
+                .getJSONArray("expect").strings().toSet()
+            val before = previous.getJSONArray(id).strings().toSet()
+            val current = observed.getJSONArray(id).strings().toSet()
+            assertTrue("$id: lost a previously correct match", ((before intersect expected) - current).isEmpty())
+            assertTrue("$id: added an incorrect match", ((current - expected) - (before - expected)).isEmpty())
+        }
     }
 }

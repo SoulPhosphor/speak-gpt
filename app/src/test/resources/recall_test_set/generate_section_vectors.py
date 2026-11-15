@@ -6,20 +6,33 @@ LongMessageSearch.cut cuts it, and every section is read as a message being
 sent. The unit test checks that the app's own cutter produces exactly the
 section texts stored here, so this file cannot drift from the app unnoticed.
 
-Requires Python, numpy, onnxruntime and tokenizers. Model files are
+Requires Python, numpy, tokenizers, and the app-pinned ONNX runtime version. Model files are
 downloaded into a temporary folder unless --model-dir names a folder that
 already holds model_q4.onnx, model_q4.onnx_data and tokenizer.json. They are
 never committed. vectors.json is not read or changed.
+Python outputs are diagnostics, not Android accuracy measurements.
+An explicit new output path is required; historical fixtures are not overwritten.
 """
 
 import argparse
 import json
 import math
 import os
+from importlib.metadata import version
 from pathlib import Path
 import re
 import tempfile
 import urllib.request
+
+# Reject a version mismatch before importing Microsoft native code.
+app_build = Path(__file__).resolve().parents[4] / "build.gradle"
+runtime_match = re.search(r"onnxruntime-android:([^'\"]+)", app_build.read_text())
+if runtime_match is None:
+    raise SystemExit("Cannot determine the app's exact ONNX Runtime version.")
+required_runtime = runtime_match.group(1)
+installed_runtime = version("onnxruntime")
+if installed_runtime != required_runtime:
+    raise SystemExit(f"App requires ONNX Runtime {required_runtime}; installed Python runtime is {installed_runtime}. Refusing mismatched inference.")
 
 # The API alone can be too late to suppress the native initialization event.
 os.environ["ORT_DISABLE_TELEMETRY"] = "1"
@@ -77,10 +90,12 @@ def main():
     here = Path(__file__).parent
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=Path, default=here / "cases.json")
-    parser.add_argument("--output", type=Path, default=here / "section_vectors.json")
+    parser.add_argument("--output", type=Path, required=True, help="New output path; existing fixtures are never overwritten")
     parser.add_argument("--section-words", type=int, default=80)
     parser.add_argument("--model-dir", type=Path)
     args = parser.parse_args()
+    if args.output.exists():
+        parser.error("Output already exists. Choose a new path; historical fixtures must stay unchanged.")
     cases = json.loads(args.cases.read_text(encoding="utf-8"))
 
     with tempfile.TemporaryDirectory(prefix="recall-embedding-") as temporary:
@@ -148,7 +163,8 @@ def main():
             ]
             count += len(sections)
         document = {"section_words": args.section_words, "messages": result}
-        args.output.write_text(json.dumps(document, allow_nan=False) + "\n", encoding="utf-8")
+        with args.output.open("x", encoding="utf-8") as output:
+            output.write(json.dumps(document, allow_nan=False) + "\n")
         print(f"Wrote {count} section vectors for {len(result)} messages to {args.output}", flush=True)
 
 

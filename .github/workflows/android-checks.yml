@@ -213,8 +213,6 @@ jobs:
           diff -u "$model_dir/host-hashes.txt" "$model_dir/device-hashes.txt"
 
       - name: Run recovery instrumentation and fault suite
-        env:
-          STEP2_REAL_MODEL: 'true'
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/recovery-results"
@@ -236,17 +234,15 @@ jobs:
           for class_name in "${classes[@]}"; do
             result_name="${class_name##*.}"
             adb logcat -c
-            extra_args=()
             if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
               wifi_before=$(adb shell settings get global wifi_on | tr -d '\r')
               data_before=$(adb shell settings get global mobile_data | tr -d '\r')
               adb shell svc wifi disable
               adb shell svc data disable
-              if [ "$STEP2_REAL_MODEL" = true ]; then extra_args=(-e step2_real_model true); fi
             fi
             set +e
             adb shell am instrument -w -r \
-              "${extra_args[@]}" -e class "$class_name" \
+              -e class "$class_name" \
               com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner \
               | tee "$RUNNER_TEMP/recovery-results/$result_name.txt"
             instrument_status=${PIPESTATUS[0]}

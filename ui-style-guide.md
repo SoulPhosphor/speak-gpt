@@ -748,7 +748,8 @@ or field typography.
 Parameter ranges and numeric precision are behavior, not appearance. They live
 in `SamplingParameterSpec` / `SamplingParameterValuePolicy`: Temperature
 0–2, Top P 0–1, both penalties -2–2, with 0.01 steps and at most two displayed
-decimal places. Add or reuse a spec there rather than multiplying values in a
+decimal places. Memory Search Test’s Minimum Spread uses 0.001 steps and up to
+three decimal places; other specs keep their existing precision. Add or reuse a spec there rather than multiplying values in a
 screen controller or placing range/default numbers in layout XML.
 
 The slider precedes its compact editable value field: the value stays on the

@@ -100,24 +100,23 @@ A second agent reviewed #180 and this plan with the owner on 2026-11-10.
 
 ### Starting numbers
 
-Chosen from the measurements in Part A, on the default q4 model with
-256-number vectors:
+Current defaults for the q4 model with 256-number vectors. The original Part A measurements are preserved below; the Android calibration repair and its verification are recorded in `memory baseline.md`:
 
 | Number | Value |
 |---|---|
 | Minimum Match | 0.35 |
-| Stand-Out Strength | 2.5 |
+| Stand-Out Strength | 2.53 |
 | Keyword Match Needed | 0.5 |
 | Importance Influence | 0.1 |
 | Small Library Size | 8 |
 | Small Library Minimum Match | 0.40 |
 | Full-Strength Match | 0.55 |
 | Agreement Bonus | 0.1 |
-| Minimum Spread | 0.02 |
+| Minimum Spread | 0.034 |
 | Maximum Memories | 8 (unchanged) |
 | Memory Space | 6,000 characters (unchanged) |
 
-They are educated guesses, tunable on the test screen.
+They remain provisional and tunable on the test screen. Minimum Spread uses three decimal places so 0.034 is displayed and preserved accurately. Existing explicitly saved tuning is retained; these values govern defaults and Reset to Defaults.
 
 ### 3. Inside Joke and the per-memory vibe (one pull request)
 

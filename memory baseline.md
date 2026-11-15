@@ -490,7 +490,7 @@ The three cross-runtime result changes are all in the pre-existing whole-message
 
 An independent version-only experiment used the same pinned model, tokenizer, Python preprocessing and postprocessing under Python ORT 1.20.0 and 1.29.0. Version 1.29 regenerated the original fixtures byte for byte. Version 1.20 produced small vector differences and reproduced both added `very_long_03` matches: their standouts became 2.681 and 2.626. Android's compiled native kernels differ slightly from Linux's too, but the same unchanged gate explains the observed result. No evidence of tokenization drift, different model files, a section-rule regression, or a reason to retune the approved parameters was found.
 
-The cross-runtime equality assertion was therefore a wrong test assumption, rather than a product contract. It is replaced by **exact, separately labelled Android x86_64 ORT 1.20 observations** in `android_ort120_x86_64_observed.json`, captured from run 43631334204. These are observed retrieval lists and totals, not correct-answer labels. The final test still requires every input hash to match, retains the original minimum vector cosine of 0.99, checks every native result list and accuracy total against that platform's observations, preserves whole-message ordering, and rejects any new section-only incorrect match against the unchanged gold answers. Python differences remain visible in the artifacts. Other Android ABIs execute the input/vector and per-message regression checks but do not pretend that an x86_64 observation is a physical-phone baseline. The runtime-version assertion requires fresh validation if the shipped runtime is upgraded. No production inference, whole-message rule, threshold or expected gold answer was changed to obtain a pass.
+Exact equality between runtimes is not guaranteed, but accepting the worse native result as a passing baseline was an acceptance error in PR #201. The recorded `android_ort120_x86_64_observed.json` files remain historical evidence only. The repair branch restores the original per-message quality requirement on every Android ABI: preserve previously correct matches, permit additional correct matches, and reject any newly incorrect match. Original gold labels, baseline files, vectors, thresholds and section parameters stay unchanged. The known Android 1.20 result therefore fails this gate until the cause is resolved; green CI from #201 did not establish the requested accuracy.
 
 ### Measured emulator latency and remaining limits
 
@@ -509,3 +509,138 @@ The same Android run measured the real `prepareSearchTest` path with the configu
 The native read was stopped cooperatively, and no unfinished section result was injected. The total exceeded the allowance by 7 ms in this run; this is a measurement, not a hard-deadline guarantee. The inference input is the invented long filler message from the integration fixture. The constrained x86_64 emulator is not a Pixel 8 or a physical-phone Beta measurement. Physical-phone latency, hardware-dependent retrieval variation and practical section recovery within the allowance remain provisional. Parameters remain unchanged, as required.
 
 Independent fixture verification during this investigation used ONNX startup/API opt-outs plus a Linux seccomp filter denying socket creation, connect and send syscalls before importing the runtime. A socket probe returned `ENETUNREACH`. All four original/independent whole-message and section vector files reproduced byte for byte under ORT 1.29.0. This verifies reproducibility without allowing runtime network traffic; these Python runs are not Android performance measurements. Local full Gradle checks remained unavailable in the fresh environment as documented above. Final code-check/review results are tracked on PR #201; no physical-phone or packet-capture verification is claimed.
+
+
+## Step 2 acceptance reopened: contract audit branch
+
+Branch `repair/step2-contract-audit` starts from current main `0911569797e7c54ed930ef551043b2a398edd65d`. This is an in-progress repair, not a completed or approved accuracy improvement. No runtime/model upgrade or merge is made by this checkpoint.
+
+- Restored original per-message accuracy checks rather than treating native 69/6/21 as acceptable. The native whole-message differences add three wrong IDs across two messages and remove one wrong ID elsewhere: net two additional incorrect matches. The unchanged target remains 69/6/19 or better without per-message regressions.
+- Removed the opt-in skip from the full Android Step 2 test class. Missing pinned model inputs must fail clearly.
+- Fixed the shared queue discarding a successfully completed result solely because its cooperative deadline expired while native work unwound. The caller had already waited; dropping that result saved no time. Actual stopped inference still reports timeout, the queue retains ownership until work unwinds, and no extra waiting or allowance is introduced. Separate latch-based tests distinguish stopped work from completed work.
+- Preserved actual embedding-index failure causes in Memory Search Test, and prevented an old query's result from appearing under edited message text or a changed scope.
+- Python fixture generators now reject a runtime different from the app dependency before importing native code. An explicit new output path is required, and existing fixtures cannot be overwritten. Python diagnostics still do not substitute for Android measurements.
+
+Verification at checkpoint: Python syntax and resource XML parse checks and `git diff --check` passed. These are not Android execution results. Renewed unit/build/instrumentation verification is pending. Prior PR #201 results remain historical results, not passes for this branch. The app stays on Android ONNX Runtime 1.20.0 and the existing EmbeddingGemma model while an isolated Android runtime comparison is prepared. Any candidate must preserve the original quality target and undergo telemetry opt-out and Silero voice compatibility checks before an upgrade recommendation.
+
+Remaining evidence gaps: no controlled full live before/after on the app runtime; no physical-phone timing; no packet-capture proof of zero telemetry. The model catalog's unversioned `resolve/main` downloads and unset hashes also mean installed files cannot be assumed identical to CI's pinned files. These gaps must not be described as completed validation.
+
+
+### Isolated Android 1.29 candidate
+
+`experiment/step2-ort129-android` is based on contract-audit checkpoint `90cfdd293c5e499d68d041188a041ce4848bff87`. Its only production inference change is the Android ONNX Runtime dependency from 1.20.0 to 1.29.0. Main and the contract-audit branch retain 1.20.0. No model, tokenizer, input processing, retrieval rule, gold answer, quality gate, or section parameter is changed. Beta package/label and normal release controls remain unchanged. Candidate APKs are experimental and are not approved for shipping.
+
+The same full Android dataset checks run on both branches with the pinned q4 files and Wi-Fi/mobile data disabled during inference. This is an actual Android candidate comparison, not a substituted Python runtime. Candidate artifacts additionally identify runtime, ABI, model and case hash. A native Silero smoke test checks loading the shipped voice model, finite recurrent state/probabilities and eight silent frames below the speech threshold. It is not a speech-accuracy or microphone/end-to-end voice regression test. The startup environment opt-out and native telemetry API are exercised; neither is packet-capture proof.
+
+Version 1.29.0 is selected as the first controlled candidate because the recorded 1.29 Python results were better, not because it is the newest release or already proven better on Android. Its new POSIX telemetry provider makes privacy validation material. No upgrade recommendation or merge is justified until candidate quality, native compatibility and privacy evidence are assessed. Local Gradle validation stopped before compilation because the wrapper distribution download returned `Network is unreachable`; Android execution must be established by GitHub Actions, not inferred from syntax checks.
+
+
+Upgrade requirement found during source audit: `EmbeddingModels.Model.embeddingTag` contains only model ID and dimensions, and `RetrievalDocument.effectiveKey` adds the document format version. Neither identifies the runtime or artifact hash. A dependency-only upgrade would therefore reuse vectors generated by the older runtime for existing memories. The candidate's fresh-vector evaluation does not validate that mixed state. A shipping recommendation must address index provenance/rebuilding or prove mixed-runtime compatibility first; saved memory text and historical research need not be discarded. No cache identity, data migration or rebuild behavior is changed by this experiment.
+
+
+### Completed Android version comparison: no accuracy improvement
+
+| Android runtime (x86_64 emulator) | Whole: correct / missed / incorrect | With sections: correct / missed / incorrect | Independent set, whole and sections |
+| --- | --- | --- | --- |
+| 1.20.0, contract audit `90cfdd29` | 54 / 21 / 21 | 69 / 6 / 21 | 4 / 5 / 0 |
+| 1.29.0, isolated candidate `6a48c6ab` | 54 / 21 / 21 | 69 / 6 / 21 | 4 / 5 / 0 |
+
+Evidence: [1.20 Android Checks](https://github.com/SoulPhosphor/speak-gpt/actions/runs/43657372299) and [1.29 Android Checks](https://github.com/SoulPhosphor/speak-gpt/actions/runs/43657754338). Both standard unit/build jobs passed, including Beta packaging/identity and instrumentation compilation. On 1.20, ten of eleven Step 2 tests passed; on 1.29, eleven of twelve passed, including the added native Silero compatibility check. The other 73 Android tests passed in each run. Each run has exactly one failed test: the restored original accuracy gate. It rejects `health_wrist` and `home_leak` on `very_long_03`, and `food_bread` on `conversation_06_turn_2`. No accuracy failure was converted into a pass.
+
+All 313 token comparisons passed in each run. Both reported the same maximum vector differences and minimum cosines against the historical Python reference: original set 0.0063216463 / 0.99957734; independent set 0.005674582 / 0.9996953. These diagnostics and equal decisions do not establish bitwise equality of every native vector. They do establish that the Android dependency bump alone did not recover the better historical Python result. The earlier Linux/Python version-only experiment must not be generalized to an Android upgrade recommendation.
+
+Measured live test timings: 1.20 whole-model 5,766 ms; section queue 0 ms, model 1,702 ms, total 1,707 ms; two attempts, one successful section, then timeout. For 1.29: whole-model 5,065 ms; section queue 0 ms, model 1,506 ms, total 1,510 ms; two attempts, one successful section, then timeout. These are single emulator observations on separate runners, not controlled speed or physical-phone comparisons. The full quality table uses measured cached vectors without the 1,500 ms allowance; it does not prove all section recoveries occur within that allowance.
+
+**Recommendation: retain Android 1.20.0.** Version 1.29 produced no accuracy benefit and introduces the broader POSIX telemetry provider. It is an evaluated, rejected accuracy fix, not a shipping change. Main and `repair/step2-contract-audit` retain 1.20. No PR or merge was made from either experiment. Step 2 accuracy remains unresolved against the original 69/6/19 target.
+
+Additional checks: both fixture generators rejected a mismatched version before native imports and set the startup opt-out before a permitted import, using isolated mocked import probes without inference. All original/independent case, baseline, vector, section-vector, token-hash and native-observation files remain byte-for-byte identical to main. Static inspection of the official 1.29 AAR found the startup opt-out flag in both x86_64 and arm64 native libraries; this is not packet-capture evidence. The native API/startup-variable checks passed on Android. No physical-phone or end-to-end speech-accuracy proof is claimed.
+
+Specific remaining numerical lead: the exact pinned graph SHA was independently checked without executing it; all 170 `MatMulNBits` nodes specify `accuracy_level=4`. The official 1.20/1.29 CPU implementations select computation precision according to that allowance and available kernels. This makes platform-dependent calculation precision a concrete investigation target, not a proven root cause or approved model change. A higher-precision comparison would need actual Android evaluation with unchanged gold answers and explicit performance reporting; no such comparison or model edit has been run.
+
+These notes document the completed code runs above. Subsequent documentation-only commits do not change their application/test source trees or turn the failed accuracy gates green. No new runtime/model/threshold experiment is silently accepted.
+
+
+### Isolated FP32-activation comparison on Android 1.20
+
+`experiment/step2-ort120-fp32` starts from contract-audit `f3274ef3`. This is a calculation-precision experiment, not an accepted shipping change or a completed accuracy fix. The application dependency stays ONNX Runtime Android 1.20.0; application source, model catalog, q4 weight file, tokenizer, matching rules, section parameters, baseline labels and vector fixtures remain unchanged.
+
+The CI-only preparation script reads the pinned ONNX graph as protobuf without importing or running ONNX Runtime. With `onnx==1.23.2` used only for serialization, all 170 `MatMulNBits` nodes change `accuracy_level` from 4 to 1, requiring FP32 activations/computation instead of permitting INT8 activations. The weights remain q4. The original graph SHA is `ad1dfee81a70f7944b9b9d1cc6e48075b832881cf33fab2f2b248be78f3f0043`; the prepared graph SHA is `fb08ff24b5291bb88ced003b8c3e292d3e69859ea2c4485edcc419eede64a81f`. Both graph files have 519,322 bytes and differ in exactly 170 bytes, each 4 -> 1. Restoring those attribute values restores the complete original protobuf; tensor data, graph connections and external-weight references are preserved.
+
+CI verifies the original graph, external weights and tokenizer before preparation, and verifies the prepared graph plus unchanged weights/tokenizer afterwards. The prepared graph is supplied only to the temporary isolated instrumentation model directory and is not bundled in app APKs or committed. Android metrics explicitly identify FP32 activation precision and the graph SHA; the real runtime version must be 1.20.0. All inference, quality decisions and latency measurements come from Android. The original accuracy gate remains binding, including its unchanged 0.99 vector-reference tolerance, per-message correct-match preservation and rejection of newly wrong matches.
+
+Local preparation and integrity checks passed without inference. The actual Android run is complete; results are below. Normal Beta artifacts still use the existing model catalog and do not adopt the prepared graph. No model migration, cache-identity change, rebuild behavior or shipping precision setting is introduced by this experiment.
+
+
+### FP32 comparison completed: rejected as an accuracy fix
+
+Evidence: [Android Checks run 43662657723](https://github.com/SoulPhosphor/speak-gpt/actions/runs/43662657723), code commit `f7ecb21167f90f79bac501c564206c8a98bbfb81`.
+
+| Android 1.20 graph | Whole: correct / missed / incorrect | With sections: correct / missed / incorrect | Independent set, whole and sections |
+| --- | --- | --- | --- |
+| Original q4, accuracy allowance 4 | 54 / 21 / 21 | 69 / 6 / 21 | 4 / 5 / 0 |
+| Same q4 weights, required FP32 activation math | 54 / 21 / 21 | 69 / 6 / 21 | 4 / 5 / 0 |
+
+The standard unit/build job passed, including Beta packaging/identity and instrumentation compilation. Ten of eleven Step 2 Android tests passed; the other 73 Android tests passed. The one failed test is the original accuracy gate, with the same three newly incorrect IDs in two messages. All 313 token checks passed. Reported vector-reference diagnostics are unchanged: original set maximum absolute difference 0.0063216463 and minimum cosine 0.99957734; independent set 0.005674582 and 0.9996953. These are not a proof of bitwise equality of every vector or of which default native kernel ran.
+
+The real Android run verified the prepared graph hash `fb08ff24b5291bb88ced003b8c3e292d3e69859ea2c4485edcc419eede64a81f` and runtime 1.20.0. Its single live latency observation was whole-model 7,102 ms; section queue 0 ms, model 1,503 ms, total 1,510 ms; one attempt, zero successful sections, then timeout. The control had whole-model 5,766 ms and section total 1,707 ms with one success from two attempts. Separate runners and single observations do not establish a controlled speed difference. No accuracy benefit was found, so the precision change is rejected. Main and the repair branch keep the original model configuration and Android 1.20. No model migration or vector rebuild was applied, and no PR or merge was made for the experiment.
+
+Decision tracing from the archived Android similarity scores confirms where the extra matches enter. The whole-message relevance gate requires similarity at least 0.35 and relative standout at least 2.5, or sufficient keyword coverage. For `very_long_03`, Android admits `health_wrist` at similarity 0.403230 / standout 2.718614 and `home_leak` at 0.399786 / 2.600457. Their historical Python standouts were 2.414072 and 2.418576, below the unchanged cutoff. For `conversation_06_turn_2`, the query is `What temperature should it be?`; `food_bread` crosses from Python standout 2.499784 to Android 2.529728 while the correct `pet_cobalt` remains selected. The test intentionally searches each turn independently, without the preceding fish context. These are observed gate decisions, not evidence that changing a runtime alone resolves contextual ambiguity.
+
+The section implementation itself changes native totals from 54/21/21 to 69/6/21 and adds no incorrect match on either frozen set. The outstanding 19-versus-21 quality gap originates in whole-message selection before sections run. It remains a failed acceptance requirement and has not been relabelled. Further repair should target whole-message relevance quality with frozen answers and independent validation, rather than more blind runtime/precision substitutions. Step 2's existing work order explicitly preserves whole-message selection; no new whole-message threshold, filtering rule or model choice has been implemented by this investigation.
+
+
+## Whole-message default calibration after later-step review
+
+The later work orders were checked before expanding the repair. Steps 3–4 add separate previous-message searches and keep the existing relevance gate. Steps 14–15 concern the new conversation-passage engine. The saved-memory gate was already implemented in #180 (the older memory plan's Step 1.8); no later numbered work order fixes this specific existing saved-memory calibration. The current repair therefore evaluates the existing default numbers under the original locked quality requirements. Runtime remains Android ONNX 1.20.0, model/weights/tokenizer and 256 dimensions remain unchanged, and no index rebuild is needed.
+
+The input scores come from the original Android 1.20 control run `43657372299`, code `90cfdd29`, original graph `ad1dfee81a70f7944b9b9d1cc6e48075b832881cf33fab2f2b248be78f3f0043`. The new `android_ort120_similarity_scores.json` is measured input, never correct-answer labels. Its SHA is `329ae241df535863a09443964e3fab141661b4b47b1d11a082c2f35fd09a884a`; its provenance, case hash, memory order and every measured scalar are preserved. The unchanged application Kotlin reproduced all 86 recorded native whole-message result lists exactly before evaluating candidates. Scalar cosine replay uses adapter vectors only; it is not fresh model inference, latency measurement or physical-phone evidence.
+
+Raising Stand-Out Strength alone was rejected: 2.60 lost `work_budget` and `plan_concert`; 2.75 lost those and `food_stew`. A combined calibration of the existing distribution-spread floor and standout requirement was screened instead. The selected candidate defaults are **Stand-Out Strength 2.53** and **Minimum Spread 0.034**. The original similarity minimum 0.35, keyword coverage minimum 0.5, ranking, importance rules and section requirements are unchanged. The wider spread floor stops an unusually tight background distribution from making weak similarities look decisive; the small standout adjustment removes an additional marginal false match. These numbers were selected on the original set; the separate independent set was not used to choose them. They remain provisional and must not be generalized into a guarantee for every phone or library.
+
+| Evaluation before native rerun | Original control | Candidate defaults |
+| --- | --- | --- |
+| Recorded Android scores, whole only | 54 correct / 21 missed / 21 incorrect | 54 / 21 / 17 |
+| Frozen reference vectors, with sections | 69 / 6 / 19 | 69 / 6 / 17 |
+| Independent recorded native scores, whole only | 4 / 5 / 0 | 4 / 5 / 0 |
+| Independent frozen reference vectors, with sections | 4 / 5 / 0 | 4 / 5 / 0 |
+
+Every original required correct match is retained per message and no newly incorrect ID is accepted in these checks. Aggregate reductions cannot conceal a per-message regression. All original cases, baseline labels, whole/section vectors, token hashes and native observation files remain byte-for-byte unchanged. The real Android full-section result is not inferred from the whole-score replay; it remains a separate required instrumentation gate.
+
+The calibration is in production defaults, shared by chat and Memory Search Test; no test-only precision/model substitution is used. Existing saved custom values are respected. The shared numeric control supports the required third decimal for Minimum Spread only, leaving other controls at their existing two-place precision. Score diagnostics retain enough digits to distinguish a rejected standout of 2.5297 from a requirement of 2.53.
+
+Local focused verification used the project's Kotlin compiler version 2.0.21 and the actual application source, without Android SDK stubs or embedding runtime substitution. **77 JUnit tests passed**, covering live retrieval, section search, queue/cancellation, the unchanged original 86-case baseline, measured-native score regressions and numeric control precision. Full Gradle builds remain impractical locally because the wrapper distribution download is blocked and the Android SDK is unavailable. Full unit/build/Beta identity and real Android model validation are pending GitHub Actions; no PR, merge or completed native accuracy claim is made at this checkpoint.
+
+### Real Android validation of the calibrated defaults
+
+[Android Checks run 43669339130](https://github.com/SoulPhosphor/speak-gpt/actions/runs/43669339130), source commit `4d4c646e190ca59dc488ba40bf34acaee20c3b31`, runs the original graph and q4 weights on **Android ONNX Runtime 1.20.0**, x86_64. The restored original quality gate passes. Correct-answer labels and historical fixtures are unchanged.
+
+| Real Android dataset | Whole message only: correct / missed / incorrect | With all sections: correct / missed / incorrect |
+| --- | --- | --- |
+| Original 86-message set | **54 / 21 / 17** | **69 / 6 / 17** |
+| Independent 10-message set | **4 / 5 / 0** | **4 / 5 / 0** |
+
+Every originally required correct match is retained per message, with no newly incorrect ID against the original baseline. Sections recover 15 correct matches and add no incorrect match on this set. Compared with the earlier Android 1.20 control, exactly three messages change; the same removals occur in whole-only and whole-plus-section lists. Retained matches keep their order. Every other message and the entire independent set are unchanged.
+
+| Message | Earlier Android IDs | Calibrated Android IDs | Effect |
+| --- | --- | --- | --- |
+| `very_long_03` | `home_latch`, `food_sesame`, `health_wrist`, `home_leak` | `home_latch`, `food_sesame` | Removes two incorrect matches |
+| `two_04` | `home_shelf`, `hobby_pottery`, `health_wrist` | `home_shelf`, `hobby_pottery` | Removes one incorrect match |
+| `conversation_06_turn_2` | `pet_cobalt`, `food_bread` | `pet_cobalt` | Removes one incorrect match |
+
+Compared with the original Python baseline, the calibrated native result also omits the previously incorrect `food_tea` on `conversation_01_turn_2` and `health_wrist` on `two_04`, reducing the original 19 incorrect matches to 17 without losing correct matches. The three runtime-induced incorrect IDs from the initial Android run are rejected.
+
+All **85 Android tests passed**: 12 Step 2 tests and 73 existing instrumentation/fault tests. The Step 2 checks include actual native model/token references and accuracy, startup/API telemetry opt-out, index-read failure with preserved keyword results/cause, stale-message result rejection, and three-decimal Minimum Spread/rejected-standout display. The archived result-card screenshot was inspected: section attribution, the independent 0.48 requirement, calibrated 2.53 standout requirement, rejection causes and wrapping are visible. This is an emulator Debug screen, not a physical-phone Beta inspection.
+
+All 313 token references match. Original-set vector-reference diagnostics remain maximum absolute difference 0.0063216463 and minimum cosine 0.99957734; independent-set diagnostics remain 0.005674582 and 0.9996953. Default calibration changes selection, not model-generated vectors.
+
+**Timing is a separate measurement.** Accuracy above evaluates all sections without an elapsed-time allowance; it does not establish that all 15 recoveries fit the live allowance. In the run's separate timed emulator example, whole-message model work was **5,840 ms**; additional section queue/model/scoring/total were **0 / 1,770 / 0 / 1,775 ms**, with two sections attempted, one completed and the cooperative time limit reported. Native cancellation/unwind can exceed the provisional 1,500 ms allowance. Physical Pixel timing and end-to-end user behavior remain unmeasured.
+
+Current upstream model metadata was also checked: revision `5090578d9565bb06545b4552f76e6bc2c93e4a66` still matches the CI-pinned graph, external weights and tokenizer hashes: `ad1dfee81a70f7944b9b9d1cc6e48075b832881cf33fab2f2b248be78f3f0043`, `599962c3143b040de2dd05e5975be3e9091dd067cacc6a8f7186e3203bab9e02`, and `4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47`. The app catalog's unversioned URL is unchanged; this metadata check does not individually verify pre-existing installed copies. No model change, re-download or index rebuild is required by the calibration. Existing saved custom tuning remains untouched; defaults and Reset to Defaults use the calibrated numbers.
+
+The standard unit/build job also passed: all Gradle unit-test tasks, Debug packaging, `assembleBeta`, non-debuggable Beta identity (`com.soulphosphor.phosphorshines.beta`, label `Phosphor Shines Beta`) and instrumentation compilation. Both jobs in run `43669339130` completed successfully.
+
+The ONNX startup/API opt-out test passed in this run. No new packet capture was performed, so this is not a claim of universal zero-network behavior. The rejected 1.29 runtime and forced-FP32 experiments are not included in this repair. PR review and integration remain pending.
+
+### PR #202 review follow-up
+
+Both final-document-commit checks passed at `d7c303e`: push run `43671204545` and pull-request run `43671253028`. Review found a test-screen visibility edge case: editing a running query and restoring it (or adding trailing whitespace) hides the old result, but its matching completion was accepted without showing the result container again. The completion now restores visibility only after the existing normalized-message and scope checks pass. The different-message rejection remains unchanged. A new Android regression checks both accepted edit sequences, including visible completion, the prepared query and exactly one whole-message model call. No matching defaults, model/runtime, gold answers or accuracy requirements change in this follow-up. Android execution and renewed review of this correction remain pending.

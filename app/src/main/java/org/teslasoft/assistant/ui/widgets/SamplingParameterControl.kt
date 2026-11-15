@@ -15,7 +15,7 @@ import org.teslasoft.assistant.R
 /**
  * Shared sampling control used by Quick Settings and both API Endpoint editor
  * layouts. The value box and slider always mirror one another. Direct input is
- * committed on Done or focus loss, normalized to two-decimal precision, and
+ * committed on Done or focus loss, normalized to the parameter's precision, and
  * clamped to the parameter's supported range.
  */
 class SamplingParameterControl @JvmOverloads constructor(
@@ -85,8 +85,8 @@ class SamplingParameterControl @JvmOverloads constructor(
         // styled font, rather than a fixed width or the current short value.
         val sizingFormat = DecimalFormat("0").apply {
             isGroupingUsed = false
-            minimumFractionDigits = SamplingParameterValuePolicy.DECIMAL_PLACES
-            maximumFractionDigits = SamplingParameterValuePolicy.DECIMAL_PLACES
+            minimumFractionDigits = spec.decimalPlaces
+            maximumFractionDigits = spec.decimalPlaces
         }
         valueField.minimumWidth = ceil(maxOf(
             valueField.paint.measureText(sizingFormat.format(spec.minimum)),

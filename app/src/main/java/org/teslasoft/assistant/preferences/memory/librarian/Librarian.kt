@@ -739,7 +739,7 @@ class Librarian private constructor(private val appContext: Context) {
                 }
             } catch (t: Throwable) {
                 vectors = emptyMap()
-                MemoryLog.log(appContext, "Librarian", "error", "Couldn't load the embedding index. Used keyword search instead. Error: ${t.message}")
+                MemoryLog.log(appContext, "Librarian", "error", "Couldn't load the embedding index. Used keyword search instead. Error: ${t.message ?: t.javaClass.simpleName}")
             }
         }
         val withVector = candidates.count { vectors.containsKey(it.memoryId) }
@@ -860,7 +860,9 @@ class Librarian private constructor(private val appContext: Context) {
         val embedMillis: Long,
         val loadMillis: Long,
         /** The message's sections as read for the long-message search. */
-        val sections: LongMessageSearch.Reading = LongMessageSearch.Reading.NONE
+        val sections: LongMessageSearch.Reading = LongMessageSearch.Reading.NONE,
+        /** An index read error is different from embeddings not being ready. */
+        val indexFailureCause: String? = null
     )
 
     /**
@@ -878,9 +880,13 @@ class Librarian private constructor(private val appContext: Context) {
             store.activeMemoryTargetNames()
         } catch (_: Exception) { emptyMap() }
         val m = ensureModel()
+        var indexFailureCause: String? = null
         val vectors: Map<String, ByteArray> = if (m == null || candidates.isEmpty()) emptyMap() else try {
             store.embeddingsForMemories(candidates.map { it.memoryId }, RetrievalDocument.effectiveKey(m.tag))
-        } catch (_: Throwable) { emptyMap() }
+        } catch (t: Throwable) {
+            indexFailureCause = t.message ?: t.javaClass.simpleName
+            emptyMap()
+        }
         val corpus = candidates.map { mem ->
             LiveRetrieval.Candidate(
                 mem,
@@ -907,7 +913,7 @@ class Librarian private constructor(private val appContext: Context) {
         val sections = if (m != null && queryVector != null) {
             readSections(m, query, LiveRetrieval.index(corpus))
         } else LongMessageSearch.Reading.NONE
-        return PreparedSearchTest(query, queryVector, corpus, m != null, embedMillis, loadMillis, sections)
+        return PreparedSearchTest(query, queryVector, corpus, m != null, embedMillis, loadMillis, sections, indexFailureCause)
     }
 
     /** tags_json -> list; a garbled column degrades to "no tags", never an error. */

@@ -8,7 +8,7 @@ import java.text.ParsePosition
 import java.util.Locale
 
 /** Domain ranges and precision shared by every sampling-parameter editor. */
-enum class SamplingParameterSpec(val minimum: Float, val maximum: Float) {
+enum class SamplingParameterSpec(val minimum: Float, val maximum: Float, val decimalPlaces: Int = 2) {
     TEMPERATURE(0f, 2f),
     TOP_P(0f, 1f),
     FREQUENCY_PENALTY(-2f, 2f),
@@ -23,15 +23,15 @@ enum class SamplingParameterSpec(val minimum: Float, val maximum: Float) {
     MEMORY_SMALL_LIBRARY_MATCH(0f, 0.95f),
     MEMORY_FULL_STRENGTH_MATCH(0.01f, 1f),
     MEMORY_AGREEMENT_BONUS(0f, 1f),
-    MEMORY_MINIMUM_SPREAD(0.01f, 0.5f);
+    MEMORY_MINIMUM_SPREAD(0.01f, 0.5f, 3);
 
-    val step: Float get() = SamplingParameterValuePolicy.STEP
+    val step: Float get() = if (this == MEMORY_MINIMUM_SPREAD) 0.001f else SamplingParameterValuePolicy.STEP
 }
 
 /**
  * One precision policy for slider movement, typed values, display text, and
- * persistence. Values are rounded to at most two decimal places and clamped
- * to the selected parameter's real supported range.
+ * persistence. Values use their parameter's precision (three places for
+ * memory spread, two elsewhere) and stay inside its supported range.
  */
 object SamplingParameterValuePolicy {
     const val DECIMAL_PLACES = 2
@@ -39,7 +39,7 @@ object SamplingParameterValuePolicy {
 
     fun normalize(value: Float, spec: SamplingParameterSpec): Float {
         val rounded = BigDecimal(value.toString())
-            .setScale(DECIMAL_PLACES, RoundingMode.HALF_UP)
+            .setScale(spec.decimalPlaces, RoundingMode.HALF_UP)
             .toFloat()
         return rounded.coerceIn(spec.minimum, spec.maximum)
     }
@@ -51,7 +51,7 @@ object SamplingParameterValuePolicy {
     ): String {
         val formatter = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(locale)).apply {
             isGroupingUsed = false
-            maximumFractionDigits = DECIMAL_PLACES
+            maximumFractionDigits = spec.decimalPlaces
         }
         return formatter.format(normalize(value, spec))
     }

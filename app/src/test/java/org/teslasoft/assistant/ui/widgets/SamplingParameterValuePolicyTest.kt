@@ -42,4 +42,15 @@ class SamplingParameterValuePolicyTest {
     fun `parses locale decimal separator`() {
         assertEquals(0.75f, SamplingParameterValuePolicy.parse("0,75", Locale.GERMANY))
     }
+
+    @Test
+    fun `memory spread preserves its calibrated third decimal without changing sampling precision`() {
+        val spread = SamplingParameterSpec.MEMORY_MINIMUM_SPREAD
+        assertEquals(0.034f, SamplingParameterValuePolicy.normalize(0.034f, spread))
+        assertEquals("0.034", SamplingParameterValuePolicy.format(0.034f, spread, Locale.US))
+        assertEquals("0,034", SamplingParameterValuePolicy.format(0.034f, spread, Locale.GERMANY))
+        assertEquals(0.001f, spread.step)
+        assertEquals(0.03f, SamplingParameterValuePolicy.normalize(0.034f, SamplingParameterSpec.TEMPERATURE))
+        assertEquals(0.01f, SamplingParameterSpec.TEMPERATURE.step)
+    }
 }
