@@ -207,6 +207,57 @@ class Step2RecallInstrumentedTest {
         assertSame(OnnxRuntimeEnvironment.get(), OnnxRuntimeEnvironment.get())
     }
 
+    @Test fun calibratedControlsAndRejectedStandoutKeepTheirActualPrecision() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        fun fixture(name: String) = JSONObject(instrumentation.context.assets.open("recall_test_set/$name")
+            .bufferedReader().use { it.readText() })
+        val cases = fixture("cases.json")
+        val measured = fixture("android_ort120_similarity_scores.json")
+        val id = "conversation_06_turn_2"
+        val messageCase = cases.getJSONArray("conversations").objects()
+            .flatMap { it.getJSONArray("messages").objects() }.single { it.getString("id") == id }
+        val ids = measured.getJSONArray("memory_ids").strings()
+        val scores = measured.getJSONObject("messages").getJSONArray(id)
+        val corpus = cases.getJSONArray("memories").objects().map { memory ->
+            val sim = scores.getDouble(ids.indexOf(memory.getString("id"))).toFloat()
+            LiveRetrieval.Candidate(RetrievableMemory(memory.getString("id"), "global", memory.getString("content"),
+                null, 0, "2026-01-01T00:00:00Z", null), floatArrayOf(sim, sqrt(1.0 - sim.toDouble() * sim).toFloat()),
+                memory.getJSONArray("tags").strings(), emptyList())
+        }
+        val query = messageCase.getString("text")
+        val vector = floatArrayOf(1f, 0f)
+        val prepared = Librarian.PreparedSearchTest(query, vector, corpus, true, 0, 0)
+        val report = SearchTestReport.build(query, vector, corpus, SearchTuning(), true)
+        assertFalse(report.sent.any { it.explanation.memory.memoryId == "food_bread" })
+        ActivityScenario.launch(MemorySearchTestActivity::class.java).use { scenario ->
+            var ready = false
+            val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (!ready && System.nanoTime() < until) {
+                scenario.onActivity { activity ->
+                    val control = activity.findViewById<org.teslasoft.assistant.ui.widgets.SamplingParameterControl>(R.id.slider_min_spread)
+                    ready = kotlin.math.abs(control.value - 0.034f) < 1e-6
+                }
+                if (!ready) Thread.sleep(10)
+            }
+            assertTrue("Minimum spread was rounded while loading the screen", ready)
+            scenario.onActivity { activity ->
+                val control = activity.findViewById<org.teslasoft.assistant.ui.widgets.SamplingParameterControl>(R.id.slider_min_spread)
+                assertEquals(0.034f, control.value, 1e-6f)
+                val render = MemorySearchTestActivity::class.java.getDeclaredMethod("showReport",
+                    Librarian.PreparedSearchTest::class.java, SearchTestReport.Report::class.java).apply { isAccessible = true }
+                render.invoke(activity, prepared, report)
+                val cards = activity.findViewById<LinearLayout>(R.id.list_not_sent)
+                val bread = (0 until cards.childCount).map { cards.getChildAt(it) }.single {
+                    it.findViewById<TextView>(R.id.text_memory).text.toString() == corpus.single { c -> c.memory.memoryId == "food_bread" }.memory.content }
+                val text = bread.findViewById<TextView>(R.id.text_meaning).text.toString()
+                assertTrue("Rejected score rounded to the passing threshold: $text",
+                    text.contains(String.format(java.util.Locale.getDefault(), "%.4f", 2.529728)))
+                assertTrue("Actual threshold missing: $text",
+                    text.contains(String.format(java.util.Locale.getDefault(), "%.2f", 2.53)))
+            }
+        }
+    }
+
     @Test fun indexReadFailureRetainsKeywordResultsAndActualCause() {
         // Only this isolated test database is altered.
         store.writableDatabase.execSQL("DROP TABLE embeddings")

@@ -57,14 +57,14 @@ object LiveRetrieval {
         val similarityFloor: Double = 0.35,
         /** Meaning search: how far above this message's typical similarity a
          *  memory must stand, in robust spreads (median absolute deviation). */
-        val standoutMin: Double = 2.5,
+        val standoutMin: Double = 2.53,
         /** Keyword search: share (0..1) of the message's informative words,
          *  weighted by rarity, that a memory must contain to pass on keywords
          *  alone. */
         val keywordMin: Double = 0.5,
         /** Smallest spread used for the stand-out measure, so a small or
          *  uniform library cannot make tiny differences look large. */
-        val minSpread: Double = 0.02,
+        val minSpread: Double = 0.034,
         /** Below this many searchable memories the stand-out measure is not
          *  meaningful; only [smallLibraryFloor] is used. */
         val smallLibrarySize: Int = 8,

@@ -483,23 +483,23 @@ class MemorySearchTestActivity : SettingsPageActivity() {
             val sectionMinimum = sectionEvaluation?.requiredSimilarity ?: sectionSettings.sectionSimilarityMin
             card.findViewById<TextView>(R.id.text_meaning).text = when {
                 section != null -> getString(R.string.memory_search_test_section_requirements,
-                    sectionSimilarity(e.similarity ?: 0.0, sectionMinimum), num(sectionMinimum),
+                    comparisonNumber(e.similarity ?: 0.0, sectionMinimum), num(sectionMinimum),
                     getString(if (e.matchedTerms.isEmpty()) R.string.memory_search_test_section_no else R.string.memory_search_test_section_yes),
                     getString(if (e.passed) R.string.memory_search_test_gate_pass else R.string.memory_search_test_gate_fail)) + "\n" +
                     getString(R.string.memory_search_test_section_gate_details, if (small) getString(R.string.memory_search_test_detail_meaning_small,
                         num(e.similarity ?: 0.0), num(maxOf(params.similarityFloor, params.smallLibraryFloor)))
                     else getString(R.string.memory_search_test_detail_meaning,
-                        num(e.similarity ?: 0.0), num(params.similarityFloor), num(e.standout ?: 0.0, 1), num(params.standoutMin, 1)))
+                        comparisonNumber(e.similarity ?: 0.0, params.similarityFloor), num(params.similarityFloor), comparisonNumber(e.standout ?: 0.0, params.standoutMin), num(params.standoutMin)))
                 e.similarity == null && d.meaningRan -> getString(R.string.memory_search_test_detail_meaning_no_vector)
                 e.similarity == null -> getString(R.string.memory_search_test_detail_meaning_not_run)
                 small -> getString(
                     R.string.memory_search_test_detail_meaning_small,
-                    num(e.similarity), num(maxOf(params.similarityFloor, params.smallLibraryFloor))
+                    comparisonNumber(e.similarity, maxOf(params.similarityFloor, params.smallLibraryFloor)), num(maxOf(params.similarityFloor, params.smallLibraryFloor))
                 )
                 else -> getString(
                     R.string.memory_search_test_detail_meaning,
-                    num(e.similarity), num(params.similarityFloor),
-                    num(e.standout ?: 0.0, 1), num(params.standoutMin, 1)
+                    comparisonNumber(e.similarity, params.similarityFloor), num(params.similarityFloor),
+                    comparisonNumber(e.standout ?: 0.0, params.standoutMin), num(params.standoutMin)
                 )
             }
             card.findViewById<TextView>(R.id.text_keyword).text = if (e.matchedTerms.isEmpty()) {
@@ -537,8 +537,8 @@ class MemorySearchTestActivity : SettingsPageActivity() {
     }
 
     /** Keep ordinary scores compact, but never round a below-threshold
-     * section score into an apparently qualifying value such as 0.48. */
-    private fun sectionSimilarity(value: Double, minimum: Double): String {
+     * score into an apparently qualifying value, including standout scores. */
+    private fun comparisonNumber(value: Double, minimum: Double): String {
         for (decimals in listOf(2, 4, 8)) {
             val shown = num(value, decimals)
             if (value >= minimum || shown != num(minimum, decimals)) return shown

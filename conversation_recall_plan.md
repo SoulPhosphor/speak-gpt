@@ -1364,7 +1364,7 @@ one of two things:
 
 **Approved rule: overlapping sections, used only for finding (G29).**
 Step 2 applies this to saved memories only. Earlier-exchange recall remains future work.
-- The whole message is searched first, exactly as today.
+- The whole message is searched first using the shared saved-memory matcher. The current repair may recalibrate its existing defaults under the frozen quality requirements below.
 - A message longer than one piece is also searched in pieces. A piece is
   cut at a paragraph or a line where there is one, otherwise between
   words. Periods play no part.
@@ -1373,7 +1373,7 @@ Step 2 applies this to saved memories only. Earlier-exchange recall remains futu
 - **A piece is only ever used to find a memory. It is never shown to the
   AI.** What the AI receives is the whole saved memory, or the whole
   earlier exchange.
-- A message short enough to be one piece is searched exactly as today.
+- A message short enough to be one piece uses only that whole-message pass.
   There is no line between "long" and "short" beyond that.
 
 **When a piece's match counts.** A wrong memory is worse than a missed
@@ -1395,8 +1395,7 @@ well; this app does not.
   today.
 
 **Order and room.**
-- Everything that matches the whole message keeps its place, in today's
-  order. Nothing that is sent today is pushed out.
+- Whole-message matches under the current tuning retain their order. Sections never push them out. The quality repair preserves every originally correct whole-message match and may remove incorrect matches; gold answers are unchanged.
 - Memories found only through a piece come after those, best first, in
   whatever room the memory limit leaves. Section-only matches, including +3
   importance, never bypass Maximum Memories. Entire memories are sent.
@@ -2115,10 +2114,12 @@ measurements and verification results.
 
 **Status:** Implemented in #200 and repaired in #201, but acceptance remains open. The Android 1.20 result adds wrong matches against the original baseline; no lowered acceptance target is approved. Current repair work is on `repair/step2-contract-audit`, with no shipping runtime or model switch approved. An isolated Android 1.29 candidate is recorded in `memory baseline.md`.
 
+**Repair scope after later-step review:** Steps 3–4 add separate previous-message searches; Steps 14–15 build and measure conversation-passage recall. Neither is a later work order to recalibrate this existing saved-memory gate. The existing gate was already built in #180. The current repair may therefore adjust its existing default calibration while preserving all original correct matches and rejecting newly incorrect matches per sample. Android 1.20, the original q4 model, vector size, keyword rule, section size/cap/0.48 threshold and gold answers remain fixed. No later Step is started here.
+
 **Agent checklist for this step**
 - **Prerequisites:** Steps 0 and 1. **Approval gate:** Resolved by the owner; final wording is in G.13b. Routine repair corrections are authorized.
 - **Change:** G.10's bounded overlapping search pieces for typed and dictated messages, using the shared embedding queue and a minimal hookup. Whole-message search still runs first; each section must pass the relevance gate, similarity ≥0.48 and meaningful shared-word overlap.
-- **Preserve:** Existing whole-message matches **and their order**, Memory Assistant search, lorebooks, and current sending when no piece can qualify. Do not add a paid rewrite or trust periods as sentence boundaries.
+- **Preserve:** Every originally correct whole-message match and the relative order of retained matches; Memory Assistant search, lorebooks, and current sending when no piece can qualify. The existing whole-message defaults may be recalibrated under the repair scope below. Do not add a paid rewrite or trust periods as sentence boundaries.
 - **Verify and report:** Step 0's per-sample quality improves for long messages **without increased wrong memories**; existing tests pass; report time allowance and any missing on-phone performance proof.
 
 - **Goal:** a small detail in a long message finds its saved memory,
@@ -2130,9 +2131,7 @@ measurements and verification results.
   `SearchTestReport.kt`.
 - **Build:** G.10, in its own file, with a small hookup. Every use of the
   embedding model goes through Step 1's queue.
-- **Must not change:** the result of the whole-message search; the
-  presence and order of anything that is sent today; the Memory
-  Assistant's own search; the lorebook.
+- **Must not change:** originally correct whole-message matches or the relative order of retained matches; the Memory Assistant's own search; the lorebook. Removing incorrect matches through the existing default calibration is permitted only under the unchanged per-message quality gate.
 - **Results:** record the before/after totals and every changed sample in
   `memory baseline.md`. Update `baseline.json` only for verified
   improvements, never to permit a regression.
