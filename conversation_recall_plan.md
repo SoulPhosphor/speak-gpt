@@ -31,8 +31,9 @@ comments and tests cite its section numbers.
 `memory baseline.md`. The owner's decisions of 2026-11-16 replace searching
 with the previous messages by a selectable context assistance (G.9, G.9b),
 approve a narrow +3 exception (G.10), and keep embedding models replaceable
-(G.9c). The next stages are memory provenance (M.3) and Step 4a, in the
-order M.2 recommends; both wait for owner decisions listed in M.10.
+(G.9c). The next stage is memory sources (M.3), which has nothing waiting
+on the owner; then Step 4a, whose remaining owner questions are asked when
+it starts (M.10).
 
 # Part M: Roadmap, status, and consolidation
 
@@ -85,8 +86,8 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
 | Order | Stage | Contains | Needs | Approve first | The user sees |
 |---:|---|---|---|---|---|
 | 1 | **Memory provenance** | M.3: source storage and database migration; sources recorded by the Memory Assistant; backups, imports, restores and merges; source carried through supersede and merge; source link and dates in the Memory Browser | Nothing unbuilt | Nothing (G43 decided) | A link at the bottom of a memory back to the message it came from, and its dates |
-| 2 | **Context assistance: Off and Code-based** | Step 4a: the context-assistance interface, Off, Code-based subject tracking, the +3 top-match rule, the app-wide setting | #205 and #206 merged (done) | G38; G45 if the lorebook check is included | Follow-ups keep their memories; the context-assistance setting |
-| 3 | **Context assistance: API AI** | Step 4b, with the Memory Context Helper Tool API screen in AI Settings (M.4) | Stage 2 | G39, G44 | The API AI choice and the Memory Context Helper Tool API screen |
+| 2 | **Context assistance: Off and Code-based** | Step 4a: the context-assistance interface, no helper and Code-based, the +3 top-match rule, Memory Context Helper Settings with its toggle and dropdown | #205 and #206 merged (done) | The Step 4a questions in M.10 | Follow-ups keep their memories; the context-assistance setting |
+| 3 | **Context assistance: API AI** | Step 4b, with the Memory Context Helper Tool API screen in AI Settings (M.4) | Stage 2 | The Step 4b questions in M.10 | The API AI choice and the Memory Context Helper Tool API screen |
 | 4 | **Memory length limit** | Step 5: word count under every memory editor, the saving limit, Memory Assistant splitting | Step 1 (done) | Open parts of G34 | Word count under memory fields |
 | 5 | **Data control** | Memory plan Phase 2: the view dropdown, Retired, Memory Handling Preferences, Delete to Retired, with every new field in backups | Stage 1 (both are expected to change the memory database; building them one after the other avoids competing migrations) | Wording and layout; D44 default | Retired view and Memory Handling Preferences |
 | 6 | **Conversation test chats** | Step 6 | Nothing unbuilt | Nothing | Nothing |
@@ -450,27 +451,48 @@ choice keeps are unchanged (G.9, G.9b).
 - **Other helper settings** go on **Memory Context Helper Settings** in the
   Memory Manager (M.11), not on this screen.
 
-**Still open before Step 4b (G39).** A builder does not choose these:
-1. **What the helper reads:** how many recent turns, and whether the AI's
-   replies are included or only the user's messages.
-2. **Its instruction text:** fixed, or viewable and editable with a way to
-   restore the default.
-3. **Time allowance:** fixed, or a setting.
-4. **Failure behavior and notice** when the helper is offline, errors, runs
-   out of time, or returns unusable output. Proposed in G.9b: the turn goes
-   ahead as Off.
-5. **Cost display:** what the provider reports, otherwise "Not Reported".
-6. **Privacy disclosure:** that recent conversation is sent to the chosen
-   provider.
-7. **What happens when API AI is chosen but no model is configured.**
-8. **Logging:** whether failures go to the Provider Failure Log under a
-   function name of their own (all logging needs approval).
+**Memory Context Helper defaults (Owner, 2026-11-16; the owner delegated
+the remaining technical decisions and approved these defaults).** Each is
+tested during implementation and its result reported; none is retuned
+without the owner.
+1. **Conversation input.** The new message and up to four recent
+   user/assistant exchanges from the same chat. AI replies are included,
+   because they may hold what a follow-up refers to. Historical context is
+   limited to 2,048 tokens, newest messages first, kept in chronological
+   order.
+2. **Instructions.** A fixed, app-managed prompt. It resolves references
+   and produces one standalone search query. It never answers the user,
+   invents facts, or changes the actual message. No prompt editor at first.
+3. **Time allowance.** 8 seconds in text chat, 3 seconds in hands-free
+   voice. No automatic retries. Latency is checked in Step 4b and the
+   result reported, saying whether these limits work.
+4. **Failure.** The original message is sent normally, without helper
+   context, and chat is never blocked. A brief, non-blocking notice says
+   the helper failed, not repeated every turn. Invalid output is handled
+   the same way.
+5. **Cost.** Actual provider-reported usage and cost through the existing
+   usage system; "Not Reported" when the provider gives none. Unknown cost
+   is never shown as zero.
+6. **Privacy.** A clear disclosure before API AI is turned on, saying that
+   recent conversation messages go to the selected provider. No API helper
+   call is ever made while it is not selected.
+7. **No model selected.** API AI cannot be chosen until a model is set on
+   Memory Context Helper Tool API, and the user is directed there. If a
+   selected model becomes unavailable, the turn goes ahead with no helper.
+8. **Logging.** Failures go to the existing Provider Failure Log under the
+   function name **Memory Context Helper**, with error types and useful
+   technical details, never conversation text or API credentials.
+9. **Starting state.** The helper starts off. When first turned on,
+   Code-based is selected. API AI is only ever chosen by the user.
+10. **Testing.** Test these defaults in implementation: time limits,
+    invalid responses, provider failure, and no model. Use the existing
+    frozen carry-over sets for retrieval quality. No new open-ended
+    research, no claim that API AI is better without measurements, and no
+    paid benchmark calls without a model and cost the owner approves.
 
-**Ship timing (Open, G44).** Step 4a can ship the setting with Off and
-Code-based before Step 4b adds API AI, or the setting can stay hidden
-until all three choices exist. **Recommendation:** ship Step 4a first. Its
-benefit is measured and free, and adding API AI later changes nothing
-already built.
+**No placeholder screens (Owner, 2026-11-16).** Memory Context Helper
+Settings is built in Step 4a and Memory Context Helper Tool API in Step 4b,
+each using the screen arrangements already established.
 
 ## M.5 Embedding models stay replaceable
 
@@ -599,16 +621,22 @@ default, not a permanent restriction. In addition:
 
 Where settings go on screen is M.11.
 
-## M.10 Decisions needed, in the order they are needed
+## M.10 Questions to ask the owner when a step starts
 
-Each is also a row in G.17.
+**Owner, 2026-11-16:** the owner is not asked design or engineering
+questions ahead of time. Technical choices belong to the builder, using
+the decisions recorded in this plan and the existing measurements. A
+question that only the owner can answer (user-facing wording, or a product
+choice the plan leaves open) is asked **immediately when that step starts**,
+one at a time, and is never acted on before it is answered. A builder who
+finds something missed adds it here rather than guessing.
 
-| # | Needed before | Question | Recommendation |
-|---|---|---|---|
-| G45 | Stage 2 | Include the frozen-path lorebook check (step 1.13) in Step 4a | Yes |
-| G38 | Stage 2 | Context helper on Memory Context Helper Settings (M.11). **Decided 2026-11-16:** an on/off toggle that starts off; Local AI not shown. **Open:** which choice (Code-based or API AI) is selected when first turned on; labels and explanations; rebuilding the subject after restart | Code-based selected when first turned on |
-| G44 | Stage 2 | Ship Off and Code-based before API AI is ready | Yes |
-| G39 | Stage 3 | The remaining items for the Memory Context Helper Tool API (M.4, items 1–8) and the model and cost of its scored run; its name, place, model choice, all parameters and same-as-Memory-Scanner-Tool-API behavior were decided 2026-11-16 | Each item approved before Step 4b |
+| Step | Ask the owner when it starts |
+|---|---|
+| Stage 1, memory sources | Nothing open. Decided in G43 |
+| Stage 2, Step 4a | (1) Include the missed lorebook duplicate check on the frozen send path (G45; recommended: yes). (2) The exact labels and explanations for the Memory Context Helper Settings screen, its toggle and dropdown, and its row in the Memory Manager. (3) Whether the setting is released after Step 4a with Code-based only, before API AI exists (G44; recommended: yes, since the toggle starts off) |
+| Stage 3, Step 4b | The exact wording of the privacy disclosure, the failure notice, and the no-model message; the model and cost for the one scored run on the frozen sets. Everything else is decided in M.4 |
+| Later stages | The approvals listed in M.2's "Approve first" column |
 
 ## M.11 Where settings go (Owner, 2026-11-16)
 
@@ -1997,34 +2025,29 @@ self-contained search query. It never answers the user's message, never
 changes the message or what the chat model receives, and never adds a fact
 that is not in the conversation it was given.
 
-**Proposed for the API AI helper, decided in G39 before Step 4b:**
+**How the API AI helper's query is used (Proposed, engineering).**
 - Its query is searched in addition to the new message: the new message's
   own results stay first and unchanged, and memories found only through
   the query follow, through the same relevance gate.
 - Its output is checked before use: one query of plain text, within the
   embedding model's message limit. Anything else is discarded and the turn
-  goes ahead as Off.
-- When it fails (offline, provider error, time allowance exceeded, or
-  output discarded) the turn goes ahead as Off. The time allowance, the
-  notice wording and the privacy disclosure are approved first.
-- Cost is shown as the provider reports it, otherwise "Not Reported".
-- Which turns it reads (the user's messages only, or the AI's replies
-  too), its instruction text, and which provider models qualify.
-- Before a starting choice is set for anyone, it is scored once on the two
-  frozen carry-over sets exactly as `CarryOverFinalEvaluationTest` scores
-  the other methods, with a model and cost the owner approves. It is not
-  described as better than Code-based until then.
+  goes ahead with no helper.
+- Its other behavior (what it reads, instructions, time allowance, failure,
+  cost, privacy, no model, logging, starting state and testing) is decided:
+  M.4, "Memory Context Helper defaults".
+- Before it is described as better than Code-based, it is scored once on
+  the two frozen carry-over sets exactly as `CarryOverFinalEvaluationTest`
+  scores the other methods, with a model and cost the owner approves.
 
 **The setting (Owner, 2026-11-16).** The context helper is optional and
 **off until the user turns it on** with a toggle on the **Memory Context
-Helper Settings** screen (M.11). With the toggle off, behavior is Off. With
-it on, the user chooses Code-based or API AI. Only one runs at a time:
+Helper Settings** screen (M.11). With the toggle off, there is no helper:
+each message is searched on its own, as today. With it on, the user
+chooses Code-based or API AI from a **dropdown**. Only one runs at a time:
 API AI does not use Code-based, and Local AI, when built, becomes another
-choice in the same list. The toggle starts off for everyone, so a user can
-always use no helper at all. Which choice is selected when it is first turned on, and the
-labels and explanations, are approved before Step 4a (G38). The API AI
-screen (Memory Context Helper Tool API, M.4) is approved before Step 4b
-(G39).
+choice in the same dropdown. The toggle starts off for everyone; when
+first turned on, Code-based is selected. The API AI screen is Memory
+Context Helper Tool API (M.4).
 
 ## G.9c Embedding models stay replaceable (Owner, 2026-11-16)
 
@@ -2928,7 +2951,8 @@ measurements and verification results.
 
 **Agent checklist for this step**
 - **Prerequisites:** the Step 3 repair (#205) and the carry-over
-  evaluation (#206) are merged. **Approval gate:** G38, and G45 if the
+  evaluation (#206) are merged. **Approval gate:** the Step 4a questions in
+  M.10, asked when the step starts (G38 is decided). G45 decides whether the
   frozen-path lorebook check (M.6) is included.
 - **Change:** the context-assistance interface (G.9b) in its own files,
   with a small connection where a message is sent; Off and Code-based
@@ -2974,7 +2998,7 @@ measurements and verification results.
 ### Step 4b: API AI context helper (Hard)
 
 **Agent checklist for this step**
-- **Prerequisites:** Step 4a merged. **Approval gate:** G39.
+- **Prerequisites:** Step 4a merged. **Approval gate:** the Step 4b questions in M.10, asked when the step starts (G39 is decided).
 - **Change:** the API AI choice behind the Step 4a interface, with the
   **Memory Context Helper Tool API** screen in AI Settings (M.4): its own
   endpoint and model selection filled from the user's configured providers
@@ -3495,14 +3519,14 @@ about to start. Each has a recommendation.
 | G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before Step 7. No builder treats it as approved before then | Step 7 |
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
-| G38 | The context helper's setting | **Decided (owner, 2026-11-16):** on Memory Context Helper Settings, a screen in the Memory Manager's Settings section (M.11); optional, with an on/off toggle that starts off for everyone; when on, the user chooses Code-based or API AI; Local AI not shown now. **Open:** which choice is selected when first turned on (recommended: Code-based, the only free method that held up on the held-out set), labels and explanations, and how Code-based rebuilds the subject after the app restarts | Step 4a |
-| G39 | The Memory Context Helper Tool API (M.4). **Decided (owner, 2026-11-16):** that name; its own screen opened from AI Settings; the user chooses their own API model; every model parameter exposed; works and looks like Memory Scanner Tool API; Local AI not now. **Still open:** which turns it reads, instruction text, time allowance, failure behavior and notice, cost display, privacy disclosure, behavior with no model configured, logging, and the model and cost of its scored run | Open (M.4) | Step 4b |
+| G38 | The context helper's setting | **Decided (owner, 2026-11-16):** on Memory Context Helper Settings (M.11); optional, an on/off toggle that starts off; when on, a dropdown of Code-based or API AI, one at a time; Code-based selected when first turned on; Local AI not shown now; no placeholder screens. Labels and explanations are asked when Step 4a starts (M.10). How Code-based rebuilds the subject after a restart is an engineering choice for the builder | Decided |
+| G39 | The Memory Context Helper Tool API (M.4) | **Decided (owner, 2026-11-16):** the name and place, the user's own API model, every parameter, Memory Scanner Tool API's arrangement, and the ten defaults in M.4 (input, fixed instructions, 8 s / 3 s time allowance, failure fallback, cost, privacy disclosure, no model, logging as "Memory Context Helper", starting state, testing). Wording of the disclosure and notices, and the model and cost of the scored run, are asked when Step 4b starts (M.10) | Decided |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
 | G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
 | G43 | The memory provenance design (M.3) and its details | **Decided (owner, 2026-11-16):** separate labeled lines (Speaker; Glamour only for the user's messages when one was in use; Date fully spelled out; Source Message); the speaker is whoever said the message; profile names follow renames by ID and keep the last known name after deletion; an unavailable source reads Unavailable and a deleted one reads Deleted, and the memory is never removed; no excerpts; the user cannot edit sources, the creation date or message dates; the event date is the important date, one field, built in Phase 4; the citing instruction wording was left to the agent (M.3). Adding sources by hand is a possible later feature | Decided |
-| G44 | Ship Step 4a's setting with Off and Code-based before Step 4b adds API AI, or hold it until all three exist | Open. Recommended: ship Step 4a first; its benefit is measured and free | Step 4a |
-| G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | Open. Recommended: yes. It changes only that a memory repeating a lorebook entry is no longer sent on the frozen path, as it already is not on the other path | Step 4a |
+| G44 | Release Step 4a's setting before Step 4b adds API AI | Open; asked when Step 4a starts (M.10). Recommended: yes, since the toggle starts off | Step 4a |
+| G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | Open; asked when Step 4a starts (M.10). Recommended: yes | Step 4a |
 
 ## G.18 Research behind this plan (2026-11-10)
 
