@@ -38,22 +38,23 @@ class ApiContextAssistantTest {
         var reply: suspend (ApiContextAssistant.HelperRequest) -> String = { "Ada's birthday party plans" }
     ) : ApiContextAssistant.HelperTransport {
         val requests = ArrayList<ApiContextAssistant.HelperRequest>()
-        val failures = ArrayList<Pair<ApiContextAssistant.Failure, List<String>>>()
+        val described = ArrayList<Pair<Throwable, List<String>>>()
 
         override fun contextWindowTokens(): Int? {
-            if (unavailable) throw ApiContextAssistant.HelperUnavailable("no model")
+            if (unavailable) throw ApiContextAssistant.HelperUnavailable(HelperFailure.Local.NoModel)
             return window
         }
+
+        override fun profileAndModel(): Pair<String?, String?> = "Profile" to "helper-model"
 
         override suspend fun complete(request: ApiContextAssistant.HelperRequest): String {
             requests.add(request)
             return reply(request)
         }
 
-        override fun recordFailure(
-            failure: ApiContextAssistant.Failure, error: Throwable?, privateValues: List<String>
-        ) {
-            failures.add(failure to privateValues)
+        override fun describe(error: Throwable, privateValues: List<String>): HelperFailure {
+            described.add(error to privateValues)
+            return HelperFailure(HelperFailure.Category.SERVICE_ERROR, "Profile", "helper-model")
         }
     }
 
@@ -70,11 +71,13 @@ class ApiContextAssistantTest {
         conversation: List<ContextAssistant.Turn> = turns(6),
         message: String = "What did she want for it?",
         handsFree: Boolean = false,
-        fits: (String) -> Boolean = { true }
+        fits: (String) -> Boolean = { true },
+        limit: Int? = null
     ) = ContextAssistant.Input(
         chatId = "chat", modelTag = "model", own = emptySearch, eligible = emptyMap(),
         earlierUserMessages = emptyList(), searchEarlier = { null },
-        message = message, conversation = conversation, handsFree = handsFree, queryFits = fits
+        message = message, conversation = conversation, handsFree = handsFree, queryFits = fits,
+        queryTokenLimit = limit
     )
 
     private fun helper(
@@ -90,7 +93,7 @@ class ApiContextAssistantTest {
         val result = helper(transport).assist(input())
         assertEquals(ContextAssistant.Output.Query("Ada's birthday party plans"), result.output)
         assertNull(result.failure)
-        assertTrue(transport.failures.isEmpty())
+        assertTrue(transport.described.isEmpty())
     }
 
     @Test
@@ -102,6 +105,7 @@ class ApiContextAssistantTest {
         assertEquals(turns(2), request.earlier)
         assertEquals(HelperPrompt.newest("What did she want for it?"), request.newest)
         assertEquals(ApiContextAssistant.CACHE_KEY_PREFIX + "chat", request.cacheKey)
+        assertEquals("chat", request.chatId)
     }
 
     @Test
@@ -162,16 +166,22 @@ class ApiContextAssistantTest {
     }
 
     @Test
-    fun discardedOutputSendsNoHelper() {
-        for (reply in listOf("", "   ", "line one\nline two")) {
+    fun discardedOutputSendsNoHelperAndSaysWhy() {
+        val cases = mapOf(
+            "" to HelperFailure.Local.ReplyEmpty,
+            "   " to HelperFailure.Local.ReplyEmpty,
+            "line one\nline two" to HelperFailure.Local.ReplyMultipleLines
+        )
+        for ((reply, reason) in cases) {
             val transport = StandIn(reply = { reply })
             val result = helper(transport).assist(input())
             assertEquals(ContextAssistant.Output.Nothing, result.output)
-            assertEquals(ApiContextAssistant.Failure.INVALID_OUTPUT, result.failure)
+            assertEquals(HelperFailure.Category.UNUSABLE, result.failure?.category)
+            assertEquals(reason, result.failure?.local)
+            assertEquals("helper-model", result.failure?.model)
         }
-        val tooLong = StandIn()
-        val result = helper(tooLong).assist(input(fits = { false }))
-        assertEquals(ApiContextAssistant.Failure.INVALID_OUTPUT, result.failure)
+        val tooLong = helper(StandIn()).assist(input(fits = { false }, limit = 512))
+        assertEquals(HelperFailure.Local.ReplyTooLong(512), tooLong.failure?.local)
     }
 
     @Test
@@ -180,7 +190,8 @@ class ApiContextAssistantTest {
         val started = System.nanoTime()
         val result = helper(transport, text = 100, handsFree = 50).assist(input())
         assertEquals(ContextAssistant.Output.Nothing, result.output)
-        assertEquals(ApiContextAssistant.Failure.TIMED_OUT, result.failure)
+        assertEquals(HelperFailure.Category.TIME_ALLOWANCE, result.failure?.category)
+        assertEquals(HelperFailure.Local.NoReplyWithin(0), result.failure?.local)
         assertTrue((System.nanoTime() - started) / 1_000_000 < 5_000)
     }
 
@@ -188,7 +199,7 @@ class ApiContextAssistantTest {
     fun handsFreeUsesItsShorterAllowance() {
         val transport = StandIn(reply = { delay(200); "query" })
         val voice = helper(transport, text = 5_000, handsFree = 50).assist(input(handsFree = true))
-        assertEquals(ApiContextAssistant.Failure.TIMED_OUT, voice.failure)
+        assertEquals(HelperFailure.Category.TIME_ALLOWANCE, voice.failure?.category)
         val typed = helper(transport, text = 5_000, handsFree = 50).assist(input(handsFree = false))
         assertEquals(ContextAssistant.Output.Query("query"), typed.output)
     }
@@ -205,7 +216,8 @@ class ApiContextAssistantTest {
             val transport = StandIn(reply = { throw error })
             val result = helper(transport).assist(input())
             assertEquals(ContextAssistant.Output.Nothing, result.output)
-            assertEquals(ApiContextAssistant.Failure.REQUEST_FAILED, result.failure)
+            assertEquals(HelperFailure.Category.SERVICE_ERROR, result.failure?.category)
+            assertEquals(error, transport.described.single().first)
             assertEquals(1, transport.requests.size)
         }
     }
@@ -214,15 +226,16 @@ class ApiContextAssistantTest {
     fun noModelMakesNoRequest() {
         val transport = StandIn(unavailable = true)
         val result = helper(transport).assist(input())
-        assertEquals(ApiContextAssistant.Failure.NO_MODEL, result.failure)
+        assertEquals(HelperFailure.Category.CONFIGURATION_NEEDED, result.failure?.category)
+        assertEquals(HelperFailure.Local.NoModel, result.failure?.local)
         assertTrue(transport.requests.isEmpty())
     }
 
     @Test
-    fun failureRecordsNameConversationTextAsPrivate() {
+    fun failureDescriptionTreatsConversationTextAsPrivate() {
         val transport = StandIn(reply = { throw IllegalStateException("boom") })
         helper(transport).assist(input(conversation = turns(1), message = "secret message"))
-        val private = transport.failures.single().second
+        val private = transport.described.single().second
         assertTrue("secret message" in private)
         assertTrue("question 1" in private && "answer 1" in private)
     }
@@ -244,18 +257,19 @@ class ApiContextAssistantTest {
 
     @Test
     fun outputCheckTrimsAndAcceptsOneLine() {
-        assertEquals("query", HelperOutput.check("  query \n", { true }))
-        assertNull(HelperOutput.check(null, { true }))
+        assertEquals(HelperOutput.Result.Query("query"), HelperOutput.check("  query \n", { true }))
+        assertEquals(HelperOutput.Result.Empty, HelperOutput.check(null, { true }))
     }
 
     @Test
-    fun noticeIsShownOnceWhileAFailureContinues() {
+    fun onePopUpPerFailureEpisode() {
+        fun f(c: HelperFailure.Category) = HelperFailure(c)
         ContextHelperNotice.reset()
-        val first = ContextHelperNotice.outcome(ApiContextAssistant.Failure.TIMED_OUT)
-        assertTrue(first != null)
-        assertNull(ContextHelperNotice.outcome(ApiContextAssistant.Failure.REQUEST_FAILED))
-        assertNull(ContextHelperNotice.outcome(null))
-        assertTrue(ContextHelperNotice.outcome(ApiContextAssistant.Failure.NO_MODEL) != null)
+        assertTrue(ContextHelperNotice.shouldShow(f(HelperFailure.Category.TIME_ALLOWANCE)))
+        assertFalse(ContextHelperNotice.shouldShow(f(HelperFailure.Category.TIME_ALLOWANCE)))
+        assertTrue(ContextHelperNotice.shouldShow(f(HelperFailure.Category.RATE_LIMIT)))
+        assertFalse(ContextHelperNotice.shouldShow(null))
+        assertTrue(ContextHelperNotice.shouldShow(f(HelperFailure.Category.RATE_LIMIT)))
         ContextHelperNotice.reset()
     }
 }

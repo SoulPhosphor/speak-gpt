@@ -38,7 +38,7 @@ import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
  * Only the helper's own model is used ([HelperTransport]); nothing here
  * falls back to the chat's or any other job's model. Any failure, timeout or
  * unusable output means no helper this turn: the message is sent with its
- * own results, and the failure is reported once through [Assistance.failure].
+ * own results, and the failure is reported through [Assistance.failure].
  */
 class ApiContextAssistant(
     private val transport: HelperTransport,
@@ -59,14 +59,20 @@ class ApiContextAssistant(
          *  text. Throws on any provider or network failure. */
         suspend fun complete(request: HelperRequest): String
 
-        /** Records a failure for diagnostics. [privateValues] are texts that
-         *  must never appear in a record. */
-        fun recordFailure(failure: Failure, error: Throwable?, privateValues: List<String>) = Unit
+        /** The API profile's name and the model, for a failure report. */
+        fun profileAndModel(): Pair<String?, String?> = null to null
+
+        /** Describes a failed [complete] from the error and the provider's
+         *  response, sanitized of [privateValues] and credentials. */
+        fun describe(error: Throwable, privateValues: List<String>): HelperFailure {
+            val (profile, model) = profileAndModel()
+            return HelperFailure(HelperFailure.Category.UNEXPECTED, profile, model)
+        }
     }
 
     /** No model is set on Memory Context Helper Tool API, or it can no
      *  longer be used. */
-    class HelperUnavailable(message: String) : Exception(message)
+    class HelperUnavailable(val reason: HelperFailure.Local) : Exception(reason.toString())
 
     /**
      * One helper request, ordered so a provider's prompt cache can reuse its
@@ -80,19 +86,23 @@ class ApiContextAssistant(
         val newest: String,
         /** A stable key for this chat's helper requests, so a router can send
          *  them where an earlier one may already be cached. */
-        val cacheKey: String?
+        val cacheKey: String?,
+        /** The chat the request belongs to, for its usage log. */
+        val chatId: String? = null
     )
 
     override fun assist(input: ContextAssistant.Input): ContextAssistant.Assistance {
         val private = listOf(input.message) + input.conversation.map { it.text }
-        fun failed(failure: Failure, error: Throwable? = null): ContextAssistant.Assistance {
-            transport.recordFailure(failure, error, private)
-            return ContextAssistant.Assistance(ContextAssistant.Output.Nothing, failure = failure)
+        fun failed(failure: HelperFailure) =
+            ContextAssistant.Assistance(ContextAssistant.Output.Nothing, failure = failure)
+        fun local(category: HelperFailure.Category, detail: HelperFailure.Local): ContextAssistant.Assistance {
+            val (profile, model) = transport.profileAndModel()
+            return failed(HelperFailure(category, profile, model, local = detail))
         }
         val window = try {
             transport.contextWindowTokens()
-        } catch (_: HelperUnavailable) {
-            return failed(Failure.NO_MODEL)
+        } catch (e: HelperUnavailable) {
+            return local(HelperFailure.Category.CONFIGURATION_NEEDED, e.reason)
         }
         val exchanges = HelperConversation.select(
             HelperConversation.exchanges(input.conversation),
@@ -104,26 +114,30 @@ class ApiContextAssistant(
             HelperPrompt.INSTRUCTIONS,
             exchanges.flatten(),
             HelperPrompt.newest(input.message),
-            input.chatId.takeIf { it.isNotBlank() }?.let { CACHE_KEY_PREFIX + it }
+            input.chatId.takeIf { it.isNotBlank() }?.let { CACHE_KEY_PREFIX + it },
+            input.chatId.takeIf { it.isNotBlank() }
         )
         val budget = if (input.handsFree) handsFreeAllowanceMs else textAllowanceMs
         val reply = try {
             runBlocking(Dispatchers.IO) { withTimeout(budget) { transport.complete(request) } }
-        } catch (e: TimeoutCancellationException) {
-            return failed(Failure.TIMED_OUT, e)
+        } catch (_: TimeoutCancellationException) {
+            return local(HelperFailure.Category.TIME_ALLOWANCE, HelperFailure.Local.NoReplyWithin(budget / 1000))
         } catch (e: CancellationException) {
             throw e
-        } catch (_: HelperUnavailable) {
-            return failed(Failure.NO_MODEL)
+        } catch (e: HelperUnavailable) {
+            return local(HelperFailure.Category.CONFIGURATION_NEEDED, e.reason)
         } catch (e: Exception) {
-            return failed(Failure.REQUEST_FAILED, e)
+            return failed(transport.describe(e, private))
         }
-        val query = HelperOutput.check(reply, input.queryFits) ?: return failed(Failure.INVALID_OUTPUT)
-        return ContextAssistant.Assistance(ContextAssistant.Output.Query(query))
+        return when (val checked = HelperOutput.check(reply, input.queryFits)) {
+            is HelperOutput.Result.Query -> ContextAssistant.Assistance(ContextAssistant.Output.Query(checked.text))
+            HelperOutput.Result.Empty -> local(HelperFailure.Category.UNUSABLE, HelperFailure.Local.ReplyEmpty)
+            HelperOutput.Result.MultipleLines ->
+                local(HelperFailure.Category.UNUSABLE, HelperFailure.Local.ReplyMultipleLines)
+            HelperOutput.Result.TooLong ->
+                local(HelperFailure.Category.UNUSABLE, HelperFailure.Local.ReplyTooLong(input.queryTokenLimit))
+        }
     }
-
-    /** Why the helper gave nothing this turn. */
-    enum class Failure { NO_MODEL, TIMED_OUT, REQUEST_FAILED, INVALID_OUTPUT }
 
     companion object {
         /** Time allowance (M.4 item 3): 8 s in text chat, 3 s in hands-free
@@ -236,13 +250,20 @@ object HelperPrompt {
 }
 
 /** The output check (G.9b): one query of plain text, within the embedding
- *  model's message limit. Anything else is discarded. */
+ *  model's message limit. Anything else is discarded, with the reason. */
 object HelperOutput {
-    fun check(reply: String?, fits: (String) -> Boolean): String? {
+    sealed class Result {
+        data class Query(val text: String) : Result()
+        object Empty : Result()
+        object MultipleLines : Result()
+        object TooLong : Result()
+    }
+
+    fun check(reply: String?, fits: (String) -> Boolean): Result {
         val query = reply?.trim().orEmpty()
-        if (query.isEmpty()) return null
-        if (query.any { it == '\n' || it == '\r' }) return null
-        if (!fits(query)) return null
-        return query
+        if (query.isEmpty()) return Result.Empty
+        if (query.any { it == '\n' || it == '\r' }) return Result.MultipleLines
+        if (!fits(query)) return Result.TooLong
+        return Result.Query(query)
     }
 }

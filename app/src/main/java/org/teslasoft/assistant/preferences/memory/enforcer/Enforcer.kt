@@ -38,6 +38,7 @@ import org.teslasoft.assistant.preferences.memory.ScoredMemory
 import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.preferences.memory.context.ApiContextAssistant
 import org.teslasoft.assistant.preferences.memory.context.ContextAssistance
+import org.teslasoft.assistant.preferences.memory.context.HelperFailure
 import org.teslasoft.assistant.preferences.memory.context.ContextAssistant
 import org.teslasoft.assistant.preferences.memory.librarian.RecallDiagnostics
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
@@ -133,9 +134,10 @@ class Enforcer private constructor(private val appContext: Context) {
         /** True while hands-free voice is running (the helper's shorter time
          *  allowance, M.4 item 3). */
         val handsFree: Boolean = false,
-        /** Told after each API helper call: null when it worked, else why it
-         *  gave nothing. Not called for other methods. */
-        val onContextHelperOutcome: ((ApiContextAssistant.Failure?) -> Unit)? = null
+        /** Told after each API helper call, once the message is actually sent
+         *  (with the context commit): null when it worked, else why it gave
+         *  nothing. Not called for other methods. */
+        val onContextHelperOutcome: ((HelperFailure?) -> Unit)? = null
     )
 
     /** The rendered prompt and the exact final memory selection behind it. */
@@ -286,10 +288,14 @@ class Enforcer private constructor(private val appContext: Context) {
                     message = query,
                     conversation = input.conversation,
                     handsFree = input.handsFree,
-                    queryFits = { text -> librarian.fitsMessageLimit(text) }
+                    queryFits = { text -> librarian.fitsMessageLimit(text) },
+                    queryTokenLimit = librarian.messageTokenLimit()
                 ))
-                input.deferContextCommit?.invoke(assistance.commit) ?: assistance.commit()
-                if (assistant is ApiContextAssistant) input.onContextHelperOutcome?.invoke(assistance.failure)
+                val commit: () -> Unit = {
+                    assistance.commit()
+                    if (assistant is ApiContextAssistant) input.onContextHelperOutcome?.invoke(assistance.failure)
+                }
+                input.deferContextCommit?.invoke(commit) ?: commit()
                 when (val out = assistance.output) {
                     is ContextAssistant.Output.Nothing -> emptyList()
                     is ContextAssistant.Output.Carry -> out.memories

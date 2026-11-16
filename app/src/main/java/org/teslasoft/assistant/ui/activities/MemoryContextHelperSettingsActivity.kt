@@ -21,6 +21,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
@@ -119,14 +120,24 @@ class MemoryContextHelperSettingsActivity : SettingsPageActivity() {
     /** API AI needs a model first (M.4 item 7): the method stays as it was
      *  and the user is directed to Memory Context Helper Tool API. */
     private fun showNoModel() {
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+        val actions = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.memory_context_helper_no_model_title)
             .setMessage(R.string.memory_context_helper_no_model_message)
-            .setNegativeButton(R.string.btn_cancel, null)
-            .setPositiveButton(R.string.memory_context_helper_no_model_open) { _, _ ->
-                startActivity(Intent(this, MemoryContextHelperToolApiActivity::class.java))
+            .setView(actions)
+            .create()
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.choose_provider_choose_model_title)
+            setOnClickListener {
+                dialog.dismiss()
+                startActivity(Intent(this@MemoryContextHelperSettingsActivity, MemoryContextHelperToolApiActivity::class.java))
             }
-            .show()
+        }
+        dialog.show()
     }
 
     private fun labelFor(method: String): Int =

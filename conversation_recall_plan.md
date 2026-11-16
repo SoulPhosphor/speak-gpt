@@ -308,10 +308,29 @@ without the owner.
 3. **Time allowance.** 8 seconds in text chat, 3 seconds in hands-free
    voice. No automatic retries. Latency is checked in Step 4b and the
    result reported, saying whether these limits work.
-4. **Failure.** The original message is sent normally, without helper
-   context, and chat is never blocked. A brief, non-blocking notice says
-   the helper failed, not repeated every turn. Invalid output is handled
-   the same way.
+4. **Failure (corrected by the owner, 2026-11-16).** The original message
+   is sent normally, without helper context; a helper failure never stops,
+   cancels or delays the chat request or hands-free voice. The failure is
+   shown in a **persistent pop-up** that stays until the user presses
+   **Okay** (no Snackbar, temporary notice or separate Details button),
+   because a hands-free user may not be looking at the screen. It follows
+   the app's error-detail standard (`conversation-summary-errors.md`
+   sections 1 and 2, `GenerationErrorMessages.kt`): the title **Memory
+   Context Helper Error**; the failure category as a heading; a plain
+   explanation; once the reply has finished, that the message was still sent
+   using normal memory search; then the actual sanitized provider or
+   technical error (provider message, HTTP status, codes) whenever there is
+   one, never replaced by a generic summary and never a guessed cause; and
+   **Copy** and **Okay**. The categories are Model Configuration Needed,
+   Time Allowance Exceeded, AI Service Unreachable, Connection Timed Out,
+   Response Timed Out, Access Rejected, Model Unavailable, Rate Limit
+   Reached, Quota Reached, Request Too Large, Request Rejected, AI Service
+   Error, Response Unusable and Unexpected Error, each chosen only from what
+   the app observed. API keys, credentials and conversation text are removed
+   from every detail. The pop-up does not depend on Log Chat Failures. One
+   pop-up per failure episode, as for Summarizer Errors: a repeat of the same
+   failure shows nothing until the helper works again or fails differently.
+   The exact wording is in `strings.xml` (Owner, 2026-11-16).
 5. **Cost.** Actual provider-reported usage and cost through the existing
    usage system; "Not Reported" when the provider gives none. Unknown cost
    is never shown as zero.
@@ -327,9 +346,11 @@ without the owner.
    any other. API AI cannot be chosen until a model is set there, and the
    user is directed there. If the selected model becomes unavailable, the
    turn goes ahead with no helper.
-8. **Logging.** Failures go to the existing Provider Failure Log under the
-   function name **Memory Context Helper**, with error types and useful
-   technical details, never conversation text or API credentials.
+8. **Logging.** Writing helper failures to the Provider Failure Log under
+   the function name **Memory Context Helper**, and any debug-view label for
+   memories found through the helper, need the owner's separate approval of
+   their exact content first (`CLAUDE.md` section 7). Neither is built until
+   then; the error pop-up (item 4) is how the user sees a failure.
 9. **Starting state.** The helper starts off. When first turned on,
    Code-based is selected. API AI is only ever chosen by the user.
 10. **Testing.** Test these defaults in implementation: time limits,
@@ -482,7 +503,7 @@ finds something missed adds it here rather than guessing.
 |---|---|
 | Stage 1, memory sources | Nothing open. Decided in G43 |
 | Stage 2, Step 4a | Answered by the owner on 2026-11-16: G45 and G44 are decided; the Memory Context Helper Settings wording is in `strings.xml`; the debug view marks carried memories `[carried from earlier subject]` and top-match memories `[+3 top match]` |
-| Stage 3, Step 4b | The exact wording of the failure notice and the no-model message; the API AI choice's name and explanation in the Helper Method dropdown; the AI Settings row's label and subtitle for Memory Context Helper Tool API; the model and cost for the one scored run on the frozen sets. No privacy disclosure (M.4 item 6). Everything else is decided in M.4 |
+| Stage 3, Step 4b | Answered by the owner on 2026-11-16: the error pop-up and its wording, the no-model message, the API AI choice and its explanation, the Memory Context Helper Tool API labels, the model picker title, the model cleanup line and the usage section are in `strings.xml`; no privacy disclosure (M.4 item 6). Still to ask: the model and cost for the one scored run on the frozen sets, and the exact content of any helper log lines (M.4 item 8) |
 | Later stages | The approvals listed in M.2's "Approve first" column |
 
 ## M.11 Where settings go (Owner, 2026-11-16)

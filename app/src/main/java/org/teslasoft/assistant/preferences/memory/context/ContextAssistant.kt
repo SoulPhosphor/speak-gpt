@@ -47,7 +47,7 @@ interface ContextAssistant {
         val output: Output,
         val commit: () -> Unit = {},
         /** Set when the API helper gave nothing because it failed. */
-        val failure: ApiContextAssistant.Failure? = null
+        val failure: HelperFailure? = null
     )
 
     /** One earlier message of the chat, as the user or the AI wrote it. */
@@ -74,7 +74,9 @@ interface ContextAssistant {
         /** True while hands-free voice is running. */
         val handsFree: Boolean = false,
         /** Whether a query fits the embedding model's message limit. */
-        val queryFits: (String) -> Boolean = { true }
+        val queryFits: (String) -> Boolean = { true },
+        /** That limit in tokens, for a failure report; null when unknown. */
+        val queryTokenLimit: Int? = null
     )
 
     sealed class Output {

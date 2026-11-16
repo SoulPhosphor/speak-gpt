@@ -464,6 +464,9 @@ class Librarian private constructor(private val appContext: Context) {
         return m.countTokens(text, isQuery = true) <= m.messageTokenLimit
     }
 
+    /** The embedding model's message limit in tokens, or null with no usable model. */
+    fun messageTokenLimit(): Int? = ensureModel()?.messageTokenLimit
+
     @Synchronized
     private fun ensureModel(): EmbeddingModel? {
         model?.let { return it }

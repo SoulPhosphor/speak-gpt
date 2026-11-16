@@ -95,6 +95,7 @@ class TokenPricingDetailsActivity : FragmentActivity() {
         UsageCategory.CHAT -> R.string.usage_section_chat
         UsageCategory.IMAGE_GENERATION -> R.string.usage_section_image_generations
         UsageCategory.SUMMARIZING -> R.string.usage_section_summarizing
+        UsageCategory.MEMORY_CONTEXT_HELPER -> R.string.usage_section_memory_context_helper
         UsageCategory.STT -> R.string.usage_section_stt
         UsageCategory.TTS -> R.string.usage_section_tts
     }

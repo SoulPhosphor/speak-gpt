@@ -16,35 +16,33 @@
 
 package org.teslasoft.assistant.preferences.memory.context
 
-import androidx.annotation.StringRes
-import org.teslasoft.assistant.R
-
 /**
- * The brief notice when the API helper fails (conversation_recall_plan.md
- * M.4 items 4 and 7): shown once when a failure starts, not again on every
- * turn while it continues. A helper call that works, or a change of the
- * helper setting, lets the next failure be shown.
+ * Failure episodes for the Memory Context Helper's error pop-up
+ * (conversation_recall_plan.md M.4 item 4), the same rule as Summarizer
+ * Errors (conversation-summary-errors.md section 3): an episode starts with
+ * the first failure after a success or a different kind of failure, and only
+ * that first failure is shown. Repeats of the same kind show nothing, so
+ * hands-free use is never interrupted by a flood of pop-ups. A change of the
+ * helper setting starts afresh.
  */
 object ContextHelperNotice {
-    private var failing = false
+    private var episode: HelperFailure.Category? = null
 
-    /** The notice to show for [failure], or null: none when the helper
-     *  worked, and none while an earlier failure is still going on. */
-    @StringRes
+    /** Whether [failure] starts a new episode and should be shown. A null
+     *  failure (the helper worked) ends the episode. */
     @Synchronized
-    fun outcome(failure: ApiContextAssistant.Failure?): Int? {
+    fun shouldShow(failure: HelperFailure?): Boolean {
         if (failure == null) {
-            failing = false
-            return null
+            episode = null
+            return false
         }
-        if (failing) return null
-        failing = true
-        return if (failure == ApiContextAssistant.Failure.NO_MODEL) R.string.memory_context_helper_no_model_notice
-        else R.string.memory_context_helper_failed_notice
+        if (episode == failure.category) return false
+        episode = failure.category
+        return true
     }
 
     @Synchronized
     fun reset() {
-        failing = false
+        episode = null
     }
 }
