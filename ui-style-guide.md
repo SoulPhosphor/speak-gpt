@@ -608,8 +608,7 @@ its contents below it, ends the scrolling content above the navigation bar,
 and keeps the page clear of side insets and cutouts. The layout supplies only
 the ids `root`, `action_bar` and `scroll`. Do not fit the page root inside the
 system bars instead; that leaves a gap above the header. Current users:
-BackUp Options, Restore Options, Embedding Model, and RAG Active Memory
-Settings.
+BackUp Options, Restore Options, and Embedding Model.
 
 A page the user types into calls `ScreenChrome.fitSystemBarsAndKeyboard`
 instead: the same, plus the page ends at the top of an open keyboard (the

@@ -64,7 +64,6 @@ class MemoryManagerActivity : SettingsPageActivity() {
     private var rowMemorySettings: LinearLayout? = null
     private var rowAssistantAdvancedSettings: LinearLayout? = null
     private var rowAdvancedMemory: LinearLayout? = null
-    private var rowRagActiveMemorySettings: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,7 +87,6 @@ class MemoryManagerActivity : SettingsPageActivity() {
         rowMemorySettings = findViewById(R.id.row_memory_settings)
         rowAssistantAdvancedSettings = findViewById(R.id.row_assistant_advanced_settings)
         rowAdvancedMemory = findViewById(R.id.row_advanced_memory)
-        rowRagActiveMemorySettings = findViewById(R.id.row_rag_active_memory_settings)
     }
 
     @Suppress("DEPRECATION")
@@ -135,10 +133,6 @@ class MemoryManagerActivity : SettingsPageActivity() {
 
         rowMemorySettings?.setOnClickListener {
             startActivity(Intent(this, MemoryControlsActivity::class.java).putExtra("chatId", chatId))
-        }
-
-        rowRagActiveMemorySettings?.setOnClickListener {
-            startActivity(Intent(this, RagActiveMemorySettingsActivity::class.java))
         }
 
         rowAdvancedMemory?.setOnClickListener {

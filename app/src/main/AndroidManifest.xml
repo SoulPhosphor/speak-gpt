@@ -476,13 +476,6 @@
             android:label="@string/recovery_title" />
 
         <activity
-            android:name=".ui.activities.RagActiveMemorySettingsActivity"
-            android:exported="false"
-            android:label="@string/title_rag_active_memory_settings"
-            android:launchMode="singleTask">
-        </activity>
-
-        <activity
             android:name=".ui.activities.EmbeddingModelActivity"
             android:exported="false"
             android:label="@string/title_embedding_model"

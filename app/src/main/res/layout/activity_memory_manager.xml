@@ -169,23 +169,6 @@
                     android:contentDescription="@string/row_memory_settings_title" />
             </LinearLayout>
 
-            <!-- RAG Active Memory Settings (owner design, Nov 16 2026). -->
-            <LinearLayout
-                android:id="@+id/row_rag_active_memory_settings"
-                style="@style/Widget.App.Row.TitleOnly">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/title_rag_active_memory_settings" />
-                </LinearLayout>
-
-                <ImageView
-                    style="@style/Widget.App.Row.Chevron"
-                    android:contentDescription="@string/title_rag_active_memory_settings" />
-            </LinearLayout>
-
             <!-- Memory Repair Settings (formerly Advanced Memory Settings): diagnostics/repair. Moved out of the
                  Memory Controls screen (owner ruling, July 9 2026). -->
             <LinearLayout

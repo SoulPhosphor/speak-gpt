@@ -2311,8 +2311,7 @@
          name is "Memory Assistant" — never "Archivist".
          ============================================================ -->
     <!-- Screen titles (also the manifest activity labels) -->
-    <string name="title_memory_controls">Memory Controls</string>
-    <string name="title_rag_active_memory_settings">RAG Active Memory Settings</string>
+    <string name="title_memory_controls">RAG Active Memory Settings</string>
     <string name="title_embedding_model">Embedding Model</string>
     <string name="title_memory_scanner_tool_api">Memory Scanner Tool API</string>
     <string name="title_memory_assistant_advanced">Memory Scanner Settings</string>

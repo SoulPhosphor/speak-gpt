@@ -50,7 +50,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * Memory Index; shown to the user as "Memory Repair Settings". Reached from
  * the Memory Manager hub. Embedding model download/remove moved to Embedding
  * Model in AI Settings, and Memory Search Test to RAG Active Memory Settings
- * (Nov 16 2026).
+ * (the Memory Controls screen) (Nov 16 2026).
  *
  * Reset Memories deliberately does NOT live here — it stays on Memory Controls
  * as the single home for that destructive action (placement ruling 5).
