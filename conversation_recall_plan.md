@@ -86,7 +86,7 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
 |---:|---|---|---|---|---|
 | 1 | **Memory provenance** | M.3: source storage and database migration; sources recorded by the Memory Assistant; backups, imports, restores and merges; source carried through supersede and merge; source link and dates in the Memory Browser | Nothing unbuilt | Nothing (G43 decided) | A link at the bottom of a memory back to the message it came from, and its dates |
 | 2 | **Context assistance: Off and Code-based** | Step 4a: the context-assistance interface, Off, Code-based subject tracking, the +3 top-match rule, the app-wide setting | #205 and #206 merged (done) | G38; G45 if the lorebook check is included | Follow-ups keep their memories; the context-assistance setting |
-| 3 | **Context assistance: API AI** | Step 4b, with the dedicated configuration screen of M.4 | Stage 2 | G39, G44 | The API AI choice and its configuration screen |
+| 3 | **Context assistance: API AI** | Step 4b, with the Memory Context Helper Tool API screen in AI Settings (M.4) | Stage 2 | G39, G44 | The API AI choice and the Memory Context Helper Tool API screen |
 | 4 | **Memory length limit** | Step 5: word count under every memory editor, the saving limit, Memory Assistant splitting | Step 1 (done) | Open parts of G34 | Word count under memory fields |
 | 5 | **Data control** | Memory plan Phase 2: the view dropdown, Retired, Memory Handling Preferences, Delete to Retired, with every new field in backups | Stage 1 (both are expected to change the memory database; building them one after the other avoids competing migrations) | Wording and layout; D44 default | Retired view and Memory Handling Preferences |
 | 6 | **Conversation test chats** | Step 6 | Nothing unbuilt | Nothing | Nothing |
@@ -430,33 +430,41 @@ This corrects G.9b and the Step 4b work order, which described only "its
 own model selector". The interface, the helper's role, and the rules every
 choice keeps are unchanged (G.9, G.9b).
 
-**What the screen needs, for the owner's approval before Step 4b (G39).**
-None of these is decided. A builder does not choose them:
-1. **Which provider connection** the helper uses, from the user's
-   configured API providers, and whether it can differ from the
-   Summarizer's and Memory Assistant's.
-2. **The model list,** read from the provider's live catalog, never a
-   built-in list. Which models qualify.
-3. **What the helper reads:** how many recent turns, and whether the AI's
+**Decided by the owner, 2026-11-16:**
+- **Name and place.** The screen is called **Memory Context Helper Tool
+  API**. It is its own screen, opened from a row in **AI Settings**, beside
+  Memory Scanner Tool API and Embedding Model.
+- **What it supports now:** the user chooses their own API model for the
+  helper, from their configured providers (never a built-in list). Nothing
+  else. Local AI is not built and not shown; the code keeps room to add it
+  later without redesign, and its settings will go with the helper's when
+  it is.
+- **How it works and looks:** the same as the Memory Scanner Tool API
+  screen. The owner authorizes reusing that screen's structure and shared
+  components for this one: the header with the Save disc, the endpoint,
+  model, View All Models and provider routing rows, **every model parameter
+  exposed** through the shared parameter list, Reset to Recommended, the
+  same saving behavior (endpoint, model and routing at once; parameters on
+  Save, with the green disc and toast), and the same leave-without-saving
+  question. No new appearance is invented.
+- **Other helper settings** go on **Memory Context Helper Settings** in the
+  Memory Manager (M.11), not on this screen.
+
+**Still open before Step 4b (G39).** A builder does not choose these:
+1. **What the helper reads:** how many recent turns, and whether the AI's
    replies are included or only the user's messages.
-4. **Its instruction text:** fixed, or viewable and editable with a way to
+2. **Its instruction text:** fixed, or viewable and editable with a way to
    restore the default.
-5. **Model settings** such as response length and temperature: fixed by the
-   app, or adjustable.
-6. **Time allowance:** fixed, or a setting.
-7. **Failure behavior and notice** when the helper is offline, errors, runs
+3. **Time allowance:** fixed, or a setting.
+4. **Failure behavior and notice** when the helper is offline, errors, runs
    out of time, or returns unusable output. Proposed in G.9b: the turn goes
    ahead as Off.
-8. **Cost display:** what the provider reports, otherwise "Not Reported".
-9. **Privacy disclosure:** that recent conversation is sent to the chosen
+5. **Cost display:** what the provider reports, otherwise "Not Reported".
+6. **Privacy disclosure:** that recent conversation is sent to the chosen
    provider.
-10. **What happens when API AI is chosen but no model is configured.**
-11. **Its title and labels.** It opens from a row in **AI Settings**,
-    beside Memory Scanner Tool API and Embedding Model (M.11), and the API AI
-    choice in RAG Active Memory Settings may point to it.
-12. **Whether a test action** is offered on the screen.
-13. **Logging:** whether failures go to the Provider Failure Log under a
-    function name of their own (all logging needs approval).
+7. **What happens when API AI is chosen but no model is configured.**
+8. **Logging:** whether failures go to the Provider Failure Log under a
+   function name of their own (all logging needs approval).
 
 **Ship timing (Open, G44).** Step 4a can ship the setting with Off and
 Code-based before Step 4b adds API AI, or the setting can stay hidden
@@ -598,9 +606,9 @@ Each is also a row in G.17.
 | # | Needed before | Question | Recommendation |
 |---|---|---|---|
 | G45 | Stage 2 | Include the frozen-path lorebook check (step 1.13) in Step 4a | Yes |
-| G38 | Stage 2 | Context-assistance setting (on RAG Active Memory Settings, M.11): label, explanation, starting choice, rebuilding the subject after restart (Local AI not shown: decided 2026-11-16) | Start on Code-based |
+| G38 | Stage 2 | Context-assistance setting (on Memory Context Helper Settings, M.11): label, explanation, starting choice, rebuilding the subject after restart (Local AI not shown: decided 2026-11-16) | Start on Code-based |
 | G44 | Stage 2 | Ship Off and Code-based before API AI is ready | Yes |
-| G39 | Stage 3 | The API AI configuration screen (M.4, items 1–13) and the model and cost of its scored run | Each item approved before Step 4b; recommendations are made when Step 4b is prepared |
+| G39 | Stage 3 | The remaining items for the Memory Context Helper Tool API (M.4, items 1–8) and the model and cost of its scored run; its name, place, model choice, all parameters and same-as-Memory-Scanner-Tool-API behavior were decided 2026-11-16 | Each item approved before Step 4b |
 
 ## M.11 Where settings go (Owner, 2026-11-16)
 
@@ -630,8 +638,8 @@ to the owner first.
 
 | Setting or screen | Screen | Status |
 |---|---|---|
-| Context-assistance choice (G38) | RAG Active Memory Settings | Placement by the rule; wording open |
-| API AI configuration screen (M.4) | Its own screen, opened from AI Settings | Placement by the rule; title and wording open (G39) |
+| Context-assistance choice (G38) and every other context-helper setting, Code-based included | **Memory Context Helper Settings**: its own screen, opened from a row in the Memory Manager's Settings section | Owner decision of 2026-11-16; position in the section and wording open |
+| API helper model and parameters (M.4) | **Memory Context Helper Tool API**, its own screen opened from AI Settings | Owner decision of 2026-11-16 |
 | Conversation Recall setting (G.8b) | RAG Active Memory Settings | Owner decision of 2026-11-11; the screen was renamed |
 | Room for recalled text (G.8b) | RAG Active Memory Settings | Moved from Advanced Memory Settings by the 2026-11-16 reorganization |
 | Conversation Index section: Index Conversations, status, Delete Conversation Index (G.16a) | RAG Active Memory Settings, above the test rows | Moved from Advanced Memory Settings by the 2026-11-16 reorganization; wording unchanged |
@@ -2938,7 +2946,9 @@ measurements and verification results.
   - How the subject is rebuilt after the app restarts is proposed to the
     owner, with its cost, as part of G38, and built only as approved.
   - The +3 top-match rule.
-  - The setting, using the shared styles (`ui-style-guide.md`).
+  - The setting, on a new **Memory Context Helper Settings** screen opened
+    from the Memory Manager's Settings section (M.11), using the shared
+    styles (`ui-style-guide.md`).
 - **Tests:**
   - With the +3 top-match rule switched off inside the test, the app's
     Off and Code-based reproduce the recorded `none` and `subject_anchor`
@@ -2958,12 +2968,15 @@ measurements and verification results.
 
 **Agent checklist for this step**
 - **Prerequisites:** Step 4a merged. **Approval gate:** G39.
-- **Change:** the API AI choice behind the Step 4a interface, with its
-  dedicated configuration screen (M.4) holding its own model selection
-  filled from the user's configured providers (never a built-in model
-  list), and every other screen item exactly as approved in G39; the
-  approved instruction, the output check, and the approved behavior on
-  failure. The screen uses the shared styles (`ui-style-guide.md`).
+- **Change:** the API AI choice behind the Step 4a interface, with the
+  **Memory Context Helper Tool API** screen in AI Settings (M.4): its own
+  endpoint and model selection filled from the user's configured providers
+  (never a built-in model list), every model parameter, and the same
+  structure and saving behavior as Memory Scanner Tool API, reused through
+  its shared components as the owner authorized; every other item exactly
+  as approved in G39; the approved instruction, the output check, and the
+  approved behavior on failure. The screen uses the shared styles
+  (`ui-style-guide.md`).
 - **Preserve:** the chat, Summarizer and embedding models and their
   settings are untouched; the user's message is unchanged; no request is
   made unless the user chose API AI.
@@ -3475,8 +3488,8 @@ about to start. Each has a recommendation.
 | G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before Step 7. No builder treats it as approved before then | Step 7 |
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
-| G38 | The context-assistance setting's label and explanation, which choice it starts on, how Code-based rebuilds the subject after the app restarts, and whether Local AI is shown before it is built | Open. Placement follows M.11: RAG Active Memory Settings. **Decided (owner, 2026-11-16):** Local AI is not shown now. Recommended start: Code-based, the only free method that held up on the held-out set | Step 4a |
-| G39 | The API AI configuration screen (M.4): provider connection, model list and which models qualify, which turns it reads, instruction text, model settings, time allowance, failure behavior and notice, cost display, privacy disclosure, behavior with no model configured, where the screen opens from and its labels, a test action, logging; also the output check and the model and cost of its scored run. **Owner (2026-11-16):** the screen is dedicated and its model selection is independent of the chat, Summarizer and embedding models | Open (G.9b, M.4) | Step 4b |
+| G38 | The context-assistance setting's label and explanation, which choice it starts on, how Code-based rebuilds the subject after the app restarts, and whether Local AI is shown before it is built | Open. **Decided (owner, 2026-11-16):** it is on Memory Context Helper Settings, a screen in the Memory Manager's Settings section (M.11); Local AI is not shown now. Recommended start: Code-based, the only free method that held up on the held-out set | Step 4a |
+| G39 | The Memory Context Helper Tool API (M.4). **Decided (owner, 2026-11-16):** that name; its own screen opened from AI Settings; the user chooses their own API model; every model parameter exposed; works and looks like Memory Scanner Tool API; Local AI not now. **Still open:** which turns it reads, instruction text, time allowance, failure behavior and notice, cost display, privacy disclosure, behavior with no model configured, logging, and the model and cost of its scored run | Open (M.4) | Step 4b |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
 | G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
