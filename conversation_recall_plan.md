@@ -6,8 +6,8 @@ the memory plan, `Memory System/dynamic_memory_plan.md`, which remains the recor
 saved-memory search (its Parts A to F). References below to "Part A" or "Part E" mean that document. Numbered
 Steps always mean the work orders in G.16 of this document.
 
-**State on 2026-11-16.** Steps 0–3 are built; Step 3's repair is in
-review. The carry-over evaluation is complete and its results are in
+**State on 2026-11-16.** Steps 0–3 are built; Step 3's repair is merged
+in #205. The carry-over evaluation is complete and its results are in
 `memory baseline.md`. The owner's decisions of 2026-11-16 replace searching
 with the previous messages by a selectable context assistance (G.9, G.9b),
 approve a narrow +3 exception (G.10), and keep embedding models replaceable
@@ -1948,7 +1948,7 @@ rewrite its expected answers. Its authoritative results are in
 | 0 | **Complete** | Saved-memory test set with the real model's vectors | Routine with written instructions | Lighter | Nothing | Nothing | Nothing |
 | 1 | **Complete (#199)** | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle | Nothing | Step 0 complete | Nothing (G33) |
 | 2 | **Complete (#200; repairs #201, #202)** | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
-| 3 | **Built (#203); repair in review (#205)** | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
+| 3 | **Complete (#203; repair #205)** | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
 | 4a | Waiting | Context assistance with Off and Code-based; the +3 top-match rule | Careful | Strongest | Follow-up continuity; the context-assistance setting | Step 3 repair and the carry-over evaluation merged | G38 |
 | 4b | Waiting | API AI context helper with its own model selector | Hard | Strongest | The API AI choice and its model selector | Step 4a | G39 |
 | 5 | Waiting | Memory word count and length limit | Careful | Middle | Word count under memory fields | Step 1 | Open parts of G34 |
