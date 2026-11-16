@@ -267,11 +267,30 @@ choice keeps are unchanged (G.9, G.9b).
 the remaining technical decisions and approved these defaults).** Each is
 tested during implementation and its result reported; none is retuned
 without the owner.
-1. **Conversation input.** The new message and up to four recent
-   user/assistant exchanges from the same chat. AI replies are included,
-   because they may hold what a follow-up refers to. Historical context is
-   limited to 2,048 tokens, newest messages first, kept in chronological
-   order.
+1. **Conversation input (corrected by the owner, 2026-11-16).** The new
+   message and up to the number of recent user/assistant exchanges from
+   the same chat set in **Number of Past Messages to Send** (below; four
+   unless the user changes it). AI replies are included, because they may hold what a follow-up
+   refers to. There is **no fixed token cap** on this history: the helper
+   is an API model, separate from the on-device embedding model, and does
+   not inherit that model's 2,048-token limit. Exchanges are kept whole
+   and in chronological order as far as the selected API model's actual
+   context window allows, after the fixed instructions and the response
+   room its parameters set; when the window cannot hold all four, the
+   oldest whole exchanges are left out first, and an exchange is never
+   cut. When the app has no context window for that model, every exchange
+   the setting asks for is sent, and a provider refusal for size is
+   handled as a failure (item 4).
+
+   **Number of Past Messages to Send (Owner, 2026-11-16).** A setting on
+   Memory Context Helper Settings, shown while API AI is the Helper Method:
+   the label **Number of Past Messages to Send** and a field that takes one
+   whole number, filled in with **4**. The number is how many recent
+   exchanges (a user message and the reply to it) the helper receives with
+   the new message. The user may enter any whole number from 0 up; the app
+   adds no upper limit of its own, and the context-window rule above still
+   applies. An empty or invalid entry is not saved and the field shows the
+   saved number again (the shared number field's behavior).
 2. **Instructions.** A fixed, app-managed prompt. It resolves references
    and produces one standalone search query. It never answers the user,
    invents facts, or changes the actual message. No prompt editor at first.
@@ -285,12 +304,18 @@ without the owner.
 5. **Cost.** Actual provider-reported usage and cost through the existing
    usage system; "Not Reported" when the provider gives none. Unknown cost
    is never shown as zero.
-6. **Privacy.** A clear disclosure before API AI is turned on, saying that
-   recent conversation messages go to the selected provider. No API helper
-   call is ever made while it is not selected.
-7. **No model selected.** API AI cannot be chosen until a model is set on
-   Memory Context Helper Tool API, and the user is directed there. If a
-   selected model becomes unavailable, the turn goes ahead with no helper.
+6. **No separate privacy warning (Owner, 2026-11-16).** The app is an
+   API chat application: the user enters their own key and assigns this
+   model themselves, so choosing API AI shows no disclosure. No API helper
+   call is ever made while API AI is not selected. A meaningful difference
+   in what is sent, or in which provider receives it, is raised with the
+   owner when it arises; ordinary API use is not treated as exceptional.
+7. **Its own model only; no model selected.** The helper uses only the
+   model set on Memory Context Helper Tool API. It never uses, copies or
+   falls back to the chat's model, the Summarizer's, the Memory Scanner's or
+   any other. API AI cannot be chosen until a model is set there, and the
+   user is directed there. If the selected model becomes unavailable, the
+   turn goes ahead with no helper.
 8. **Logging.** Failures go to the existing Provider Failure Log under the
    function name **Memory Context Helper**, with error types and useful
    technical details, never conversation text or API credentials.
@@ -446,7 +471,7 @@ finds something missed adds it here rather than guessing.
 |---|---|
 | Stage 1, memory sources | Nothing open. Decided in G43 |
 | Stage 2, Step 4a | Answered by the owner on 2026-11-16: G45 and G44 are decided; the Memory Context Helper Settings wording is in `strings.xml`; the debug view marks carried memories `[carried from earlier subject]` and top-match memories `[+3 top match]` |
-| Stage 3, Step 4b | The exact wording of the privacy disclosure, the failure notice, and the no-model message; the model and cost for the one scored run on the frozen sets. Everything else is decided in M.4 |
+| Stage 3, Step 4b | The exact wording of the failure notice and the no-model message; the API AI choice's name and explanation in the Helper Method dropdown; the AI Settings row's label and subtitle for Memory Context Helper Tool API; the model and cost for the one scored run on the frozen sets. No privacy disclosure (M.4 item 6). Everything else is decided in M.4 |
 | Later stages | The approvals listed in M.2's "Approve first" column |
 
 ## M.11 Where settings go (Owner, 2026-11-16)
@@ -479,6 +504,7 @@ to the owner first.
 |---|---|---|
 | Context-assistance choice (G38) and every other context-helper setting, Code-based included | **Memory Context Helper Settings**: its own screen, opened from a row in the Memory Manager's Settings section | Owner decision of 2026-11-16; position in the section and wording open |
 | API helper model and parameters (M.4) | **Memory Context Helper Tool API**, its own screen opened from AI Settings | Owner decision of 2026-11-16 |
+| Number of Past Messages to Send (M.4 item 1) | Memory Context Helper Settings, shown while API AI is the Helper Method | Owner decision of 2026-11-16; default 4 |
 | Conversation Recall setting (G.8b) | RAG Active Memory Settings | Owner decision of 2026-11-11; the screen was renamed |
 | Room for recalled text (G.8b) | RAG Active Memory Settings | Moved from Advanced Memory Settings by the 2026-11-16 reorganization |
 | Conversation Index section: Index Conversations, status, Delete Conversation Index (G.16a) | RAG Active Memory Settings, above the test rows | Moved from Advanced Memory Settings by the 2026-11-16 reorganization; wording unchanged |
@@ -1844,7 +1870,7 @@ that is not in the conversation it was given.
   embedding model's message limit. Anything else is discarded and the turn
   goes ahead with no helper.
 - Its other behavior (what it reads, instructions, time allowance, failure,
-  cost, privacy, no model, logging, starting state and testing) is decided:
+  cost, privacy, its own model, logging, starting state and testing) is decided:
   M.4, "Memory Context Helper defaults".
 - Before it is described as better than Code-based, it is scored once on
   the two frozen carry-over sets exactly as `CarryOverFinalEvaluationTest`
@@ -2821,9 +2847,16 @@ measurements and verification results.
   (`ui-style-guide.md`).
 - **Preserve:** the chat, Summarizer and embedding models and their
   settings are untouched; the user's message is unchanged; no request is
-  made unless the user chose API AI.
+  made unless the user chose API AI; the helper uses only its own model
+  from Memory Context Helper Tool API, never the chat's model (M.4 item 7);
+  its conversation input has no fixed token cap and keeps whole exchanges
+  within the selected model's context window (M.4 item 1); no privacy
+  disclosure (M.4 item 6).
 - **Verify and report:** unit tests with a stand-in provider for a valid
-  query, discarded output, timeout, provider error and no network; one
+  query, discarded output, timeout, provider error and no network; the
+  conversation input keeping whole exchanges within a model's context
+  window, honoring Number of Past Messages to Send, and sending every
+  requested exchange when no window is known; one
   scored run on the two frozen carry-over sets with the model and cost the
   owner approved, recorded in `memory baseline.md`; send-time delay on a
   physical phone. Local AI is not built, but nothing in the interface
@@ -3331,7 +3364,7 @@ about to start. Each has a recommendation.
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
 | G38 | The context helper's setting | **Decided (owner, 2026-11-16):** on Memory Context Helper Settings (M.11); optional, an on/off toggle that starts off; when on, a dropdown of Code-based or API AI, one at a time; Code-based selected when first turned on; Local AI not shown now; no placeholder screens. Labels and explanations are asked when Step 4a starts (M.10). How Code-based rebuilds the subject after a restart is an engineering choice for the builder | Decided |
-| G39 | The Memory Context Helper Tool API (M.4) | **Decided (owner, 2026-11-16):** the name and place, the user's own API model, every parameter, Memory Scanner Tool API's arrangement, and the ten defaults in M.4 (input, fixed instructions, 8 s / 3 s time allowance, failure fallback, cost, privacy disclosure, no model, logging as "Memory Context Helper", starting state, testing). Wording of the disclosure and notices, and the model and cost of the scored run, are asked when Step 4b starts (M.10) | Decided |
+| G39 | The Memory Context Helper Tool API (M.4) | **Decided (owner, 2026-11-16):** the name and place, the user's own API model, every parameter, Memory Scanner Tool API's arrangement, and the ten defaults in M.4 (input, fixed instructions, 8 s / 3 s time allowance, failure fallback, cost, no separate privacy warning, its own model only, logging as "Memory Context Helper", starting state, testing). Corrected by the owner on 2026-11-16: no fixed token cap on the conversation input, and no privacy disclosure. Wording of the notices and labels, and the model and cost of the scored run, are asked when Step 4b starts (M.10) | Decided |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
 | G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
