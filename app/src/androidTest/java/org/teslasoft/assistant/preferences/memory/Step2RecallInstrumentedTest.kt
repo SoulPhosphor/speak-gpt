@@ -397,6 +397,8 @@ class Step2RecallInstrumentedTest {
                 .apply { isAccessible = true }.get(real) as HfTokenizer
             val accuracyFailures = verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_test_set") +
                 verifyAndroidVectorsAndDecisions(real, tokenizer, "recall_independent_set")
+            recordAndroidSimilarities(real, "recall_carryover_set")
+            recordAndroidSimilarities(real, "recall_carryover_holdout")
             val reference = VectorMath.cosine(
                 real.embed("What should I feed Pepper?", true),
                 real.embed("Pepper is the user's cat. She has kidney disease and eats a prescription diet.", false))
@@ -432,6 +434,71 @@ class Step2RecallInstrumentedTest {
 
     /** Compare actual Android JNI outputs and retrieval decisions with the
      * Python fixture pipeline. Gold answers remain unchanged. */
+    /**
+     * Measurement only, for the carry-over evaluation set: reads every memory
+     * and message of [folder] with the real model on this device and records
+     * each message's similarity to each memory. It decides nothing and checks
+     * no result; the evaluation scores these numbers on a desktop afterwards.
+     */
+    private fun recordAndroidSimilarities(real: EmbeddingModel, folder: String) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        fun fixtureText(name: String) = instrumentation.context.assets
+            .open("$folder/$name").bufferedReader().use { it.readText() }
+        val casesText = fixtureText("cases.json")
+        val cases = JSONObject(casesText)
+        val reference = JSONObject(fixtureText("vectors.json"))
+        val sections = JSONObject(fixtureText("section_vectors.json")).getJSONObject("messages")
+        val queue = EmbeddingQueue()
+        var compared = 0
+        var largestDifference = 0f
+        var minimumCosine = 1f
+        fun read(text: String, query: Boolean, expected: FloatArray): FloatArray {
+            val limit = if (query) real.messageTokenLimit else real.storedTextTokenLimit
+            val actual = queue.run(EmbeddingQueue.Priority.LIVE) { control -> real.embed(text, query, limit, control) }
+            assertEquals(expected.size, actual.size)
+            assertTrue(actual.all { it.isFinite() })
+            minimumCosine = minOf(minimumCosine, VectorMath.cosine(actual, expected))
+            for (i in actual.indices) largestDifference = maxOf(largestDifference, abs(actual[i] - expected[i]))
+            compared++
+            return actual
+        }
+        val memories = cases.getJSONArray("memories").objects()
+        val memoryVectors = memories.map { m ->
+            read(RetrievalDocument.semanticDocument(m.getString("content"), null, m.getJSONArray("tags").strings()),
+                false, reference.getJSONArray(m.getString("id")).vector())
+        }
+        fun scores(vector: FloatArray) = JSONArray().apply {
+            for (memory in memoryVectors) put(Math.round(VectorMath.cosine(vector, memory) * 1_000_000.0) / 1_000_000.0)
+        }
+        val messages = JSONObject()
+        val sectionScores = JSONObject()
+        for (turn in cases.getJSONArray("conversations").objects().flatMap { it.getJSONArray("messages").objects() }) {
+            val id = turn.getString("id")
+            messages.put(id, scores(read(turn.getString("text"), true, reference.getJSONArray(id).vector())))
+            val recorded = sections.optJSONArray(id)?.objects().orEmpty()
+            if (recorded.isNotEmpty()) sectionScores.put(id, JSONArray().apply {
+                for (section in recorded) put(scores(read(section.getString("text"), true,
+                    section.getJSONArray("vector").vector())))
+            })
+        }
+        val casesHash = MessageDigest.getInstance("SHA-256").digest(casesText.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        File(base.getExternalFilesDir(null), "step2-$folder-similarities.json").writeText(
+            JSONObject().put("data_kind", "measured_android_cosines_not_expected_answers")
+                .put("runtime", OnnxRuntimeEnvironment.get().version)
+                .put("abi", android.os.Build.SUPPORTED_ABIS.first())
+                .put("cases_sha256", casesHash)
+                .put("memory_ids", JSONArray(memories.map { it.getString("id") }))
+                .put("messages", messages).put("sections", sectionScores)
+                .put("vector_reference", JSONObject().put("compared", compared)
+                    .put("max_abs_difference", largestDifference.toDouble())
+                    .put("minimum_cosine", minimumCosine.toDouble())).toString())
+        instrumentation.sendStatus(0, Bundle().apply {
+            putString("carryover_android_similarities", "$folder; compared=$compared; " +
+                "max_abs_difference=$largestDifference; minimum_cosine=$minimumCosine")
+        })
+    }
+
     private fun verifyAndroidVectorsAndDecisions(
         real: EmbeddingModel, tokenizer: HfTokenizer, folder: String
     ): List<String> {

@@ -1,0 +1,14 @@
+{
+ "note": "Carry-over methods compared on this set, fixed before any of them was run on it. Only plan_1, plan_2 and plan_3 are the method in conversation_recall_plan.md G.9a. The others exist only in the evaluation test, are not in the app, and are not approved. Every method sends the new message's own matches first, unchanged, and then passes its candidates through the enforcer's selection.",
+ "methods": [
+  {"id": "none", "previous_messages": 0, "description": "No carry-over: each message searched on its own, as the app does today."},
+  {"id": "plan_1", "previous_messages": 1, "description": "The plan's rule: also search the previous user message; add everything it matches."},
+  {"id": "plan_2", "previous_messages": 2, "description": "The plan's rule with two previous user messages."},
+  {"id": "plan_3", "previous_messages": 3, "description": "The plan's rule with three previous user messages."},
+  {"id": "only_if_nothing", "previous_messages": 1, "description": "The plan's rule with one previous message, used only when the new message matched nothing on its own."},
+  {"id": "inherit_if_nothing", "previous_messages": 1, "description": "When the new message matched nothing on its own, send again what was sent with the previous message, however that was arrived at. Unlike the plan's rule this keeps a result without searching again."},
+  {"id": "previous_meaning_and_keyword", "previous_messages": 1, "description": "Add only memories the previous message matched by meaning and by keywords together."},
+  {"id": "similar_to_new_message", "previous_messages": 1, "minimum_similarity": 0.30, "description": "Add only memories the previous message matched whose similarity to the new message is at least the stated minimum."},
+  {"id": "previous_top_match", "previous_messages": 1, "description": "Add only the previous message's single best match."}
+ ]
+}

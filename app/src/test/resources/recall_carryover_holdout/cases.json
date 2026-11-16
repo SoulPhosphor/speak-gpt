@@ -1,0 +1,1069 @@
+{
+ "note": "Held-out carry-over validation set. Written after the first carry-over set (recall_carryover_set) had been run and studied, so that set can be used to develop methods and this one to check them once. Expected answers here were written before any vector existed for this set and before any method was run on it. Do not develop, tune or choose thresholds against this set, and do not rewrite its answers to match results.",
+ "how_to_read": {
+  "expect": "Memories that should be sent with this message. For a follow-up that names nothing, the subject still under discussion.",
+  "acceptable": "Memories that are reasonable to send but not required. They count neither as correct nor as incorrect.",
+  "incorrect": "Every other memory. A memory rated +3 sent where it is neither expected nor acceptable is also counted as a sensitive false match.",
+  "kinds": {
+   "first": "First message of a chat.",
+   "follow_up_unnamed": "Continues the subject without naming it.",
+   "follow_up_named": "Continues the conversation and names what it is about.",
+   "subject_change": "Starts a different subject.",
+   "aside": "Small talk or acknowledgement; nothing is required.",
+   "unrelated": "A message no saved memory is needed for."
+  },
+  "sensitive_bait": "hold_07 uses words that brush against the +3 memories (seizure, nuts, drink, died, hand over) in messages that have nothing to do with them.",
+  "importance": "Rating on the app's -2..+3 scale; 0 when absent."
+ },
+ "person": "Tomás Whitlock (fictional)",
+ "memories": [
+  {
+   "id": "s_epilepsy",
+   "content": "Tomás Whitlock has epilepsy controlled with lamotrigine. If a seizure lasts more than five minutes, an ambulance must be called.",
+   "tags": [
+    "epilepsy",
+    "seizure"
+   ],
+   "importance": 3
+  },
+  {
+   "id": "s_anaphylaxis",
+   "content": "Tomás's daughter Wren has a severe peanut allergy and carries two adrenaline auto-injectors.",
+   "tags": [
+    "Wren",
+    "peanut allergy"
+   ],
+   "importance": 3
+  },
+  {
+   "id": "s_recovery",
+   "content": "Tomás has been sober for four years and does not want alcohol suggested, even as a joke.",
+   "tags": [
+    "sober",
+    "alcohol"
+   ],
+   "importance": 3
+  },
+  {
+   "id": "s_custody",
+   "content": "Wren stays with her mother Elena on alternate weeks. Handovers are on Sundays at 5 pm at the library.",
+   "tags": [
+    "Wren",
+    "Elena",
+    "handover"
+   ],
+   "importance": 3
+  },
+  {
+   "id": "s_grief",
+   "content": "Tomás's father Aldo died last March. The anniversary is hard for him and he prefers it acknowledged gently.",
+   "tags": [
+    "Aldo",
+    "father"
+   ],
+   "importance": 3
+  },
+  {
+   "id": "h_back",
+   "content": "Tomás has a slipped disc and must not lift more than ten kilos.",
+   "tags": [
+    "back"
+   ],
+   "importance": 2
+  },
+  {
+   "id": "w_contract",
+   "content": "Tomás's contract with Kestrel Logistics ends on the 30th of June.",
+   "tags": [
+    "contract"
+   ],
+   "importance": 2
+  },
+  {
+   "id": "w_role",
+   "content": "Tomás is a dispatcher at Kestrel Logistics and works the early shift from 5 am to 1 pm.",
+   "tags": [
+    "work",
+    "shift"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "w_boss",
+   "content": "Tomás's supervisor is Nadia. Shift swaps are arranged with her by text.",
+   "tags": [
+    "Nadia",
+    "supervisor"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "w_van",
+   "content": "Van number 7 at the depot has a faulty side door that must be locked by hand.",
+   "tags": [
+    "van",
+    "depot"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "w_course",
+   "content": "Tomás is studying for a transport manager certificate. The exam is on the 19th of November.",
+   "tags": [
+    "course",
+    "exam"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "f_wren",
+   "content": "Wren is nine, plays the trumpet, and has band practice on Tuesdays after school.",
+   "tags": [
+    "Wren",
+    "trumpet"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "f_sister",
+   "content": "Tomás's sister Bianca lives in Porto and is expecting a baby in January.",
+   "tags": [
+    "Bianca",
+    "sister"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "f_mother",
+   "content": "Tomás's mother Rosa uses a hearing aid and prefers video calls to phone calls.",
+   "tags": [
+    "Rosa",
+    "mother"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "p_dog",
+   "content": "Tomás has a terrier named Biscuit who is afraid of thunder and sleeps in the hallway.",
+   "tags": [
+    "Biscuit",
+    "terrier"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "p_vet",
+   "content": "Biscuit's vaccinations are due in February at the Millbrook clinic.",
+   "tags": [
+    "Biscuit",
+    "vet"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "home_heating",
+   "content": "The flat has storage heaters that charge overnight. The boost switch is behind the sofa.",
+   "tags": [
+    "heating"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "home_lease",
+   "content": "Tomás's lease renews on the 1st of September and the letting agent is Corwin Lettings.",
+   "tags": [
+    "lease"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "home_bike",
+   "content": "Tomás's bike is locked in shed 12 and the code is written on a note on the fridge.",
+   "tags": [
+    "bike",
+    "shed"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "home_neighbour",
+   "content": "The upstairs neighbour Mr. Pell practises the drums on Saturday mornings.",
+   "tags": [
+    "neighbour",
+    "Pell"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "hobby_allotment",
+   "content": "Tomás has allotment plot number 23, where he grows runner beans and garlic.",
+   "tags": [
+    "allotment"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "hobby_radio",
+   "content": "Tomás restores valve radios and is rebuilding a 1950s Bush set.",
+   "tags": [
+    "radio"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "hobby_run",
+   "content": "Tomás runs five kilometres on Mondays and Thursdays and is training for a ten-kilometre race in April.",
+   "tags": [
+    "running",
+    "race"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "hobby_choir",
+   "content": "Tomás sings bass in the Harrow Lane community choir, which rehearses on Wednesday evenings.",
+   "tags": [
+    "choir"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "food_veg",
+   "content": "Tomás is vegetarian and cooks a chickpea curry most Sundays.",
+   "tags": [
+    "vegetarian",
+    "curry"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "food_tea",
+   "content": "Tomás drinks rooibos tea and has given up coffee.",
+   "tags": [
+    "tea"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "food_wren",
+   "content": "When she is tired, Wren will only eat pasta with butter.",
+   "tags": [
+    "Wren",
+    "pasta"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "plan_holiday",
+   "content": "Tomás and Wren are going camping in the Lake District in the last week of July.",
+   "tags": [
+    "camping",
+    "holiday"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "plan_passport",
+   "content": "Wren's passport expires in August and must be renewed before any trip abroad.",
+   "tags": [
+    "passport"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "plan_insurance",
+   "content": "Tomás's car insurance renews on the 8th of December with Halden Mutual.",
+   "tags": [
+    "insurance",
+    "car"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "money_pension",
+   "content": "Tomás's workplace pension is with Arden and he contributes five percent.",
+   "tags": [
+    "pension"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "tech_laptop",
+   "content": "Tomás's laptop is an old ThinkPad whose battery lasts about an hour.",
+   "tags": [
+    "laptop"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "health_gp",
+   "content": "Tomás's GP is Dr. Imani at the Fenwick practice. His neurology reviews are every six months.",
+   "tags": [
+    "GP",
+    "doctor"
+   ],
+   "importance": 0
+  },
+  {
+   "id": "money_card",
+   "content": "Tomás is paying off a credit card at 150 a month and expects to clear it by next spring.",
+   "tags": [
+    "credit card"
+   ],
+   "importance": 0
+  }
+ ],
+ "messages": [],
+ "conversations": [
+  {
+   "id": "hold_01",
+   "messages": [
+    {
+     "id": "hold_01_turn_1",
+     "kind": "first",
+     "text": "I'm going down to the allotment this afternoon.",
+     "expect": [
+      "hobby_allotment"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_01_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What did I plant there this year?",
+     "expect": [
+      "hobby_allotment"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_01_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Is it too late to put more in?",
+     "expect": [
+      "hobby_allotment"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_01_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "How much watering will they need?",
+     "expect": [
+      "hobby_allotment"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_01_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "Should I net them against birds?",
+     "expect": [
+      "hobby_allotment"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_01_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "Which plot number is mine again?",
+     "expect": [
+      "hobby_allotment"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_01_turn_7",
+     "kind": "subject_change",
+     "text": "By the way, when does my lease renew?",
+     "expect": [
+      "home_lease"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_01_turn_8",
+     "kind": "follow_up_unnamed",
+     "text": "Who do I contact about it?",
+     "expect": [
+      "home_lease"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "hold_02",
+   "messages": [
+    {
+     "id": "hold_02_turn_1",
+     "kind": "first",
+     "text": "I felt a bit odd this morning and I'm worried about a seizure.",
+     "expect": [
+      "s_epilepsy"
+     ],
+     "acceptable": [
+      "health_gp"
+     ]
+    },
+    {
+     "id": "hold_02_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What should the people around me do if it happens?",
+     "expect": [
+      "s_epilepsy"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_02_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "And when do they need to call for help?",
+     "expect": [
+      "s_epilepsy"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_02_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "Who do I see about adjusting the dose?",
+     "expect": [
+      "health_gp",
+      "s_epilepsy"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_02_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "How often are those reviews?",
+     "expect": [
+      "health_gp"
+     ],
+     "acceptable": [
+      "s_epilepsy"
+     ]
+    },
+    {
+     "id": "hold_02_turn_6",
+     "kind": "subject_change",
+     "text": "Changing the subject, Biscuit hates this weather.",
+     "expect": [
+      "p_dog"
+     ],
+     "acceptable": [
+      "p_vet"
+     ]
+    },
+    {
+     "id": "hold_02_turn_7",
+     "kind": "follow_up_unnamed",
+     "text": "Where does he usually hide?",
+     "expect": [
+      "p_dog"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "hold_03",
+   "messages": [
+    {
+     "id": "hold_03_turn_1",
+     "kind": "first",
+     "text": "Wren is going to a birthday party on Saturday and there will be cake.",
+     "expect": [
+      "s_anaphylaxis"
+     ],
+     "acceptable": [
+      "f_wren",
+      "s_custody"
+     ]
+    },
+    {
+     "id": "hold_03_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What should I tell the host?",
+     "expect": [
+      "s_anaphylaxis"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_03_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "What does she need to have with her?",
+     "expect": [
+      "s_anaphylaxis"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_03_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "Is Saturday one of my weeks?",
+     "expect": [
+      "s_custody"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_03_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "What time do I hand her over?",
+     "expect": [
+      "s_custody"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_03_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "And where?",
+     "expect": [
+      "s_custody"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_03_turn_7",
+     "kind": "subject_change",
+     "text": "Unrelated, my back is aching from work.",
+     "expect": [
+      "h_back"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_03_turn_8",
+     "kind": "follow_up_unnamed",
+     "text": "What's my limit for lifting?",
+     "expect": [
+      "h_back"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "hold_04",
+   "messages": [
+    {
+     "id": "hold_04_turn_1",
+     "kind": "first",
+     "text": "Nadia asked if I could cover a late shift next week.",
+     "expect": [
+      "w_boss"
+     ],
+     "acceptable": [
+      "w_role"
+     ]
+    },
+    {
+     "id": "hold_04_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "How do I normally arrange that with her?",
+     "expect": [
+      "w_boss"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_04_turn_3",
+     "kind": "follow_up_named",
+     "text": "What hours do I usually work?",
+     "expect": [
+      "w_role"
+     ],
+     "acceptable": [
+      "w_boss"
+     ]
+    },
+    {
+     "id": "hold_04_turn_4",
+     "kind": "follow_up_named",
+     "text": "Would that clash with my course?",
+     "expect": [
+      "w_course"
+     ],
+     "acceptable": [
+      "w_role"
+     ]
+    },
+    {
+     "id": "hold_04_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "When is the exam?",
+     "expect": [
+      "w_course"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_04_turn_6",
+     "kind": "follow_up_named",
+     "text": "How long do I have left on my contract anyway?",
+     "expect": [
+      "w_contract"
+     ],
+     "acceptable": [
+      "w_role"
+     ]
+    },
+    {
+     "id": "hold_04_turn_7",
+     "kind": "follow_up_unnamed",
+     "text": "What happens after that date?",
+     "expect": [
+      "w_contract"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "hold_05",
+   "messages": [
+    {
+     "id": "hold_05_turn_1",
+     "kind": "first",
+     "text": "My team wants to go for drinks on Friday to celebrate.",
+     "expect": [
+      "s_recovery"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_05_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What could I order instead?",
+     "expect": [
+      "s_recovery"
+     ],
+     "acceptable": [
+      "food_tea"
+     ]
+    },
+    {
+     "id": "hold_05_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "How long has it been now?",
+     "expect": [
+      "s_recovery"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_05_turn_4",
+     "kind": "aside",
+     "text": "Thanks, that helps.",
+     "expect": [],
+     "acceptable": [
+      "s_recovery"
+     ]
+    },
+    {
+     "id": "hold_05_turn_5",
+     "kind": "subject_change",
+     "text": "Can you remind me what I cook on Sundays?",
+     "expect": [
+      "food_veg"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_05_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "Would Wren eat that?",
+     "expect": [
+      "food_wren"
+     ],
+     "acceptable": [
+      "food_veg",
+      "f_wren",
+      "s_anaphylaxis"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "hold_06",
+   "messages": [
+    {
+     "id": "hold_06_turn_1",
+     "kind": "first",
+     "text": "It's nearly the anniversary of Dad's death.",
+     "expect": [
+      "s_grief"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_06_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "I never know how to get through the day.",
+     "expect": [
+      "s_grief"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_06_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Should I tell Mum I'm thinking of him?",
+     "expect": [
+      "s_grief"
+     ],
+     "acceptable": [
+      "f_mother"
+     ]
+    },
+    {
+     "id": "hold_06_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "What's the best way to reach her?",
+     "expect": [
+      "f_mother"
+     ],
+     "acceptable": [
+      "s_grief"
+     ]
+    },
+    {
+     "id": "hold_06_turn_5",
+     "kind": "subject_change",
+     "text": "Separately, Bianca's baby, when is it due?",
+     "expect": [
+      "f_sister"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "hold_07",
+   "messages": [
+    {
+     "id": "hold_07_turn_1",
+     "kind": "first",
+     "text": "The radio I'm restoring keeps cutting out, it's like it has a seizure every few minutes.",
+     "expect": [
+      "hobby_radio"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_07_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "What model is it again?",
+     "expect": [
+      "hobby_radio"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_07_turn_3",
+     "kind": "subject_change",
+     "text": "The squirrels on the allotment went nuts for the garlic.",
+     "expect": [
+      "hobby_allotment"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_07_turn_4",
+     "kind": "subject_change",
+     "text": "Mr. Pell's drumming is driving me to drink.",
+     "expect": [
+      "home_neighbour"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_07_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "When does he usually do it?",
+     "expect": [
+      "home_neighbour"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_07_turn_6",
+     "kind": "subject_change",
+     "text": "My laptop battery died again.",
+     "expect": [
+      "tech_laptop"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_07_turn_7",
+     "kind": "follow_up_unnamed",
+     "text": "How long does it normally last?",
+     "expect": [
+      "tech_laptop"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_07_turn_8",
+     "kind": "unrelated",
+     "text": "I need to hand over the van keys at the end of my shift.",
+     "expect": [],
+     "acceptable": [
+      "w_van",
+      "w_role"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "hold_08",
+   "messages": [
+    {
+     "id": "hold_08_turn_1",
+     "kind": "first",
+     "text": "I'm planning the camping trip with Wren.",
+     "expect": [
+      "plan_holiday"
+     ],
+     "acceptable": [
+      "f_wren",
+      "s_anaphylaxis"
+     ]
+    },
+    {
+     "id": "hold_08_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "When are we going?",
+     "expect": [
+      "plan_holiday"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_08_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Does she need her passport for it?",
+     "expect": [
+      "plan_passport"
+     ],
+     "acceptable": [
+      "plan_holiday"
+     ]
+    },
+    {
+     "id": "hold_08_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "When does it run out?",
+     "expect": [
+      "plan_passport"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_08_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "What food should I pack for her?",
+     "expect": [
+      "s_anaphylaxis",
+      "food_wren"
+     ],
+     "acceptable": [
+      "plan_holiday"
+     ]
+    },
+    {
+     "id": "hold_08_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "Is that one of my weeks with her?",
+     "expect": [
+      "s_custody"
+     ],
+     "acceptable": [
+      "plan_holiday"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "hold_09",
+   "messages": [
+    {
+     "id": "hold_09_turn_1",
+     "kind": "first",
+     "text": "I went for my run this morning.",
+     "expect": [
+      "hobby_run"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_09_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "How far am I supposed to be doing?",
+     "expect": [
+      "hobby_run"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_09_turn_3",
+     "kind": "aside",
+     "text": "One second, the kettle's boiling.",
+     "expect": [],
+     "acceptable": [
+      "hobby_run",
+      "food_tea"
+     ]
+    },
+    {
+     "id": "hold_09_turn_4",
+     "kind": "follow_up_unnamed",
+     "text": "Okay, and what am I training for?",
+     "expect": [
+      "hobby_run"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_09_turn_5",
+     "kind": "follow_up_unnamed",
+     "text": "When is it?",
+     "expect": [
+      "hobby_run"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_09_turn_6",
+     "kind": "follow_up_unnamed",
+     "text": "Will my back be all right with that?",
+     "expect": [
+      "h_back"
+     ],
+     "acceptable": [
+      "hobby_run"
+     ]
+    },
+    {
+     "id": "hold_09_turn_7",
+     "kind": "follow_up_unnamed",
+     "text": "What was the doctor's name?",
+     "expect": [
+      "health_gp"
+     ],
+     "acceptable": [
+      "h_back"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "hold_10",
+   "messages": [
+    {
+     "id": "hold_10_turn_1",
+     "kind": "unrelated",
+     "text": "What's a good film to watch tonight?",
+     "expect": [],
+     "acceptable": []
+    },
+    {
+     "id": "hold_10_turn_2",
+     "kind": "subject_change",
+     "text": "When is my car insurance due?",
+     "expect": [
+      "plan_insurance"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_10_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Who is it with?",
+     "expect": [
+      "plan_insurance"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_10_turn_4",
+     "kind": "unrelated",
+     "text": "What's the capital of Australia?",
+     "expect": [],
+     "acceptable": []
+    },
+    {
+     "id": "hold_10_turn_5",
+     "kind": "subject_change",
+     "text": "Which evening is choir?",
+     "expect": [
+      "hobby_choir"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_10_turn_6",
+     "kind": "unrelated",
+     "text": "Tell me a joke about penguins.",
+     "expect": [],
+     "acceptable": []
+    },
+    {
+     "id": "hold_10_turn_7",
+     "kind": "subject_change",
+     "text": "How much do I put into my pension?",
+     "expect": [
+      "money_pension"
+     ],
+     "acceptable": []
+    }
+   ]
+  },
+  {
+   "id": "hold_11",
+   "messages": [
+    {
+     "id": "hold_11_turn_1",
+     "kind": "first",
+     "text": "right so I am just getting in now and I wanted to get a few things down before I forget them the early shift ran over because two drivers were stuck behind the accident on the ring road and I had to reroute half the morning drops by hand which took forever then I missed the bus and walked back in the drizzle and when I got in the flat was freezing because the storage heaters did not charge overnight again and I could not remember what you are meant to do about that so I just put a jumper on and made some toast and then Bianca rang to tell me about the nursery colours she has picked and we talked for nearly an hour and after that I tried to do some reading for the course but I kept nodding off so I gave up and watched half a programme about bridges and now it is late and I still have not sorted out anything for tomorrow",
+     "expect": [
+      "home_heating"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_11_turn_2",
+     "kind": "follow_up_unnamed",
+     "text": "Where is the switch for that?",
+     "expect": [
+      "home_heating"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_11_turn_3",
+     "kind": "follow_up_unnamed",
+     "text": "Does it cost more to use it?",
+     "expect": [
+      "home_heating"
+     ],
+     "acceptable": []
+    },
+    {
+     "id": "hold_11_turn_4",
+     "kind": "subject_change",
+     "text": "Also the bike, where did I leave the code?",
+     "expect": [
+      "home_bike"
+     ],
+     "acceptable": []
+    }
+   ]
+  }
+ ]
+}
