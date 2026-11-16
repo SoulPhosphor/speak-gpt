@@ -606,7 +606,7 @@ Each is also a row in G.17.
 | # | Needed before | Question | Recommendation |
 |---|---|---|---|
 | G45 | Stage 2 | Include the frozen-path lorebook check (step 1.13) in Step 4a | Yes |
-| G38 | Stage 2 | Context-assistance setting (on Memory Context Helper Settings, M.11): label, explanation, starting choice, rebuilding the subject after restart (Local AI not shown: decided 2026-11-16) | Start on Code-based |
+| G38 | Stage 2 | Context helper on Memory Context Helper Settings (M.11). **Decided 2026-11-16:** an on/off toggle that starts off; Local AI not shown. **Open:** which choice (Code-based or API AI) is selected when first turned on; labels and explanations; rebuilding the subject after restart | Code-based selected when first turned on |
 | G44 | Stage 2 | Ship Off and Code-based before API AI is ready | Yes |
 | G39 | Stage 3 | The remaining items for the Memory Context Helper Tool API (M.4, items 1–8) and the model and cost of its scored run; its name, place, model choice, all parameters and same-as-Memory-Scanner-Tool-API behavior were decided 2026-11-16 | Each item approved before Step 4b |
 
@@ -2015,9 +2015,14 @@ that is not in the conversation it was given.
   the other methods, with a model and cost the owner approves. It is not
   described as better than Code-based until then.
 
-**The setting.** One app-wide choice. Its place, label, explanation and
-starting choice are approved before Step 4a (G38). The API AI
-configuration screen (M.4) is approved before Step 4b (G39).
+**The setting (Owner, 2026-11-16).** The context helper is optional and
+**off until the user turns it on** with a toggle on the **Memory Context
+Helper Settings** screen (M.11). With the toggle off, behavior is Off. With
+it on, the user chooses Code-based or API AI. The toggle starts off for
+everyone. Which choice is selected when it is first turned on, and the
+labels and explanations, are approved before Step 4a (G38). The API AI
+screen (Memory Context Helper Tool API, M.4) is approved before Step 4b
+(G39).
 
 ## G.9c Embedding models stay replaceable (Owner, 2026-11-16)
 
@@ -3488,7 +3493,7 @@ about to start. Each has a recommendation.
 | G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before Step 7. No builder treats it as approved before then | Step 7 |
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
-| G38 | The context-assistance setting's label and explanation, which choice it starts on, how Code-based rebuilds the subject after the app restarts, and whether Local AI is shown before it is built | Open. **Decided (owner, 2026-11-16):** it is on Memory Context Helper Settings, a screen in the Memory Manager's Settings section (M.11); Local AI is not shown now. Recommended start: Code-based, the only free method that held up on the held-out set | Step 4a |
+| G38 | The context helper's setting | **Decided (owner, 2026-11-16):** on Memory Context Helper Settings, a screen in the Memory Manager's Settings section (M.11); optional, with an on/off toggle that starts off for everyone; when on, the user chooses Code-based or API AI; Local AI not shown now. **Open:** which choice is selected when first turned on (recommended: Code-based, the only free method that held up on the held-out set), labels and explanations, and how Code-based rebuilds the subject after the app restarts | Step 4a |
 | G39 | The Memory Context Helper Tool API (M.4). **Decided (owner, 2026-11-16):** that name; its own screen opened from AI Settings; the user chooses their own API model; every model parameter exposed; works and looks like Memory Scanner Tool API; Local AI not now. **Still open:** which turns it reads, instruction text, time allowance, failure behavior and notice, cost display, privacy disclosure, behavior with no model configured, logging, and the model and cost of its scored run | Open (M.4) | Step 4b |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
