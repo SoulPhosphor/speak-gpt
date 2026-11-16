@@ -244,9 +244,24 @@ never run together on one line. For a source that is a user message:
   second line, because companions have no sub-profiles. The Glamour line
   belongs only to the user's own messages. The same principle applies when
   a Roleplay Character speaks: **Speaker** is that character's name.
-- **Not decided yet:** what the Glamour line shows if that Glamour is later
-  renamed or deleted. Recommended: keep the profile name recorded at the
-  time, as for the speaker. Asked before stage 1.
+- **Renamed or deleted profiles (Owner, 2026-11-16).** A Glamour, a
+  companion and a Roleplay Character are referenced by their permanent ID,
+  never by name. The source stores that ID with the profile's name as last
+  known.
+  - **Renamed:** the line shows the profile's current name, found by its
+    ID, so a rename updates every memory that cites it. The stored name is
+    refreshed to match.
+  - **Deleted:** the line keeps the last known name. It never says
+    "deleted" or "unavailable" and is never removed.
+  - This covers the Glamour line, a companion speaker, and a Roleplay
+    Character speaker. The user's **Speaker** username is the name the chat
+    showed for that message and stays as recorded.
+  - **Verify before building:** which ID each record holds. A user message
+    names its Glamour or Roleplay Character in `userNameSource`; a
+    companion reply is stamped only with `companionName`, so the companion's
+    ID must come from the chat's companion at the time (the transcript row's
+    `companion_id`) or be stamped on new replies. Nothing is guessed for
+    older messages.
 
 ### The design (Proposed, approved as a whole in G43)
 
@@ -260,8 +275,9 @@ never run together on one line. For a source that is a user message:
     roleplay character), or unknown. Never required;
   - for a user message: the username the chat displayed for that message,
     and, when a Glamour was in use for that message, the Glamour's ID and
-    its profile name, each recorded at the time (see "What the Memory
-    Browser shows" below);
+    its last known profile name; for a companion or Roleplay Character
+    speaker: its ID and last known name (see "What the Memory Browser
+    shows" below);
   - the statement time, when known;
   - when and how the source was attached: cited by the Memory Assistant,
     added by the user, or carried from a memory it replaced.
@@ -3388,7 +3404,7 @@ about to start. Each has a recommendation.
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
 | G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
-| G43 | The memory provenance design (M.3) as a whole, and its details. **Decided (owner, 2026-11-16):** sources show as separate labeled lines (Speaker; Glamour only when one was in use, by its profile name; Date fully spelled out; Source Message), with the speaker as listed in the chat for that message (M.3, "What the Memory Browser shows"). **Still open:** (a) the wording when a source or its date is unavailable; (b) the Glamour line after a Glamour is renamed or deleted (decided 2026-11-16: a companion or Roleplay Character speaker shows only its name); (c) whether the user can add, edit or remove sources and dates in the memory editor; (d) whether any excerpt of the source message is stored; (e) whether the event date and Phase 4's important date are separate fields; (f) the Memory Scanner instruction text that asks it to cite source messages; and approval of the storage design as a whole | Open. Recommended: (b) keep names as recorded at the time; (d) no excerpt, the link and the chat are the source; (e) separate: an event date records a fact and never causes sending, an important date is a sending rule | Memory provenance (stage 1) |
+| G43 | The memory provenance design (M.3) as a whole, and its details. **Decided (owner, 2026-11-16):** sources show as separate labeled lines (Speaker; Glamour only when one was in use, by its profile name; Date fully spelled out; Source Message), with the speaker as listed in the chat for that message (M.3, "What the Memory Browser shows"). **Still open:** (a) the wording when a source or its date is unavailable; (b) decided 2026-11-16: a companion or Roleplay Character speaker shows only its name; Glamour, companion and Roleplay Character names follow renames by ID and keep the last known name after deletion; (c) whether the user can add, edit or remove sources and dates in the memory editor; (d) whether any excerpt of the source message is stored; (e) whether the event date and Phase 4's important date are separate fields; (f) the Memory Scanner instruction text that asks it to cite source messages; and approval of the storage design as a whole | Open. Recommended: (d) no excerpt, the link and the chat are the source; (e) separate: an event date records a fact and never causes sending, an important date is a sending rule | Memory provenance (stage 1) |
 | G44 | Ship Step 4a's setting with Off and Code-based before Step 4b adds API AI, or hold it until all three exist | Open. Recommended: ship Step 4a first; its benefit is measured and free | Step 4a |
 | G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | Open. Recommended: yes. It changes only that a memory repeating a lorebook entry is no longer sent on the frozen path, as it already is not on the other path | Step 4a |
 
