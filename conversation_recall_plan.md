@@ -199,7 +199,7 @@ Memory Browser, directly under the **Tags** field, in this order:
 **Speaker**, **Glamour** (only when one applies), **Date**, **Source
 Message**, then, once Phase 4 builds it, the editable **important date**.
 Each source is shown as separate labeled lines, never run together on one
-line.
+line. For a source that is a user message:
 
 > **Speaker:** Lena
 > **Glamour:** Midnight
