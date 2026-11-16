@@ -99,7 +99,7 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
 | 13 | **Today's date and dates on memories** | Memory plan Phase 4 | Stage 12 | D55 first; D1–D5, D12–D14 wording and AI-facing text | Dates tab, important dates |
 | 14 | **Fading** | Memory plan Phase 5 | Stage 13 | D8, D19, D45, D49, D50 details | Fading markers |
 | 15 | **Memory Assistant date proposals** | Memory plan Phase 6 | Stage 13 | D33, AI-facing text | Proposed dates in Pending |
-| Later | Not ordered | Optional re-ranker; live AI worker (G.11, G8); recall across chats (G9); Local AI context assistance; other embedding models (G41); background reviewer (D51); recent-chat continuity (D38); companion journal (D40); Model Rules adjustments (D.13); search tuning revisited; vector size, automatic tags and variety (memory plan steps 1.14–1.16, only if testing shows a need) | The re-ranker, live AI worker and cross-chat recall need stage 11 | Separate owner decisions | — |
+| Later | Not ordered | Optional re-ranker; live AI worker (G.11, G8); recall across chats (G9); Local AI context assistance; other embedding models (G41); background reviewer (D51); recent-chat continuity (D38); companion journal (D40); Model Rules adjustments (D.13); linking a memory to a Glamour (M.6); search tuning revisited; vector size, automatic tags and variety (memory plan steps 1.14–1.16, only if testing shows a need) | The re-ranker, live AI worker and cross-chat recall need stage 11 | Separate owner decisions | — |
 | Any time | Not a stage of its own | **Automatic companion linking** (M.6, Owner 2026-11-16): every companion the user creates is linked to the memory system automatically | Nothing unbuilt | Nothing; the behavior is decided | Nothing new; companions appear in the memory system as soon as they are saved |
 | Any time | Not a stage of its own | The memory-use instruction (D41) can be added to any stage that touches the memory instructions once its exact text is approved | — | D41 text | Changed AI behavior |
 
@@ -523,6 +523,16 @@ default, not a permanent restriction. In addition:
   existed are linked when it is first set up, without the button. The owner's
   own installation is already linked. The System Status line "Personas linked
   to companions" reports the old flag and is reviewed with this change.
+- **Linking a memory to a Glamour (Owner, 2026-11-16: later, to be
+  designed).** A memory can already be linked to a Roleplay Character
+  (`memory_roleplay_characters`, which also controls which chats see it).
+  **Checked in the code on 2026-11-16:** nothing links a memory to a
+  Glamour. Open when designed: whether a Glamour link is only a label
+  reminding the user which Glamour the memory is about, or a visibility
+  rule that limits the memory to chats where that Glamour is active. Not
+  built until the owner decides. This is separate from the Glamour line on
+  a memory's source, which records only which Glamour the user was using
+  when a message was sent.
 - **D58's open question** (whether a replacing memory keeps the old vibe)
   stays open. Sources are carried by owner direction (M.3); the vibe is a
   separate question.
