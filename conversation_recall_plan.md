@@ -6,14 +6,15 @@ the memory plan, `Memory System/dynamic_memory_plan.md`, which remains the recor
 saved-memory search (its Parts A to F). References below to "Part A" or "Part E" mean that document. Numbered
 Steps always mean the work orders in G.16 of this document.
 
-**State on 2026-11-12.** Step 0 is complete. Its 86-sample measurements
-are in `memory baseline.md`; they are not duplicated here. No application
-feature in this plan is built yet. The next work order is Step 1. The plan
-was reviewed and corrected on 2026-11-12: the long-message design (G.10), follow-ups
-(G.9, G.9a), the cutter (G.5b), the build steps (G.16), the wording rule
-(G.13b), and a comparison with established open-source systems (G.18a).
-The open questions are in G.17. Where the "Next steps" list in the memory
-plan disagrees with this document, this document is the current one.
+**State on 2026-11-16.** Steps 0–3 are built; Step 3's repair is merged
+in #205. The carry-over evaluation is complete and its results are in
+`memory baseline.md`. The owner's decisions of 2026-11-16 replace searching
+with the previous messages by a selectable context assistance (G.9, G.9b),
+approve a narrow +3 exception (G.10), and keep embedding models replaceable
+(G.9c). The record of those decisions is `rag alteration notes November
+14.md`. The next work order is Step 4a. The open questions are in G.17.
+Where the "Next steps" list in the memory plan disagrees with this
+document, this document is the current one.
 
 ## G.0 Status and how to read this plan
 
@@ -770,10 +771,10 @@ is not asked to choose them.
 - The user's latest message, on its own.
 - A message longer than one piece is also searched in overlapping pieces
   (G.10), up to a limit. Periods play no part.
-- The user's previous message is searched as well, as a separate search
-  that counts for less than the newest (G.9a). The number of previous
-  messages is 1 by default and can be set from 0 to 3 (G32). Earlier
-  messages are never glued onto the search text.
+- Follow-ups are handled by the chosen context assistance (G.9b): what
+  it supplies is searched as well and counts for less than the newest
+  message. Earlier messages are never glued onto the search text. The
+  details for recall are part of G36.
 - Each of these is a separate search. A passage qualifies when it passes
   for any one of them.
 
@@ -1233,99 +1234,169 @@ existing memory debugging view, so a wrong result can be explained. This
 does not authorize any new general application log entries. The exact
 lines are shown to the owner before Step 16.
 
-## G.9 Carry-over for saved memories (Proposed)
+## G.9 Carry-over for saved memories (Owner, 2026-11-16)
 
 **The problem.** The saved-memory text is rebuilt for every message and is
 not kept in the chat history. A memory found for one message is gone for
 the next unless that message finds it again.
 
-**The rule (rewritten 2026-11-12 to use an established method, G.9a).**
+**How it is solved.** Through context assistance (G.9b): one app-wide
+choice of Off, Code-based, API AI (in the initial rollout) or Local AI
+(later). Searching with the previous messages (G.9a) was measured and is
+not used (Owner, 2026-11-16).
 
-- The user's previous message is searched again, on its own, alongside
-  the new message. The number of previous messages is 1 by default and
-  can be set from 0 to 3 (G32).
-- A memory found through an earlier message must pass the same relevance
-  gate against that message. Nothing is kept merely because it was sent
-  before.
-- Matches for the new message come first. Matches for the message before
-  it come next, and for the one before that last.
-- A memory therefore stays through a follow-up such as "What should I feed
-  her?", and falls away after the subject changes: one message later by
-  default.
-- Only the user's messages are searched. The AI's reply alone can never
-  keep a memory alive.
-- Carried memories obey scope like any other.
+**Rules every option keeps.**
+- The new message is searched as today. Its own results come first and
+  are never changed by assistance; assistance only adds candidates after
+  them.
+- Every added memory goes through the enforcer's selection like any
+  other: scope, Maximum Memories, the +3 rule, lore overlap and memory
+  space. Nothing is kept merely because it was sent before.
+- A carried memory is read again from the store when the message is sent:
+  an edit applies at once, and a deleted, disabled or out-of-scope memory
+  is never carried.
+- **Off means no context assistance (Owner, 2026-11-16).** It does not
+  freeze other approved retrieval improvements, such as the +3 top-match
+  rule (G.10), which apply under every option.
 
-**Two known limits, both measured on the test set (Step 0) and reported
-to the owner before Step 4 ships.**
-- **A memory can ride into a new subject.** With the setting at 1, the
-  first message on a new subject is searched together with the message
-  before it. If that earlier message names the old subject, the old
-  memory can be sent once more, after the new subject's own matches. It
-  stays for as many messages as the setting says, so "gone after one
-  message" is only true when the setting is 1.
-- **A second follow-up in a row can lose the memory.** With the setting at
-  1, "How much should I feed her?" keeps the Pepper memory because the
-  message before it named Pepper. A further "And how often?" is searched
-  with "How much should I feed her?", which names nothing, so the memory
-  can drop. A higher setting covers a longer run of follow-ups and lets
-  an old subject linger longer. The two limits pull against each other.
+**Code-based: subject tracking (Owner, 2026-11-16, as evaluated).**
+- A message sets the subject when it has a confident match of its own: a
+  memory it matched by meaning and keywords together, by meaning with a
+  stand-out of at least 4.0, or through a section of a long message
+  (G.10). Those memories become the chat's current subject.
+- A message with no confident match of its own is sent its own matches,
+  then the current subject's memories it did not already find.
+- A later confident match replaces the subject. There is no turn limit;
+  the three-turn variant gave no benefit.
+- This is exactly the method `subject_anchor` fixed in
+  `app/src/test/resources/recall_carryover_holdout/final_methods.json`.
+  Its numbers are not changed. Results are in `memory baseline.md`.
+- Only the user's messages set the subject. A carried memory is not tested
+  again against the follow-up; it passed the relevance gate against the
+  message that set the subject.
+- **Known limit, measured.** A message that names nothing and is not a
+  follow-up ("Tell me a joke about penguins") receives the previous
+  subject's memory. Code cannot tell it apart from a follow-up.
+- **Proposed:** a +3 memory matched only through the top-match rule
+  (G.10) does not by itself set the subject, so Code-based stays as
+  evaluated. The combined effect is measured in Step 4a.
 
-How much less an earlier message counts is measured on the same set.
+**API AI and Local AI** resolve the follow-up into a search query instead
+(G.9b).
 
 **Relation to recall.** Carry-over and conversation recall are separate.
-They share this way of searching (G.9a) and the final size check (G.8),
+They share the context assistance (G.9b) and the final size check (G.8),
 and nothing else. Each has its own size limit.
 
 A recalled exchange is carried over under the same rule (Owner,
 2026-11-11; G.8b).
 
-## G.9a Searching with the previous messages (Proposed; replaces the subject check, 2026-11-12)
+## G.9a Searching with the previous messages (built in Step 3; not used, Owner 2026-11-16)
 
-The earlier version of this plan had a "subject check": a new component
-with two unmeasured numbers that judged whether a message was still on the
-previous subject. No established system does that. It is replaced by what
-RisuAI does (G.18a).
+Step 3 built `PreviousMessageSearch`, which searches the new message and
+0–3 previous user messages separately. On both carry-over sets it found
+more expected memories but carried many wrong ones (held-out set, one
+previous message: 15 more correct, 45 more incorrect; `memory baseline.md`).
+The owner decided it is not the carry-over method and it is not one of the
+context-assistance choices. Step 4a does not connect it to sending.
+Removing it from the code is a separate owner decision.
 
-- **What is searched:** the new message, and the user's previous
-  messages: 1 by default, from 0 to 3 (Owner, 2026-11-12; G32).
-- **How:** each is its own search. They are never joined into one text.
-  #180 measured that joining recent messages hurt saved-memory search in
-  this app; separate searches avoid that.
-- **How results combine:** a match for the newest message outranks a match
-  for an earlier one.
-- **Prepare when composing:** When the user begins entering a non-empty
-  message, prepare any missing embeddings for the configured 0–3 previous
-  **user** messages in the background, through Step 1's shared embedding
-  queue. For dictated input, begin when transcribed text first appears.
-  Prepare each unchanged earlier message only once, not on every
-  keystroke. Do not repeatedly embed the unfinished draft. This uses the
-  existing on-device model, not a paid AI request.
-- **Keep across screens:** Keep only those earlier-message embeddings in
-  a small, bounded in-memory cache for as long as the app's process stays
-  alive. Navigating to the Summarizer, companion or profile settings, or
-  another chat does **not** clear the cache. Do not persist it to disk.
-  Android may end the app process even when the user has not explicitly
-  closed the app; a new process starts with an empty cache. Key cached
-  entries to the original chat, user-message ID/content, and embedding
-  model so data from one chat or model is never reused for another.
-  Discard an entry if its earlier message is edited or deleted, its chat
-  is deleted, or the embedding model changes; older entries may also be
-  evicted to respect the cache's size bound.
-- **At send time:** Reuse prepared embeddings. If a needed earlier-message
-  embedding is missing (for example, after reopening the app or sending
-  immediately), calculate it through the shared live-priority queue,
-  subject to the existing request time allowance; never treat a cache
-  miss alone as a reason to omit follow-up search. If the time allowance
-  is genuinely exceeded, use the plan's existing timeout/fallback
-  behavior. Run the **search itself again for every message sent**,
-  against the memories, scope, chat, and index as they exist then.
-  Never cache a prior search result: edits, deletes, companion/project
-  changes, and switching chats must take effect immediately.
-- **Used by:** carry-over for saved memories (G.9) and conversation recall
-  (G.6 retrieval stage 1).
-- **What it never does:** search with the AI's replies, or keep anything
-  that does not pass the relevance gate.
+These rules from its design still apply wherever a later Step keeps
+earlier-message embeddings:
+
+- **Prepare in the background, through Step 1's shared embedding queue,**
+  once per unchanged message, never on every keystroke, never the
+  unfinished draft.
+- **Keep only in a small, bounded in-memory cache** for the app process's
+  lifetime. Navigating to settings or another chat does not clear it.
+  Never persist it to disk. Key entries to the chat, the user message's ID
+  and content, and the embedding model tag. Discard an entry when its
+  message is edited or deleted, its chat is deleted, or the embedding
+  model changes.
+- **Never cache a search result.** The search runs again for every message
+  sent, against the memories, scope and chat as they exist then.
+
+## G.9b Context assistance (Owner, 2026-11-16)
+
+Context assistance helps a follow-up find what it refers to. It is
+optional: saved memories and recall work in full with it Off, and no
+choice makes a paid call the only route to continuity.
+
+| Choice | What it does | Built in |
+|---|---|---|
+| Off | Nothing. Each message is searched on its own, as today | Step 4a |
+| Code-based | Subject tracking (G.9). On the phone, no cost | Step 4a |
+| API AI | An AI model writes a self-contained search query from the recent conversation. Its model is chosen in its own selector from the user's configured API providers, separate from the chat, Summarizer and embedding models | Step 4b, part of the initial rollout |
+| Local AI | The same role and contract as API AI, with an on-device model | Later; the interface must accept it without change |
+
+**One interface.** Each choice is its own implementation of one contract,
+called once for each message sent, before saved-memory search:
+- **Input:** the new message, and the recent turns of the same chat that
+  the choice may read (for API AI, G39).
+- **Output:** nothing (Off, or when the choice has nothing to add);
+  memories to carry (Code-based); or one self-contained search query (API
+  AI, Local AI).
+- **Unchanged downstream:** the search, relevance gate, enforcer
+  selection, scope, Maximum Memories, the +3 rule and prompt assembly.
+- Conversation recall (Step 14) uses the same output for its stage 1
+  (G.6).
+
+**What the API AI helper does (Owner, 2026-11-16).** It resolves
+references in short follow-ups and subject changes ("she", "that one",
+"the same thing") from the recent conversation and writes one
+self-contained search query. It never answers the user's message, never
+changes the message or what the chat model receives, and never adds a fact
+that is not in the conversation it was given.
+
+**Proposed for the API AI helper, decided in G39 before Step 4b:**
+- Its query is searched in addition to the new message: the new message's
+  own results stay first and unchanged, and memories found only through
+  the query follow, through the same relevance gate.
+- Its output is checked before use: one query of plain text, within the
+  embedding model's message limit. Anything else is discarded and the turn
+  goes ahead as Off.
+- When it fails (offline, provider error, time allowance exceeded, or
+  output discarded) the turn goes ahead as Off. The time allowance, the
+  notice wording and the privacy disclosure are approved first.
+- Cost is shown as the provider reports it, otherwise "Not Reported".
+- Which turns it reads (the user's messages only, or the AI's replies
+  too), its instruction text, and which provider models qualify.
+- Before a starting choice is set for anyone, it is scored once on the two
+  frozen carry-over sets exactly as `CarryOverFinalEvaluationTest` scores
+  the other methods, with a model and cost the owner approves. It is not
+  described as better than Code-based until then.
+
+**The setting.** One app-wide choice. Its place, label, explanation and
+starting choice are approved before Step 4a (G38). The API model
+selector's place and wording are approved before Step 4b (G39).
+
+## G.9c Embedding models stay replaceable (Owner, 2026-11-16)
+
+The embedding model is a separate choice from context assistance. An API
+language model that rewrites a question is not an API embedding model that
+computes vectors.
+
+- EmbeddingGemma 300M q4 stays the default. Other local and API embedding
+  models must be possible without redesign. None is built in this plan's
+  current Steps.
+- **Already in the code:** the `EmbeddingModel` interface, whose `tag`
+  stamps every stored memory vector (`embeddings.embedding_model`); a new
+  tag re-embeds. Model-specific tokenizer, prefix, dimensions, token
+  limits and normalization stay behind that interface, not in retrieval
+  code.
+- **Every new store or cache of vectors** (the earlier-message cache, the
+  passage index of Steps 8–9) records the model tag, keeps the original
+  text so vectors can be rebuilt, and never compares vectors from
+  different models.
+- **Proposed:** the matching numbers (similarity floor, stand-out, the
+  section threshold, and the 4.0 and 2.0 stand-outs of G.9 and G.10) were
+  measured for EmbeddingGemma and belong to that model. Another model is
+  offered only after its own values are measured on the Step 0 and
+  carry-over sets.
+- An API embedding model sends memory and message text to a provider. Its
+  privacy and cost are decided before it is built (G41).
+- Quality is reported separately from speed, memory use, battery and cost.
+  Today's phone is a benchmark, not a permanent limit.
 
 ## G.10 A small detail inside a larger message (Step 2 built; repair merged in #202)
 
@@ -1409,6 +1480,14 @@ well; this app does not.
   section is no longer held to Maximum Memories. Example: Maximum Memories
   5, ten matching +2 memories and three further matching +3 memories send
   eight.
+- **+3 top match (Owner, 2026-11-16; G40).** A +3 memory that fails the
+  relevance gate in a message's own whole-message search still matches
+  when all three hold: its similarity is at least the ordinary similarity
+  floor, its stand-out is at least 2.0, and it is the single most similar
+  memory to that message. It is then a matching +3 memory under the rule
+  above. The unrestricted lower bar, without the top-match condition, is
+  rejected. Measured as `lower_bar_top_match_only` (`memory baseline.md`).
+  It applies under every context-assistance choice, Off included.
 
 **Time.**
 - The number of pieces searched has a limit. When a message has more
@@ -1485,6 +1564,10 @@ setting if the pieces prove not to be enough.
 
 **Owner:** the foundation must support the Summarizer's model doing
 message-level work while the user chats, as an option.
+
+**Not the context helper.** The API AI context helper (G.9b) is a
+separate job, run once for each message sent with its own model, and is
+built in Step 4b. This worker stays Later.
 
 - **What it is.** A background job that reads new exchanges as they are
   indexed and writes notes about them. It is off unless the user turns it
@@ -1865,8 +1948,9 @@ rewrite its expected answers. Its authoritative results are in
 | 0 | **Complete** | Saved-memory test set with the real model's vectors | Routine with written instructions | Lighter | Nothing | Nothing | Nothing |
 | 1 | **Complete (#199)** | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle | Nothing | Step 0 complete | Nothing (G33) |
 | 2 | **Complete (#200; repairs #201, #202)** | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
-| 3 | **Built (#203); repair awaiting owner approval** | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
-| 4 | Waiting | Saved memories stay through follow-up messages | Careful | Middle | Follow-up continuity | Steps 0 and 3 | Label and placement of its setting (G32) |
+| 3 | **Complete (#203; repair #205)** | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
+| 4a | Waiting | Context assistance with Off and Code-based; the +3 top-match rule | Careful | Strongest | Follow-up continuity; the context-assistance setting | Step 3 repair and the carry-over evaluation merged | G38 |
+| 4b | Waiting | API AI context helper with its own model selector | Hard | Strongest | The API AI choice and its model selector | Step 4a | G39 |
 | 5 | Waiting | Memory word count and length limit | Careful | Middle | Word count under memory fields | Step 1 | Open parts of G34 |
 | 6 | Waiting | Conversation-recall test chats with known answers | Routine with written instructions | Lighter | Nothing | Steps 0–5 complete | Nothing |
 | 7 | Waiting | Passage cutter | Routine | Lighter | Nothing | Step 6 complete | Conversation-index design as a whole (G35) |
@@ -2187,42 +2271,67 @@ measurements and verification results.
   a row that kept it; memories of the old subject sent after the subject
   changed; and any other memory sent that the sample did not expect.
 
-### Step 4: carry-over for saved memories (Careful)
+### Step 4a: context assistance, Off and Code-based (Careful)
 
 **Agent checklist for this step**
-- **Prerequisites:** Step 0 and Step 3. **Approval gate:** After examining Step 3's 0/1/2/3 results, get owner approval for the G32 setting's placement, label, and explanation.
-- **Change:** Use Step 3 at send time with **0–3 previous user messages**, default **1**. As described in G.9a, prepare missing previous-message embeddings when typing or transcription begins; keep a bounded in-memory cache across screen/chat navigation for the app process's lifetime. Invalidate changed inputs, prepare missing embeddings at send if needed, and rerun the actual search against current memories and scope each time.
-- **Preserve:** Setting **0** must match the pre-step baseline exactly. Do not independently change the default from 1 or invent a separate subject-detection algorithm.
-- **Verify and report:** First follow-up retention, old-subject spillover when topics change, no carry-over beyond the configured count, and no carry-over of edited/deleted memories. Also test leaving/reentering a chat through settings, switching chats, an empty cache after process restart, sending before preparation finishes, and changes to earlier messages or embedding model. Report the known second-follow-up limitations rather than hiding them.
+- **Prerequisites:** the Step 3 repair (#205) and the carry-over
+  evaluation are merged. **Approval gate:** G38.
+- **Change:** the context-assistance interface (G.9b) in its own files,
+  with a small connection where a message is sent; Off and Code-based
+  (G.9); the +3 top-match rule (G.10) in the saved-memory search, so the
+  Memory Search Test shows the same result; and the app-wide setting (G38).
+- **Preserve:** with Off, the request is the same as before Step 4a except
+  for the +3 top-match rule. Code-based is exactly the evaluated
+  `subject_anchor`; its numbers are not tuned. `PreviousMessageSearch` is
+  not connected to sending. Search results are never cached.
+- **Verify and report:** see below.
 
-- **Goal:** a saved memory stays through follow-up messages and falls away
-  after the subject changes (G.9).
-- **Needs first:** Step 0 and Step 3.
-- **Before building, the owner approves:** the label, explanation, and
-  place of the setting for how many previous messages are searched (G32),
-  after seeing Step 3's recorded results for 0, 1, 2, and 3.
-- **Read:** G.9, G.9a; `enforcer/Enforcer.kt`; the injection record in
+- **Goal:** a saved memory stays through follow-up messages and gives way
+  when the subject changes (G.9).
+- **Read:** G.9, G.9b, G.9c, G.10; `enforcer/Enforcer.kt`;
+  `CarryOverFinalEvaluationTest.kt`; the injection record in
   `MemoryStore.kt`.
-- **Build:** the hookup that uses Step 3 when a message is sent, in its
-  own file with a small connection; the setting (0 to 3, starting at 1);
-  and preparing/caching earlier-message embeddings as G.9a describes.
-  Leaving the chat screen must not clear these calculations; Android
-  process termination naturally clears them. Do not cache search results.
-- **Must not change:** anything when the setting is 0. With the setting
-  at 0 every result is the same as before Step 4.
-- **The starting value stays 1 (G32).** The builder does not change it. If
-  Step 3's results suggest another value, the builder explains them and
-  asks the owner. No other way of telling that the subject has changed,
-  and no other search method, is added without the owner's approval.
-- **Results:** record the setting comparison and every changed sample in
-  `memory baseline.md`. Update `baseline.json` only for verified
-  improvements, never to permit a regression.
-- **Done when:** on Step 0's conversations, with the setting at 1, a
-  memory stays through the first follow-up; the memories carried into the
-  first message of a new subject are counted and reported; no memory is
-  carried further than the setting allows; an edited or deleted memory is
-  never carried; and with the setting at 0 the results match the
-  baseline.
+- **Build:**
+  - The interface, Off and Code-based behind it. The Code-based subject is
+    kept per chat in memory for the app process, keyed to the chat and the
+    embedding model tag, dropped when the chat is deleted or the model
+    changes. Carried memories are read again from the store at send.
+  - How the subject is rebuilt after the app restarts is proposed to the
+    owner, with its cost, as part of G38, and built only as approved.
+  - The +3 top-match rule.
+  - The setting, using the shared styles (`ui-style-guide.md`).
+- **Tests:**
+  - With the +3 top-match rule switched off inside the test, the app's
+    Off and Code-based reproduce the recorded `none` and `subject_anchor`
+    results of both carry-over sets exactly.
+  - With the rule on, the combined results on both carry-over sets and
+    Step 0 are recorded in `memory baseline.md`.
+  - A deleted, disabled, edited or out-of-scope memory is never carried in
+    its old form; switching chats never carries another chat's subject.
+- **On Android:** leaving and re-entering a chat, switching chats, a
+  restart, Maximum Memories 1 and 8, and lore overlap and memory space
+  with carried memories. Send-time cost on a physical phone is reported;
+  the owner confirms the device behavior.
+- **Done when:** the tests above pass, Off sends what it sent before apart
+  from the +3 top-match rule, and the results are recorded.
+
+### Step 4b: API AI context helper (Hard)
+
+**Agent checklist for this step**
+- **Prerequisites:** Step 4a merged. **Approval gate:** G39.
+- **Change:** the API AI choice behind the Step 4a interface, with its own
+  model selector filled from the user's configured providers (never a
+  built-in model list), the approved instruction, the output check, and
+  the approved behavior on failure.
+- **Preserve:** the chat, Summarizer and embedding models and their
+  settings are untouched; the user's message is unchanged; no request is
+  made unless the user chose API AI.
+- **Verify and report:** unit tests with a stand-in provider for a valid
+  query, discarded output, timeout, provider error and no network; one
+  scored run on the two frozen carry-over sets with the model and cost the
+  owner approved, recorded in `memory baseline.md`; send-time delay on a
+  physical phone. Local AI is not built, but nothing in the interface
+  needs to change to add it.
 
 ### Step 5: the memory word count and length limit (Careful)
 
@@ -2560,13 +2669,13 @@ questions for each situation.
 
 **Agent checklist for this step**
 - **Prerequisites:** Step 6, Steps 1 and 7–10, and Step 3. **Approval gate:** G36 must approve the complete G.6/G.8 retrieval and delivery design before coding.
-- **Change:** The current-chat-only retrieval engine behind G.8a interfaces: implement G.6 retrieval stages **1–8** with G.9a/G.10 query handling, scoring, gates, eligibility, and measured time allowance.
+- **Change:** The current-chat-only retrieval engine behind G.8a interfaces: implement G.6 retrieval stages **1–8** with G.9b/G.10 query handling, scoring, gates, eligibility, and measured time allowance.
 - **Preserve:** No cross-chat recall, no request assembly, no paid calls, no forced match when nothing qualifies. **G.6 retrieval stage 9 and the optional re-ranker are not in this build.**
 - **Verify and report:** Use Step 6's prewritten questions and the real embedding model. Score each question individually for relevant exchanges found and unrelated exchanges left out; record results as the work order requires.
 
 - **Goal:** given a chat and a message, return the exchanges to offer,
-  with every score and reason (G.6, G.9a, G.8a points 1 and 2).
-- **Read:** G.6, G.8a, G.9a, G.10; `LiveRetrieval.kt` and
+  with every score and reason (G.6, G.9b, G.8a points 1 and 2).
+- **Read:** G.6, G.8a, G.9b, G.10; `LiveRetrieval.kt` and
   `KeywordText.kt`; Step 6's `conversations.json`.
 - **Build:** retrieval stages 1 through 8 of G.6 (retrieval stage 9 is not
   in the first build), using the method from Step 3,
@@ -2718,11 +2827,16 @@ about to start. Each has a recommendation.
 | G29 | To find a small detail in a long or dictated message, should the app also search with overlapping pieces of the message, cut between words and never at periods (G.10)? | **Decided (owner, 2026-11-12):** yes, on the agent's recommendation | Decided |
 | G30 | Is recall offered without an embedding model? | **Decided (owner, 2026-11-12):** no. Conversation recall requires the embedding model. Lorebook keyword matching is separate and keeps working whenever the lorebook is on | Decided |
 | G31 | What the user sees when the required on-device model is missing, removed, or unusable | Open for exact approval. G.13b proposes separate wording for trying to enable the feature with no model and for an installed feature becoming unavailable, each with an Open Model Settings action | Step 11 |
-| G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | **Decided (owner, 2026-11-12):** yes. 0 to 3, and it starts at 1. Still open: where the control goes, and its label and explanation. Recommended place: with the other search numbers on the Memory Search Test screen | Step 4 |
+| G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | **Superseded (owner, 2026-11-16):** searching with the previous messages is not the carry-over method and is not a context-assistance choice. Replaced by G37 and G38 | Superseded |
 | G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | Follows from the owner's decision of 2026-11-12 that a memory may hold 1,500 words (G34): that limit is not true unless the model reads that much. Written into Step 1. Speed and memory use on the phone are checked before it ships | Step 1 |
 | G34 | How is a saved memory limited to what the model can read, and how is its length shown? | **Decided (owner, 2026-11-12):** a word count under the memory box, aligned right, for each memory; at 1,500 it turns red and reads "Word Limit Reached: 1,500 Words Maximum"; the Memory Assistant splits a large subject into separate proposed memories and never fails or discards one for length. Still open, asked before Step 5: the count's text before the limit; what happens on saving over the limit; the wording when the model's real limit is reached below 1,500 words; how existing over-length memories are marked; the words added to the Memory Assistant's instructions | Step 5 |
 | G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before Step 7. No builder treats it as approved before then | Step 7 |
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
+| G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
+| G38 | Where the context-assistance setting goes, its label and explanation, which choice it starts on, and how Code-based rebuilds the subject after the app restarts | Open. Recommended start: Code-based, the only free method that held up on the held-out set | Step 4a |
+| G39 | For API AI: which turns it reads, its instruction, the output check, time allowance, failure notice, privacy disclosure, which provider models qualify, the model selector's place and wording, cost display, and the model and cost of its scored run | Open (G.9b) | Step 4b |
+| G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
+| G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c) | Later |
 
 ## G.18 Research behind this plan (2026-11-10)
 
@@ -2828,7 +2942,7 @@ this plan. These rules keep that safe.
   plan (`Memory System/dynamic_memory_plan.md`) is background for
   saved-memory work and is not needed for the conversation index.
 - **Build exactly one numbered Step from G.16, as one pull request.** Do
-  not start the next Step. Steps 0–3 have implementations; their repairs and verification are recorded in `memory baseline.md`. Do not begin Step 4 until the Step 3 repair is merged and the owner has approved Step 4's setting (G32). Every Step follows the code
+  not start the next Step. Steps 0–3 have implementations; their repairs and verification are recorded in `memory baseline.md`. Do not begin Step 4a until the Step 3 repair and the carry-over evaluation are merged and G38 is approved; Step 4b also needs G39. Every Step follows the code
   workflow in `CLAUDE.md`.
 - **Do not start a Step out of order or while its "Approve first" entry in
   G.16 is not satisfied.** Say what is waiting and stop.
@@ -2888,3 +3002,5 @@ request. Detailed results stay in the file named by G.16.
 - Step 3 — a standalone search helper (`PreviousMessageSearch.kt`) that searches the new message and 0–3 previous user messages separately through the existing saved-memory search and returns candidates for the enforcer's selection: the new message's candidates first and unchanged, then older messages' in order of age, each memory once. It is connected to nothing: no setting, no screen, no change to sending. PR #203.
 
 - Step 3 repair — the helper as merged in #203 described and measured its limit as Maximum Memories; it now only supplies candidates, and Maximum Memories, backfill and the +3 rule stay in the enforcer's selection. The owner's +3 rule (G.10) is applied to section matches in the search, the enforcer and the Memory Search Test, replacing the section-only exception. A message searched without its embedding is reported instead of passing unnoticed. The Step 0 conversations are scored through the enforcer's selection at Maximum Memories 1, 2, 3, 5 and 8 and checked against the expected answers. Results, costs and what Step 4 must verify are in `memory baseline.md`.
+
+- Carry-over evaluation (before Step 4) — methods and +3 rules fixed in advance and scored on a development set and a held-out set with Android ONNX Runtime 1.20 similarities and desktop vectors. Results are in `memory baseline.md`; the owner's decisions are G37 and G40.
