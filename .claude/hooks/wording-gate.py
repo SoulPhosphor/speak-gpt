@@ -7,7 +7,7 @@ resources (res/values*/*.xml) or any literal text in a layout or menu
 approves it. Reusing wording that already exists is always allowed, and so
 is removing it.
 
-The owner unlocks wording by starting a message with "Approved wording:".
+The owner unlocks wording with any message containing "Approved wording".
 That unlocks edits until the owner's next message. Every other message from
 the owner locks it again. Agents can never create or touch the unlock file.
 """
@@ -41,7 +41,7 @@ REMINDER = (
     "no changed strings, no stand-in or placeholder text, and no code that depends on wording the "
     "owner has not approved. Ask the owner for the exact wording first, one question at a time, "
     "with your recommendation. Reusing wording that already exists in strings.xml needs no approval. "
-    "The owner unlocks wording by starting a message with \"Approved wording:\"."
+    "The owner unlocks wording with any message containing \"Approved wording\"."
 )
 
 
