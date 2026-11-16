@@ -230,12 +230,18 @@ never run together on one line. For a source that is a user message:
 - **Memories the user writes (Owner, 2026-11-16).** A memory the user
   types in themselves has no source and no speaker, and the user cannot add
   either. It shows one line: **Date**, the date the user created the
-  memory, fully spelled out like every date. The memory record's `origin`
-  already tells user-written memories apart, so this also applies to ones
-  written before this stage.
+  memory, fully spelled out like every date. **Checked in the code on
+  2026-11-16:** the memory record cannot tell this today. Its `origin`
+  column holds the same placeholder for every route (Memory Assistant,
+  import and manual; `PendingMemoryRecordFactory.COMPAT_ORIGIN`), and the
+  marker for Memory Assistant drafts (`generated_pending_drafts`) is removed
+  when a draft is accepted. So from this stage on, creating a memory by hand
+  records it as written by the user (a source of the kind "the user's own
+  entry", with no message and no speaker). Memories saved before this stage
+  cannot be told apart and show no lines.
 - **No source, no lines (Owner, 2026-11-16).** Any other memory with no
-  recorded source (one the Memory Scanner saved before this stage, or an
-  import without sources) shows no source lines at all. The source lines
+  recorded source (any memory saved before this stage, or an import
+  without sources) shows no source lines at all. The source lines
   are a reminder for the user of where a memory came from; they are never
   sent to the AI and nothing else depends on them.
 - **Unavailable and deleted sources (Owner, 2026-11-16).** When a recorded
