@@ -31,8 +31,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -44,21 +42,19 @@ import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
-import org.teslasoft.assistant.preferences.ModelPickerScope
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.ui.dedicated.DedicatedModelRows
-import org.teslasoft.assistant.ui.dedicated.DedicatedParametersSection
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /**
- * "Advanced Memory Assistant Settings" — suggestion cap, endpoint/model
- * selection, and AI extraction tuning. Reached from the Memory Manager hub.
+ * Memory Scanner Settings — suggestion cap, token amounts, Minimum
+ * Importance and the two analysis-type prompts. Reached from the Memory
+ * Manager hub. The Memory Scanner's endpoint, model, routing and parameters
+ * moved to Memory Scanner Tool API (MemoryScannerToolApiActivity, owner
+ * design Nov 16 2026).
  *
- * The Memory Scanner's parameters (DedicatedParametersSection), Minimum
- * Importance, and the two analysis-type prompts (the Associative Memory Prompt
- * and the Lorebook Memory Prompt) are persisted only on Save (spec §2).
- * Maximum Suggestions, endpoint, model and routing save immediately on change
- * (DedicatedModelRows: the Memory Scanner's own lists and routing).
+ * Token amounts, Minimum Importance and the two prompts (the Associative
+ * Memory Prompt and the Lorebook Memory Prompt) are persisted only on Save
+ * (spec §2). Maximum Suggestions saves immediately on change.
  *
  * User-facing name is "Memory Assistant"; the `Preferences.getArchivist*`
  * accessors keep the internal code name.
@@ -76,14 +72,6 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
     private var fieldScannerAverageTokens: TextInputEditText? = null
     private var fieldScannerMaximumTokens: TextInputEditText? = null
 
-    private var textArchivistEndpointValue: TextView? = null
-    private var btnEditArchivistEndpoint: ImageButton? = null
-    private var textArchivistModelValue: TextView? = null
-    private var btnViewAllArchivistModels: MaterialButton? = null
-    private var sectionArchivistRouting: View? = null
-    private var textArchivistRoutingValue: TextView? = null
-
-    private var btnResetParameters: MaterialButton? = null
     private var textMinImportanceValue: TextView? = null
     private var fieldExtractionPrompt: TextInputEditText? = null
     private var btnResetPrompt: MaterialButton? = null
@@ -96,17 +84,6 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
 
     /** Held until Save (spec §2 has an explicit Save button). 0 = No Minimum. */
     private var selectedImportance = 0
-
-    private var modelRows: DedicatedModelRows? = null
-    private var parametersSection: DedicatedParametersSection? = null
-
-    private val archivistEndpointEditorLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result -> modelRows?.onEndpointEditorResult(result) }
-
-    private val archivistRoutingSetupLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result -> modelRows?.onRoutingSetupResult(result) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -121,12 +98,6 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
         initLogic()
     }
 
-    override fun onResume() {
-        super.onResume()
-        modelRows?.refresh()
-        parametersSection?.syncIfUnedited()
-    }
-
     private fun bindViews() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
@@ -134,13 +105,6 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
         fieldMaxSuggestions = findViewById(R.id.field_max_suggestions)
         fieldScannerAverageTokens = findViewById(R.id.field_scanner_average_tokens)
         fieldScannerMaximumTokens = findViewById(R.id.field_scanner_maximum_tokens)
-        textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
-        btnEditArchivistEndpoint = findViewById(R.id.btn_edit_archivist_endpoint)
-        textArchivistModelValue = findViewById(R.id.text_archivist_model_value)
-        btnViewAllArchivistModels = findViewById(R.id.btn_view_all_archivist_models)
-        sectionArchivistRouting = findViewById(R.id.section_archivist_routing)
-        textArchivistRoutingValue = findViewById(R.id.text_archivist_routing_value)
-        btnResetParameters = findViewById(R.id.btn_reset_model_parameters)
         textMinImportanceValue = findViewById(R.id.text_min_importance_value)
         fieldExtractionPrompt = findViewById(R.id.field_extraction_prompt)
         btnResetPrompt = findViewById(R.id.btn_reset_prompt)
@@ -173,31 +137,13 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
     }
 
     private fun initLogic() {
-        btnBack?.setOnClickListener { attemptExit() }
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() { attemptExit() }
-        })
+        btnBack?.setOnClickListener { finish() }
 
         /* ---- Maximum Suggestions Per Conversation ---- */
         setupMaxSuggestions()
 
         fieldScannerAverageTokens?.setText(preferences?.getMemoryScannerAverageTokens()?.toString())
         fieldScannerMaximumTokens?.setText(preferences?.getMemoryScannerMaximumTokens()?.toString())
-
-        /* ---- Memory Scanner model and parameters ---- */
-        // The parameters are saved with this screen's Save; choosing a model
-        // (which saves at once, like Quick Settings) shows its parameters.
-        val section = DedicatedParametersSection(
-            findViewById(R.id.root), ModelPickerScope.MEMORY_SCANNER, autoSave = false
-        )
-        parametersSection = section
-        modelRows = DedicatedModelRows(
-            this, ModelPickerScope.MEMORY_SCANNER,
-            textArchivistEndpointValue!!, btnEditArchivistEndpoint!!, textArchivistModelValue!!,
-            btnViewAllArchivistModels!!, sectionArchivistRouting!!, textArchivistRoutingValue!!,
-            archivistEndpointEditorLauncher, archivistRoutingSetupLauncher
-        ) { section.onModelSelected() }
-        btnResetParameters?.setOnClickListener { section.showRecommended() }
 
         /* ---- Minimum Importance ---- */
         selectedImportance = (preferences?.getArchivistMinImportance() ?: 0).coerceIn(0, 5)
@@ -323,44 +269,6 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
 
     /* ------------------------------ Save ------------------------------ */
 
-    /**
-     * Leaving with Memory Scanner parameter changes that were not saved asks
-     * first (owner ruling, Nov 8 2026): Cancel stays on the screen, Save &
-     * Exit saves and leaves (staying when something cannot be saved), and
-     * Okay leaves without saving.
-     */
-    private fun attemptExit() {
-        if (parametersSection?.hasUnsavedChanges() != true) {
-            finish()
-            return
-        }
-        val actions = layoutInflater.inflate(R.layout.dialog_three_actions_row, null)
-        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_parameters_discard_title)
-            .setMessage(R.string.memory_parameters_discard_message)
-            .setView(actions)
-            .create()
-        actions.findViewById<MaterialButton>(R.id.btn_dialog_cancel_action).apply {
-            setText(R.string.btn_cancel)
-            setOnClickListener { dialog.dismiss() }
-        }
-        actions.findViewById<MaterialButton>(R.id.btn_dialog_middle_action).apply {
-            setText(R.string.btn_save_and_exit)
-            setOnClickListener {
-                dialog.dismiss()
-                if (save()) finish()
-            }
-        }
-        actions.findViewById<MaterialButton>(R.id.btn_dialog_final_action).apply {
-            setText(R.string.okay)
-            setOnClickListener {
-                dialog.dismiss()
-                finish()
-            }
-        }
-        dialog.show()
-    }
-
     /** False when something on screen could not be saved (the user is
      *  shown why and stays on the screen). */
     private fun save(): Boolean {
@@ -389,7 +297,6 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
         }
         preferences?.setMemoryScannerTokenAmounts(average, maximum)
 
-        parametersSection?.commit()
         preferences?.setArchivistMinImportance(selectedImportance)
 
         // Each prompt saves independently. Storing "" when the field still holds

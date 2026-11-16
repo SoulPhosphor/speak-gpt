@@ -2312,6 +2312,7 @@
          ============================================================ -->
     <!-- Screen titles (also the manifest activity labels) -->
     <string name="title_memory_controls">Memory Controls</string>
+    <string name="title_memory_scanner_tool_api">Memory Scanner Tool API</string>
     <string name="title_memory_assistant_advanced">Advanced Memory Scanner Settings</string>
     <string name="title_advanced_memory_settings">Advanced Memory Settings</string>
 

@@ -227,7 +227,7 @@ the right.
   (`AppButton.Primary.Inline`), then the final commitment
   (`AppButton.Destructive.Inline`), in the caller's approved order. Users:
   the chat/image deletion choice (**Cancel**, **Delete Chat Only**,
-  **Delete All**), and leaving Advanced Memory Settings with unsaved Memory
+  **Delete All**), and leaving Memory Scanner Tool API with unsaved Memory
   Scanner parameters (**Discard Changes?** / "You have unsaved parameter
   changes." with **Cancel** (stay), **Save & Exit**, **Okay** (leave without
   saving)).
@@ -424,6 +424,24 @@ Use these pieces in order:
 
 Use when the row opens another screen and needs no explanatory subtitle.
 
+### Stacked selector
+
+A setting whose choice is a dropdown placed beneath its own title and
+explanation, rather than beside them:
+
+1. `Widget.App.StackedSelector` (the block), holding a `Widget.App.Row.Title`
+   and `Widget.App.Row.Subtitle`;
+2. the dropdown: `Widget.App.StackedSelector.Value.Full` on its own line, or,
+   when a trailing gear shares the line, a `Widget.App.StackedSelector.ValueLine`
+   holding `Widget.App.StackedSelector.Value` and `Widget.App.StackedSelector.Gear`;
+3. optional `Widget.App.StackedSelector.Action` for a full-width button beneath.
+
+`Widget.App.StackedSelector.Group` wraps a block that is shown or hidden as a
+whole; a dropdown directly under a `Section.Hint` uses
+`Widget.App.StackedSelector.Value.AfterHint`. Spacing lives in
+`stacked_selector_*` dimensions. Current user: Memory Scanner Tool API
+(endpoint, model with View All Models, and provider routing).
+
 ### Navigation row with subtitle
 
 Use these pieces in order:
@@ -591,7 +609,7 @@ Prompts, the Summary / Compaction review screen, Summarizer Settings, System
 Prompt editor, Activation Prompt, Lore Book, User Persona, Memory editor,
 Model Rule editor, Campaign and World details, Possible Match review, API
 endpoint editor, Advanced Memory Settings, Memory Assistant Advanced
-Settings, Voice Settings, Voice Advanced Settings, and the alert debug menu. Edit Companion
+Settings, Memory Scanner Tool API, Voice Settings, Voice Advanced Settings, and the alert debug menu. Edit Companion
 and the chat keep their own handling.
 
 ### Header with one trailing action icon
@@ -1545,7 +1563,7 @@ and link line up with the slider. Spacing lives in `plain_parameter_*`.
 Current users: Model Settings (the model name uses
 `Widget.App.ModelParameters.ModelName`), and the Summarizer's and Memory
 Scanner's parameters, which share `layout/view_dedicated_model_parameters.xml`
-on Summarizer Settings and Advanced Memory Settings. Quick Settings keeps its
+on Summarizer Settings and Memory Scanner Tool API. Quick Settings keeps its
 card segments.
 
 A control that cannot be used yet is faded to `disabled_control_alpha`.
