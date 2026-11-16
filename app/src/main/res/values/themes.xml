@@ -1240,6 +1240,16 @@
         <item name="android:layout_marginTop">@dimen/stacked_selector_action_gap</item>
     </style>
 
+    <!-- A list of downloadable on-device models, filled from code with one
+         view_embedding_model_row per model (ui-style-guide.md "Downloadable
+         model list"). -->
+    <style name="Widget.App.ModelDownloadList" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingTop">@dimen/model_download_list_gap</item>
+    </style>
+
     <!-- A group that appears and disappears as a whole (shown from code). -->
     <style name="Widget.App.StackedSelector.Group" parent="">
         <item name="android:layout_width">match_parent</item>

@@ -442,6 +442,15 @@ whole; a dropdown directly under a `Section.Hint` uses
 `stacked_selector_*` dimensions. Current user: Memory Scanner Tool API
 (endpoint, model with View All Models, and provider routing).
 
+### Downloadable model list
+
+`Widget.App.ModelDownloadList` holds one `layout/view_embedding_model_row.xml`
+per downloadable on-device model, added from code; spacing lives in
+`model_download_list_gap`. Current user: Embedding Model, where an explanation
+in `Screen.Intro` sits above the list and the keyword-search-only line
+(`Section.Hint`) below it while no model is installed. The row layout itself
+has not been audited against this guide.
+
 ### Navigation row with subtitle
 
 Use these pieces in order:
@@ -599,7 +608,7 @@ its contents below it, ends the scrolling content above the navigation bar,
 and keeps the page clear of side insets and cutouts. The layout supplies only
 the ids `root`, `action_bar` and `scroll`. Do not fit the page root inside the
 system bars instead; that leaves a gap above the header. Current users:
-BackUp Options and Restore Options.
+BackUp Options, Restore Options, and Embedding Model.
 
 A page the user types into calls `ScreenChrome.fitSystemBarsAndKeyboard`
 instead: the same, plus the page ends at the top of an open keyboard (the

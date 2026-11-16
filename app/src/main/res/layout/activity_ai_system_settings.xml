@@ -102,6 +102,24 @@
                     android:contentDescription="@string/title_memory_scanner_tool_api" />
             </LinearLayout>
 
+            <!-- Embedding Model (owner design, Nov 16 2026): download and remove
+                 the on-device embedding models. Title only, no subtext. -->
+            <LinearLayout
+                android:id="@+id/row_embedding_model"
+                style="@style/Widget.App.Row.TitleOnly">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_embedding_model" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_embedding_model" />
+            </LinearLayout>
+
             <!-- System prompts: opens the user's library of saved system prompts
                  (SystemPromptsListActivity). The subtitle mirrors whichever
                  prompt is currently active for the chat, or "None". -->

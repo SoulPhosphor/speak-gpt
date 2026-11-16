@@ -23,7 +23,6 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
@@ -34,19 +33,12 @@ import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
-import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
-import com.google.android.material.progressindicator.LinearProgressIndicator
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelDownloader
-import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
-import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModels
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.theme.ThemeManager
 
@@ -54,9 +46,9 @@ import org.teslasoft.assistant.theme.ThemeManager
  * "Advanced Memory Settings" — the diagnostics/repair surface from the Memory
  * Settings reorganization (`Memory System/memory_settings_reorg_spec.md` §3,
  * July 9 2026). Technical tools only: System Status (store health + row
- * counts), Setup / Repair (Create Companions From Personas), Librarian /
- * Embeddings (model download/remove + Rebuild Index) and Debug search. Reached
- * from the bottom row of Memory Controls.
+ * counts), Setup / Repair (Create Companions From Personas), Rebuild Memory
+ * Index and Debug search. Reached from the Memory Manager hub. Embedding model
+ * download/remove moved to Embedding Model in AI Settings (Nov 16 2026).
  *
  * Reset Memories deliberately does NOT live here — it stays on Memory Controls
  * as the single home for that destructive action (placement ruling 5).
@@ -72,13 +64,9 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
     private var textStatus: TextView? = null
     private var btnBootstrap: MaterialButton? = null
 
-    private var librarianModels: LinearLayout? = null
     private var btnRebuildIndex: MaterialButton? = null
     private var textIndexStatus: TextView? = null
     private var rowMemorySearchTest: View? = null
-
-    // Per-model download jobs so a second tap cancels an in-flight download.
-    private val downloadJobs = HashMap<String, Job>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,6 +84,7 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
     override fun onResume() {
         super.onResume()
         refreshStatus()
+        refreshIndexStatus()
     }
 
     private fun bindViews() {
@@ -103,7 +92,6 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
         btnBack = findViewById(R.id.btn_back)
         textStatus = findViewById(R.id.text_memory_status)
         btnBootstrap = findViewById(R.id.btn_memory_bootstrap)
-        librarianModels = findViewById(R.id.librarian_models)
         btnRebuildIndex = findViewById(R.id.btn_rebuild_index)
         textIndexStatus = findViewById(R.id.text_index_status)
         rowMemorySearchTest = findViewById(R.id.row_memory_search_test)
@@ -145,7 +133,6 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
             }
         }
 
-        buildLibrarianRows()
         btnRebuildIndex?.setOnClickListener { rebuildIndex() }
         rowMemorySearchTest?.setOnClickListener {
             startActivity(Intent(this, MemorySearchTestActivity::class.java))
@@ -207,95 +194,7 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
         }
     }
 
-    /* ------------------------------ librarian ------------------------------ */
-
-    private fun buildLibrarianRows() {
-        val container = librarianModels ?: return
-        val inflater = LayoutInflater.from(this)
-        container.removeAllViews()
-        for (model in EmbeddingModels.ALL) {
-            val row = inflater.inflate(R.layout.view_embedding_model_row, container, false)
-            row.tag = model.id
-            container.addView(row)
-            refreshModelRow(row, model)
-        }
-        refreshIndexStatus()
-    }
-
-    private fun refreshModelRow(row: View, model: EmbeddingModels.Model) {
-        val title = row.findViewById<TextView>(R.id.model_row_title)
-        val subtitle = row.findViewById<TextView>(R.id.model_row_subtitle)
-        val action = row.findViewById<MaterialButton>(R.id.model_row_action)
-        title.text = model.displayName
-        subtitle.text = getString(R.string.memory_model_progress_placeholder, model.sizeMb, model.description)
-
-        val installed = EmbeddingModelStorage.isInstalled(this, model)
-        val downloading = downloadJobs[model.id]?.isActive == true
-        action.text = when {
-            downloading -> getString(R.string.memory_model_cancel)
-            installed -> getString(R.string.memory_model_delete)
-            else -> getString(R.string.memory_model_download)
-        }
-        action.setOnClickListener {
-            val job = downloadJobs[model.id]
-            when {
-                job != null && job.isActive -> { job.cancel(); downloadJobs.remove(model.id); refreshModelRow(row, model) }
-                EmbeddingModelStorage.isInstalled(this, model) -> deleteModel(model, row)
-                else -> downloadModel(model, row)
-            }
-        }
-    }
-
-    private fun downloadModel(model: EmbeddingModels.Model, row: View) {
-        val progress = row.findViewById<LinearProgressIndicator>(R.id.model_row_progress)
-        val progressLabel = row.findViewById<TextView>(R.id.model_row_progress_label)
-        progress.visibility = View.VISIBLE
-        progress.isIndeterminate = true
-        progressLabel.visibility = View.VISIBLE
-        progressLabel.text = ""
-
-        val job = lifecycleScope.launch {
-            val result = EmbeddingModelDownloader.download(this@AdvancedMemorySettingsActivity, model) { bytes, total ->
-                runOnUiThread {
-                    if (total > 0) {
-                        progress.isIndeterminate = false
-                        progress.setProgressCompat((bytes * 100 / total).toInt().coerceIn(0, 100), true)
-                        progressLabel.text = getString(
-                            R.string.memory_model_progress_fmt,
-                            (bytes / 1_000_000).toInt(), (total / 1_000_000).toInt()
-                        )
-                    } else progress.isIndeterminate = true
-                }
-            }
-            downloadJobs.remove(model.id)
-            runOnUiThread {
-                progress.visibility = View.GONE
-                progressLabel.visibility = View.GONE
-                when (result) {
-                    EmbeddingModelDownloader.Result.Success -> {
-                        Librarian.getInstance(this@AdvancedMemorySettingsActivity).invalidateModel()
-                        Toast.makeText(this@AdvancedMemorySettingsActivity,
-                            getString(R.string.memory_model_downloaded, model.displayName), Toast.LENGTH_SHORT).show()
-                    }
-                    EmbeddingModelDownloader.Result.Canceled -> { }
-                    is EmbeddingModelDownloader.Result.Failed ->
-                        Toast.makeText(this@AdvancedMemorySettingsActivity,
-                            getString(R.string.memory_model_download_failed, result.reason), Toast.LENGTH_LONG).show()
-                }
-                refreshModelRow(row, model)
-                refreshIndexStatus()
-            }
-        }
-        downloadJobs[model.id] = job
-        refreshModelRow(row, model)
-    }
-
-    private fun deleteModel(model: EmbeddingModels.Model, row: View) {
-        EmbeddingModelStorage.delete(this, model)
-        Librarian.getInstance(this).invalidateModel()
-        refreshModelRow(row, model)
-        refreshIndexStatus()
-    }
+    /* ------------------------------ index ------------------------------ */
 
     private fun rebuildIndex() {
         textIndexStatus?.text = getString(R.string.memory_index_building, 0, 0)
@@ -315,18 +214,20 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
         }.start()
     }
 
+    /** The no-model line moved to the Embedding Model screen; with no model
+     *  installed this line stays empty. */
     private fun refreshIndexStatus() {
         Thread {
             val text = try {
                 val librarian = Librarian.getInstance(this)
                 when {
-                    librarian.activeTag() == null -> getString(R.string.memory_index_none)
+                    librarian.activeTag() == null -> ""
                     librarian.indexNeedsRebuild() -> getString(R.string.memory_index_stale)
                     !MemoryStore.isProvisioned(this) -> getString(R.string.memory_index_ok, 0)
                     else -> getString(R.string.memory_index_ok,
                         MemoryStore.getInstance(this).counts()["memories"] ?: 0)
                 }
-            } catch (_: Exception) { getString(R.string.memory_index_none) }
+            } catch (_: Exception) { "" }
             runOnUiThread { textIndexStatus?.text = text }
         }.start()
     }

@@ -68,6 +68,7 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
     private var switchAutoApplyModelRules: MaterialSwitch? = null
     private var rowSummarizerSettings: LinearLayout? = null
     private var rowMemoryScannerToolApi: LinearLayout? = null
+    private var rowEmbeddingModel: LinearLayout? = null
 
     private var systemPromptsPreferences: SystemPromptsPreferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
@@ -110,6 +111,7 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
         switchAutoApplyModelRules = findViewById(R.id.switch_auto_apply_model_rules)
         rowSummarizerSettings = findViewById(R.id.row_summarizer_settings)
         rowMemoryScannerToolApi = findViewById(R.id.row_memory_scanner_tool_api)
+        rowEmbeddingModel = findViewById(R.id.row_embedding_model)
     }
 
     @Suppress("DEPRECATION")
@@ -157,6 +159,10 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
 
         rowMemoryScannerToolApi?.setOnClickListener {
             startActivity(Intent(this, MemoryScannerToolApiActivity::class.java))
+        }
+
+        rowEmbeddingModel?.setOnClickListener {
+            startActivity(Intent(this, EmbeddingModelActivity::class.java))
         }
 
         rowSystemPrompt?.setOnClickListener {

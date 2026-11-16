@@ -385,4 +385,7 @@
     <dimen name="stacked_selector_value_gap">8dp</dimen>
     <dimen name="stacked_selector_gear_gap">8dp</dimen>
     <dimen name="stacked_selector_action_gap">12dp</dimen>
+
+    <!-- Downloadable model list (Widget.App.ModelDownloadList). -->
+    <dimen name="model_download_list_gap">8dp</dimen>
 </resources>
