@@ -84,7 +84,7 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
 
 | Order | Stage | Contains | Needs | Approve first | The user sees |
 |---:|---|---|---|---|---|
-| 1 | **Memory provenance** | M.3: source storage and database migration; sources recorded by the Memory Assistant; backups, imports, restores and merges; source carried through supersede and merge; source link and dates in the Memory Browser | Nothing unbuilt | G43 | A link at the bottom of a memory back to the message it came from, and its dates |
+| 1 | **Memory provenance** | M.3: source storage and database migration; sources recorded by the Memory Assistant; backups, imports, restores and merges; source carried through supersede and merge; source link and dates in the Memory Browser | Nothing unbuilt | Nothing (G43 decided) | A link at the bottom of a memory back to the message it came from, and its dates |
 | 2 | **Context assistance: Off and Code-based** | Step 4a: the context-assistance interface, Off, Code-based subject tracking, the +3 top-match rule, the app-wide setting | #205 and #206 merged (done) | G38; G45 if the lorebook check is included | Follow-ups keep their memories; the context-assistance setting |
 | 3 | **Context assistance: API AI** | Step 4b, with the dedicated configuration screen of M.4 | Stage 2 | G39, G44 | The API AI choice and its configuration screen |
 | 4 | **Memory length limit** | Step 5: word count under every memory editor, the saving limit, Memory Assistant splitting | Step 1 (done) | Open parts of G34 | Word count under memory fields |
@@ -96,7 +96,7 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
 | 10 | **Recall retrieval and inspector** | Steps 14 and 15 | Stages 2 and 8 | G36; inspector labels | Conversation Recall Test screen |
 | 11 | **Conversation Recall in real requests** | Step 16 | Stage 10 | AI-facing text, "what was sent" wording, recall-room setting, debug lines, G24 | Conversation Recall works |
 | 12 | **The Always tab and bring-up setting** | Memory plan Phase 3 | Stage 5 | Wording, screens, AI-facing text; D17 | Always tab |
-| 13 | **Today's date and dates on memories** | Memory plan Phase 4 | Stage 12 | D55 and G43(e) first; D1–D5, D12–D14 wording and AI-facing text | Dates tab, important dates |
+| 13 | **Today's date and dates on memories** | Memory plan Phase 4 | Stage 12 | D55 first; D1–D5, D12–D14 wording and AI-facing text | Dates tab, important dates |
 | 14 | **Fading** | Memory plan Phase 5 | Stage 13 | D8, D19, D45, D49, D50 details | Fading markers |
 | 15 | **Memory Assistant date proposals** | Memory plan Phase 6 | Stage 13 | D33, AI-facing text | Proposed dates in Pending |
 | Later | Not ordered | Optional re-ranker; live AI worker (G.11, G8); recall across chats (G9); Local AI context assistance; other embedding models (G41); background reviewer (D51); recent-chat continuity (D38); companion journal (D40); Model Rules adjustments (D.13); search tuning revisited; vector size, automatic tags and variety (memory plan steps 1.14–1.16, only if testing shows a need) | The re-ranker, live AI worker and cross-chat recall need stage 11 | Separate owner decisions | — |
@@ -127,7 +127,7 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
   unchanged. A builder may still split a stage if one PR would be too
   large to review safely, and says why.
 
-## M.3 Memory provenance (Owner requirements; display decided 2026-11-16; storage design Proposed)
+## M.3 Memory provenance (Owner decisions of 2026-11-15 and 2026-11-16)
 
 ### What the owner decided (2026-11-15, recorded in the RAG notes section 1A)
 
@@ -144,7 +144,10 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
   user, the AI, or another speaker) is stored when known. Unknown stays
   unknown, and an AI suggestion is never attributed to the user.
 - **An optional event date,** when the source supports it. It is not the
-  statement date or the creation date, and is never invented.
+  statement date or the creation date, and is never invented. **Owner,
+  2026-11-16:** this is the same thing as the important date of memory plan
+  Phase 4 (D.5): one field, called the **important date**, holding the date
+  the thing actually happens, not when it was said.
 - **Several sources per memory.** A consolidated, updated or deduplicated
   memory keeps references to every supporting source rather than replacing
   them.
@@ -212,10 +215,16 @@ never run together on one line. For a source that is a user message:
 - **Date** is the date the message was sent, always fully spelled out:
   month name, day, comma, four-digit year ("November 10, 2025"). Never
   numeric, abbreviated, or relative ("yesterday"). With no known date the
-  line says so rather than guessing (wording approved first).
+  value reads **Unavailable**.
 - **Source Message** is the tappable line that opens the chat at that
   message. When only the conversation is known, it reads **Source
   Conversation** and opens the chat.
+- **Unavailable and deleted sources (Owner, 2026-11-16).** When the source
+  cannot be found or opened, the source line reads **Unavailable**. When the
+  source message, or the chat holding it, was deleted, it reads
+  **Deleted**. The memory is never removed or changed because its source
+  was deleted. (This is different from a deleted Glamour, companion or
+  Roleplay Character, whose last known name is kept.)
 - The appearance of the labels and values comes from `ui-style-guide.md`;
   a missing style is created there.
 
@@ -245,12 +254,15 @@ never run together on one line. For a source that is a user message:
   belongs only to the user's own messages. The same principle applies when
   a Roleplay Character speaks: **Speaker** is that character's name.
 - **Editing (Owner, 2026-11-16).** The user can never edit the memory's
-  creation date or a source message's date. The user can add, change and
-  clear the memory's **event date** in the memory editor. The owner's
-  intent for the event date: when a memory is about something that happens
-  at a specific time, the event date makes it easier to bring that memory
-  up at the right time. How it relates to Phase 4's important date stays
-  open (G43(e)).
+  creation date or a source message's date, and cannot add, change or
+  remove sources: sources come only from the app. The user can add, change
+  and clear the memory's **important date** (the former "event date"), so a
+  memory about something at a specific time can be brought up at the right
+  time.
+- **Possible later (Owner, 2026-11-16; not now):** letting the user add a
+  source to a memory. Not built unless the owner asks. The sources table
+  already allows more sources per memory, so adding this later needs no
+  database change.
 - **Renamed or deleted profiles (Owner, 2026-11-16).** A Glamour, a
   companion and a Roleplay Character are referenced by their permanent ID,
   never by name. The source stores that ID with the profile's name as last
@@ -270,7 +282,7 @@ never run together on one line. For a source that is a user message:
     `companion_id`) or be stamped on new replies. Nothing is guessed for
     older messages.
 
-### The design (Proposed, approved as a whole in G43)
+### The design (G43 decided, 2026-11-16)
 
 **Storage.**
 - A new table of sources, one row per supporting source of a memory:
@@ -287,13 +299,14 @@ never run together on one line. For a source that is a user message:
     shows" below);
   - the statement time, when known;
   - when and how the source was attached: cited by the Memory Assistant,
-    added by the user, or carried from a memory it replaced.
-- One optional event date on the memory itself, because it describes what
-  the memory says, not where it came from.
-- **No copy of the message text** is stored with the source. The chat stays
-  the only home of the conversation. If the chat is deleted, the memory
-  keeps its dates and speaker, and the link reports that the source is no
-  longer available.
+    or carried from a memory it replaced.
+- **No event-date field in this stage.** The event date is the important
+  date (Owner, 2026-11-16), one field, built with Phase 4 (stage 13) in the
+  form D.5 designs, so the memory database gains one date field, not two.
+- **No copy of the message text** is stored with the source (Owner,
+  2026-11-16: no excerpts). The chat stays the only home of the
+  conversation. If the chat is deleted, the memory keeps its date and
+  speaker, and the source line reads **Deleted**.
 - The memory's "original statement date" shown to the user is the earliest
   known statement time among its sources. It is derived, not stored twice.
 - The migration adds the table and the column in the next database
@@ -309,8 +322,19 @@ never run together on one line. For a source that is a user message:
   falls back to the conversation alone. **The speaker and the statement
   time are read by the app from the cited turn, never from the model's
   words,** so an AI suggestion can never be recorded as the user's
-  statement. The changed instruction text is AI-facing and needs approval
-  (G43(f)).
+  statement.
+- **The Memory Scanner's citing instruction** (the owner left the wording to
+  the agent, 2026-11-16). Added to both analysis prompts, adapted to the
+  turn numbering and output format the builder finds in `ArchivistPrompt`:
+
+  > Each turn of the conversation is numbered. For every memory you
+  > propose, list the numbers of the turns where that information was
+  > actually stated, in `source_turns`. Cite only turns from this
+  > conversation that state it directly. If it comes from several turns,
+  > list each one. If you are not sure which turn it came from, leave
+  > `source_turns` empty rather than guessing.
+
+  The app ignores any cited number that was not in the batch.
 - **Pending to saved.** Accepting, editing or filing a proposal keeps its
   sources.
 - **Replacing and merging.** Save & Supersede, Replace and a Possible Match
@@ -327,9 +351,9 @@ never run together on one line. For a source that is a user message:
   renamed), the chat is found again by the permanent message ID. The rename
   path also updates source references where it can. A test covers a renamed
   older chat.
-- A source message that was deleted, hidden from the AI, or belongs to a
-  deleted chat is reported plainly; the memory itself is never changed or
-  removed because its source changed.
+- A source message that was deleted, or belongs to a deleted chat, reads
+  **Deleted**; one that cannot be found or opened reads **Unavailable**. The
+  memory itself is never changed or removed because its source changed.
 
 **Backups, imports, restores and merges.**
 - The sources table is added to `MemoryPortableRows.memorySpecs`, so every
@@ -345,8 +369,8 @@ never run together on one line. For a source that is a user message:
 Nothing new is sent to any AI model and nothing new is placed in the
 embedding text.
 
-**Not in this stage:** the Memory Assistant proposing event dates (aligned
-with Phase 6, stage 15); speaker wording in the embedding text (measured
+**Not in this stage:** the important date (Phase 4, stage 13) and the
+Memory Assistant proposing it (Phase 6, stage 15); user-added sources; speaker wording in the embedding text (measured
 later, when a test set with speakers exists); filling in sources for
 memories saved before this stage.
 
@@ -444,9 +468,9 @@ default, not a permanent restriction. In addition:
   The database is at version 34, and provenance adds the next version. Each
   stage takes the next version when it is built.
 - **Provenance and later phases.** Retired memories keep their sources.
-  Fading and Retired never delete sources. Phase 4's important date and
-  provenance's event date are separate unless the owner decides otherwise
-  (G43(e)).
+  Fading and Retired never delete sources. Provenance's event date and
+  Phase 4's important date are one field (Owner, 2026-11-16), built in
+  Phase 4.
 - **Step 1.13 is still unbuilt** (checked 2026-11-16): the frozen request
   path (`buildFrozenRegularRequest`) passes no lorebook matches to the
   memory system, so the check that drops a memory repeating a lorebook entry
@@ -527,7 +551,6 @@ Each is also a row in G.17.
 
 | # | Needed before | Question | Recommendation |
 |---|---|---|---|
-| G43 | Stage 1 | The rest of the provenance design in M.3 (display decided 2026-11-16; open details in G.17) | Approve M.3; recommendations for each detail are in G.17 |
 | G45 | Stage 2 | Include the frozen-path lorebook check (step 1.13) in Step 4a | Yes |
 | G38 | Stage 2 | Context-assistance setting (on RAG Active Memory Settings, M.11): label, explanation, starting choice, rebuilding the subject after restart, whether Local AI is shown before it is built | Start on Code-based; do not show Local AI until it exists |
 | G44 | Stage 2 | Ship Off and Code-based before API AI is ready | Yes |
@@ -3411,7 +3434,7 @@ about to start. Each has a recommendation.
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
 | G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
-| G43 | The memory provenance design (M.3) as a whole, and its details. **Decided (owner, 2026-11-16):** sources show as separate labeled lines (Speaker; Glamour only when one was in use, by its profile name; Date fully spelled out; Source Message), with the speaker as listed in the chat for that message (M.3, "What the Memory Browser shows"). **Still open:** (a) the wording when a source or its date is unavailable; (b) decided 2026-11-16: a companion or Roleplay Character speaker shows only its name; Glamour, companion and Roleplay Character names follow renames by ID and keep the last known name after deletion; (c) decided 2026-11-16: the creation date and message dates are never editable and the event date is; still open: whether the user can remove a wrong source or add one; (d) whether any excerpt of the source message is stored; (e) whether the event date and Phase 4's important date are separate fields; (f) the Memory Scanner instruction text that asks it to cite source messages; and approval of the storage design as a whole | Open. Recommended: (d) no excerpt, the link and the chat are the source; (e) separate: an event date records a fact and never causes sending, an important date is a sending rule | Memory provenance (stage 1) |
+| G43 | The memory provenance design (M.3) and its details | **Decided (owner, 2026-11-16):** separate labeled lines (Speaker; Glamour only for the user's messages when one was in use; Date fully spelled out; Source Message); the speaker is whoever said the message; profile names follow renames by ID and keep the last known name after deletion; an unavailable source reads Unavailable and a deleted one reads Deleted, and the memory is never removed; no excerpts; the user cannot edit sources, the creation date or message dates; the event date is the important date, one field, built in Phase 4; the citing instruction wording was left to the agent (M.3). Adding sources by hand is a possible later feature | Decided |
 | G44 | Ship Step 4a's setting with Off and Code-based before Step 4b adds API AI, or hold it until all three exist | Open. Recommended: ship Step 4a first; its benefit is measured and free | Step 4a |
 | G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | Open. Recommended: yes. It changes only that a memory repeating a lorebook entry is no longer sent on the frozen path, as it already is not on the other path | Step 4a |
 
