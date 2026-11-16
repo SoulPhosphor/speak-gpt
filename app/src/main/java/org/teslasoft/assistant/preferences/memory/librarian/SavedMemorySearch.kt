@@ -41,10 +41,12 @@ object SavedMemorySearch {
     fun search(
         query: String, queryVector: FloatArray?, index: LiveRetrieval.Index,
         params: LiveRetrieval.Params, limit: Int, useImportanceRatings: Boolean,
+        plusThreeTopMatch: Boolean = true,
         readSections: () -> LongMessageSearch.Reading
     ): Result {
         val whole = LiveRetrieval.search(query, queryVector, index, params, limit,
-            useImportanceRatings, includeMandatoryImportance = useImportanceRatings)
+            useImportanceRatings, includeMandatoryImportance = useImportanceRatings,
+            plusThreeTopMatch = plusThreeTopMatch)
         val reading = if (queryVector != null) readSections() else LongMessageSearch.Reading.NONE
         val scoringStarted = System.nanoTime()
         val matches = LongMessageSearch.matches(reading, index, params, whole.explanations, useImportanceRatings)

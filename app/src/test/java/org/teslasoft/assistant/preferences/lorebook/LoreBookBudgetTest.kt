@@ -30,30 +30,36 @@ class LoreBookBudgetTest {
 
     @Test fun everythingFitsWhenUnderBothLimits() {
         val matches = listOf(match("a", "short"), match("b", "also short"))
-        val result = LoreBookBudget.select(matches, maxEntries = 20, maxChars = 6000)
+        val result = LoreBookBudget.select(matches, maxEntries = 20, maxChars = null)
         assertEquals(listOf("a", "b"), result.kept.map { it.entry.id })
         assertTrue(result.cut.isEmpty())
     }
 
     @Test fun entryLimitCutsEverythingFromThatPointOnwardWithReason() {
         val matches = (1..5).map { match("m$it", "x") }
-        val result = LoreBookBudget.select(matches, maxEntries = 3, maxChars = 6000)
+        val result = LoreBookBudget.select(matches, maxEntries = 3, maxChars = null)
         assertEquals(listOf("m1", "m2", "m3"), result.kept.map { it.entry.id })
         assertEquals(listOf("m4", "m5"), result.cut.map { it.match.entry.id })
         assertTrue(result.cut.all { it.reason.contains("entry limit") })
     }
 
-    @Test fun characterBudgetStopsTheWalkWithoutBackfill() {
-        // "big" (60 chars) doesn't fit after "small" (10 chars) within a 50-char
-        // budget; the walk STOPS there rather than skipping ahead to try a
-        // later, smaller candidate — lore stays simple/deterministic (§5.6).
+    @Test fun characterLimitSkipsAnEntryThatDoesNotFitAndKeepsLaterOnesThatDo() {
+        // Owner rule (Stage 2): with the optional character limit on, fewer
+        // entries may be sent; an entry that would pass the limit is skipped
+        // and later entries that still fit are kept. The limit is never passed.
         val small = match("small", "s".repeat(10))
         val big = match("big", "b".repeat(60))
         val tiny = match("tiny", "t".repeat(2))
         val result = LoreBookBudget.select(listOf(small, big, tiny), maxEntries = 20, maxChars = 50)
-        assertEquals(listOf("small"), result.kept.map { it.entry.id })
-        assertEquals(listOf("big", "tiny"), result.cut.map { it.match.entry.id })
+        assertEquals(listOf("small", "tiny"), result.kept.map { it.entry.id })
+        assertEquals(listOf("big"), result.cut.map { it.match.entry.id })
         assertTrue(result.cut.all { it.reason.contains("character budget") })
+    }
+
+    @Test fun withoutACharacterLimitOnlyTheEntryLimitApplies() {
+        val huge = match("huge", "x".repeat(50_000))
+        val result = LoreBookBudget.select(listOf(huge, match("b", "y")), maxEntries = 20, maxChars = null)
+        assertEquals(listOf("huge", "b"), result.kept.map { it.entry.id })
     }
 
     @Test fun budgetTrimmedLorebookEntryNeverAppearsInAttribution() {
@@ -74,17 +80,15 @@ class LoreBookBudgetTest {
         assertFalse(attribution.any { it.id == "trimmed" })
     }
 
-    @Test fun aSingleOversizedFirstEntryStillGetsIn() {
-        // kept.isEmpty() bypasses the char check for the very first candidate —
-        // one huge note is never zero-injected, matching the original loop.
+    @Test fun aFirstEntryLongerThanTheCharacterLimitIsNotSent() {
         val huge = match("huge", "x".repeat(10_000))
         val result = LoreBookBudget.select(listOf(huge), maxEntries = 20, maxChars = 50)
-        assertEquals(listOf("huge"), result.kept.map { it.entry.id })
-        assertTrue(result.cut.isEmpty())
+        assertTrue(result.kept.isEmpty())
+        assertEquals(listOf("huge"), result.cut.map { it.match.entry.id })
     }
 
     @Test fun emptyInputProducesEmptySelection() {
-        val result = LoreBookBudget.select(emptyList(), maxEntries = 20, maxChars = 6000)
+        val result = LoreBookBudget.select(emptyList(), maxEntries = 20, maxChars = null)
         assertTrue(result.kept.isEmpty())
         assertTrue(result.cut.isEmpty())
     }

@@ -107,11 +107,7 @@ class LoreBookStore private constructor(
         private const val TABLE_DELETED_ENTRIES = "deleted_entry_ids"
         private const val COL_DELETED_AT = "deleted_at"
 
-        // Injection safety budget: if many memories trigger at once, only this
-        // many entries / characters are injected per request (core book first),
-        // so a trigger-storm can't flood the model's context or the user's bill.
-        const val MAX_INJECTED_ENTRIES = 20
-        const val MAX_INJECTED_CHARS = 6000
+        // The per-request entry and character limits are LorebookLimits.
 
         // A multi-book/multi-entry batched query passes ids as bound
         // parameters; chunk them so the IN(...) list stays well under

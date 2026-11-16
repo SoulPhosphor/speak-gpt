@@ -1013,3 +1013,37 @@ The plain lower bar is rejected: on the held-out set it sends the custody memory
 ### Limits
 
 Two invented sets (152 turns) written by agents; Android similarities replayed on a desktop JVM, not a send through the app; no lore, oversized memories, real chat history or timing. Subject tracking's 4.0 stand-out was chosen on the development set and was not adjusted for the held-out set.
+
+## Step 4a: context assistance and the +3 top-match rule
+
+The app's own Off and On-device (Code-Based) context assistance (`ContextAssistant.Off`, `CodeBasedAssistant`) run through the enforcer's selection on both frozen carry-over sets. Nothing in the cases, the methods or the matching numbers was changed.
+
+**Reproduction.** With the +3 top-match rule switched off inside the test, the app's Off and Code-based send exactly the recorded `none` and `subject_anchor` results on both sets and both inputs, turn by turn at Maximum Memories 8 and in total at 1, 2, 3, 5 and 8 (`CarryOverFinalEvaluationTest.appMatches…`).
+
+**With the rule on** (Maximum Memories 8; record: `recall_carryover_holdout/step4a_results.json`):
+
+| Set | Input | Method | Rule | Correct | Missed | Incorrect | Incorrect +3 | Expected +3 missed |
+|---|---|---|---|---:|---:|---:|---:|---:|
+| Development | Android | Off | off | 51 | 29 | 31 | 1 | 5 |
+| Development | Android | Off | on | 52 | 28 | 31 | 1 | 4 |
+| Development | Android | Code-based | off | 67 | 13 | 33 | 1 | 3 |
+| Development | Android | Code-based | on | 68 | 12 | 33 | 1 | 2 |
+| Development | Desktop vectors | Off | off | 51 | 29 | 32 | 1 | 4 |
+| Development | Desktop vectors | Off | on | 52 | 28 | 32 | 1 | 3 |
+| Development | Desktop vectors | Code-based | off | 66 | 14 | 35 | 1 | 3 |
+| Development | Desktop vectors | Code-based | on | 67 | 13 | 35 | 1 | 2 |
+| Held-out | Android | Off | off | 40 | 29 | 43 | 12 | 13 |
+| Held-out | Android | Off | on | 42 | 27 | 43 | 12 | 11 |
+| Held-out | Android | Code-based | off | 58 | 11 | 50 | 12 | 8 |
+| Held-out | Android | Code-based | on | 59 | 10 | 50 | 12 | 7 |
+| Held-out | Desktop vectors | Off | off | 40 | 29 | 43 | 10 | 13 |
+| Held-out | Desktop vectors | Off | on | 42 | 27 | 43 | 10 | 11 |
+| Held-out | Desktop vectors | Code-based | off | 58 | 11 | 50 | 10 | 8 |
+| Held-out | Desktop vectors | Code-based | on | 59 | 10 | 50 | 10 | 7 |
+
+The rule finds one or two more expected +3 memories in every row and adds no incorrect memory. Combined with Code-based it does not change what is carried: a memory matched only through the rule fails the meaning gate, so it never sets the subject.
+
+**Step 0 set.** The rule changes nothing on the Step 0 set (desktop vectors): 69 found, 6 missed, 17 wrongly sent, with the rule on and off.
+
+**Not measured here.** Send-time cost on a physical phone, and the on-device checks of the Step 4a work order (leaving and re-entering a chat, switching chats, a restart, Maximum Memories 1 and 8, lorebook overlap and Memory Space with carried memories). Code-based adds no model reads to a message that has a confident match or a known subject; the first message after a restart with neither searches up to three earlier messages once.
+

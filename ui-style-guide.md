@@ -502,7 +502,7 @@ Use these pieces in order:
 4. `Widget.App.Row.Subtitle`
 5. `Widget.App.Row.Number.Field`
 
-Use for a setting whose value is a whole number typed into a small field at the end of the row. The title and subtitle are the same as a toggle row's. Set `android:ems` and `android:maxLength` on each field for the digits it accepts. Current users: Complete Messages and Compaction Average Token Amount (Summarizer Settings).
+Use for a setting whose value is a whole number typed into a small field at the end of the row. The title and subtitle are the same as a toggle row's; the subtitle is left out of a title-only number row. Set `android:ems` and `android:maxLength` on each field for the digits it accepts. A number row that depends on a toggle sits directly beneath that toggle row and is shown only while the toggle is on. `NumberSettingField` (`org.teslasoft.assistant.ui.util`) wires a field to its stored value: a field with a default restores it when left invalid, a field without one starts empty. Current users: Complete Messages and Compaction Average Token Amount (Summarizer Settings); Maximum Lorebook Entries and Maximum Lorebook Characters (Lorebook Settings); Maximum Lorebook Entries (RAG Active Memory Settings).
 
 ### Title information icons
 
@@ -923,6 +923,11 @@ Each section is `layout/view_summary_section.xml`; the shared editing behaviors 
 Use for a plain explanatory paragraph at the top of a screen that has no title of its own above it. 14sp, regular weight, full-strength `text_title` color.
 
 Distinct from `Widget.App.Section.Title`/`Widget.App.Section.Hint`, which are a heading-plus-explanation pair belonging to one section within a screen, and from `Widget.App.Row.Subtitle`, which is muted 13sp text describing a single row. Use `Screen.Intro` only when the text is not paired with a heading directly above it.
+
+`Widget.App.Screen.Intro.PageTop` is the same paragraph as the first item of a
+`Widget.App.Page.Content` body, which has no top padding of its own; the gap
+below the header is `screen_intro_page_top_gap`. Current user: Memory Context
+Helper Settings.
 
 ## Multiple-choice dropdowns
 

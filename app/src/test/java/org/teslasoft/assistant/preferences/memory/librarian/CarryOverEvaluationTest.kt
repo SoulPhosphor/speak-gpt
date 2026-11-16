@@ -111,7 +111,9 @@ class CarryOverEvaluationTest {
     }
 
     private fun own(turn: Turn, limit: Int) =
-        SavedMemorySearch.search(turn.text, vector(turn), index, params, limit, true) { reading(turn) }
+        // Recorded before the +3 top-match rule; replayed with it off.
+        SavedMemorySearch.search(turn.text, vector(turn), index, params, limit, true,
+            plusThreeTopMatch = false) { reading(turn) }
 
     private fun message(turn: Turn) =
         PreviousMessageSearch.Message.withVector(turn.text, vector(turn)) { reading(turn) }
@@ -131,7 +133,8 @@ class CarryOverEvaluationTest {
     private fun plan(turns: List<Turn>, position: Int, count: Int, maximum: Int): List<Sent> {
         val result = PreviousMessageSearch.search(
             message(turns[position]), turns.subList(0, position).reversed().map { message(it) },
-            count, index, params, RetrievalBackfill.scanCap(maximum) + 1, true
+            count, index, params, RetrievalBackfill.scanCap(maximum) + 1, true,
+            plusThreeTopMatch = false
         )
         assertTrue(result.searchedByKeywordsOnly.isEmpty())
         return select(result.found.map { it.scored to (it.messagesBack > 0) }, maximum)

@@ -165,9 +165,13 @@ object LiveRetrieval {
         val passedKeyword: Boolean,
         val relevance: Double,
         val importanceBonus: Double,
-        val score: Double
+        val score: Double,
+        /** A +3 memory that failed the gate but matches under the owner's
+         *  top-match rule (conversation_recall_plan.md G.10, G40): only set by
+         *  [search] for the whole message, never for a section. */
+        val passedTopMatch: Boolean = false
     ) {
-        val passed: Boolean get() = passedMeaning || passedKeyword
+        val passed: Boolean get() = passedMeaning || passedKeyword || passedTopMatch
     }
 
     data class Result(
@@ -215,10 +219,11 @@ object LiveRetrieval {
         params: Params,
         limit: Int,
         useImportanceRatings: Boolean = true,
-        includeMandatoryImportance: Boolean = true
+        includeMandatoryImportance: Boolean = true,
+        plusThreeTopMatch: Boolean = true
     ): Result = search(
         query, queryVector, index(corpus), params, limit,
-        useImportanceRatings, includeMandatoryImportance
+        useImportanceRatings, includeMandatoryImportance, plusThreeTopMatch
     )
 
     /** [search] against an [Index] made once for this library. */
@@ -229,13 +234,20 @@ object LiveRetrieval {
         params: Params,
         limit: Int,
         useImportanceRatings: Boolean = true,
-        includeMandatoryImportance: Boolean = true
+        includeMandatoryImportance: Boolean = true,
+        plusThreeTopMatch: Boolean = true
     ): Result {
         val corpus = index.corpus
         if (corpus.isEmpty()) {
             return Result(emptyList(), emptyList(), Diagnostics(0, 0, queryVector != null, 0))
         }
-        val explanations = explain(query, queryVector, index, params, useImportanceRatings)
+        // Best first before the top-match rule, so a tie in similarity is
+        // settled the same way as in the measured evaluation.
+        val explained = explain(query, queryVector, index, params, useImportanceRatings)
+            .sortedByDescending { it.score }
+        val explanations = if (plusThreeTopMatch && includeMandatoryImportance && useImportanceRatings) {
+            applyTopMatch(explained, params)
+        } else explained
         val meaningRan = queryVector != null && index.withVector > 0
 
         val passed = explanations.filter { it.passed }.sortedByDescending { it.score }
@@ -249,6 +261,25 @@ object LiveRetrieval {
             explanations = explanations.sortedByDescending { it.score },
             diagnostics = Diagnostics(corpus.size, index.withVector, meaningRan, passed.size)
         )
+    }
+
+    /** Stand-out a +3 memory needs under the top-match rule (G.10, G40). */
+    const val TOP_MATCH_STANDOUT = 2.0
+
+    /**
+     * The owner's +3 top-match rule (conversation_recall_plan.md G.10, G40;
+     * measured as `lower_bar_top_match_only`). A +3 memory that failed the
+     * relevance gate still matches when it is the single most similar memory
+     * to the message, its similarity is at least the ordinary floor, and its
+     * stand-out is at least [TOP_MATCH_STANDOUT]. It applies to the whole
+     * message only, and only while importance ratings are used.
+     */
+    fun applyTopMatch(explanations: List<Explanation>, params: Params): List<Explanation> {
+        val top = explanations.filter { it.similarity != null }.maxByOrNull { it.similarity!! } ?: return explanations
+        if (top.passed || !ImportanceRanking.isMandatory(top.memory.importance.toDouble(), true)) return explanations
+        val similarity = top.similarity ?: return explanations
+        if (similarity < params.similarityFloor || (top.standout ?: 0.0) < TOP_MATCH_STANDOUT) return explanations
+        return explanations.map { if (it === top) it.copy(passedTopMatch = true) else it }
     }
 
     /**

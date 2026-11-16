@@ -2001,6 +2001,12 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- Screen.Intro as the first item of a Widget.App.Page.Content body,
+         which has no top padding of its own: the gap below the header. -->
+    <style name="Widget.App.Screen.Intro.PageTop">
+        <item name="android:paddingTop">@dimen/screen_intro_page_top_gap</item>
+    </style>
+
     <!-- A label-sized primary action centered on its own line directly
          below a screen's intro text (Widget.App.Screen.Intro), for vertical
          (LinearLayout) hosts. First user: Recompact Messages from Scratch on

@@ -453,6 +453,18 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.MemoryContextHelperSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_memory_context_helper_settings">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.LorebookSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_lorebook_settings">
+        </activity>
+
+        <activity
             android:name=".ui.activities.MemoryBackupRestoreActivity"
             android:exported="false"
             android:label="@string/title_memory_backup_restore"
