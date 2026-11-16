@@ -35,6 +35,32 @@ A stronger embedding model was previously considered but not selected because it
 - Today's Pixel 8 is a useful performance benchmark, **not a permanent device limit**. Report retrieval quality separately from speed, RAM, battery use and API cost. A future model may be acceptable on newer hardware even if too slow on today's phone.
 - No need to implement API embeddings or benchmark a new model merely to unblock current Step 3/4 work.
 
+## 1A. Memory Browser provenance fields — omitted from the first note
+
+**Correction, November 15:** The original note missed a separate discussion about fields the Memory Browser and Memory Assistant need. This is important because the app will eventually generate and combine memories from older conversation messages. Preserve these requirements when revising the saved-memory schema and Memory Assistant plan; this is **not** authorization to run a database migration without inspecting the current implementation and agreeing on behavior.
+
+### Preserve source information separately from memory content
+
+| Field / capability | Owner's intent and boundaries |
+|---|---|
+| **Original statement date/time** | Record when the source statement was actually made, **separate from** the saved memory's creation and last-edited timestamps. For historical data, leave unknown dates unknown. |
+| **Source conversation ID** | Retain a stable ID for the conversation that supplied the statement; a changeable conversation title is not an identity. |
+| **Source message ID** | When available, retain the permanent ID of the exact source message rather than linking only to the conversation as a whole. |
+| **Source link in Memory Browser** | Place a clickable link **at the bottom of the memory** to open the source conversation, ideally scrolled to the original message. Source identifiers should be used for navigation, not shown as distracting technical IDs in the normal UI. |
+| **Original speaker / attribution** | **Consider storing who said the statement**, distinguishing the user from an AI or another speaker. **The owner explicitly clarified that this must not be a mandatory field** for every memory. Unknown provenance remains unknown; do not misattribute assistant suggestions to the user. |
+| **Event date/time** | Consider a separate **optional** field for when the event described occurred, where supported by the source. It is not interchangeable with the statement date or creation date; do not fabricate it. |
+| **Multiple source messages** | Plan for a single consolidated memory to retain references to more than one supporting source, instead of replacing original provenance when a memory is updated or deduplicated. Exact display/lineage behavior is still to be designed. |
+
+**Do not conflate stored provenance with embedding input.** Storing source IDs, dates and optional attribution in structured metadata does **not** mean all of it should be sent to the embedding model. The owner wants **whether speaker attribution helps retrieval to remain a considered/testable choice**, not an automatic ban or a requirement. Technical UUIDs do not carry useful natural-language meaning; they belong in metadata, not searchable memory prose. A small measured test can decide whether natural-language speaker context belongs in the embedding's document text.
+
+### Database and migration implications
+
+This is more than adding labels to the Memory Browser. Expect a schema change: dates and attribution can be nullable fields, while **multiple source references may warrant a separate memory-to-source relationship table**. Inspect the current schema, existing permanent message identifiers, source ownership/scope, import/export and backup formats before choosing the migration. Existing memories must remain intact; missing historical provenance should remain unset rather than invented. Preserve provenance through future edits, consolidation, backup/restore and embedding-model changes.
+
+The exact data schema, whether the event-date field and speaker metadata are exposed in regular UI or advanced details, and handling deleted/hidden/inaccessible source messages remain implementation decisions for review. **The main decisions are to preserve traceable origins, enable source navigation, and keep speaker information optional and its use for embeddings undecided.**
+
+**Priority:** Plan and implement provenance alongside the relevant saved-memory and Memory Assistant work, before large-scale creation of memories without source lineage. This should **not** block finishing Fable's already-running frozen retrieval evaluation or require re-running it now.
+
 ## 2. Relevance and +3 importance: question to resolve with measurements
 
 The current implementation's **+3** status makes an *otherwise eligible* memory mandatory even beyond the Maximum Memories count. It **does not** bypass the relevance gate. A +3 memory can be first by raw cosine similarity and still fail the gate's additional stand-out requirement.
