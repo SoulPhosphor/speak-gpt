@@ -73,7 +73,8 @@ object ModelEndpointMergePlanner {
                 favorites.values.toList(),
                 RecentModelsBackup.merge(current.recents, backup.recents),
                 DedicatedModelsBackup.merge(current.summarizer, backup.summarizer),
-                DedicatedModelsBackup.merge(current.memoryScanner, backup.memoryScanner)
+                DedicatedModelsBackup.merge(current.memoryScanner, backup.memoryScanner),
+                DedicatedModelsBackup.merge(current.memoryContextHelper, backup.memoryContextHelper)
             ),
             Report(addedEndpoints, addedFavorites, identicalSkipped, conflicts)
         )

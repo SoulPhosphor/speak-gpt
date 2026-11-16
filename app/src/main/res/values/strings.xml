@@ -4534,6 +4534,9 @@
     <string name="memory_context_helper_method">Helper Method</string>
     <string name="memory_context_helper_method_code_based">On-device (Code-Based)</string>
     <string name="memory_context_helper_method_code_based_hint">Uses rules on your device to keep memories from the last clearly identified subject available during follow-ups. No additional AI calls or cost.\n\nIt cannot always distinguish a follow-up from a new topic, so unrelated messages may also receive memories from the previous subject.</string>
+    <string name="title_memory_context_helper_tool_api">Memory Context Helper Tool API</string>
+    <string name="memory_context_helper_function">Memory Context Helper</string>
+    <string name="memory_context_helper_past_messages">Number of Past Messages to Send</string>
 
     <!-- Lorebook Settings (owner-approved wording, Stage 2). -->
     <string name="title_lorebook_settings">Lorebook Settings</string>

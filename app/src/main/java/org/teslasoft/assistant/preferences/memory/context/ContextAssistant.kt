@@ -26,7 +26,8 @@ import org.teslasoft.assistant.preferences.memory.librarian.SavedMemorySearch
  * choice, each choice its own implementation of [ContextAssistant]:
  *  - Off ([Off]): nothing; each message is searched on its own.
  *  - Code-based ([CodeBasedAssistant]): subject tracking, on the phone.
- *  - API AI (Step 4b) and Local AI (later) return a search query instead.
+ *  - API AI ([ApiContextAssistant]) and Local AI (later) return a search
+ *    query instead.
  *
  * Every choice keeps the same rules: the new message's own search results
  * come first and are never changed; assistance only adds candidates after
@@ -42,7 +43,15 @@ interface ContextAssistant {
      */
     fun assist(input: Input): Assistance
 
-    data class Assistance(val output: Output, val commit: () -> Unit = {})
+    data class Assistance(
+        val output: Output,
+        val commit: () -> Unit = {},
+        /** Set when the API helper gave nothing because it failed. */
+        val failure: ApiContextAssistant.Failure? = null
+    )
+
+    /** One earlier message of the chat, as the user or the AI wrote it. */
+    data class Turn(val isUser: Boolean, val text: String)
 
     data class Input(
         val chatId: String,
@@ -56,7 +65,16 @@ interface ContextAssistant {
         val earlierUserMessages: List<String>,
         /** Searches an earlier message the same way as the new one. Null when
          *  nothing can be searched. */
-        val searchEarlier: (String) -> SavedMemorySearch.Result?
+        val searchEarlier: (String) -> SavedMemorySearch.Result?,
+        /** The message being sent. */
+        val message: String = "",
+        /** The chat's earlier user and AI messages with text, oldest first,
+         *  not including [message]. */
+        val conversation: List<Turn> = emptyList(),
+        /** True while hands-free voice is running. */
+        val handsFree: Boolean = false,
+        /** Whether a query fits the embedding model's message limit. */
+        val queryFits: (String) -> Boolean = { true }
     )
 
     sealed class Output {

@@ -36,6 +36,7 @@ import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
 import org.teslasoft.assistant.preferences.memory.WorldRecord
+import org.teslasoft.assistant.preferences.memory.context.ApiContextAssistant
 import org.teslasoft.assistant.preferences.memory.context.ContextAssistance
 import org.teslasoft.assistant.preferences.memory.context.ContextAssistant
 import org.teslasoft.assistant.preferences.memory.librarian.RecallDiagnostics
@@ -125,7 +126,16 @@ class Enforcer private constructor(private val appContext: Context) {
         val useContextAssistance: Boolean = true,
         /** Receives the step that records this message in context assistance,
          *  to run only once the message is actually sent. Null runs it at once. */
-        val deferContextCommit: ((() -> Unit) -> Unit)? = null
+        val deferContextCommit: ((() -> Unit) -> Unit)? = null,
+        /** The chat's earlier user and AI messages with text, oldest first,
+         *  for the API helper (conversation_recall_plan.md M.4 item 1). */
+        val conversation: List<ContextAssistant.Turn> = emptyList(),
+        /** True while hands-free voice is running (the helper's shorter time
+         *  allowance, M.4 item 3). */
+        val handsFree: Boolean = false,
+        /** Told after each API helper call: null when it worked, else why it
+         *  gave nothing. Not called for other methods. */
+        val onContextHelperOutcome: ((ApiContextAssistant.Failure?) -> Unit)? = null
     )
 
     /** The rendered prompt and the exact final memory selection behind it. */
@@ -259,8 +269,9 @@ class Enforcer private constructor(private val appContext: Context) {
         // Context assistance (conversation_recall_plan.md G.9b): the message's
         // own results stay first and unchanged; assistance only adds
         // candidates after them, and they go through the same selection below.
-        val assistant = if (input.useContextAssistance) ContextAssistance.forSettings(prefs)
+        val assistant = if (input.useContextAssistance) ContextAssistance.forSettings(appContext, prefs)
         else ContextAssistant.Off
+        var helperQueryUsed = false
         val added: List<ScoredMemory> = turnSearch?.result?.let { own ->
             try {
                 val assistance = assistant.assist(ContextAssistant.Input(
@@ -271,14 +282,21 @@ class Enforcer private constructor(private val appContext: Context) {
                     earlierUserMessages = input.earlierUserMessages,
                     searchEarlier = { text ->
                         librarian.searchTurn(retrievalScope, text, scanCap + 1, projectId).result
-                    }
+                    },
+                    message = query,
+                    conversation = input.conversation,
+                    handsFree = input.handsFree,
+                    queryFits = { text -> librarian.fitsMessageLimit(text) }
                 ))
                 input.deferContextCommit?.invoke(assistance.commit) ?: assistance.commit()
+                if (assistant is ApiContextAssistant) input.onContextHelperOutcome?.invoke(assistance.failure)
                 when (val out = assistance.output) {
                     is ContextAssistant.Output.Nothing -> emptyList()
                     is ContextAssistant.Output.Carry -> out.memories
-                    is ContextAssistant.Output.Query ->
+                    is ContextAssistant.Output.Query -> {
+                        helperQueryUsed = true
                         librarian.searchTurn(retrievalScope, out.text, scanCap + 1, projectId).ranked
+                    }
                 }
             } catch (_: Exception) {
                 // Assistance only adds candidates; on failure the message is
@@ -286,7 +304,10 @@ class Enforcer private constructor(private val appContext: Context) {
                 emptyList()
             }
         }.orEmpty()
-        val (poolScored, carriedIds) = ContextAssistant.candidates(ownScored, added)
+        val (poolScored, addedIds) = ContextAssistant.candidates(ownScored, added)
+        // The debug view marks memories carried by On-device (Code-Based)
+        // subject tracking; what an API helper query found is not carried.
+        val carriedIds = if (helperQueryUsed) emptySet() else addedIds
         val topMatchIds = turnSearch?.result?.whole?.explanations
             ?.filter { it.passedTopMatch }?.map { it.memory.memoryId }?.toSet().orEmpty()
         val manualIds = manualMemories.map { it.memoryId }.toSet()

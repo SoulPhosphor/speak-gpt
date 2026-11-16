@@ -400,8 +400,11 @@ class ModelCleanupActivity : SettingsPageActivity() {
         container.removeAllViews()
         data.cleared.forEach { entry ->
             val text = getString(
-                if (entry.scope == ModelPickerScope.SUMMARIZER) R.string.model_cleanup_cleared_summarizer
-                else R.string.model_cleanup_cleared_memory_scanner,
+                when (entry.scope) {
+                    ModelPickerScope.SUMMARIZER -> R.string.model_cleanup_cleared_summarizer
+                    ModelPickerScope.MEMORY_CONTEXT_HELPER -> R.string.model_cleanup_cleared_memory_context_helper
+                    else -> R.string.model_cleanup_cleared_memory_scanner
+                },
                 entry.target.modelId, displayLabel(entry.target.endpointId, data)
             )
             container.addView(TextView(this, null, 0, R.style.Widget_App_ModelCleanup_ClearedLine).apply {

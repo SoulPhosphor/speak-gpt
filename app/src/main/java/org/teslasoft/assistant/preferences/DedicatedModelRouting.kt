@@ -24,8 +24,8 @@ import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.providers.RecentOnlyProvidersStore
 
 /**
- * A background job's selected model and its provider routing (the Summarizer
- * or the Memory Scanner), kept apart from the chat's and from each other.
+ * A background job's selected model and its provider routing (the Summarizer,
+ * the Memory Scanner or the Memory Context Helper), kept apart from the chat's and from each other.
  *
  * It follows the chat's rules with the job's own lists: a favorite keeps its
  * routing on the favorite; a model that is not one of the job's favorites, or
@@ -39,10 +39,12 @@ class DedicatedModelRouting private constructor(val scope: ModelPickerScope) {
     companion object {
         val SUMMARIZER = DedicatedModelRouting(ModelPickerScope.SUMMARIZER)
         val MEMORY_SCANNER = DedicatedModelRouting(ModelPickerScope.MEMORY_SCANNER)
+        val MEMORY_CONTEXT_HELPER = DedicatedModelRouting(ModelPickerScope.MEMORY_CONTEXT_HELPER)
 
         fun of(scope: ModelPickerScope): DedicatedModelRouting = when (scope) {
             ModelPickerScope.SUMMARIZER -> SUMMARIZER
             ModelPickerScope.MEMORY_SCANNER -> MEMORY_SCANNER
+            ModelPickerScope.MEMORY_CONTEXT_HELPER -> MEMORY_CONTEXT_HELPER
             ModelPickerScope.CHAT -> throw IllegalArgumentException("Chat routing belongs to ChatModelRouting")
         }
 
@@ -58,11 +60,19 @@ class DedicatedModelRouting private constructor(val scope: ModelPickerScope) {
     /* ---------------------------- The selected model ---------------------------- */
 
     fun endpointId(context: Context): String = prefs(context).let {
-        if (scope == ModelPickerScope.SUMMARIZER) it.getSummarizerEndpointId() else it.getArchivistEndpointId()
+        when (scope) {
+            ModelPickerScope.SUMMARIZER -> it.getSummarizerEndpointId()
+            ModelPickerScope.MEMORY_CONTEXT_HELPER -> it.getMemoryContextHelperEndpointId()
+            else -> it.getArchivistEndpointId()
+        }
     }
 
     fun modelId(context: Context): String = prefs(context).let {
-        if (scope == ModelPickerScope.SUMMARIZER) it.getSummarizerModel() else it.getArchivistModel()
+        when (scope) {
+            ModelPickerScope.SUMMARIZER -> it.getSummarizerModel()
+            ModelPickerScope.MEMORY_CONTEXT_HELPER -> it.getMemoryContextHelperModel()
+            else -> it.getArchivistModel()
+        }
     }
 
     /** Makes [modelId] on [endpointId] the job's model. Routing is set
@@ -72,33 +82,50 @@ class DedicatedModelRouting private constructor(val scope: ModelPickerScope) {
         if (scope == ModelPickerScope.SUMMARIZER) {
             prefs.setSummarizerEndpointId(endpointId)
             prefs.setSummarizerModel(modelId)
+        } else if (scope == ModelPickerScope.MEMORY_CONTEXT_HELPER) {
+            prefs.setMemoryContextHelperEndpointId(endpointId)
+            prefs.setMemoryContextHelperModel(modelId)
         } else {
             prefs.setArchivistEndpointId(endpointId)
             prefs.setArchivistModel(modelId)
         }
     }
 
-    private fun storedOverride(prefs: Preferences): String =
-        if (scope == ModelPickerScope.SUMMARIZER) prefs.getSummarizerRoutingOverride()
-        else prefs.getMemoryScannerRoutingOverride()
+    private fun storedOverride(prefs: Preferences): String = when (scope) {
+        ModelPickerScope.SUMMARIZER -> prefs.getSummarizerRoutingOverride()
+        ModelPickerScope.MEMORY_CONTEXT_HELPER -> prefs.getMemoryContextHelperRoutingOverride()
+        else -> prefs.getMemoryScannerRoutingOverride()
+    }
 
-    private fun migrated(prefs: Preferences): Boolean =
-        if (scope == ModelPickerScope.SUMMARIZER) prefs.getSummarizerRoutingMigrated()
-        else prefs.getMemoryScannerRoutingMigrated()
+    /** The Memory Context Helper never had an older routing setting, so it
+     *  has nothing to carry over. */
+    private fun migrated(prefs: Preferences): Boolean = when (scope) {
+        ModelPickerScope.SUMMARIZER -> prefs.getSummarizerRoutingMigrated()
+        ModelPickerScope.MEMORY_CONTEXT_HELPER -> true
+        else -> prefs.getMemoryScannerRoutingMigrated()
+    }
 
     private fun markMigrated(prefs: Preferences) {
-        if (scope == ModelPickerScope.SUMMARIZER) prefs.setSummarizerRoutingMigrated()
-        else prefs.setMemoryScannerRoutingMigrated()
+        when (scope) {
+            ModelPickerScope.SUMMARIZER -> prefs.setSummarizerRoutingMigrated()
+            ModelPickerScope.MEMORY_CONTEXT_HELPER -> Unit
+            else -> prefs.setMemoryScannerRoutingMigrated()
+        }
     }
 
     private fun storeOverride(prefs: Preferences, json: String) {
-        if (scope == ModelPickerScope.SUMMARIZER) prefs.setSummarizerRoutingOverride(json)
-        else prefs.setMemoryScannerRoutingOverride(json)
+        when (scope) {
+            ModelPickerScope.SUMMARIZER -> prefs.setSummarizerRoutingOverride(json)
+            ModelPickerScope.MEMORY_CONTEXT_HELPER -> prefs.setMemoryContextHelperRoutingOverride(json)
+            else -> prefs.setMemoryScannerRoutingOverride(json)
+        }
     }
 
-    private fun legacyRoutingType(prefs: Preferences): String =
-        if (scope == ModelPickerScope.SUMMARIZER) prefs.getSummarizerRoutingType()
-        else prefs.getArchivistRoutingType()
+    private fun legacyRoutingType(prefs: Preferences): String = when (scope) {
+        ModelPickerScope.SUMMARIZER -> prefs.getSummarizerRoutingType()
+        ModelPickerScope.MEMORY_CONTEXT_HELPER -> "automatic"
+        else -> prefs.getArchivistRoutingType()
+    }
 
     /* ---------------------------- Routing ---------------------------- */
 

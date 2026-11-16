@@ -70,7 +70,9 @@ object ModelEndpointPortableCodec {
          *  it; older backups have none. */
         val summarizer: DedicatedModelsBackup.Snapshot? = null,
         /** The Memory Scanner's, the same way. */
-        val memoryScanner: DedicatedModelsBackup.Snapshot? = null
+        val memoryScanner: DedicatedModelsBackup.Snapshot? = null,
+        /** The Memory Context Helper's, the same way. */
+        val memoryContextHelper: DedicatedModelsBackup.Snapshot? = null
     )
 
     sealed class Result {
@@ -128,6 +130,9 @@ object ModelEndpointPortableCodec {
             .apply { data.recents?.let { put("recents", RecentModelsBackup.encode(it)) } }
             .apply { data.summarizer?.let { put(SUMMARIZER_KEY, DedicatedModelsBackup.encode(it)) } }
             .apply { data.memoryScanner?.let { put(MEMORY_SCANNER_KEY, DedicatedModelsBackup.encode(it)) } }
+            .apply {
+                data.memoryContextHelper?.let { put(MEMORY_CONTEXT_HELPER_KEY, DedicatedModelsBackup.encode(it)) }
+            }
             .toString(2)
     }
 
@@ -208,12 +213,17 @@ object ModelEndpointPortableCodec {
                 DedicatedModelsBackup.parse(root.getJSONObject(MEMORY_SCANNER_KEY))
                     ?: return Result.Rejected("memory scanner models are malformed")
             } else null
+            val memoryContextHelper = if (root.has(MEMORY_CONTEXT_HELPER_KEY)) {
+                DedicatedModelsBackup.parse(root.getJSONObject(MEMORY_CONTEXT_HELPER_KEY))
+                    ?: return Result.Rejected("memory context helper models are malformed")
+            } else null
             val endpointIds = endpoints.mapTo(HashSet()) { e -> e.id }
             val data = Data(
                 endpoints, favorites,
                 recents?.let { RecentModelsBackup.forEndpoints(it, endpointIds) },
                 summarizer?.let { DedicatedModelsBackup.forEndpoints(it, endpointIds) },
-                memoryScanner?.let { DedicatedModelsBackup.forEndpoints(it, endpointIds) }
+                memoryScanner?.let { DedicatedModelsBackup.forEndpoints(it, endpointIds) },
+                memoryContextHelper?.let { DedicatedModelsBackup.forEndpoints(it, endpointIds) }
             )
             validate(data)?.let { Result.Rejected(it) } ?: Result.Ok(data)
         } catch (_: Exception) {
@@ -304,7 +314,10 @@ object ModelEndpointPortableCodec {
     private val ROOT_KEYS = setOf("format", "complete", "endpoints", "favorites")
     private const val SUMMARIZER_KEY = "summarizer_models"
     private const val MEMORY_SCANNER_KEY = "memory_scanner_models"
-    private val OPTIONAL_ROOT_KEYS = setOf("recents", SUMMARIZER_KEY, MEMORY_SCANNER_KEY)
+    private const val MEMORY_CONTEXT_HELPER_KEY = "memory_context_helper_models"
+    private val OPTIONAL_ROOT_KEYS = setOf(
+        "recents", SUMMARIZER_KEY, MEMORY_SCANNER_KEY, MEMORY_CONTEXT_HELPER_KEY
+    )
     private val ENDPOINT_KEYS = setOf(
         "id", "label", "host", "chat_endpoint", "speech_endpoint", "auth_type", "model",
         "temperature", "top_p", "frequency_penalty", "presence_penalty", "max_tokens",

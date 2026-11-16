@@ -42,6 +42,10 @@ object ModelEndpointPortableBackup {
             memoryScanner = DedicatedModelsBackup.forEndpoints(
                 DedicatedModelsBackup.capture(appContext, ModelPickerScope.MEMORY_SCANNER),
                 stored.endpoints.mapTo(HashSet()) { it.id }
+            ),
+            memoryContextHelper = DedicatedModelsBackup.forEndpoints(
+                DedicatedModelsBackup.capture(appContext, ModelPickerScope.MEMORY_CONTEXT_HELPER),
+                stored.endpoints.mapTo(HashSet()) { it.id }
             )
         )
         val json = ModelEndpointPortableCodec.encode(data)

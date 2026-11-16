@@ -69,6 +69,7 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
     private var rowSummarizerSettings: LinearLayout? = null
     private var rowMemoryScannerToolApi: LinearLayout? = null
     private var rowEmbeddingModel: LinearLayout? = null
+    private var rowMemoryContextHelperToolApi: LinearLayout? = null
 
     private var systemPromptsPreferences: SystemPromptsPreferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
@@ -112,6 +113,7 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
         rowSummarizerSettings = findViewById(R.id.row_summarizer_settings)
         rowMemoryScannerToolApi = findViewById(R.id.row_memory_scanner_tool_api)
         rowEmbeddingModel = findViewById(R.id.row_embedding_model)
+        rowMemoryContextHelperToolApi = findViewById(R.id.row_memory_context_helper_tool_api)
     }
 
     @Suppress("DEPRECATION")
@@ -159,6 +161,10 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
 
         rowMemoryScannerToolApi?.setOnClickListener {
             startActivity(Intent(this, MemoryScannerToolApiActivity::class.java))
+        }
+
+        rowMemoryContextHelperToolApi?.setOnClickListener {
+            startActivity(Intent(this, MemoryContextHelperToolApiActivity::class.java))
         }
 
         rowEmbeddingModel?.setOnClickListener {

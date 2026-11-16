@@ -810,6 +810,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         selectorTitle?.text = getString(
             when {
                 dedicatedPicker && scope == ModelPickerScope.SUMMARIZER -> R.string.summarizer_model_picker_title
+                dedicatedPicker && scope == ModelPickerScope.MEMORY_CONTEXT_HELPER ->
+                    R.string.memory_context_helper_model_picker_title
                 dedicatedPicker -> R.string.memory_scanner_model_picker_title
                 chatPicker -> R.string.model_picker_title
                 imageMode -> R.string.label_select_image_model

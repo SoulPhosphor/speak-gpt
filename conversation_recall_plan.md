@@ -287,9 +287,9 @@ without the owner.
    the label **Number of Past Messages to Send** and a field that takes one
    whole number, filled in with **4**. The number is how many recent
    exchanges (a user message and the reply to it) the helper receives with
-   the new message. The user may enter any whole number from 0 up; the app
-   adds no upper limit of its own, and the context-window rule above still
-   applies. An empty or invalid entry is not saved and the field shows the
+   the new message. The user may enter any whole number from 0 to 999 (the
+   field holds three digits); the app adds no other limit, and the
+   context-window rule above still applies. An empty or invalid entry is not saved and the field shows the
    saved number again (the shared number field's behavior).
 2. **Instructions.** A fixed, app-managed prompt. It resolves references
    and produces one standalone search query. It never answers the user,

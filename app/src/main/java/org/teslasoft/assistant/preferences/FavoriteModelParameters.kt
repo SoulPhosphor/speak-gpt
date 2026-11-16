@@ -95,6 +95,12 @@ object FavoriteModelParameters {
                 topP = prefs.getSummarizerTopP()
                 frequencyPenalty = prefs.getSummarizerFrequencyPenalty()
                 presencePenalty = prefs.getSummarizerPresencePenalty()
+            } else if (scope == ModelPickerScope.MEMORY_CONTEXT_HELPER) {
+                streaming = prefs.getMemoryContextHelperStreaming()
+                temperature = prefs.getMemoryContextHelperTemperature()
+                topP = prefs.getMemoryContextHelperTopP()
+                frequencyPenalty = prefs.getMemoryContextHelperFrequencyPenalty()
+                presencePenalty = prefs.getMemoryContextHelperPresencePenalty()
             } else {
                 streaming = prefs.getMemoryScannerStreaming()
                 temperature = prefs.getArchivistTemperature()
@@ -120,6 +126,12 @@ object FavoriteModelParameters {
             prefs.setSummarizerTopP(topP)
             prefs.setSummarizerFrequencyPenalty(frequency)
             prefs.setSummarizerPresencePenalty(presence)
+        } else if (scope == ModelPickerScope.MEMORY_CONTEXT_HELPER) {
+            prefs.setMemoryContextHelperStreaming(streaming)
+            prefs.setMemoryContextHelperTemperature(temperature)
+            prefs.setMemoryContextHelperTopP(topP)
+            prefs.setMemoryContextHelperFrequencyPenalty(frequency)
+            prefs.setMemoryContextHelperPresencePenalty(presence)
         } else {
             prefs.setMemoryScannerStreaming(streaming)
             prefs.setArchivistTemperature(temperature)
