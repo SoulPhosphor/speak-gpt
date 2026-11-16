@@ -114,7 +114,9 @@ object Archivist {
     private data class PreparedMemories(
         val records: List<org.teslasoft.assistant.preferences.memory.MemoryRecord>,
         val relationshipHintsByMemoryId: Map<String, List<String>>,
-        val duplicatesSkipped: Int
+        val duplicatesSkipped: Int,
+        val sourcesByMemoryId: Map<String, List<org.teslasoft.assistant.preferences.memory.MemorySource>> =
+            emptyMap()
     )
 
     private data class PreparedLore(
@@ -904,7 +906,8 @@ object Archivist {
                                                 preparedMemories.records, preparedRules, emptyList(),
                                                 relationshipHintsByMemoryId =
                                                     preparedMemories.relationshipHintsByMemoryId,
-                                                runProgress = progressRow
+                                                runProgress = progressRow,
+                                                sourcesByMemoryId = preparedMemories.sourcesByMemoryId
                                             )
                                         } else {
                                             store.commitRerunChatOutputs(
@@ -912,7 +915,8 @@ object Archivist {
                                                 relationshipHintsByMemoryId =
                                                     preparedMemories.relationshipHintsByMemoryId,
                                                 candidateCollectionId = candidateCollectionId,
-                                                runProgress = progressRow
+                                                runProgress = progressRow,
+                                                sourcesByMemoryId = preparedMemories.sourcesByMemoryId
                                             )
                                         }
                                     } catch (e: Exception) {
@@ -1363,6 +1367,7 @@ object Archivist {
         var duplicates = collected.exactDuplicatesRemoved
         val records = ArrayList<org.teslasoft.assistant.preferences.memory.MemoryRecord>()
         val relationshipHints = linkedMapOf<String, List<String>>()
+        val sources = linkedMapOf<String, List<org.teslasoft.assistant.preferences.memory.MemorySource>>()
         val stagedIdentities = HashSet<String>()
         // The current user-owned Type ids: a suggestion is honored only if it
         // names one of these, otherwise the memory files as No Type (never
@@ -1499,6 +1504,14 @@ object Archivist {
                             MemoryStore.nowIso()
                         )
                     records.add(record)
+                    // The source is the whole conversation, which the app
+                    // knows for certain (M.3). The scanner names no messages.
+                    sources[record.memoryId] = listOf(
+                        org.teslasoft.assistant.preferences.memory.MemorySourceRules.conversationOnly(
+                            MemoryStore.newId(org.teslasoft.assistant.preferences.memory.MemorySource.ID_PREFIX),
+                            record.memoryId, conversation.chatId, MemoryStore.nowIso()
+                        )
+                    )
                     // Request-local M aliases were validated by the parser.
                     // Re-check existence at the complete chat boundary; a
                     // vanished reference is discarded rather than guessed.
@@ -1509,7 +1522,7 @@ object Archivist {
                 }
             }
         }
-        return PreparedMemories(records, relationshipHints, duplicates)
+        return PreparedMemories(records, relationshipHints, duplicates, sources)
     }
 
     /** Production requests use only stable ids normalized from that exact

@@ -75,7 +75,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 34
+        private const val DATABASE_VERSION = 35
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -1017,6 +1017,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.execSQL("CREATE INDEX idx_supersessions_old ON memory_supersessions(old_memory_id)")
         db.execSQL("CREATE INDEX idx_possible_match_hints_existing ON memory_possible_match_hints(existing_memory_id)")
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
+        createMemorySourcesTable(db)
         db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
         db.execSQL("CREATE INDEX idx_transcripts_chat ON transcripts(chat_id)")
         db.execSQL("CREATE INDEX idx_transcripts_chat_order ON transcripts(chat_id, started_at, transcript_id)")
@@ -2195,6 +2196,45 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "34")
             )
         }
+        if (oldVersion < 35) {
+            // Memory provenance (development plan M.3). Additive only:
+            // existing memories receive no source rows and no dates, and
+            // their creation and edit times are unchanged.
+            createMemorySourcesTable(db)
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "35")
+            )
+        }
+    }
+
+    /**
+     * One row per supporting source of a memory (M.3), removed with the
+     * memory. Kinds and speakers are validated in code, not by CHECK
+     * constraints, so a backup from a later version with a new value still
+     * restores. No message text is stored.
+     */
+    private fun createMemorySourcesTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS memory_sources (" +
+                "source_id TEXT PRIMARY KEY, " +
+                "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "kind TEXT NOT NULL, " +
+                "chat_id TEXT, " +
+                "message_id TEXT, " +
+                "speaker TEXT, " +
+                "speaker_name TEXT, " +
+                "speaker_profile_kind TEXT, " +
+                "speaker_profile_id TEXT, " +
+                "glamour_id TEXT, " +
+                "glamour_name TEXT, " +
+                "stated_at TEXT, " +
+                "attached_at TEXT NOT NULL, " +
+                "attached_by TEXT NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_memory_sources_memory ON memory_sources(memory_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_memory_sources_chat ON memory_sources(chat_id)")
     }
 
     /** Adds the built-in Inside Joke Type if it is missing. Idempotent. */
@@ -2894,6 +2934,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         put("prior_state_json", l.priorStateJson)
                     })
                 }
+                // Sources follow the memory under its final id (M.3). A source
+                // id already used here is given a fresh one, never dropped.
+                for (source in m.sources) {
+                    val sourceId = source.sourceId.takeIf {
+                        it.isNotBlank() && !rowExists(db, "memory_sources", "source_id", it)
+                    } ?: newMemorySourceId()
+                    insertMemorySourceTx(db, source.copy(sourceId = sourceId, memoryId = finalId))
+                }
                 report.addAdded("memories")
                 if (finalId != m.memoryId) report.addRepaired("memories")
             }
@@ -3271,7 +3319,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         companionIds = readJoin(db, "memory_companions", "companion_id", id),
                         entityRefs = readJoin(db, "memory_entities", "entity_id", id),
                         changeLog = readChangeLog(db, id),
-                        origin = it.getStringOrNull("origin") ?: "user"
+                        origin = it.getStringOrNull("origin") ?: "user",
+                        sources = readMemorySourcesTx(db, id)
                     )
                 )
             }
@@ -4070,10 +4119,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         memories: List<MemoryRecord>,
         rules: List<ModelRuleRecord>,
         lorebookSuggestions: List<LorebookSuggestionRecord>,
-        relationshipHintsByMemoryId: Map<String, List<String>>
+        relationshipHintsByMemoryId: Map<String, List<String>>,
+        sourcesByMemoryId: Map<String, List<MemorySource>> = emptyMap()
     ) {
         for (memory in memories) {
             insertPendingMemoryTx(db, memory, generated = true)
+            for (source in sourcesByMemoryId[memory.memoryId].orEmpty()) {
+                insertMemorySourceTx(db, source.copy(memoryId = memory.memoryId))
+            }
             for (existingId in relationshipHintsByMemoryId[memory.memoryId].orEmpty().distinct()) {
                 if (existingId == memory.memoryId ||
                     !rowExists(db, "memories", "memory_id", existingId)
@@ -4114,7 +4167,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         rules: List<ModelRuleRecord>,
         lorebookSuggestions: List<LorebookSuggestionRecord>,
         relationshipHintsByMemoryId: Map<String, List<String>> = emptyMap(),
-        runProgress: ArchivistRunRecord? = null
+        runProgress: ArchivistRunRecord? = null,
+        sourcesByMemoryId: Map<String, List<MemorySource>> = emptyMap()
     ): CommittedChatOutputs {
         val db = writableDatabase
         db.beginTransaction()
@@ -4160,7 +4214,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             }
 
             insertPreparedOutputsTx(
-                db, memories, rules, lorebookSuggestions, relationshipHintsByMemoryId
+                db, memories, rules, lorebookSuggestions, relationshipHintsByMemoryId,
+                sourcesByMemoryId
             )
 
             val frozenEnd = AnalysisBookmark.Boundary(
@@ -4222,13 +4277,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         lorebookSuggestions: List<LorebookSuggestionRecord>,
         relationshipHintsByMemoryId: Map<String, List<String>> = emptyMap(),
         candidateCollectionId: String? = null,
-        runProgress: ArchivistRunRecord? = null
+        runProgress: ArchivistRunRecord? = null,
+        sourcesByMemoryId: Map<String, List<MemorySource>> = emptyMap()
     ): CommittedChatOutputs {
         val db = writableDatabase
         db.beginTransaction()
         try {
             insertPreparedOutputsTx(
-                db, memories, rules, lorebookSuggestions, relationshipHintsByMemoryId
+                db, memories, rules, lorebookSuggestions, relationshipHintsByMemoryId,
+                sourcesByMemoryId
             )
             candidateCollectionId?.let { collectionId ->
                 db.update("analysis_run_state", ContentValues().apply {
@@ -5370,6 +5427,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             )
             db.execSQL(
                 "UPDATE OR REPLACE rejected_lore_suggestions SET chat_key = ? WHERE chat_key = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            // Memory sources name their chat by the same id (M.3).
+            db.execSQL(
+                "UPDATE memory_sources SET chat_id = ? WHERE chat_id = ?",
                 arrayOf(newChatId, oldChatId)
             )
             db.setTransactionSuccessful()
@@ -7259,6 +7321,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.insertOrThrow("memories", null, memoryValues(m))
             writeMemoryLinks(db, m)
             logChange(db, m.memoryId, "user", "created", null, null)
+            // A memory the user writes is recorded as the user's own entry,
+            // dated when it was created (M.3): no message and no speaker.
+            insertMemorySourceTx(
+                db, MemorySourceRules.userEntry(newMemorySourceId(), m.memoryId, m.createdAt)
+            )
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -7417,6 +7484,67 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         recordDeletionTx(db, "memory", memoryId, prior?.createdAt)
         clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
     }
+
+    /* ---------------------------------------------------------------------- */
+    /* Memory sources (development plan M.3)                                   */
+    /* ---------------------------------------------------------------------- */
+
+    private fun newMemorySourceId(): String = newId(MemorySource.ID_PREFIX)
+
+    private fun memorySourceValues(s: MemorySource) = ContentValues().apply {
+        put("source_id", s.sourceId)
+        put("memory_id", s.memoryId)
+        put("kind", s.kind)
+        put("chat_id", s.chatId)
+        put("message_id", s.messageId)
+        put("speaker", s.speaker)
+        put("speaker_name", s.speakerName)
+        put("speaker_profile_kind", s.speakerProfileKind)
+        put("speaker_profile_id", s.speakerProfileId)
+        put("glamour_id", s.glamourId)
+        put("glamour_name", s.glamourName)
+        put("stated_at", s.statedAt)
+        put("attached_at", s.attachedAt)
+        put("attached_by", s.attachedBy)
+    }
+
+    private fun insertMemorySourceTx(db: SQLiteDatabase, s: MemorySource) {
+        db.insertOrThrow("memory_sources", null, memorySourceValues(s))
+    }
+
+    private fun readMemorySourcesTx(db: SQLiteDatabase, memoryId: String): List<MemorySource> {
+        val out = ArrayList<MemorySource>()
+        db.query(
+            "memory_sources", null, "memory_id = ?", arrayOf(memoryId),
+            null, null, "attached_at ASC, source_id ASC"
+        ).use { c ->
+            while (c.moveToNext()) {
+                out.add(
+                    MemorySource(
+                        sourceId = c.getString(c.getColumnIndexOrThrow("source_id")),
+                        memoryId = c.getString(c.getColumnIndexOrThrow("memory_id")),
+                        kind = c.getString(c.getColumnIndexOrThrow("kind")),
+                        chatId = c.getStringOrNull("chat_id"),
+                        messageId = c.getStringOrNull("message_id"),
+                        speaker = c.getStringOrNull("speaker"),
+                        speakerName = c.getStringOrNull("speaker_name"),
+                        speakerProfileKind = c.getStringOrNull("speaker_profile_kind"),
+                        speakerProfileId = c.getStringOrNull("speaker_profile_id"),
+                        glamourId = c.getStringOrNull("glamour_id"),
+                        glamourName = c.getStringOrNull("glamour_name"),
+                        statedAt = c.getStringOrNull("stated_at"),
+                        attachedAt = c.getString(c.getColumnIndexOrThrow("attached_at")),
+                        attachedBy = c.getString(c.getColumnIndexOrThrow("attached_by"))
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    /** Every recorded source of [memoryId], oldest attachment first. */
+    fun memorySources(memoryId: String): List<MemorySource> =
+        readMemorySourcesTx(readableDatabase, memoryId)
 
     /* ---------------------------------------------------------------------- */
     /* Possible Match detection + resolution (Step 1.5)                        */

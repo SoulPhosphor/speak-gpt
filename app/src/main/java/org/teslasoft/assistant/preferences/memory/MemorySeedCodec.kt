@@ -120,6 +120,44 @@ object MemorySeedCodec {
         if (value != null) put(key, value)
     }
 
+    private fun encodeSource(s: MemorySource): JSONObject = JSONObject().apply {
+        put("source_id", s.sourceId)
+        put("kind", s.kind)
+        putIfNotNull("chat_id", s.chatId)
+        putIfNotNull("message_id", s.messageId)
+        putIfNotNull("speaker", s.speaker)
+        putIfNotNull("speaker_name", s.speakerName)
+        putIfNotNull("speaker_profile_kind", s.speakerProfileKind)
+        putIfNotNull("speaker_profile_id", s.speakerProfileId)
+        putIfNotNull("glamour_id", s.glamourId)
+        putIfNotNull("glamour_name", s.glamourName)
+        putIfNotNull("stated_at", s.statedAt)
+        put("attached_at", s.attachedAt)
+        put("attached_by", s.attachedBy)
+    }
+
+    /** One stored source, or null when it lacks the fields every source has. */
+    private fun decodeSource(o: JSONObject, memoryId: String): MemorySource? {
+        val kind = o.str("kind") ?: return null
+        val attachedAt = o.str("attached_at") ?: return null
+        return MemorySource(
+            sourceId = o.str("source_id").orEmpty(),
+            memoryId = memoryId,
+            kind = kind,
+            chatId = o.str("chat_id"),
+            messageId = o.str("message_id"),
+            speaker = o.str("speaker"),
+            speakerName = o.str("speaker_name"),
+            speakerProfileKind = o.str("speaker_profile_kind"),
+            speakerProfileId = o.str("speaker_profile_id"),
+            glamourId = o.str("glamour_id"),
+            glamourName = o.str("glamour_name"),
+            statedAt = o.str("stated_at"),
+            attachedAt = attachedAt,
+            attachedBy = o.str("attached_by") ?: MemorySource.ATTACHED_IMPORT
+        )
+    }
+
     private fun each(obj: JSONObject, key: String): List<JSONObject> {
         if (!obj.has(key) || obj.isNull(key)) return emptyList()
         val arr = obj.getJSONArray(key)
@@ -216,7 +254,10 @@ object MemorySeedCodec {
                         note = l.str("note"),
                         priorStateJson = null
                     )
-                }
+                },
+                // Memory sources (M.3). Absent in older backups: the memory
+                // simply has none.
+                sources = each(m, "sources").mapNotNull { src -> decodeSource(src, m.reqStr("memory_id")) }
             )
         }
 
@@ -618,6 +659,9 @@ object MemorySeedCodec {
                                 })
                             }
                         })
+                    }
+                    if (m.sources.isNotEmpty()) {
+                        put("sources", JSONArray().apply { m.sources.forEach { put(encodeSource(it)) } })
                     }
                     put("created_at", m.createdAt)
                     putIfNotNull("updated_at", m.updatedAt)

@@ -11,16 +11,19 @@ data class ChatListDetails(val hasBookmarks: Boolean, val startedAt: Long?, val 
     companion object {
         fun fromMessages(messages: List<Map<String, *>>, startedAt: Long? = null): ChatListDetails = ChatListDetails(
             messages.any(MessageBookmarks::isBookmarked),
-            startedAt?.takeIf { it > 0 } ?: messages.mapNotNull { message ->
-                val raw = message["messageTime"]
-                val time = when (raw) {
-                    is Number -> raw.toDouble().takeIf { it.isFinite() && it > 0 && it < Long.MAX_VALUE }
-                        ?.toLong()
-                    else -> raw?.toString()?.toLongOrNull()
-                }
-                time?.takeIf { it > 0 }
-            }.minOrNull()
+            startedAt?.takeIf { it > 0 } ?: messages.mapNotNull(::messageTime).minOrNull()
         )
+
+        /** When [message] was created, epoch milliseconds, or null when not recorded. */
+        fun messageTime(message: Map<String, *>): Long? {
+            val raw = message["messageTime"]
+            val time = when (raw) {
+                is Number -> raw.toDouble().takeIf { it.isFinite() && it > 0 && it < Long.MAX_VALUE }
+                    ?.toLong()
+                else -> raw?.toString()?.toLongOrNull()
+            }
+            return time?.takeIf { it > 0 }
+        }
 
         fun metadata(
             startedAt: Long?, model: String?,

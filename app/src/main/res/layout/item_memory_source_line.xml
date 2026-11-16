@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A labeled memory source line, e.g. "Speaker: Lena" (Widget.App.SourceLine). -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.SourceLine" />

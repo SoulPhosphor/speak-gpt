@@ -326,8 +326,47 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 }
                 refreshScope()
                 ready = true
+                record?.let { loadSources(it.memoryId) }
             }
         }
+    }
+
+    /** The memory's source lines under Tags (M.3). The last indexed details
+     *  show at once; a chat not indexed yet is prepared and the lines redrawn,
+     *  and any later index change redraws them too. Never blocks the editor. */
+    private fun loadSources(id: String) {
+        runOffThread {
+            // Source lines are a reminder only: if they cannot be read, the
+            // editor works as before and the lines stay hidden.
+            val store = try { MemoryStore.getInstance(this) } catch (_: Exception) { return@runOffThread }
+            var shown: List<List<MemorySourceLines.Line>>? = null
+            for (prepareMissing in listOf(false, true)) {
+                val groups = try {
+                    MemorySourceLines.load(this, store, id, prepareMissing)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                if (groups == shown) continue
+                shown = groups
+                runOnUiThread {
+                    findViewById<android.widget.LinearLayout>(R.id.section_memory_sources)?.let {
+                        MemorySourceLines.render(this, it, groups)
+                    }
+                }
+            }
+        }
+    }
+
+    private val sourceIndexListener: () -> Unit = { existing?.memoryId?.let { loadSources(it) } }
+
+    override fun onStart() {
+        super.onStart()
+        org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex.addListener(sourceIndexListener)
+    }
+
+    override fun onStop() {
+        org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex.removeListener(sourceIndexListener)
+        super.onStop()
     }
 
     private fun targetsForScope(scope: String, r: MemoryRecord): List<String> = when (scope) {
@@ -726,6 +765,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                     if (saved != null) {
                         existing = saved
                         memoryId = saved.memoryId
+                        loadSources(saved.memoryId)
                     }
                     btnHeaderSave?.let { SaveIconFlash.flash(it) }
                     Toast.makeText(this, R.string.mem_edit_saved_toast, Toast.LENGTH_SHORT).show()

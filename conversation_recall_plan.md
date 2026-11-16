@@ -85,7 +85,7 @@ it starts (M.10).
 
 | Order | Stage | Contains | Needs | Approve first | The user sees |
 |---:|---|---|---|---|---|
-| 1 | **Memory provenance** | M.3: source storage and database migration; sources recorded by the Memory Assistant; backups, imports, restores and merges; source carried through supersede and merge; source link and dates in the Memory Browser | Nothing unbuilt | Nothing (G43 decided) | A link at the bottom of a memory back to the message it came from, and its dates |
+| 1 | **Memory provenance** | M.3: source storage and database migration; the conversation recorded by the Memory Assistant; backups, imports, restores and merges; conversation participants, dates and link in the memory editor | Nothing unbuilt | Nothing (G43 decided) | The conversation a memory came from: its participants, its dates, and a link to it |
 | 2 | **Context assistance: Off and Code-based** | Step 4a: the context-assistance interface, no helper and Code-based, the +3 top-match rule, Memory Context Helper Settings with its toggle and dropdown | #205 and #206 merged (done) | The Step 4a questions in M.10 | Follow-ups keep their memories; the context-assistance setting |
 | 3 | **Context assistance: API AI** | Step 4b, with the Memory Context Helper Tool API screen in AI Settings (M.4) | Stage 2 | The Step 4b questions in M.10 | The API AI choice and the Memory Context Helper Tool API screen |
 | 4 | **Memory length limit** | Step 5: word count under every memory editor, the saving limit, Memory Assistant splitting | Step 1 (done) | Open parts of G34 | Word count under memory fields |
@@ -130,293 +130,104 @@ it starts (M.10).
 
 ## M.3 Memory provenance (Owner decisions of 2026-11-15 and 2026-11-16)
 
-### What the owner decided (2026-11-15, recorded in the RAG notes section 1A)
+### What the owner decided
 
-- **Original statement date and time,** separate from the memory's creation
-  and last-edited times. Unknown historical dates stay unknown.
-- **Source conversation ID,** a stable ID, never the changeable chat title.
-- **Source message ID,** the permanent ID of the exact message, when
-  available.
-- **A clickable source link on the memory** (placed under Tags in the memory
-  editor, Owner 2026-11-16) in the Memory
-  Browser, opening the conversation, ideally at the original message.
-  Technical IDs are used for navigation and are not shown in the normal
-  view.
-- **Speaker attribution is optional, never mandatory.** Who said it (the
-  user, the AI, or another speaker) is stored when known. Unknown stays
-  unknown, and an AI suggestion is never attributed to the user.
-- **An optional event date,** when the source supports it. It is not the
-  statement date or the creation date, and is never invented. **Owner,
-  2026-11-16:** this is the same thing as the important date of memory plan
-  Phase 4 (D.5): one field, called the **important date**, holding the date
-  the thing actually happens, not when it was said.
-- **Several sources per memory.** A consolidated, updated or deduplicated
-  memory keeps references to every supporting source rather than replacing
-  them.
-- **Stored provenance is not embedding input.** Source IDs and dates are
-  metadata. Whether speaker wording should be part of the text the
-  embedding model reads remains a measured, open question, neither banned
-  nor required.
-- **Existing memories stay intact,** and provenance survives edits,
-  consolidation, backup and restore, and embedding-model changes.
-- **Priority:** before large-scale creation of memories without source
-  lineage.
+- **The source is the whole conversation (Owner, 2026-11-16).** A memory
+  from the Memory Scanner records the conversation it was read from, which
+  the app knows for certain. The scanner is never asked which message a
+  memory came from: an inexpensive model choosing message numbers is not
+  reliable, and correct details of the wrong message are still wrong
+  attribution. Participant-specific attribution of a memory is not built now
+  and is a separate future question.
+- **No carried sources (Owner, 2026-11-16).** Save & Replace, Save &
+  Supersede and a Possible Match merge do not copy old memories' sources onto
+  the resulting memory. Each memory keeps only its own source; a superseded
+  memory keeps its own as history.
+- **A memory the user writes** records the user's own entry, dated when the
+  user created it. It has no conversation.
+- **Existing memories stay intact,** and sources survive edits, Pending
+  acceptance, backup and restore, and embedding-model changes.
+- **Stored provenance is not embedding input** and is never sent to an AI.
+- **No excerpts:** no copy of message text is stored with a source.
+- **The important date** (the former "event date") is one field, built with
+  memory plan Phase 4 (stage 13), not in this stage.
+- **The Lorebook is untouched (Owner, 2026-11-16).** The Lorebook prompt and
+  lorebook suggestions get no sources.
 
-### What exists today (read in the code on 2026-11-16)
+### What the memory editor shows (Owner, 2026-11-16)
 
-A builder re-reads these before relying on them.
+Directly under **Tags** in the memory editor opened from the Memory Browser.
+For a memory from the Memory Scanner:
 
-- **The memory record** (`MemoryStore.kt`, table `memories`, database
-  version 34) has `created_at`, `updated_at`, `origin` and `supersedes`, and
-  no source, statement-date, speaker or event-date field.
-  `memory_supersessions` records which memory replaced which.
-  `change_log` records edits with an actor.
-- **The Memory Assistant reads stored turns** (table `transcripts`). Each
-  turn in a transcript row holds its role (user or assistant), its text, the
-  time it was captured, and, for turns captured since message IDs were
-  recorded, the permanent message ID (`TranscriptTurnVisibility.stamp`).
-  Each row holds the chat ID.
-- **Memory Assistant drafts carry no source.** Proposed memories record
-  neither the chat nor the message they came from. Lorebook suggestions
-  record only the source chat ID and name (`lorebook_suggestions`).
-- **The chat can already open at a message.** Chat search passes a message
-  ID (`SearchTargetResolver.EXTRA_MESSAGE_ID`) and the chat screen scrolls
-  to it (`ChatActivity.jumpToMessage`). The source link can reuse this.
-- **Chat IDs of older chats change on rename.** A chat that never had a
-  stored ID uses a hash of its title (`ChatPreferences.storedChatId`), and
-  `ChatRenameTransaction` does not update anything in the memory database.
-  Message IDs do not change.
-- **Backups are table-driven.** The memory backup, import and restore read
-  and write the tables listed in `MemoryPortableRows.memorySpecs`. A new
-  table is carried only when it is added to that list. Imports can remap
-  memory IDs (`MemoryIdRemap`, `MemoryIdImport`).
-- **The embedding text** is built by `RetrievalDocument` from a memory's
-  content and tags. New metadata columns do not change it, so provenance
-  requires no re-embedding.
-
-### What the Memory Browser shows (Owner, 2026-11-16)
-
-**Placement (Owner, 2026-11-16).** In the memory editor opened from the
-Memory Browser, directly under the **Tags** field, in this order:
-**Speaker**, **Glamour** (only when one applies), **Date**, **Source
-Message**, then, once Phase 4 builds it, the editable **important date**.
-Each source is shown as separate labeled lines, never run together on one
-line. For a source that is a user message:
-
-> **Speaker:** Lena
-> **Glamour:** Midnight
+> **User:** Lena, Captain Vale
+> **Companion:** Ada
 > **Date:** November 10, 2025
-> **Source Message**
+> **Last Message Date:** November 12, 2025
+> **Source Conversation**
 
-- **Speaker** is the username the chat listed for that message: the name
-  shown above that message in the chat. That name can come from the
-  chat's own username, a Glamour's in-chat name, or a Roleplay Character.
-  It is the name as it was for that message, recorded when the source is
-  recorded. A later name change never relabels it.
-- **Glamour** appears on its own line under Speaker **only when a Glamour
-  was in use for that message**. It always shows the Glamour's **profile
-  name** (its assigned name in the Glamour list), even when that Glamour
-  uses a different name in chat, because the profile name is the firm
-  identifier. The Glamour's ID is stored with it.
-- **Date never changes (Owner, 2026-11-16).** It is the date of the source
-  message, or, for a memory the user wrote, the date the user first created
-  it. Editing, replacing or merging the memory never changes it, and it is
-  not the memory's last-edited time. (The memory's existing change history
-  is left as it is for now.)
-- **Date** is the date the message was sent, always fully spelled out:
-  month name, day, comma, four-digit year ("November 10, 2025"). Never
-  numeric, abbreviated, or relative ("yesterday"). With no known date the
-  value reads **Unavailable**.
-- **Source Message** is the tappable line that opens the chat at that
-  message. When only the conversation is known, it reads **Source
-  Conversation** and opens the chat.
-- **Source and speaker are separate (Owner, 2026-11-16).** The **source**
-  is the message the memory was taken from (the Source Message line). The
-  **speaker** is who said it (the Speaker line, and Glamour for the user's
-  own messages). The speaker name is saved when the source is recorded and
-  is never deleted: it always shows a name, even when no profile exists for
-  it, when that profile was deleted, or when the source message was
-  deleted or is unavailable. Only the Source Message line can read
-  **Deleted** or **Unavailable**; Speaker, Glamour and Date stay.
-- **Memories the user writes (Owner, 2026-11-16).** A memory the user
-  types in themselves has no source and no speaker, and the user cannot add
-  either. It shows one line: **Date**, the date the user created the
-  memory, fully spelled out like every date. **Checked in the code on
-  2026-11-16:** the memory record cannot tell this today. Its `origin`
-  column holds the same placeholder for every route (Memory Assistant,
-  import and manual; `PendingMemoryRecordFactory.COMPAT_ORIGIN`), and the
-  marker for Memory Assistant drafts (`generated_pending_drafts`) is removed
-  when a draft is accepted. So from this stage on, creating a memory by hand
-  records it as written by the user (a source of the kind "the user's own
-  entry", with no message and no speaker). Memories saved before this stage
-  cannot be told apart and show no lines.
-- **No source, no lines (Owner, 2026-11-16).** Any other memory with no
-  recorded source (any memory saved before this stage, or an import
-  without sources) shows no source lines at all. The source lines
-  are a reminder for the user of where a memory came from; they are never
-  sent to the AI and nothing else depends on them.
-- **Unavailable and deleted sources (Owner, 2026-11-16).** When a recorded
-  source cannot be found or opened (an error case), the source line reads
-  **Unavailable**. When the
-  source message, or the chat holding it, was deleted, it reads
-  **Deleted**. The memory is never removed or changed because its source
-  was deleted. (This is different from a deleted Glamour, companion or
-  Roleplay Character, whose last known name is kept.)
-- The appearance of the labels and values comes from `ui-style-guide.md`;
-  a missing style is created there.
+- **User** and **Companion** list every distinct name the conversation
+  displays for that role, in order of first appearance, separated by commas.
+  They follow the chat screen's own name rules (`ChatSpeakerNames`): the
+  chat's own username replaces every user name; a message without a saved
+  name shows "User", and a reply without one shows the chat's current
+  companion, else "Assistant". Names are the ones saved on the messages, so a
+  deleted companion or Glamour never makes them disappear. Nothing is
+  resolved from companion or Glamour IDs. A role with no messages has no
+  line.
+- **Date** is the date of the first message currently in the conversation.
+  **Last Message Date** is the date of the newest message currently in the
+  conversation, shown only when it falls on a different calendar day. Both
+  describe the conversation, not the memory's extraction, and are read live:
+  if the conversation continues, Last Message Date moves. Each is that
+  exact message's own time; when the first or newest message has no time
+  saved, its date reads **Unavailable** and is never taken from another
+  message. Dates are fully spelled out ("November 10, 2025").
+- **Source Conversation** opens the chat. When the chat was deleted it reads
+  **Source Conversation: Deleted**; when chat storage cannot be read it reads
+  **Source Conversation: Unavailable**. The memory itself is never changed or
+  removed because its conversation changed.
+- A memory the user wrote shows only **Date**, the date it was created.
+- A memory with no recorded source (saved before this stage, or an import
+  without sources) shows no lines.
+- Appearance comes from the `Widget.App.SourceLine` styles in
+  `ui-style-guide.md`.
 
-**Rules for the builder.**
-- Every value comes from the stored message and the app's own records,
-  never from the Memory Scanner's text. The scanner only names which
-  message a memory came from.
-- **Checked in the code on 2026-11-16:** each user message is stamped when
-  sent with the name used and, when that name came from a Glamour or a
-  Roleplay Character, the source and its ID (`ChatSpeakerNames`:
-  `userName`, `userNameSource` with `glamour:` or `roleplay:`). A chat's
-  own username, when set, replaces every user name that chat displays
-  (`ChatSpeakerNames.displayedUserName`). Companion replies carry the
-  companion's name (`companionName`). Messages sent before stamping existed
-  show only "User".
-- **Verify before building, and stop if it does not hold:** whether the
-  stamp records the Glamour whenever one is in use, or only when the
-  Glamour's own name is the name used (for example, when the chat's own
-  username replaces it). The owner's rule is "show the Glamour whenever one
-  was in use for that message". If the existing stamp cannot tell, propose
-  how to record it for new messages; older messages show only what was
-  recorded and nothing is guessed.
-- **The speaker is whoever said the message (Owner, 2026-11-16).** When a
-  companion said it, **Speaker** is that companion's name, from the name
-  recorded on its reply (`companionName`), and nothing else: no Glamour or
-  second line, because companions have no sub-profiles. The Glamour line
-  belongs only to the user's own messages. The same principle applies when
-  a Roleplay Character speaks: **Speaker** is that character's name.
-- **Editing (Owner, 2026-11-16).** The user can never edit the memory's
-  creation date or a source message's date, and cannot add, change or
-  remove sources: sources come only from the app. The user can add, change
-  and clear the memory's **important date** (the former "event date"), so a
-  memory about something at a specific time can be brought up at the right
-  time.
-- **Possible later (Owner, 2026-11-16; not now):** letting the user add a
-  source to a memory. Not built unless the owner asks. The sources table
-  already allows more sources per memory, so adding this later needs no
-  database change.
-- **Renamed or deleted profiles (Owner, 2026-11-16).** A Glamour, a
-  companion and a Roleplay Character are referenced by their permanent ID,
-  never by name. The source stores that ID with the profile's name as last
-  known.
-  - **Renamed:** the line shows the profile's current name, found by its
-    ID, so a rename updates every memory that cites it. The stored name is
-    refreshed to match.
-  - **Deleted:** the line keeps the last known name. It never says
-    "deleted" or "unavailable" and is never removed.
-  - This covers the Glamour line, a companion speaker, and a Roleplay
-    Character speaker. The user's **Speaker** username is the name the chat
-    showed for that message and stays as recorded.
-  - **Verify before building:** which ID each record holds. A user message
-    names its Glamour or Roleplay Character in `userNameSource`; a
-    companion reply is stamped only with `companionName`, so the companion's
-    ID must come from the chat's companion at the time (the transcript row's
-    `companion_id`) or be stamped on new replies. Nothing is guessed for
-    older messages.
+### The design
 
-### The design (G43 decided, 2026-11-16)
+**Storage.** Memory database version 35 adds `memory_sources`, one row per
+source, removed with its memory: the kind (conversation, user's own entry,
+or kept for later use: chat message, import, unknown), the chat ID, and when
+and how it was attached. The message, speaker, Glamour and statement-time
+columns are kept available for a later, more reliable scanner and are not
+filled now. The migration gives existing memories no source rows; creation
+and edit times are unchanged.
 
-**Storage.**
-- A new table of sources, one row per supporting source of a memory:
-  - the memory it supports, removed with the memory;
-  - the kind of source: a chat message, a conversation with no known
-    message, a user's own entry, an import, or unknown;
-  - the chat ID and the permanent message ID, each when known;
-  - the speaker, when known: the user, the AI, another speaker (such as a
-    roleplay character), or unknown. Never required;
-  - for a user message: the username the chat displayed for that message,
-    and, when a Glamour was in use for that message, the Glamour's ID and
-    its last known profile name; for a companion or Roleplay Character
-    speaker: its ID and last known name (see "What the Memory Browser
-    shows" below);
-  - the statement time, when known;
-  - when and how the source was attached: cited by the Memory Assistant,
-    or carried from a memory it replaced.
-- **No event-date field in this stage.** The event date is the important
-  date (Owner, 2026-11-16), one field, built with Phase 4 (stage 13) in the
-  form D.5 designs, so the memory database gains one date field, not two.
-- **No copy of the message text** is stored with the source (Owner,
-  2026-11-16: no excerpts). The chat stays the only home of the
-  conversation. If the chat is deleted, the memory keeps its date and
-  speaker, and the source line reads **Deleted**.
-- The memory's "original statement date" shown to the user is the earliest
-  known statement time among its sources. It is derived, not stored twice.
-- The migration adds the sources table in the next database
-  version. Existing memories receive no source rows and no dates; nothing
-  is guessed. Creation and edit times are unchanged.
+**Conversation details.** User, Companion, Date and Last Message Date come
+from the chat list's details index (`ChatListIndex`), which already keeps
+derived per-chat values and updates them in the background whenever a chat
+is saved. It also stores each role's saved names and the first and newest
+messages' own times. (Its existing earliest-known time, which the chat list
+uses, is not used for Date.) Its database version 3 rebuilds
+every chat's entry once from the chats (Owner approved, 2026-11-16). The
+editor shows the last indexed details at once, prepares a chat not yet
+indexed, and redraws when the index changes; it never reads the chat
+history itself and never blocks.
 
-**How sources are recorded.**
-- **Memory Assistant.** The chat of the analyzed conversation is known with
-  certainty and is always recorded. To record the exact message, the
-  assistant's instructions ask it to cite the turns each proposal came from.
-  The app checks every citation against the turns it actually sent: a
-  citation to a turn that was not in the batch is dropped, and the source
-  falls back to the conversation alone. **The speaker and the statement
-  time are read by the app from the cited turn, never from the model's
-  words,** so an AI suggestion can never be recorded as the user's
-  statement.
-- **The Memory Scanner's citing instruction** (the owner left the wording to
-  the agent, 2026-11-16). Added to both analysis prompts, adapted to the
-  turn numbering and output format the builder finds in `ArchivistPrompt`:
+**Chat IDs.** A chat rename updates sources through the existing rename path
+(`repointChat`). A chat whose ID changes some other way reads Deleted.
 
-  > Each turn of the conversation is numbered. For every memory you
-  > propose, list the numbers of the turns where that information was
-  > actually stated, in `source_turns`. Cite only turns from this
-  > conversation that state it directly. If it comes from several turns,
-  > list each one. If you are not sure which turn it came from, leave
-  > `source_turns` empty rather than guessing.
-
-  The app ignores any cited number that was not in the batch.
-- **Pending to saved.** Accepting, editing or filing a proposal keeps its
-  sources.
-- **Replacing and merging.** Save & Supersede, Replace and a Possible Match
-  merge give the resulting memory every source of the memories it replaces,
-  without duplicates (owner direction above).
-- **A memory the user writes** has no source unless the user adds one. There
-  is no action today for saving a chat message as a memory; adding one is a
-  separate interface decision, not part of this stage.
-
-**Navigation.**
-- The link opens the source chat at the source message through the
-  existing message jump.
-- When the stored chat ID no longer exists (an older chat that was
-  renamed), the chat is found again by the permanent message ID. The rename
-  path also updates source references where it can. A test covers a renamed
-  older chat.
-- A source message that was deleted, or belongs to a deleted chat, reads
-  **Deleted**; one that cannot be found or opened reads **Unavailable**. The
-  memory itself is never changed or removed because its source changed.
-
-**Backups, imports, restores and merges.**
-- The sources table is added to `MemoryPortableRows.memorySpecs`, so every
-  backup, export, import and restore path carries it.
-- Restoring an older backup that has no sources restores memories without
-  sources, never with an error.
-- A memory ID remapped during import keeps its sources under the new ID.
-- A chat merge or restore that changes chat IDs keeps source links working
-  through the message ID.
-- Round-trip tests for each path, including the legacy conversion path.
-
-**Privacy.** IDs, times and speaker stay in the encrypted memory database.
-Nothing new is sent to any AI model and nothing new is placed in the
-embedding text.
-
-**Not in this stage:** the important date (Phase 4, stage 13) and the
-Memory Assistant proposing it (Phase 6, stage 15); user-added sources; speaker wording in the embedding text (measured
-later, when a test set with speakers exists); filling in sources for
-memories saved before this stage.
+**Backups, imports, restores and merges.** The table is in
+`MemoryPortableRowFormat.memorySpecs` and the shared restore rows, and
+sources ride each memory in the memory backup JSON. Older backups without
+sources restore with none. A memory ID remapped during import keeps its
+sources under the new ID.
 
 **Tests.** Migration from version 34 with existing memories unchanged;
-recording and validating Memory Assistant citations, including an invalid
-citation and an AI-written turn; sources kept through Pending, edit,
-supersede, replace and Possible Match; every backup path round-trips;
-older backups restore without sources; renamed older chat, deleted chat
-and deleted message links; embedding text and stored vectors unchanged.
+sources kept through Pending, acceptance and edits; Replace and Supersede
+carrying nothing; every backup path round-trips and older backups restore
+without sources; the user-entry date; the index's participant names and
+dates; the editor lines, including Deleted, Unavailable and a same-day Last
+Message Date.
 
 ## M.4 Context assistance: correction for API AI (Owner, 2026-11-16)
 
@@ -570,12 +381,11 @@ default, not a permanent restriction. In addition:
   Glamour. Open when designed: whether a Glamour link is only a label
   reminding the user which Glamour the memory is about, or a visibility
   rule that limits the memory to chats where that Glamour is active. Not
-  built until the owner decides. This is separate from the Glamour line on
-  a memory's source, which records only which Glamour the user was using
-  when a message was sent.
+  built until the owner decides. This is separate from the User line on a
+  memory's source, which only lists the names the conversation displays.
 - **D58's open question** (whether a replacing memory keeps the old vibe)
-  stays open. Sources are carried by owner direction (M.3); the vibe is a
-  separate question.
+  stays open. Sources are not carried to a replacing memory (M.3); the vibe
+  is a separate question.
 
 ## M.7 Superseded and corrected instructions
 
@@ -674,7 +484,7 @@ to the owner first.
 | Conversation Recall Test (G21) | A row beside Memory Search Test at the bottom of RAG Active Memory Settings | Moved from Advanced Memory Settings, Debug, by the 2026-11-16 reorganization |
 | Where the user installs a model in no-model notices (G.13b, G31) | AI Settings, Embedding Model | Location updated; the wording is still a proposal |
 | Conversation index line on Check Database Integrity (G.13a) | Memory Backup & Restore | Unchanged |
-| Source lines: Speaker, Glamour, Date, Source Message, then the important date (M.3) | Memory editor opened from the Memory Browser, directly under Tags | Owner decision of 2026-11-16 |
+| Source lines: User, Companion, Date, Last Message Date, Source Conversation, then the important date (M.3) | Memory editor opened from the Memory Browser, directly under Tags | Owner decision of 2026-11-16 |
 | Word count and length limit (Step 5) | Every memory editor | Owner decision of 2026-11-12 |
 | Memory Handling Preferences (memory plan Phase 2) | Its own screen, opened from a row in the Memory Manager's Settings section | Placement by the rule; position and wording shown first |
 | Always, Retired and Dates views (Phases 2–4) | Memory Browser view dropdown | Owner design |
@@ -3524,7 +3334,7 @@ about to start. Each has a recommendation.
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
 | G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
-| G43 | The memory provenance design (M.3) and its details | **Decided (owner, 2026-11-16):** separate labeled lines (Speaker; Glamour only for the user's messages when one was in use; Date fully spelled out; Source Message); the speaker is whoever said the message; profile names follow renames by ID and keep the last known name after deletion; an unavailable source reads Unavailable and a deleted one reads Deleted, and the memory is never removed; no excerpts; the user cannot edit sources, the creation date or message dates; the event date is the important date, one field, built in Phase 4; the citing instruction wording was left to the agent (M.3). Adding sources by hand is a possible later feature | Decided |
+| G43 | The memory provenance design (M.3) and its details | **Decided (owner, 2026-11-16):** the source is the whole conversation, never a scanner-chosen message; the memory editor shows User, Companion, Date, Last Message Date and Source Conversation as M.3 describes; no sources are carried through Replace, Supersede or merge; a memory the user writes shows its creation date; the user cannot edit sources or dates; the important date is built in Phase 4. Participant-specific attribution and user-added sources are possible later features | Decided |
 | G44 | Release Step 4a's setting before Step 4b adds API AI | Open; asked when Step 4a starts (M.10). Recommended: yes, since the toggle starts off | Step 4a |
 | G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | Open; asked when Step 4a starts (M.10). Recommended: yes | Step 4a |
 

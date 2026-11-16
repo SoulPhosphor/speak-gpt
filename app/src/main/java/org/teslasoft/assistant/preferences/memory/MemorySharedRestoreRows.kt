@@ -52,6 +52,7 @@ object MemorySharedRestoreRowFormat {
         Spec("memory_projects", listOf("memory_id", "project_id")),
         Spec("memory_supersessions", listOf("new_memory_id", "old_memory_id")),
         Spec("memory_possible_match_hints", listOf("draft_memory_id", "existing_memory_id")),
+        Spec("memory_sources", listOf("source_id")),
         Spec("change_log", listOf("memory_id", "at", "actor", "action")),
         Spec("modes", listOf("mode_id")),
         Spec("directives", listOf("directive_id")),
@@ -188,12 +189,20 @@ object MemorySharedRestoreRowFormat {
                 return null
             }
             val tablesJson = root.getJSONObject("tables")
-            if (tablesJson.keys().asSequence().toSet() != tableNames) {
+            // Rows staged by a build before a later table existed carry no
+            // entry for it; they read as holding none of its rows.
+            val stagedTables = tablesJson.keys().asSequence().toSet() +
+                MemoryPortableRowFormat.tablesAddedLater.filter { it in tableNames }
+            if (stagedTables != tableNames) {
                 reject?.invoke("staged rows have a different table set")
                 return null
             }
             val tables = LinkedHashMap<String, List<Map<String, Any?>>>()
             for (spec in specs) {
+                if (!tablesJson.has(spec.table)) {
+                    tables[spec.table] = emptyList()
+                    continue
+                }
                 val array = tablesJson.getJSONArray(spec.table)
                 val rows = ArrayList<Map<String, Any?>>(array.length())
                 repeat(array.length()) { index ->

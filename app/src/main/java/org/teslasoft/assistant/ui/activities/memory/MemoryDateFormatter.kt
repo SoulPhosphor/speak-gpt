@@ -31,6 +31,19 @@ object MemoryDateFormatter {
         } catch (_: Exception) {
             iso
         }
+
+    /**
+     * A date fully spelled out: month name, day, comma, four-digit year
+     * ("November 10, 2025"). Null when [iso] is not a readable time.
+     */
+    fun formatDay(iso: String?, locale: Locale = Locale.getDefault(), zoneId: ZoneId = ZoneId.systemDefault()): String? =
+        try {
+            iso?.takeIf { it.isNotBlank() }?.let {
+                DateTimeFormatter.ofPattern("MMMM d, yyyy", locale).withZone(zoneId).format(Instant.parse(it))
+            }
+        } catch (_: Exception) {
+            null
+        }
 }
 
 /** Pure supersession presentation policy shared by the browser row and its
