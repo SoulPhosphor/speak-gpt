@@ -103,7 +103,7 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
 | Any time | Not a stage of its own | **Automatic companion linking** (M.6, Owner 2026-11-16): every companion the user creates is linked to the memory system automatically | Nothing unbuilt | Nothing; the behavior is decided | Nothing new; companions appear in the memory system as soon as they are saved |
 | Any time | Not a stage of its own | The memory-use instruction (D41) can be added to any stage that touches the memory instructions once its exact text is approved | — | D41 text | Changed AI behavior |
 
-**Why this order (Proposed, decision G42):**
+**Why this order (Owner approved, 2026-11-16, G42):**
 - **Provenance first.** The owner wants to build a memory collection now.
   Every memory saved before provenance exists has no recorded source, and
   that source cannot be recovered later. Provenance does not depend on any
@@ -441,7 +441,6 @@ Each is also a row in G.17.
 
 | # | Needed before | Question | Recommendation |
 |---|---|---|---|
-| G42 | Next assignment | Confirm the build order in M.2 | As M.2: provenance, then Step 4a, Step 4b, Step 5, data control, conversation recall, then Phases 3–6 |
 | G43 | Stage 1 | The provenance design in M.3 as a whole, and its open details (G.17) | Approve M.3; recommendations for each detail are in G.17 |
 | G45 | Stage 2 | Include the frozen-path lorebook check (step 1.13) in Step 4a | Yes |
 | G38 | Stage 2 | Context-assistance setting (on RAG Active Memory Settings, M.11): label, explanation, starting choice, rebuilding the subject after restart, whether Local AI is shown before it is built | Start on Code-based; do not show Local AI until it exists |
@@ -3325,7 +3324,7 @@ about to start. Each has a recommendation.
 | G39 | The API AI configuration screen (M.4): provider connection, model list and which models qualify, which turns it reads, instruction text, model settings, time allowance, failure behavior and notice, cost display, privacy disclosure, behavior with no model configured, where the screen opens from and its labels, a test action, logging; also the output check and the model and cost of its scored run. **Owner (2026-11-16):** the screen is dedicated and its model selection is independent of the chat, Summarizer and embedding models | Open (G.9b, M.4) | Step 4b |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
-| G42 | The build order in M.2 | Open. Recommended as M.2: provenance, Step 4a, Step 4b, Step 5, data control, conversation recall, then Phases 3–6 | Next assignment |
+| G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
 | G43 | The memory provenance design (M.3) as a whole, and its details: (a) the source link's wording and what it shows when the source is unavailable; (b) where the statement date, event date and speaker are shown: the normal view or a details view; (c) whether the user can add, edit or remove sources and dates in the memory editor; (d) whether any excerpt of the source message is stored; (e) whether the event date and Phase 4's important date are separate fields; (f) the Memory Assistant instruction text that asks it to cite source turns; (g) the speaker choices | Open. Recommended: approve M.3; (d) no excerpt, the link and the chat are the source; (e) separate: an event date records a fact and never causes sending, an important date is a sending rule; (g) the user, the AI, another speaker, or unknown | Memory provenance (stage 1) |
 | G44 | Ship Step 4a's setting with Off and Code-based before Step 4b adds API AI, or hold it until all three exist | Open. Recommended: ship Step 4a first; its benefit is measured and free | Step 4a |
 | G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | Open. Recommended: yes. It changes only that a memory repeating a lorebook entry is no longer sent on the frozen path, as it already is not on the other path | Step 4a |
