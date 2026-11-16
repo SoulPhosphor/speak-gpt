@@ -194,8 +194,12 @@ A builder re-reads these before relying on them.
 
 ### What the Memory Browser shows (Owner, 2026-11-16)
 
-At the bottom of a memory, each source is shown as separate labeled lines,
-never run together on one line. For a source that is a user message:
+**Placement (Owner, 2026-11-16).** In the memory editor opened from the
+Memory Browser, directly under the **Tags** field, in this order:
+**Speaker**, **Glamour** (only when one applies), **Date**, **Source
+Message**, then, once Phase 4 builds it, the editable **important date**.
+Each source is shown as separate labeled lines, never run together on one
+line.
 
 > **Speaker:** Lena
 > **Glamour:** Midnight
@@ -212,6 +216,11 @@ never run together on one line. For a source that is a user message:
   name** (its assigned name in the Glamour list), even when that Glamour
   uses a different name in chat, because the profile name is the firm
   identifier. The Glamour's ID is stored with it.
+- **Date never changes (Owner, 2026-11-16).** It is the date of the source
+  message, or, for a memory the user wrote, the date the user first created
+  it. Editing, replacing or merging the memory never changes it, and it is
+  not the memory's last-edited time. (The memory's existing change history
+  is left as it is for now.)
 - **Date** is the date the message was sent, always fully spelled out:
   month name, day, comma, four-digit year ("November 10, 2025"). Never
   numeric, abbreviated, or relative ("yesterday"). With no known date the
@@ -628,7 +637,7 @@ to the owner first.
 | Conversation Recall Test (G21) | A row beside Memory Search Test at the bottom of RAG Active Memory Settings | Moved from Advanced Memory Settings, Debug, by the 2026-11-16 reorganization |
 | Where the user installs a model in no-model notices (G.13b, G31) | AI Settings, Embedding Model | Location updated; the wording is still a proposal |
 | Conversation index line on Check Database Integrity (G.13a) | Memory Backup & Restore | Unchanged |
-| Provenance link and dates (M.3) | Memory Browser, on the memory | Owner decision of 2026-11-15 |
+| Source lines: Speaker, Glamour, Date, Source Message, then the important date (M.3) | Memory editor opened from the Memory Browser, directly under Tags | Owner decision of 2026-11-16 |
 | Word count and length limit (Step 5) | Every memory editor | Owner decision of 2026-11-12 |
 | Memory Handling Preferences (memory plan Phase 2) | Its own screen, opened from a row in the Memory Manager's Settings section | Placement by the rule; position and wording shown first |
 | Always, Retired and Dates views (Phases 2–4) | Memory Browser view dropdown | Owner design |
