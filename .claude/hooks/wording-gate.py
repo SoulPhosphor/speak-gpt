@@ -19,7 +19,7 @@ import sys
 PROJECT = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
 TOKEN = os.path.join(PROJECT, ".claude", "wording-approval.token")
 TOKEN_NAME = "wording-approval.token"
-APPROVAL = re.compile(r"^\s*approved wording\s*:", re.IGNORECASE)
+APPROVAL = re.compile(r"\bapproved wording\b", re.IGNORECASE)
 
 VALUES_FILE = re.compile(r"/res/values[^/]*/[^/]+\.xml$")
 LAYOUT_FILE = re.compile(r"/res/(layout|menu)[^/]*/[^/]+\.xml$")
