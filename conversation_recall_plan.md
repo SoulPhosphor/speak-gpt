@@ -179,9 +179,10 @@ For a memory from the Memory Scanner:
   conversation, shown only when it falls on a different calendar day. Both
   describe the conversation, not the memory's extraction, and are read live:
   if the conversation continues, Last Message Date moves. Each is that
-  exact message's own time; when the first or newest message has no time
-  saved, its date reads **Unavailable** and is never taken from another
-  message. Dates are fully spelled out ("November 10, 2025").
+  exact message's own date and is never taken from another message. When
+  the first message has no saved date, Date reads **Unavailable**; when the
+  newest message has none, the Last Message Date line is hidden. Dates are
+  fully spelled out ("November 10, 2025").
 - **Source Conversation** opens the chat. When the chat was deleted it reads
   **Source Conversation: Deleted**; when chat storage cannot be read it reads
   **Source Conversation: Unavailable**. The memory itself is never changed or
