@@ -136,7 +136,8 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
 - **Source conversation ID,** a stable ID, never the changeable chat title.
 - **Source message ID,** the permanent ID of the exact message, when
   available.
-- **A clickable source link at the bottom of the memory** in the Memory
+- **A clickable source link on the memory** (placed under Tags in the memory
+  editor, Owner 2026-11-16) in the Memory
   Browser, opening the conversation, ideally at the original message.
   Technical IDs are used for navigation and are not shown in the normal
   view.
@@ -344,7 +345,7 @@ line. For a source that is a user message:
   speaker, and the source line reads **Deleted**.
 - The memory's "original statement date" shown to the user is the earliest
   known statement time among its sources. It is derived, not stored twice.
-- The migration adds the table and the column in the next database
+- The migration adds the sources table in the next database
   version. Existing memories receive no source rows and no dates; nothing
   is guessed. Creation and edit times are unchanged.
 
