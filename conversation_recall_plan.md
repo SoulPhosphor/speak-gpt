@@ -219,8 +219,14 @@ never run together on one line. For a source that is a user message:
 - **Source Message** is the tappable line that opens the chat at that
   message. When only the conversation is known, it reads **Source
   Conversation** and opens the chat.
-- **Unavailable and deleted sources (Owner, 2026-11-16).** When the source
-  cannot be found or opened, the source line reads **Unavailable**. When the
+- **No source, no lines (Owner, 2026-11-16).** A memory with no recorded
+  source (every memory saved before this stage, a memory the user wrote,
+  an import without sources) shows no source lines at all. The source lines
+  are a reminder for the user of where a memory came from; they are never
+  sent to the AI and nothing else depends on them.
+- **Unavailable and deleted sources (Owner, 2026-11-16).** When a recorded
+  source cannot be found or opened (an error case), the source line reads
+  **Unavailable**. When the
   source message, or the chat holding it, was deleted, it reads
   **Deleted**. The memory is never removed or changed because its source
   was deleted. (This is different from a deleted Glamour, companion or
