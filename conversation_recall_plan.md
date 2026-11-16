@@ -99,6 +99,7 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
 | 14 | **Fading** | Memory plan Phase 5 | Stage 13 | D8, D19, D45, D49, D50 details | Fading markers |
 | 15 | **Memory Assistant date proposals** | Memory plan Phase 6 | Stage 13 | D33, AI-facing text | Proposed dates in Pending |
 | Later | Not ordered | Optional re-ranker; live AI worker (G.11, G8); recall across chats (G9); Local AI context assistance; other embedding models (G41); background reviewer (D51); recent-chat continuity (D38); companion journal (D40); Model Rules adjustments (D.13); search tuning revisited; vector size, automatic tags and variety (memory plan steps 1.14–1.16, only if testing shows a need) | The re-ranker, live AI worker and cross-chat recall need stage 11 | Separate owner decisions | — |
+| Any time | Not a stage of its own | **Automatic companion linking** (M.6, Owner 2026-11-16): every companion the user creates is linked to the memory system automatically | Nothing unbuilt | Nothing; the behavior is decided | Nothing new; companions appear in the memory system as soon as they are saved |
 | Any time | Not a stage of its own | The memory-use instruction (D41) can be added to any stage that touches the memory instructions once its exact text is approved | — | D41 text | Changed AI behavior |
 
 **Why this order (Proposed, decision G42):**
@@ -368,6 +369,21 @@ default, not a permanent restriction. In addition:
 - **Steps 1.14–1.16** stay conditional: only if testing shows a need.
 - **D41, the memory-use instruction,** stays Proposed. Its exact text is
   approved first.
+- **Automatic companion linking (Owner, 2026-11-16).** Creating a companion
+  must link it to the memory system automatically; the user never has to
+  press a setup button. The "Create Companions From Personas" button and its
+  "Setup / Repair" heading were removed from Memory Repair Settings the same
+  day. **Checked in the code on 2026-11-16:** `MemoryCompanionSync.onPersonaSaved`
+  creates the memory-system companion for a newly saved companion only when
+  that button has been used once (`META_BOOTSTRAP_DONE`); otherwise the
+  companion is created the first time it is chatted with
+  (`ensureCompanionForPersona`, from `Enforcer` and `TranscriptRecorder`).
+  Nothing is created before the memory database exists. **To build:** saving
+  a companion creates its memory-system record whenever the memory database
+  exists, without that flag, and companions saved before the memory database
+  existed are linked when it is first set up, without the button. The owner's
+  own installation is already linked. The System Status line "Personas linked
+  to companions" reports the old flag and is reviewed with this change.
 - **D58's open question** (whether a replacing memory keeps the old vibe)
   stays open. Sources are carried by owner direction (M.3); the vibe is a
   separate question.
