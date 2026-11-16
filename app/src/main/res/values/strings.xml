@@ -244,7 +244,7 @@
     <string name="persona_additional_lorebooks">Additional Lorebooks</string>
     <string name="persona_no_additional_lorebooks">No lorebooks linked yet.</string>
     <string name="label_lorebook_none">None</string>
-    <string name="tile_lorebooks_title">Lorebooks</string>
+    <string name="tile_lorebooks_title">Lorebook Browser</string>
     <string name="tile_lorebooks_desc">Manage memory collections for role-play and context</string>
     <string name="btn_new_lorebook">Add lorebook</string>
     <string name="label_add_lorebook">Add lorebook</string>
@@ -1397,12 +1397,13 @@
     <string name="title_memory_manager">Memory Manager</string>
     <string name="row_memory_browser_title">Memory Browser</string>
     <string name="row_memory_browser_subtitle">View, search, edit, approve, or remove saved and pending memories.</string>
-    <string name="row_memory_assistant_title">Memory Scanner</string>
+    <string name="row_memory_assistant_title">Memory Scanner Tool</string>
     <string name="row_memory_assistant_subtitle">Analyze conversation history and review pending memories.</string>
     <string name="row_lorebooks_subtitle">Simple memory notes triggered invisibly by keywords for your companion.</string>
     <!-- Memory Manager hub, fourth row (memory_settings_reorg_spec.md placement
          ruling 1, July 9 2026): the row now opens the Memory Controls screen. -->
-    <string name="row_memory_settings_title">Memory Controls</string>
+    <string name="row_memory_settings_title">RAG Active Memory Settings</string>
+    <string name="memory_manager_section_settings">Settings</string>
     <string name="row_memory_settings_subtitle">Set memory defaults, models, backups, and review limits.</string>
     <!-- Memory Manager hub, Memory Backup & Restore row + screen title (owner
          request, July 18 2026 — the row label is the owner's exact words). The
@@ -2340,7 +2341,7 @@
     <string name="memory_assistant_conversation_amount_large">Large · About 16,000 Tokens</string>
     <string name="memory_assistant_conversation_amount_custom">Custom</string>
     <string name="memory_assistant_conversation_tokens">Conversation Tokens Per Request</string>
-    <string name="memory_controls_row_advanced_assistant">Advanced Memory Scanner Settings</string>
+    <string name="memory_controls_row_advanced_assistant">Memory Scanner Settings</string>
     <string name="memory_controls_row_advanced_assistant_subtitle">Tune extraction temperature, importance, and prompt behavior.</string>
     <string name="memory_controls_section_engine">Memory Engine</string>
     <string name="memory_controls_row_engine">Memory Engine</string>

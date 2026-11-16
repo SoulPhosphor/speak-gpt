@@ -1,10 +1,21 @@
 # Memory Plan: Search Repair, Dates, Fading, and the Standing Briefing
 
+> **Reference document (2026-11-16).** The single authoritative memory
+> development plan is `conversation_recall_plan.md`. Its **Part M** sets the
+> build order and status, holds the Memory Browser provenance design, and
+> lists everything in this document that was superseded (M.7). This
+> document remains the reference for the measured diagnosis and design of
+> saved-memory search (Parts A and B), the designs of later saved-memory
+> features (Part C Phases 2–6 and Part D), the D-decisions (Part E), and
+> research (Part F). Its status, "Next steps", phase order and D.13 order
+> are historical and no longer decide what is built. Section numbers are
+> unchanged because code comments cite them.
+
 **Written 2026-11-08 at the owner's request. Rewritten the same day as one
 step-by-step plan, after a full review for ideas carried over from older
 documents.**
 
-## Where things stand (read this first)
+## Where things stand (historical, superseded 2026-11-16 by Part M of `conversation_recall_plan.md`)
 
 **Last updated 2026-11-10** (a fresh review of #180; carry-over put on hold;
 Part G added for the conversation index and recall). The owner relies on the
@@ -141,7 +152,7 @@ Built in the pull request from branch `ccr-985655d1-x68k8w` (owner approval,
   old one's vibe, as it does today for the title. Whether the vibe should
   carry over is an open question.
 
-### 3b. The pull request after that (not built; on hold)
+### 3b. The pull request after that (historical; each item is placed in M.6)
 
 **On hold (owner, 2026-11-10).** Nothing in this section is built until the
 owner approves `conversation_recall_plan.md`. Carry-over is redesigned
@@ -203,7 +214,7 @@ The specific corrections:
 - **Inside jokes and "vibe"** have a first proposal (D.9).
 - **Published research** is summarized in Part F.
 
-### Next steps, in order
+### Next steps, in order (historical; replaced by M.2)
 
 1. **Done:** #180 merged into `beta/new-client` after Codex passed it and
    Android Checks was green.
@@ -658,7 +669,10 @@ used.
   linked companions, worlds, characters, campaigns, and projects, as the
   current keyword search already uses.
 
-**Carry-over (step 1.12), revised after review.**
+**Carry-over (step 1.12), revised after review.** *Superseded (owner,
+2026-11-16): carry-over is done by context assistance
+(`conversation_recall_plan.md` G.9, G.9b). The rule below is kept as a
+record.*
 - **Candidates:** the memories sent with the previous message only.
 - **The check:** each carried memory is compared, with a lower bar than new
   memories, against the user's latest message and the AI's previous reply.
@@ -939,7 +953,7 @@ Steps run in this order.
 - **Done when:** in a chat that keeps talking about one topic, the relevant
   memory is sent on every message.
 
-### Step 1.12: Carry the conversation forward (next pull request)
+### Step 1.12: Carry the conversation forward (superseded by Step 4a, G.9)
 
 - **Change:** carry-over as revised in B.5:
   - only the previous message's memories are candidates;
@@ -1022,7 +1036,7 @@ Tested and rejected (A.10). Reconsider only if a small re-ranker made for
 short personal text becomes available. Any candidate is tested against the
 test set and the owner's saved cases first (D21).
 
-### Phase 1 in pull requests
+### Phase 1 in pull requests (historical; replaced by M.2)
 
 1. **#180 (built):** safety-protected bug fixes (steps 1.5–1.11), card
    cooldown removal, and the test screen (step 1.4), with the review
@@ -1075,7 +1089,9 @@ receives.** It gives the user control and visibility first.
 
 **Approved design (D.2, D.6, D.12, D16, D46–D48, D52, D53).**
 
-1. **Database migration** from version 33 adds, for each memory:
+1. **Database migration** from version 33 adds, for each memory (the
+   database is now at version 34; the version is chosen when the phase is
+   built, M.6):
    - Always membership and whether it is checked;
    - the bring-up setting for Always memories, default When it fits;
    - the Custom condition text.
@@ -1707,7 +1723,8 @@ use what it is given naturally.
 - nothing requires action; doing nothing leads to the sensible default;
 - renewing is one tap.
 
-**Order, each a separate pull request, foundations first:**
+**Order, each a separate pull request, foundations first** (historical;
+replaced by M.2 of `conversation_recall_plan.md`):
 1. Carry-over, both send paths, and the memory-use instruction (D41). These
    are the next pull request.
 2. Data control (Phase 2). This changes no AI behavior.

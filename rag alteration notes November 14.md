@@ -1,5 +1,13 @@
 # RAG alteration notes — November 14
 
+> **Historical record (2026-11-16).** Everything in this note is carried
+> into the single authoritative memory development plan,
+> `conversation_recall_plan.md` (Part M; M.8 maps each section to its new
+> place). Status statements below describe November 15 and are outdated:
+> the Step 3 repair and the carry-over evaluation are merged (#205, #206),
+> and the owner's decisions are recorded as G37–G41 there. Do not use this
+> note as a work order.
+
 **Captured:** November 15, 2026, from the owner's November 14–15 design discussion. The requested filename uses November 14.  
 **Repository:** `SoulPhosphor/speak-gpt`, active integration branch `main`.  
 **Purpose:** Preserve new owner direction before the existing evaluation and later RAG plan revisions. **This is a decision/intent record, not a replacement work order, a production change, or approval for unspecified UI details.**

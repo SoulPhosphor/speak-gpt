@@ -1,26 +1,441 @@
-# Conversation index, recall, and carry-over plan
+# Memory development plan
 
-Written 2026-11-10. This is the only document a builder needs for this
-work. Section numbers keep a "G." prefix because this began as Part G of
-the memory plan, `Memory System/dynamic_memory_plan.md`, which remains the record for
-saved-memory search (its Parts A to F). References below to "Part A" or "Part E" mean that document. Numbered
-Steps always mean the work orders in G.16 of this document.
+**The single authoritative plan for all memory work:** saved memories and
+their search, the Memory Browser, the Memory Assistant, context assistance,
+and conversation recall. Consolidated on 2026-11-16 at the owner's request.
+The file keeps its old name, `conversation_recall_plan.md`, because code
+comments and tests cite its section numbers.
 
-**State on 2026-11-16.** Steps 0–3 are built; Step 3's repair is merged
-in #205. The carry-over evaluation is complete and its results are in
+- **Part M** (below) is the build order, the status, the provenance design,
+  and the record of what was superseded. It is the only place that decides
+  what is built next.
+- **Sections G.0 to G.19** are the design of context assistance and
+  conversation recall, the work orders for the numbered Steps (G.16), and
+  the open decisions (G.17). "Part A" or "Part E" in those sections means
+  the memory plan below. Numbered Steps always mean the work orders in G.16.
+- **`Memory System/dynamic_memory_plan.md`** is reference material: the
+  measured diagnosis and design of saved-memory search (Parts A and B), the
+  designs for later saved-memory features (Part C Phases 2–6, Part D), the
+  D-decisions (Part E) and research (Part F). Its status and ordering
+  sections are historical. Where it disagrees with this plan, this plan is
+  current (M.7).
+- **`rag alteration notes November 14.md`** is a historical record of the
+  owner's November 14–16 direction. Everything in it is carried into this
+  plan (M.8).
+- **`memory baseline.md`** remains the evidence record for every
+  saved-memory measurement. Results are never copied into this plan.
+
+**State on 2026-11-16.** Steps 0–3 are built, Step 3's repair is merged in
+#205, and the carry-over evaluation is merged in #206 with its results in
 `memory baseline.md`. The owner's decisions of 2026-11-16 replace searching
 with the previous messages by a selectable context assistance (G.9, G.9b),
 approve a narrow +3 exception (G.10), and keep embedding models replaceable
-(G.9c). The record of those decisions is `rag alteration notes November
-14.md`. The next work order is Step 4a. The open questions are in G.17.
-Where the "Next steps" list in the memory plan disagrees with this
-document, this document is the current one.
+(G.9c). The next stages are memory provenance (M.3) and Step 4a, in the
+order M.2 recommends; both wait for owner decisions listed in M.10.
+
+# Part M: Roadmap, status, and consolidation
+
+## M.0 How to read Part M
+
+- **M.2 is the only build order.** G.16's former execution table, the memory
+  plan's "Next steps", Part C phase list and D.13 order, and section 4 of the
+  RAG notes no longer set the order.
+- **Labels are the same as G.0.** **Owner** is a decision the owner made,
+  with its date. **Proposed** is an agent recommendation the owner has not
+  approved. **Open** is a question waiting for the owner. Nothing becomes a
+  decision because an earlier document called it approved.
+- **A stage is a coherent piece of work** that is normally delivered as one
+  pull request (`CLAUDE.md`: one session's changes go in one PR). A stage
+  may contain several numbered Steps. The Steps keep their numbers because
+  code cites them; their work orders in G.16 still apply in full.
+- **Order and independence.** Stages are built in M.2 order. When the next
+  stage is waiting only for an owner decision, the owner may assign a later
+  stage whose "Needs" column is already satisfied. No builder skips ahead on
+  their own.
+- **Verification is kept, research is not repeated.** Every stage keeps its
+  tests and its on-device checks. The investigations closed in M.1 are not
+  run again unless the owner reopens them.
+
+## M.1 Already built and closed
+
+| Work | Where | Record |
+|---|---|---|
+| Saved-memory search repair: meaning plus keyword search, common words ignored, the message searched alone, the relevance gate, importance as a capped nudge, the +3 rule, no cooldown; the Memory Search Test screen (memory plan Phase 1, steps 1.3–1.11 and 1.4) | #180 | Memory plan, section 1 of the historical status |
+| Inside Joke type and the per-memory vibe (D56, D58); memory database version 34 | #182 | Memory plan, section 3 of the historical status |
+| Step 0: saved-memory benchmark, 86 samples | — | `memory baseline.md` |
+| Step 1: token counting, one embedding queue, stored memories read up to 2,048 tokens | #199 | `memory baseline.md` |
+| Step 2: long and dictated messages searched in sections; repairs restore the original quality gate and calibrate Stand-Out Strength 2.53 and Minimum Spread 0.034 | #200, #201, #202 | `memory baseline.md` |
+| Step 3: previous-message search helper, not connected to sending; repair applies the owner's +3 rule to section matches | #203, #205 | `memory baseline.md` |
+| Carry-over evaluation on a development and a held-out set with Android similarities | #206 | `memory baseline.md`; decisions G37, G40 |
+
+**Closed investigations. Do not repeat them:**
+- Android ONNX Runtime 1.29 and forced FP32 activations: no accuracy
+  benefit, rejected. The app stays on Android ONNX Runtime 1.20.0.
+- Whole-message gate calibration: done (2.53 and 0.034). Further retuning
+  is not part of any stage below.
+- Searching with the previous messages (G.9a), "similar to new message",
+  and the plain lower +3 bar: measured and not used (G37, G40).
+- The 23 MB on-phone re-ranker on saved memories (memory plan A.10): did
+  not work. A re-ranker for conversation passages stays a separate later
+  question (G.6 retrieval stage 5a).
+
+## M.2 The build order
+
+| Order | Stage | Contains | Needs | Approve first | The user sees |
+|---:|---|---|---|---|---|
+| 1 | **Memory provenance** | M.3: source storage and database migration; sources recorded by the Memory Assistant; backups, imports, restores and merges; source carried through supersede and merge; source link and dates in the Memory Browser | Nothing unbuilt | G43 | A link at the bottom of a memory back to the message it came from, and its dates |
+| 2 | **Context assistance: Off and Code-based** | Step 4a: the context-assistance interface, Off, Code-based subject tracking, the +3 top-match rule, the app-wide setting | #205 and #206 merged (done) | G38; G45 if the lorebook check is included | Follow-ups keep their memories; the context-assistance setting |
+| 3 | **Context assistance: API AI** | Step 4b, with the dedicated configuration screen of M.4 | Stage 2 | G39, G44 | The API AI choice and its configuration screen |
+| 4 | **Memory length limit** | Step 5: word count under every memory editor, the saving limit, Memory Assistant splitting | Step 1 (done) | Open parts of G34 | Word count under memory fields |
+| 5 | **Data control** | Memory plan Phase 2: the view dropdown, Retired, Memory Handling Preferences, Delete to Retired, with every new field in backups | Stage 1 (both are expected to change the memory database; building them one after the other avoids competing migrations) | Wording and layout; D44 default | Retired view and Memory Handling Preferences |
+| 6 | **Conversation test chats** | Step 6 | Nothing unbuilt | Nothing | Nothing |
+| 7 | **Conversation index: cutter and stores** | Steps 7 and 8 | Stage 6; Step 1 (done) | G35 | Nothing |
+| 8 | **Conversation index: embedding and upkeep** | Steps 9 and 10 | Stage 7 | Nothing after G35 | Nothing |
+| 9 | **Conversation index: settings, progress, after close** | Steps 11, 12 and 13 | Stage 8 | G20, G28, G31; Step 13's mechanism and stopped-for-the-day wording | Conversation Index settings, progress icon and pop-up, notification |
+| 10 | **Recall retrieval and inspector** | Steps 14 and 15 | Stages 2 and 8 | G36; inspector labels | Conversation Recall Test screen |
+| 11 | **Conversation Recall in real requests** | Step 16 | Stage 10 | AI-facing text, "what was sent" wording, recall-room setting, debug lines, G24 | Conversation Recall works |
+| 12 | **The Always tab and bring-up setting** | Memory plan Phase 3 | Stage 5 | Wording, screens, AI-facing text; D17 | Always tab |
+| 13 | **Today's date and dates on memories** | Memory plan Phase 4 | Stage 12 | D55 and G43(e) first; D1–D5, D12–D14 wording and AI-facing text | Dates tab, important dates |
+| 14 | **Fading** | Memory plan Phase 5 | Stage 13 | D8, D19, D45, D49, D50 details | Fading markers |
+| 15 | **Memory Assistant date proposals** | Memory plan Phase 6 | Stage 13 | D33, AI-facing text | Proposed dates in Pending |
+| Later | Not ordered | Optional re-ranker; live AI worker (G.11, G8); recall across chats (G9); Local AI context assistance; other embedding models (G41); background reviewer (D51); recent-chat continuity (D38); companion journal (D40); Model Rules adjustments (D.13); search tuning revisited; vector size, automatic tags and variety (memory plan steps 1.14–1.16, only if testing shows a need) | The re-ranker, live AI worker and cross-chat recall need stage 11 | Separate owner decisions | — |
+| Any time | Not a stage of its own | The memory-use instruction (D41) can be added to any stage that touches the memory instructions once its exact text is approved | — | D41 text | Changed AI behavior |
+
+**Why this order (Proposed, decision G42):**
+- **Provenance first.** The owner wants to build a memory collection now.
+  Every memory saved before provenance exists has no recorded source, and
+  that source cannot be recovered later. Provenance does not depend on any
+  search or recall work, and Step 4a does not depend on it, so swapping
+  stages 1 and 2 causes no rework.
+- **Context assistance next,** because it fixes a measured live problem
+  (follow-ups lose their memories) and its prerequisites are merged.
+- **Step 5 and data control before the conversation index,** because they
+  protect and improve the memory collection the owner is building, are
+  smaller, and touch only the memory editor, the Memory Browser, the
+  Memory Assistant and the memory database.
+- **Conversation recall before Phases 3–6.** The owner asked for recall
+  (G.1) and it has been the active roadmap since 2026-11-10; Phases 2–6 were designed but each waits until the owner
+  asks for it (memory plan, Next steps item 7). Phase 2 is the exception
+  above because it directly serves the Memory Browser. If the owner prefers
+  Always and dates sooner, stages 12–15 can move ahead of stages 6–11:
+  they use different databases and files.
+- **Fewer, larger stages.** Steps 7–8, 9–10, 11–13 and 14–15 are grouped
+  because each group is one coherent part of the system that can be
+  reviewed and tested together. Each Step's tests and approval gates are
+  unchanged. A builder may still split a stage if one PR would be too
+  large to review safely, and says why.
+
+## M.3 Memory provenance (Owner requirements; design Proposed)
+
+### What the owner decided (2026-11-15, recorded in the RAG notes section 1A)
+
+- **Original statement date and time,** separate from the memory's creation
+  and last-edited times. Unknown historical dates stay unknown.
+- **Source conversation ID,** a stable ID, never the changeable chat title.
+- **Source message ID,** the permanent ID of the exact message, when
+  available.
+- **A clickable source link at the bottom of the memory** in the Memory
+  Browser, opening the conversation, ideally at the original message.
+  Technical IDs are used for navigation and are not shown in the normal
+  view.
+- **Speaker attribution is optional, never mandatory.** Who said it (the
+  user, the AI, or another speaker) is stored when known. Unknown stays
+  unknown, and an AI suggestion is never attributed to the user.
+- **An optional event date,** when the source supports it. It is not the
+  statement date or the creation date, and is never invented.
+- **Several sources per memory.** A consolidated, updated or deduplicated
+  memory keeps references to every supporting source rather than replacing
+  them.
+- **Stored provenance is not embedding input.** Source IDs and dates are
+  metadata. Whether speaker wording should be part of the text the
+  embedding model reads remains a measured, open question, neither banned
+  nor required.
+- **Existing memories stay intact,** and provenance survives edits,
+  consolidation, backup and restore, and embedding-model changes.
+- **Priority:** before large-scale creation of memories without source
+  lineage.
+
+### What exists today (read in the code on 2026-11-16)
+
+A builder re-reads these before relying on them.
+
+- **The memory record** (`MemoryStore.kt`, table `memories`, database
+  version 34) has `created_at`, `updated_at`, `origin` and `supersedes`, and
+  no source, statement-date, speaker or event-date field.
+  `memory_supersessions` records which memory replaced which.
+  `change_log` records edits with an actor.
+- **The Memory Assistant reads stored turns** (table `transcripts`). Each
+  turn in a transcript row holds its role (user or assistant), its text, the
+  time it was captured, and, for turns captured since message IDs were
+  recorded, the permanent message ID (`TranscriptTurnVisibility.stamp`).
+  Each row holds the chat ID.
+- **Memory Assistant drafts carry no source.** Proposed memories record
+  neither the chat nor the message they came from. Lorebook suggestions
+  record only the source chat ID and name (`lorebook_suggestions`).
+- **The chat can already open at a message.** Chat search passes a message
+  ID (`SearchTargetResolver.EXTRA_MESSAGE_ID`) and the chat screen scrolls
+  to it (`ChatActivity.jumpToMessage`). The source link can reuse this.
+- **Chat IDs of older chats change on rename.** A chat that never had a
+  stored ID uses a hash of its title (`ChatPreferences.storedChatId`), and
+  `ChatRenameTransaction` does not update anything in the memory database.
+  Message IDs do not change.
+- **Backups are table-driven.** The memory backup, import and restore read
+  and write the tables listed in `MemoryPortableRows.memorySpecs`. A new
+  table is carried only when it is added to that list. Imports can remap
+  memory IDs (`MemoryIdRemap`, `MemoryIdImport`).
+- **The embedding text** is built by `RetrievalDocument` from a memory's
+  content and tags. New metadata columns do not change it, so provenance
+  requires no re-embedding.
+
+### The design (Proposed, approved as a whole in G43)
+
+**Storage.**
+- A new table of sources, one row per supporting source of a memory:
+  - the memory it supports, removed with the memory;
+  - the kind of source: a chat message, a conversation with no known
+    message, a user's own entry, an import, or unknown;
+  - the chat ID and the permanent message ID, each when known;
+  - the speaker, when known: the user, the AI, another speaker (such as a
+    roleplay character), or unknown. Never required;
+  - the statement time, when known;
+  - when and how the source was attached: cited by the Memory Assistant,
+    added by the user, or carried from a memory it replaced.
+- One optional event date on the memory itself, because it describes what
+  the memory says, not where it came from.
+- **No copy of the message text** is stored with the source. The chat stays
+  the only home of the conversation. If the chat is deleted, the memory
+  keeps its dates and speaker, and the link reports that the source is no
+  longer available.
+- The memory's "original statement date" shown to the user is the earliest
+  known statement time among its sources. It is derived, not stored twice.
+- The migration adds the table and the column in the next database
+  version. Existing memories receive no source rows and no dates; nothing
+  is guessed. Creation and edit times are unchanged.
+
+**How sources are recorded.**
+- **Memory Assistant.** The chat of the analyzed conversation is known with
+  certainty and is always recorded. To record the exact message, the
+  assistant's instructions ask it to cite the turns each proposal came from.
+  The app checks every citation against the turns it actually sent: a
+  citation to a turn that was not in the batch is dropped, and the source
+  falls back to the conversation alone. **The speaker and the statement
+  time are read by the app from the cited turn, never from the model's
+  words,** so an AI suggestion can never be recorded as the user's
+  statement. The changed instruction text is AI-facing and needs approval
+  (G43(f)).
+- **Pending to saved.** Accepting, editing or filing a proposal keeps its
+  sources.
+- **Replacing and merging.** Save & Supersede, Replace and a Possible Match
+  merge give the resulting memory every source of the memories it replaces,
+  without duplicates (owner direction above).
+- **A memory the user writes** has no source unless the user adds one. There
+  is no action today for saving a chat message as a memory; adding one is a
+  separate interface decision, not part of this stage.
+
+**Navigation.**
+- The link opens the source chat at the source message through the
+  existing message jump.
+- When the stored chat ID no longer exists (an older chat that was
+  renamed), the chat is found again by the permanent message ID. The rename
+  path also updates source references where it can. A test covers a renamed
+  older chat.
+- A source message that was deleted, hidden from the AI, or belongs to a
+  deleted chat is reported plainly; the memory itself is never changed or
+  removed because its source changed.
+
+**Backups, imports, restores and merges.**
+- The sources table is added to `MemoryPortableRows.memorySpecs`, so every
+  backup, export, import and restore path carries it.
+- Restoring an older backup that has no sources restores memories without
+  sources, never with an error.
+- A memory ID remapped during import keeps its sources under the new ID.
+- A chat merge or restore that changes chat IDs keeps source links working
+  through the message ID.
+- Round-trip tests for each path, including the legacy conversion path.
+
+**Privacy.** IDs, times and speaker stay in the encrypted memory database.
+Nothing new is sent to any AI model and nothing new is placed in the
+embedding text.
+
+**Not in this stage:** the Memory Assistant proposing event dates (aligned
+with Phase 6, stage 15); speaker wording in the embedding text (measured
+later, when a test set with speakers exists); filling in sources for
+memories saved before this stage.
+
+**Tests.** Migration from version 34 with existing memories unchanged;
+recording and validating Memory Assistant citations, including an invalid
+citation and an AI-written turn; sources kept through Pending, edit,
+supersede, replace and Possible Match; every backup path round-trips;
+older backups restore without sources; renamed older chat, deleted chat
+and deleted message links; embedding text and stored vectors unchanged.
+
+## M.4 Context assistance: correction for API AI (Owner, 2026-11-16)
+
+**Owner, 2026-11-16 (this consolidation's assignment):** the initial
+rollout of context assistance supports **Off, Code-based and API AI**.
+Local AI is supported by the architecture and built later. **API AI has a
+dedicated configuration screen,** not merely a model picker. That screen
+holds **its own API model selection, independent of the chat, Summarizer
+and embedding models.**
+
+This corrects G.9b and the Step 4b work order, which described only "its
+own model selector". The interface, the helper's role, and the rules every
+choice keeps are unchanged (G.9, G.9b).
+
+**What the screen needs, for the owner's approval before Step 4b (G39).**
+None of these is decided. A builder does not choose them:
+1. **Which provider connection** the helper uses, from the user's
+   configured API providers, and whether it can differ from the
+   Summarizer's and Memory Assistant's.
+2. **The model list,** read from the provider's live catalog, never a
+   built-in list. Which models qualify.
+3. **What the helper reads:** how many recent turns, and whether the AI's
+   replies are included or only the user's messages.
+4. **Its instruction text:** fixed, or viewable and editable with a way to
+   restore the default.
+5. **Model settings** such as response length and temperature: fixed by the
+   app, or adjustable.
+6. **Time allowance:** fixed, or a setting.
+7. **Failure behavior and notice** when the helper is offline, errors, runs
+   out of time, or returns unusable output. Proposed in G.9b: the turn goes
+   ahead as Off.
+8. **Cost display:** what the provider reports, otherwise "Not Reported".
+9. **Privacy disclosure:** that recent conversation is sent to the chosen
+   provider.
+10. **What happens when API AI is chosen but no model is configured.**
+11. **Where the screen is opened from,** and its title and labels.
+12. **Whether a test action** is offered on the screen.
+13. **Logging:** whether failures go to the Provider Failure Log under a
+    function name of their own (all logging needs approval).
+
+**Ship timing (Open, G44).** Step 4a can ship the setting with Off and
+Code-based before Step 4b adds API AI, or the setting can stay hidden
+until all three choices exist. **Recommendation:** ship Step 4a first. Its
+benefit is measured and free, and adding API AI later changes nothing
+already built.
+
+## M.5 Embedding models stay replaceable
+
+G.9c is the owner's decision. EmbeddingGemma 300M q4 is the current
+default, not a permanent restriction. In addition:
+
+- **Already true in the code:** each stored memory vector is stamped with
+  its model's tag, and the `embeddings` table is keyed by memory and
+  model, so vectors from two models can exist side by side while a change
+  is made. The passage index of Steps 8–9 follows the same rule (G.5,
+  G.5a rule 3).
+- **Memory text, provenance and the Memory Browser never depend on the
+  embedding model.** Changing the model can require re-embedding, never
+  rewriting or losing memories or sources.
+- **A gap to close before any change of model files or runtime** (found in
+  the Step 2 audit, `memory baseline.md`): the stored vector identity holds
+  the model ID, dimensions and document format, but not the runtime version
+  or the model files' hashes, and the model download address is not pinned
+  to a version. A change of runtime or model files would otherwise mix old
+  and new vectors. No stage in M.2 changes either, so this is a requirement
+  for that future work, not a current stage.
+- **Matching numbers belong to a model** (G.9c, Proposed): another model is
+  offered only after its own values are measured on the Step 0 and
+  carry-over sets.
+- **API embedding models** send memory and message text to a provider; their
+  privacy and cost are decided first (G41). Local and API embedding models
+  are Later in M.2.
+- **An API language model that writes a search query** (context assistance)
+  is a different choice from an API embedding model. They are configured
+  separately.
+
+## M.6 Saved-memory features carried in from the memory plan
+
+- **Phases 2–6** keep their designs in the memory plan (Part C, Part D) and
+  their decisions in Part E. They are built in M.2 order. Before each, the
+  owner sees its exact wording, screens and AI-facing text, as Part E
+  requires.
+- **Database versions.** Phase 3 in the memory plan says "from version 33".
+  The database is at version 34, and provenance adds the next version. Each
+  stage takes the next version when it is built.
+- **Provenance and later phases.** Retired memories keep their sources.
+  Fading and Retired never delete sources. Phase 4's important date and
+  provenance's event date are separate unless the owner decides otherwise
+  (G43(e)).
+- **Step 1.13 is still unbuilt** (checked 2026-11-16): the frozen request
+  path (`buildFrozenRegularRequest`) passes no lorebook matches to the
+  memory system, so the check that drops a memory repeating a lorebook entry
+  runs only on the other path (memory plan A.9). **Proposed (G45):** include
+  it in Step 4a, which already verifies lore overlap with carried memories.
+- **Step 1.2** is replaced by the Step 0 set and the two carry-over sets.
+- **Step 1.12 and B.5's carry-over rule** are replaced by context assistance
+  (G.9, G.9b).
+- **Steps 1.14–1.16** stay conditional: only if testing shows a need.
+- **D41, the memory-use instruction,** stays Proposed. Its exact text is
+  approved first.
+- **D58's open question** (whether a replacing memory keeps the old vibe)
+  stays open. Sources are carried by owner direction (M.3); the vibe is a
+  separate question.
+
+## M.7 Superseded and corrected instructions
+
+| Earlier instruction | Where | Now |
+|---|---|---|
+| "Where things stand", sections 0–4, and "Next steps, in order" | Memory plan, top | Historical. Status is M.1; order is M.2. References to `beta/new-client` are obsolete: `main` is the integration branch |
+| Carry-over, step 1.12 and B.5's carry-over rule (previous message's memories re-checked against the AI's reply) | Memory plan | Replaced by context assistance (G.9, G.9b; G37) |
+| Section 3b "on hold" list | Memory plan | Each item placed in M.6 |
+| D.13's build order and the "Phase 1 in pull requests" list | Memory plan | Replaced by M.2 |
+| Phase 3's migration "from version 33" | Memory plan | The next free version when built (M.6) |
+| Strict execution order table | G.16 | Replaced by M.2. The work orders stay in G.16 |
+| "Each Step is one pull request" and "build exactly one numbered Step" | G.16, G.19 | One stage, normally one PR, per assignment (M.0; `CLAUDE.md`) |
+| Step 6 needing Steps 0–5 complete | G.16 | Step 6 needs nothing unbuilt; Step 5 is an independent stage |
+| API AI "chosen in its own selector" | G.9b, Step 4b | A dedicated configuration screen (M.4) |
+| Searching with the previous messages as the carry-over method, and "the previous one or two" messages | G.1 item 18, G.15, G.18a | Measured and not used (G.9a, G37) |
+| An optional live AI worker after Step 16 as the only AI help | RAG notes section 4 | The API AI context helper is in the initial rollout (stage 3); the live AI worker stays Later |
+| Code-based offered only if the held-out evaluation shows a benefit | RAG notes section 1 | Evaluated; the owner included it (G37) |
+| Step 3 repair and evaluation "not merged" | RAG notes section 3 | Merged in #205 and #206 |
+
+## M.8 Where the RAG notes went
+
+| RAG notes section | Now |
+|---|---|
+| 1, context assistance choices and the helper's role | G.9, G.9b, M.4; decisions G37–G39, G44 |
+| 1, embedding models are a separate choice | G.9c, M.5; G41 |
+| 1A, Memory Browser provenance | M.3; G43 |
+| 2, +3 relevance | G.10; G40 |
+| 3, finish the evaluation | Done (#206); results in `memory baseline.md` |
+| 4, build order and scope | M.0, M.2 |
+| 5, still open | G38, G39, G41, G43, G44 |
+| 6, repository handling | `CLAUDE.md` |
+
+## M.9 Documents
+
+| Document | Role |
+|---|---|
+| This plan | Authoritative: order, status, designs, work orders, decisions |
+| `memory baseline.md` | Evidence for every saved-memory measurement |
+| `conversation_recall_baseline.md` | Created by Step 14 for conversation-recall results (G.16) |
+| `Memory System/dynamic_memory_plan.md` | Reference: saved-memory search design and later saved-memory feature designs, D-decisions, research |
+| `rag alteration notes November 14.md` | Historical record of owner direction, fully carried into this plan |
+
+## M.10 Decisions needed, in the order they are needed
+
+Each is also a row in G.17.
+
+| # | Needed before | Question | Recommendation |
+|---|---|---|---|
+| G42 | Next assignment | Confirm the build order in M.2 | As M.2: provenance, then Step 4a, Step 4b, Step 5, data control, conversation recall, then Phases 3–6 |
+| G43 | Stage 1 | The provenance design in M.3 as a whole, and its open details (G.17) | Approve M.3; recommendations for each detail are in G.17 |
+| G45 | Stage 2 | Include the frozen-path lorebook check (step 1.13) in Step 4a | Yes |
+| G38 | Stage 2 | Context-assistance setting: place, label, explanation, starting choice, rebuilding the subject after restart, whether Local AI is shown before it is built | Start on Code-based; do not show Local AI until it exists |
+| G44 | Stage 2 | Ship Off and Code-based before API AI is ready | Yes |
+| G39 | Stage 3 | The API AI configuration screen (M.4, items 1–13) and the model and cost of its scored run | Each item approved before Step 4b; recommendations are made when Step 4b is prepared |
+
+# Part G: Context assistance and conversation recall
+
+Written 2026-11-10 as Part G of the memory plan. Order and status are in
+Part M.
 
 ## G.0 Status and how to read this plan
 
 - **This plan is a proposal.** It was written on 2026-11-10 from the current
   code, the review of #180, and published research. Steps 0–3 are built;
-  the status of every Step is in the G.16 table.
+  the status and order of every Step are in M.2.
 - **Two labels are used throughout:**
   - **Owner** means the owner said it on the date shown, or on 2026-11-10
     where no date is given. These are decisions.
@@ -29,11 +444,12 @@ document, this document is the current one.
 - **Names here are planning names,** not on-screen wording. Every label,
   explanation, and AI-facing text is shown to the owner before it is built.
 - **Three kinds of statement, and which one a builder follows:**
-  - **A work order** (a numbered Step in G.16) is the instruction. It says what to
-    build, what not to build, and when the Step is done.
+  - **A work order** (a numbered Step in G.16, or a stage design in Part M)
+    is the instruction. It says what to build, what not to build, and when
+    the work is done.
   - **A design section** (G.5 to G.15) explains the work order. Where it
-    is marked Proposed, it becomes binding only for the Steps whose
-    "Approve first" entry in G.16 is satisfied.
+    is marked Proposed, it becomes binding only for the stages whose
+    "Approve first" entry in M.2 is satisfied.
   - **A decision** (Owner, or a row in G.17) overrides both.
 - **If two parts of this plan disagree, or a Step cannot meet all of its
   own conditions, the builder stops and says which parts.** A builder
@@ -41,8 +457,8 @@ document, this document is the current one.
 - **Rows and sections have similar names.** "G10" with no dot is row 10 of
   the decisions table in G.17. "G.10" with a dot is section 10.
 - **The design covers the whole system,** including parts built later.
-  The strict numbered order in G.16 decides the build order. It does not
-  leave anything out of the design.
+  M.2 decides the build order. It does not leave anything out of the
+  design.
 
 Words used in this plan:
 
@@ -116,7 +532,9 @@ Words used in this plan:
 18. **Owner (2026-11-12):** the agent's recommendations of that day are
     accepted: overlapping pieces for long and dictated messages (G29),
     the simpler cutter, searching with the previous messages, and leaving
-    borrowed context out of the first build.
+    borrowed context out of the first build. **Superseded in part
+    (Owner, 2026-11-16):** searching with the previous messages was
+    measured and is not used (G.9a, G37).
 
 ## G.2 What the review of #180 found
 
@@ -1326,7 +1744,7 @@ choice makes a paid call the only route to continuity.
 |---|---|---|
 | Off | Nothing. Each message is searched on its own, as today | Step 4a |
 | Code-based | Subject tracking (G.9). On the phone, no cost | Step 4a |
-| API AI | An AI model writes a self-contained search query from the recent conversation. Its model is chosen in its own selector from the user's configured API providers, separate from the chat, Summarizer and embedding models | Step 4b, part of the initial rollout |
+| API AI | An AI model writes a self-contained search query from the recent conversation. It has a dedicated configuration screen with its own model selection from the user's configured API providers, separate from the chat, Summarizer and embedding models (M.4) | Step 4b, part of the initial rollout |
 | Local AI | The same role and contract as API AI, with an on-device model | Later; the interface must accept it without change |
 
 **One interface.** Each choice is its own implementation of one contract,
@@ -1367,8 +1785,8 @@ that is not in the conversation it was given.
   described as better than Code-based until then.
 
 **The setting.** One app-wide choice. Its place, label, explanation and
-starting choice are approved before Step 4a (G38). The API model
-selector's place and wording are approved before Step 4b (G39).
+starting choice are approved before Step 4a (G38). The API AI
+configuration screen (M.4) is approved before Step 4b (G39).
 
 ## G.9c Embedding models stay replaceable (Owner, 2026-11-16)
 
@@ -1886,7 +2304,7 @@ context assembly exists. Do not claim a real "sent" result in Step 15.
 | Situation | What must happen |
 |---|---|
 | An exact detail ("Which model did we choose?") | The original decision is recalled |
-| A follow-up ("Why did we choose that?") | The same discussion is recalled, by also searching with the previous message |
+| A follow-up ("Why did we choose that?") | The same discussion is recalled, through the chosen context assistance (G.9b) |
 | A time reference ("What did we change last week?") | Exchanges from that period are favoured |
 | A summarized or compacted chat | The original exchange is recalled although the AI otherwise has only the summary |
 | Nothing relevant | Nothing is added |
@@ -1918,12 +2336,15 @@ Each has a starting value from measurement and is adjustable afterwards.
 
 ## G.16 Build order and work orders
 
-The design covers everything. Building is split into numbered Steps small enough to
-hand to an agent one at a time: "build Step 7". Each Step is one pull
-request with its own tests, and each leaves the app working.
+The design covers everything. Building is split into numbered Steps small
+enough to hand to an agent: "build Step 7". **The order, status, grouping
+into stages, and approval gates of every Step are in M.2.** A stage is
+normally one pull request with its own tests, and each leaves the app
+working.
 
-**How to use this section.** Give the agent this plan and the Step number. The agent reads G.19 first, then the sections the Step names, then
-the code files the Step names. It builds only that Step.
+**How to use this section.** Give the agent this plan and the stage or Step.
+The agent reads Part M and G.19 first, then the sections the Step names,
+then the code files the Step names. It builds only what was assigned.
 
 **Difficulty** is marked so the owner can choose which model does a Step:
 - **Routine:** self-contained, little risk. A lighter model can do it.
@@ -1931,39 +2352,33 @@ the code files the Step names. It builds only that Step.
 - **Hard:** many moving parts, or touches the chat screen. Use the
   strongest model available, and expect more than one review round.
 
-### Strict execution order
+### Steps, difficulty, and model
 
-The numbered Steps below are the execution order. A builder completes one
-Step and stops. A later Step does not begin until every lower-numbered
-unfinished Step is merged and every item in its **Approve first** column is
-resolved. A builder never skips ahead because a later Step looks easier.
-Only a new owner decision may change this order.
+The former strict execution table is replaced by M.2 (2026-11-16). Step 0
+is complete: do not rebuild it, regenerate its vectors, or rewrite its
+expected answers. Its authoritative results are in
+[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200; the first Step 2 repair is merged in #201, whose checks incorrectly accepted worse native accuracy. The follow-up, merged in #202, restores the original quality gate and passes real Android validation at 69/6/17 with the original runtime/model; the original quality target remains binding. Step 3 was merged in #203; its repair, merged in #205, corrects how its helper relates to the enforcer's selection and applies the owner's +3 rule (results in `memory baseline.md`).
 
-Step 0 is already complete. Do not rebuild it, regenerate its vectors, or
-rewrite its expected answers. Its authoritative results are in
-[memory baseline](<memory baseline.md>). Steps 1 and 2 were implemented in PRs #199 and #200; the first Step 2 repair is merged in #201, whose checks incorrectly accepted worse native accuracy. The follow-up, merged in #202, restores the original quality gate and passes real Android validation at 69/6/17 with the original runtime/model; the original quality target remains binding. Step 3 was merged in #203; its repair corrects how its helper relates to the enforcer's selection and applies the owner's +3 rule (results in `memory baseline.md`).
-
-| Step | Status | What is built | Difficulty | Model | The user sees | Needs | Approve first |
-|---:|---|---|---|---|---|---|---|
-| 0 | **Complete** | Saved-memory test set with the real model's vectors | Routine with written instructions | Lighter | Nothing | Nothing | Nothing |
-| 1 | **Complete (#199)** | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle | Nothing | Step 0 complete | Nothing (G33) |
-| 2 | **Complete (#200; repairs #201, #202)** | Long and dictated messages find their saved memories | Hard | Strongest | Better memory matches in long messages | Steps 0–1 | Resolved; approved wording in G.13b |
-| 3 | **Complete (#203; repair #205)** | Search primitive for previous user messages | Careful | Middle | Nothing | Step 0 | Nothing |
-| 4a | Waiting | Context assistance with Off and Code-based; the +3 top-match rule | Careful | Strongest | Follow-up continuity; the context-assistance setting | Step 3 repair and the carry-over evaluation merged | G38 |
-| 4b | Waiting | API AI context helper with its own model selector | Hard | Strongest | The API AI choice and its model selector | Step 4a | G39 |
-| 5 | Waiting | Memory word count and length limit | Careful | Middle | Word count under memory fields | Step 1 | Open parts of G34 |
-| 6 | Waiting | Conversation-recall test chats with known answers | Routine with written instructions | Lighter | Nothing | Steps 0–5 complete | Nothing |
-| 7 | Waiting | Passage cutter | Routine | Lighter | Nothing | Step 6 complete | Conversation-index design as a whole (G35) |
-| 8 | Waiting | Passage stores and per-message updating | Hard | Strongest | Nothing | Steps 1 and 7 | Nothing after G35 |
-| 9 | Waiting | Background embedding of passages | Hard | Strongest | Nothing | Steps 1 and 8 | Nothing |
-| 10 | Waiting | Keep the index synchronized with chats | Hard | Strongest | Nothing | Steps 8–9 | Nothing |
-| 11 | Waiting | Settings, status, deletion, database check, and errors | Careful | Middle | Approved settings section (G.16a) | Steps 9–10 | G20, G28, G31 |
-| 12 | Waiting | Progress icon and pop-up with pause/resume | Careful | Middle | Approved icon and pop-up (G.16a) | Step 11 | Nothing |
-| 13 | Waiting | Indexing after the app closes | Hard | Strongest | Approved notification (G.16a) | Step 12 | Background mechanism and stopped-for-the-day wording |
-| 14 | Waiting | Retrieval | Hard | Strongest | Nothing | Steps 3 and 6–10 | Retrieval and assembly design as a whole (G36) |
-| 15 | Waiting | Inspector and measured starting values | Careful | Middle | Conversation Recall Test screen | Step 14 | Screen labels |
-| 16 | Waiting | Context assembly in real requests | Hard | Strongest | Conversation Recall works | Steps 14–15 | AI-facing text; "what was sent" wording; recall-room setting; G24 |
-| Later | Not numbered yet | Optional re-ranker, live AI worker, and recall across chats | Design later | — | — | Step 16 | Separate owner decisions |
+| Step | What is built | Difficulty | Model |
+|---:|---|---|---|
+| 0 | Saved-memory test set with the real model's vectors | Routine with written instructions | Lighter |
+| 1 | Token counting, one embedding queue, and the 2,048-token stored-text limit | Careful | Middle |
+| 2 | Long and dictated messages find their saved memories | Hard | Strongest |
+| 3 | Search primitive for previous user messages | Careful | Middle |
+| 4a | Context assistance with Off and Code-based; the +3 top-match rule | Careful | Strongest |
+| 4b | API AI context helper with its own model selector | Hard | Strongest |
+| 5 | Memory word count and length limit | Careful | Middle |
+| 6 | Conversation-recall test chats with known answers | Routine with written instructions | Lighter |
+| 7 | Passage cutter | Routine | Lighter |
+| 8 | Passage stores and per-message updating | Hard | Strongest |
+| 9 | Background embedding of passages | Hard | Strongest |
+| 10 | Keep the index synchronized with chats | Hard | Strongest |
+| 11 | Settings, status, deletion, database check, and errors | Careful | Middle |
+| 12 | Progress icon and pop-up with pause/resume | Careful | Middle |
+| 13 | Indexing after the app closes | Hard | Strongest |
+| 14 | Retrieval | Hard | Strongest |
+| 15 | Inspector and measured starting values | Careful | Middle |
+| 16 | Context assembly in real requests | Hard | Strongest |
 
 **Difficulty and model labels.** Lighter means a small, inexpensive model is
 enough. Middle means a mid-range model. Strongest means the most capable
@@ -2005,7 +2420,7 @@ and is complete. Step 1 must put every embedding request through one queue
 before Step 2 runs the model several times for one message. This preserves
 the owner's priority without skipping either safety prerequisite.
 
-**Builder reading rule.** Follow the numbered execution order above. Each checklist highlights the assigned Step; every instruction and test in the rest of that Step and its referenced design sections still applies. A checklist never permits skipping details or prerequisites. Stop before dependent work if an approval is missing. Do not change another Step, the design, or existing decisions to make the assigned task easier.
+**Builder reading rule.** Follow the build order in M.2. Each checklist highlights the assigned Step; every instruction and test in the rest of that Step and its referenced design sections still applies. A checklist never permits skipping details or prerequisites. Stop before dependent work if an approval is missing. Do not change another Step, the design, or existing decisions to make the assigned task easier.
 
 ### Step 0: saved-memory test set — COMPLETE (Routine with these instructions)
 
@@ -2275,7 +2690,8 @@ measurements and verification results.
 
 **Agent checklist for this step**
 - **Prerequisites:** the Step 3 repair (#205) and the carry-over
-  evaluation are merged. **Approval gate:** G38.
+  evaluation (#206) are merged. **Approval gate:** G38, and G45 if the
+  frozen-path lorebook check (M.6) is included.
 - **Change:** the context-assistance interface (G.9b) in its own files,
   with a small connection where a message is sent; Off and Code-based
   (G.9); the +3 top-match rule (G.10) in the saved-memory search, so the
@@ -2319,10 +2735,12 @@ measurements and verification results.
 
 **Agent checklist for this step**
 - **Prerequisites:** Step 4a merged. **Approval gate:** G39.
-- **Change:** the API AI choice behind the Step 4a interface, with its own
-  model selector filled from the user's configured providers (never a
-  built-in model list), the approved instruction, the output check, and
-  the approved behavior on failure.
+- **Change:** the API AI choice behind the Step 4a interface, with its
+  dedicated configuration screen (M.4) holding its own model selection
+  filled from the user's configured providers (never a built-in model
+  list), and every other screen item exactly as approved in G39; the
+  approved instruction, the output check, and the approved behavior on
+  failure. The screen uses the shared styles (`ui-style-guide.md`).
 - **Preserve:** the chat, Summarizer and embedding models and their
   settings are untouched; the user's message is unchanged; no request is
   made unless the user chose API AI.
@@ -2395,7 +2813,7 @@ measurements and verification results.
 ### Step 6: the conversation test set (Routine with these instructions)
 
 **Agent checklist for this step**
-- **Prerequisites and approval:** Steps 0–5 complete under the strict execution order; no additional approval. Build invented test samples and validation, not the recall engine.
+- **Prerequisites and approval:** Step 0 complete (done); position in M.2; no additional approval. Build invented test samples and validation, not the recall engine.
 - **Change only:** Add `conversations.json` and a unit test that validates every situation and minimum below.
 - **Preserve:** No application-code changes, existing-test changes, real conversation content, or changed expected answers. Do not create Markdown.
 - **Verify and report:** Run the validation test; report each situation's sample count in the PR. Step 14 handles vectors and retrieval scoring later. Follow the code workflow in `CLAUDE.md`.
@@ -2833,10 +3251,14 @@ about to start. Each has a recommendation.
 | G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before Step 7. No builder treats it as approved before then | Step 7 |
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
-| G38 | Where the context-assistance setting goes, its label and explanation, which choice it starts on, and how Code-based rebuilds the subject after the app restarts | Open. Recommended start: Code-based, the only free method that held up on the held-out set | Step 4a |
-| G39 | For API AI: which turns it reads, its instruction, the output check, time allowance, failure notice, privacy disclosure, which provider models qualify, the model selector's place and wording, cost display, and the model and cost of its scored run | Open (G.9b) | Step 4b |
+| G38 | Where the context-assistance setting goes, its label and explanation, which choice it starts on, how Code-based rebuilds the subject after the app restarts, and whether Local AI is shown before it is built | Open. Recommended start: Code-based, the only free method that held up on the held-out set. Recommended: Local AI is not shown until it exists | Step 4a |
+| G39 | The API AI configuration screen (M.4): provider connection, model list and which models qualify, which turns it reads, instruction text, model settings, time allowance, failure behavior and notice, cost display, privacy disclosure, behavior with no model configured, where the screen opens from and its labels, a test action, logging; also the output check and the model and cost of its scored run. **Owner (2026-11-16):** the screen is dedicated and its model selection is independent of the chat, Summarizer and embedding models | Open (G.9b, M.4) | Step 4b |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
-| G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c) | Later |
+| G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
+| G42 | The build order in M.2 | Open. Recommended as M.2: provenance, Step 4a, Step 4b, Step 5, data control, conversation recall, then Phases 3–6 | Next assignment |
+| G43 | The memory provenance design (M.3) as a whole, and its details: (a) the source link's wording and what it shows when the source is unavailable; (b) where the statement date, event date and speaker are shown: the normal view or a details view; (c) whether the user can add, edit or remove sources and dates in the memory editor; (d) whether any excerpt of the source message is stored; (e) whether the event date and Phase 4's important date are separate fields; (f) the Memory Assistant instruction text that asks it to cite source turns; (g) the speaker choices | Open. Recommended: approve M.3; (d) no excerpt, the link and the chat are the source; (e) separate: an event date records a fact and never causes sending, an important date is a sending rule; (g) the user, the AI, another speaker, or unknown | Memory provenance (stage 1) |
+| G44 | Ship Step 4a's setting with Off and Code-based before Step 4b adds API AI, or hold it until all three exist | Open. Recommended: ship Step 4a first; its benefit is measured and free | Step 4a |
+| G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | Open. Recommended: yes. It changes only that a memory repeating a lorebook entry is no longer sent on the frozen path, as it already is not on the other path | Step 4a |
 
 ## G.18 Research behind this plan (2026-11-10)
 
@@ -2898,12 +3320,12 @@ Read on 2026-11-12 from each project's documentation or source code.
 |---|---|---|
 | Cutting text into pieces | SillyTavern: 400 characters, cut at a paragraph, a line, or between words, no overlap for chat messages. GPT4All: 512 characters. LangChain's standard splitter: paragraph, line, then between words, with overlap | Same cut points (G.5b) |
 | What the AI is handed | SillyTavern finds a piece and hands over the whole original message, labelled with who said it, under "Past events" | The whole exchange (G.8) |
-| What to search with | SillyTavern: the last 2 messages joined. RisuAI: the last 3 messages, each searched on its own, later ones counting more. AnythingLLM: the latest message only | The newest message and the previous one or two, each on its own (G.9a) |
+| What to search with | SillyTavern: the last 2 messages joined. RisuAI: the last 3 messages, each searched on its own, later ones counting more. AnythingLLM: the latest message only | The newest message, plus what context assistance supplies (G.9b). Searching the previous messages (G.9a) was measured and not used |
 | How many are sent | SillyTavern 3, GPT4All 3, AnythingLLM 4 | 3 (G.8) |
 | The cut-off | SillyTavern: a fixed 25% score, then the best 3 | A stricter gate, this app's own, because a wrong result is worse than a missed one (G.6) |
 | Keywords as well as meaning | SillyTavern, GPT4All, AnythingLLM, RisuAI: meaning only. Open WebUI and Mem0: both, with an optional re-ranker | Both (G.6) |
 | No embedding model | None of the chat apps offers recall without one | The embedding model is required (G30) |
-| Follow-up messages | AnythingLLM fills empty room with what was used in recent replies, newest first, with no relevance check. Open WebUI and LlamaIndex have an AI model rewrite the follow-up, a paid call | G.9a |
+| Follow-up messages | AnythingLLM fills empty room with what was used in recent replies, newest first, with no relevance check. Open WebUI and LlamaIndex have an AI model rewrite the follow-up, a paid call | Context assistance: Code-based subject tracking, or an optional API AI rewrite (G.9b) |
 | A long message about several things | RisuAI's experimental mode searches each paragraph of the message separately. Others offer a paid rewrite | Overlapping pieces (G.10) |
 | Keeping the index correct | SillyTavern keeps a fingerprint per message; on every edit, deletion, or new message it adds what is missing and deletes what is gone | The same idea (G.5a rule 4) |
 | Prompt caching | SillyTavern's documentation warns that recall works against prompt caching, because it changes text early in the request | Recalled text sits beside the newest message, which leaves the earlier text unchanged. To be confirmed with a caching provider in Step 16 |
@@ -2938,14 +3360,16 @@ Sources:
 A Step may be built by a different agent or model than the one that wrote
 this plan. These rules keep that safe.
 
-- **Read this plan and the files it names for your Step.** The memory
-  plan (`Memory System/dynamic_memory_plan.md`) is background for
-  saved-memory work and is not needed for the conversation index.
-- **Build exactly one numbered Step from G.16, as one pull request.** Do
-  not start the next Step. Steps 0–3 have implementations; their repairs and verification are recorded in `memory baseline.md`. Do not begin Step 4a until the Step 3 repair and the carry-over evaluation are merged and G38 is approved; Step 4b also needs G39. Every Step follows the code
+- **Read this plan and the files it names for your stage.** The memory
+  plan (`Memory System/dynamic_memory_plan.md`) is background design for
+  saved-memory work (its Parts B–E for Phases 2–6) and is not needed for
+  the conversation index.
+- **Build only the assigned stage or Step from M.2.** Do not start the
+  next one. A session's changes go in one pull request (`CLAUDE.md`).
+  Steps 0–3 have implementations; their repairs and verification are recorded in `memory baseline.md`. Do not begin Step 4a until G38 is approved; Step 4b also needs G39 and G44; memory provenance needs G43. Every stage follows the code
   workflow in `CLAUDE.md`.
-- **Do not start a Step out of order or while its "Approve first" entry in
-  G.16 is not satisfied.** Say what is waiting and stop.
+- **Do not start a stage out of order or while its "Approve first" entry in
+  M.2 is not satisfied.** Say what is waiting and stop.
 - **Write results only to the destination table in G.16.** This plan may
   otherwise be edited only where the Step's work order explicitly says to
   record a confirmed code fact, and in the Build record.
