@@ -1546,6 +1546,20 @@ above Streaming in Quick Settings, the same link above the parameters on
 Summarizer Settings and Memory Scanner Tool API, and Reset to Recommended
 below them on Memory Scanner Tool API (`Widget.App.PlainParameter.TextLink`).
 
+## Source lines
+
+Read-only labeled lines that say where something came from, one group per
+source: `Widget.App.SourceLines` holds the groups, `Widget.App.SourceLines.Group`
+is the first group and `Widget.App.SourceLines.Group.Following` each later one
+(it adds the gap between sources). Each line is "Label: value" in
+`Widget.App.SourceLine`, with the label and its colon in
+`TextAppearance.App.SourceLine.Label`. The line that opens the source uses
+`Widget.App.SourceLine.Link` (primary-colored text, a full touch-height line,
+no button box). A source that cannot be opened reads Deleted or Unavailable in
+the plain line style. Spacing and text size live in `source_*`. Current user:
+the memory editor's User, Companion, Date, Last Message Date and Source
+Conversation lines under Tags.
+
 ## Clean Up Models result sections
 
 Each result section on Clean Up Models is a `Widget.App.Section.Title` heading,

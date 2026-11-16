@@ -48,7 +48,10 @@ object ChatListIndex {
         /** How much of the chat memory has scanned ("pending", "partial",
          *  "processing" or "processed"), or null when memory holds nothing
          *  from it. Kept here so a row draws its memory status at once. */
-        val memoryState: String? = null
+        val memoryState: String? = null,
+        /** Who took part and the newest message time, for the memory
+         *  editor's conversation lines (M.3). */
+        val participants: ConversationParticipants = ConversationParticipants()
     ) {
         /** The model label: what the chat used most, else its selected model. */
         val displayModel: String get() = mostUsedModel ?: model
@@ -56,7 +59,12 @@ object ChatListIndex {
 
     enum class Part { CONTENT, SETTINGS, MEMORY }
 
-    data class ContentValues(val hasBookmarks: Boolean, val mostUsedModel: String?, val startedAt: Long?)
+    data class ContentValues(
+        val hasBookmarks: Boolean,
+        val mostUsedModel: String?,
+        val startedAt: Long?,
+        val participants: ConversationParticipants = ConversationParticipants()
+    )
     data class SettingsValues(val model: String, val companionId: String, val memoryExcluded: Boolean)
     data class MemoryValues(val state: String?)
     /** [memory] is null when memory could not be read right now. */
@@ -77,7 +85,8 @@ object ChatListIndex {
         if (content != null) entry = entry.copy(
             hasBookmarks = content.hasBookmarks,
             mostUsedModel = content.mostUsedModel?.takeIf { it.isNotBlank() },
-            startedAt = content.startedAt?.takeIf { it > 0 }
+            startedAt = content.startedAt?.takeIf { it > 0 },
+            participants = content.participants
         )
         if (settings != null) entry = entry.copy(
             model = settings.model,
@@ -497,7 +506,8 @@ object ChatListIndex {
                 ContentValues(
                     details.hasBookmarks,
                     MostUsedChatModel.select(UsageLogStore.read(preferences), history.messages),
-                    details.startedAt
+                    details.startedAt,
+                    ConversationParticipants.fromMessages(history.messages)
                 )
             } else null
             val memory = if (Part.MEMORY in parts) readMemory(chatId) else null
@@ -538,7 +548,8 @@ object ChatListIndex {
         }
 
         override fun readAll(): Map<String, Entry> = database().rawQuery(
-            "SELECT chat_id, has_bookmarks, most_used_model, model, companion_id, memory_excluded, started_at, memory_state FROM chat_details",
+            "SELECT chat_id, has_bookmarks, most_used_model, model, companion_id, memory_excluded, started_at, memory_state, " +
+                "user_names, companion_names, last_message_at, first_message_at FROM chat_details",
             null
         ).use { cursor ->
             val out = HashMap<String, Entry>(cursor.count)
@@ -550,7 +561,13 @@ object ChatListIndex {
                     companionId = cursor.getString(4),
                     memoryExcluded = cursor.getInt(5) != 0,
                     startedAt = if (cursor.isNull(6)) null else cursor.getLong(6),
-                    memoryState = if (cursor.isNull(7)) null else cursor.getString(7)
+                    memoryState = if (cursor.isNull(7)) null else cursor.getString(7),
+                    participants = ConversationParticipants(
+                        userNames = namesFromJson(cursor.getString(8)),
+                        companionNames = namesFromJson(cursor.getString(9)),
+                        lastMessageAt = if (cursor.isNull(10)) null else cursor.getLong(10),
+                        firstMessageAt = if (cursor.isNull(11)) null else cursor.getLong(11)
+                    )
                 )
             }
             out
@@ -570,6 +587,10 @@ object ChatListIndex {
                         put("memory_excluded", if (entry.memoryExcluded) 1 else 0)
                         put("started_at", entry.startedAt)
                         put("memory_state", entry.memoryState)
+                        put("user_names", namesToJson(entry.participants.userNames))
+                        put("companion_names", namesToJson(entry.participants.companionNames))
+                        put("last_message_at", entry.participants.lastMessageAt)
+                        put("first_message_at", entry.participants.firstMessageAt)
                     }, SQLiteDatabase.CONFLICT_REPLACE)
                 }
                 db.setTransactionSuccessful()
@@ -591,6 +612,15 @@ object ChatListIndex {
 
         @Synchronized
         fun discard() = discardFiles()
+
+        private fun namesToJson(names: List<String>): String = org.json.JSONArray(names).toString()
+
+        private fun namesFromJson(text: String?): List<String> = try {
+            val array = org.json.JSONArray(text ?: "[]")
+            List(array.length()) { array.optString(it) }
+        } catch (_: Exception) {
+            emptyList()
+        }
 
         private fun discardFiles() {
             runCatching { helper?.close() }
@@ -616,7 +646,8 @@ object ChatListIndex {
                     "CREATE TABLE IF NOT EXISTS chat_details(" +
                         "chat_id TEXT PRIMARY KEY NOT NULL, has_bookmarks INTEGER NOT NULL, " +
                         "most_used_model TEXT, model TEXT NOT NULL, companion_id TEXT NOT NULL, " +
-                        "memory_excluded INTEGER NOT NULL, started_at INTEGER, memory_state TEXT)"
+                        "memory_excluded INTEGER NOT NULL, started_at INTEGER, memory_state TEXT, " +
+                        "user_names TEXT, companion_names TEXT, last_message_at INTEGER, first_message_at INTEGER)"
                 )
             }
         }
@@ -629,7 +660,9 @@ object ChatListIndex {
 
         companion object {
             const val DATABASE_NAME = "chat_list_details.db"
-            private const val DATABASE_VERSION = 2
+            // 3: participant names and the first and newest message times (M.3). Derived
+            // values, so the upgrade prepares every chat again from its data.
+            private const val DATABASE_VERSION = 3
             @Volatile private var libraryLoaded = false
 
             private fun loadLibrary() {

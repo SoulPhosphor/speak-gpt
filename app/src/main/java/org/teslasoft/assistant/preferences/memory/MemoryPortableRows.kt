@@ -32,6 +32,7 @@ object MemoryPortableRowFormat {
         Spec("memory_projects", listOf("memory_id", "project_id")),
         Spec("memory_supersessions", listOf("new_memory_id", "old_memory_id")),
         Spec("memory_possible_match_hints", listOf("draft_memory_id", "existing_memory_id")),
+        Spec("memory_sources", listOf("source_id")),
         Spec("change_log", listOf("memory_id", "at", "actor", "action")),
         Spec("modes", listOf("mode_id")),
         Spec("directives", listOf("directive_id")),
@@ -49,6 +50,13 @@ object MemoryPortableRowFormat {
         Spec("model_rule_tag_links", listOf("rule_id", "tag_id"))
     )
 
+    /**
+     * Tables added after a backup format was first released. A backup made
+     * before one existed (an older database file, or older readable JSON)
+     * reads as having none of its rows, never as an error.
+     */
+    val tablesAddedLater: Set<String> = setOf("memory_sources")
+
     fun specs(group: MemoryPortableGroup): List<Spec> = when (group) {
         MemoryPortableGroup.MEMORIES -> memorySpecs
         MemoryPortableGroup.MODEL_RULES -> modelRuleSpecs
@@ -58,6 +66,10 @@ object MemoryPortableRowFormat {
         val out = LinkedHashMap<String, List<Map<String, Any?>>>()
         for (spec in specs(group)) {
             val rows = ArrayList<Map<String, Any?>>()
+            if (spec.table in tablesAddedLater && !tableExists(db, spec.table)) {
+                out[spec.table] = rows
+                continue
+            }
             db.query(spec.table, null, spec.where, null, null, null, null).use { cursor ->
                 while (cursor.moveToNext()) {
                     val row = LinkedHashMap<String, Any?>()
@@ -168,6 +180,10 @@ object MemoryPortableRowFormat {
             val tablesJson = root.getJSONObject("tables")
             val tables = LinkedHashMap<String, List<Map<String, Any?>>>()
             for (spec in specs(expected)) {
+                if (spec.table in tablesAddedLater && !tablesJson.has(spec.table)) {
+                    tables[spec.table] = emptyList()
+                    continue
+                }
                 val array = tablesJson.getJSONArray(spec.table)
                 val rows = ArrayList<Map<String, Any?>>(array.length())
                 repeat(array.length()) { index ->
@@ -188,6 +204,11 @@ object MemoryPortableRowFormat {
             null
         }
     }
+
+    fun tableExists(db: SQLiteDatabase, table: String): Boolean =
+        db.rawQuery(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", arrayOf(table)
+        ).use { it.moveToFirst() }
 
     private fun columns(db: SQLiteDatabase, table: String): Set<String> {
         val out = HashSet<String>()

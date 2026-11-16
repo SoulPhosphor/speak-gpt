@@ -3585,6 +3585,51 @@
          memory's two short notes always match. -->
     <style name="Widget.App.Field.Box.MemoryVibe" parent="Widget.App.Field.Box.MemoryTitle" />
 
+    <!-- Source lines (memory provenance, development plan M.3): read-only
+         labeled lines under a memory's Tags, one group per source (User,
+         Companion, Date, Last Message Date, Source Conversation). Each line
+         is "Label: value" with the label in TextAppearance.App.SourceLine.Label.
+         The tappable Source Conversation line uses Widget.App.SourceLine.Link;
+         a source that cannot be opened reads Deleted or Unavailable in the
+         plain line style. -->
+    <style name="Widget.App.SourceLines" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">@dimen/source_lines_top_gap</item>
+    </style>
+
+    <style name="Widget.App.SourceLines.Group" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.SourceLines.Group.Following">
+        <item name="android:layout_marginTop">@dimen/source_group_gap</item>
+    </style>
+
+    <style name="Widget.App.SourceLine" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/source_line_gap</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">@dimen/source_line_text_size</item>
+    </style>
+
+    <style name="Widget.App.SourceLine.Link">
+        <item name="android:minHeight">@dimen/source_link_min_height</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="TextAppearance.App.SourceLine.Label" parent="">
+        <item name="android:textStyle">bold</item>
+    </style>
+
     <style name="Widget.App.Field.Box.MemoryTitle" parent="Widget.App.Field.Box">
         <item name="android:gravity">top|start</item>
         <item name="android:minLines">2</item>

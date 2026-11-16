@@ -2145,6 +2145,15 @@
     <string name="mem_edit_hint_title">Title</string>
     <string name="mem_edit_hint_content">What to remember</string>
     <string name="mem_edit_hint_tags">Tags (comma-separated)</string>
+    <!-- Memory source lines (memory provenance). "%1$s" is the label, "%2$s" its value. -->
+    <string name="memory_source_line">%1$s: %2$s</string>
+    <string name="memory_source_user">User</string>
+    <string name="memory_source_companion">Companion</string>
+    <string name="memory_source_date">Date</string>
+    <string name="memory_source_last_message_date">Last Message Date</string>
+    <string name="memory_source_conversation">Source Conversation</string>
+    <string name="memory_source_unavailable">Unavailable</string>
+    <string name="memory_source_deleted">Deleted</string>
     <string name="mem_edit_label_type">Type</string>
     <string name="mem_edit_label_importance">Importance</string>
     <string name="mem_edit_label_scope">Scope</string>

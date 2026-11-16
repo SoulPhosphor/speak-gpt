@@ -122,6 +122,27 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun sourcesSurviveABackupAndAreAbsentFromOlderBackups() {
+        val original = MemorySeedCodec.parse(fixtureJson()).memories.first()
+        val sources = listOf(
+            MemorySource(
+                sourceId = "src-1", memoryId = original.memoryId,
+                kind = MemorySource.KIND_CHAT_MESSAGE, chatId = "chat-1", messageId = "msg-1",
+                speaker = MemorySource.SPEAKER_USER, speakerName = "Lena",
+                glamourId = "gl-1", glamourName = "Midnight",
+                statedAt = "2025-11-10T15:00:00Z", attachedAt = "2026-11-16T00:00:00Z",
+                attachedBy = MemorySource.ATTACHED_MEMORY_ASSISTANT
+            ),
+            MemorySourceRules.userEntry("src-2", original.memoryId, "2026-11-16T09:00:00Z")
+        )
+        val edited = original.copy(sources = sources)
+        assertEquals(edited, MemorySeedCodec.decodeSingleMemory(MemorySeedCodec.encodeSingleMemory(edited)))
+        val oldBackup = JSONObject(MemorySeedCodec.encodeSingleMemory(edited))
+        oldBackup.getJSONArray("memories").getJSONObject(0).remove("sources")
+        assertEquals(emptyList<MemorySource>(), MemorySeedCodec.parse(oldBackup.toString()).memories.first().sources)
+    }
+
+    @Test
     fun originRoundTripsAndDefaultsToUser() {
         // A record with no origin in the JSON parses as 'user'; a non-default
         // origin survives a serialize/parse cycle.

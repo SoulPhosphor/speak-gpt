@@ -479,7 +479,12 @@ data class MemoryRecord(
     /** Optional user-written note on how the AI should treat this memory
      *  (owner decision, November 10 2026). Sent with the memory; never part
      *  of search. Empty = no vibe. */
-    val vibe: String = ""
+    val vibe: String = "",
+    /** Where the memory came from (development plan M.3). Filled only by
+     *  [MemoryStore.exportData] and backup parsing so sources ride the memory
+     *  backup; ordinary reads load them separately with
+     *  [MemoryStore.memorySources]. Never sent to a model or embedded. */
+    val sources: List<MemorySource> = emptyList()
 )
 
 data class ModeRecord(

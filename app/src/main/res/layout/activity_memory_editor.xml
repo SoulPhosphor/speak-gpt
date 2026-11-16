@@ -313,6 +313,14 @@
                     android:singleLine="true" />
             </com.google.android.material.textfield.TextInputLayout>
 
+            <!-- Where the memory came from (memory provenance): User, Companion,
+                 Date, Last Message Date and Source Conversation lines, filled in code.
+                 Hidden when the memory has no recorded source. -->
+            <LinearLayout
+                android:id="@+id/section_memory_sources"
+                style="@style/Widget.App.SourceLines"
+                android:visibility="gone" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_mem_save"
                 android:layout_width="match_parent"

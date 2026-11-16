@@ -85,9 +85,10 @@ object MemoryCategoryPlanner {
             cleared += filterJoin(tables, "memory_campaigns", "memory_id", memoryIds, "campaign_id", references.campaigns)
             cleared += filterJoin(tables, "memory_roleplay_characters", "memory_id", memoryIds, "roleplay_character_id", references.roleplayCharacters)
             cleared += filterJoin(tables, "memory_projects", "memory_id", memoryIds, "project_id", projectIds)
-            for (table in listOf("change_log", "memory_possible_match_hints")) {
-                val keys = if (table == "change_log") listOf("memory_id")
-                    else listOf("draft_memory_id", "existing_memory_id")
+            for (table in listOf("change_log", "memory_possible_match_hints", "memory_sources")) {
+                val keys = if (table == "memory_possible_match_hints") {
+                    listOf("draft_memory_id", "existing_memory_id")
+                } else listOf("memory_id")
                 val before = tables.getValue(table)
                 tables[table] = before.filter { row -> keys.all { (row[it] as? String) in memoryIds } }
                 cleared += before.size - tables.getValue(table).size

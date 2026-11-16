@@ -111,6 +111,34 @@ class MemoryCategoryPlannerTest {
         )
     }
 
+    @Test
+    fun `sources travel with their memory and orphans are dropped on merge`() {
+        val source = linkedMapOf<String, Any?>(
+            "source_id" to "src-1", "memory_id" to "new", "kind" to "chat_message",
+            "chat_id" to "chat-1", "message_id" to "msg-1",
+            "attached_at" to "2026-11-16T00:00:00Z", "attached_by" to "memory_assistant"
+        )
+        val orphan = LinkedHashMap(source).apply { put("source_id", "src-2"); put("memory_id", "gone") }
+        val backup = rows(MemoryPortableGroup.MEMORIES, mapOf(
+            "memories" to listOf(memory("new", "New")),
+            "memory_sources" to listOf(source, orphan)
+        ))
+        val ready = MemoryCategoryPlanner.plan(
+            MemoryPortableGroup.MEMORIES, rows(MemoryPortableGroup.MEMORIES), backup, PortableRestoreMode.MERGE
+        ) as MemoryCategoryPlanner.Result.Ready
+        assertEquals(listOf("src-1"), ready.rows.tables.getValue("memory_sources").map { it["source_id"] })
+    }
+
+    @Test
+    fun `readable memory rows from before sources parse with none`() {
+        val full = rows(MemoryPortableGroup.MEMORIES, mapOf("memories" to listOf(memory("m", "Text"))))
+        val json = org.json.JSONObject(MemoryPortableRowFormat.toJson(MemoryPortableGroup.MEMORIES, full))
+        json.getJSONObject("tables").remove("memory_sources")
+        val parsed = MemoryPortableRowFormat.parse(json.toString(), MemoryPortableGroup.MEMORIES)!!
+        assertTrue(parsed.tables.getValue("memory_sources").isEmpty())
+        assertEquals(1, parsed.tables.getValue("memories").size)
+    }
+
     private fun rows(
         group: MemoryPortableGroup,
         replacements: Map<String, List<Map<String, Any?>>> = emptyMap()
