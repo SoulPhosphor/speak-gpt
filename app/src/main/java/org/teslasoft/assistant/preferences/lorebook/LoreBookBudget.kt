@@ -17,18 +17,18 @@
 package org.teslasoft.assistant.preferences.lorebook
 
 /**
- * The lorebook injection safety budget (entry count + character total),
- * factored into one shared, pure implementation (counterplan Step 1.6) so the
- * enforcer's lore-notes truncation and the classic fallback path always agree
- * on exactly what was injected versus cut — previously each kept its own copy
- * of this loop, which is how "the debug log shows the raw matches, not what
- * entered the prompt" happened in the first place.
+ * Which matched lorebook entries are sent with one message. Typed sending,
+ * voice and resending all use this one walk with the same settings
+ * ([LorebookLimits]), so every way of sending sends the same entries.
  *
- * Semantics are unchanged from the original loops: as soon as one candidate
- * doesn't fit (entry limit reached, or it alone would blow the character
- * budget), the walk stops — no backfill, no reordering. Lore stays simple and
- * deterministic (counterplan §5.6); this only makes the stopping point
- * explainable instead of silent.
+ * The matches arrive already deduplicated across books, in book order (the
+ * companion's core lorebook first) and, inside a book, most recently edited
+ * first. The walk keeps them in that order:
+ *  - at most [maxEntries] entries; every later match is cut once that many
+ *    are kept;
+ *  - when a character limit is set ([maxChars] not null), an entry that would
+ *    take the kept text past it is skipped, and later entries that still fit
+ *    are kept. The limit is never exceeded.
  */
 object LoreBookBudget {
 
@@ -40,35 +40,25 @@ object LoreBookBudget {
             get() = kept.map { it.entry.id }
     }
 
-    /**
-     * Walk [matches] in order (already deduped by the caller), keeping up to
-     * [maxEntries] whose combined content length stays within [maxChars].
-     * Everything from the first candidate that doesn't fit onward is cut with
-     * the reason that stopped the walk — those later entries were never
-     * individually oversized, they simply never got evaluated once the walk
-     * stopped, same as the original behavior.
-     */
     fun select(
         matches: List<LoreBookMatch>,
         maxEntries: Int,
-        maxChars: Int
+        maxChars: Int?
     ): Selection {
         val kept = ArrayList<LoreBookMatch>()
         val cut = ArrayList<Cut>()
         var chars = 0
-        for ((index, match) in matches.withIndex()) {
-            val reason = when {
-                kept.size >= maxEntries -> "entry limit ($maxEntries) reached"
-                kept.isNotEmpty() && chars + match.entry.content.length > maxChars ->
-                    "character budget ($maxChars) reached"
-                else -> null
+        for (match in matches) {
+            val length = match.entry.content.length
+            when {
+                kept.size >= maxEntries -> cut.add(Cut(match, "entry limit ($maxEntries) reached"))
+                maxChars != null && chars + length > maxChars ->
+                    cut.add(Cut(match, "character budget ($maxChars) reached"))
+                else -> {
+                    chars += length
+                    kept.add(match)
+                }
             }
-            if (reason != null) {
-                for (rest in matches.subList(index, matches.size)) cut.add(Cut(rest, reason))
-                break
-            }
-            chars += match.entry.content.length
-            kept.add(match)
         }
         return Selection(kept, cut)
     }

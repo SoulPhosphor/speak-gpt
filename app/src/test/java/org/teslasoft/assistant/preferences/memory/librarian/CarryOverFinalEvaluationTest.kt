@@ -25,6 +25,8 @@ import org.teslasoft.assistant.preferences.memory.ImportanceRanking
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
 import org.teslasoft.assistant.preferences.memory.RetrievalPolicy
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
+import org.teslasoft.assistant.preferences.memory.context.CodeBasedAssistant
+import org.teslasoft.assistant.preferences.memory.context.ContextAssistant
 import org.teslasoft.assistant.preferences.memory.enforcer.RetrievalBackfill
 import java.security.MessageDigest
 import kotlin.math.sqrt
@@ -132,22 +134,26 @@ class CarryOverFinalEvaluationTest {
             })
         }
 
-        /** The message's own search, whole message and sections, cut at [limit] candidates. */
-        fun own(turn: Turn, limit: Int): SavedMemorySearch.Result {
+        /**
+         * The message's own search, whole message and sections, cut at [limit]
+         * candidates. The recorded methods were measured before the +3
+         * top-match rule, so they replay with [topMatch] off.
+         */
+        fun own(turn: Turn, limit: Int, topMatch: Boolean = false): SavedMemorySearch.Result {
             val recorded = sectionVectors.optJSONArray(turn.id)?.objects().orEmpty()
             val cut = LongMessageSearch.cut(turn.text)
             assertEquals("${turn.id} is cut differently from the recorded sections",
                 recorded.map { it.getString("text") }, cut.map { it.text })
             if (android == null) {
                 return SavedMemorySearch.search(turn.text, vectors.getJSONArray(turn.id).vector(), referenceIndex,
-                    params, limit, true) {
+                    params, limit, true, topMatch) {
                     LongMessageSearch.read(turn.text, referenceIndex, now = { 0L }) { text ->
                         recorded.single { it.getString("text") == text }.getJSONArray("vector").vector()
                     }
                 }
             }
             val whole = SavedMemorySearch.search(turn.text, query2d,
-                measuredIndex(android.getJSONObject("messages").getJSONArray(turn.id)), params, limit, true) {
+                measuredIndex(android.getJSONObject("messages").getJSONArray(turn.id)), params, limit, true, topMatch) {
                 LongMessageSearch.Reading.NONE
             }
             if (cut.isEmpty()) return whole
@@ -279,19 +285,25 @@ class CarryOverFinalEvaluationTest {
         else -> "unnamed_follow_up_third_or_later_in_a_row"
     }
 
-    private fun score(data: Data, method: JSONObject, maximum: Int, record: JSONObject? = null): Tally {
+    private fun score(data: Data, method: JSONObject, maximum: Int, record: JSONObject? = null): Tally =
+        score(data, maximum, record, { turns -> run(data, method, turns, maximum) },
+            { turns -> run(data, methods.first(), turns, maximum) }, method.getString("id"))
+
+    private fun score(
+        data: Data, maximum: Int, record: JSONObject?,
+        runner: (List<Turn>) -> List<List<Sent>>, alonerunner: (List<Turn>) -> List<List<Sent>>, name: String
+    ): Tally {
         val tally = Tally()
-        val none = methods.first()
         for (turns in data.conversations) {
-            val results = run(data, method, turns, maximum)
-            val alone = run(data, none, turns, maximum)
+            val results = runner(turns)
+            val alone = alonerunner(turns)
             for (position in turns.indices) {
                 val turn = turns[position]
                 val sent = results[position]
                 val ids = sent.map { it.id }
                 assertEquals("${turn.id}: listed twice", ids.size, ids.toSet().size)
                 val ownIds = alone[position].map { it.id }
-                assertEquals("${turn.id} ${method.getString("id")}: the new message's own result comes first, unchanged",
+                assertEquals("${turn.id} $name: the new message's own result comes first, unchanged",
                     ownIds, ids.take(ownIds.size))
                 val earlierSubjects = turns.subList(0, position).flatMap { it.expect }.toSet()
                 for (item in sent) when {
@@ -401,4 +413,87 @@ class CarryOverFinalEvaluationTest {
 
     @Test
     fun heldOutSetMatchesTheRecord() = evaluate("recall_carryover_holdout")
+
+    /**
+     * The app's own context assistance ([ContextAssistant.Off] and
+     * [CodeBasedAssistant.step]) through the enforcer's selection, as Step 4a
+     * sends it. [topMatch] is the +3 top-match rule.
+     */
+    private fun runApp(data: Data, turns: List<Turn>, maximum: Int, codeBased: Boolean, topMatch: Boolean): List<List<Sent>> {
+        val limit = RetrievalBackfill.scanCap(maximum) + 1
+        var subject = emptyList<ScoredMemory>()
+        return turns.map { turn ->
+            val own = data.own(turn, limit, topMatch)
+            val added = if (codeBased) {
+                val (next, carried) = CodeBasedAssistant.step(own, subject)
+                subject = next
+                carried
+            } else emptyList()
+            val (pool, carriedIds) = ContextAssistant.candidates(own.ranked, added)
+            select(pool.map { Candidate(it, it.memory.memoryId in carriedIds) }, maximum)
+        }
+    }
+
+    private fun recordedTurns(folder: String): JSONObject = JSONObject(checkNotNull(text("$folder/final_results.json")))
+
+    /** With the top-match rule off, the app's Off and Code-based send exactly
+     *  the recorded `none` and `subject_anchor` results, turn by turn and at
+     *  every Maximum Memories. */
+    private fun appReproducesTheRecord(folder: String) {
+        val recorded = recordedTurns(folder)
+        for (source in listOf("android", "reference_vectors")) {
+            val data = Data(folder, source)
+            for ((app, method) in listOf(false to "none", true to "subject_anchor")) {
+                for (maximum in maximums) {
+                    val record = JSONObject()
+                    val tally = score(data, maximum, record,
+                        { turns -> runApp(data, turns, maximum, app, false) },
+                        { turns -> runApp(data, turns, maximum, false, false) }, method)
+                    val expected = recorded.getJSONObject(source).getJSONObject("summary")
+                        .getJSONObject(method).getJSONObject(maximum.toString())
+                    assertTrue("$folder $source app $method at $maximum differs from the record",
+                        tally.json().similar(expected))
+                    if (maximum == defaultMaximum) {
+                        assertTrue("$folder $source app $method per turn differs from the record",
+                            record.similar(recorded.getJSONObject(source)
+                                .getJSONObject("sent_at_default_maximum").getJSONObject(method)))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun appMatchesTheDevelopmentRecordWithoutTheTopMatchRule() = appReproducesTheRecord("recall_carryover_set")
+
+    @Test
+    fun appMatchesTheHeldOutRecordWithoutTheTopMatchRule() = appReproducesTheRecord("recall_carryover_holdout")
+
+    /** The combined results with the top-match rule on, printed for
+     *  memory baseline.md, and checked against the values recorded there. */
+    @Test
+    fun appWithTheTopMatchRule() {
+        val out = JSONObject()
+        for (folder in listOf("recall_carryover_set", "recall_carryover_holdout")) {
+            for (source in listOf("android", "reference_vectors")) {
+                val data = Data(folder, source)
+                for ((app, name) in listOf(false to "off", true to "code_based")) {
+                    for (topMatch in listOf(false, true)) {
+                        val tally = score(data, defaultMaximum, null,
+                            { turns -> runApp(data, turns, defaultMaximum, app, topMatch) },
+                            { turns -> runApp(data, turns, defaultMaximum, false, topMatch) }, name)
+                        val key = "$folder $source $name top_match=$topMatch"
+                        out.put(key, tally.json())
+                        println("STEP4A $key ${tally.json()}")
+                    }
+                }
+            }
+        }
+        val expected = text("recall_carryover_holdout/step4a_results.json")
+            ?: error("Record the printed STEP4A lines in recall_carryover_holdout/step4a_results.json")
+        val recorded = JSONObject(expected)
+        for (key in out.keys()) {
+            assertTrue("$key differs from the Step 4a record", out.getJSONObject(key).similar(recorded.getJSONObject(key)))
+        }
+    }
 }

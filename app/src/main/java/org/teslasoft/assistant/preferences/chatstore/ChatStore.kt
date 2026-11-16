@@ -25,6 +25,7 @@ import net.zetetic.database.sqlcipher.SQLiteDatabase
 import net.zetetic.database.sqlcipher.SQLiteOpenHelper
 import java.io.StringReader
 import java.util.UUID
+import org.teslasoft.assistant.preferences.memory.context.ContextAssistance
 import org.teslasoft.assistant.util.Hash
 
 /**
@@ -255,6 +256,13 @@ class ChatStore private constructor(
             arrayOf<Any>(newId, listRowJson, nextRevision(db), oldId)
         )
         true
+    }.also { moved ->
+        // Chat IDs come from titles and can be reused, so the context
+        // helper's in-memory subject never outlives the ID it was kept for.
+        if (moved && oldId != newId) {
+            ContextAssistance.chatDeleted(oldId)
+            ContextAssistance.chatDeleted(newId)
+        }
     }
 
     private fun rowIdExists(db: SQLiteDatabase, chatId: String): Boolean =
@@ -264,7 +272,7 @@ class ChatStore private constructor(
         val deleted = db.delete("chats", "chat_id = ?", arrayOf(chatId)) > 0
         if (deleted) nextRevision(db)
         deleted
-    }
+    }.also { deleted -> if (deleted) ContextAssistance.chatDeleted(chatId) }
 
     fun revision(chatId: String): Long? =
         readableDatabase.rawQuery("SELECT revision FROM chats WHERE chat_id = ?", arrayOf(chatId))

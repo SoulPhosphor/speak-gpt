@@ -132,6 +132,48 @@
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
+            <!-- Lorebook entry limit while memory is on (owner request,
+                 Stage 2); replaces Lorebook Settings' limit only when on AND
+                 a valid number is entered (LorebookLimits). -->
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_controls_rag_lorebook_limit" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/memory_controls_rag_lorebook_limit_hint" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_rag_lorebook_limit"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_rag_lorebook_max_entries"
+                style="@style/Widget.App.Row.Number"
+                android:visibility="gone">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_controls_rag_lorebook_max_entries" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/field_rag_lorebook_max_entries"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:contentDescription="@string/memory_controls_rag_lorebook_max_entries"
+                    android:ems="2"
+                    android:importantForAutofill="no"
+                    android:maxLength="2" />
+            </LinearLayout>
+
             <!-- ============ Memory Engine ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"

@@ -649,6 +649,45 @@ class Librarian private constructor(private val appContext: Context) {
     )
 
     /**
+     * One live search with everything behind it: the search result (whole
+     * message, sections, the numbers that decide a confident match) and the
+     * memories [scope] may use right now, read from the store for this call.
+     * Context assistance (ContextAssistance) needs both: the first to decide
+     * the subject, the second so a carried memory is always the current one.
+     * [Turn.result] is null when the store is not set up or nothing is
+     * eligible; [Turn.ranked] is then empty.
+     */
+    data class Turn(
+        val ranked: List<ScoredMemory>,
+        val result: SavedMemorySearch.Result?,
+        val eligible: Map<String, RetrievableMemory>
+    )
+
+    fun searchTurn(
+        scope: RetrievalScope,
+        query: String,
+        topK: Int,
+        selectedProjectId: String? = null,
+        diag: ((RetrievalDiagnostics) -> Unit)? = null
+    ): Turn {
+        var result: SavedMemorySearch.Result? = null
+        var eligible: Map<String, RetrievableMemory> = emptyMap()
+        val ranked = searchInternal(
+            scope = scope,
+            query = query,
+            topK = topK,
+            selectedProjectId = selectedProjectId,
+            rankingWeights = null,
+            reconciliation = false,
+            diag = diag
+        ) { r, candidates ->
+            result = r
+            eligible = candidates.associateBy { it.memoryId }
+        }
+        return Turn(ranked, result, eligible)
+    }
+
+    /**
      * Stage C local pre-extraction retrieval. Each supplied text window is
      * searched through the same scope eligibility, vector completeness, and
      * lexical fallback machinery as live retrieval; results are unioned by
@@ -692,7 +731,8 @@ class Librarian private constructor(private val appContext: Context) {
         selectedProjectId: String?,
         rankingWeights: Weights?,
         reconciliation: Boolean,
-        diag: ((RetrievalDiagnostics) -> Unit)?
+        diag: ((RetrievalDiagnostics) -> Unit)?,
+        detail: ((SavedMemorySearch.Result, List<RetrievableMemory>) -> Unit)? = null
     ): List<ScoredMemory> {
         if (!MemoryStore.isProvisioned(appContext)) return emptyList()
         val store = MemoryStore.getInstance(appContext)
@@ -789,6 +829,7 @@ class Librarian private constructor(private val appContext: Context) {
             }
             diag?.invoke(RetrievalDiagnostics(candidates.size, withVector,
                 result.whole.diagnostics.meaningRan, m != null, result.sectionIds))
+            detail?.invoke(result, candidates)
             return result.ranked
         }
         val result = searchCore(

@@ -23,6 +23,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
@@ -33,9 +34,11 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.lorebook.LorebookLimits
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.NumberSettingField
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /**
@@ -145,6 +148,27 @@ class MemoryControlsActivity : SettingsPageActivity() {
         switchUseImportanceRatings?.isChecked = preferences?.getUseImportanceRatings() ?: true
         switchUseImportanceRatings?.setOnCheckedChangeListener { _, checked ->
             preferences?.setUseImportanceRatings(checked)
+        }
+
+        // Lorebook entry limit while memory is on (owner request, Stage 2):
+        // replaces Lorebook Settings' limit only while on AND a valid number
+        // is entered (LorebookLimits). The field starts empty.
+        val switchRagLorebookLimit = findViewById<MaterialSwitch>(R.id.switch_rag_lorebook_limit)
+        val rowRagLorebookMax = findViewById<View>(R.id.row_rag_lorebook_max_entries)
+        val lorebookLimits = preferences?.getLorebookLimitSettings()
+        switchRagLorebookLimit?.isChecked = lorebookLimits?.memoryOverrideEnabled == true
+        rowRagLorebookMax?.visibility = if (switchRagLorebookLimit?.isChecked == true) View.VISIBLE else View.GONE
+        switchRagLorebookLimit?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setRagLorebookEntryLimitEnabled(checked)
+            rowRagLorebookMax?.visibility = if (checked) View.VISIBLE else View.GONE
+        }
+        findViewById<EditText>(R.id.field_rag_lorebook_max_entries)?.let { field ->
+            NumberSettingField.bindOptional(
+                field,
+                LorebookLimits.MIN_ENTRIES..LorebookLimits.MAX_ENTRIES,
+                read = { preferences?.getLorebookLimitSettings()?.memoryOverrideEntries },
+                write = { preferences?.setRagLorebookMaxEntries(it) }
+            )
         }
 
         /* ---- Memory Engine ---- */

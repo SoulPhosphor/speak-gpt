@@ -265,6 +265,8 @@ import org.teslasoft.assistant.preferences.memory.ActiveMemoryReference
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
 import org.teslasoft.assistant.preferences.lorebook.LoreBookBudget
+import org.teslasoft.assistant.preferences.lorebook.LorebookLimits
+import org.teslasoft.assistant.preferences.memory.context.EarlierUserMessages
 import org.teslasoft.assistant.preferences.lorebook.ChatLoreBookSelection
 import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
@@ -13567,10 +13569,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
             }
             // Cross-book dedup (Step 1.6): the same lore content can live in
-            // two active books; first occurrence (core book first) wins. This
-            // path has no entry/character budget of its own, so dedup is the
-            // only thing that can drop a match here.
-            injectedLoreMatches = LoreDedup.dedup(allLoreMatches)
+            // two active books; first occurrence (core book first) wins. Then
+            // the lorebook limits every way of sending shares (LorebookLimits).
+            val loreSelection = LorebookLimits.select(
+                LoreDedup.dedup(allLoreMatches),
+                LorebookLimits.resolve(
+                    preferences!!.getLorebookLimitSettings(),
+                    preferences?.getChatMemoryEnabled() == true && MemoryStore.isProvisioned(this)
+                )
+            )
+            injectedLoreMatches = loreSelection.kept
             LoreBookInjectionLog.record(
                 userMessage = loreQuery,
                 matched = allLoreMatches,
@@ -13578,7 +13586,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 injected = injectedLoreMatches,
                 cut = LoreDedup.droppedDuplicates(allLoreMatches).map { (dup, _) ->
                     LoreBookInjectionLog.Cut(dup, "duplicate content")
-                }
+                } + loreSelection.cut.map { LoreBookInjectionLog.Cut(it.match, it.reason) }
             )
         }
 
@@ -13599,11 +13607,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                     conversationProjection.memoryContext
                                 ),
                                 modelTag = selectedModel,
-                                // Lore is frozen as its own complete request
-                                // layer immediately after memory below. Passing
-                                // it into Enforcer would apply its legacy
-                                // injection cap before request-capacity checks.
-                                loreMatches = emptyList(),
+                                // Lore is frozen as its own request layer
+                                // immediately after memory below; the enforcer
+                                // only drops memories that repeat it.
+                                sentLore = injectedLoreMatches,
                                 worldId = preferences?.getChatWorldId(),
                                 campaignId = preferences?.getChatCampaignId(),
                                 roleplayCharacterId =
@@ -13611,7 +13618,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 userPersonaId = preferences?.getChatUserPersonaId(),
                                 projectId = preferences?.getChatProjectId(),
                                 manualMemoryIds = manualMemoryIds,
-                                automaticMemoryEnabled = preferences?.getChatMemoryEnabled() == true
+                                automaticMemoryEnabled = preferences?.getChatMemoryEnabled() == true,
+                                earlierUserMessages = EarlierUserMessages.from(
+                                    conversationProjection.memoryContext
+                                )
                             )
                         )
                 }
@@ -13958,8 +13968,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 org.teslasoft.assistant.preferences.memory.MemoryLog.log(this, "LoreBook", "error", "Lorebook unavailable this turn: ${e.message}")
             }
             dedupedLoreMatches = LoreDedup.dedup(allLoreMatches)
-            loreBudget = LoreBookBudget.select(
-                dedupedLoreMatches, LoreBookStore.MAX_INJECTED_ENTRIES, LoreBookStore.MAX_INJECTED_CHARS
+            // The same lorebook limits as typed sending (LorebookLimits).
+            loreBudget = LorebookLimits.select(
+                dedupedLoreMatches,
+                LorebookLimits.resolve(
+                    preferences!!.getLorebookLimitSettings(),
+                    preferences?.getChatMemoryEnabled() == true && MemoryStore.isProvisioned(this)
+                )
             )
             // Every turn is recorded — zero-match and store-unavailable turns
             // included — so "lore didn't reach the model" is diagnosable from
@@ -13977,12 +13992,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         // Full memory system (Phase 4 enforcer): assemble the per-turn memory
-        // message — retrieved memories, lore notes, scene — as ONE separate
-        // system message after the stable base prompt. Gated on the per-chat
+        // message — retrieved memories and scene — as ONE separate system
+        // message after the stable base prompt; the lorebook entries follow as
+        // their own message, exactly as on typed sending. Gated on the per-chat
         // "Use memory" switch alone (Quick Settings is God; the engine tier is
-        // only its default). With lore books off for the chat, dedupedLoreMatches
-        // is empty, so the assembly contains no lore notes — the switches stay
-        // independent. Automatic-recall failures retain the classic lore fallback.
+        // only its default). Lore books and memory stay independent switches.
         // An explicit attachment failure stops the request rather than silently omitting it.
         val manualMemoryIds = MemoryAttachmentController.fromMessage(
             messages.lastOrNull { it["isBot"] != true && !MessageVisibility.isHidden(it) }
@@ -14001,14 +14015,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 userMessage = lastUserMessageForLore,
                                 recentContext = if (legacyExperimental) "" else recentTurnsContext(),
                                 modelTag = model,
-                                loreMatches = dedupedLoreMatches,
+                                // Lore is its own request layer below, as on
+                                // typed sending; the enforcer only drops
+                                // memories that repeat it.
+                                sentLore = loreBudget.kept,
                                 worldId = preferences?.getChatWorldId(),
                                 campaignId = preferences?.getChatCampaignId(),
                                 roleplayCharacterId = preferences?.getChatRoleplayCharacterId(),
                                 userPersonaId = preferences?.getChatUserPersonaId(),
                                 projectId = preferences?.getChatProjectId(),
                                 manualMemoryIds = manualMemoryIds,
-                                automaticMemoryEnabled = preferences?.getChatMemoryEnabled() == true
+                                automaticMemoryEnabled = preferences?.getChatMemoryEnabled() == true,
+                                earlierUserMessages = if (legacyExperimental) emptyList() else
+                                    EarlierUserMessages.from(chatMessages)
                             )
                         )
                 }
@@ -14051,13 +14070,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
             )
         }
-        if (memoryAssemblyResult == null && loreBudget.kept.isNotEmpty()) {
-            // Safety budget: a message that trips many triggers at once must not
-            // flood the context. Inject at most MAX_INJECTED_ENTRIES memories /
-            // MAX_INJECTED_CHARS characters, in book order (core book first).
-            // Same shared selection the enforcer would have used for loreNotes
-            // had it run (counterplan Step 1.6) — precomputed above as
-            // [loreBudget] so this path and the debug log agree with it.
+        if (loreBudget.kept.isNotEmpty()) {
+            // The lorebook entries selected above with the limits shared by
+            // every way of sending (LorebookLimits), rendered as their own
+            // message after memory, the same layout as typed sending.
             val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
             for (match in loreBudget.kept) {
                 loreText.append("\n- ").append(match.entry.content)
@@ -14122,8 +14138,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
 
-        val lorebookIds = memoryAssemblyResult?.lorebookEntryIds
-            ?: loreBudget.injectedEntryIds
+        val lorebookIds = loreBudget.injectedEntryIds
         activeMemoryReferences = ActiveMemoryAttribution.fromFinalSelection(
             memoryAssemblyResult?.memoryIds.orEmpty(),
             lorebookIds

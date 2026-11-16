@@ -1999,6 +1999,58 @@ class Preferences internal constructor(
         putGlobalBoolean("use_importance_ratings", enabled, true)
     }
 
+    /** Memory Context Helper Settings: the helper is off until the user turns
+     *  it on (conversation_recall_plan.md G38). */
+    fun getMemoryContextHelperEnabled(): Boolean =
+        getGlobalBoolean("memory_context_helper_enabled", false)
+
+    fun setMemoryContextHelperEnabled(enabled: Boolean) {
+        putGlobalBoolean("memory_context_helper_enabled", enabled, false)
+    }
+
+    /** The helper method; "code_based" is the only one built (Stage 2). */
+    fun getMemoryContextHelperMethod(): String =
+        getGlobalString("memory_context_helper_method", "code_based")
+
+    fun setMemoryContextHelperMethod(method: String) {
+        putGlobalString("memory_context_helper_method", method, "code_based")
+    }
+
+    /** Lorebook Settings and the RAG Active Memory Settings override; see
+     *  LorebookLimits. A stored -1 means the field is empty. */
+    fun getLorebookLimitSettings(): org.teslasoft.assistant.preferences.lorebook.LorebookLimits.Settings =
+        org.teslasoft.assistant.preferences.lorebook.LorebookLimits.Settings(
+            maxEntries = getGlobalInt("lorebook_max_entries",
+                org.teslasoft.assistant.preferences.lorebook.LorebookLimits.DEFAULT_MAX_ENTRIES),
+            characterLimitEnabled = getGlobalBoolean("lorebook_character_limit_enabled", false),
+            maxCharacters = getGlobalInt("lorebook_max_characters", -1).takeIf { it >= 0 },
+            memoryOverrideEnabled = getGlobalBoolean("rag_lorebook_entry_limit_enabled", false),
+            memoryOverrideEntries = getGlobalInt("rag_lorebook_max_entries", -1).takeIf { it >= 0 }
+        )
+
+    fun setLorebookMaxEntries(value: Int) {
+        putGlobalInt("lorebook_max_entries", value,
+            org.teslasoft.assistant.preferences.lorebook.LorebookLimits.DEFAULT_MAX_ENTRIES)
+    }
+
+    fun setLorebookCharacterLimitEnabled(enabled: Boolean) {
+        putGlobalBoolean("lorebook_character_limit_enabled", enabled, false)
+    }
+
+    /** null clears the field. */
+    fun setLorebookMaxCharacters(value: Int?) {
+        putGlobalInt("lorebook_max_characters", value ?: -1, -1)
+    }
+
+    fun setRagLorebookEntryLimitEnabled(enabled: Boolean) {
+        putGlobalBoolean("rag_lorebook_entry_limit_enabled", enabled, false)
+    }
+
+    /** null clears the field. */
+    fun setRagLorebookMaxEntries(value: Int?) {
+        putGlobalInt("rag_lorebook_max_entries", value ?: -1, -1)
+    }
+
     /**
      * Display-only preference for the review/archive status line beneath chat
      * rows. It does not enable, disable, or modify any memory processing.

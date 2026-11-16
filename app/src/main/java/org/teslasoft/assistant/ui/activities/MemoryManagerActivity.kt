@@ -64,6 +64,8 @@ class MemoryManagerActivity : SettingsPageActivity() {
     private var rowMemorySettings: LinearLayout? = null
     private var rowAssistantAdvancedSettings: LinearLayout? = null
     private var rowAdvancedMemory: LinearLayout? = null
+    private var rowMemoryContextHelper: LinearLayout? = null
+    private var rowLorebookSettings: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,6 +89,8 @@ class MemoryManagerActivity : SettingsPageActivity() {
         rowMemorySettings = findViewById(R.id.row_memory_settings)
         rowAssistantAdvancedSettings = findViewById(R.id.row_assistant_advanced_settings)
         rowAdvancedMemory = findViewById(R.id.row_advanced_memory)
+        rowMemoryContextHelper = findViewById(R.id.row_memory_context_helper)
+        rowLorebookSettings = findViewById(R.id.row_lorebook_settings)
     }
 
     @Suppress("DEPRECATION")
@@ -137,6 +141,14 @@ class MemoryManagerActivity : SettingsPageActivity() {
 
         rowAdvancedMemory?.setOnClickListener {
             startActivity(Intent(this, AdvancedMemorySettingsActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        rowMemoryContextHelper?.setOnClickListener {
+            startActivity(Intent(this, MemoryContextHelperSettingsActivity::class.java))
+        }
+
+        rowLorebookSettings?.setOnClickListener {
+            startActivity(Intent(this, LorebookSettingsActivity::class.java))
         }
 
     }

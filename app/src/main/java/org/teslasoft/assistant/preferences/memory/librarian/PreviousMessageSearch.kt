@@ -143,17 +143,21 @@ object PreviousMessageSearch {
         index: LiveRetrieval.Index,
         params: LiveRetrieval.Params,
         candidateLimit: Int,
-        useImportanceRatings: Boolean
+        useImportanceRatings: Boolean,
+        /** The +3 top-match rule (G.10); off reproduces the Step 3 records. */
+        plusThreeTopMatch: Boolean = true
     ): Result {
         val newest = SavedMemorySearch.search(
-            current.text, current.vector, index, params, candidateLimit, useImportanceRatings, current.readSections
+            current.text, current.vector, index, params, candidateLimit, useImportanceRatings,
+            plusThreeTopMatch, readSections = current.readSections
         )
         // An earlier message's search is not cut: what it may add is decided
         // once, in combine(), after the newer candidates.
         val everything = maxOf(candidateLimit, index.corpus.size)
         val earlier = previousUserMessages.take(previousCount.coerceIn(0, MAX_PREVIOUS_MESSAGES)).map { message ->
             SavedMemorySearch.search(
-                message.text, message.vector, index, params, everything, useImportanceRatings, message.readSections
+                message.text, message.vector, index, params, everything, useImportanceRatings,
+                plusThreeTopMatch, readSections = message.readSections
             )
         }
         val searched = listOf(current) + previousUserMessages.take(earlier.size)

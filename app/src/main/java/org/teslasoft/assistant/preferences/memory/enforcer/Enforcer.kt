@@ -20,9 +20,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.lorebook.LoreBookBudget
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
-import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.CampaignRecord
 import org.teslasoft.assistant.preferences.memory.CardEntryRecord
 import org.teslasoft.assistant.preferences.memory.CardType
@@ -38,6 +36,8 @@ import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
 import org.teslasoft.assistant.preferences.memory.WorldRecord
+import org.teslasoft.assistant.preferences.memory.context.ContextAssistance
+import org.teslasoft.assistant.preferences.memory.context.ContextAssistant
 import org.teslasoft.assistant.preferences.memory.librarian.RecallDiagnostics
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.preferences.memory.librarian.RetrievalDocument
@@ -101,7 +101,11 @@ class Enforcer private constructor(private val appContext: Context) {
         /** Short rolling summary of the last few turns, built by the caller. */
         val recentContext: String,
         val modelTag: String,
-        val loreMatches: List<LoreBookMatch>,
+        /** The lorebook entries this message sends, exactly as the caller
+         *  sends them in their own request layer. They are only compared
+         *  with retrieved memories: a memory repeating one is dropped. They
+         *  are not rendered here and use none of the Memory Space. */
+        val sentLore: List<LoreBookMatch>,
         val worldId: String?,
         /** Quick Settings Campaign selection (Stage 3.0) — the owner-chosen
          *  explicit signal that this chat is inside that playthrough. */
@@ -112,14 +116,16 @@ class Enforcer private constructor(private val appContext: Context) {
          *  (owner_approved_rules §4 rev 3). */
         val projectId: String?,
         val manualMemoryIds: List<String> = emptyList(),
-        val automaticMemoryEnabled: Boolean = true
+        val automaticMemoryEnabled: Boolean = true,
+        /** The chat's earlier user messages with text, newest first, for
+         *  context assistance. */
+        val earlierUserMessages: List<String> = emptyList()
     )
 
-    /** The rendered prompt and the exact final entry selection behind it. */
+    /** The rendered prompt and the exact final memory selection behind it. */
     data class AssemblyResult(
         val prompt: String,
-        val memoryIds: List<String>,
-        val lorebookEntryIds: List<String>
+        val memoryIds: List<String>
     )
 
     /**
@@ -235,29 +241,54 @@ class Enforcer private constructor(private val appContext: Context) {
         // relevant candidates still waiting".
         val scanCap = RetrievalBackfill.scanCap(policy.topK)
         var retrievalDiag: Librarian.RetrievalDiagnostics? = null
-        val poolScored: List<ScoredMemory> = try {
-            librarian.search(
-                retrievalScope, query, scanCap + 1,
-                input.projectId?.takeIf { it.isNotBlank() }
-            ) { d -> retrievalDiag = d }
+        val projectId = input.projectId?.takeIf { it.isNotBlank() }
+        val turnSearch: Librarian.Turn? = try {
+            librarian.searchTurn(retrievalScope, query, scanCap + 1, projectId) { d -> retrievalDiag = d }
         } catch (e: Exception) {
             notes.add("retrieval failed: ${e.message}")
-            emptyList()
+            null
         }
+        val ownScored = turnSearch?.ranked.orEmpty()
+
+        // Context assistance (conversation_recall_plan.md G.9b): the message's
+        // own results stay first and unchanged; assistance only adds
+        // candidates after them, and they go through the same selection below.
+        val assistant = ContextAssistance.forSettings(prefs)
+        val added: List<ScoredMemory> = turnSearch?.result?.let { own ->
+            try {
+                when (val out = assistant.assist(ContextAssistant.Input(
+                    chatId = input.chatId,
+                    modelTag = librarian.activeTag(),
+                    own = own,
+                    eligible = turnSearch.eligible,
+                    earlierUserMessages = input.earlierUserMessages,
+                    searchEarlier = { text ->
+                        librarian.searchTurn(retrievalScope, text, scanCap + 1, projectId).result
+                    }
+                ))) {
+                    is ContextAssistant.Output.Nothing -> emptyList()
+                    is ContextAssistant.Output.Carry -> out.memories
+                    is ContextAssistant.Output.Query ->
+                        librarian.searchTurn(retrievalScope, out.text, scanCap + 1, projectId).ranked
+                }
+            } catch (_: Exception) {
+                // Assistance only adds candidates; on failure the message is
+                // sent with its own results, as with the helper off.
+                emptyList()
+            }
+        }.orEmpty()
+        val (poolScored, carriedIds) = ContextAssistant.candidates(ownScored, added)
+        val topMatchIds = turnSearch?.result?.whole?.explanations
+            ?.filter { it.passedTopMatch }?.map { it.memory.memoryId }?.toSet().orEmpty()
         val manualIds = manualMemories.map { it.memoryId }.toSet()
         val pool = poolScored.filterNot { it.memory.memoryId in manualIds }
             .map { toAssembled(it.memory, it.score, it.similarity) }
 
-        // Lore notes: the user's hand-written tier, same budget selection as
-        // the classic path (core-book-first order is preserved from the
-        // caller) — both now share LoreBookBudget.select (counterplan Step
-        // 1.6) so the two paths can never disagree on what was injected.
-        val loreSelection = LoreBookBudget.select(
-            input.loreMatches, LoreBookStore.MAX_INJECTED_ENTRIES, LoreBookStore.MAX_INJECTED_CHARS
-        )
-        val loreKept = loreSelection.kept
-        val loreNotes = loreKept.map { LoreNote(it.entry.label, it.entry.content) }
-        val loreChars = loreKept.sumOf { it.entry.content.length }
+        // The lorebook entries this message sends. The caller sends them in
+        // their own request layer, with the same limits on every way of
+        // sending (LorebookLimits); here they are only compared with the
+        // memories, and take none of the Memory Space.
+        val loreNotes = input.sentLore.map { LoreNote(it.entry.label, it.entry.content) }
 
         // The turn clock, used to record which memories and card entries
         // reached the prompt. Neither has a cooldown: the memory block is
@@ -382,7 +413,7 @@ class Enforcer private constructor(private val appContext: Context) {
         val directKept = ArrayList<Pair<AssembledCardEntry, String>>()
         var directChars = 0
         val manualChars = manualMemories.sumOf(PromptAssembler::memoryCost)
-        val directAvailable = (policy.charBudget - loreChars - manualChars).coerceAtLeast(0)
+        val directAvailable = (policy.charBudget - manualChars).coerceAtLeast(0)
         for (f in cardDirect) {
             val a = assembleCard(f)
             val cost = cardCost(a)
@@ -406,7 +437,7 @@ class Enforcer private constructor(private val appContext: Context) {
         // the list (never truncated — atomic or absent).
         val suppressed = ArrayList<Pair<AssembledMemory, LoreNote>>()
         val budgetCut = ArrayList<AssembledMemory>()
-        val memoryAvailable = (policy.charBudget - loreChars - directChars).coerceAtLeast(0)
+        val memoryAvailable = (policy.charBudget - directChars).coerceAtLeast(0)
         // Explicit attachments reserve both count and character room before auto-fill.
         // They stay whole even above the retrieval budget; request-capacity checks
         // still measure the complete final prompt before dispatch.
@@ -504,7 +535,6 @@ class Enforcer private constructor(private val appContext: Context) {
 
         val components = AssemblyComponents(
             memories = kept,
-            loreNotes = loreNotes,
             scene = scene,
             cardEntries = cardsFinal.map { it.first }
         )
@@ -541,10 +571,12 @@ class Enforcer private constructor(private val appContext: Context) {
                 injected = kept.map {
                     AssemblyLog.Line(
                         memLogLabel(it),
-                        "score %.3f sim %.3f%s%s · %s".format(
+                        "score %.3f sim %.3f%s%s%s%s · %s".format(
                             it.score, it.similarity,
                             if (it.isProtected) " [protected]" else "",
                             if (it.isInstruction) " [instruction rule]" else "",
+                            if (it.memoryId in carriedIds) " [carried from earlier subject]" else "",
+                            if (it.memoryId in topMatchIds) " [+3 top match]" else "",
                             it.memoryId
                         )
                     )
@@ -573,8 +605,7 @@ class Enforcer private constructor(private val appContext: Context) {
         return rendered.takeIf { it.isNotBlank() }?.let {
             AssemblyResult(
                 prompt = it,
-                memoryIds = kept.map { memory -> memory.memoryId },
-                lorebookEntryIds = loreSelection.injectedEntryIds
+                memoryIds = kept.map { memory -> memory.memoryId }
             )
         }
     }
@@ -582,14 +613,8 @@ class Enforcer private constructor(private val appContext: Context) {
     /** An explicit attachment remains usable with automatic recall switched off. */
     private fun manualOnlyAssembly(input: TurnInput, memories: List<AssembledMemory>): AssemblyResult? {
         if (memories.isEmpty()) return null
-        val lore = LoreBookBudget.select(
-            input.loreMatches, LoreBookStore.MAX_INJECTED_ENTRIES, LoreBookStore.MAX_INJECTED_CHARS
-        )
-        val prompt = PromptAssembler.render(AssemblyComponents(
-            memories = memories,
-            loreNotes = lore.kept.map { LoreNote(it.entry.label, it.entry.content) }
-        ))
-        return AssemblyResult(prompt, memories.map { it.memoryId }, lore.injectedEntryIds)
+        val prompt = PromptAssembler.render(AssemblyComponents(memories = memories))
+        return AssemblyResult(prompt, memories.map { it.memoryId })
     }
 
     /* ------------------------------------------------------------------ */

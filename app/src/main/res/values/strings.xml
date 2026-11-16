@@ -4522,4 +4522,28 @@
     <string name="chat_usage_alert_amount_hint">If the estimated cost of the conversation gets to this amount, a pop-up alert will show.</string>
     <string name="chat_usage_alert_title">Usage Cost Warning</string>
     <string name="chat_usage_alert_message">The total amount of usage for this conversation has reached %1$s.</string>
+
+    <!-- Memory Context Helper Settings (owner-approved wording, Stage 2;
+         conversation_recall_plan.md G38, M.11). -->
+    <string name="row_memory_context_helper_title">Memory Context Helper Settings</string>
+    <string name="row_memory_context_helper_subtitle">Help follow-up messages retain relevant memories.</string>
+    <string name="title_memory_context_helper_settings">Memory Context Helper Settings</string>
+    <string name="memory_context_helper_intro">Follow-up messages don\'t always repeat who or what you\'re talking about. The Memory Context Helper helps the AI retain relevant memories as the conversation continues, even when your next message doesn\'t mention the original subject.</string>
+    <string name="memory_context_helper_toggle">Use Memory Context Helper</string>
+    <string name="memory_context_helper_toggle_hint">When off, memory search continues normally, without additional help connecting follow-up messages to earlier subjects.</string>
+    <string name="memory_context_helper_method">Helper Method</string>
+    <string name="memory_context_helper_method_code_based">On-device (Code-Based)</string>
+    <string name="memory_context_helper_method_code_based_hint">Uses rules on your device to keep memories from the last clearly identified subject available during follow-ups. No additional AI calls or cost.\n\nIt cannot always distinguish a follow-up from a new topic, so unrelated messages may also receive memories from the previous subject.</string>
+
+    <!-- Lorebook Settings (owner-approved wording, Stage 2). -->
+    <string name="title_lorebook_settings">Lorebook Settings</string>
+    <string name="lorebook_settings_max_entries">Maximum Lorebook Entries</string>
+    <string name="lorebook_settings_limit_characters">Limit Maximum Amount of Characters</string>
+    <string name="lorebook_settings_limit_characters_hint">When enabled, fewer lorebook entries may be sent to the AI if the character limit is reached before the maximum entry count.</string>
+    <string name="lorebook_settings_max_characters">Maximum Lorebook Characters</string>
+    <!-- RAG Active Memory Settings: lorebook entry limit while memory is on
+         (owner-approved wording, Stage 2). -->
+    <string name="memory_controls_rag_lorebook_limit">Activating Both Memory Systems Limit Lorebook Entries</string>
+    <string name="memory_controls_rag_lorebook_limit_hint">When turned on this will replace the amount of lorebook entries that are allowed to be sent when rag active memories are activated.</string>
+    <string name="memory_controls_rag_lorebook_max_entries">Maximum Lorebook Entries</string>
 </resources>

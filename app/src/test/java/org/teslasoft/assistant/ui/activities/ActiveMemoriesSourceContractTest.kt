@@ -8,6 +8,7 @@
 package org.teslasoft.assistant.ui.activities
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -33,12 +34,25 @@ class ActiveMemoriesSourceContractTest {
     }
 
     @Test
-    fun memoryAndFallbackPathsAttributeOnlyPostBudgetLorebookIds() {
+    fun voiceAndResendAttributeTheExactLorebookListTheySend() {
+        // Lorebook entries are their own request layer on every way of
+        // sending; the enforcer only compares memories with them.
         val chat = source("ui/activities/ChatActivity.kt")
         val enforcer = source("preferences/memory/enforcer/Enforcer.kt")
-        assertTrue(chat.contains("memoryAssemblyResult?.lorebookEntryIds"))
-        assertTrue(chat.contains("?: loreBudget.injectedEntryIds"))
-        assertTrue(enforcer.contains("lorebookEntryIds = loreSelection.injectedEntryIds"))
+        assertTrue(chat.contains("for (match in loreBudget.kept)"))
+        assertTrue(chat.contains("val lorebookIds = loreBudget.injectedEntryIds"))
+        assertFalse(enforcer.contains("lorebookEntryIds"))
+    }
+
+    @Test
+    fun everyWayOfSendingChecksMemoriesAgainstTheLorebookEntriesItSends() {
+        // Typed sending, and voice and resending, hand the enforcer exactly
+        // the lorebook entries they send, so a memory repeating one is dropped
+        // on all of them (owner decision, Stage 2).
+        val chat = source("ui/activities/ChatActivity.kt")
+        assertTrue(chat.contains("sentLore = injectedLoreMatches"))
+        assertTrue(chat.contains("sentLore = loreBudget.kept"))
+        assertEquals(2, Regex("LorebookLimits\\.select\\(").findAll(chat).count())
     }
 
     @Test
