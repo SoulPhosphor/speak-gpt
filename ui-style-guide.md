@@ -608,7 +608,8 @@ its contents below it, ends the scrolling content above the navigation bar,
 and keeps the page clear of side insets and cutouts. The layout supplies only
 the ids `root`, `action_bar` and `scroll`. Do not fit the page root inside the
 system bars instead; that leaves a gap above the header. Current users:
-BackUp Options, Restore Options, and Embedding Model.
+BackUp Options, Restore Options, Embedding Model, and RAG Active Memory
+Settings.
 
 A page the user types into calls `ScreenChrome.fitSystemBarsAndKeyboard`
 instead: the same, plus the page ends at the top of an open keyboard (the
@@ -1543,8 +1544,8 @@ button box, for an action that should read as a link. After a successful save,
 `Widget.App.QuickSettings.TextLink` aligns it with the Quick Settings card
 segments. Current users: Save Parameters to Favorite / Recent Model Settings
 above Streaming in Quick Settings, the same link above the parameters on
-Summarizer Settings and Advanced Memory Settings, and Reset to Recommended
-below them on Advanced Memory Settings (`Widget.App.PlainParameter.TextLink`).
+Summarizer Settings and Memory Scanner Tool API, and Reset to Recommended
+below them on Memory Scanner Tool API (`Widget.App.PlainParameter.TextLink`).
 
 ## Clean Up Models result sections
 
@@ -1934,11 +1935,11 @@ message storage; an image-generation command leaves them for the next chat turn.
 The browser header orders the conditional warning icon before Companions,
 then Icon Legend, then Add. Warning uses Google Material Symbols `warning` and
 the existing chained header-button family with theme tint. It is visible only
-while no complete embedding model is installed; returning from Advanced Memory
-Settings refreshes it. Opening the browser never opens this dialog automatically.
+while no complete embedding model is installed; returning from Embedding Model
+refreshes it. Opening the browser never opens this dialog automatically.
 The popup keeps its explanation and uses Dialog.Actions/EndRow/EndRowFlow with
 standard primary action buttons: Add Embedding Model on the left, Okay on the
-right. Add opens Advanced Memory Settings.
+right. Add opens Embedding Model (AI Settings).
 
 MemoryBrowser card typography, spacing, checkbox and icon geometry are owned
 by the stylesheet, with dimensions in `dimens.xml`. The trailing icon/chevron

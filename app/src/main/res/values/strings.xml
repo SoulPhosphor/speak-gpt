@@ -1957,7 +1957,7 @@
     <string name="memory_engine_picker_title">Choose memory engine</string>
     <!-- Owner wording, July 9 2026 — shown inline (persistent) under the
          Memory Engine control, never a toast. -->
-    <string name="memory_engine_needs_embedding">Install the embedding model in Advanced Memory Settings to enable Associative Search.</string>
+    <string name="memory_engine_needs_embedding">Install the embedding model in AI Settings, under Embedding Model, to enable Associative Search.</string>
     <string name="memory_archivist_endpoint_picker_title">Choose an endpoint</string>
     <string name="memory_archivist_endpoint_none_toast">No saved API endpoints yet — add one in API Endpoints first.</string>
     <string name="memory_archivist_model_hint">e.g. gpt-4o-mini</string>
@@ -2074,7 +2074,7 @@
     </plurals>
     <string name="model_cleanup_cleared_heading">Cleared Selected Models</string>
     <string name="model_cleanup_cleared_summarizer">Summarizer: %1$s (%2$s) was unavailable and has been cleared. Choose a new model in Summarizer Settings.</string>
-    <string name="model_cleanup_cleared_memory_scanner">Memory Scanner: %1$s (%2$s) was unavailable and has been cleared. Choose a new model in Advanced Memory Settings.</string>
+    <string name="model_cleanup_cleared_memory_scanner">Memory Scanner: %1$s (%2$s) was unavailable and has been cleared. Choose a new model in AI Settings, under Memory Scanner Tool API.</string>
     <string name="model_cleanup_tts_heading">Unavailable TTS Models</string>
     <string name="model_cleanup_delete_tts_confirm_title">Remove Unavailable TTS Models?</string>
     <string name="model_cleanup_delete_tts_confirm_message">Remove the saved TTS combinations whose models were reported unavailable by the last check? This removes them from Select API Voice Models and Select Voice.</string>
@@ -2312,10 +2312,11 @@
          ============================================================ -->
     <!-- Screen titles (also the manifest activity labels) -->
     <string name="title_memory_controls">Memory Controls</string>
+    <string name="title_rag_active_memory_settings">RAG Active Memory Settings</string>
     <string name="title_embedding_model">Embedding Model</string>
     <string name="title_memory_scanner_tool_api">Memory Scanner Tool API</string>
     <string name="title_memory_assistant_advanced">Advanced Memory Scanner Settings</string>
-    <string name="title_advanced_memory_settings">Advanced Memory Settings</string>
+    <string name="title_advanced_memory_settings">Memory Repair Settings</string>
 
     <!-- Memory Controls (spec §1) -->
     <string name="memory_controls_intro">Choose how memory works in chats, roleplay, backups, and memory review.</string>
@@ -2846,7 +2847,7 @@
     <string name="health_screen_blocked_memory">Memory is currently turned off because of a database problem.</string>
     <string name="health_screen_blocked_lorebook">Lorebooks are currently turned off because of a database problem.</string>
 
-    <string name="memory_controls_row_advanced">Advanced Memory Settings</string>
+    <string name="memory_controls_row_advanced">Memory Repair Settings</string>
     <string name="memory_controls_row_advanced_subtitle">Diagnostics, indexing, model files, and repair tools.</string>
 
     <!-- Memory Assistant Advanced Settings (spec §2) -->

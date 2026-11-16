@@ -46,9 +46,11 @@ import org.teslasoft.assistant.theme.ThemeManager
  * "Advanced Memory Settings" — the diagnostics/repair surface from the Memory
  * Settings reorganization (`Memory System/memory_settings_reorg_spec.md` §3,
  * July 9 2026). Technical tools only: System Status (store health + row
- * counts), Setup / Repair (Create Companions From Personas), Rebuild Memory
- * Index and Debug search. Reached from the Memory Manager hub. Embedding model
- * download/remove moved to Embedding Model in AI Settings (Nov 16 2026).
+ * counts), Setup / Repair (Create Companions From Personas) and Rebuild
+ * Memory Index; shown to the user as "Memory Repair Settings". Reached from
+ * the Memory Manager hub. Embedding model download/remove moved to Embedding
+ * Model in AI Settings, and Memory Search Test to RAG Active Memory Settings
+ * (Nov 16 2026).
  *
  * Reset Memories deliberately does NOT live here — it stays on Memory Controls
  * as the single home for that destructive action (placement ruling 5).
@@ -66,7 +68,6 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
 
     private var btnRebuildIndex: MaterialButton? = null
     private var textIndexStatus: TextView? = null
-    private var rowMemorySearchTest: View? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,7 +95,6 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
         btnBootstrap = findViewById(R.id.btn_memory_bootstrap)
         btnRebuildIndex = findViewById(R.id.btn_rebuild_index)
         textIndexStatus = findViewById(R.id.text_index_status)
-        rowMemorySearchTest = findViewById(R.id.row_memory_search_test)
     }
 
     @Suppress("DEPRECATION")
@@ -134,9 +134,6 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
         }
 
         btnRebuildIndex?.setOnClickListener { rebuildIndex() }
-        rowMemorySearchTest?.setOnClickListener {
-            startActivity(Intent(this, MemorySearchTestActivity::class.java))
-        }
     }
 
     /* ------------------------------ status ------------------------------ */

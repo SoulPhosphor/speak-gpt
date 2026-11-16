@@ -139,36 +139,6 @@
                 android:paddingTop="8dp"
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
-
-            <!-- ============ Debug ============ -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="24dp"
-                android:text="@string/advanced_memory_section_debug"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:id="@+id/row_memory_search_test"
-                style="@style/Widget.App.Row.WithSubtitle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/title_memory_search_test" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:text="@string/memory_search_test_row_subtitle" />
-                </LinearLayout>
-
-                <ImageView
-                    style="@style/Widget.App.Row.Chevron"
-                    android:importantForAccessibility="no" />
-            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
