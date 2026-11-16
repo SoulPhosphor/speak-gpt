@@ -35,3 +35,6 @@ transcripts-export*
 
 # Kotlin compiler cache
 .kotlin/
+
+# Owner wording approval (set only by the owner's "Approved wording:" message)
+.claude/wording-approval.token
