@@ -7,7 +7,8 @@ The file keeps its old name, `conversation_recall_plan.md`, because code
 comments and tests cite its section numbers.
 
 - **Part M** (below) is the build order, the status, the provenance design,
-  and the record of what was superseded. It is the only place that decides
+  where each setting goes on screen (M.11), and the record of what was
+  superseded. It is the only place that decides
   what is built next.
 - **Sections G.0 to G.19** are the design of context assistance and
   conversation recall, the work orders for the numbered Steps (G.16), and
@@ -304,7 +305,9 @@ None of these is decided. A builder does not choose them:
 9. **Privacy disclosure:** that recent conversation is sent to the chosen
    provider.
 10. **What happens when API AI is chosen but no model is configured.**
-11. **Where the screen is opened from,** and its title and labels.
+11. **Its title and labels.** It opens from a row in **AI Settings**,
+    beside Memory Scanner Tool API and Embedding Model (M.11), and the API AI
+    choice in RAG Active Memory Settings may point to it.
 12. **Whether a test action** is offered on the screen.
 13. **Logging:** whether failures go to the Provider Failure Log under a
     function name of their own (all logging needs approval).
@@ -403,6 +406,7 @@ default, not a permanent restriction. In addition:
 | API AI "chosen in its own selector" | G.9b, Step 4b | A dedicated configuration screen (M.4) |
 | Searching with the previous messages as the carry-over method, and "the previous one or two" messages | G.1 item 18, G.15, G.18a | Measured and not used (G.9a, G37) |
 | An optional live AI worker after Step 16 as the only AI help | RAG notes section 4 | The API AI context helper is in the initial rollout (stage 3); the live AI worker stays Later |
+| Screen names and placements: Memory Controls, Advanced Memory Settings (Librarian / Embeddings, Debug), Advanced Memory Scanner Settings | This plan before 2026-11-16, memory plan | The 2026-11-16 screens and placements in M.11 |
 | Code-based offered only if the held-out evaluation shows a benefit | RAG notes section 1 | Evaluated; the owner included it (G37) |
 | Step 3 repair and evaluation "not merged" | RAG notes section 3 | Merged in #205 and #206 |
 
@@ -429,6 +433,8 @@ default, not a permanent restriction. In addition:
 | `Memory System/dynamic_memory_plan.md` | Reference: saved-memory search design and later saved-memory feature designs, D-decisions, research |
 | `rag alteration notes November 14.md` | Historical record of owner direction, fully carried into this plan |
 
+Where settings go on screen is M.11.
+
 ## M.10 Decisions needed, in the order they are needed
 
 Each is also a row in G.17.
@@ -438,9 +444,52 @@ Each is also a row in G.17.
 | G42 | Next assignment | Confirm the build order in M.2 | As M.2: provenance, then Step 4a, Step 4b, Step 5, data control, conversation recall, then Phases 3–6 |
 | G43 | Stage 1 | The provenance design in M.3 as a whole, and its open details (G.17) | Approve M.3; recommendations for each detail are in G.17 |
 | G45 | Stage 2 | Include the frozen-path lorebook check (step 1.13) in Step 4a | Yes |
-| G38 | Stage 2 | Context-assistance setting: place, label, explanation, starting choice, rebuilding the subject after restart, whether Local AI is shown before it is built | Start on Code-based; do not show Local AI until it exists |
+| G38 | Stage 2 | Context-assistance setting (on RAG Active Memory Settings, M.11): label, explanation, starting choice, rebuilding the subject after restart, whether Local AI is shown before it is built | Start on Code-based; do not show Local AI until it exists |
 | G44 | Stage 2 | Ship Off and Code-based before API AI is ready | Yes |
 | G39 | Stage 3 | The API AI configuration screen (M.4, items 1–13) and the model and cost of its scored run | Each item approved before Step 4b; recommendations are made when Step 4b is prepared |
+
+## M.11 Where settings go (Owner, 2026-11-16)
+
+The owner reorganized the memory screens on 2026-11-16. Every new setting
+in this plan is placed by this rule: **choosing an AI model or provider
+belongs in AI Settings; how the memory system behaves belongs on its screen
+in the Memory Manager; checking and fixing the memory system belongs in
+Memory Repair Settings.** A stage that adds a setting puts it on the screen
+below. Its exact position on that screen, label and wording are still shown
+to the owner first.
+
+**The screens as of 2026-11-16:**
+
+| Screen | Opened from | Holds |
+|---|---|---|
+| Memory Browser | Memory Manager | Memories, Pending, the memory editor |
+| Lorebook Browser | Memory Manager | Lorebooks |
+| Memory Scanner Tool | Memory Manager | Running the Memory Scanner (Memory Assistant) |
+| Memory Scanner Tool Settings | Memory Manager, Settings section | How scans behave: suggestion limit, token amounts, Minimum Importance, the Associative and Lorebook Memory Prompts |
+| RAG Active Memory Settings (formerly Memory Controls) | Memory Manager, Settings section | How memories are searched and sent in chats: Memory Defaults, Memory Engine; Memory Search Test last |
+| Memory Repair Settings (formerly Advanced Memory Settings) | Memory Manager, Settings section, last | System Status and Rebuild memory index |
+| Memory Scanner Tool API | AI Settings | The Memory Scanner's endpoint, model, provider routing and parameters |
+| Embedding Model | AI Settings | Downloading and removing on-device embedding models |
+| Memory Backup & Restore | Main Settings | Memory backups, restores, Check Database Integrity |
+
+**Where this plan's settings go:**
+
+| Setting or screen | Screen | Status |
+|---|---|---|
+| Context-assistance choice (G38) | RAG Active Memory Settings | Placement by the rule; wording open |
+| API AI configuration screen (M.4) | Its own screen, opened from AI Settings | Placement by the rule; title and wording open (G39) |
+| Conversation Recall setting (G.8b) | RAG Active Memory Settings | Owner decision of 2026-11-11; the screen was renamed |
+| Room for recalled text (G.8b) | RAG Active Memory Settings | Moved from Advanced Memory Settings by the 2026-11-16 reorganization |
+| Conversation Index section: Index Conversations, status, Delete Conversation Index (G.16a) | RAG Active Memory Settings, above the test rows | Moved from Advanced Memory Settings by the 2026-11-16 reorganization; wording unchanged |
+| Conversation Recall Test (G21) | A row beside Memory Search Test at the bottom of RAG Active Memory Settings | Moved from Advanced Memory Settings, Debug, by the 2026-11-16 reorganization |
+| Where the user installs a model in no-model notices (G.13b, G31) | AI Settings, Embedding Model | Location updated; the wording is still a proposal |
+| Conversation index line on Check Database Integrity (G.13a) | Memory Backup & Restore | Unchanged |
+| Provenance link and dates (M.3) | Memory Browser, on the memory | Owner decision of 2026-11-15 |
+| Word count and length limit (Step 5) | Every memory editor | Owner decision of 2026-11-12 |
+| Memory Handling Preferences (memory plan Phase 2) | Its own screen, opened from a row in the Memory Manager's Settings section | Placement by the rule; position and wording shown first |
+| Always, Retired and Dates views (Phases 2–4) | Memory Browser view dropdown | Owner design |
+| Other embedding models, local or API (G41) | AI Settings, Embedding Model | Placement by the rule; Later |
+| Live AI worker's model (G.11) | AI Settings | Placement by the rule; Later |
 
 # Part G: Context assistance and conversation recall
 
@@ -1623,7 +1672,8 @@ without duplicating assembly logic.
 Decided by the owner on 2026-11-11.
 
 **The setting.**
-- It is in **Memory Controls**, is called **Conversation Recall**, and
+- It is in **RAG Active Memory Settings** (the screen formerly called
+  Memory Controls; M.11), is called **Conversation Recall**, and
   starts **off**. It is one setting for all chats, not chosen per
   conversation.
 - Its explanation reads: "Brings back earlier parts of the current chat
@@ -1650,7 +1700,8 @@ Decided by the owner on 2026-11-11.
   warns or blocks as it does today.
 
 **Room for recalled text.** A starting amount is set through testing. It
-is adjustable in **Advanced Memory Settings**, not only on the test
+is adjustable in **RAG Active Memory Settings** (M.11; placed in Advanced
+Memory Settings before the 2026-11-16 reorganization), not only on the test
 screen. Its label and explanation are shown to the owner before Step 16.
 
 **What the user sees.** Recalled exchanges are listed on the existing
@@ -1660,8 +1711,10 @@ group.
 **Follow-ups.** A recalled exchange stays through follow-up messages
 under the same rule as saved memories (G.9).
 
-**The recall test screen** is in Advanced Memory Settings, Debug section,
-beside Memory Search Test, and is called **Conversation Recall Test**.
+**The recall test screen** is opened from a row beside Memory Search Test at
+the bottom of **RAG Active Memory Settings** (M.11; it was in Advanced
+Memory Settings, Debug section, before the 2026-11-16 reorganization), and
+is called **Conversation Recall Test**.
 
 **Debug information.** Recall and carry-over may add information to the
 existing memory debugging view, so a wrong result can be explained. This
@@ -2164,7 +2217,7 @@ notice is shown once per unchanged condition, not once per message.
 | Name in the report | Conversation index |
 | Healthy | No problems found. |
 | Automatic repair running | The conversation index is being rebuilt. Your conversations are safe and unchanged. |
-| Repair failed | The conversation index could not be rebuilt. Index Conversations and Conversation Recall are off. Your conversations are safe and unchanged. Open Advanced Memory Settings to try indexing again. |
+| Repair failed | The conversation index could not be rebuilt. Index Conversations and Conversation Recall are off. Your conversations are safe and unchanged. Open RAG Active Memory Settings to try indexing again. |
 
 The former rule that every index error raises a persistent snack bar is
 superseded by the owner's 2026-11-12 decision above. Step 11 may create a
@@ -2204,11 +2257,11 @@ Additional rules:
 
 | Situation | Proposed wording and actions |
 |---|---|
-| Turning on Index Conversations or Conversation Recall with no model installed | **Title:** On-Device Search Model Needed. **Text:** Conversation Recall needs an on-device search model. Install one under Librarian / Embeddings, then turn this setting on again. Your conversations were not changed. **Buttons:** Open Model Settings, Close |
-| The installed model was removed or no longer loads | **Title:** Conversation Recall Is Off. **Text:** Conversation Recall is off because its on-device search model is no longer available. Your conversations and saved memories are safe and unchanged. Reinstall or choose a model under Librarian / Embeddings to use recall again. **Buttons:** Open Model Settings, Close |
+| Turning on Index Conversations or Conversation Recall with no model installed | **Title:** On-Device Search Model Needed. **Text:** Conversation Recall needs an on-device search model. Install one in AI Settings, under Embedding Model, then turn this setting on again. Your conversations were not changed. **Buttons:** Open Model Settings, Close |
+| The installed model was removed or no longer loads | **Title:** Conversation Recall Is Off. **Text:** Conversation Recall is off because its on-device search model is no longer available. Your conversations and saved memories are safe and unchanged. Reinstall or choose a model in AI Settings, under Embedding Model, to use recall again. **Buttons:** Open Model Settings, Close |
 | Recall fails for one turn and no user action is available | Conversation Recall could not check earlier messages this time. Your message was sent normally without recalled conversation. No action is needed unless this keeps happening. |
 | Recall fails for one turn and the code knows an action | Conversation Recall could not check earlier messages because (plain cause). Your message was sent normally without recalled conversation. (Specific action.) |
-| The index cannot be rebuilt | **Title:** Conversation Recall Is Off. **Text:** The conversation index could not be rebuilt, so Index Conversations and Conversation Recall were turned off. Your conversations are safe and unchanged. Open Advanced Memory Settings to try indexing again. **Buttons:** Open Advanced Memory Settings, Close |
+| The index cannot be rebuilt | **Title:** Conversation Recall Is Off. **Text:** The conversation index could not be rebuilt, so Index Conversations and Conversation Recall were turned off. Your conversations are safe and unchanged. Open RAG Active Memory Settings to try indexing again. **Buttons:** Open RAG Active Memory Settings, Close |
 | Recall reaches its sending-time allowance | **What was sent:** Conversation Recall did not finish in time, so this message was sent normally without recalled conversation. |
 | Android pauses background indexing until the app is reopened | **Notification/status:** Background indexing is paused. Open the app to continue. Finished work was saved. |
 | Long-message section search reaches its allowance | **Approved Step 2:** Time limit reached while searching your message in sections. The full-message search still ran, but only {checked} of {total} additional sections were checked. |
@@ -3014,7 +3067,7 @@ questions for each situation.
 **Agent checklist for this step**
 - **Prerequisites:** Steps 9 and 10. **Stop for owner decisions G20, G28, and G31 before building their wording or behavior.**
 - **Change:** Only the Conversation Index settings and messages in G.16a and G.13a/G.13b: setting/status, database-integrity line, deletion confirmation, and approved error/no-model explanations. Use shared styles. G27 is decided: automatic repairs do not interrupt the user; deduplicate notices for the same ongoing condition.
-- **Preserve:** All other Advanced Memory Settings behavior. Index Conversations starts **off** and cannot turn on without an installed embedding model.
+- **Preserve:** All other RAG Active Memory Settings behavior. Index Conversations starts **off** and cannot turn on without an installed embedding model.
 - **Verify:** Enabling starts indexing while the app is open; deletion removes derived index data and turns indexing off; approved errors explain causes and next actions. Update `ui-style-adoption.md` with the UI change.
 
 - **Goal:** the Conversation Index section of G.16a, the conversation
@@ -3026,12 +3079,12 @@ questions for each situation.
 - **Read:** G.16a; G.13a; G.13b; `ui-style-guide.md` in full for the parts
   used (toggle rows, section headings, destructive buttons, two-action
   dialogs); `ui-style-adoption.md`.
-- **Build:** exactly what G.16a lists for Advanced Memory Settings, with
+- **Build:** exactly what G.16a lists for RAG Active Memory Settings, with
   the approved wording; the notification classification in G.13a; and
   one-notice-per-ongoing-condition deduplication. Every visible value comes from a shared style; a
   missing style is created and added to the guide. `ui-style-adoption.md`
   is updated.
-- **Must not change:** any other part of Advanced Memory Settings.
+- **Must not change:** any other part of RAG Active Memory Settings.
 - **With no embedding model:** the setting cannot be turned on, and the
   user is told why and where to install one. That wording is approved
   first (G31).
@@ -3124,7 +3177,7 @@ questions for each situation.
 
 **Agent checklist for this step**
 - **Prerequisite:** Step 14, with Step 6 quality cases available. **Approval gate:** Show all inspector-screen labels to the owner as one list before implementation.
-- **Change:** The **Conversation Recall Test** inspector in Advanced Memory Settings > Debug (G.8b), showing which exchanges a typed question would find and why; measure the G.15 retrieval starting values. Do not show assembly exclusions or "what was sent" as if computed; Step 16 adds those after assembly exists.
+- **Change:** The **Conversation Recall Test** inspector, opened from RAG Active Memory Settings beside Memory Search Test (G.8b), showing which exchanges a typed question would find and why; measure the G.15 retrieval starting values. Do not show assembly exclusions or "what was sent" as if computed; Step 16 adds those after assembly exists.
 - **Preserve:** This is a debugging and measurement step, **not** live request injection. Do not add recall to outgoing requests until Step 16.
 - **Verify and report:** Record the measured starting values in `conversation_recall_baseline.md`, and distinguish build-environment measurements from actual search time on the owner's phone.
 
@@ -3191,8 +3244,9 @@ opens the progress pop-up.
 | Title | Indexing Conversations |
 | Text | 42% done. Tap to open. (real percentage) |
 
-**In Advanced Memory Settings,** a new section after Librarian /
-Embeddings:
+**In RAG Active Memory Settings** (M.11; placed in Advanced Memory Settings
+after Librarian / Embeddings before the 2026-11-16 reorganization), a new
+section above the test rows at the bottom:
 
 | Part | Wording |
 |---|---|
@@ -3232,7 +3286,7 @@ about to start. Each has a recommendation.
 | # | Question | Recommendation | Needed before |
 |---|---|---|---|
 | G1 | Is recall on for every chat, or chosen per chat? | **Decided (owner, 2026-11-11):** one setting in a settings menu, applying to all chats. Not chosen per conversation. Which menu, its wording, and whether it starts on or off are G17 | Decided |
-| G2 | How large is recall's own size limit, and can the user set it? | **Decided (owner, 2026-11-11):** a starting amount from testing, adjustable in Advanced Memory Settings (G.8b). Its label is shown to the owner before Step 16 | Decided |
+| G2 | How large is recall's own size limit, and can the user set it? | **Decided (owner, 2026-11-11):** a starting amount from testing, adjustable in RAG Active Memory Settings (G.8b, M.11). Its label is shown to the owner before Step 16 | Decided |
 | G3 | When a chat no longer fits the model, does anything change? | **Decided (owner, 2026-11-11):** no. It warns or blocks as today | Decided |
 | G4 | Does recall apply in Experimental Mode? | **Decided (owner, 2026-11-11):** no | Decided |
 | G5 | Are attached files and images indexed? | **Decided (owner, 2026-11-11):** no, not in this work | Decided |
@@ -3250,7 +3304,7 @@ about to start. Each has a recommendation.
 | G18 | Does the per-chat memory switch also stop recall in that chat? | **Decided (owner, 2026-11-11):** yes | Decided |
 | G19 | The exact Error Log lines, the database check's line and hint for the conversation index, and the wording that tells the user of a failure | **Decided (owner, 2026-11-11):** as recorded in G.13a | Decided |
 | G20 | Which failures receive a user-facing notice, and what does each notice say? | **Partly decided (owner, 2026-11-12):** automatic repairs do not interrupt the user. An affected turn, stopped feature, prevented setting, or failure with a real user action receives a plain notice under G.13a. Exact proposed wording and actions in G.13b are approved before Step 11 or Step 13 builds them | Step 11 and Step 13 |
-| G21 | Where the recall test screen goes, and its name | **Decided (owner, 2026-11-11):** Advanced Memory Settings, Debug section; Conversation Recall Test | Decided |
+| G21 | Where the recall test screen goes, and its name | **Decided (owner, 2026-11-11):** Conversation Recall Test. Placement updated by the owner's 2026-11-16 reorganization: a row beside Memory Search Test at the bottom of RAG Active Memory Settings (M.11) | Decided |
 | G22 | May recall and carry-over add to the existing memory debugging view? | **Decided (owner, 2026-11-11):** yes. No new general application log entries | Decided |
 | G23 | Which Step is built first? | **Decided (owner, 2026-11-11):** the long-message fix is the first user-visible fix. In the corrected numbering it is Step 2, after completed Step 0 and the Step 1 queue-safety prerequisite (G.16) | Decided |
 | G24 | If the user turns Index Conversations off while Conversation Recall is on, what happens to recall? Also undecided: whether turning Conversation Recall on turns Index Conversations on (G.8b says only that it "may"), and what happens to recall when the index is deleted | Open. Indexing is never silently restarted (G.8b) | Step 16 |
@@ -3267,7 +3321,7 @@ about to start. Each has a recommendation.
 | G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before Step 7. No builder treats it as approved before then | Step 7 |
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
-| G38 | Where the context-assistance setting goes, its label and explanation, which choice it starts on, how Code-based rebuilds the subject after the app restarts, and whether Local AI is shown before it is built | Open. Recommended start: Code-based, the only free method that held up on the held-out set. Recommended: Local AI is not shown until it exists | Step 4a |
+| G38 | The context-assistance setting's label and explanation, which choice it starts on, how Code-based rebuilds the subject after the app restarts, and whether Local AI is shown before it is built | Open. Placement follows M.11: RAG Active Memory Settings. Recommended start: Code-based, the only free method that held up on the held-out set. Recommended: Local AI is not shown until it exists | Step 4a |
 | G39 | The API AI configuration screen (M.4): provider connection, model list and which models qualify, which turns it reads, instruction text, model settings, time allowance, failure behavior and notice, cost display, privacy disclosure, behavior with no model configured, where the screen opens from and its labels, a test action, logging; also the output check and the model and cost of its scored run. **Owner (2026-11-16):** the screen is dedicated and its model selection is independent of the chat, Summarizer and embedding models | Open (G.9b, M.4) | Step 4b |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |

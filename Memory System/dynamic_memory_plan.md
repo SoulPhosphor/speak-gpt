@@ -8,8 +8,10 @@
 > saved-memory search (Parts A and B), the designs of later saved-memory
 > features (Part C Phases 2–6 and Part D), the D-decisions (Part E), and
 > research (Part F). Its status, "Next steps", phase order and D.13 order
-> are historical and no longer decide what is built. Section numbers are
-> unchanged because code comments cite them.
+> are historical and no longer decide what is built. Screen names and
+> placements here predate the 2026-11-16 reorganization; M.11 of that plan
+> says where each setting goes now. Section numbers are unchanged because
+> code comments cite them.
 
 **Written 2026-11-08 at the owner's request. Rewritten the same day as one
 step-by-step plan, after a full review for ideas carried over from older
