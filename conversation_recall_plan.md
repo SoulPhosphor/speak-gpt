@@ -2018,8 +2018,10 @@ that is not in the conversation it was given.
 **The setting (Owner, 2026-11-16).** The context helper is optional and
 **off until the user turns it on** with a toggle on the **Memory Context
 Helper Settings** screen (M.11). With the toggle off, behavior is Off. With
-it on, the user chooses Code-based or API AI. The toggle starts off for
-everyone. Which choice is selected when it is first turned on, and the
+it on, the user chooses Code-based or API AI. Only one runs at a time:
+API AI does not use Code-based, and Local AI, when built, becomes another
+choice in the same list. The toggle starts off for everyone, so a user can
+always use no helper at all. Which choice is selected when it is first turned on, and the
 labels and explanations, are approved before Step 4a (G38). The API AI
 screen (Memory Context Helper Tool API, M.4) is approved before Step 4b
 (G39).
