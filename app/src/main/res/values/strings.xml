@@ -2847,7 +2847,7 @@
     <string name="health_screen_blocked_lorebook">Lorebooks are currently turned off because of a database problem.</string>
 
     <string name="memory_controls_row_advanced">Memory Repair Settings</string>
-    <string name="memory_controls_row_advanced_subtitle">Diagnostics, indexing, model files, and repair tools.</string>
+    <string name="memory_controls_row_advanced_subtitle">Memory system status and index repair.</string>
 
     <!-- Memory Assistant Advanced Settings (spec §2) -->
     <string name="memory_assistant_adv_intro">Analyze conversations to suggest memories that the embedding model can hand to your AI to remember who you are.\n\nMemory suggestions are sent to the memory browser as pending so you can approve them.\n\nYou may continue chatting while this process runs, but do not close the app completely. Messages that are added to scanned conversations will be marked for review on next analysis.</string>
@@ -2872,7 +2872,7 @@
     <string name="memory_assistant_adv_saved">Advanced settings saved.</string>
 
     <!-- Advanced Memory Settings (spec §3) -->
-    <string name="advanced_memory_intro">Technical tools for memory diagnostics, indexing, model files, and repair.</string>
+    <string name="advanced_memory_intro">Check the health of your memory system and rebuild the memory index if search stops working correctly.</string>
     <string name="advanced_memory_section_status">System Status</string>
     <string name="advanced_memory_section_setup">Setup / Repair</string>
     <string name="advanced_memory_bootstrap">Create Companions From Personas</string>
