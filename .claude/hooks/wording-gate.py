@@ -25,7 +25,7 @@ VALUES_FILE = re.compile(r"/res/values[^/]*/[^/]+\.xml$")
 LAYOUT_FILE = re.compile(r"/res/(layout|menu)[^/]*/[^/]+\.xml$")
 RES_IN_COMMAND = re.compile(r"res/(values|layout|menu)[^/\s'\"]*/")
 WRITES_IN_COMMAND = re.compile(
-    r"(>|\btee\b|\bsed\s+(-[a-zA-Z]*i|--in-place)|\bperl\s+-[a-zA-Z]*i|\bpython|\bcp\b|\bmv\b|"
+    r"((?:^|[\s;)])[0-9&]?>>?(?!&)(?!\s*/dev/null)|\btee\b|\bsed\s+(-[a-zA-Z]*i|--in-place)|\bperl\s+-[a-zA-Z]*i|\bpython|\bcp\b|\bmv\b|"
     r"\binstall\b|\bdd\b|\bapply\b|\bpatch\b|\bcheckout\b|\brestore\b)"
 )
 STRING_ELEMENT = re.compile(
