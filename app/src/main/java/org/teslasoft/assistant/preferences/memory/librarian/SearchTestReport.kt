@@ -110,8 +110,7 @@ object SearchTestReport {
         val selection = RetrievalBackfill.select(
             pool, tuning.maxMemories, scanCap,
             isMandatory = { e ->
-                e.memory.memoryId !in bySection &&
-                    ImportanceRanking.isMandatory(e.memory.importance.toDouble(), useImportanceRatings)
+                ImportanceRanking.isMandatory(e.memory.importance.toDouble(), useImportanceRatings)
             }
         ) { e ->
             val a = ManualMemoryPriority.assemble(e.memory, e.score.toFloat(), (e.similarity ?: 0.0).toFloat())

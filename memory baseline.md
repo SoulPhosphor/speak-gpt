@@ -343,7 +343,7 @@ Historical measurements and fixtures above are preserved; their Python timings a
 | 10 | Typed and voice sending wait synchronously for retrieval | Both enter the same typed-turn funnel; final request paths await Enforcer on IO; encrypted-store/Enforcer integration coverage added |
 | 11 | Allowance only checked before reads | Deadline bounds queue waiting and requests cooperative ONNX termination; caller retains model ownership until unwind; exact hard deadline cannot be guaranteed |
 | 12 | Six-word excerpt unbounded by character count | Six words retained, capped at 96 Unicode code points; numbering preserved |
-| 13 | Section-only +3 must obey Maximum Memories | Existing Enforcer policy retained; final assembly covered by Android integration tests |
+| 13 | Section-only +3 must obey Maximum Memories | Existing Enforcer policy retained at the time; final assembly covered by Android integration tests. **Superseded by the owner's +3 rule in the Step 3 repair below: a matching +3 memory found only through a section is now sent past Maximum Memories.** |
 | 14 | Size, cap and threshold selected on evaluation data | All provisional; independent real-model set measured at 4/5/0; no retuning |
 | 15 | Status, G.10, G.13b, G26 and Build record contradict implementation | Status, matching rule, approved wording, resolved decisions and provisional parameters reconciled |
 | 16 | Prior unfinished commit is merged history | History preserved; no unfinished repair commit created |
@@ -647,67 +647,112 @@ Both final-document-commit checks passed at `d7c303e`: push run `43671204545` an
 
 ## Step 3: searching with the previous messages
 
-Step 3 adds a search helper (`PreviousMessageSearch.kt`) and nothing else. It is **not connected to sending**: chat, the Memory Search Test and every other screen behave exactly as before, and there is no setting. Using it when a message is sent, the setting, and preparing and keeping earlier-message vectors are Step 4. The runtime, model, matching defaults, expected answers and `baseline.json` are unchanged.
+Step 3 adds a search helper (`PreviousMessageSearch.kt`). It is **not connected to sending**: nothing in chat calls it and there is no setting. Using it when a message is sent, the setting, and preparing and keeping earlier-message vectors are Step 4. The runtime, model, matching defaults, expected answers and `baseline.json` are unchanged.
 
-### What the helper does
+This section replaces the one written with PR #203, which was wrong in the ways listed under "What the repair corrected".
 
-- It searches the new message, then each of the user's 0–3 previous messages **separately**, with the same search a message gets today (whole message, then sections for a long message). Messages are never joined.
-- A memory found through an earlier message passed the existing relevance gate against that message. The helper keeps nothing between calls, so nothing is returned because it was sent before.
-- The new message's own result is returned first and exactly as it is today. Matches for the message before it follow, then the one before that. A memory matched by several messages is listed once, at its newest match.
-- Earlier messages only fill the room the new message leaves under the memory limit. Beyond the limit only a +3 memory is added, the existing rule for every search.
-- The caller supplies the user's messages, any vectors it already has for them, and the memories eligible at that moment. A message without a vector is searched by keywords alone, as a new message is today when meaning search is unavailable.
+### What the repair corrected
+
+| Problem in the merged Step 3 (#203) | Correction |
+|---|---|
+| The helper was described, tested and measured as applying Maximum Memories. The app does not apply it in the search: the search hands on Maximum Memories + 65 candidates, and the enforcer's selection (`RetrievalBackfill.select`) drops lore duplicates and memories that do not fit the memory space, fills freed places from later candidates, and applies Maximum Memories and the +3 rule. | The helper now only supplies candidates in the form the existing search does. Its number is the candidate limit, never Maximum Memories. Selection, backfill and filtering are the enforcer's and are unchanged. |
+| The measurement used a limit of 5 inside the search. The app's default Maximum Memories is 8 and is applied by the enforcer. | Every turn is now scored through the enforcer's selection at Maximum Memories 1, 2, 3, 5 and 8. |
+| A "left out by the limit" figure described the helper's own cut, not the app's. | Removed. The helper reports only candidates not handed on because the candidate limit was reached (`beyondCandidateLimit`). |
+| An earlier message without an embedding was searched by keywords with no trace. | The caller must now state it (`Message.keywordsOnly`), and the result names every message searched that way (`searchedByKeywordsOnly`). |
+| The test only recorded whatever the search returned. | Results are now checked against the expected answers; the per-turn record is kept as well. |
+| A matching +3 memory found only through a section of a long message was held to Maximum Memories (search, enforcer and Memory Search Test). | Owner's +3 rule applied everywhere; see below. |
+
+### The +3 rule (owner decision)
+
+Maximum Memories applies normally to all matching memories, +2 and +3 included, and +2 and +3 rank alike. After the highest-ranked memories up to the limit are selected, every further matching +3 memory is added, once. +2 never passes the limit. +3 always passes the count limit, subject to relevance, scope and physical request capacity. The rule is the same for whole-message, section and previous-message matches.
+
+What changed in the app (this is the only change to live behavior in the repair):
+
+- A matching +3 memory found **only through a section** of a long message is now sent past Maximum Memories. Before, it was dropped when the limit was full.
+- Such a memory is also handed on past the search's candidate limit, as whole-message +3 matches already were.
+- The Memory Search Test shows the same result, with its existing "Would be sent past Maximum Memories…" line. No wording was added or changed.
+
+Whole-message behavior was already this rule and is unchanged: +2 and +3 have the same ranking weight, +3 inside the limit uses its place, and further matching +3 memories are added.
+
+**Where a matching +3 memory can still be left out.** These are existing behaviors, not changed here, because changing them needs the owner's decision on behavior and on wording or logging:
+
+- **Memory space.** A +3 memory that does not fit the remaining memory space (the character budget) is left out, like any other memory. When attached memories, lore and card entries already use the whole space, no saved memory is sent at all.
+- **Lore overlap.** A +3 memory that near-duplicates an injected lore entry is left out in favour of the lore entry.
+- **How it is reported.** Both are recorded only in debugging records: the per-turn assembly record ("over budget", "near-duplicate of lore"), which is kept in memory for the debug view and is gone when the app closes, and a count in the retrieval summary note. Nothing tells the user in chat. A +3 memory left out this way therefore disappears without notice unless someone looks at the debug view.
 
 ### How the conversations were scored
 
-The nine Step 0 conversations (30 turns) were scored with 0, 1, 2 and 3 previous messages, with the memory limit of 5 used throughout this file. Each conversation is its own chat, so its first turn has no previous message. Turn 2 of every conversation is a first follow-up (9). Turn 3 of the three four-turn conversations is a second follow-up in a row (3). The last turn of every conversation changes the subject (9).
+The nine Step 0 conversations (30 turns, one expected memory each, no memory rated) were scored with 0, 1, 2 and 3 previous messages. Each conversation is its own chat. Turn 2 of every conversation is a first follow-up (9); turn 3 of the three four-turn conversations is a second follow-up in a row (3); the last turn changes the subject (9).
 
-Two sets of already-recorded inputs were scored. No new model output was produced for this step.
+Each turn goes the way a sent message goes: the helper's candidates, then the enforcer's selection. The test set has no lore and no oversized memory, so no candidate is filtered out; filtering and backfill are covered by unit tests instead.
 
-- **Android scores:** the similarities the real model produced on Android ONNX Runtime 1.20 (`android_ort120_similarity_scores.json`), replayed as in the Step 2 repair. This is a replay of measured numbers through the unchanged matching code, not a new run on a device.
+**These are not Android runs.** Two sets of inputs recorded earlier were scored, and no new model output was produced:
+
+- **Android scores:** the similarities the real model produced on Android ONNX Runtime 1.20 (`android_ort120_similarity_scores.json`), replayed through the unchanged matching code on a desktop JVM.
 - **Reference vectors:** the frozen Step 0 vectors (`vectors.json`).
 
 Every conversation turn is shorter than 80 words, so section search plays no part in these numbers.
 
-### Results
+### Results at the default Maximum Memories (8)
 
-| Android scores | 0 | 1 | 2 | 3 |
+Correct = expected memories sent. Missed = expected memories not sent. Incorrect = every memory sent that the turn did not expect.
+
+| Android scores, previous messages | 0 | 1 | 2 | 3 |
 |---|---:|---:|---:|---:|
+| Correct (of 30) | 27 | 29 | 29 | 29 |
+| Missed | 3 | 1 | 1 | 1 |
+| Incorrect | 9 | 25 | 31 | 31 |
+| of which: old subject's memory after the subject changed (9 changes) | 0 | 8 | 9 | 9 |
+| of which: other unexpected memories | 9 | 17 | 22 | 22 |
 | First follow-ups that kept their memory (of 9) | 8 | 9 | 9 | 9 |
 | Second follow-ups in a row that kept it (of 3) | 2 | 3 | 3 | 3 |
-| New subject's own memory found after the change (of 9) | 9 | 9 | 9 | 9 |
-| Old-subject memories sent after the subject changed (of 9 changes) | 0 | 8 | 9 | 9 |
-| Other memories sent that the turn did not expect | 9 | 17 | 22 | 22 |
-| Expected memories found / missed, all 30 turns | 27 / 3 | 29 / 1 | 29 / 1 | 29 / 1 |
-| Earlier-message matches left out by the memory limit | 0 | 0 | 0 | 0 |
+| New subject's own memory found (of 9) | 9 | 9 | 9 | 9 |
 
-| Reference vectors | 0 | 1 | 2 | 3 |
+| Reference vectors, previous messages | 0 | 1 | 2 | 3 |
 |---|---:|---:|---:|---:|
+| Correct (of 30) | 27 | 29 | 29 | 29 |
+| Missed | 3 | 1 | 1 | 1 |
+| Incorrect | 10 | 27 | 33 | 33 |
+| of which: old subject's memory after the subject changed | 0 | 8 | 9 | 9 |
+| of which: other unexpected memories | 10 | 19 | 24 | 24 |
 | First follow-ups that kept their memory (of 9) | 8 | 9 | 9 | 9 |
 | Second follow-ups in a row that kept it (of 3) | 2 | 3 | 3 | 3 |
-| New subject's own memory found after the change (of 9) | 9 | 9 | 9 | 9 |
-| Old-subject memories sent after the subject changed (of 9 changes) | 0 | 8 | 9 | 9 |
-| Other memories sent that the turn did not expect | 10 | 19 | 24 | 24 |
-| Expected memories found / missed, all 30 turns | 27 / 3 | 29 / 1 | 29 / 1 | 29 / 1 |
-| Earlier-message matches left out by the memory limit | 0 | 0 | 0 | 0 |
+| New subject's own memory found (of 9) | 9 | 9 | 9 | 9 |
 
-With 0 previous messages every turn returns exactly what the existing search returns for it, in the same order; the test checks this for all 30 turns on both inputs. The two inputs differ in one memory only: on reference vectors `conversation_01_turn_2` also sends `food_tea` on its own (already recorded in Step 0), and that carries into turn 3 from 1 previous message upward.
+- **Follow-ups.** One previous message repairs both follow-ups that lost their memory (`conversation_07_turn_2`, `conversation_09_turn_3`). The remaining miss, `conversation_04_turn_1`, is a first message with nothing before it.
+- **The price.** Incorrect memories rise from 9 to 25 with one previous message and to 31 with two. Eight or nine of those are the old subject's memory after a subject change, which the plan expects. The rest are memories an earlier message matched wrongly, sent again with the next message.
+- **2 against 1** adds only carried memories on this set; no further follow-up is kept. **3 is identical to 2**, because each third-previous message matched only a memory already listed.
+- **The second-follow-up limit did not occur, and this set cannot show it.** It has no second follow-up that follows a first follow-up which found nothing.
+- With 0 previous messages every turn is exactly the existing search and selection; the test checks this at every Maximum Memories value on both inputs.
+- The two inputs differ in one memory: on reference vectors `conversation_01_turn_2` also sends `food_tea` on its own, and that carries into turn 3.
 
-What the numbers show on this set:
+### Maximum Memories changes the result
 
-- **Follow-ups.** With 1 previous message both follow-ups that lost their memory are repaired: `conversation_07_turn_2` ("Where should I take him?") and `conversation_09_turn_3` ("Will showing it on my phone be enough?"). The one remaining miss, `conversation_04_turn_1`, is a first message and has nothing before it.
-- **The second-follow-up limit did not occur here, and that is not evidence it cannot.** `conversation_09_turn_3` is kept at 1 because turn 2 found the memory on its own. The other two second follow-ups find their memory on their own. This set has no second follow-up that follows a first follow-up which also names nothing and finds nothing.
-- **Old subject after a change.** With 1 previous message, 8 of the 9 subject changes also send the old subject's memory, after the new subject's own match. The ninth, `conversation_09_turn_4`, does not, only because the turn before it matched nothing. With 2 it is sent there too.
-- **Incorrect memories are carried as well.** A memory an earlier message matched wrongly passed that message's gate, so it is sent again with the next message. Other unexpected memories go from 9 to 17 with 1 previous message and to 22 with 2 (10, 19 and 24 on reference vectors). No turn's own search sends a wrong memory it did not send before; every added one comes from an earlier turn's own result.
-- **2 against 1** adds only carried memories on this set: one more old subject and five more unexpected memories, with no additional follow-up kept.
-- **3 is identical to 2 on this set.** Only the last turn of a four-turn conversation has a third previous message, and each of those first turns matched only a memory already listed.
+A carried memory comes after everything the new message matched, right or wrong, so a low Maximum Memories drops carried memories first. Android scores:
 
-### How much less an earlier message counts
+| Maximum Memories | Previous messages | Correct | Missed | Incorrect | First follow-ups kept (of 9) | Second follow-ups kept (of 3) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0 | 25 | 5 | 3 | 7 | 1 |
+| 1 | 1 | 25 | 5 | 4 | 7 | 1 |
+| 2 | 0 | 26 | 4 | 8 | 7 | 2 |
+| 2 | 1 | 27 | 3 | 18 | 8 | 2 |
+| 3 | 0 | 26 | 4 | 9 | 7 | 2 |
+| 3 | 1 | 27 | 3 | 25 | 8 | 2 |
+| 5 | 0 | 27 | 3 | 9 | 8 | 2 |
+| 5 | 1 | 29 | 1 | 25 | 9 | 3 |
+| 8 | 0 | 27 | 3 | 9 | 8 | 2 |
+| 8 | 1 | 29 | 1 | 25 | 9 | 3 |
 
-The rule gives an earlier message's match one disadvantage: it is listed after every newer match, and it is dropped first when the memory limit is reached. On these conversations the limit was never reached by an earlier match (the longest list was exactly 5, at `conversation_09_turn_4` with 2 or 3), so the only measured effect is the order. This set therefore cannot show whether an earlier message should count less than that, for example through a stricter gate. No such number was added: the plan keeps the same gate for an earlier message, and a different one would need the owner's decision.
+- At Maximum Memories 1, previous messages repair nothing: in `conversation_07_turn_2` the new message's own wrong match (`hobby_camera`) takes the one place and the carried right memory (`pet_brindle`) is second.
+- At 2 and 3, one of the two lost follow-ups is repaired. `conversation_09_turn_3` is not: the previous message matched three wrong memories ahead of the right one, so the right one is fourth.
+- From 5 upward nothing differs on this set, because no turn has more than five candidates. That is a property of this small set, not evidence that 5 and 8 behave alike on a real library.
+- The lower rows at 0 previous messages (25 and 26 correct) are the existing search: where a wrong memory outranks the right one, a low limit already loses the right one today.
 
-### Every turn
+All rows for 2 and 3 previous messages and for reference vectors are in `previous_message_results.json`.
 
-Android scores. Expected memories are bold. "Added at 1" lists what one previous message adds to the turn's own result, "added at 2" what a second adds; nothing is added at 3. Order within a cell is the order sent.
+### Every turn (Android scores, Maximum Memories 8)
+
+Expected memories are bold. "Added at 1" is what one previous message adds to the turn's own result, "added at 2" what a second adds; nothing is added at 3. Order within a cell is the order sent.
 
 | Turn | Own result (0) | Added at 1 | Added at 2 |
 |---|---|---|---|
@@ -744,10 +789,49 @@ Android scores. Expected memories are bold. "Added at 1" lists what one previous
 
 On reference vectors the table is the same except that 01.2 also sends `food_tea` on its own and 01.3 adds `pet_tansy`, `food_tea` at 1.
 
-The exact list for every turn, input and count, with the message that found each memory, is recorded in `previous_message_results.json`. `PreviousMessageRecallTest` fails if any of them changes. That file is a record of measured results, not of expected answers.
+### How much less an earlier message counts
 
-### Limits of this measurement
+An earlier message's match has one disadvantage: it comes after every newer match, so it is the first to be dropped when Maximum Memories is reached. The table above shows that effect at Maximum Memories 1 to 3. Nothing else makes an earlier message count less. No stricter gate for earlier messages was added: the plan keeps the same gate, and a different one would need the owner's decision.
 
-- Nine short invented conversations and 32 invented memories. The counts describe this set, not a real library.
-- Scored from recorded similarities and vectors. Nothing was run on a phone or emulator for this step, and no timing was measured: the helper performs no model work itself, and when earlier-message vectors are made is Step 4.
-- Long earlier messages are supported (their sections are searched like any message's) and covered by a unit test, but no conversation in this set has one, so their effect on results is unmeasured.
+### Cost of searching long previous messages
+
+A message longer than 80 words is also searched in sections, at most 8. Sections were counted with the app's own cutter:
+
+| Message length (words) | Sections | Sections read | Model reads for the message |
+|---:|---:|---:|---:|
+| 81 | 2 | 2 | 3 |
+| 150 | 3 | 3 | 4 |
+| 300 | 7 | 7 | 8 |
+| 400 | 9 | 8 | 9 |
+| 600 or more | 14 or more | 8 | 9 |
+
+- **Bound.** At most 9 model reads per message, so at most 36 for one send with three long previous messages and a long new message, if nothing is reused. The helper itself makes no model read; it uses the vectors and section readings it is given.
+- **Redundant work.** An earlier message was already read, whole and in sections, when it was the new message. If Step 4 keeps only whole-message vectors, every send reads each long previous message's sections again: with three long previous messages, 24 section reads per send that repeat earlier work. The helper accepts a reading the caller already holds and then reads nothing; a unit test checks that a counted message's sections are asked for once and an uncounted message's never.
+- **Time on a device is not measured for Step 3.** The only device figures are the Step 2 emulator example above: 5,840 ms for one whole-message read, and about 1,770 ms for one section read that ran into the 1,500 ms allowance. Each message's section search has its own 1,500 ms allowance, so three long previous messages read at send time could add three such allowances plus three whole-message reads. That is arithmetic from one emulator example, not a measurement.
+- **Scoring time without the model** (desktop JVM, 2.3 GHz Xeon, 256-number vectors, every message 600 words with 8 sections; not a phone):
+
+| Saved memories | 0 previous | 1 | 2 | 3 |
+|---:|---:|---:|---:|---:|
+| 32 | 2 ms | 4 ms | 6 ms | 8 ms |
+| 500 | 21 ms | 38 ms | 51 ms | 70 ms |
+| 2,000 | 90 ms | 167 ms | 274 ms | 353 ms |
+
+Scoring grows with the number of memories and with the number of sections searched. A phone will be slower than these figures by an unmeasured factor.
+
+### Not tested, and what Step 4 must verify on Android
+
+Nothing in Step 3 ran on an emulator or phone except the existing Android tests of the enforcer, which cover the section +3 rule. Not tested anywhere:
+
+- The helper inside the real send path, with the real model and real earlier-message vectors.
+- Any conversation with a long previous message; none exists in the test set.
+- A second follow-up after a first follow-up that found nothing.
+- Lore overlap and memory-space filtering together with carried memories in a real chat (unit-tested only against the enforcer's selection function).
+- Timing of any kind on a device.
+
+Step 4 must verify on Android: that with the setting at 0 the request is identical to today's; that every earlier message has its embedding before the search (`searchedByKeywordsOnly` empty whenever the new message has one); that section readings of earlier messages are reused and not read again on every send; send-time delay with 1, 2 and 3 long previous messages on a physical phone; that the enforcer's selection, backfill and +3 rule give the same final prompt as the unit tests; and the cases already listed in the Step 4 work order (leaving and re-entering a chat, switching chats, process restart, sending before preparation finishes, edited or deleted messages and memories, model change).
+
+### Open for the owner before Step 4
+
+- **Empty and attachment-only user messages.** The helper searches exactly the previous messages it is given and decides nothing about which those are. A message with no text finds nothing and, if passed in, still uses one of the 0–3 places (unit-tested, so the behavior is stated, not hidden). Proposed for Step 4, not built: skip user messages that have no text when choosing the previous messages, so that "1 previous message" means the last message the user actually wrote. The alternative is to count every user message, in which case a photo sent between a question and its follow-up ends the carry-over.
+- **+3 memories left out by memory space or lore overlap** are reported only in debugging records (above). Whether the user should be told is an owner decision involving wording and logging.
+- **Incorrect memories carried forward** (9 to 25 at one previous message on this set) are the result to weigh when approving Step 4's setting and its default.

@@ -16,10 +16,19 @@
 
 package org.teslasoft.assistant.preferences.memory.librarian
 
+import org.teslasoft.assistant.preferences.memory.ImportanceRanking
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
 
-/** Shared live/test boundary: whole-message ranking first, one additional
- * reading, then section-only candidates. Eligibility is supplied by the store. */
+/**
+ * Shared live/test boundary: whole-message ranking first, one additional
+ * reading, then section-only candidates. Eligibility is supplied by the store.
+ *
+ * [search]'s limit is the number of candidates handed on, not Maximum
+ * Memories: live chat asks for more candidates than it may send, and the
+ * enforcer's selection (RetrievalBackfill) applies Maximum Memories and the
+ * +3 rule to them. A matching +3 memory is therefore always handed on, even
+ * past the candidate limit, whether the whole message or a section found it.
+ */
 object SavedMemorySearch {
     data class Result(
         val whole: LiveRetrieval.Result,
@@ -42,7 +51,9 @@ object SavedMemorySearch {
         val scoringMillis = (System.nanoTime() - scoringStarted) / 1_000_000
         val sections = if (reading.sections.isEmpty()) reading else reading.copy(
             millis = reading.millis + scoringMillis, scoringMillis = scoringMillis)
-        val included = matches.take((limit - whole.ranked.size).coerceAtLeast(0))
+        val included = ImportanceRanking.includeMandatory(
+            matches, (limit - whole.ranked.size).coerceAtLeast(0)
+        ) { ImportanceRanking.isMandatory(it.explanation.memory.importance.toDouble(), useImportanceRatings) }
         return Result(whole, sections, matches, whole.ranked + included.map { it.scored },
             included.map { it.explanation.memory.memoryId }.toSet())
     }

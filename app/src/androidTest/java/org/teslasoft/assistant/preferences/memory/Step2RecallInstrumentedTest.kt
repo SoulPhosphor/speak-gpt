@@ -159,10 +159,19 @@ class Step2RecallInstrumentedTest {
         assertEquals(output.memoryIds, report.sent.map { it.explanation.memory.memoryId })
     }
 
-    @Test fun wholeMatchAndManualAttachmentPreventSectionPlusThreeOverflow() {
+    @Test fun sectionPlusThreeIsSentPastMaximumMemoriesAfterWholeMatchOrManualAttachment() {
+        // Maximum Memories is 1 and "section" is rated +3. The whole-message
+        // match, or the attached memory, takes the one normal place; the
+        // matching +3 memory a section found is still sent, after it.
         add("whole", "the primary whole message memory", whole)
+        assertEquals(listOf("whole", "section"), send()!!.memoryIds)
+        assertEquals(listOf("whole", "section"), send(listOf("whole"))!!.memoryIds)
+    }
+
+    @Test fun sectionPlusTwoDoesNotGoPastMaximumMemories() {
+        add("whole", "the primary whole message memory", whole)
+        store.writableDatabase.execSQL("UPDATE memories SET importance = 2 WHERE memory_id = 'section'")
         assertEquals(listOf("whole"), send()!!.memoryIds)
-        assertEquals(listOf("whole"), send(listOf("whole"))!!.memoryIds)
     }
 
     @Test fun brokenSectionsPreserveWholeMatchesAndStopRepeatedWork() {

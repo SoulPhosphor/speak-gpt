@@ -21,7 +21,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.preferences.memory.ImportanceRanking
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
+import org.teslasoft.assistant.preferences.memory.RetrievalPolicy
+import org.teslasoft.assistant.preferences.memory.enforcer.RetrievalBackfill
 import kotlin.math.sqrt
 
 class PreviousMessageSearchTest {
@@ -44,19 +47,40 @@ class PreviousMessageSearchTest {
     private val violin = cand("violin", "The violin lesson is on Thursday")
     private val library = listOf(pepper, juniper, violin)
 
-    private fun message(text: String, vector: FloatArray? = null) = PreviousMessageSearch.Message(text, vector)
+    private fun message(text: String, vector: FloatArray? = null) =
+        if (vector == null) PreviousMessageSearch.Message.keywordsOnly(text)
+        else PreviousMessageSearch.Message.withVector(text, vector)
+
+    /** The number of candidates live chat asks the search for at the default
+     *  Maximum Memories: the enforcer's scan cap and one more. */
+    private val liveCandidateLimit = RetrievalBackfill.scanCap(RetrievalPolicy.DEFAULT_TOP_K) + 1
 
     private fun search(
         current: String,
         previous: List<String>,
         count: Int,
         corpus: List<LiveRetrieval.Candidate> = library,
-        limit: Int = 5,
+        candidateLimit: Int = liveCandidateLimit,
         useImportanceRatings: Boolean = true
     ) = PreviousMessageSearch.search(
         message(current), previous.map { message(it) }, count,
-        LiveRetrieval.index(corpus), params, limit, useImportanceRatings
+        LiveRetrieval.index(corpus), params, candidateLimit, useImportanceRatings
     )
+
+    /**
+     * The enforcer's own selection over the candidates, called the way the
+     * enforcer calls it: Maximum Memories, its scan cap, the +3 rule, and a
+     * filter standing in for its lore-overlap and memory-space checks.
+     */
+    private fun sent(
+        result: PreviousMessageSearch.Result,
+        maximumMemories: Int,
+        useImportanceRatings: Boolean = true,
+        survives: (String) -> Boolean = { true }
+    ): List<String> = RetrievalBackfill.select(
+        result.ranked, maximumMemories, RetrievalBackfill.scanCap(maximumMemories),
+        isMandatory = { ImportanceRanking.isMandatory(it.memory.importance.toDouble(), useImportanceRatings) }
+    ) { survives(it.memory.memoryId) }.kept.map { it.memory.memoryId }
 
     private fun ids(result: PreviousMessageSearch.Result) = result.ranked.map { it.memory.memoryId }
 
@@ -144,34 +168,125 @@ class PreviousMessageSearchTest {
         assertEquals(listOf("pepper"), ids(search(current, listOf(previous), count = 1)))
     }
 
-    @Test
-    fun earlierMessagesOnlyFillTheRoomTheNewMessageLeaves() {
-        val result = search(
-            "Pepper and Juniper", listOf("Tell me about the violin"), count = 1, limit = 2
-        )
-        assertEquals(setOf("pepper", "juniper"), ids(result).toSet())
-        assertEquals(listOf("violin"), result.leftOutByLimit.map { it.scored.memory.memoryId })
+    /* ---------------- candidates, not the final selection ---------------- */
 
-        val roomForOne = search(
-            "Tell me about Pepper", listOf("Juniper and the violin"), count = 1, limit = 2
-        )
-        assertEquals(2, roomForOne.ranked.size)
-        assertEquals("pepper", ids(roomForOne).first())
-        assertEquals(1, roomForOne.leftOutByLimit.size)
+    @Test
+    fun atTheLiveCandidateLimitEveryMatchIsHandedToTheEnforcer() {
+        val result = search("Pepper and Juniper", listOf("Tell me about the violin"), count = 1)
+        assertEquals(setOf("pepper", "juniper"), ids(result).take(2).toSet())
+        assertEquals("violin", ids(result).last())
+        assertTrue(result.beyondCandidateLimit.isEmpty())
     }
 
     @Test
-    fun aPlusThreeMemoryFromAnEarlierMessageIsAddedBeyondTheLimitOnlyWhenRatingsAreOn() {
+    fun earlierMessagesAddCandidatesOnlyUpToTheCandidateLimit() {
+        val result = search(
+            "Pepper and Juniper", listOf("Tell me about the violin"), count = 1, candidateLimit = 2
+        )
+        assertEquals(setOf("pepper", "juniper"), ids(result).toSet())
+        assertEquals(listOf("violin"), result.beyondCandidateLimit.map { it.scored.memory.memoryId })
+
+        val roomForOne = search(
+            "Tell me about Pepper", listOf("Juniper and the violin"), count = 1, candidateLimit = 2
+        )
+        assertEquals(2, roomForOne.ranked.size)
+        assertEquals("pepper", ids(roomForOne).first())
+        assertEquals(1, roomForOne.beyondCandidateLimit.size)
+    }
+
+    @Test
+    fun aMatchingPlusThreeFromAnEarlierMessageIsHandedOnPastTheCandidateLimit() {
         val corpus = listOf(pepper, juniper, cand("violin", "The violin lesson is on Thursday", importance = 3))
-        val on = search("Pepper and Juniper", listOf("Tell me about the violin"), count = 1, corpus = corpus, limit = 2)
+        val on = search(
+            "Pepper and Juniper", listOf("Tell me about the violin"), count = 1, corpus = corpus, candidateLimit = 2
+        )
         assertEquals(listOf("violin"), ids(on).drop(2))
-        assertTrue(on.leftOutByLimit.isEmpty())
+        assertTrue(on.beyondCandidateLimit.isEmpty())
+        // +2 is ordinary, and so is +3 while importance ratings are off.
+        val two = listOf(pepper, juniper, cand("violin", "The violin lesson is on Thursday", importance = 2))
+        assertFalse("violin" in ids(search(
+            "Pepper and Juniper", listOf("Tell me about the violin"), count = 1, corpus = two, candidateLimit = 2
+        )))
         val off = search(
             "Pepper and Juniper", listOf("Tell me about the violin"), count = 1,
-            corpus = corpus, limit = 2, useImportanceRatings = false
+            corpus = corpus, candidateLimit = 2, useImportanceRatings = false
         )
         assertEquals(2, off.ranked.size)
         assertFalse("violin" in ids(off))
+    }
+
+    /* ------------------ through the enforcer's selection ------------------ */
+
+    private fun many(prefix: String, word: String, count: Int, importance: Int) =
+        (0 until count).map { cand("$prefix%02d".format(it), "$word note $prefix$it", importance = importance) }
+
+    @Test
+    fun maximumMemoriesIsAppliedByTheEnforcerNotByTheSearch() {
+        // The same candidates give different results at different limits.
+        val result = search("Tell me about Juniper", listOf("Tell me about Pepper", "the violin"), count = 2)
+        assertEquals(listOf("juniper", "pepper", "violin"), ids(result))
+        assertEquals(listOf("juniper"), sent(result, maximumMemories = 1))
+        assertEquals(listOf("juniper", "pepper"), sent(result, maximumMemories = 2))
+        assertEquals(listOf("juniper", "pepper", "violin"), sent(result, maximumMemories = 8))
+    }
+
+    @Test
+    fun aFilteredCandidateIsBackfilledFromAnEarlierMessagesCandidates() {
+        val result = search("Pepper and Juniper", listOf("Tell me about the violin"), count = 1)
+        val first = ids(result).first()
+        val second = ids(result)[1]
+        // The enforcer drops the second candidate (lore overlap or memory
+        // space); the earlier message's candidate takes the freed place.
+        assertEquals(listOf(first, "violin"), sent(result, maximumMemories = 2) { it != second })
+        assertEquals(listOf(first, second), sent(result, maximumMemories = 2))
+    }
+
+    @Test
+    fun tenPlusTwoMemoriesFillFivePlacesAndThreePlusThreeMemoriesAreAdded() {
+        // The owner's example, with the +3 memories found by the previous
+        // message: five normal places, then every matching +3 memory.
+        val corpus = many("two", "kiln", 10, importance = 2) + many("three", "harbour", 3, importance = 3) +
+            listOf(pepper, juniper)
+        val result = search("kiln", listOf("harbour"), count = 1, corpus = corpus)
+        assertEquals(
+            listOf("two00", "two01", "two02", "two03", "two04", "three00", "three01", "three02"),
+            sent(result, maximumMemories = 5)
+        )
+        // The other way round: +3 memories found by the new message take
+        // normal places first; the rest are still added. +2 never is.
+        val swapped = search("harbour", listOf("kiln"), count = 1, corpus = corpus)
+        assertEquals(listOf("three00", "three01", "three02", "two00", "two01"), sent(swapped, maximumMemories = 5))
+        assertEquals(listOf("three00", "three01", "three02"), sent(swapped, maximumMemories = 2))
+        // With importance ratings off, +3 has no protection.
+        val off = search("kiln", listOf("harbour"), count = 1, corpus = corpus, useImportanceRatings = false)
+        assertEquals(5, sent(off, maximumMemories = 5, useImportanceRatings = false).size)
+    }
+
+    @Test
+    fun aPlusThreeFromAnEarlierMessageBeyondTheCandidateCutoffIsStillSent() {
+        // More ordinary matches than the enforcer will ever examine at
+        // Maximum Memories 1, then a +3 and a +2 the previous message matched.
+        val cutoff = RetrievalBackfill.scanCap(1) + 1
+        val corpus = many("two", "kiln", cutoff + 4, importance = 2) +
+            cand("protected", "harbour master", importance = 3) + cand("ordinary", "harbour wall", importance = 2)
+        val result = search("kiln", listOf("harbour"), count = 1, corpus = corpus, candidateLimit = cutoff)
+        assertEquals(cutoff, result.current.ranked.size)
+        assertEquals("protected", ids(result).last())
+        assertFalse("ordinary" in ids(result))
+        assertEquals(listOf("ordinary"), result.beyondCandidateLimit.map { it.scored.memory.memoryId })
+        assertEquals(listOf("two00", "protected"), sent(result, maximumMemories = 1))
+        // Even when every ordinary candidate is filtered out.
+        assertEquals(listOf("protected"), sent(result, maximumMemories = 1) { it == "protected" })
+    }
+
+    @Test
+    fun aPlusThreeThatDoesNotFitIsNotSentAndAPlusTwoNeverPassesTheLimit() {
+        val corpus = listOf(pepper, cand("violin", "The violin lesson is on Thursday", importance = 3),
+            cand("juniper", "Juniper the terrier walks at dawn", importance = 2))
+        val result = search("Tell me about Pepper", listOf("Juniper and the violin"), count = 1, corpus = corpus)
+        assertEquals(listOf("pepper", "violin"), sent(result, maximumMemories = 1))
+        // Request capacity still applies to a +3 memory.
+        assertEquals(listOf("pepper"), sent(result, maximumMemories = 1) { it != "violin" })
     }
 
     @Test
@@ -210,6 +325,10 @@ class PreviousMessageSearchTest {
         val noVector = run(message("that thing we planned"))
         assertTrue(ids(noVector).isEmpty())
         assertFalse(noVector.previous.single().whole.diagnostics.meaningRan)
+        // A message searched without its embedding is always named.
+        assertTrue(byMeaning.searchedByKeywordsOnly.isEmpty())
+        assertEquals(listOf(1), noVector.searchedByKeywordsOnly)
+        assertEquals(listOf(0, 1, 2), search("And then?", listOf("a", "b", "c"), count = 2).searchedByKeywordsOnly)
         // ...but keyword search still runs for it.
         assertEquals(listOf("subject"), ids(run(message("the harbour festival"))))
     }
@@ -220,7 +339,7 @@ class PreviousMessageSearchTest {
         fun filler(count: Int, from: Int) = (from until from + count).joinToString(" ") { "zq$it" }
         val long = filler(200, 0) + " Pepper seems unwell lately " + filler(96, 200)
         var sectionReads = 0
-        val earlier = PreviousMessageSearch.Message(long, elsewhere) {
+        val earlier = PreviousMessageSearch.Message.withVector(long, elsewhere) {
             sectionReads++
             LongMessageSearch.read(long, index, now = { 0L }) { text -> if ("Pepper" in text) onSubject else elsewhere }
         }
@@ -247,5 +366,24 @@ class PreviousMessageSearchTest {
         assertSame(current, combined.current)
         assertEquals(current.ranked, combined.ranked.take(current.ranked.size))
         assertEquals(current.ranked.size + 1, combined.ranked.size)
+    }
+
+    @Test
+    fun aMemoryOutsideTheCurrentScopeIsNotCarriedFromAnEarlierMessage() {
+        // The library is whatever is eligible for this chat now. A memory
+        // the previous message matched under another companion or project
+        // is not in it, so it cannot be returned.
+        val history = listOf("Tell me about Pepper", "Tell me about Juniper")
+        val thisScope = listOf(juniper, violin)
+        assertEquals(listOf("juniper"), ids(search("And then?", history, count = 2, corpus = thisScope)))
+    }
+
+    @Test
+    fun aBlankPreviousMessageFindsNothingAndStillUsesItsPlace() {
+        // Which messages are passed in is the caller's choice; this states
+        // what happens to the ones that are.
+        val history = listOf("   ", "Tell me about Pepper")
+        assertTrue(ids(search("And then?", history, count = 1)).isEmpty())
+        assertEquals(listOf("pepper"), ids(search("And then?", history, count = 2)))
     }
 }

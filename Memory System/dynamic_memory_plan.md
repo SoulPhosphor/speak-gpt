@@ -906,6 +906,15 @@ Steps run in this order.
   - In ordering it counts exactly the same as +2. It gets no extra boost.
   - If it is relevant and other memories would fill the memory limit ahead
     of it, it is added anyway.
+  - **Clarified by the owner, 2026-11-15:** Maximum Memories applies
+    normally to all matching memories, +2 and +3 included. The
+    highest-ranked up to that limit are selected, then every further
+    matching +3 memory is added, each once. +2 never passes the limit. +3
+    always passes the count limit, subject to relevance, scope and physical
+    request capacity. The rule is the same for whole-message, long-message
+    section and previous-message matches; there is no section-only
+    exception. Example: Maximum Memories 5, ten matching +2 memories and
+    three further matching +3 memories send eight.
 - **Change:** the existing rule (`ImportanceRanking.includeMandatory`,
   `RetrievalBackfill.select`, and `normalizedRankingImportance`, which gives
   +3 the +2 contribution) already works this way once the gate works. Keep
