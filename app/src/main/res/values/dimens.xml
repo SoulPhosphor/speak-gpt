@@ -379,4 +379,13 @@
     <!-- Chat Outline screen (Widget.App.ChatOutline.*). -->
     <dimen name="chat_outline_text_size">16sp</dimen>
     <dimen name="chat_outline_status_spinner_gap">8dp</dimen>
+    <!-- Stacked selector: a label and explanation above a full-width dropdown
+         (Widget.App.StackedSelector, ui-style-guide.md "Stacked selector"). -->
+    <dimen name="stacked_selector_padding_vertical">12dp</dimen>
+    <dimen name="stacked_selector_value_gap">8dp</dimen>
+    <dimen name="stacked_selector_gear_gap">8dp</dimen>
+    <dimen name="stacked_selector_action_gap">12dp</dimen>
+
+    <!-- Downloadable model list (Widget.App.ModelDownloadList). -->
+    <dimen name="model_download_list_gap">8dp</dimen>
 </resources>

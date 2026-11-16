@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -119,6 +120,10 @@ class MemoryControlsActivity : SettingsPageActivity() {
 
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
+
+        findViewById<View>(R.id.row_memory_search_test)?.setOnClickListener {
+            startActivity(Intent(this, MemorySearchTestActivity::class.java))
+        }
 
         /* ---- Memory Defaults ---- */
         // Global default for the per-chat memory kill switch (a plain global

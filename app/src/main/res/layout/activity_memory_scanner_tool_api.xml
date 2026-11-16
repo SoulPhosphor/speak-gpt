@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Memory Scanner Tool API (owner design, Nov 16 2026): the Memory
+     Scanner's endpoint, model, provider routing and parameters, moved here
+     from Memory Scanner Settings and opened from AI Settings. Appearance
+     comes only from shared styles (ui-style-guide.md). -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/action_bar"
+        style="@style/Widget.App.ActionBar">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            style="@style/Widget.App.ActionBar.BackButton" />
+
+        <TextView
+            android:id="@+id/activity_title"
+            style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/title_memory_scanner_tool_api"
+            app:layout_constraintEnd_toStartOf="@+id/btn_save" />
+
+        <ImageButton
+            android:id="@+id/btn_save"
+            style="@style/Widget.App.ActionBar.SaveButton"
+            android:contentDescription="@string/btn_save"
+            android:src="@drawable/ic_save"
+            android:tooltipText="@string/btn_save" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout style="@style/Widget.App.Page.Content">
+
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/memory_controls_section_assistant_model" />
+
+            <LinearLayout style="@style/Widget.App.StackedSelector">
+
+                <TextView
+                    style="@style/Widget.App.Row.Title"
+                    android:text="@string/memory_controls_row_assistant_endpoint" />
+
+                <TextView
+                    style="@style/Widget.App.Row.Subtitle"
+                    android:text="@string/memory_controls_row_assistant_endpoint_hint" />
+
+                <LinearLayout style="@style/Widget.App.StackedSelector.ValueLine">
+
+                    <TextView
+                        android:id="@+id/text_archivist_endpoint_value"
+                        style="@style/Widget.App.StackedSelector.Value"
+                        android:text="@string/dropdown_select" />
+
+                    <ImageButton
+                        android:id="@+id/btn_edit_archivist_endpoint"
+                        style="@style/Widget.App.StackedSelector.Gear"
+                        android:contentDescription="@string/memory_assistant_edit_endpoint_desc"
+                        android:tooltipText="@string/memory_assistant_edit_endpoint_desc" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.StackedSelector">
+
+                <TextView
+                    style="@style/Widget.App.Row.Title"
+                    android:text="@string/memory_controls_row_assistant_model" />
+
+                <TextView
+                    style="@style/Widget.App.Row.Subtitle"
+                    android:text="@string/memory_controls_row_assistant_model_hint" />
+
+                <TextView
+                    android:id="@+id/text_archivist_model_value"
+                    style="@style/Widget.App.StackedSelector.Value.Full"
+                    android:text="@string/dropdown_select" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_view_all_archivist_models"
+                    style="@style/Widget.App.StackedSelector.Action"
+                    android:text="@string/choose_provider_view_all_models" />
+            </LinearLayout>
+
+            <!-- Provider routing: shown from code only for endpoints that
+                 support it. -->
+            <LinearLayout
+                android:id="@+id/section_archivist_routing"
+                style="@style/Widget.App.StackedSelector.Group"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.Section.Title"
+                    android:text="@string/memory_assistant_routing_title" />
+
+                <TextView
+                    style="@style/Widget.App.Section.Hint"
+                    android:text="@string/memory_assistant_routing_hint" />
+
+                <TextView
+                    android:id="@+id/text_archivist_routing_value"
+                    style="@style/Widget.App.StackedSelector.Value.AfterHint"
+                    android:text="@string/choose_provider_routing_automatic" />
+            </LinearLayout>
+
+            <!-- The Memory Scanner's parameters (shared block), saved with
+                 this screen's Save. -->
+            <include layout="@layout/view_dedicated_model_parameters" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_reset_model_parameters"
+                style="@style/Widget.App.PlainParameter.TextLink"
+                android:text="@string/memory_assistant_adv_reset_temperature" />
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

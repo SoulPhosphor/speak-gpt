@@ -476,6 +476,20 @@
             android:label="@string/recovery_title" />
 
         <activity
+            android:name=".ui.activities.EmbeddingModelActivity"
+            android:exported="false"
+            android:label="@string/title_embedding_model"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
+            android:name=".ui.activities.MemoryScannerToolApiActivity"
+            android:exported="false"
+            android:label="@string/title_memory_scanner_tool_api"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.MemoryAssistantAdvancedSettingsActivity"
             android:exported="false"
             android:label="@string/title_memory_assistant_advanced"

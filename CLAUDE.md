@@ -119,12 +119,14 @@ For code work, use this sequence:
 
 1. Fetch `main`, confirm its current commit, and branch from that commit unless the owner explicitly names a different target. Inspect relevant code, finish the assigned changes, and review the full diff yourself.
 2. Run the local checks and fix failures: `./gradlew testDebugUnitTest`, `./gradlew assembleBeta`, and `./gradlew assembleDebugAndroidTest`. Do not open a code PR with known failed local checks.
-3. Open one focused pull request once the work is complete, required owner decisions are resolved, and local checks pass. The first Codex review begins automatically; do not request a duplicate first review.
+3. Open one pull request once the work is complete, required owner decisions are resolved, and local checks pass. The first Codex review begins automatically; do not request a duplicate first review.
 4. Android Checks runs while Codex reviews. Validate each finding against the actual code and owner-approved behavior. Fix valid findings, and reply with the reason for any finding not being fixed. Rerun local checks, push the fixes together, and request `@codex review` for a subsequent review.
 5. Repeat until Codex has no outstanding actionable findings and Android Checks is green on **the final commit**. Codex is the final code-review gate: do not push further code after it passes. If a later correction is unavoidable, repeat checks and obtain a fresh Codex review of that commit. Do not merge work that is still running, failed, or unreviewed.
 6. Merge the approved, green PR into **`main`** (or a different integration branch explicitly designated by the owner) immediately, without waiting for the owner to give a second merge instruction. Use an ordinary merge method and no force-push. If the target branch or approval status is genuinely uncertain, leave it unmerged and ask rather than choosing silently.
 
-**Codex review is required only for pull requests that change application or test code.** A PR changing only `CLAUDE.md` or other documentation needs no Codex review or re-review. For documentation-only changes, inspect the complete replacement text, links, scope, and diff; do not run Android builds solely to validate documentation or claim tests were executed when they were not. Wait for any required repository checks, then merge without a Codex approval gate. A PR containing both documentation and code follows the code workflow above.
+**One pull request per session.** Combine all changes made in one session into a single pull request, including documentation, instruction and code changes. Split them only for an extremely good reason, and state that reason in each PR.
+
+**Codex review is required only for pull requests that change application or test code.** A PR changing only `CLAUDE.md` or other documentation needs no Codex review or re-review. **Do not run local checks or Android builds when every change is documentation**; inspect the complete replacement text, links, scope, and diff instead, and never claim tests were executed when they were not. Wait for any required repository checks, then merge without a Codex approval gate. A PR containing both documentation and code follows the code workflow above.
 
 After opening a PR, do not trigger a duplicate first Codex review, run repetitive status checks, or schedule watchers. Check while CI or review action is pending, then stop. If only the owner can decide the remaining blocker, ask once and leave the PR intact.
 
@@ -152,8 +154,8 @@ This file is the navigation point, not an encyclopedia. Locate any additional sp
 
 | Work | Relevant source |
 | --- | --- |
-| Conversation indexing, recall, carry-over | `conversation_recall_plan.md`: read G.19, the **assigned** work order in G.16, its referenced design sections, and the current source files. Only explicitly approved choices are binding; do not build withdrawn or later-stage proposals. |
-| Saved-memory search and related behavior | `Memory System/dynamic_memory_plan.md`, using the sections relevant to the task |
+| All memory work: saved memories, Memory Browser, Memory Assistant, context assistance, conversation indexing and recall | `conversation_recall_plan.md`, the single authoritative memory development plan: read Part M (build order, status, decisions), G.19, the **assigned** stage or work order, its referenced design sections, and the current source files. Only explicitly approved choices are binding; do not build withdrawn or later-stage proposals. |
+| Background design for saved-memory search and later saved-memory features | `Memory System/dynamic_memory_plan.md`: reference only (design and D-decisions); Part M of the memory development plan sets order and status |
 | UI and theme-ready styles | `ui-style-guide.md` and `ui-style-adoption.md` |
 | UI redesign | `ui-redesign-plan.md` |
 | Document attachments | `document-includes-plan.md` |

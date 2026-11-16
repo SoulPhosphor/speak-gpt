@@ -176,6 +176,28 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
+            <!-- Memory Search Test (owner placement, Nov 16 2026): last on this
+                 screen; moved here from what is now Memory Repair Settings. -->
+            <LinearLayout
+                android:id="@+id/row_memory_search_test"
+                style="@style/Widget.App.Row.WithSubtitle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_memory_search_test" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/memory_search_test_row_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_memory_search_test" />
+            </LinearLayout>
+
             <!-- The Backups section and the destructive Reset section were moved
                  out of this screen into their own "Memory Backup & Restore" row
                  on the Memory Manager hub (owner request, July 18 2026). See

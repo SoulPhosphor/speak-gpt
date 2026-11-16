@@ -227,7 +227,7 @@ the right.
   (`AppButton.Primary.Inline`), then the final commitment
   (`AppButton.Destructive.Inline`), in the caller's approved order. Users:
   the chat/image deletion choice (**Cancel**, **Delete Chat Only**,
-  **Delete All**), and leaving Advanced Memory Settings with unsaved Memory
+  **Delete All**), and leaving Memory Scanner Tool API with unsaved Memory
   Scanner parameters (**Discard Changes?** / "You have unsaved parameter
   changes." with **Cancel** (stay), **Save & Exit**, **Okay** (leave without
   saving)).
@@ -424,6 +424,33 @@ Use these pieces in order:
 
 Use when the row opens another screen and needs no explanatory subtitle.
 
+### Stacked selector
+
+A setting whose choice is a dropdown placed beneath its own title and
+explanation, rather than beside them:
+
+1. `Widget.App.StackedSelector` (the block), holding a `Widget.App.Row.Title`
+   and `Widget.App.Row.Subtitle`;
+2. the dropdown: `Widget.App.StackedSelector.Value.Full` on its own line, or,
+   when a trailing gear shares the line, a `Widget.App.StackedSelector.ValueLine`
+   holding `Widget.App.StackedSelector.Value` and `Widget.App.StackedSelector.Gear`;
+3. optional `Widget.App.StackedSelector.Action` for a full-width button beneath.
+
+`Widget.App.StackedSelector.Group` wraps a block that is shown or hidden as a
+whole; a dropdown directly under a `Section.Hint` uses
+`Widget.App.StackedSelector.Value.AfterHint`. Spacing lives in
+`stacked_selector_*` dimensions. Current user: Memory Scanner Tool API
+(endpoint, model with View All Models, and provider routing).
+
+### Downloadable model list
+
+`Widget.App.ModelDownloadList` holds one `layout/view_embedding_model_row.xml`
+per downloadable on-device model, added from code; spacing lives in
+`model_download_list_gap`. Current user: Embedding Model, where an explanation
+in `Screen.Intro` sits above the list and the keyword-search-only line
+(`Section.Hint`) below it while no model is installed. The row layout itself
+has not been audited against this guide.
+
 ### Navigation row with subtitle
 
 Use these pieces in order:
@@ -581,7 +608,7 @@ its contents below it, ends the scrolling content above the navigation bar,
 and keeps the page clear of side insets and cutouts. The layout supplies only
 the ids `root`, `action_bar` and `scroll`. Do not fit the page root inside the
 system bars instead; that leaves a gap above the header. Current users:
-BackUp Options and Restore Options.
+BackUp Options, Restore Options, and Embedding Model.
 
 A page the user types into calls `ScreenChrome.fitSystemBarsAndKeyboard`
 instead: the same, plus the page ends at the top of an open keyboard (the
@@ -591,7 +618,7 @@ Prompts, the Summary / Compaction review screen, Summarizer Settings, System
 Prompt editor, Activation Prompt, Lore Book, User Persona, Memory editor,
 Model Rule editor, Campaign and World details, Possible Match review, API
 endpoint editor, Advanced Memory Settings, Memory Assistant Advanced
-Settings, Voice Settings, Voice Advanced Settings, and the alert debug menu. Edit Companion
+Settings, Memory Scanner Tool API, Voice Settings, Voice Advanced Settings, and the alert debug menu. Edit Companion
 and the chat keep their own handling.
 
 ### Header with one trailing action icon
@@ -1516,8 +1543,8 @@ button box, for an action that should read as a link. After a successful save,
 `Widget.App.QuickSettings.TextLink` aligns it with the Quick Settings card
 segments. Current users: Save Parameters to Favorite / Recent Model Settings
 above Streaming in Quick Settings, the same link above the parameters on
-Summarizer Settings and Advanced Memory Settings, and Reset to Recommended
-below them on Advanced Memory Settings (`Widget.App.PlainParameter.TextLink`).
+Summarizer Settings and Memory Scanner Tool API, and Reset to Recommended
+below them on Memory Scanner Tool API (`Widget.App.PlainParameter.TextLink`).
 
 ## Clean Up Models result sections
 
@@ -1545,7 +1572,7 @@ and link line up with the slider. Spacing lives in `plain_parameter_*`.
 Current users: Model Settings (the model name uses
 `Widget.App.ModelParameters.ModelName`), and the Summarizer's and Memory
 Scanner's parameters, which share `layout/view_dedicated_model_parameters.xml`
-on Summarizer Settings and Advanced Memory Settings. Quick Settings keeps its
+on Summarizer Settings and Memory Scanner Tool API. Quick Settings keeps its
 card segments.
 
 A control that cannot be used yet is faded to `disabled_control_alpha`.
@@ -1907,11 +1934,11 @@ message storage; an image-generation command leaves them for the next chat turn.
 The browser header orders the conditional warning icon before Companions,
 then Icon Legend, then Add. Warning uses Google Material Symbols `warning` and
 the existing chained header-button family with theme tint. It is visible only
-while no complete embedding model is installed; returning from Advanced Memory
-Settings refreshes it. Opening the browser never opens this dialog automatically.
+while no complete embedding model is installed; returning from Embedding Model
+refreshes it. Opening the browser never opens this dialog automatically.
 The popup keeps its explanation and uses Dialog.Actions/EndRow/EndRowFlow with
 standard primary action buttons: Add Embedding Model on the left, Okay on the
-right. Add opens Advanced Memory Settings.
+right. Add opens Embedding Model (AI Settings).
 
 MemoryBrowser card typography, spacing, checkbox and icon geometry are owned
 by the stylesheet, with dimensions in `dimens.xml`. The trailing icon/chevron

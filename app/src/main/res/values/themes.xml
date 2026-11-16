@@ -1194,6 +1194,69 @@
         <item name="android:layout_marginStart">@dimen/companion_editor_field_inset</item>
         <item name="android:layout_marginEnd">@dimen/companion_editor_field_inset</item>
     </style>
+    <!-- Stacked selector (ui-style-guide.md "Stacked selector"): a row title
+         and explanation (Widget.App.Row.Title / Row.Subtitle) above a
+         full-width dropdown, with an optional trailing gear and a full-width
+         action beneath. -->
+    <style name="Widget.App.StackedSelector" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingTop">@dimen/stacked_selector_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/stacked_selector_padding_vertical</item>
+    </style>
+
+    <style name="Widget.App.StackedSelector.ValueLine" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/stacked_selector_value_gap</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <!-- The dropdown inside a ValueLine, sharing the line with a gear. -->
+    <style name="Widget.App.StackedSelector.Value" parent="Widget.App.Dropdown.CanonicalValue.Fill" />
+
+    <!-- A dropdown on its own line beneath the label. -->
+    <style name="Widget.App.StackedSelector.Value.Full" parent="Widget.App.Dropdown.CanonicalValue">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_marginTop">@dimen/stacked_selector_value_gap</item>
+    </style>
+
+    <!-- A dropdown directly beneath a Section.Hint explanation. -->
+    <style name="Widget.App.StackedSelector.Value.AfterHint" parent="Widget.App.StackedSelector.Value.Full">
+        <item name="android:layout_marginTop">@dimen/stacked_selector_action_gap</item>
+    </style>
+
+    <style name="Widget.App.StackedSelector.Gear" parent="Widget.App.QuickTile.EditButton">
+        <item name="android:layout_marginStart">@dimen/stacked_selector_gear_gap</item>
+        <item name="android:layout_marginEnd">0dp</item>
+        <item name="android:src">@drawable/ic_settings</item>
+    </style>
+
+    <style name="Widget.App.StackedSelector.Action" parent="AppButton.Primary">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/stacked_selector_action_gap</item>
+    </style>
+
+    <!-- A list of downloadable on-device models, filled from code with one
+         view_embedding_model_row per model (ui-style-guide.md "Downloadable
+         model list"). -->
+    <style name="Widget.App.ModelDownloadList" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingTop">@dimen/model_download_list_gap</item>
+    </style>
+
+    <!-- A group that appears and disappears as a whole (shown from code). -->
+    <style name="Widget.App.StackedSelector.Group" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
     <style name="Widget.App.Dropdown.CanonicalValue.Fill" parent="Widget.App.Dropdown.CanonicalValue">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_weight">1</item>

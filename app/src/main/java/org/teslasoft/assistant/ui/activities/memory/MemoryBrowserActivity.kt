@@ -219,7 +219,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         val dialog = builder.setMessage(R.string.lore_no_model_reminder).setView(actions).create()
         actions.findViewById<View>(R.id.btn_embedding_add).setOnClickListener {
             dialog.dismiss()
-            startActivity(Intent(this, org.teslasoft.assistant.ui.activities.AdvancedMemorySettingsActivity::class.java))
+            startActivity(Intent(this, org.teslasoft.assistant.ui.activities.EmbeddingModelActivity::class.java))
         }
         actions.findViewById<View>(R.id.btn_embedding_okay).setOnClickListener { dialog.dismiss() }
         dialog.show()
