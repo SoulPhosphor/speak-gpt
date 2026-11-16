@@ -127,7 +127,7 @@ order M.2 recommends; both wait for owner decisions listed in M.10.
   unchanged. A builder may still split a stage if one PR would be too
   large to review safely, and says why.
 
-## M.3 Memory provenance (Owner requirements; design Proposed)
+## M.3 Memory provenance (Owner requirements; display decided 2026-11-16; storage design Proposed)
 
 ### What the owner decided (2026-11-15, recorded in the RAG notes section 1A)
 
@@ -189,6 +189,60 @@ A builder re-reads these before relying on them.
   content and tags. New metadata columns do not change it, so provenance
   requires no re-embedding.
 
+### What the Memory Browser shows (Owner, 2026-11-16)
+
+At the bottom of a memory, each source is shown as separate labeled lines,
+never run together on one line. For a source that is a user message:
+
+> **Speaker:** Lena
+> **Glamour:** Midnight
+> **Date:** November 10, 2025
+> **Source Message**
+
+- **Speaker** is the username the chat listed for that message: the name
+  shown above that message in the chat. That name can come from the
+  chat's own username, a Glamour's in-chat name, or a Roleplay Character.
+  It is the name as it was for that message, recorded when the source is
+  recorded. A later name change never relabels it.
+- **Glamour** appears on its own line under Speaker **only when a Glamour
+  was in use for that message**. It always shows the Glamour's **profile
+  name** (its assigned name in the Glamour list), even when that Glamour
+  uses a different name in chat, because the profile name is the firm
+  identifier. The Glamour's ID is stored with it.
+- **Date** is the date the message was sent, always fully spelled out:
+  month name, day, comma, four-digit year ("November 10, 2025"). Never
+  numeric, abbreviated, or relative ("yesterday"). With no known date the
+  line says so rather than guessing (wording approved first).
+- **Source Message** is the tappable line that opens the chat at that
+  message. When only the conversation is known, it reads **Source
+  Conversation** and opens the chat.
+- The appearance of the labels and values comes from `ui-style-guide.md`;
+  a missing style is created there.
+
+**Rules for the builder.**
+- Every value comes from the stored message and the app's own records,
+  never from the Memory Scanner's text. The scanner only names which
+  message a memory came from.
+- **Checked in the code on 2026-11-16:** each user message is stamped when
+  sent with the name used and, when that name came from a Glamour or a
+  Roleplay Character, the source and its ID (`ChatSpeakerNames`:
+  `userName`, `userNameSource` with `glamour:` or `roleplay:`). A chat's
+  own username, when set, replaces every user name that chat displays
+  (`ChatSpeakerNames.displayedUserName`). Companion replies carry the
+  companion's name (`companionName`). Messages sent before stamping existed
+  show only "User".
+- **Verify before building, and stop if it does not hold:** whether the
+  stamp records the Glamour whenever one is in use, or only when the
+  Glamour's own name is the name used (for example, when the chat's own
+  username replaces it). The owner's rule is "show the Glamour whenever one
+  was in use for that message". If the existing stamp cannot tell, propose
+  how to record it for new messages; older messages show only what was
+  recorded and nothing is guessed.
+- **Not decided yet:** how a companion or Roleplay Character speaker is
+  shown, and what the Glamour line shows if that Glamour is later renamed
+  or deleted. Recommended: keep the name recorded at the time, as for the
+  speaker. Asked before stage 1.
+
 ### The design (Proposed, approved as a whole in G43)
 
 **Storage.**
@@ -199,6 +253,10 @@ A builder re-reads these before relying on them.
   - the chat ID and the permanent message ID, each when known;
   - the speaker, when known: the user, the AI, another speaker (such as a
     roleplay character), or unknown. Never required;
+  - for a user message: the username the chat displayed for that message,
+    and, when a Glamour was in use for that message, the Glamour's ID and
+    its profile name, each recorded at the time (see "What the Memory
+    Browser shows" below);
   - the statement time, when known;
   - when and how the source was attached: cited by the Memory Assistant,
     added by the user, or carried from a memory it replaced.
@@ -441,7 +499,7 @@ Each is also a row in G.17.
 
 | # | Needed before | Question | Recommendation |
 |---|---|---|---|
-| G43 | Stage 1 | The provenance design in M.3 as a whole, and its open details (G.17) | Approve M.3; recommendations for each detail are in G.17 |
+| G43 | Stage 1 | The rest of the provenance design in M.3 (display decided 2026-11-16; open details in G.17) | Approve M.3; recommendations for each detail are in G.17 |
 | G45 | Stage 2 | Include the frozen-path lorebook check (step 1.13) in Step 4a | Yes |
 | G38 | Stage 2 | Context-assistance setting (on RAG Active Memory Settings, M.11): label, explanation, starting choice, rebuilding the subject after restart, whether Local AI is shown before it is built | Start on Code-based; do not show Local AI until it exists |
 | G44 | Stage 2 | Ship Off and Code-based before API AI is ready | Yes |
@@ -3325,7 +3383,7 @@ about to start. Each has a recommendation.
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
 | G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
-| G43 | The memory provenance design (M.3) as a whole, and its details: (a) the source link's wording and what it shows when the source is unavailable; (b) where the statement date, event date and speaker are shown: the normal view or a details view; (c) whether the user can add, edit or remove sources and dates in the memory editor; (d) whether any excerpt of the source message is stored; (e) whether the event date and Phase 4's important date are separate fields; (f) the Memory Assistant instruction text that asks it to cite source turns; (g) the speaker choices | Open. Recommended: approve M.3; (d) no excerpt, the link and the chat are the source; (e) separate: an event date records a fact and never causes sending, an important date is a sending rule; (g) the user, the AI, another speaker, or unknown | Memory provenance (stage 1) |
+| G43 | The memory provenance design (M.3) as a whole, and its details. **Decided (owner, 2026-11-16):** sources show as separate labeled lines (Speaker; Glamour only when one was in use, by its profile name; Date fully spelled out; Source Message), with the speaker as listed in the chat for that message (M.3, "What the Memory Browser shows"). **Still open:** (a) the wording when a source or its date is unavailable; (b) how companion and Roleplay Character speakers are shown, and the Glamour line after a Glamour is renamed or deleted; (c) whether the user can add, edit or remove sources and dates in the memory editor; (d) whether any excerpt of the source message is stored; (e) whether the event date and Phase 4's important date are separate fields; (f) the Memory Scanner instruction text that asks it to cite source messages; and approval of the storage design as a whole | Open. Recommended: (b) keep names as recorded at the time; (d) no excerpt, the link and the chat are the source; (e) separate: an event date records a fact and never causes sending, an important date is a sending rule | Memory provenance (stage 1) |
 | G44 | Ship Step 4a's setting with Off and Code-based before Step 4b adds API AI, or hold it until all three exist | Open. Recommended: ship Step 4a first; its benefit is measured and free | Step 4a |
 | G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | Open. Recommended: yes. It changes only that a memory repeating a lorebook entry is no longer sent on the frozen path, as it already is not on the other path | Step 4a |
 
