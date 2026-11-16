@@ -291,6 +291,17 @@ without the owner.
    field holds three digits); the app adds no other limit, and the
    context-window rule above still applies. An empty or invalid entry is not saved and the field shows the
    saved number again (the shared number field's behavior).
+
+   **Strict sliding window and caching (Owner, 2026-11-16).** The helper
+   receives exactly the newest exchanges the setting asks for, moving
+   forward one exchange each turn, so an older subject drops out and cannot
+   pollute the current one. The request is ordered so a provider's prompt
+   cache can reuse its start: the fixed instructions, then each earlier
+   message as its own chat message in order, then the newest message last.
+   On OpenRouter it carries the chat's stable cache key; it adds no explicit
+   cache marker, since short helper requests rarely reach a provider's
+   caching minimum and some providers charge to write one. A window that
+   stays anchored and grows to reuse the cache is not built.
 2. **Instructions.** A fixed, app-managed prompt. It resolves references
    and produces one standalone search query. It never answers the user,
    invents facts, or changes the actual message. No prompt editor at first.

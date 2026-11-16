@@ -47,6 +47,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.providers.ModelRequestParameters
 import org.teslasoft.assistant.providers.ModelSupportedParametersStore
+import org.teslasoft.assistant.providers.PromptCachingRequestSerializer
 import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.RoutingBlock
@@ -126,13 +127,16 @@ class ApiContextHelperTransport(
             ModelSupportedParametersStore.get(appContext).supported(t.endpoint.id, t.model)
         )
         val send: suspend (Observer?) -> String = { observer ->
-            val client = buildClient(t, observer)
+            val client = buildClient(t, observer, request.cacheKey)
             val chatRequest = ChatCompletionRequest(
                 model = ModelId(t.model),
-                messages = listOf(
-                    ChatMessage(role = ChatRole.System, content = request.instructions),
-                    ChatMessage(role = ChatRole.User, content = request.conversation)
-                ),
+                messages = buildList {
+                    add(ChatMessage(role = ChatRole.System, content = request.instructions))
+                    request.earlier.forEach { turn ->
+                        add(ChatMessage(role = if (turn.isUser) ChatRole.User else ChatRole.Assistant, content = turn.text))
+                    }
+                    add(ChatMessage(role = ChatRole.User, content = request.newest))
+                },
                 temperature = parameters.temperature,
                 topP = parameters.topP,
                 frequencyPenalty = parameters.frequencyPenalty,
@@ -190,7 +194,7 @@ class ApiContextHelperTransport(
         } catch (_: Exception) { /* A diagnostic failure never affects sending. */ }
     }
 
-    private fun buildClient(t: Target, observer: Observer?): OpenAI {
+    private fun buildClient(t: Target, observer: Observer?, cacheKey: String?): OpenAI {
         val endpoint = t.endpoint
         val isBearerAuth = endpoint.authType == ApiEndpointObject.AUTH_BEARER
         val extraHeaders: Map<String, String> = when (endpoint.authType) {
@@ -222,16 +226,24 @@ class ApiContextHelperTransport(
                         }
                     }
                     val providerRouting = t.providerRouting
-                    if (endpoint.isOpenRouterRouting() && providerRouting != null) {
-                        install(createClientPlugin("MemoryContextHelperProviderRouting") {
+                    if (endpoint.isOpenRouterRouting()) {
+                        // The helper's provider routing, and the chat's
+                        // stable cache key so OpenRouter can send it where its
+                        // earlier requests may be cached. No explicit cache
+                        // marker: short helper requests rarely reach a
+                        // provider's caching minimum, and some providers
+                        // charge to write one (Owner, 2026-11-16).
+                        install(createClientPlugin("MemoryContextHelperRequest") {
                             on(Send) { request ->
                                 val content = request.body as? TextContent
                                 if (content?.contentType?.match(ContentType.Application.Json) == true) {
+                                    var body = content.text
+                                    if (providerRouting != null) {
+                                        body = ProviderRoutingSerializer.augmentBody(body, providerRouting)
+                                    }
+                                    body = PromptCachingRequestSerializer.augmentOpenRouterChatBody(body, cacheKey)
                                     request.setBody(
-                                        TextContent(
-                                            ProviderRoutingSerializer.augmentBody(content.text, providerRouting),
-                                            content.contentType ?: ContentType.Application.Json
-                                        )
+                                        TextContent(body, content.contentType ?: ContentType.Application.Json)
                                     )
                                 }
                                 proceed(request)

@@ -68,7 +68,20 @@ class ApiContextAssistant(
      *  longer be used. */
     class HelperUnavailable(message: String) : Exception(message)
 
-    data class HelperRequest(val instructions: String, val conversation: String)
+    /**
+     * One helper request, ordered so a provider's prompt cache can reuse its
+     * start: the fixed instructions, then each earlier message in order as
+     * its own chat message, then the newest message last. Nothing that
+     * changes every turn comes before the earlier messages.
+     */
+    data class HelperRequest(
+        val instructions: String,
+        val earlier: List<ContextAssistant.Turn>,
+        val newest: String,
+        /** A stable key for this chat's helper requests, so a router can send
+         *  them where an earlier one may already be cached. */
+        val cacheKey: String?
+    )
 
     override fun assist(input: ContextAssistant.Input): ContextAssistant.Assistance {
         val private = listOf(input.message) + input.conversation.map { it.text }
@@ -89,7 +102,9 @@ class ApiContextAssistant(
         )
         val request = HelperRequest(
             HelperPrompt.INSTRUCTIONS,
-            HelperPrompt.conversation(exchanges, input.message)
+            exchanges.flatten(),
+            HelperPrompt.newest(input.message),
+            input.chatId.takeIf { it.isNotBlank() }?.let { CACHE_KEY_PREFIX + it }
         )
         val budget = if (input.handsFree) handsFreeAllowanceMs else textAllowanceMs
         val reply = try {
@@ -115,6 +130,9 @@ class ApiContextAssistant(
          *  voice; no automatic retries. */
         const val TEXT_ALLOWANCE_MS = 8_000L
         const val HANDS_FREE_ALLOWANCE_MS = 3_000L
+
+        /** Keeps the helper's cache key apart from the chat request's. */
+        const val CACHE_KEY_PREFIX = "memory-context-helper:"
     }
 }
 
@@ -158,7 +176,9 @@ object HelperConversation {
     }
 
     /**
-     * The newest [count] of [exchanges]. With a known [contextWindowTokens],
+     * The newest [count] of [exchanges]: a strict sliding window, so an
+     * older subject drops out as the chat moves on (Owner, 2026-11-16). With
+     * a known [contextWindowTokens],
      * the oldest whole exchanges are left out until the request and room for
      * the reply fit; an exchange is never cut. With no known window, all
      * [count] are kept, and a provider refusal for size is a failure.
@@ -180,7 +200,8 @@ object HelperConversation {
     /** The request's estimated size plus room for the reply. */
     fun estimatedTokens(exchanges: List<List<ContextAssistant.Turn>>, message: String): Int =
         IncludeTextPolicy.estimateTokens(HelperPrompt.INSTRUCTIONS) +
-            IncludeTextPolicy.estimateTokens(HelperPrompt.conversation(exchanges, message)) +
+            exchanges.flatten().sumOf { IncludeTextPolicy.estimateTokens(it.text) } +
+            IncludeTextPolicy.estimateTokens(HelperPrompt.newest(message)) +
             REPLY_ROOM_TOKENS
 
     /** Room kept for the reply: one search query, which the output check
@@ -188,11 +209,14 @@ object HelperConversation {
     const val REPLY_ROOM_TOKENS = 512
 }
 
-/** The fixed, app-managed instructions and conversation text (M.4 item 2). */
+/** The fixed, app-managed instructions and the newest message's wording
+ *  (M.4 item 2). The earlier messages are sent as they are, in their own
+ *  roles. */
 object HelperPrompt {
     const val INSTRUCTIONS =
-        "You write a search query for a memory lookup. You are given a recent " +
-            "conversation between a user and an AI, then the user's newest message.\n\n" +
+        "You write a search query for a memory lookup. The messages after these " +
+            "instructions are a recent conversation between a user and an AI. The last " +
+            "message gives the user's newest message.\n\n" +
             "Write one self-contained search query that states what the newest message " +
             "is about. Replace pronouns and vague references, such as \"she\", \"that one\" " +
             "or \"the same thing\", with the names, things or topics they refer to in the " +
@@ -205,20 +229,10 @@ object HelperPrompt {
             "Reply with the query only, on one line, with no quotation marks, labels " +
             "or explanation."
 
-    fun conversation(exchanges: List<List<ContextAssistant.Turn>>, message: String): String =
-        buildString {
-            if (exchanges.isNotEmpty()) {
-                append("Recent conversation:\n")
-                exchanges.flatten().forEach { turn ->
-                    append(if (turn.isUser) "User: " else "AI: ")
-                    append(turn.text.trim())
-                    append('\n')
-                }
-                append('\n')
-            }
-            append("Newest message:\n")
-            append(message.trim())
-        }
+    /** The last message of the request: the newest message, marked so the
+     *  model writes the query rather than replying to it. */
+    fun newest(message: String): String =
+        "Newest message:\n" + message.trim() + "\n\nWrite the search query."
 }
 
 /** The output check (G.9b): one query of plain text, within the embedding
