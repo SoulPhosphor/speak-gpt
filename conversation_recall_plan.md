@@ -219,6 +219,14 @@ never run together on one line. For a source that is a user message:
 - **Source Message** is the tappable line that opens the chat at that
   message. When only the conversation is known, it reads **Source
   Conversation** and opens the chat.
+- **Source and speaker are separate (Owner, 2026-11-16).** The **source**
+  is the message the memory was taken from (the Source Message line). The
+  **speaker** is who said it (the Speaker line, and Glamour for the user's
+  own messages). The speaker name is saved when the source is recorded and
+  is never deleted: it always shows a name, even when no profile exists for
+  it, when that profile was deleted, or when the source message was
+  deleted or is unavailable. Only the Source Message line can read
+  **Deleted** or **Unavailable**; Speaker, Glamour and Date stay.
 - **No source, no lines (Owner, 2026-11-16).** A memory with no recorded
   source (every memory saved before this stage, a memory the user wrote,
   an import without sources) shows no source lines at all. The source lines
