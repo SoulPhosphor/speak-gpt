@@ -227,9 +227,15 @@ never run together on one line. For a source that is a user message:
   it, when that profile was deleted, or when the source message was
   deleted or is unavailable. Only the Source Message line can read
   **Deleted** or **Unavailable**; Speaker, Glamour and Date stay.
-- **No source, no lines (Owner, 2026-11-16).** A memory with no recorded
-  source (every memory saved before this stage, a memory the user wrote,
-  an import without sources) shows no source lines at all. The source lines
+- **Memories the user writes (Owner, 2026-11-16).** A memory the user
+  types in themselves has no source and no speaker, and the user cannot add
+  either. It shows one line: **Date**, the date the user created the
+  memory, fully spelled out like every date. The memory record's `origin`
+  already tells user-written memories apart, so this also applies to ones
+  written before this stage.
+- **No source, no lines (Owner, 2026-11-16).** Any other memory with no
+  recorded source (one the Memory Scanner saved before this stage, or an
+  import without sources) shows no source lines at all. The source lines
   are a reminder for the user of where a memory came from; they are never
   sent to the AI and nothing else depends on them.
 - **Unavailable and deleted sources (Owner, 2026-11-16).** When a recorded
