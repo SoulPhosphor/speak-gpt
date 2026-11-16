@@ -58,6 +58,10 @@ class CodeBasedAssistantTest {
         searchEarlier: (String) -> SavedMemorySearch.Result? = { null }
     ) = ContextAssistant.Input(chat, tag, own, eligible, earlier, searchEarlier)
 
+    /** The message is sent: its assistance is committed. */
+    private fun ContextAssistant.send(input: ContextAssistant.Input): ContextAssistant.Output =
+        assist(input).also { it.commit() }.output
+
     private fun carried(out: ContextAssistant.Output) =
         (out as? ContextAssistant.Output.Carry)?.memories?.map { it.memory.memoryId }.orEmpty()
 
@@ -76,61 +80,61 @@ class CodeBasedAssistantTest {
     @Test
     fun aFollowUpWithNoConfidentMatchReceivesTheSubject() {
         val assistant = CodeBasedAssistant(SubjectStore())
-        assertEquals(emptyList<String>(), carried(assistant.assist(input(result(e("a", meaning = true, keyword = true))))))
-        assertEquals(listOf("a"), carried(assistant.assist(input(noMatch))))
+        assertEquals(emptyList<String>(), carried(assistant.send(input(result(e("a", meaning = true, keyword = true))))))
+        assertEquals(listOf("a"), carried(assistant.send(input(noMatch))))
         // No turn limit.
-        assertEquals(listOf("a"), carried(assistant.assist(input(noMatch))))
+        assertEquals(listOf("a"), carried(assistant.send(input(noMatch))))
     }
 
     @Test
     fun aMemoryTheFollowUpAlreadyFoundIsNotAddedTwice() {
         val assistant = CodeBasedAssistant(SubjectStore())
-        assistant.assist(input(result(e("a", meaning = true, keyword = true), e("b", meaning = true, keyword = true))))
-        assertEquals(listOf("b"), carried(assistant.assist(input(result(e("a", keyword = true))))))
+        assistant.send(input(result(e("a", meaning = true, keyword = true), e("b", meaning = true, keyword = true))))
+        assertEquals(listOf("b"), carried(assistant.send(input(result(e("a", keyword = true))))))
     }
 
     @Test
     fun aLaterConfidentMatchReplacesTheSubject() {
         val assistant = CodeBasedAssistant(SubjectStore())
-        assistant.assist(input(result(e("a", meaning = true, keyword = true))))
-        assistant.assist(input(result(e("b", meaning = true, standout = 5.0))))
-        assertEquals(listOf("b"), carried(assistant.assist(input(noMatch))))
+        assistant.send(input(result(e("a", meaning = true, keyword = true))))
+        assistant.send(input(result(e("b", meaning = true, standout = 5.0))))
+        assertEquals(listOf("b"), carried(assistant.send(input(noMatch))))
     }
 
     @Test
     fun aDeletedDisabledOrOutOfScopeMemoryIsNeverCarried() {
         val assistant = CodeBasedAssistant(SubjectStore())
-        assistant.assist(input(result(e("a", meaning = true, keyword = true), e("b", meaning = true, keyword = true))))
+        assistant.send(input(result(e("a", meaning = true, keyword = true), e("b", meaning = true, keyword = true))))
         // "a" is no longer among the memories this chat may use.
-        assertEquals(listOf("b"), carried(assistant.assist(input(noMatch, eligible = all - "a"))))
+        assertEquals(listOf("b"), carried(assistant.send(input(noMatch, eligible = all - "a"))))
     }
 
     @Test
     fun anEditedMemoryIsCarriedAsItIsStoredNow() {
         val assistant = CodeBasedAssistant(SubjectStore())
-        assistant.assist(input(result(e("a", meaning = true, keyword = true))))
+        assistant.send(input(result(e("a", meaning = true, keyword = true))))
         val edited = all + ("a" to mem("a", content = "edited text"))
-        val out = assistant.assist(input(noMatch, eligible = edited)) as ContextAssistant.Output.Carry
+        val out = assistant.send(input(noMatch, eligible = edited)) as ContextAssistant.Output.Carry
         assertEquals("edited text", out.memories.single().memory.content)
     }
 
     @Test
     fun switchingChatsNeverCarriesAnotherChatsSubject() {
         val assistant = CodeBasedAssistant(SubjectStore())
-        assistant.assist(input(result(e("a", meaning = true, keyword = true)), chat = "one"))
-        assertEquals(emptyList<String>(), carried(assistant.assist(input(noMatch, chat = "two"))))
-        assertEquals(listOf("a"), carried(assistant.assist(input(noMatch, chat = "one"))))
+        assistant.send(input(result(e("a", meaning = true, keyword = true)), chat = "one"))
+        assertEquals(emptyList<String>(), carried(assistant.send(input(noMatch, chat = "two"))))
+        assertEquals(listOf("a"), carried(assistant.send(input(noMatch, chat = "one"))))
     }
 
     @Test
     fun aChangedEmbeddingModelOrADeletedChatDropsTheSubject() {
         val store = SubjectStore()
         val assistant = CodeBasedAssistant(store)
-        assistant.assist(input(result(e("a", meaning = true, keyword = true))))
-        assertEquals(emptyList<String>(), carried(assistant.assist(input(noMatch, tag = "other-model"))))
-        assistant.assist(input(result(e("a", meaning = true, keyword = true))))
+        assistant.send(input(result(e("a", meaning = true, keyword = true))))
+        assertEquals(emptyList<String>(), carried(assistant.send(input(noMatch, tag = "other-model"))))
+        assistant.send(input(result(e("a", meaning = true, keyword = true))))
         store.forget("chat")
-        assertEquals(emptyList<String>(), carried(assistant.assist(input(noMatch))))
+        assertEquals(emptyList<String>(), carried(assistant.send(input(noMatch))))
     }
 
     @Test
@@ -142,21 +146,21 @@ class CodeBasedAssistantTest {
             "oldest" to result(e("d", meaning = true, keyword = true))
         )
         val assistant = CodeBasedAssistant(SubjectStore())
-        val out = assistant.assist(input(noMatch, earlier = listOf("newest", "middle", "oldest")) {
+        val out = assistant.send(input(noMatch, earlier = listOf("newest", "middle", "oldest")) {
             searched.add(it); earlier[it]
         })
         assertEquals(listOf("c"), carried(out))
         assertEquals(listOf("newest", "middle"), searched)
         // Rebuilt once per chat per app run.
         searched.clear()
-        assistant.assist(input(noMatch, earlier = listOf("newest")) { searched.add(it); earlier[it] })
+        assistant.send(input(noMatch, earlier = listOf("newest")) { searched.add(it); earlier[it] })
         assertTrue(searched.isEmpty())
     }
 
     @Test
     fun aConfidentMessageNeverSearchesEarlierMessages() {
         val assistant = CodeBasedAssistant(SubjectStore())
-        assistant.assist(input(result(e("a", meaning = true, keyword = true)), earlier = listOf("x")) {
+        assistant.send(input(result(e("a", meaning = true, keyword = true)), earlier = listOf("x")) {
             error("not searched")
         })
     }
@@ -164,7 +168,7 @@ class CodeBasedAssistantTest {
     @Test
     fun theRebuildLooksAtMostThreeEarlierMessages() {
         val searched = ArrayList<String>()
-        CodeBasedAssistant(SubjectStore()).assist(input(noMatch, earlier = listOf("1", "2", "3", "4")) {
+        CodeBasedAssistant(SubjectStore()).send(input(noMatch, earlier = listOf("1", "2", "3", "4")) {
             searched.add(it); noMatch
         })
         assertEquals(listOf("1", "2", "3"), searched)
@@ -172,12 +176,21 @@ class CodeBasedAssistantTest {
 
     @Test
     fun offAddsNothingAndCandidatesKeepTheMessagesOwnResultsFirst() {
-        assertEquals(ContextAssistant.Output.Nothing, ContextAssistant.Off.assist(input(noMatch)))
+        assertEquals(ContextAssistant.Output.Nothing, ContextAssistant.Off.assist(input(noMatch)).output)
         val own = listOf(ScoredMemory(mem("a"), 0.5f, 0.5f), ScoredMemory(mem("b"), 0.4f, 0.4f))
         val added = listOf(ScoredMemory(mem("b"), 0.9f, 0.9f), ScoredMemory(mem("c"), 0.9f, 0.9f))
         val (pool, carriedIds) = ContextAssistant.candidates(own, added)
         assertEquals(listOf("a", "b", "c"), pool.map { it.memory.memoryId })
         assertEquals(0.4f, pool[1].score)
         assertEquals(setOf("c"), carriedIds)
+    }
+
+    @Test
+    fun aDraftThatIsNotSentLeavesTheSubjectUnchanged() {
+        val assistant = CodeBasedAssistant(SubjectStore())
+        assistant.send(input(result(e("a", meaning = true, keyword = true))))
+        // Blocked or cancelled before sending: never committed.
+        assistant.assist(input(result(e("b", meaning = true, keyword = true))))
+        assertEquals(listOf("a"), carried(assistant.send(input(noMatch))))
     }
 }

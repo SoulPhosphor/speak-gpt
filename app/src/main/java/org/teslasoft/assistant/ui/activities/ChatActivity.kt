@@ -798,14 +798,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val payload: FrozenChatPayload,
         val activeMemoryReferences: List<ActiveMemoryReference>,
         val contextDecision: ModelContextDecision,
-        val nativePdfs: List<NativePdfPayload>
+        val nativePdfs: List<NativePdfPayload>,
+        /** Records the message in context assistance once it is sent. */
+        val commitContext: () -> Unit = {}
     )
 
     private data class FrozenRegularRequest(
         val request: ChatCompletionRequest,
         val payload: FrozenChatPayload,
         val activeMemoryReferences: List<ActiveMemoryReference>,
-        val nativePdfs: List<NativePdfPayload>
+        val nativePdfs: List<NativePdfPayload>,
+        /** Records the message in context assistance once it is sent. */
+        val commitContext: () -> Unit = {}
     )
 
     /** One fully resolved conversation snapshot shared by measurement/send. */
@@ -10645,7 +10649,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     payload = frozen.payload,
                     activeMemoryReferences = frozen.activeMemoryReferences,
                     contextDecision = decision,
-                    nativePdfs = frozen.nativePdfs
+                    nativePdfs = frozen.nativePdfs,
+                    commitContext = frozen.commitContext
                 )
                 val hasFullImages = preparedRequest.first.second
 
@@ -10732,6 +10737,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun commitPreparedTurn(prepared: PreparedRegularTurn) {
         requestPreparationInProgress = false
+        // Only a message that is actually sent updates context assistance.
+        prepared.commitContext()
         parseMessage(prepared.rawMessage, preparedTurn = prepared)
     }
 
@@ -13592,6 +13599,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         var memoryAssemblyResult:
             org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.AssemblyResult? = null
+        var commitContext: () -> Unit = {}
         if (manualMemoryIds.isNotEmpty() ||
             (preferences?.getChatMemoryEnabled() == true && MemoryStore.isProvisioned(this))) {
             memoryAssemblyResult = try {
@@ -13621,7 +13629,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 automaticMemoryEnabled = preferences?.getChatMemoryEnabled() == true,
                                 earlierUserMessages = EarlierUserMessages.from(
                                     conversationProjection.memoryContext
-                                )
+                                ),
+                                useContextAssistance = !experimentalModeOn(),
+                                deferContextCommit = { commitContext = it }
                             )
                         )
                 }
@@ -13773,7 +13783,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             injectedLoreMatches.map { it.entry.id }
         )
         return FrozenRegularRequest(
-            request, payload, activeMemoryReferences, conversationProjection.nativePdfs
+            request, payload, activeMemoryReferences, conversationProjection.nativePdfs, commitContext
         )
     }
 
@@ -14027,7 +14037,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 manualMemoryIds = manualMemoryIds,
                                 automaticMemoryEnabled = preferences?.getChatMemoryEnabled() == true,
                                 earlierUserMessages = if (legacyExperimental) emptyList() else
-                                    EarlierUserMessages.from(chatMessages)
+                                    EarlierUserMessages.from(chatMessages),
+                                useContextAssistance = !legacyExperimental
                             )
                         )
                 }

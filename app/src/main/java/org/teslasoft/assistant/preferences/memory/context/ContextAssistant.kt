@@ -34,8 +34,15 @@ import org.teslasoft.assistant.preferences.memory.librarian.SavedMemorySearch
  * (scope, Maximum Memories, the +3 rule, lorebook overlap and Memory Space).
  */
 interface ContextAssistant {
-    /** Called once for each message sent, after the message's own search. */
-    fun assist(input: Input): Output
+    /**
+     * Called once for each message about to be sent, after the message's own
+     * search. Nothing it keeps between messages changes until the caller runs
+     * [Assistance.commit], once the message is actually sent: a draft that is
+     * blocked or cancelled leaves no trace.
+     */
+    fun assist(input: Input): Assistance
+
+    data class Assistance(val output: Output, val commit: () -> Unit = {})
 
     data class Input(
         val chatId: String,
@@ -69,7 +76,7 @@ interface ContextAssistant {
 
     /** Off: no context assistance. */
     object Off : ContextAssistant {
-        override fun assist(input: Input): Output = Output.Nothing
+        override fun assist(input: Input): Assistance = Assistance(Output.Nothing)
     }
 
     companion object {

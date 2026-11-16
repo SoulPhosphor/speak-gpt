@@ -56,6 +56,17 @@ class ActiveMemoriesSourceContractTest {
     }
 
     @Test
+    fun contextAssistanceSkipsExperimentalModeAndTypedDraftsUntilSent() {
+        val chat = source("ui/activities/ChatActivity.kt")
+        assertTrue(chat.contains("useContextAssistance = !experimentalModeOn()"))
+        assertTrue(chat.contains("useContextAssistance = !legacyExperimental"))
+        // A typed draft records its subject only when it is committed.
+        assertTrue(chat.contains("deferContextCommit = { commitContext = it }"))
+        val commit = chat.substringAfter("private fun commitPreparedTurn(").substringBefore("\n    }")
+        assertTrue(commit.contains("prepared.commitContext()"))
+    }
+
+    @Test
     fun viewerDistinguishesDeletionFromReadErrorsAndPreservesBlankLabelContent() {
         val viewer = source("ui/activities/ActiveMemoriesActivity.kt")
         assertTrue(viewer.contains("data object Deleted"))

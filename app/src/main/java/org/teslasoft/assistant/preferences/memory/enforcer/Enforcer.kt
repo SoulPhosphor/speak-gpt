@@ -119,7 +119,13 @@ class Enforcer private constructor(private val appContext: Context) {
         val automaticMemoryEnabled: Boolean = true,
         /** The chat's earlier user messages with text, newest first, for
          *  context assistance. */
-        val earlierUserMessages: List<String> = emptyList()
+        val earlierUserMessages: List<String> = emptyList(),
+        /** False in Experimental Mode, whose messages stay independent: no
+         *  context assistance runs and nothing is carried or remembered. */
+        val useContextAssistance: Boolean = true,
+        /** Receives the step that records this message in context assistance,
+         *  to run only once the message is actually sent. Null runs it at once. */
+        val deferContextCommit: ((() -> Unit) -> Unit)? = null
     )
 
     /** The rendered prompt and the exact final memory selection behind it. */
@@ -253,10 +259,11 @@ class Enforcer private constructor(private val appContext: Context) {
         // Context assistance (conversation_recall_plan.md G.9b): the message's
         // own results stay first and unchanged; assistance only adds
         // candidates after them, and they go through the same selection below.
-        val assistant = ContextAssistance.forSettings(prefs)
+        val assistant = if (input.useContextAssistance) ContextAssistance.forSettings(prefs)
+        else ContextAssistant.Off
         val added: List<ScoredMemory> = turnSearch?.result?.let { own ->
             try {
-                when (val out = assistant.assist(ContextAssistant.Input(
+                val assistance = assistant.assist(ContextAssistant.Input(
                     chatId = input.chatId,
                     modelTag = librarian.activeTag(),
                     own = own,
@@ -265,7 +272,9 @@ class Enforcer private constructor(private val appContext: Context) {
                     searchEarlier = { text ->
                         librarian.searchTurn(retrievalScope, text, scanCap + 1, projectId).result
                     }
-                ))) {
+                ))
+                input.deferContextCommit?.invoke(assistance.commit) ?: assistance.commit()
+                when (val out = assistance.output) {
                     is ContextAssistant.Output.Nothing -> emptyList()
                     is ContextAssistant.Output.Carry -> out.memories
                     is ContextAssistant.Output.Query ->

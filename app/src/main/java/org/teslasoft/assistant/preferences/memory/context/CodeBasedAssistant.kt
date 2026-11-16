@@ -77,7 +77,7 @@ class CodeBasedAssistant(private val store: SubjectStore = SubjectStore.shared) 
         }
     }
 
-    override fun assist(input: ContextAssistant.Input): ContextAssistant.Output {
+    override fun assist(input: ContextAssistant.Input): ContextAssistant.Assistance {
         val tag = input.modelTag
         var subject: List<ScoredMemory>? = store.get(input.chatId, tag)
         if (subject == null && confident(input.own).isEmpty()) {
@@ -87,10 +87,10 @@ class CodeBasedAssistant(private val store: SubjectStore = SubjectStore.shared) 
                 .orEmpty()
         }
         val (next, added) = step(input.own, subject.orEmpty())
-        store.put(input.chatId, tag, next)
         val current = added.mapNotNull { carried -> refresh(carried, input.eligible) }
-        return if (current.isEmpty()) ContextAssistant.Output.Nothing
+        val output = if (current.isEmpty()) ContextAssistant.Output.Nothing
         else ContextAssistant.Output.Carry(current)
+        return ContextAssistant.Assistance(output) { store.put(input.chatId, tag, next) }
     }
 
     /** The carried memory as stored now, or null when it may not be used. */
