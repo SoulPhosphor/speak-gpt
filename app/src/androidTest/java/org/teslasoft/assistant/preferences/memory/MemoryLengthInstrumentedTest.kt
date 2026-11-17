@@ -67,15 +67,23 @@ class MemoryLengthInstrumentedTest {
 
     @Test fun scannerFilesEveryPartWithTargetsTypeTagsHintsAndSourcesDespiteCapOne() {
         store.upsertProject(ProjectRecord("project", "Example", "active", MemoryStore.nowIso(), MemoryStore.nowIso()))
+        val oldCandidate = MemoryCandidateValidator.validateGeneral(
+            scope = "project", content = "Earlier information about this project.", projectIds = listOf("project")
+        ) as CandidateResult.Valid
+        val old = PendingMemoryRecordFactory.build(oldCandidate.candidate,
+            MemoryId.generate(MemoryId.Type.ASSOCIATIVE), MemoryStore.nowIso()).copy(status = "active")
+        store.insertMemory(old)
         val text = (1..300).joinToString("\n\n") { "Detail $it: the complete original wording stays here." }
         val draft = ArchivistResponseParser.DraftMemory(
             content = text, scope = "project", typeIdSuggestion = "mtype-fact",
             tags = listOf("detailed", "example"), targetName = null,
+            relatedExistingMemoryIds = listOf(old.memoryId),
             targetIds = listOf("project"), scene = ArchivistSceneContext(null, null, null, null, "project")
         )
         val prepared = prepare(listOf(draft, draft.copy(content = "Second subject")), 1)
         val records: List<MemoryRecord> = field(prepared, "records")
         val sources: Map<String, List<MemorySource>> = field(prepared, "sourcesByMemoryId")
+        val hints: Map<String, List<String>> = field(prepared, "relationshipHintsByMemoryId")
         assertTrue(records.size > 1)
         assertEquals(text, records.joinToString("") { it.content })
         assertEquals(records.size, records.map { it.memoryId }.distinct().size)
@@ -87,12 +95,16 @@ class MemoryLengthInstrumentedTest {
             assertEquals(draft.tags, MemoryTokenMeter.input(record).tags)
             assertTrue(reader.measure(MemoryTokenMeter.input(record)).fits)
             assertEquals("source-chat", sources.getValue(record.memoryId).single().chatId)
+            assertEquals(listOf(old.memoryId), hints[record.memoryId])
         }
-        store.commitRerunChatOutputs(records, emptyList(), emptyList(), sourcesByMemoryId = sources)
+        store.commitRerunChatOutputs(records, emptyList(), emptyList(),
+            relationshipHintsByMemoryId = hints, sourcesByMemoryId = sources)
         assertEquals(text, records.joinToString("") { store.getMemory(it.memoryId)!!.content })
         // Re-running must not create the same parts again.
         val rerun = prepare(listOf(draft), 1)
         assertTrue(field<List<MemoryRecord>>(rerun, "records").isEmpty())
+        val withNewSubject = prepare(listOf(draft, draft.copy(content = "Second subject")), 1)
+        assertEquals("Second subject", field<List<MemoryRecord>>(withNewSubject, "records").single().content)
     }
 
     @Test fun countingAnExistingOversizedMemoryNeverChangesIt() {

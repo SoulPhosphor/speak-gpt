@@ -191,7 +191,6 @@ class MemoryRowAdapter(
             parent, false
         )
 
-        bindTokenMeter(view, row)
         val title = view.findViewById<TextView>(R.id.row_title)
         val tags = view.findViewById<TextView>(R.id.row_tags)
         val subtitle = view.findViewById<TextView>(R.id.row_subtitle)
@@ -201,6 +200,7 @@ class MemoryRowAdapter(
         val ui = view.findViewById<View>(R.id.ui)
 
         val row = rows[position]
+        bindTokenMeter(view, row)
         if (row.browserCard) {
             view.findViewById<com.google.android.material.checkbox.MaterialCheckBox>(R.id.memory_selection_checkbox).apply {
                 setOnCheckedChangeListener(null)

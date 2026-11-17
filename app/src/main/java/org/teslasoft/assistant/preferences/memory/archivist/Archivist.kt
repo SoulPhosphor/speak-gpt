@@ -1507,7 +1507,7 @@ object Archivist {
                         )
                     // Apply the suggestion cap to original proposals. All parts
                     // of an accepted proposal are filed, with no second cap.
-                    acceptedProposals++
+                    val beforeParts = records.size
                     val parts = if (tokenReader == null) {
                         listOf(org.teslasoft.assistant.preferences.memory.librarian.MemoryProposalSplitter.Part(
                             record.content, d.tags))
@@ -1546,6 +1546,7 @@ object Archivist {
                             .distinct()
                         if (validHints.isNotEmpty()) relationshipHints[splitRecord.memoryId] = validHints
                     }
+                    if (records.size > beforeParts) acceptedProposals++
                 }
             }
         }
