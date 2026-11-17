@@ -20,6 +20,10 @@ data class MemoryReferenceIds(
 )
 
 object MemoryCategoryPlanner {
+    /** Settings tables whose absent row means "use the defaults", so a merge
+     *  must not fill them from the backup (memory plan Phase 2). */
+    private val currentOnlyOnMerge = setOf("memory_handling_preferences")
+
     data class Conflict(val table: String, val identity: String)
     data class Report(val conflicts: List<Conflict>, val clearedReferences: Int)
 
@@ -48,6 +52,12 @@ object MemoryCategoryPlanner {
             }
             if (mode == PortableRestoreMode.REPLACE) {
                 tables[spec.table] = backupRows.map { LinkedHashMap(it) }
+                continue
+            }
+            // A merge keeps the user's current preferences exactly, including
+            // having none saved (the defaults): a backup's row is never added.
+            if (spec.table in currentOnlyOnMerge) {
+                tables[spec.table] = currentRows.map { LinkedHashMap(it) }
                 continue
             }
             val currentById = currentRows.associateBy { MemoryPortableRowFormat.identity(spec, it)!! }

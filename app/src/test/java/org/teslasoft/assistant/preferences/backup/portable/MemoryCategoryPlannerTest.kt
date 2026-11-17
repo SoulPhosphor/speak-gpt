@@ -130,6 +130,22 @@ class MemoryCategoryPlannerTest {
     }
 
     @Test
+    fun `a merge keeps the current handling preferences even when none are saved`() {
+        val off = listOf(linkedMapOf<String, Any?>("id" to 1L, "delete_moves_to_archived" to 0L))
+        val backup = rows(MemoryPortableGroup.MEMORIES, mapOf("memory_handling_preferences" to off))
+        val merged = MemoryCategoryPlanner.plan(
+            MemoryPortableGroup.MEMORIES, rows(MemoryPortableGroup.MEMORIES), backup, PortableRestoreMode.MERGE
+        ) as MemoryCategoryPlanner.Result.Ready
+        assertTrue(merged.rows.tables.getValue("memory_handling_preferences").isEmpty())
+        assertTrue(merged.report.conflicts.isEmpty())
+
+        val replaced = MemoryCategoryPlanner.plan(
+            MemoryPortableGroup.MEMORIES, rows(MemoryPortableGroup.MEMORIES), backup, PortableRestoreMode.REPLACE
+        ) as MemoryCategoryPlanner.Result.Ready
+        assertEquals(off, replaced.rows.tables.getValue("memory_handling_preferences"))
+    }
+
+    @Test
     fun `readable memory rows from before sources parse with none`() {
         val full = rows(MemoryPortableGroup.MEMORIES, mapOf("memories" to listOf(memory("m", "Text"))))
         val json = org.json.JSONObject(MemoryPortableRowFormat.toJson(MemoryPortableGroup.MEMORIES, full))
