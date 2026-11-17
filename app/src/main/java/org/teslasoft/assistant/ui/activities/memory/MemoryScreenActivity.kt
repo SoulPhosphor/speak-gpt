@@ -41,6 +41,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
 import org.teslasoft.assistant.ui.util.PromptLibrarySearch
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.chatsearch.SearchOptions
 import org.teslasoft.assistant.preferences.Preferences
@@ -76,12 +77,11 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
     private var pendingBanner: com.google.android.material.button.MaterialButton? = null
     private var btnFilter: ImageButton? = null
     private var btnSearchToggle: ImageButton? = null
-    private var filteredMemories: View? = null
-    private var filteredPending: View? = null
+    private var filteredMarker: View? = null
     private var searchBackCallback: OnBackPressedCallback? = null
     private var modeToggleContainer: View? = null
-    private var btnModeMemories: TextView? = null
-    private var btnModePending: TextView? = null
+    private var viewSelector: TextView? = null
+    private var shownViewKey: String? = null
     private var modePendingCount: TextView? = null
 
     private var librarySearch: PromptLibrarySearch? = null
@@ -164,24 +164,55 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
      *  chrome that depends on the data (e.g. the browser's Pending banner). */
     protected open fun onRowsRendered() {}
 
-    /** Opt into the centered "Memories | Pending" two-mode header (owner
-     *  design, July 8 2026 evening). Only the memory browser uses it. */
+    /** One view offered by the view dropdown on the tools line. */
+    protected data class ScreenView(val key: String, val label: String)
+
+    /** Opt into the tools line's view dropdown (memory plan Phase 2: one
+     *  dropdown for Memories, Pending and Archived). Only the memory browser
+     *  uses it. */
     protected open fun showModeToggle(): Boolean = false
 
-    /** Called when the user taps a mode word: "memories" or "pending". */
+    /** The views the dropdown offers, in order. With fewer than two there is
+     *  nothing to choose, so the dropdown is hidden. */
+    protected open fun viewOptions(): List<ScreenView> = emptyList()
+
+    /** Called when the user picks a view from the dropdown, by its key. */
     protected open fun onModeSelected(mode: String) {}
 
-    /** Refresh the toggle's selected word and the count line beneath it
-     *  (null hides the count — it never shows when nothing is pending). */
+    /** Show [mode]'s view in the dropdown and refresh the count line beneath
+     *  it (null hides the count — it never shows when nothing is pending). */
     protected fun updateModeToggle(mode: String, pendingCountLine: String?) {
-        // The current word's color comes from its style (selected state).
-        btnModeMemories?.isSelected = mode == "memories"
-        btnModePending?.isSelected = mode == "pending"
+        val selector = viewSelector
+        val views = viewOptions()
+        if (selector != null) {
+            if (views.size < 2) {
+                selector.visibility = View.GONE
+            } else {
+                selector.visibility = View.VISIBLE
+                val current = views.firstOrNull { it.key == mode } ?: views.first()
+                if (shownViewKey != current.key) {
+                    shownViewKey = current.key
+                    selector.text = current.label
+                    AppDropdown.sizeToOptions(selector, views.map { it.label }) {
+                        (selector.parent as? View)?.width ?: 0
+                    }
+                }
+            }
+        }
         if (pendingCountLine == null) {
             modePendingCount?.visibility = View.GONE
         } else {
             modePendingCount?.visibility = View.VISIBLE
             modePendingCount?.text = pendingCountLine
+        }
+    }
+
+    private fun openViewSelector(anchor: TextView) {
+        val views = viewOptions()
+        if (views.size < 2) return
+        val selected = views.indexOfFirst { it.key == shownViewKey }
+        AppDropdown.show(anchor, views.map { it.label }, selected) { index ->
+            onModeSelected(views[index].key)
         }
     }
 
@@ -196,11 +227,10 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         }
     }
 
-    /** Show the filtered icon after the [mode] word ("memories" / "pending"),
-     *  or hide both when null. */
-    protected fun setFilteredMarker(mode: String?) {
-        filteredMemories?.visibility = if (mode == "memories") View.VISIBLE else View.GONE
-        filteredPending?.visibility = if (mode == "pending") View.VISIBLE else View.GONE
+    /** Show the filtered icon after the view dropdown while filters narrow
+     *  the current view. */
+    protected fun setFilteredMarker(shown: Boolean) {
+        filteredMarker?.visibility = if (shown) View.VISIBLE else View.GONE
     }
 
     /* ------------------------------ collapsible search ------------------------------ */
@@ -289,17 +319,14 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
         pendingBanner = findViewById(R.id.pending_banner)
         btnFilter = findViewById(R.id.btn_filter)
         btnSearchToggle = findViewById(R.id.btn_search_toggle)
-        filteredMemories = findViewById(R.id.filtered_memories)
-        filteredPending = findViewById(R.id.filtered_pending)
+        filteredMarker = findViewById(R.id.filtered_marker)
         modeToggleContainer = findViewById(R.id.mode_toggle_container)
-        btnModeMemories = findViewById(R.id.btn_mode_memories)
-        btnModePending = findViewById(R.id.btn_mode_pending)
+        viewSelector = findViewById(R.id.view_selector)
         modePendingCount = findViewById(R.id.mode_pending_count)
 
         if (showModeToggle()) {
             modeToggleContainer?.visibility = View.VISIBLE
-            btnModeMemories?.setOnClickListener { onModeSelected("memories") }
-            btnModePending?.setOnClickListener { onModeSelected("pending") }
+            viewSelector?.setOnClickListener { openViewSelector(it as TextView) }
         }
 
         titleView?.text = screenTitle()

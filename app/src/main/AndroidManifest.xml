@@ -459,6 +459,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.MemoryHandlingPreferencesActivity"
+            android:exported="false"
+            android:label="@string/title_memory_handling_preferences">
+        </activity>
+
+        <activity
             android:name=".ui.activities.LorebookSettingsActivity"
             android:exported="false"
             android:label="@string/title_lorebook_settings">

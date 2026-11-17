@@ -40,10 +40,10 @@ object MemoryBrowserFilterState {
     /** Source: single-value. "all" | "hand" | "learned". */
     var source: String = "all"
 
-    /** Superseded memories: single-value. "hide" (default — active + archived,
-     *  no old versions) | "include" (active + archived + superseded together) |
-     *  "only" (just superseded). Applies to the Memories view only; the
-     *  Pending view is drafts, which are never superseded. */
+    /** Superseded memories: single-value. "hide" (default — memories in use,
+     *  no old versions) | "include" (memories in use and superseded together)
+     *  | "only" (just superseded). Applies to the Memories view only; Pending
+     *  lists drafts and Archived lists archived memories (MemoryBrowserViews). */
     var superseded: String = "hide"
 
     /** Scope: multi-select. Empty = match anything.

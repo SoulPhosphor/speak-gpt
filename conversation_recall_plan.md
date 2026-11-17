@@ -504,6 +504,7 @@ finds something missed adds it here rather than guessing.
 | Stage 1, memory sources | Nothing open. Decided in G43 |
 | Stage 2, Step 4a | Answered by the owner on 2026-11-16: G45 and G44 are decided; the Memory Context Helper Settings wording is in `strings.xml`; the debug view marks carried memories `[carried from earlier subject]` and top-match memories `[+3 top match]` |
 | Stage 3, Step 4b | Answered by the owner on 2026-11-16: the error pop-up and its wording, the no-model message, the API AI choice and its explanation, the Memory Context Helper Tool API labels, the model picker title, the model cleanup line and the usage section are in `strings.xml`; no privacy disclosure (M.4 item 6). Still to ask: the model and cost for the one scored run on the frozen sets, and the exact content of any helper log lines (M.4 item 8) |
+| Stage 5, data control | Answered by the owner on 2026-11-17: D44 is on by default; Retired and archived are one state, named Archived everywhere (the view, the setting and the toast); Delete moves an in-use memory to Archived with no pop-up and shows a toast; permanent deletes and Discard keep a confirmation pop-up; superseded memories stay behind the Superseded filter (owner ruling, August 3 2026); Pending suggestions are never archived; the wording is in `strings.xml` |
 | Later stages | The approvals listed in M.2's "Approve first" column |
 
 ## M.11 Where settings go (Owner, 2026-11-16)
@@ -545,7 +546,7 @@ to the owner first.
 | Conversation index line on Check Database Integrity (G.13a) | Memory Backup & Restore | Unchanged |
 | Source lines: User, Companion, Date, Last Message Date, Source Conversation, then the important date (M.3) | Memory editor opened from the Memory Browser, directly under Tags | Owner decision of 2026-11-16 |
 | Word count and token-capacity meter (Step 5) | Top of memory creation, editing and reading views | Owner decision of 2026-11-17, corrected G34 |
-| Memory Handling Preferences (memory plan Phase 2) | Its own screen, opened from a row in the Memory Manager's Settings section | Placement by the rule; position and wording shown first |
+| Memory Handling Preferences (memory plan Phase 2) | Its own screen, opened from a row in the Memory Manager's Settings section, after Memory Context Helper Settings | Owner decision of 2026-11-17; wording in `strings.xml` |
 | Always, Retired and Dates views (Phases 2–4) | Memory Browser view dropdown | Owner design |
 | Other embedding models, local or API (G41) | AI Settings, Embedding Model | Placement by the rule; Later |
 | Live AI worker's model (G.11) | AI Settings | Placement by the rule; Later |

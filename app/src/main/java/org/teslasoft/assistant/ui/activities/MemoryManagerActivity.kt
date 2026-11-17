@@ -65,6 +65,7 @@ class MemoryManagerActivity : SettingsPageActivity() {
     private var rowAssistantAdvancedSettings: LinearLayout? = null
     private var rowAdvancedMemory: LinearLayout? = null
     private var rowMemoryContextHelper: LinearLayout? = null
+    private var rowMemoryHandling: LinearLayout? = null
     private var rowLorebookSettings: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,6 +91,7 @@ class MemoryManagerActivity : SettingsPageActivity() {
         rowAssistantAdvancedSettings = findViewById(R.id.row_assistant_advanced_settings)
         rowAdvancedMemory = findViewById(R.id.row_advanced_memory)
         rowMemoryContextHelper = findViewById(R.id.row_memory_context_helper)
+        rowMemoryHandling = findViewById(R.id.row_memory_handling)
         rowLorebookSettings = findViewById(R.id.row_lorebook_settings)
     }
 
@@ -145,6 +147,10 @@ class MemoryManagerActivity : SettingsPageActivity() {
 
         rowMemoryContextHelper?.setOnClickListener {
             startActivity(Intent(this, MemoryContextHelperSettingsActivity::class.java))
+        }
+
+        rowMemoryHandling?.setOnClickListener {
+            startActivity(Intent(this, MemoryHandlingPreferencesActivity::class.java))
         }
 
         rowLorebookSettings?.setOnClickListener {

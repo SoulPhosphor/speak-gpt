@@ -484,6 +484,21 @@ object MemorySeedCodec {
         val retrievalPolicy = if (root.has("retrieval_policy") && !root.isNull("retrieval_policy"))
             root.getJSONObject("retrieval_policy").toString() else null
 
+        // Memory Handling Preferences (memory plan Phase 2). Absent in older
+        // exports, and absent when the user never changed them: the restored
+        // store then uses the defaults. A missing field keeps its default.
+        val memoryHandling = if (root.has("memory_handling_preferences") &&
+            !root.isNull("memory_handling_preferences")
+        ) {
+            val h = root.getJSONObject("memory_handling_preferences")
+            MemoryHandlingPreferences(
+                deleteMovesToArchived = h.optBoolean(
+                    "delete_moves_to_archived",
+                    MemoryHandlingPreferences.DEFAULT.deleteMovesToArchived
+                )
+            )
+        } else null
+
         val transcripts = each(root, "transcripts").map { t ->
             TranscriptRecord(
                 transcriptId = t.reqStr("transcript_id"),
@@ -550,7 +565,8 @@ object MemorySeedCodec {
             modelRuleTags = modelRuleTags,
             modelRuleTagLinks = modelRuleTagLinks,
             memoryTypes = memoryTypes,
-            analysisBookmarks = analysisBookmarks
+            analysisBookmarks = analysisBookmarks,
+            memoryHandlingPreferences = memoryHandling
         )
     }
 
@@ -948,6 +964,12 @@ object MemorySeedCodec {
         })
 
         data.retrievalPolicyJson?.let { root.put("retrieval_policy", JSONObject(it)) }
+
+        data.memoryHandlingPreferences?.let { h ->
+            root.put("memory_handling_preferences", JSONObject().apply {
+                put("delete_moves_to_archived", h.deleteMovesToArchived)
+            })
+        }
 
         if (data.transcripts.isNotEmpty()) {
             root.put("transcripts", JSONArray().apply {

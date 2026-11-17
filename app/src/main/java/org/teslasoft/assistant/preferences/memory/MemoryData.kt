@@ -517,6 +517,21 @@ data class ArchivistSettingsRecord(
     val notes: String?
 )
 
+/**
+ * Memory Handling Preferences (memory plan Phase 2, D.12, D44). One stored
+ * row in `memory_handling_preferences`; a store without that row uses
+ * [DEFAULT]. The setting travels with every memory backup.
+ */
+data class MemoryHandlingPreferences(
+    /** Delete moves an in-use memory to Archived instead of removing it
+     *  permanently (D44, Owner 2026-11-17: on by default). */
+    val deleteMovesToArchived: Boolean
+) {
+    companion object {
+        val DEFAULT = MemoryHandlingPreferences(deleteMovesToArchived = true)
+    }
+}
+
 data class ProposalRecord(
     val proposalId: String,
     val targetType: String,
@@ -715,7 +730,10 @@ data class MemoryStoreData(
     // Stage-B bookmarks travel with transcript backups. Claims and frozen
     // ranges remain device-local, but the permanent reviewed boundary must
     // survive restore or already-terminal history would become eligible again.
-    val analysisBookmarks: List<AnalysisChatBookmark> = emptyList()
+    val analysisBookmarks: List<AnalysisChatBookmark> = emptyList(),
+    // Memory Handling Preferences (memory plan Phase 2). Null when the store
+    // has never saved them, or the backup predates them: the defaults apply.
+    val memoryHandlingPreferences: MemoryHandlingPreferences? = null
 )
 
 /**

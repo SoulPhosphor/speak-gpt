@@ -57,6 +57,7 @@ object MemorySharedRestoreRowFormat {
         Spec("modes", listOf("mode_id")),
         Spec("directives", listOf("directive_id")),
         Spec("archivist_settings", listOf("id")),
+        Spec("memory_handling_preferences", listOf("id")),
         Spec("proposals", listOf("proposal_id")),
         Spec("transcripts", listOf("transcript_id")),
         Spec("analysis_chat_bookmarks", listOf("chat_id")),

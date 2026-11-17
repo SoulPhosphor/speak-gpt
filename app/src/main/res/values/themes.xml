@@ -1427,34 +1427,20 @@
          sets only its icon and labels. -->
     <style name="Widget.App.ListTools.Action" parent="Widget.App.QuickTile.EditButton" />
 
-    <!-- Fills the space between the icons and the mode words. -->
+    <!-- Fills the space between the icons and the view dropdown. -->
     <style name="Widget.App.ListTools.Spacer" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">0dp</item>
         <item name="android:layout_weight">1</item>
     </style>
 
-    <!-- The Memories / Pending words. Code marks the current one selected;
-         its color comes from list_tools_mode_word_text. -->
-    <style name="Widget.App.ListTools.ModeWord" parent="">
-        <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:padding">@dimen/list_tools_mode_word_padding</item>
-        <item name="android:textColor">@color/list_tools_mode_word_text</item>
-        <item name="android:textSize">@dimen/list_tools_mode_word_text_size</item>
-        <item name="android:textStyle">bold</item>
-    </style>
+    <!-- The view dropdown (Memories, Pending, Archived): the canonical
+         dropdown control, standalone, so code sizes it to its longest view
+         with AppDropdown.sizeToOptions. Placement only; its appearance is
+         the canonical dropdown's. -->
+    <style name="Widget.App.ListTools.ViewSelector" parent="Widget.App.Dropdown.CanonicalValue" />
 
-    <!-- The "|" between the mode words. -->
-    <style name="Widget.App.ListTools.ModeSeparator" parent="">
-        <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:text">@string/mem_mode_separator</item>
-        <item name="android:textColor">?attr/appSubtleTextColor</item>
-        <item name="android:textSize">@dimen/list_tools_mode_word_text_size</item>
-    </style>
-
-    <!-- "N Memories Pending" under the mode words. -->
+    <!-- "N Memories Pending" under the view dropdown. -->
     <style name="Widget.App.ListTools.PendingCount" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
@@ -1462,12 +1448,13 @@
         <item name="android:textSize">@dimen/list_tools_pending_count_text_size</item>
     </style>
 
-    <!-- Shown right after the current mode word while filters are on. Hidden
-         as gone, so it takes no room until it shows; the mode group
-         then grows to make room for it. Its color is set here only. -->
+    <!-- Shown right after the view dropdown while filters narrow the current
+         view. Hidden as gone, so it takes no room until it shows. Its color
+         is set here only. -->
     <style name="Widget.App.ListTools.FilteredIcon" parent="">
         <item name="android:layout_width">@dimen/list_tools_filtered_icon_size</item>
         <item name="android:layout_height">@dimen/list_tools_filtered_icon_size</item>
+        <item name="android:layout_marginStart">@dimen/list_tools_filtered_icon_gap</item>
         <item name="android:src">@drawable/ic_filter_list</item>
         <item name="android:tint">?attr/colorPrimary</item>
         <item name="android:contentDescription">@string/mem_filtered_indicator</item>

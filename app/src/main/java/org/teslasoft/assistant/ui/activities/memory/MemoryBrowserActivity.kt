@@ -27,6 +27,8 @@ import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryScopeGrouping
+import org.teslasoft.assistant.preferences.memory.MemoryDeleteAction
+import org.teslasoft.assistant.preferences.memory.MemoryDeleteRules
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.PossibleMatchFinder
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
@@ -64,16 +66,15 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     @Volatile private var typeOptions: List<Pair<String, String>> = emptyList()
 
     /** Draft count in the current (global or scoped) view, for the count line
-     *  under the Memories | Pending toggle (owner design, July 8 2026
-     *  evening — hidden when nothing is pending). */
+     *  under the view dropdown (owner design, July 8 2026 evening — hidden
+     *  when nothing is pending). */
     @Volatile private var pendingCount: Int = 0
 
-    /** The two-mode view (owner design): "memories" = everything approved
-     *  (non-draft; archived/superseded keep their badges), "pending" = drafts
-     *  with the Accept / Delete / Edit (+ Add to Card) action words. Replaces
-     *  the old Pending banner + separate Pending screen AND the filter
-     *  panel's Status section (removed as a duplicate of this toggle). */
-    private var mode: String = "memories"
+    /** The view dropdown's current view (memory plan Phase 2): Memories,
+     *  Pending or Archived. [MemoryBrowserViews] decides which memories each
+     *  lists. Pending replaces the old Pending banner and separate Pending
+     *  screen and the filter panel's Status section. */
+    private var mode: String = MemoryBrowserViews.MEMORIES
 
     private var presetCompanionId: String? = null
     private var presetWorldId: String? = null
@@ -130,6 +131,17 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
     override fun showModeToggle(): Boolean = true
 
+    // Choosing memories to attach lists only memories in use: nothing
+    // pending or archived can be sent to the AI.
+    override fun viewOptions(): List<ScreenView> =
+        if (pickingMemories) {
+            listOf(ScreenView(MemoryBrowserViews.MEMORIES, getString(R.string.mem_mode_memories)))
+        } else listOf(
+            ScreenView(MemoryBrowserViews.MEMORIES, getString(R.string.mem_mode_memories)),
+            ScreenView(MemoryBrowserViews.PENDING, getString(R.string.mem_mode_pending)),
+            ScreenView(MemoryBrowserViews.ARCHIVED, getString(R.string.mem_status_archived))
+        )
+
     override fun onModeSelected(mode: String) {
         if (pickingMemories || this.mode == mode) return
         this.mode = mode
@@ -137,22 +149,24 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // read it (the Memory Assistant's View Pending Memories link writes
         // status={draft} to open this view pre-switched).
         MemoryBrowserFilterState.status.clear()
-        MemoryBrowserFilterState.status.add(if (mode == "pending") "draft" else "active")
+        MemoryBrowserFilterState.status.add(MemoryBrowserViews.statusFor(mode))
+        updateModeToggle(mode, pendingCountLine())
         reload()
     }
 
     // Count line under the toggle: "One Memory Pending" / "N Memories
     // Pending", hidden when nothing is pending (owner wording).
     override fun onRowsRendered() {
-        val countLine = when {
-            pendingCount <= 0 -> null
-            pendingCount == 1 -> getString(R.string.mem_pending_count_one)
-            else -> getString(R.string.mem_pending_count_many, pendingCount)
-        }
-        updateModeToggle(mode, countLine)
-        // The filter icon sits after the current mode word while any filter
-        // narrows that view (sort order is not a filter).
-        setFilteredMarker(if (isFiltered()) mode else null)
+        updateModeToggle(mode, pendingCountLine())
+        // The filter icon sits after the view dropdown while any filter
+        // narrows the current view (sort order is not a filter).
+        setFilteredMarker(isFiltered())
+    }
+
+    private fun pendingCountLine(): String? = when {
+        pendingCount <= 0 -> null
+        pendingCount == 1 -> getString(R.string.mem_pending_count_one)
+        else -> getString(R.string.mem_pending_count_many, pendingCount)
     }
 
     private fun isFiltered(): Boolean {
@@ -162,7 +176,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             f.importance.isNotEmpty() ||
             f.source != "all" ||
             f.tags.isNotEmpty() ||
-            (mode == "memories" && f.superseded != "hide")
+            (mode == MemoryBrowserViews.MEMORIES && f.superseded != "hide")
     }
 
     // Companions link (unscoped browser only).
@@ -188,14 +202,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         titleOverride = intent.getStringExtra("screenTitle")
         // An entry point that wrote status={draft} (the Memory Assistant's
         // View Pending Memories link) opens straight into Pending view.
-        mode = if (!pickingMemories && MemoryBrowserFilterState.status == setOf("draft")) "pending" else "memories"
+        mode = if (pickingMemories) MemoryBrowserViews.MEMORIES
+            else MemoryBrowserViews.viewFor(MemoryBrowserFilterState.status)
         super.onCreate(savedInstanceState)
         memorySelection.bind()
-        if (pickingMemories) {
-            findViewById<View>(R.id.btn_mode_pending).visibility = View.GONE
-            findViewById<View>(R.id.filtered_pending).visibility = View.GONE
-            findViewById<View>(R.id.mode_separator).visibility = View.GONE
-        }
+        updateModeToggle(mode, null)
         findViewById<android.widget.ImageButton>(R.id.btn_icon_legend).apply {
             visibility = View.VISIBLE
             setOnClickListener { showIconLegend() }
@@ -279,21 +290,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         if (f.importance.isNotEmpty()) {
             list = list.filter { it.importance.coerceIn(-2, 3).toString() in f.importance }
         }
-        // The mode toggle IS the draft split (owner design, July 8 2026
-        // evening): Pending = drafts only; Memories = everything approved
-        // (non-draft). Within Memories, the Superseded Memories filter (owner
-        // ruling, Aug 3 2026) decides whether old versions show: Hide =
-        // active + archived only (the default), Include = active + archived +
-        // superseded together, Only = just superseded.
-        list = if (mode == "pending") {
-            list.filter { it.status == "draft" }
-        } else {
-            when (MemoryBrowserFilterState.superseded) {
-                "only" -> list.filter { it.status == "superseded" }
-                "include" -> list.filter { it.status != "draft" }
-                else -> list.filter { it.status != "draft" && it.status != "superseded" }
-            }
-        }
+        // The view dropdown decides which statuses are listed (memory plan
+        // Phase 2); within Memories the Superseded Memories filter (owner
+        // ruling, Aug 3 2026) decides whether old versions show.
+        val superseded = MemoryBrowserFilterState.superseded
+        list = list.filter { MemoryBrowserViews.lists(mode, it.status, superseded) }
         if (f.source != "all") list = list.filter { sourceKey(it.origin) == f.source }
         if (f.tags.isNotEmpty()) {
             val lowered = f.tags.map { it.lowercase() }.toSet()
@@ -314,10 +315,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     private fun rowFor(m: MemoryRecord, supersededAt: String?): MemoryRow {
         val tags = parseTags(m.tagsJson)
         val tagsLine = if (tags.isEmpty()) null else formatTagsLine(tags)
-        val pending = mode == "pending"
-        // In Pending view every row is a draft, so the "Pending" badge would
-        // repeat the mode — suppressed, same reasoning as the Active badge.
-        val badge = if (m.status == "active" || pending) null else {
+        val pending = mode == MemoryBrowserViews.PENDING
+        // In Pending and Archived every row has the view's own status, so a
+        // badge would only repeat the view's name — suppressed, the same
+        // reasoning as the Active badge.
+        val badge = if (m.status == "active" || mode != MemoryBrowserViews.MEMORIES) null else {
             val status = statusLabel(m.status)
             MemorySupersessionPresentation.badge(
                 m.status, status, supersededAt
@@ -487,14 +489,19 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             menu.menu.add(0, 5, 0, getString(R.string.action_restore))
         }
         menu.menu.add(0, 6, 0, getString(R.string.action_history))
-        menu.menu.add(0, 7, 0, getString(R.string.action_delete))
+        // In Archived, removal is always permanent, so it says so (memory
+        // plan Phase 2); elsewhere Delete follows Memory Handling Preferences.
+        menu.menu.add(
+            0, 7, 0,
+            getString(if (m.status == "archived") R.string.memory_delete_permanently else R.string.action_delete)
+        )
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> openEditor(m.memoryId)
                 4 -> setStatus(m.memoryId, "archived")
                 5 -> setStatus(m.memoryId, "active")
                 6 -> showHistory(m.memoryId)
-                7 -> confirmDelete(m)
+                7 -> deleteMemory(m)
             }
             true
         }
@@ -529,7 +536,22 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
     /* ------------------------------ actions ------------------------------ */
 
-    private fun setStatus(memoryId: String, status: String) {
+    /** Delete from the row menu (memory plan Phase 2, D44): an in-use memory
+     *  moves to Archived without a pop-up while Delete Moves to Archived is
+     *  on; otherwise the permanent-delete confirmation is shown. */
+    private fun deleteMemory(m: MemoryRecord) {
+        runOffThread {
+            val preferences = MemoryStore.getInstance(this).getMemoryHandlingPreferences()
+            when (MemoryDeleteRules.forDelete(m.status, preferences)) {
+                MemoryDeleteAction.MOVE_TO_ARCHIVED -> setStatus(m.memoryId, "archived") {
+                    Toast.makeText(this, R.string.memory_moved_to_archived, Toast.LENGTH_SHORT).show()
+                }
+                MemoryDeleteAction.CONFIRM_PERMANENT_DELETE -> runOnUiThread { confirmDelete(m) }
+            }
+        }
+    }
+
+    private fun setStatus(memoryId: String, status: String, onDone: (() -> Unit)? = null) {
         // The library is changing, so any cached Possible Match results may now
         // be stale — drop them; the pending cards re-check on the next bind.
         matchState.clear()
@@ -546,17 +568,22 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             }
             store.setMemoryStatus(memoryId, status, getString(R.string.memory_change_status))
             if (status == "active") Librarian.getInstance(this).reindexMemory(memoryId)
-            runOnUiThread { reload() }
+            runOnUiThread {
+                onDone?.invoke()
+                reload()
+            }
         }
     }
 
-    private fun confirmDelete(m: MemoryRecord) {
+    /** The permanent-delete confirmation. Discarding a Pending suggestion
+     *  uses the same pop-up worded for Discard (owner wording, Stage 5). */
+    private fun confirmDelete(m: MemoryRecord, discard: Boolean = false) {
         // Titles are retired (§3.1): identify the memory by a content preview.
         val preview = m.content.substringBefore('\n').trim().take(80)
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_delete_confirm_title)
+            .setTitle(if (discard) R.string.memory_discard_confirm_title else R.string.memory_delete_confirm_title)
             .setMessage(getString(R.string.memory_delete_confirm_msg, preview))
-            .setPositiveButton(R.string.btn_delete) { _, _ ->
+            .setPositiveButton(if (discard) R.string.memory_discard_confirm_button else R.string.btn_delete) { _, _ ->
                 matchState.clear()
                 runOffThread {
                     MemoryStore.getInstance(this).deleteMemory(m.memoryId)
@@ -648,11 +675,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         setStatus(row.id, "active")
     }
 
-    // Discard reuses the app's existing permanent-delete confirmation.
+    // Discard removes the suggestion permanently after the Discard pop-up.
     override fun onDiscard(row: MemoryRow) {
         runOffThread {
             val m = MemoryStore.getInstance(this).getMemory(row.id) ?: return@runOffThread
-            runOnUiThread { confirmDelete(m) }
+            runOnUiThread { confirmDelete(m, discard = true) }
         }
     }
 
