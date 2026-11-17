@@ -75,7 +75,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 35
+        private const val DATABASE_VERSION = 36
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -1018,6 +1018,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.execSQL("CREATE INDEX idx_possible_match_hints_existing ON memory_possible_match_hints(existing_memory_id)")
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
         createMemorySourcesTable(db)
+        createMemoryHandlingPreferencesTable(db)
         db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
         db.execSQL("CREATE INDEX idx_transcripts_chat ON transcripts(chat_id)")
         db.execSQL("CREATE INDEX idx_transcripts_chat_order ON transcripts(chat_id, started_at, transcript_id)")
@@ -2207,6 +2208,32 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "35")
             )
         }
+        if (oldVersion < 36) {
+            // Memory Handling Preferences (memory plan Phase 2). Additive
+            // only: no row is written, so every existing installation reads
+            // the defaults until the user changes the setting.
+            createMemoryHandlingPreferencesTable(db)
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "36")
+            )
+        }
+    }
+
+    /**
+     * Memory Handling Preferences (memory plan Phase 2, D.12): a single row,
+     * id 1, written only when the user saves a preference. An absent row
+     * means [MemoryHandlingPreferences.DEFAULT]. Later phases add their
+     * preferences (the Always limit, the fade time) as further columns.
+     */
+    private fun createMemoryHandlingPreferencesTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS memory_handling_preferences (" +
+                "id INTEGER PRIMARY KEY CHECK (id = 1), " +
+                "delete_moves_to_archived INTEGER NOT NULL DEFAULT 1 " +
+                "CHECK (delete_moves_to_archived IN (0, 1)))"
+        )
     }
 
     /**
@@ -2636,6 +2663,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     }
                     db.insertWithOnConflict("retrieval_policy", null, values, SQLiteDatabase.CONFLICT_REPLACE)
                     report.addAdded("retrieval policy")
+                }
+                data.memoryHandlingPreferences?.let { p ->
+                    writeMemoryHandlingPreferences(db, p)
+                    report.addAdded("memory handling preferences")
                 }
             }
 
@@ -3477,7 +3508,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             modelRuleTags = modelRuleTags,
             modelRuleTagLinks = modelRuleTagLinks,
             memoryTypes = getMemoryTypes(),
-            analysisBookmarks = getAnalysisBookmarks()
+            analysisBookmarks = getAnalysisBookmarks(),
+            memoryHandlingPreferences = storedMemoryHandlingPreferences(db)
         )
     }
 
@@ -4768,6 +4800,36 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             put("policy_json", policyJson)
         }
         writableDatabase.insertWithOnConflict("retrieval_policy", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /* ------------------- Memory Handling Preferences ------------------- */
+
+    /** The user's Memory Handling Preferences, or the defaults when none are
+     *  saved (memory plan Phase 2). */
+    fun getMemoryHandlingPreferences(): MemoryHandlingPreferences =
+        storedMemoryHandlingPreferences(readableDatabase) ?: MemoryHandlingPreferences.DEFAULT
+
+    fun setMemoryHandlingPreferences(preferences: MemoryHandlingPreferences) {
+        writeMemoryHandlingPreferences(writableDatabase, preferences)
+    }
+
+    private fun storedMemoryHandlingPreferences(db: SQLiteDatabase): MemoryHandlingPreferences? =
+        db.query(
+            "memory_handling_preferences", arrayOf("delete_moves_to_archived"),
+            "id = 1", null, null, null, null
+        ).use {
+            if (!it.moveToFirst()) null
+            else MemoryHandlingPreferences(deleteMovesToArchived = it.getInt(0) != 0)
+        }
+
+    private fun writeMemoryHandlingPreferences(db: SQLiteDatabase, preferences: MemoryHandlingPreferences) {
+        val values = ContentValues().apply {
+            put("id", 1)
+            put("delete_moves_to_archived", if (preferences.deleteMovesToArchived) 1 else 0)
+        }
+        db.insertWithOnConflict(
+            "memory_handling_preferences", null, values, SQLiteDatabase.CONFLICT_REPLACE
+        )
     }
 
     fun getWorld(worldId: String): WorldRecord? =

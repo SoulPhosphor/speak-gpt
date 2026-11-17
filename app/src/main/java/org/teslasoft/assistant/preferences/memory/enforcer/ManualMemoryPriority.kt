@@ -19,6 +19,8 @@ object ManualMemoryPriority {
         return unique.map { id ->
             val memory = checkNotNull(load(id)) { "A selected memory is no longer available." }
             check(memory.status != "draft") { "A selected memory is no longer approved." }
+            // Nothing archived is sent to the AI (memory plan Phase 2).
+            check(memory.status != "archived") { "A selected memory is no longer available." }
             RetrievableMemory(
                 memoryId = memory.memoryId, scope = memory.scope, content = memory.content,
                 embeddingText = memory.embeddingText, importance = memory.importance,

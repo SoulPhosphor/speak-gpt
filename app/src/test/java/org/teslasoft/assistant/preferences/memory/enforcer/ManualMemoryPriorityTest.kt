@@ -59,6 +59,10 @@ class ManualMemoryPriorityTest {
     fun unapprovedDraftIsNotSilentlyInjected() {
         ManualMemoryPriority.resolve(listOf("draft")) { memory(it).copy(status = "draft") }
     }
+    @Test(expected = IllegalStateException::class)
+    fun archivedMemoryIsNeverSent() {
+        ManualMemoryPriority.resolve(listOf("old")) { memory(it).copy(status = "archived") }
+    }
     @Test(expected = IllegalArgumentException::class)
     fun malformedCallerCannotBypassFiveMemoryLimit() {
         ManualMemoryPriority.resolve((1..6).map { "m$it" }, ::memory)

@@ -2899,6 +2899,17 @@
     <!-- Delete confirm -->
     <string name="memory_delete_confirm_title">Delete this memory?</string>
     <string name="memory_delete_confirm_msg">“%1$s” will be permanently removed. This cannot be undone.</string>
+    <!-- Data control (owner-approved wording, Stage 5, memory plan Phase 2).
+         The Discard pop-up uses memory_delete_confirm_msg for its message. -->
+    <string name="memory_discard_confirm_title">Discard this memory?</string>
+    <string name="memory_discard_confirm_button">Discard</string>
+    <string name="memory_delete_permanently">Delete Permanently</string>
+    <string name="memory_moved_to_archived">Memory Moved to Archived</string>
+    <string name="row_memory_handling_title">Memory Handling Preferences</string>
+    <string name="row_memory_handling_subtitle">Manage how memories are archived or permanently deleted.</string>
+    <string name="title_memory_handling_preferences">Memory Handling Preferences</string>
+    <string name="memory_handling_delete_moves_title">Delete Moves to Archived</string>
+    <string name="memory_handling_delete_moves_subtitle">When off memories will be deleted permanently.</string>
     <!-- Protect dialog -->
     <string name="memory_protect_dialog_msg">Protected memories are injected together with handling notes so the model treats them with care. One handling note per line.</string>
     <string name="memory_protect_handling_hint">e.g. Follow the user\'s lead; never assume how they feel about it</string>

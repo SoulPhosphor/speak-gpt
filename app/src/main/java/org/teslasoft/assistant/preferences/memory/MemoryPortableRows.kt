@@ -37,6 +37,7 @@ object MemoryPortableRowFormat {
         Spec("modes", listOf("mode_id")),
         Spec("directives", listOf("directive_id")),
         Spec("archivist_settings", listOf("id")),
+        Spec("memory_handling_preferences", listOf("id")),
         Spec("proposals", listOf("proposal_id")),
         Spec("transcripts", listOf("transcript_id")),
         Spec("analysis_chat_bookmarks", listOf("chat_id")),
@@ -55,7 +56,7 @@ object MemoryPortableRowFormat {
      * before one existed (an older database file, or older readable JSON)
      * reads as having none of its rows, never as an error.
      */
-    val tablesAddedLater: Set<String> = setOf("memory_sources")
+    val tablesAddedLater: Set<String> = setOf("memory_sources", "memory_handling_preferences")
 
     fun specs(group: MemoryPortableGroup): List<Spec> = when (group) {
         MemoryPortableGroup.MEMORIES -> memorySpecs
