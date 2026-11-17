@@ -106,6 +106,16 @@ class ArchivistPromptTest {
         assertFalse(ArchivistPrompt.withAnalysisNote("BASE", "   ").contains("Analysis Note"))
     }
 
+    @Test
+    fun customPromptStillGetsLosslessProposalSplittingInstructions() {
+        val prompt = ArchivistPrompt.withCurrentTypes("CUSTOM EXTRACTION STYLE", emptyList())
+        assertTrue(prompt.startsWith("CUSTOM EXTRACTION STYLE"))
+        assertTrue(prompt.contains("without losing information"))
+        assertTrue(prompt.contains("including its tags"))
+        assertFalse(prompt.contains("1,500"))
+        assertFalse(prompt.contains("1,250"))
+    }
+
     private fun transcript(content: String, startedAt: String? = "2026-07-12T10:00:00Z"): TranscriptRecord =
         TranscriptRecord(
             transcriptId = "t-1",

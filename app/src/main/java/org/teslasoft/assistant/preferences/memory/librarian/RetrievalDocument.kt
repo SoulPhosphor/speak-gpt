@@ -41,6 +41,12 @@ object RetrievalDocument {
      *  version. Old plain-tag vectors simply never match this key. */
     fun effectiveKey(modelTag: String): String = "$modelTag|$DOC_VERSION"
 
+    /** Exact tag interpretation used by indexing, live meters and Save checks. */
+    fun parseTags(tagsJson: String): List<String> = try {
+        val array = org.json.JSONArray(tagsJson)
+        (0 until array.length()).mapNotNull { array.optString(it).takeIf { tag -> tag.isNotBlank() } }
+    } catch (_: Exception) { emptyList() }
+
     /** The text embedded for one memory. Title is retired and never included
      *  (§3.1); the document is current content, the optional condensed hint,
      *  and tags. */

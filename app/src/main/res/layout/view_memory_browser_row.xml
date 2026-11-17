@@ -25,6 +25,10 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintVertical_bias="0"
             style="@style/Widget.App.MemoryBrowser.Body">
+    <org.teslasoft.assistant.ui.widgets.MemoryTokenMeter
+        android:id="@+id/memory_length_meter"
+        style="@style/Widget.App.MemoryTokens" />
+
             <TextView
                 android:id="@+id/row_title"
                 android:text="@string/label_memory"

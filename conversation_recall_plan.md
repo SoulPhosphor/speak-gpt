@@ -88,7 +88,7 @@ it starts (M.10).
 | 1 | **Memory provenance** | M.3: source storage and database migration; the conversation recorded by the Memory Assistant; backups, imports, restores and merges; conversation participants, dates and link in the memory editor | Nothing unbuilt | Nothing (G43 decided) | The conversation a memory came from: its participants, its dates, and a link to it |
 | 2 | **Context assistance: Off and Code-based** | Step 4a: the context-assistance interface, no helper and Code-based, the +3 top-match rule, Memory Context Helper Settings with its toggle and dropdown | #205 and #206 merged (done) | The Step 4a questions in M.10 | Follow-ups keep their memories; the context-assistance setting |
 | 3 | **Context assistance: API AI** | Step 4b, with the Memory Context Helper Tool API screen in AI Settings (M.4) | Stage 2 | The Step 4b questions in M.10 | The API AI choice and the Memory Context Helper Tool API screen |
-| 4 | **Memory length limit** | Step 5: word count under every memory editor, the saving limit, Memory Assistant splitting | Step 1 (done) | Open parts of G34 | Word count under memory fields |
+| 4 | **Memory length limit** | Step 5: informational word count, live full-input token meter, exact token saving check, lossless Memory Assistant splitting | Step 1 (done) | Nothing (corrected G34 decided) | Word count, token usage and filling bar |
 | 5 | **Data control** | Memory plan Phase 2: the view dropdown, Retired, Memory Handling Preferences, Delete to Retired, with every new field in backups | Stage 1 (both are expected to change the memory database; building them one after the other avoids competing migrations) | Wording and layout; D44 default | Retired view and Memory Handling Preferences |
 | 6 | **Conversation test chats** | Step 6 | Nothing unbuilt | Nothing | Nothing |
 | 7 | **Conversation index: cutter and stores** | Steps 7 and 8 | Stage 6; Step 1 (done) | G35 | Nothing |
@@ -544,7 +544,7 @@ to the owner first.
 | Where the user installs a model in no-model notices (G.13b, G31) | AI Settings, Embedding Model | Location updated; the wording is still a proposal |
 | Conversation index line on Check Database Integrity (G.13a) | Memory Backup & Restore | Unchanged |
 | Source lines: User, Companion, Date, Last Message Date, Source Conversation, then the important date (M.3) | Memory editor opened from the Memory Browser, directly under Tags | Owner decision of 2026-11-16 |
-| Word count and length limit (Step 5) | Every memory editor | Owner decision of 2026-11-12 |
+| Word count and token-capacity meter (Step 5) | Top of memory creation, editing and reading views | Owner decision of 2026-11-17, corrected G34 |
 | Memory Handling Preferences (memory plan Phase 2) | Its own screen, opened from a row in the Memory Manager's Settings section | Placement by the rule; position and wording shown first |
 | Always, Retired and Dates views (Phases 2–4) | Memory Browser view dropdown | Owner design |
 | Other embedding models, local or API (G41) | AI Settings, Embedding Model | Placement by the rule; Later |
@@ -2894,64 +2894,67 @@ measurements and verification results.
   physical phone. Local AI is not built, but nothing in the interface
   needs to change to add it.
 
-### Step 5: the memory word count and length limit (Careful)
+### Step 5: memory word count and exact token capacity (Careful)
+
+**Owner (2026-11-17):** the restriction is the selected embedding model's actual
+reading capacity, not a word count. No 1,500-word or 1,250-word saving cap and
+no word-limit warnings are built.
 
 **Agent checklist for this step**
-- **Prerequisite:** Step 1 complete. **Approval gate:** Ask the owner to settle every remaining G34 wording and over-limit behavior choice **before** writing those choices into code or tests.
-- **Change:** Add the right-aligned counter to every saved-memory editor, a full-input token limit on saving, and splitting of over-length Memory Assistant proposals without loss.
-- **Preserve:** Existing memory text; never shorten it automatically. Count user-visible words separately from the model's complete input (content, tags, extra search text, prefix, and markers).
-- **Verify and report:** Counter changes while typing; approved limit and early-token-limit notices work; an oversized proposal is split with nothing discarded. List the affected editors in the PR.
+- **Prerequisite:** Step 1 complete. **Approval:** the corrected counter,
+  meter, saving behavior and error below are decided; do not reopen them.
+- **Change:** show the informational count exactly as "348 Words", alongside
+  actual usage such as "1,042 / 2,048 Tokens" and a filling bar. Put the meter
+  at the top while creating, editing or reading a memory; keep it visible in
+  the expanded editor. Show it for each memory in the browser, Pending and
+  Possible Match Review, including that screen's inline editor.
+- **Authoritative calculation:** use the complete retrieval document from
+  `RetrievalDocument.semanticDocument`: content, any extra searchable text and
+  tags. Include the selected embedding model's document prefix and tokenizer
+  special tokens, using its exact `countTokens()` and stored-text capacity.
+  Titles, vibe and fields the embedding model does not read are not counted.
+  The word counter counts only the content and never controls saving.
+- **Live behavior:** calculate off the UI thread and update as relevant fields
+  change. Cancel obsolete work and never display an older result as current.
+  Refresh after a model change. The displayed usage and the Save gate use the
+  same calculation; Save checks a fresh snapshot before any write. Editing
+  predicts the exact stored document: the existing source-change rule clears
+  a derived search hint when content or tags change. Reading an unchanged
+  stored memory still counts its complete retained hint.
+- **Saving:** permit a document that fits the actual token capacity, including
+  one whose word count exceeds the old estimate. Block one that exceeds the
+  token capacity, keeping every field and all entered text intact. Show only:
+  **Memory Cannot Be Saved** / "This memory exceeds the embedding model's
+  reading limit." / **Okay**. No advice or instructions are added.
+- **Unavailable model:** never show a fabricated zero or estimate. Without an
+  installed model the token figures are unavailable; preserve the existing
+  ability to create memories without an embedding model. A tokenizer failure
+  with an installed model must not bypass the Save check.
+- **Preserve:** do not automatically alter, shorten, discard or migrate any
+  existing memory text. Existing/imported text remains readable in full; the
+  meter shows its actual usage. No separate legacy-memory warning scheme.
+- **Memory Assistant:** tell it to split large subjects into separate proposed
+  memories without losing information. Also enforce this in code before the
+  proposed memories are stored: split oversized generated content losslessly
+  against the same complete-input calculation. Preserve scope, Type, targets,
+  tags, relationship hints and whole-conversation sources on the resulting
+  proposals. Deduplicate final parts within the request as well as against
+  stored memories, merging additional tags and relationship hints when they
+  fit; preserve separate metadata groups if their union exceeds capacity.
+  A proposal's parts must not be cut off by Maximum Suggestions.
+  Do not alter the lorebook analysis mode or stored memories.
+- **Read:** `ui-style-guide.md` (fields, counters, progress bars and dialogs),
+  `ui-style-adoption.md`, the affected editor/reader layouts and code,
+  `RetrievalDocument.kt`, `HfTokenizer.kt`, `EmbeddingModels.kt`,
+  `OnnxEmbeddingModel.kt`, and the Memory Assistant's `archivist/` path.
+- **Verify and report:** live updates to text and tags; metadata, prefixes and
+  special tokens included; exact capacity accepted and overflow blocked; stale
+  calculations discarded; model changes reflected; Save and display agree;
+  all oversized proposal text and metadata preserved across parts. List the
+  affected editors/readers in the PR. Run `testDebugUnitTest`, `assembleBeta`
+  and `assembleDebugAndroidTest`; verify the Beta identity. Write evidence to
+  `memory baseline.md`, the G.16 destination for saved-memory work.
 
-**Owner (2026-11-12).**
-- In the Memory Browser, under the box where a memory is typed, aligned
-  to the right, show how many words the memory holds. This is shown for
-  each memory.
-- When the count reaches 1,500 the line turns red and reads:
-  "Word Limit Reached: 1,500 Words Maximum".
-- The Memory Assistant must split a large subject into separate proposed
-  memories. It must not fail, or throw away a proposed memory, because it
-  is too long.
-
-- **Goal:** no saved memory is longer than the embedding model can read,
-  and the user can always see how long a memory is.
-- **Needs first:** Step 1, which raises the model's reading limit to
-  2,048 tokens (about 1,500 words) and adds the real token count.
-- **Before building, the owner approves (G34):** the exact text of the
-  count before the limit is reached; what happens when the user tries to
-  save a memory that is over the limit; what is shown in the rare case
-  below; how memories that are already too long are marked; and the exact
-  words added to the Memory Assistant's instructions.
-- **The rare case.** The model's limit is counted in its own units, not
-  in words. Ordinary English fits 1,500 words. Text with many unusual
-  names, numbers, or another language can reach the model's limit sooner.
-  The red line must not say 1,500 when the real limit was reached at a
-  lower count, so that case needs its own approved wording.
-- **What is counted.** The model does not read only what the user typed.
-  It reads the memory's content, any extra search text stored with the
-  memory, its tags, and the model's own instruction words and markers
-  (`RetrievalDocument.kt`, `OnnxEmbeddingModel.kt`). The check on saving
-  counts all of that together, in the model's units, with the counter
-  from Step 1. The word count the user sees counts the words they typed.
-- **Until Step 5 is built.** Step 1 raises the limit but does not stop
-  a memory from being longer than it. Such a memory is still read only up
-  to the limit, as today. Step 1 adds no new cutting; Step 5 closes
-  the gap.
-- **Read:** `ui-style-guide.md`, "Field error and counter lines" (it has
-  a right-aligned counter under a field, and a counter for a maximum);
-  `ui-style-adoption.md`; `activity_memory_editor.xml` and its screen
-  code; the Memory Assistant's instructions in `archivist/`.
-- **Build:** the count line in every place a memory's text is typed or
-  edited. The builder finds those places in the code and lists them in
-  the pull request. The count uses the shared counter style; no
-  appearance is written into a layout or into Kotlin. The check on
-  saving. The Memory Assistant change, with a test that an over-length
-  proposed memory is split and nothing is discarded.
-- **Must not change:** the text of any existing memory. Nothing is ever
-  shortened automatically.
-- **Done when:** the count updates as the user types; the red line
-  appears at the limit with the approved wording; a memory over the
-  limit cannot be saved without the user being told why and what to do;
-  and the Memory Assistant test passes.
 
 ### Step 6: the conversation test set (Routine with these instructions)
 
@@ -3390,8 +3393,8 @@ about to start. Each has a recommendation.
 | G30 | Is recall offered without an embedding model? | **Decided (owner, 2026-11-12):** no. Conversation recall requires the embedding model. Lorebook keyword matching is separate and keeps working whenever the lorebook is on | Decided |
 | G31 | What the user sees when the required on-device model is missing, removed, or unusable | Open for exact approval. G.13b proposes separate wording for trying to enable the feature with no model and for an installed feature becoming unavailable, each with an Open Model Settings action | Step 11 |
 | G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | **Superseded (owner, 2026-11-16):** searching with the previous messages is not the carry-over method and is not a context-assistance choice. Replaced by G37 and G38 | Superseded |
-| G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | Follows from the owner's decision of 2026-11-12 that a memory may hold 1,500 words (G34): that limit is not true unless the model reads that much. Written into Step 1. Speed and memory use on the phone are checked before it ships | Step 1 |
-| G34 | How is a saved memory limited to what the model can read, and how is its length shown? | **Decided (owner, 2026-11-12):** a word count under the memory box, aligned right, for each memory; at 1,500 it turns red and reads "Word Limit Reached: 1,500 Words Maximum"; the Memory Assistant splits a large subject into separate proposed memories and never fails or discards one for length. Still open, asked before Step 5: the count's text before the limit; what happens on saving over the limit; the wording when the model's real limit is reached below 1,500 words; how existing over-length memories are marked; the words added to the Memory Assistant's instructions | Step 5 |
+| G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | **Decided:** Step 1 reads saved memories up to the model's full 2,048-token capacity. G34 uses the actual model capacity, not a word-count approximation. Speed and memory use on the phone are checked before it ships | Step 1 |
+| G34 | How is a saved memory limited to what the model can read, and how is its length shown? | **Decided (owner, 2026-11-17):** informational content count exactly "348 Words"; actual complete-input tokens against the selected embedding model's capacity, plus a filling bar at the top of creating/editing/reading views. Exact local token counting off the UI thread, including content, extra searchable text, tags, document prefix and special tokens; the same fresh calculation gates Save. No word-based saving cap or warnings. Overflow pop-up: **Memory Cannot Be Saved** / "This memory exceeds the embedding model's reading limit." / **Okay**, without advice; all entered and stored text preserved. The Memory Assistant splits oversized proposals without losing information; splitting is also enforced in code. No separate existing-overlength-memory design. See the corrected Step 5 work order | Decided |
 | G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before Step 7. No builder treats it as approved before then | Step 7 |
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |

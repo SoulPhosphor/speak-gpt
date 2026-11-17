@@ -587,6 +587,7 @@ class Librarian private constructor(private val appContext: Context) {
     /** Force a reload next time (after a model download/removal). */
     @Synchronized
     fun invalidateModel() {
+        EmbeddingTokenCounter.invalidate()
         try { model?.close() } catch (_: Throwable) { }
         model = null
         modelLoadFailed = false
@@ -969,10 +970,7 @@ class Librarian private constructor(private val appContext: Context) {
     }
 
     /** tags_json -> list; a garbled column degrades to "no tags", never an error. */
-    private fun parseTags(tagsJson: String): List<String> = try {
-        val arr = org.json.JSONArray(tagsJson)
-        (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
-    } catch (_: Exception) { emptyList() }
+    private fun parseTags(tagsJson: String): List<String> = RetrievalDocument.parseTags(tagsJson)
 
     /**
      * (Re)embed every active memory with the current model, replacing vectors

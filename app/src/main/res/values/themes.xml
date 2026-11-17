@@ -3984,4 +3984,40 @@
         <item name="android:src">@drawable/ic_report</item>
         <item name="android:tint">?attr/colorError</item>
     </style>
+    <!-- Complete-input token usage; no appearance is set in individual screens. -->
+    <style name="Widget.App.MemoryTokens" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingVertical">@dimen/memory_token_meter_gap</item>
+    </style>
+    <style name="Widget.App.MemoryTokens.Page" parent="Widget.App.MemoryTokens">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_marginHorizontal">@dimen/memory_token_meter_page_inset</item>
+    </style>
+    <style name="Widget.App.MemoryTokens.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+    <style name="Widget.App.MemoryTokens.Words" parent="Widget.App.Field.Counter">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:gravity">start</item>
+    </style>
+    <style name="Widget.App.MemoryTokens.Tokens" parent="Widget.App.Field.Counter.Limit">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_marginTop">0dp</item>
+    </style>
+    <style name="Widget.App.MemoryTokens.Bar" parent="Widget.Material3.LinearProgressIndicator">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/memory_token_meter_gap</item>
+        <item name="trackThickness">@dimen/memory_token_meter_track</item>
+        <item name="trackCornerRadius">@dimen/memory_token_meter_track</item>
+        <item name="indicatorColor">?attr/colorPrimary</item>
+        <item name="trackColor">?attr/colorSurfaceContainerHighest</item>
+    </style>
 </resources>

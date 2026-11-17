@@ -8,5 +8,8 @@
             android:exported="true"
             android:grantUriPermissions="true"
             android:permission="android.permission.MANAGE_DOCUMENTS" />
+        <activity
+            android:name="org.teslasoft.assistant.ui.widgets.MemoryTokenMeterTestActivity"
+            android:exported="false" />
     </application>
 </manifest>

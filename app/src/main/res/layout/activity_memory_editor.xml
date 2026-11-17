@@ -44,6 +44,13 @@
             android:tooltipText="@string/btn_save" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+    <org.teslasoft.assistant.ui.widgets.MemoryTokenMeter
+        android:id="@+id/memory_length_meter"
+        style="@style/Widget.App.MemoryTokens.Page"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/action_bar" />
+
     <ScrollView
         android:id="@+id/scroll"
         android:layout_width="0dp"
@@ -53,7 +60,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+        app:layout_constraintTop_toBottomOf="@id/memory_length_meter">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -351,7 +358,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+        app:layout_constraintTop_toBottomOf="@id/memory_length_meter">
 
         <FrameLayout style="@style/Widget.App.Field.ExpandedPanel">
 

@@ -110,6 +110,10 @@ Only when the user repeatedly corrected the SAME habit of the AI model in this c
      */
     fun withCurrentTypes(base: String, types: List<Pair<String, String>>): String {
         val sb = StringBuilder(base.trim())
+        sb.append("\n\n## Memory Length\n")
+        sb.append("Split large subjects into separate proposed memories without losing information. ")
+        sb.append("Each proposed memory, including its tags, must fit the embedding model's reading capacity. ")
+        sb.append("Never omit information or reject a proposal because of its length.")
         sb.append("\n\n## Available Memory Types")
         if (types.isEmpty()) {
             sb.append(

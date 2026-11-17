@@ -21,6 +21,11 @@ import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
+import androidx.core.widget.doAfterTextChanged
+import org.teslasoft.assistant.ui.widgets.MemoryTokenMeter
+import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter
+import org.teslasoft.assistant.preferences.memory.librarian.MemoryTokenBudget
+
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -75,6 +80,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
     /** Guards Save until the record + pick lists have loaded, so an edit is
      *  never overwritten with the form's defaults before it populates. */
     private var ready = false
+    private var tokenMeter: MemoryTokenMeter? = null
 
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
@@ -167,6 +173,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
         titleView = findViewById(R.id.activity_title)
         fieldTitle = findViewById(R.id.field_mem_title)
         fieldVibe = findViewById(R.id.field_mem_vibe)
+        tokenMeter = findViewById(R.id.memory_length_meter)
         fieldContent = findViewById(R.id.field_mem_content)
         fieldContentExpanded = findViewById(R.id.field_mem_content_expanded)
         panelContentExpanded = findViewById(R.id.panel_content_expanded)
@@ -214,6 +221,10 @@ class MemoryEditorActivity : SettingsPageActivity() {
         btnHeaderSave?.setOnClickListener { save(activate = false) }
         findViewById<View>(R.id.btn_expand_content)?.setOnClickListener { setContentExpanded(true) }
         findViewById<View>(R.id.btn_collapse_content)?.setOnClickListener { setContentExpanded(false) }
+
+        fieldContent?.doAfterTextChanged { refreshTokenMeter() }
+        fieldContentExpanded?.doAfterTextChanged { refreshTokenMeter() }
+        findViewById<TextInputEditText>(R.id.field_mem_tags)?.doAfterTextChanged { refreshTokenMeter() }
 
         // Preset scope/target for a new memory opened from a scoped browser door.
         intent.getStringExtra("presetScope")?.takeIf { it in SCOPE_KEYS }?.let { currentScope = it }
@@ -326,6 +337,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
                 }
                 refreshScope()
                 ready = true
+                refreshTokenMeter()
                 record?.let { loadSources(it.memoryId) }
             }
         }
@@ -685,8 +697,8 @@ class MemoryEditorActivity : SettingsPageActivity() {
         }
         val title = fieldTitle?.text?.toString()?.trim().orEmpty()
         val vibe = fieldVibe?.text?.toString()?.trim().orEmpty()
-        val content = activeContentField()?.text?.toString()?.trim().orEmpty()
-        if (content.isEmpty()) {
+        val content = activeContentField()?.text?.toString().orEmpty()
+        if (content.isBlank()) {
             btnHeaderSave?.let { SaveIconFlash.flashError(it) }
             Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
             return
@@ -705,7 +717,15 @@ class MemoryEditorActivity : SettingsPageActivity() {
 
         runOffThread(onFailure = { btnHeaderSave?.let { SaveIconFlash.flashError(it) } }) {
             val store = MemoryStore.getInstance(this)
-            val prior = existing ?: memoryId?.let { store.getMemory(it) }
+            val prior = memoryId?.let { store.getMemory(it) } ?: existing
+            val input = MemoryTokenBudget.Input.forEdit(prior, content, tagsJson)
+            if (EmbeddingTokenCounter.reader(this)?.measure(input)?.fits == false) {
+                runOnUiThread {
+                    btnHeaderSave?.let { SaveIconFlash.flashError(it) }
+                    MemoryLengthDialog.show(this)
+                }
+                return@runOffThread
+            }
             // Approving a roleplay draft with a Lore Card picked MOVES it onto
             // the card (owner ruling, July 8 2026 evening): the edited content
             // becomes the entry, and the memory row is gone for good.
@@ -822,6 +842,19 @@ class MemoryEditorActivity : SettingsPageActivity() {
         panelContentExpanded?.visibility = if (expanded) View.VISIBLE else View.GONE
         scrollView?.visibility = if (expanded) View.GONE else View.VISIBLE
         to.requestFocus()
+        refreshTokenMeter()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshTokenMeter()
+    }
+
+    private fun refreshTokenMeter() {
+        val tagsJson = textToTagsJson(findViewById<TextInputEditText>(R.id.field_mem_tags)?.text?.toString().orEmpty())
+        tokenMeter?.bind(MemoryTokenBudget.Input.forEdit(
+            existing, activeContentField()?.text?.toString().orEmpty(), tagsJson
+        ))
     }
 
     /* ------------------------------ tags ------------------------------ */

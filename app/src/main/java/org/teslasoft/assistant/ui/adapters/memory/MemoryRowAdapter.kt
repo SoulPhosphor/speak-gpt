@@ -83,7 +83,8 @@ data class MemoryRow(
     val browserCard: Boolean = false,
     val selectable: Boolean = false,
     /** A memory's vibe line ("Vibe: …") on browser and pending cards, or null. */
-    val vibeLine: String? = null
+    val vibeLine: String? = null,
+    val tokenInput: org.teslasoft.assistant.preferences.memory.librarian.MemoryTokenBudget.Input? = null
 )
 
 class MemoryRowAdapter(
@@ -199,6 +200,7 @@ class MemoryRowAdapter(
         val ui = view.findViewById<View>(R.id.ui)
 
         val row = rows[position]
+        bindTokenMeter(view, row)
         if (row.browserCard) {
             view.findViewById<com.google.android.material.checkbox.MaterialCheckBox>(R.id.memory_selection_checkbox).apply {
                 setOnCheckedChangeListener(null)
@@ -323,6 +325,7 @@ class MemoryRowAdapter(
         val view = convertView
             ?: LayoutInflater.from(context).inflate(R.layout.view_memory_pending_card, parent, false)
 
+        bindTokenMeter(view, row)
         view.findViewById<ImageView>(R.id.pending_icon).apply {
             if (row.iconRes != null) { visibility = View.VISIBLE; setImageResource(row.iconRes) }
             else visibility = View.GONE
@@ -391,6 +394,13 @@ class MemoryRowAdapter(
             }
         }
         return view
+    }
+
+    private fun bindTokenMeter(view: View, row: MemoryRow) {
+        view.findViewById<org.teslasoft.assistant.ui.widgets.MemoryTokenMeter>(R.id.memory_length_meter)?.apply {
+            visibility = if (row.tokenInput != null) View.VISIBLE else View.GONE
+            row.tokenInput?.let { bind(it) }
+        }
     }
 
     private fun importanceLabel(value: Int): String = context.getString(

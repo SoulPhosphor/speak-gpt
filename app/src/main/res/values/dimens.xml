@@ -401,4 +401,7 @@
 
     <!-- Downloadable model list (Widget.App.ModelDownloadList). -->
     <dimen name="model_download_list_gap">8dp</dimen>
+    <dimen name="memory_token_meter_gap">4dp</dimen>
+    <dimen name="memory_token_meter_track">4dp</dimen>
+    <dimen name="memory_token_meter_page_inset">20dp</dimen>
 </resources>

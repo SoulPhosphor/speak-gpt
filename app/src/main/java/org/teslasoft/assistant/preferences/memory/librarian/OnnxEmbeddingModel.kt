@@ -235,7 +235,7 @@ class OnnxEmbeddingModel private constructor(
             val tokFile = EmbeddingModelStorage.tokenizerFile(context, model)
             require(modelFile.exists() && tokFile.exists()) { "model files missing" }
 
-            val tokenizer = HfTokenizer.load(tokFile)
+            val tokenizer = EmbeddingTokenCounter.tokenizer(context, model)
             // Cheap structural sanity before any inference: ids exist, are in
             // range, and distinct texts tokenize differently.
             val probeA = tokenizer.encode("hello world", 64)

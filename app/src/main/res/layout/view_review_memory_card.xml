@@ -32,6 +32,10 @@
     android:paddingHorizontal="14dp"
     android:paddingVertical="12dp">
 
+    <org.teslasoft.assistant.ui.widgets.MemoryTokenMeter
+        android:id="@+id/memory_length_meter"
+        style="@style/Widget.App.MemoryTokens" />
+
     <!-- Top row: checkbox (top-left, existing matches only) + info (top-right). -->
     <LinearLayout
         android:layout_width="match_parent"

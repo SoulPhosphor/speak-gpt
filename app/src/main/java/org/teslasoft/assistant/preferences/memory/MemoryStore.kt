@@ -7349,8 +7349,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             // cleared, so a corrected memory can never stay discoverable by
             // its old condensed wording. Only content and tags affect the
             // semantic document.
-            val sourceTextChanged = prior == null ||
-                prior.content != m.content || prior.tagsJson != m.tagsJson
+            val sourceTextChanged = MemorySourceText.changed(prior, m.content, m.tagsJson)
             val updated = m.copy(
                 updatedAt = nowIso(),
                 embeddingText = if (sourceTextChanged) null else m.embeddingText,
@@ -7799,8 +7798,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     // wording. The old memory stays active.
                     // Titles are retired (§3.1) and are not part of the embedding,
                     // so only content and tags count as a source-text change.
-                    val sourceTextChanged =
-                        prior.content != editedOld.content || prior.tagsJson != editedOld.tagsJson
+                    val sourceTextChanged = MemorySourceText.changed(prior, editedOld.content, editedOld.tagsJson)
                     val updated = editedOld.copy(
                         status = "active",
                         updatedAt = nowIso(),
