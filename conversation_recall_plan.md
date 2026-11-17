@@ -2917,7 +2917,10 @@ no word-limit warnings are built.
 - **Live behavior:** calculate off the UI thread and update as relevant fields
   change. Cancel obsolete work and never display an older result as current.
   Refresh after a model change. The displayed usage and the Save gate use the
-  same calculation; Save checks a fresh snapshot before any write.
+  same calculation; Save checks a fresh snapshot before any write. Editing
+  predicts the exact stored document: the existing source-change rule clears
+  a derived search hint when content or tags change. Reading an unchanged
+  stored memory still counts its complete retained hint.
 - **Saving:** permit a document that fits the actual token capacity, including
   one whose word count exceeds the old estimate. Block one that exceeds the
   token capacity, keeping every field and all entered text intact. Show only:
@@ -2935,7 +2938,10 @@ no word-limit warnings are built.
   proposed memories are stored: split oversized generated content losslessly
   against the same complete-input calculation. Preserve scope, Type, targets,
   tags, relationship hints and whole-conversation sources on the resulting
-  proposals. A proposal's parts must not be cut off by Maximum Suggestions.
+  proposals. Deduplicate final parts within the request as well as against
+  stored memories, merging additional tags and relationship hints when they
+  fit; preserve separate metadata groups if their union exceeds capacity.
+  A proposal's parts must not be cut off by Maximum Suggestions.
   Do not alter the lorebook analysis mode or stored memories.
 - **Read:** `ui-style-guide.md` (fields, counters, progress bars and dialogs),
   `ui-style-adoption.md`, the affected editor/reader layouts and code,

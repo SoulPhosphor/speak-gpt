@@ -717,9 +717,8 @@ class MemoryEditorActivity : SettingsPageActivity() {
 
         runOffThread(onFailure = { btnHeaderSave?.let { SaveIconFlash.flashError(it) } }) {
             val store = MemoryStore.getInstance(this)
-            val prior = existing ?: memoryId?.let { store.getMemory(it) }
-            val input = MemoryTokenBudget.Input(content, prior?.embeddingText,
-                JSONArray(tagsJson).let { tags -> (0 until tags.length()).map { tags.getString(it) } })
+            val prior = memoryId?.let { store.getMemory(it) } ?: existing
+            val input = MemoryTokenBudget.Input.forEdit(prior, content, tagsJson)
             if (EmbeddingTokenCounter.reader(this)?.measure(input)?.fits == false) {
                 runOnUiThread {
                     btnHeaderSave?.let { SaveIconFlash.flashError(it) }
@@ -852,10 +851,9 @@ class MemoryEditorActivity : SettingsPageActivity() {
     }
 
     private fun refreshTokenMeter() {
-        val tags = findViewById<TextInputEditText>(R.id.field_mem_tags)?.text?.toString().orEmpty()
-            .split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        tokenMeter?.bind(MemoryTokenBudget.Input(
-            activeContentField()?.text?.toString().orEmpty(), existing?.embeddingText, tags
+        val tagsJson = textToTagsJson(findViewById<TextInputEditText>(R.id.field_mem_tags)?.text?.toString().orEmpty())
+        tokenMeter?.bind(MemoryTokenBudget.Input.forEdit(
+            existing, activeContentField()?.text?.toString().orEmpty(), tagsJson
         ))
     }
 

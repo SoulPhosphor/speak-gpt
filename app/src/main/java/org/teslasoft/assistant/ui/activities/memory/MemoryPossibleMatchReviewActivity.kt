@@ -21,6 +21,7 @@ import org.teslasoft.assistant.ui.util.ScreenChrome
 import androidx.core.widget.doAfterTextChanged
 import org.teslasoft.assistant.ui.widgets.MemoryTokenMeter
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter
+import org.teslasoft.assistant.preferences.memory.librarian.MemoryTokenBudget
 
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -209,7 +210,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         meter.bind(record)
         val inlineContent = card.findViewById<TextInputEditText>(R.id.review_edit_content)
         inlineContent.doAfterTextChanged {
-            meter.bind(MemoryTokenMeter.input(record).copy(content = it?.toString().orEmpty()))
+            meter.bind(MemoryTokenBudget.Input.forEdit(record, it?.toString().orEmpty(), record.tagsJson))
         }
         card.findViewById<ImageView>(R.id.review_icon).setImageResource(iconForScope(record.scope))
         // Titles are retired (§3.1): the review card shows content, not a title.
@@ -373,10 +374,10 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             }
 
             val reader = EmbeddingTokenCounter.reader(this)
-            val recordsToCheck = listOfNotNull(proposal, editedOld)
-            if (reader != null && recordsToCheck.any {
-                    !reader.measure(MemoryTokenMeter.input(it)).fits
-                }) {
+            val inputsToCheck = listOfNotNull(MemoryTokenBudget.Input.from(proposal), editedOld?.let {
+                MemoryTokenBudget.Input.forEdit(store.getMemory(it.memoryId), it)
+            })
+            if (reader != null && inputsToCheck.any { !reader.measure(it).fits }) {
                 runOnUiThread {
                     applying = false
                     setButtonsEnabled(true)

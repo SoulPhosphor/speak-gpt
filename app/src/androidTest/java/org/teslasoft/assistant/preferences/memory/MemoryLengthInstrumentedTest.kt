@@ -107,6 +107,31 @@ class MemoryLengthInstrumentedTest {
         assertEquals("Second subject", field<List<MemoryRecord>>(withNewSubject, "records").single().content)
     }
 
+    @Test fun liveAndSaveInputsMatchWhatStorageKeepsAfterContentOrTagEdits() {
+        val candidate = MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "Original content", tags = listOf("tag")) as CandidateResult.Valid
+        val record = PendingMemoryRecordFactory.build(candidate.candidate,
+            MemoryId.generate(MemoryId.Type.ASSOCIATIVE), MemoryStore.nowIso())
+            .copy(embeddingText = "A stale search hint. ".repeat(200))
+        store.insertMemory(record)
+        var prior = store.getMemory(record.memoryId)!!
+        val edited = prior.copy(content = "Corrected content")
+        val predicted = org.teslasoft.assistant.preferences.memory.librarian.MemoryTokenBudget.Input.forEdit(prior, edited)
+        assertTrue(EmbeddingTokenCounter.reader(context)!!.measure(predicted).fits)
+        store.updateMemory(edited, null)
+        val saved = store.getMemory(record.memoryId)!!
+        assertEquals(predicted, MemoryTokenMeter.input(saved))
+        assertEquals(null, saved.embeddingText)
+        // A hint refreshed without changing its sources is retained.
+        store.updateMemory(saved.copy(embeddingText = "Refreshed hint"), null)
+        prior = store.getMemory(record.memoryId)!!
+        val tagEdit = prior.copy(tagsJson = "[\"new tag\"]")
+        val expectedTags = org.teslasoft.assistant.preferences.memory.librarian.MemoryTokenBudget.Input.forEdit(prior, tagEdit)
+        store.updateMemory(tagEdit, null)
+        assertEquals(expectedTags, MemoryTokenMeter.input(store.getMemory(record.memoryId)!!))
+        assertEquals(null, expectedTags.embeddingText)
+    }
+
     @Test fun countingAnExistingOversizedMemoryNeverChangesIt() {
         val candidate = MemoryCandidateValidator.validateGeneral(
             scope = "global", content = "Existing text. ".repeat(500), tags = listOf("tag")

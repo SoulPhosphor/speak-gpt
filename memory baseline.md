@@ -1093,3 +1093,12 @@ Validation before remote CI:
   recovery-instrumentation suite.
 - Android Checks, full unit results, Beta identity and instrumentation compile:
   pending. Device execution and visual confirmation are not claimed.
+
+Review corrections: live editing and Save use the same existing source-change
+rule as `MemoryStore`: a changed content or tags field clears its stale,
+derived search hint before capacity is measured. Final staged proposal parts
+are deduplicated within the request, including short proposals that repeat an
+earlier split part; extra tags and relationship hints are retained. Separate
+metadata groups remain separate if their union cannot fit. Regression tests
+cover both cases. JVM resource loading is enabled for the real shared-widget
+tests; their first run otherwise failed before reaching the widget behavior.

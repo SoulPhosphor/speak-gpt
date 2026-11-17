@@ -8,6 +8,22 @@ object MemoryTokenBudget {
         companion object {
             fun from(record: org.teslasoft.assistant.preferences.memory.MemoryRecord): Input =
                 Input(record.content, record.embeddingText, RetrievalDocument.parseTags(record.tagsJson))
+
+            fun forEdit(prior: org.teslasoft.assistant.preferences.memory.MemoryRecord?,
+                        content: String, tagsJson: String): Input = Input(
+                content,
+                if (org.teslasoft.assistant.preferences.memory.MemorySourceText.changed(prior, content, tagsJson))
+                    null else prior?.embeddingText,
+                RetrievalDocument.parseTags(tagsJson)
+            )
+
+            fun forEdit(prior: org.teslasoft.assistant.preferences.memory.MemoryRecord?,
+                        edited: org.teslasoft.assistant.preferences.memory.MemoryRecord): Input = Input(
+                edited.content,
+                if (org.teslasoft.assistant.preferences.memory.MemorySourceText.changed(prior, edited.content, edited.tagsJson))
+                    null else edited.embeddingText,
+                RetrievalDocument.parseTags(edited.tagsJson)
+            )
         }
     }
 

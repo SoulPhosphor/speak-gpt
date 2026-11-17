@@ -67,6 +67,24 @@ class MemoryTokenBudgetTest {
         assertEquals("same memory", input.content)
     }
 
+    @Test fun editCountsOnlyTheSearchHintThatStorageWillRetain() {
+        val candidate = org.teslasoft.assistant.preferences.memory.MemoryCandidateValidator.validateGeneral(
+            "global", "original", tags = listOf("tag")) as org.teslasoft.assistant.preferences.memory.CandidateResult.Valid
+        val prior = org.teslasoft.assistant.preferences.memory.PendingMemoryRecordFactory.build(
+            candidate.candidate, "memory", "2026-11-17T00:00:00Z").copy(embeddingText = "long search hint ".repeat(20))
+        val reader = MemoryTokenBudget.Reader("fixture", 30) { it.length }
+        assertFalse(reader.measure(MemoryTokenBudget.Input.from(prior)).fits)
+        assertFalse(reader.measure(MemoryTokenBudget.Input.forEdit(prior, prior.content, prior.tagsJson)).fits)
+        val contentEdit = MemoryTokenBudget.Input.forEdit(prior, "corrected", prior.tagsJson)
+        assertNull(contentEdit.embeddingText)
+        assertTrue(reader.measure(contentEdit).fits)
+        val tagEdit = MemoryTokenBudget.Input.forEdit(prior, prior.content, "[\"new\"]")
+        assertNull(tagEdit.embeddingText)
+        assertTrue(reader.measure(tagEdit).fits)
+        val titleEdit = MemoryTokenBudget.Input.forEdit(prior, prior.copy(title = "New title"))
+        assertEquals(prior.embeddingText, titleEdit.embeddingText)
+    }
+
     @Test fun wordCounterHandlesUnicodeWhitespaceAndEmptyText() {
         assertEquals(0, MemoryTokenBudget.words(" \n\t"))
         assertEquals(4, MemoryTokenBudget.words("one\u00a0two\u2003three\nfour"))

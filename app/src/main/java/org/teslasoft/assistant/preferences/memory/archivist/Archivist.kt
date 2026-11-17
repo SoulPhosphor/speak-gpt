@@ -1365,11 +1365,12 @@ object Archivist {
         if (drafts.isEmpty()) return PreparedMemories(emptyList(), emptyMap(), 0)
         val collected = ArchivistCandidateBoundary.collectFlat(drafts)
         var duplicates = collected.exactDuplicatesRemoved
-        val records = ArrayList<org.teslasoft.assistant.preferences.memory.MemoryRecord>()
-        val relationshipHints = linkedMapOf<String, List<String>>()
+        val tokenReader = org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter.reader(context)
+        val finalParts = StagedMemoryParts(tokenReader)
+        val records = finalParts.records
+        val relationshipHints = finalParts.relationshipHints
         val sources = linkedMapOf<String, List<org.teslasoft.assistant.preferences.memory.MemorySource>>()
         val stagedIdentities = HashSet<String>()
-        val tokenReader = org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter.reader(context)
         var acceptedProposals = 0
         // The current user-owned Type ids: a suggestion is honored only if it
         // names one of these, otherwise the memory files as No Type (never
@@ -1534,17 +1535,18 @@ object Archivist {
                                 continue
                             }
                         }
-                        records.add(splitRecord)
+                        val validHints = d.relatedExistingMemoryIds
+                            .filter { it != splitRecord.memoryId && store.getMemory(it) != null }.distinct()
+                        if (!finalParts.add(splitRecord, validHints)) {
+                            duplicates++
+                            continue
+                        }
                         sources[splitRecord.memoryId] = listOf(
                             org.teslasoft.assistant.preferences.memory.MemorySourceRules.conversationOnly(
                                 MemoryStore.newId(org.teslasoft.assistant.preferences.memory.MemorySource.ID_PREFIX),
                                 splitRecord.memoryId, conversation.chatId, MemoryStore.nowIso()
                             )
                         )
-                        val validHints = d.relatedExistingMemoryIds
-                            .filter { it != splitRecord.memoryId && store.getMemory(it) != null }
-                            .distinct()
-                        if (validHints.isNotEmpty()) relationshipHints[splitRecord.memoryId] = validHints
                     }
                     if (records.size > beforeParts) acceptedProposals++
                 }
