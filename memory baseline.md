@@ -1075,7 +1075,7 @@ Lorebook analysis is unchanged. No new or changed diagnostic log lines.
 
 Validation before remote CI:
 - `git diff --check`: passed.
-- All 8 changed/new XML documents parsed successfully; the meter's appearance
+- All 9 changed/new XML documents parsed successfully; the meter's appearance
   is supplied by shared styles.
 - `./gradlew testDebugUnitTest`, `./gradlew assembleBeta` and
   `./gradlew assembleDebugAndroidTest`: each attempted; none could start
@@ -1104,3 +1104,10 @@ cover both cases. The three shared-widget UI tests run in the existing Android e
 against the real layout and main thread. The original JVM resource configuration
 is retained: enabling resources globally changed assumptions in unrelated
 composer fixtures. None of those existing tests or their assertions is changed.
+
+The first final-head emulator run verified all three real-store memory-length
+tests (including full split preservation with Maximum Suggestions 1, rerun
+handling and prospective-edit agreement). Its live-meter test host failed at
+inflation because it omitted the shared palette setup used by the production
+memory editor. The debug-only host now applies `ThemeManager.applyPalette`
+before inflating that actual layout. No production theme or appearance changed.
