@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+    <LinearLayout style="@style/Widget.App.MemoryTokens.Row">
+        <TextView
+            android:id="@+id/memory_word_count"
+            style="@style/Widget.App.MemoryTokens.Words"
+            android:text="@string/mem_words_pending" />
+        <TextView
+            android:id="@+id/memory_token_count"
+            style="@style/Widget.App.MemoryTokens.Tokens"
+            android:text="@string/mem_tokens_pending" />
+    </LinearLayout>
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/memory_token_progress"
+        style="@style/Widget.App.MemoryTokens.Bar"
+        android:max="100" />
+</merge>

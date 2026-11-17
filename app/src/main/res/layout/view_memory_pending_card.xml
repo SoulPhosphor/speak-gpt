@@ -36,6 +36,10 @@
     android:paddingHorizontal="14dp"
     android:paddingVertical="12dp">
 
+    <org.teslasoft.assistant.ui.widgets.MemoryTokenMeter
+        android:id="@+id/memory_length_meter"
+        style="@style/Widget.App.MemoryTokens" />
+
         <!-- Top row: caution (top-left, only when matches exist) / spinner while
              checking; info (top-right, same position on every card). -->
         <LinearLayout

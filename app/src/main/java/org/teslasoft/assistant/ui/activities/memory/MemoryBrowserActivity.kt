@@ -348,6 +348,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             title = m.title.trim(),
             subtitle = if (showText) m.content.trim().ifEmpty { null } else null,
             vibeLine = if (showText && vibe.isNotEmpty()) getString(R.string.mem_row_vibe_fmt, vibe) else null,
+            tokenInput = org.teslasoft.assistant.preferences.memory.librarian.MemoryTokenBudget.Input.from(m),
             browserCard = true,
             selectable = pickingMemories,
             tagsLine = tagsLine,
@@ -534,6 +535,15 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         matchState.clear()
         runOffThread {
             val store = MemoryStore.getInstance(this)
+            if (status == "active") {
+                val record = store.getMemory(memoryId) ?: return@runOffThread
+                val input = org.teslasoft.assistant.ui.widgets.MemoryTokenMeter.input(record)
+                if (org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter
+                        .reader(this)?.measure(input)?.fits == false) {
+                    runOnUiThread { MemoryLengthDialog.show(this) }
+                    return@runOffThread
+                }
+            }
             store.setMemoryStatus(memoryId, status, getString(R.string.memory_change_status))
             if (status == "active") Librarian.getInstance(this).reindexMemory(memoryId)
             runOnUiThread { reload() }

@@ -18,6 +18,10 @@ package org.teslasoft.assistant.ui.activities.memory
 
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
+import androidx.core.widget.doAfterTextChanged
+import org.teslasoft.assistant.ui.widgets.MemoryTokenMeter
+import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter
+
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
@@ -201,6 +205,12 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
 
     private fun addMemoryCard(parent: LinearLayout, record: MemoryRecord, withCheckbox: Boolean): MatchHolder {
         val card = layoutInflater.inflate(R.layout.view_review_memory_card, parent, false)
+        val meter = card.findViewById<MemoryTokenMeter>(R.id.memory_length_meter)
+        meter.bind(record)
+        val inlineContent = card.findViewById<TextInputEditText>(R.id.review_edit_content)
+        inlineContent.doAfterTextChanged {
+            meter.bind(MemoryTokenMeter.input(record).copy(content = it?.toString().orEmpty()))
+        }
         card.findViewById<ImageView>(R.id.review_icon).setImageResource(iconForScope(record.scope))
         // Titles are retired (§3.1): the review card shows content, not a title.
         card.findViewById<TextView>(R.id.review_title).visibility = View.GONE
@@ -282,7 +292,11 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         // Leaving a single selection cancels an in-progress inline edit.
         val editing = editingCardId
         if (editing != null && checkedHolders().singleOrNull()?.record?.memoryId != editing) {
-            matchHolders.firstOrNull { it.record.memoryId == editing }?.editSection?.visibility = View.GONE
+            matchHolders.firstOrNull { it.record.memoryId == editing }?.let { holder ->
+                holder.editSection.visibility = View.GONE
+                (holder.editSection.parent as View).findViewById<MemoryTokenMeter>(R.id.memory_length_meter)
+                    ?.bind(holder.record)
+            }
             editingCardId = null
         }
         refreshResolutionButtons()
@@ -332,8 +346,8 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         var editedOld: MemoryRecord? = null
         if (kind == ResolutionKind.EDIT_OLD) {
             val holder = checked.singleOrNull() ?: return
-            val content = holder.editContent.text?.toString()?.trim().orEmpty()
-            if (content.isEmpty()) {
+            val content = holder.editContent.text?.toString().orEmpty()
+            if (content.isBlank()) {
                 Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
                 return
             }
@@ -355,6 +369,19 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             }
             if (checkedIds.any { store.getMemory(it) == null }) {
                 runOnUiThread { applying = false; toastAndReload(R.string.mem_review_stale, reload = true) }
+                return@runOffThread
+            }
+
+            val reader = EmbeddingTokenCounter.reader(this)
+            val recordsToCheck = listOfNotNull(proposal, editedOld)
+            if (reader != null && recordsToCheck.any {
+                    !reader.measure(MemoryTokenMeter.input(it)).fits
+                }) {
+                runOnUiThread {
+                    applying = false
+                    setButtonsEnabled(true)
+                    MemoryLengthDialog.show(this)
+                }
                 return@runOffThread
             }
 

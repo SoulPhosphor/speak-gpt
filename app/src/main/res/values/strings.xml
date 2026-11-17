@@ -4591,4 +4591,14 @@
     <string name="memory_controls_rag_lorebook_limit">Activating Both Memory Systems Limit Lorebook Entries</string>
     <string name="memory_controls_rag_lorebook_limit_hint">When turned on this will replace the amount of lorebook entries that are allowed to be sent when rag active memories are activated.</string>
     <string name="memory_controls_rag_lorebook_max_entries">Maximum Lorebook Entries</string>
+    <plurals name="mem_word_count">
+        <item quantity="one">%1$,d Word</item>
+        <item quantity="other">%1$,d Words</item>
+    </plurals>
+    <string name="mem_words_pending">… Words</string>
+    <string name="mem_token_count">%1$,d / %2$,d Tokens</string>
+    <string name="mem_tokens_pending">… / … Tokens</string>
+    <string name="mem_tokens_unavailable">— / — Tokens</string>
+    <string name="mem_cannot_save_title">Memory Cannot Be Saved</string>
+    <string name="mem_cannot_save_token_limit">This memory exceeds the embedding model\'s reading limit.</string>
 </resources>

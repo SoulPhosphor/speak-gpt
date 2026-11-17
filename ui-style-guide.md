@@ -1933,6 +1933,28 @@ The map action opens a read-only Icon Legend using `App.MaterialAlertDialog`,
 shared Row.Icon/Title typography, and a single right-aligned
 `AppButton.Primary.DialogAction` in `Widget.App.Dialog.Actions.EndRow`.
 
+### Memory token usage
+
+`Widget.App.MemoryTokens` is the shared vertical word/token/bar meter.
+`MemoryTokens.Page` pins it below the memory editor header using shared page
+insets; the compact variant sits at the top of browser, Pending and review
+cards. The same pinned meter remains visible above the expanded editor.
+
+`MemoryTokens.Row`, `.Words`, `.Tokens` and `.Bar` own geometry, typography,
+spacing and theme colors (`memory_token_meter_*` dimensions). The word count
+is informational, e.g. "348 Words". Tokens show complete retrieval-input usage
+against the current embedding model, e.g. "1,042 / 2,048 Tokens". The number
+uses the existing activated counter color at capacity; no word-limit warning
+is displayed. The bar uses theme roles and caps its fill at full capacity.
+Pending measurements use ellipses; unavailable counts use em dashes and hide
+the bar rather than showing a false zero.
+
+`MemoryTokenMeter` performs local token counting off the UI thread, cancels
+obsolete results and is rebound for edited text/tags or a model change. The
+save failure uses `App.MaterialAlertDialog` and `dialog_single_action.xml`:
+**Memory Cannot Be Saved**, "This memory exceeds the embedding model's
+reading limit.", **Okay**. It contains no advice and preserves all input.
+
 ### Manual memory attachments
 
 The chat Add menu's Add Memory row uses the existing Chat.ActionMenu row/icon/label

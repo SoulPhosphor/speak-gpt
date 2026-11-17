@@ -1047,3 +1047,49 @@ The rule finds one or two more expected +3 memories in every row and adds no inc
 
 **Not measured here.** Send-time cost on a physical phone, and the on-device checks of the Step 4a work order (leaving and re-entering a chat, switching chats, a restart, Maximum Memories 1 and 8, lorebook overlap and Memory Space with carried memories). Code-based adds no model reads to a message that has a confident match or a known subject; the first message after a restart with neither searches up to three earlier messages once.
 
+
+
+## Stage 4 / Step 5 — actual embedding token capacity
+
+The informational count is `348 Words`. Saving uses the selected installed
+embedding model's actual stored-text token capacity, with no word-based cap.
+The full retrieval document, tag parsing, document prefix and tokenizer special
+tokens are counted for both the live meter and Save. Counting is off the UI
+thread, shares the tokenizer with inference, and runs no model inference or
+paid request. Unavailable counts are not presented as zero. Existing content,
+including leading/trailing whitespace, is preserved and no migration runs.
+
+Affected editing/reading paths: Memory Editor (small and expanded), Memory
+Browser and Pending cards, Possible Match Review cards and its inline content
+editor; direct Pending acceptance also validates capacity before activation.
+The meter is pinned below the editor header and placed at the top of cards.
+The error is exactly **Memory Cannot Be Saved** / "This memory exceeds the
+embedding model's reading limit." / **Okay**, with no advice.
+
+Memory Assistant proposals are split by the exact same full-input budget
+before atomic filing. Every resulting part retains Type, scope, targets,
+tags, relationship hints and a separate whole-conversation source. The
+suggestion cap counts original proposals so it cannot cut off a proposal's
+parts. Exact repeated/rejected parts retain existing deduplication behavior.
+Lorebook analysis is unchanged. No new or changed diagnostic log lines.
+
+Validation before remote CI:
+- `git diff --check`: passed.
+- All 8 changed/new XML documents parsed successfully; the meter's appearance
+  is supplied by shared styles.
+- `./gradlew testDebugUnitTest`, `./gradlew assembleBeta` and
+  `./gradlew assembleDebugAndroidTest`: each attempted; none could start
+  because Gradle 9.3.1 is absent and the distribution download fails with
+  `java.net.SocketException: Network is unreachable` in this environment.
+- Added JVM tests for full-document counting (extra searchable text, tags,
+  prefix and special tokens), exact capacity and overflow, word-independent
+  capacity, tag-only overflow, model-capacity changes, lossless splitting,
+  Unicode/code-point boundaries and tag partitioning. UI tests exercise
+  asynchronous updates, tag edits, stale-result rejection and unavailable
+  counts. A device integration test covers the real proposal preparation and
+  SQLCipher filing path with Maximum Suggestions 1, preserved metadata,
+  sources and rerun deduplication. It uses a synthetic installed tokenizer and
+  makes no inference or provider calls. It is included in the existing CI
+  recovery-instrumentation suite.
+- Android Checks, full unit results, Beta identity and instrumentation compile:
+  pending. Device execution and visual confirmation are not claimed.

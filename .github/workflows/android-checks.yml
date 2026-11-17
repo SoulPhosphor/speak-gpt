@@ -218,6 +218,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/recovery-results"
           classes=(
             org.teslasoft.assistant.preferences.memory.Step2RecallInstrumentedTest
+            org.teslasoft.assistant.preferences.memory.MemoryLengthInstrumentedTest
             org.teslasoft.assistant.ui.util.PromptLibrarySearchInstrumentedTest
             org.teslasoft.assistant.preferences.backup.PortableRecoveryMatrixInstrumentedTest
             org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreInstrumentedTest

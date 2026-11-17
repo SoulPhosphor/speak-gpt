@@ -1369,6 +1369,8 @@ object Archivist {
         val relationshipHints = linkedMapOf<String, List<String>>()
         val sources = linkedMapOf<String, List<org.teslasoft.assistant.preferences.memory.MemorySource>>()
         val stagedIdentities = HashSet<String>()
+        val tokenReader = org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter.reader(context)
+        var acceptedProposals = 0
         // The current user-owned Type ids: a suggestion is honored only if it
         // names one of these, otherwise the memory files as No Type (never
         // dropped). Legacy `kind` is not consulted.
@@ -1385,7 +1387,7 @@ object Archivist {
         val projectIdsNow = projects.map { it.projectId }.toSet()
         val companionIdsNow = companions.map { it.companionId }.toSet()
         for ((index, d) in collected.memories.withIndex()) {
-            if (maxSuggestions > 0 && records.size >= maxSuggestions) {
+            if (maxSuggestions > 0 && acceptedProposals >= maxSuggestions) {
                 MemoryLog.log(
                     context, "Archivist", "info",
                     "chat=${conversation.chatId}: cap $maxSuggestions reached, ${collected.memories.size - index} draft(s) not filed"
@@ -1503,22 +1505,47 @@ object Archivist {
                                 .generate(org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
                             MemoryStore.nowIso()
                         )
-                    records.add(record)
-                    // The source is the whole conversation, which the app
-                    // knows for certain (M.3). The scanner names no messages.
-                    sources[record.memoryId] = listOf(
-                        org.teslasoft.assistant.preferences.memory.MemorySourceRules.conversationOnly(
-                            MemoryStore.newId(org.teslasoft.assistant.preferences.memory.MemorySource.ID_PREFIX),
-                            record.memoryId, conversation.chatId, MemoryStore.nowIso()
+                    // Apply the suggestion cap to original proposals. All parts
+                    // of an accepted proposal are filed, with no second cap.
+                    acceptedProposals++
+                    val parts = if (tokenReader == null) {
+                        listOf(org.teslasoft.assistant.preferences.memory.librarian.MemoryProposalSplitter.Part(
+                            record.content, d.tags))
+                    } else {
+                        org.teslasoft.assistant.preferences.memory.librarian.MemoryProposalSplitter.split(
+                            record.content, d.tags, tokenReader)
+                    }
+                    for ((partIndex, part) in parts.withIndex()) {
+                        val splitRecord = record.copy(
+                            memoryId = if (partIndex == 0) record.memoryId else
+                                org.teslasoft.assistant.preferences.memory.MemoryId.generate(
+                                    org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
+                            content = part.content,
+                            tagsJson = org.json.JSONArray(part.tags).toString()
                         )
-                    )
-                    // Request-local M aliases were validated by the parser.
-                    // Re-check existence at the complete chat boundary; a
-                    // vanished reference is discarded rather than guessed.
-                    val validHints = d.relatedExistingMemoryIds
-                        .filter { it != record.memoryId && store.getMemory(it) != null }
-                        .distinct()
-                    if (validHints.isNotEmpty()) relationshipHints[record.memoryId] = validHints
+                        // Re-running a conversation must not duplicate a part
+                        // already filed, or resurrect a part the user rejected.
+                        // Unsplit proposals already passed this same gate above.
+                        if (parts.size > 1) {
+                            val partCandidate = candidate.copy(content = splitRecord.content)
+                            if (store.classifyCandidate(partCandidate) is MemoryMatch.Outcome.AlreadyPresent ||
+                                store.isDraftRejected(splitRecord.content)) {
+                                duplicates++
+                                continue
+                            }
+                        }
+                        records.add(splitRecord)
+                        sources[splitRecord.memoryId] = listOf(
+                            org.teslasoft.assistant.preferences.memory.MemorySourceRules.conversationOnly(
+                                MemoryStore.newId(org.teslasoft.assistant.preferences.memory.MemorySource.ID_PREFIX),
+                                splitRecord.memoryId, conversation.chatId, MemoryStore.nowIso()
+                            )
+                        )
+                        val validHints = d.relatedExistingMemoryIds
+                            .filter { it != splitRecord.memoryId && store.getMemory(it) != null }
+                            .distinct()
+                        if (validHints.isNotEmpty()) relationshipHints[splitRecord.memoryId] = validHints
+                    }
                 }
             }
         }
