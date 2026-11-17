@@ -1,0 +1,3689 @@
+{
+  "format_version": 1,
+  "about": "Invented conversations with known right answers for conversation-recall quality tests (conversation_recall_plan.md, G.15 and G.16 Step 6). Every conversation, person and event is invented; real towns appear only as ordinary settings. An exchange is a user message and every message after it up to the next user message; expect and must_not list the ids of the user messages that open exchanges.",
+  "exchange_limit": 3,
+  "chats": [
+    {
+      "id": "chat-backyard-garden",
+      "scope": {
+        "type": "project",
+        "id": "project-backyard-garden",
+        "name": "Backyard Garden"
+      },
+      "single_subject_terms": [
+        "garden",
+        "bed",
+        "beds",
+        "plant",
+        "plants",
+        "planting",
+        "seed",
+        "seeds",
+        "seedlings",
+        "soil",
+        "compost",
+        "tomato",
+        "tomatoes",
+        "water",
+        "watering",
+        "grow",
+        "squash",
+        "peppers",
+        "peas",
+        "slugs",
+        "mulch",
+        "trellis",
+        "basil",
+        "frost",
+        "beans",
+        "marigolds",
+        "kale",
+        "aphids",
+        "transplanting",
+        "harden off"
+      ],
+      "messages": [
+        {
+          "id": "09e8d827-8ad6-599e-89fb-6e8596f057b8",
+          "author": "user",
+          "text": "I want to start a vegetable garden this year in the sunny patch behind the house. It's about 4 by 6 meters and it's just lawn right now. Where do I even begin?",
+          "time": "2026-02-02T18:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "080fc3e7-5128-590a-9506-83cff545fe2e",
+          "author": "ai",
+          "text": "Start by deciding how many beds fit the space with paths you can kneel in. A 4 by 6 meter patch comfortably holds three beds with 60 centimeter paths. After that we can pick materials, fill soil and a crop list.",
+          "time": "2026-02-02T18:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "aa6559e7-86fa-5c34-9afc-4e9125768646",
+          "author": "user",
+          "text": "Let's go with three raised beds built from untreated cedar, each 1.2 by 2.4 meters and 30 centimeters deep. I like that cedar resists rot without any chemical treatment.",
+          "time": "2026-02-04T19:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "15a39b9a-55db-5340-8053-f4dd03145300",
+          "author": "ai",
+          "text": "Untreated cedar is a good choice for food beds: it resists rot for eight to ten years, needs no sealant, and nothing leaches into the soil. Three beds at 1.2 by 2.4 meters keep every spot within arm's reach from the sides.",
+          "time": "2026-02-04T19:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "e92c073a-7966-5797-905d-91c1c76873ac",
+          "author": "user",
+          "text": "For filling the beds, I read conflicting advice about soil. What mix should I use?",
+          "time": "2026-02-06T20:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "0b06589d-56ab-5f16-a3f6-63276ae13ea3",
+          "author": "ai",
+          "text": "For your beds use 60 percent topsoil, 30 percent compost and 10 percent perlite. The topsoil gives structure, the compost feeds the plants, and the perlite keeps it from packing down. Each bed needs about 0.86 cubic meters, so roughly 2.6 cubic meters in total.",
+          "time": "2026-02-06T20:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "9eed4f84-a1e6-5f17-9324-0235792b6046",
+          "author": "user",
+          "text": "I tracked the sun on the garden patch over the weekend. The east side gets about 7 hours and the west corner only 4 because of the maple.",
+          "time": "2026-02-09T17:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "1532f391-6fbc-5597-bbc5-fce4225bd88d",
+          "author": "ai",
+          "text": "Seven hours is plenty for fruiting crops. Put the tomatoes and peppers on the east side and keep leafy greens and herbs for the shadier west corner, where four hours is enough for lettuce and kale.",
+          "time": "2026-02-09T17:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "bf0d4b43-ffa6-58b1-a5ae-c08df640cc7e",
+          "author": "user",
+          "text": "For tomatoes I'm going to grow Cherokee Purple and Sungold. One for slicing, one for snacking straight off the vine.",
+          "time": "2026-02-11T21:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "ab9d28a6-9690-53b0-bdc6-deb0d4070186",
+          "author": "ai",
+          "text": "Cherokee Purple and Sungold make a great pair. Cherokee Purple is an indeterminate heirloom with dusky, rich slicing fruit; Sungold is a very sweet orange cherry that ripens early. Both are vigorous, so plan for tall stakes or cages.",
+          "time": "2026-02-11T21:06:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "3ecc0892-524e-57ca-808c-e3fae4cf7ba3",
+          "author": "user",
+          "text": "Can you help me lay out which crops go into each bed?",
+          "time": "2026-02-14T16:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "1afcac72-94f3-5c94-a4ac-f816a4371b50",
+          "author": "ai",
+          "text": "Bed one, east: tomatoes and peppers with basil tucked between. Bed two, middle: squash, eggplant and bush cucumbers. Bed three, west: lettuce, kale, carrots and herbs. Peas can climb the fence along the north edge.",
+          "time": "2026-02-14T16:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "ef1614ab-53df-59cd-8e2b-aa4275ef1f37",
+          "author": "user",
+          "text": "I ordered all the seeds from the catalog tonight, including the peppers and the cucumbers.",
+          "time": "2026-02-23T18:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "928250e8-bb06-527b-ae21-000bbbe4f7ef",
+          "author": "ai",
+          "text": "Good timing. Seeds arrive with weeks to spare before indoor sowing. When they come, store the packets somewhere cool and dry and note the sowing dates on each one.",
+          "time": "2026-02-23T18:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "b3c7767f-38f4-57bf-9904-af2e5a21169b",
+          "author": "user",
+          "text": "What kind of light setup do I need to start seedlings indoors?",
+          "time": "2026-02-26T19:25:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "4fb5b1d8-ca76-5672-99ed-32fea43391de",
+          "author": "ai",
+          "text": "A plain LED shop light works well. Hang it about 5 centimeters above the seedlings at first and raise it as they grow, running it 14 to 16 hours a day on a timer. Leggy seedlings usually mean the light is too far away.",
+          "time": "2026-02-26T19:26:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "02f2cbcb-b762-54cb-828c-f0301cf3e215",
+          "author": "user",
+          "text": "Should I start the seeds in garden soil or something else?",
+          "time": "2026-03-02T18:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "cffbd5ef-c3a7-505b-8595-20b93fc60178",
+          "author": "ai",
+          "text": "Use a fine seed starting mix, not garden soil. It drains well and is free of weed seeds and fungus that cause damping off. Moisten it before filling the cells.",
+          "time": "2026-03-02T18:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "13d3552b-4ba3-50af-9ba4-a98777469463",
+          "author": "user",
+          "text": "Today I planted the pepper seeds indoors: Jimmy Nardello and Padron, two cells each.",
+          "time": "2026-03-08T15:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "1ebaf426-98b8-529c-9d0e-ada15d5d37d0",
+          "author": "ai",
+          "text": "Nice start. Peppers are slow, so early March is right. Keep the cells warm and evenly moist, and expect sprouts in one to three weeks depending on the temperature.",
+          "time": "2026-03-08T15:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "a118648f-f6bd-542b-af0c-b953773fcc32",
+          "author": "user",
+          "text": "The peppers haven't sprouted yet. Is the basement too cold for the seeds?",
+          "time": "2026-03-12T20:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "8f9e402c-e36f-5e9c-ab5a-a196183aa3f8",
+          "author": "ai",
+          "text": "Probably. Pepper seeds germinate best around 27 degrees Celsius. A seedling heat mat under the tray usually solves it; take the tray off the mat once most cells have sprouted.",
+          "time": "2026-03-12T20:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "b4af419d-4cbd-57f3-9473-d863250aa43b",
+          "author": "user",
+          "text": "Where should the compost bin go? I don't want it right next to the beds.",
+          "time": "2026-03-15T11:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "45fea605-2d44-5260-a5c7-9794682788dc",
+          "author": "ai",
+          "text": "Put the compost bin behind the shed in the north corner. It stays out of sight, the shade keeps it from drying out, and it is still close enough to carry finished compost to the beds.",
+          "time": "2026-03-15T11:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "0a5aaf86-f1bc-5ac0-873e-ea142800f433",
+          "author": "user",
+          "text": "I planted the snap peas directly along the north fence this afternoon. The ground was finally soft enough to dig.",
+          "time": "2026-03-22T14:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "8121f1c7-27d8-58c1-b5b7-a6f83494fe0d",
+          "author": "ai",
+          "text": "Late March is perfect for peas because they like cool soil. Water them in once and then only if it stays dry; the fence will give them something to climb.",
+          "time": "2026-03-22T14:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "c2ed89b6-bc82-5b60-9f8f-ec99859af3e2",
+          "author": "user",
+          "text": "How do I harden off the seedlings before they go outside?",
+          "time": "2026-03-27T19:35:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "4a96b673-0977-5130-962a-9457bbb55f7f",
+          "author": "ai",
+          "text": "Over about ten days, set the trays outside in a sheltered spot for an hour on the first day and add an hour or two each day, moving them into more sun as you go. Bring them in on cold or windy nights.",
+          "time": "2026-03-27T19:36:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "9d74ca6d-3794-57a9-a894-205b35f561d1",
+          "author": "user",
+          "text": "I checked lumber prices for the beds and cedar boards have gone up a lot since February.",
+          "time": "2026-04-01T18:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "722edc23-ef0d-56bd-8977-d2995aa309d9",
+          "author": "ai",
+          "text": "Prices do swing in spring. Before deciding anything, compare the full cost of all three beds, including screws and corner posts, against the alternatives.",
+          "time": "2026-04-01T18:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "8a061cc2-2a8f-546a-a2a6-194ab572fb7d",
+          "author": "user",
+          "text": "I planted the tomato seeds indoors today, a little later than the peppers.",
+          "time": "2026-04-04T16:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "4a57200e-6380-5fbf-aa4e-6a9699235083",
+          "author": "ai",
+          "text": "Early April is about six weeks before your last frost, which is right for tomatoes. They grow fast, so they will catch up with the peppers.",
+          "time": "2026-04-04T16:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "a0ff0717-ec75-56ec-b8b3-09437c1a614e",
+          "author": "user",
+          "text": "Several cells have two or three seedlings in them. Do I need to thin them?",
+          "time": "2026-04-08T20:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "aa285c04-c5a3-55f8-81fc-ed1f85f35a96",
+          "author": "ai",
+          "text": "Yes. Snip the weaker seedlings at soil level with scissors and keep the strongest one per cell. Pulling them can damage the roots of the one you keep.",
+          "time": "2026-04-08T20:06:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "c3131ce6-9a53-5a82-ad35-af4fff3cd486",
+          "author": "user",
+          "text": "There are tiny green aphids on the kale seedlings on the windowsill.",
+          "time": "2026-04-12T17:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "3b6b07cd-cb08-51f4-bbf2-917df0129962",
+          "author": "ai",
+          "text": "Rinse them off under a gentle stream of water and check the undersides of the leaves every couple of days. A few aphids are normal; if they come back in numbers, a mild soap spray handles it.",
+          "time": "2026-04-12T17:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "5b630f52-343a-5418-bc0a-34c2daf23f97",
+          "author": "user",
+          "text": "How often should I water the seedlings after transplanting them into the beds?",
+          "time": "2026-04-15T19:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "db1f6950-064e-515a-9d73-fa8bb789c8cb",
+          "author": "ai",
+          "text": "Water deeply every other day for the first two weeks after transplanting, then switch to a deep soak twice a week. Deep, less frequent watering pushes the roots down.",
+          "time": "2026-04-15T19:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "5db71aba-56fd-567d-8249-4dd855a991f4",
+          "author": "user",
+          "text": "Slugs have already found the lettuce seedlings. What can I do about the slugs?",
+          "time": "2026-04-18T21:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "54b2a5ac-d6d6-5719-b616-8fc4ca64cb62",
+          "author": "ai",
+          "text": "Set out shallow beer traps between the plants and empty them every morning, and run copper tape around the top edge of each bed. Watering in the morning rather than the evening also helps, because slugs feed on damp nights.",
+          "time": "2026-04-18T21:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "890e63aa-1582-5286-9051-97f03e26d9b9",
+          "author": "user",
+          "text": "How far apart should the squash plants be?",
+          "time": "2026-04-21T18:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "7d07f659-2045-5914-8cd6-1328990e8c48",
+          "author": "ai",
+          "text": "Give each squash plant about 90 centimeters in each direction. They spread far more than you expect, and crowded squash gets powdery mildew.",
+          "time": "2026-04-21T18:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "9daa3926-3f22-5985-8111-7d31f09da4b5",
+          "author": "user",
+          "text": "Is drip irrigation worth setting up for three garden beds?",
+          "time": "2026-04-24T19:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "cc7452ca-1504-511c-81e2-68e0a3a58aab",
+          "author": "ai",
+          "text": "For three beds a simple drip kit on a timer is worth it. It puts water at the roots, keeps the leaves dry and saves you an evening chore. Lay the lines before you mulch.",
+          "time": "2026-04-24T19:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "8d3747a6-1b06-5859-b9fa-aecc958782c3",
+          "author": "user",
+          "text": "Which herbs should I grow in the third bed?",
+          "time": "2026-04-27T17:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "90a4afe1-ab33-503c-8f92-7b96f7ae01c9",
+          "author": "ai",
+          "text": "Basil, parsley and chives all suit bed three. Basil likes the warmest end, parsley tolerates the maple's shade, and chives come back every year.",
+          "time": "2026-04-27T17:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "46f58bfd-528e-5522-87fe-68b9ef6d6976",
+          "author": "user",
+          "text": "When is it actually safe from frost here?",
+          "time": "2026-04-29T20:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "568ccc6d-7fc5-58fc-813c-5a531b93a568",
+          "author": "ai",
+          "text": "Your average last frost date is around May 10. Wait until about a week after that, and check the ten-day forecast, before setting out tomatoes and peppers.",
+          "time": "2026-04-29T20:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "6ab6f9e9-f605-5a7f-a07e-a5df9775aa58",
+          "author": "user",
+          "text": "Lumber has doubled in price, so let's switch to galvanized steel beds instead. I'm thinking the 80 centimeter tall ones so I don't have to bend down so much.",
+          "time": "2026-05-01T18:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "a154a0aa-f65a-5e96-8901-90bbd750aa7c",
+          "author": "ai",
+          "text": "Galvanized steel beds are a sound change: they last decades, go together in an afternoon, and at 80 centimeters you can garden standing up. They need more fill, so we can put logs and branches at the bottom to save on soil.",
+          "time": "2026-05-01T18:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "5c19ffa6-0ec4-5508-95be-a3597a60fb63",
+          "author": "user",
+          "text": "Will metal beds cook the plant roots in summer?",
+          "time": "2026-05-02T13:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "495740f2-64e8-54f0-add6-262951ddf7b6",
+          "author": "ai",
+          "text": "Rarely in practice. The soil mass buffers the heat, and a light-colored finish or a row of marigolds along the south side shades the walls. Keep the soil mulched and moist.",
+          "time": "2026-05-02T13:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "cbbd57fc-10cd-5c62-aaf4-461997461c86",
+          "author": "user",
+          "text": "What should go in the bottom of the tall beds so I don't need so much soil?",
+          "time": "2026-05-03T16:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "422240c7-f965-5b52-b9a7-6d68725a0e2b",
+          "author": "ai",
+          "text": "Lay untreated logs and thick branches in the bottom third, then twigs and leaves, then your soil mix on top. The wood breaks down slowly and holds water. Expect the soil to settle a few centimeters in the first year.",
+          "time": "2026-05-03T16:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "ad8e8ea5-4da2-5faa-b5bb-c7314fc316e9",
+          "author": "user",
+          "text": "What mulch should I use around the plants?",
+          "time": "2026-05-04T19:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "4b607f98-1a2b-5bc8-84cc-95d5b50d268d",
+          "author": "ai",
+          "text": "Clean straw is a good choice: it keeps the soil moist, smothers weeds and breaks down into organic matter. Keep it a few centimeters away from the stems.",
+          "time": "2026-05-04T19:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "3867fd66-215e-573a-8335-c22aa8ad7fe4",
+          "author": "user",
+          "text": "I'm changing the watering schedule to mornings instead of evenings, because of the slugs.",
+          "time": "2026-05-05T20:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "f20d9cf4-471a-5cfc-9d98-effd47d573b6",
+          "author": "ai",
+          "text": "That's a sensible change. Morning watering lets the leaf surfaces and the top of the soil dry by nightfall, which slugs and fungal diseases both dislike.",
+          "time": "2026-05-05T20:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "4ec76e38-a896-5da4-917c-810d9adc116d",
+          "author": "user",
+          "text": "What's the plan for transplanting the tomatoes once frost is past?",
+          "time": "2026-05-07T18:25:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "03080d65-843a-5d58-b7ab-d7ad81792603",
+          "author": "ai",
+          "text": "Set them deep, burying two thirds of the stem, because tomatoes root along buried stems. Water them in, add the cages right away, and give them a few cloudy days if you can pick the timing.",
+          "time": "2026-05-07T18:26:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "cde40ad8-c028-570c-ae8d-2e16cc92f717",
+          "author": "user",
+          "text": "Do marigolds really help as companion plants in the garden?",
+          "time": "2026-05-09T15:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "7ef571cf-2509-518b-bbdd-704fe4a5bffe",
+          "author": "ai",
+          "text": "They attract hoverflies and other helpful insects and they cheer up the beds. The evidence against pests is mixed, so treat them as a bonus rather than protection.",
+          "time": "2026-05-09T15:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "785b9792-3488-5da2-b70b-8e9b2812bf4e",
+          "author": "user",
+          "text": "I put a rain gauge by the garden beds so I know how much water they are getting.",
+          "time": "2026-05-10T17:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "17ac9a1f-fc80-564d-ae3e-b32270abb94e",
+          "author": "ai",
+          "text": "Good idea. As a rule of thumb the beds need about 2.5 centimeters of water a week, so you can skip the drip timer after a rainy week.",
+          "time": "2026-05-10T17:06:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "40771e2d-a0cc-5072-bebc-2c236b065b73",
+          "author": "user",
+          "text": "I changed the trellis plan for the cucumbers: instead of the string trellis, I'm putting a cattle panel arch between bed two and bed three.",
+          "time": "2026-05-12T19:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "b5ba8d98-66f4-5413-af42-6e43adeb28b5",
+          "author": "ai",
+          "text": "A cattle panel arch is a great upgrade. It holds heavy vines without sagging, the cucumbers hang down where you can see them, and you can walk under it. Anchor each end with two T-posts.",
+          "time": "2026-05-12T19:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "371ce7e5-2d64-5dcf-ac20-c2554034b499",
+          "author": "user",
+          "text": "Change of plan for the basil: I'm moving it into containers on the patio so it's right by the kitchen.",
+          "time": "2026-05-14T18:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "621285cd-ecc8-5f38-be2d-52e743ceb479",
+          "author": "ai",
+          "text": "Basil does very well in containers. Use pots at least 25 centimeters wide, water them daily in hot weather, and pinch the tops often so it keeps branching.",
+          "time": "2026-05-14T18:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "43ddbd42-2655-5f1f-8526-13c88ea14f58",
+          "author": "user",
+          "text": "I dropped the eggplant from bed two and I'm putting bush beans there instead. The eggplant seedlings never really grew.",
+          "time": "2026-05-16T11:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "0501e0cf-b38f-5eba-9c5a-8b2fe058581e",
+          "author": "ai",
+          "text": "Bush beans are a good swap. They grow fast from direct sowing, fix nitrogen for next year, and fit the space without staking.",
+          "time": "2026-05-16T11:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "3faf785d-811e-54f8-a593-f6fd7aa3b8c5",
+          "author": "user",
+          "text": "I've changed the mulch from straw to shredded leaves, since I have a big pile of them from last autumn.",
+          "time": "2026-05-19T20:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "1202f869-e8c0-5d3f-910b-b01dbba2c25a",
+          "author": "ai",
+          "text": "Shredded leaves make excellent mulch and they cost nothing. Spread them about 5 centimeters deep and they will break down into the soil over the season.",
+          "time": "2026-05-19T20:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        }
+      ]
+    },
+    {
+      "id": "chat-portugal-trip",
+      "scope": {
+        "type": "none"
+      },
+      "summarized_up_to": "57511693-4055-551d-ae9e-bb7d4a64505b",
+      "messages": [
+        {
+          "id": "5f6f6325-42d4-55ab-9e69-5b181bee1c33",
+          "author": "user",
+          "text": "My sister Clara and I want to spend ten days in Portugal in May, from May 8 to May 18. Can you help me plan it?",
+          "time": "2026-01-05T19:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "b42ab385-f1dc-5ec7-b015-05b11cb7f4c8",
+          "author": "ai",
+          "text": "Gladly. Ten days fits Lisbon with a day trip or two, then Porto in the north. Let's sort flights first, then where to stay, then the days themselves.",
+          "time": "2026-01-05T19:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "e73f3fef-e438-5b57-9f1e-0bf9e9e26e07",
+          "author": "user",
+          "text": "I booked the outbound flight: TP 1352 from Boston, landing in Lisbon at 9:40 in the morning on May 8.",
+          "time": "2026-01-07T20:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "a487e5e4-6947-5d4b-bb51-2c2189688e19",
+          "author": "ai",
+          "text": "A morning arrival is ideal. You can drop your bags, have a long lunch and stay up until a normal bedtime to beat the jet lag.",
+          "time": "2026-01-07T20:06:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "0aa18248-5f91-5290-a376-133dc6a796b8",
+          "author": "user",
+          "text": "Clara and I agreed on a food budget of 120 euros a day for the two of us. Is that realistic?",
+          "time": "2026-01-09T18:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "146d4533-87b1-5ebf-9832-69b453a36308",
+          "author": "ai",
+          "text": "Yes. 120 euros a day for two covers coffee and pastries in the morning, a sit-down lunch and a good dinner with wine most days, with room for one or two special meals.",
+          "time": "2026-01-09T18:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "1669b712-1e0b-502b-9f68-851308256f2c",
+          "author": "user",
+          "text": "Should we stay in Alfama or Principe Real in Lisbon?",
+          "time": "2026-01-12T21:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "495e4255-2013-599b-8eef-cb1e965a7296",
+          "author": "ai",
+          "text": "Alfama is atmospheric but steep and busy at night. Principe Real is calmer, leafy and close to good restaurants and the metro. For a first visit with a lot of walking, I'd lean toward Principe Real.",
+          "time": "2026-01-12T21:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "205d6f97-7048-5bc0-8e2c-ab13011b1ed3",
+          "author": "user",
+          "text": "How does public transport work in Lisbon? Is there a transit card?",
+          "time": "2026-01-15T19:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "bd512309-b570-5435-b71c-e39bd28f3f6d",
+          "author": "ai",
+          "text": "Get a Viva Viagem card at any metro station and load it with zapping balance. It works on the metro, trams, buses and the ferry across the river, and each ride costs less than a single paper ticket.",
+          "time": "2026-01-15T19:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "616bb34a-79af-5bfb-a47c-5e73e84fbb0c",
+          "author": "user",
+          "text": "For getting from Lisbon to Porto, let's take the train. The Alfa Pendular in first class looks comfortable and it's under three hours.",
+          "time": "2026-01-18T20:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "1c01fe3c-4831-53ec-8599-a506d84048af",
+          "author": "ai",
+          "text": "The Alfa Pendular is a good choice: it runs from Santa Apolonia and Oriente, takes about two hours and fifty minutes, and first class is roomy with a power socket at every seat.",
+          "time": "2026-01-18T20:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "af6eef06-f6b4-545e-a4b3-f63c60cbd816",
+          "author": "user",
+          "text": "I booked Sintra for Tuesday May 12, with Pena Palace timed entry at 10:30.",
+          "time": "2026-01-21T18:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "1547828b-019c-53db-aae0-9259418287c0",
+          "author": "ai",
+          "text": "Smart to take the first part of the morning. Catch an early train from Rossio and walk or take the bus up; the gardens are much quieter before noon.",
+          "time": "2026-01-21T18:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "fbf88f7b-44bb-5f61-ab89-9a67d4b5a85a",
+          "author": "user",
+          "text": "My friend Teodora recommended a restaurant in Lisbon called O Gaveto Azul. She said the grilled octopus is the best she's ever had.",
+          "time": "2026-01-24T19:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "b0f66cd3-348a-55b7-a284-e74cdad74f0a",
+          "author": "ai",
+          "text": "That's a great tip to have. Restaurants that size usually fill up on weekends, so book a table for one of your first evenings in Lisbon.",
+          "time": "2026-01-24T19:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "903f1381-66ee-56c2-8d1a-ab391b01ddae",
+          "author": "user",
+          "text": "Got the Belem Tower tickets for 4:15 in the afternoon on May 10.",
+          "time": "2026-01-27T20:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "7c36edc2-ded5-5e54-ad07-992bea226d44",
+          "author": "ai",
+          "text": "Late afternoon light on the tower is lovely. Go to the monastery earlier that day and pick up custard tarts in between.",
+          "time": "2026-01-27T20:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "8f3820d5-e273-5985-8697-6c1629363088",
+          "author": "user",
+          "text": "Can we manage with carry-on luggage only for ten days?",
+          "time": "2026-01-29T18:25:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "6dc0a9b7-723a-5559-ac19-9e94ee5109ad",
+          "author": "ai",
+          "text": "Yes, if you plan for one load of laundry halfway through. Pack layers, two pairs of comfortable shoes and leave room for anything you want to bring home.",
+          "time": "2026-01-29T18:26:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "007817c0-2f72-5a62-994e-84ea63f20c6b",
+          "author": "user",
+          "text": "What's the easiest way to have mobile data while we're there?",
+          "time": "2026-02-02T19:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "f5ac0bf4-2e49-59fa-afd7-b36c63275b25",
+          "author": "ai",
+          "text": "An eSIM bought before you leave is easiest. Install it at home and switch it on when you land, so you have maps and messages from the airport.",
+          "time": "2026-02-02T19:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "c85ae295-11e3-5593-98be-5655e3b66cc4",
+          "author": "user",
+          "text": "We should have one seafood restaurant by the water. I found Mare Baixa in Cascais.",
+          "time": "2026-02-05T20:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "a11de490-0c72-54ef-94d5-537d57c2678d",
+          "author": "ai",
+          "text": "Mare Baixa would make a nice half day: take the coastal train to Cascais, walk along the seafront and have a long seafood lunch at the restaurant.",
+          "time": "2026-02-05T20:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "365c6ff1-0f16-5127-a181-18fbae03b89d",
+          "author": "user",
+          "text": "I booked a guesthouse in Porto called Casa das Laranjeiras, near the river.",
+          "time": "2026-02-08T21:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "95b8da2f-b1bd-5ff2-b09b-fca03338af72",
+          "author": "ai",
+          "text": "Staying near the river puts you within walking distance of the old town and the bridge to Gaia, where the port cellars are.",
+          "time": "2026-02-08T21:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "a41cc0f2-1139-5455-9c85-9e3e188792b2",
+          "author": "user",
+          "text": "Is a port wine cellar tour in Gaia worth doing?",
+          "time": "2026-02-11T18:35:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "fb8b9a38-908a-59da-8f5c-f64b1cca2f72",
+          "author": "ai",
+          "text": "Yes, especially for a first visit. Pick one of the smaller family cellars, which tend to be less rushed, and do it in the late afternoon before dinner.",
+          "time": "2026-02-11T18:36:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "3ebca345-e07c-5fd5-a384-013a386b6930",
+          "author": "user",
+          "text": "Clara is vegetarian. I found a vegetarian restaurant in Porto called Horta do Largo.",
+          "time": "2026-02-14T19:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "46817b5e-f416-5761-bbfa-8dbeb4129745",
+          "author": "ai",
+          "text": "Good find. It helps to have one restaurant you know works for Clara in each city, so you're not hunting for options when you're tired.",
+          "time": "2026-02-14T19:06:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "0bb884c2-a68a-5d93-a082-6aca0fbb2a1c",
+          "author": "user",
+          "text": "Do we need travel insurance for a ten day trip in Europe?",
+          "time": "2026-02-18T20:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "ceb3255b-2896-50e7-8f7f-79e50e47c6e0",
+          "author": "ai",
+          "text": "It's worth having for medical cover and cancellations. Check whether a credit card you used for the flights already includes it before buying a separate policy.",
+          "time": "2026-02-18T20:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "f59de7f7-c393-5c24-bdb0-38f160b3e9bd",
+          "author": "user",
+          "text": "Is a Douro valley day trip doable from Porto?",
+          "time": "2026-02-21T18:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "0ddcb9cf-9e72-5f5a-b9a8-2b7832750f22",
+          "author": "ai",
+          "text": "Yes. The scenic train up the valley and a boat back is a classic way to do it, and many tours include a vineyard lunch. It is a long but relaxed day.",
+          "time": "2026-02-21T18:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "6aa15108-5297-524e-9103-63f01f0933ee",
+          "author": "user",
+          "text": "What Portuguese phrases should we learn before we go?",
+          "time": "2026-02-25T19:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "83eaa4bf-b4b4-5973-899c-6a3e37101593",
+          "author": "ai",
+          "text": "Start with bom dia, obrigado or obrigada, por favor, desculpe, and a conta, por favor for the bill. People appreciate the effort even if you switch to English afterwards.",
+          "time": "2026-02-25T19:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "ced4b311-71ad-5037-bd7f-f6b244da07a4",
+          "author": "user",
+          "text": "For Clara's birthday dinner on May 15 in Porto, I booked a restaurant called Sal e Brasa.",
+          "time": "2026-03-01T20:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "563b5dc8-4535-59d2-a07c-5e0ec6419cd8",
+          "author": "ai",
+          "text": "Lovely. Ask them when you confirm whether they can bring a small dessert with a candle; most places are happy to do it.",
+          "time": "2026-03-01T20:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "f3eb4e8a-801d-5413-8676-a40c292a54e2",
+          "author": "user",
+          "text": "What shoes are best for the cobblestones?",
+          "time": "2026-03-04T18:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "5654ddd5-5617-558b-8710-2e3f2aa913e2",
+          "author": "ai",
+          "text": "Shoes with cushioned, grippy soles. The polished stone gets slippery, especially on hills and after rain, so leave smooth leather soles at home.",
+          "time": "2026-03-04T18:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "ed25f20e-f7df-5f0b-a016-b71d54dcd74f",
+          "author": "user",
+          "text": "Should we bring cash or just use cards?",
+          "time": "2026-03-07T19:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "2738b7ed-11cd-5a69-9f17-7245cc3bc809",
+          "author": "ai",
+          "text": "Cards work almost everywhere, but carry a little cash for small cafes and markets. Withdraw from bank machines rather than exchange booths, and always pay in euros.",
+          "time": "2026-03-07T19:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "80c744ff-d02f-5e38-aee0-c0fc8a7d3516",
+          "author": "user",
+          "text": "Can you put together a rough day by day outline for the Lisbon part?",
+          "time": "2026-03-10T20:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "57511693-4055-551d-ae9e-bb7d4a64505b",
+          "author": "ai",
+          "text": "Day one: arrive, settle in, walk the neighbourhood. Day two: Belem in the morning and the tower in the afternoon. Day three: Alfama and the castle. Day four: Cascais. Day five: Sintra. Then you head north.",
+          "time": "2026-03-10T20:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "5db2055e-dd8f-5a7f-b9f8-740f6ff0a17b",
+          "author": "user",
+          "text": "Are there any must-see museums in Lisbon?",
+          "time": "2026-03-13T18:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "56e73337-9477-5dbe-a41f-29e44346a180",
+          "author": "ai",
+          "text": "The tile museum is the one I'd prioritise; the building and the collection are both beautiful. The Gulbenkian is a calm second choice on a rainy afternoon.",
+          "time": "2026-03-13T18:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "4fac24f1-1a59-5145-9c45-5803b4cdd144",
+          "author": "user",
+          "text": "What's the weather usually like in May? Do we need rain gear?",
+          "time": "2026-03-16T19:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "cb53151c-a113-53a5-81bc-14d5f4e8b70f",
+          "author": "ai",
+          "text": "May is mostly mild and sunny, around 22 degrees in Lisbon, a little cooler in Porto. Pack a light rain jacket for the north just in case.",
+          "time": "2026-03-16T19:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "8d9c3c3b-ba73-5624-bf5f-4d24e925f1b8",
+          "author": "user",
+          "text": "I'd love to see a fado performance. Any tips?",
+          "time": "2026-03-18T20:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "71cbe7bf-11cd-5687-a264-742d6ee11fd0",
+          "author": "ai",
+          "text": "Choose a small house where the music is the focus and people are asked to stay quiet during songs. Book ahead and expect a late start.",
+          "time": "2026-03-18T20:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "5aa17be3-afbf-5e44-a956-88348042ba27",
+          "author": "user",
+          "text": "Change of plan for getting north: let's rent a car so we can stop in Coimbra and Aveiro on the way to Porto.",
+          "time": "2026-03-21T18:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "f62fbe9d-7ca9-5308-a456-025085822c0c",
+          "author": "ai",
+          "text": "Driving north makes those stops easy. Coimbra's old university is worth a few hours, and Aveiro is a good lunch stop with its canals. Leave the car at your Porto guesthouse's nearest garage, since you won't need it in the city.",
+          "time": "2026-03-21T18:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "476cb20a-8eb9-57cb-9c59-e30e61b170dc",
+          "author": "user",
+          "text": "I booked the car with Atlantico Rent, picking it up on May 13 at Oriente station.",
+          "time": "2026-03-23T19:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "fe490ce0-116b-5a05-b50a-00e656ee588e",
+          "author": "ai",
+          "text": "Picking up at Oriente gets you onto the motorway quickly without driving through the centre. Check that the booking includes the electronic toll device.",
+          "time": "2026-03-23T19:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "bf25d2bf-e732-5e9a-8124-f23877090990",
+          "author": "user",
+          "text": "For lunch in Coimbra I booked a restaurant called Tasca do Penedo.",
+          "time": "2026-03-25T20:25:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "8cf6648b-98f8-57cf-a10d-888761e3c19c",
+          "author": "ai",
+          "text": "A booked lunch in Coimbra keeps the drive day relaxed. Aim to arrive by late morning so you have time for the university first.",
+          "time": "2026-03-25T20:26:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "dbbcd7a6-10f3-5001-8fa8-f3c9dbe1e0ae",
+          "author": "user",
+          "text": "I confirmed a short boat ride on the canals in Aveiro for 4 in the afternoon.",
+          "time": "2026-03-27T18:55:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "eb6c181e-6ea8-554e-b03b-ef1272972c27",
+          "author": "ai",
+          "text": "That timing works well after lunch in Coimbra, which is about an hour's drive away. Afterwards it's just over an hour to Porto.",
+          "time": "2026-03-27T18:56:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "516be26d-4477-5fb6-8e1b-bc5711a38c2c",
+          "author": "user",
+          "text": "Where should we park in Porto?",
+          "time": "2026-03-30T19:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "86e94865-9eb0-5d03-8b4f-ad2ad194b9cd",
+          "author": "ai",
+          "text": "Use a covered garage near your guesthouse and leave the car there until you return it. Old town streets are narrow and many are restricted to residents.",
+          "time": "2026-03-30T19:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "1c30c77c-db77-5866-be2c-81f9e563c36a",
+          "author": "user",
+          "text": "What should we do on the last evening in Porto?",
+          "time": "2026-03-30T21:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "380ded3c-446e-5bfc-a2e7-d55ad2148b22",
+          "author": "ai",
+          "text": "Walk across the upper deck of the bridge at sunset and have dinner in Gaia looking back at the old town.",
+          "time": "2026-03-30T21:06:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "72b57342-2dee-50b0-a1a6-3104b25b222b",
+          "author": "user",
+          "text": "How early should we get to the Porto airport for the flight home?",
+          "time": "2026-03-31T18:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "3d7a00ca-b4c4-53f4-af6d-4d3bd4abe737",
+          "author": "ai",
+          "text": "Two and a half hours before an international departure is comfortable. The metro runs straight to the airport from the centre.",
+          "time": "2026-03-31T18:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "0638d40c-7441-5066-a0f0-83c1f87d3b75",
+          "author": "user",
+          "text": "Should we exchange gifts for the people we're visiting?",
+          "time": "2026-03-31T19:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "f84af9d7-f3f7-5653-b506-fa9be4addacf",
+          "author": "ai",
+          "text": "A small gift from home is always welcome. Something local and easy to pack works best.",
+          "time": "2026-03-31T19:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "5f7b0052-d591-56fa-8f0c-37f930d967b9",
+          "author": "user",
+          "text": "Can you remind me to check the passports' expiry dates?",
+          "time": "2026-04-01T20:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "5501532b-bb12-5dbc-ae0a-161781e9f8b0",
+          "author": "ai",
+          "text": "Good thought. Your passports should be valid for at least three months after your return date. Check both tonight so there's time to renew if needed.",
+          "time": "2026-04-01T20:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        }
+      ]
+    },
+    {
+      "id": "chat-recipe-box-app",
+      "scope": {
+        "type": "project",
+        "id": "project-recipe-box",
+        "name": "Recipe Box App"
+      },
+      "messages": [
+        {
+          "id": "d5e2eb8a-7026-56ab-93c1-ced272deda84",
+          "author": "user",
+          "text": "I want to build an Android app for keeping our family recipes in one place. I'll write it in Kotlin. Where should we start?",
+          "time": "2026-08-03T19:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "c8cf6e84-88d0-5593-801f-08956aca21ef",
+          "author": "ai",
+          "text": "Start with the core loop: a list of recipes, a detail view, and a way to add one. Once that works end to end we can add photos, search and sharing.",
+          "time": "2026-08-03T19:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "9889fd5d-65eb-5a5e-b31c-4a33a821d78e",
+          "author": "user",
+          "text": "What minimum Android version should the app support?",
+          "time": "2026-08-04T20:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "4e2b5af6-655f-555b-a422-fdec80a60834",
+          "author": "ai",
+          "text": "Go with minimum SDK 26, which is Android 8.0. It covers nearly every phone still in use and gives you modern notification channels and adaptive icons without compatibility code.",
+          "time": "2026-08-04T20:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "0c08010d-f513-540f-be7c-3671d6a7f5be",
+          "author": "user",
+          "text": "What architecture should the app follow?",
+          "time": "2026-08-06T18:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "9219caa1-2e2d-5b68-b89a-562261a5dfdf",
+          "author": "ai",
+          "text": "Use a simple MVVM setup: Compose or XML views observe a ViewModel, the ViewModel talks to a repository, and the repository owns the database. Keep it to that until there's a real reason for more layers.",
+          "time": "2026-08-06T18:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "3658dcc7-81d9-5820-a791-99c4d72eacde",
+          "author": "user",
+          "text": "How should we store the recipes and ingredients?",
+          "time": "2026-08-08T21:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "76fb216e-c28c-576a-b4fb-37bca4952403",
+          "author": "ai",
+          "text": "Use Room. One table for recipes, and the ingredients table named pantry_items with a recipe id, a quantity, a unit and the ingredient name. Keeping quantity and unit separate makes unit conversion possible later.",
+          "time": "2026-08-08T21:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "7f56264d-4e5e-5bce-8650-412ca8917ae4",
+          "author": "user",
+          "text": "Let's design the recipe list screen. What should be on it?",
+          "time": "2026-08-11T19:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "ac7c619c-091f-5b94-b78a-235c1e1acc6e",
+          "author": "ai",
+          "text": "The list screen shows a photo thumbnail, the recipe title and the total time for each recipe, with a floating add button and a search icon in the top bar. Long titles wrap to two lines.",
+          "time": "2026-08-11T19:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "4311e015-ef44-5f8e-ab56-9be1d5422276",
+          "author": "user",
+          "text": "Which image loading library should we use for recipe photos?",
+          "time": "2026-08-13T20:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "151f24b6-d50f-5ab1-b47a-9defc3a8a596",
+          "author": "ai",
+          "text": "Use Coil. It's Kotlin-first, built on coroutines, has a smaller footprint than Glide, and handles caching and downsampling large camera photos for you.",
+          "time": "2026-08-13T20:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "b81b5bda-6c17-568d-80da-6a25218b2c58",
+          "author": "user",
+          "text": "Now the recipe detail screen. How should it be laid out?",
+          "time": "2026-08-15T18:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "58f4ca84-d81a-5481-8a62-3e5fba7072ae",
+          "author": "ai",
+          "text": "The detail screen puts the photo at the top, then the title, servings and times, then ingredients as a checklist and numbered steps below. Keep the screen awake while it's open so it doesn't dim during cooking.",
+          "time": "2026-08-15T18:06:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "40a2a8ec-0da7-599e-8307-7c56667d3d8b",
+          "author": "user",
+          "text": "What should we do about offline use and syncing between phones?",
+          "time": "2026-08-18T19:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "43ec98e1-2347-5b41-8698-59c367fc7326",
+          "author": "ai",
+          "text": "Keep everything local first so the app works with no connection. Sync to the cloud later; when the same recipe changes on two phones, last write wins and the losing version is saved as a conflict copy so nothing is lost.",
+          "time": "2026-08-18T19:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "3c0b4575-d8cc-5ff1-9759-37ffd9b3c850",
+          "author": "user",
+          "text": "Should the recipe list sort newest first or alphabetically?",
+          "time": "2026-08-20T20:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed",
+          "edited_from": "Should we use Firebase for the login and account sign-in?"
+        },
+        {
+          "id": "9504e565-0424-5314-983a-fcc3c79034e1",
+          "author": "ai",
+          "text": "Default to newest first, since people usually look for what they added recently, and offer alphabetical as a sort option in the top bar.",
+          "time": "2026-08-20T20:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "6b01707e-696e-5eee-92c2-8fa37164434a",
+          "author": "user",
+          "text": "Let's design the add-recipe form screen.",
+          "time": "2026-08-22T18:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "762eb8b3-676b-5574-b475-2c0dfa1b4a66",
+          "author": "ai",
+          "text": "The form screen has fields for title, servings, prep and cook time, a photo picker, an ingredient list where each row has quantity, unit and name, and a steps list. Save stays disabled until there is a title.",
+          "time": "2026-08-22T18:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "0f2793d1-8cba-5228-89ee-ef1bae31c570",
+          "author": "user",
+          "text": "What colors should the dark theme use?",
+          "time": "2026-08-25T19:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "3897576d-3f68-5ffc-ad8e-5528cb685c16",
+          "author": "ai",
+          "text": "For the dark theme use a warm charcoal background, #1E1B18, with off-white text and a muted tomato red accent. Every text color needs a contrast ratio of at least 4.5 to 1 against the background.",
+          "time": "2026-08-25T19:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "95ad3d49-58a1-58f1-bc1c-a71065cf6e1c",
+          "author": "user",
+          "text": "There's a bug: the app crashes when I rotate the phone on the add form.",
+          "time": "2026-08-27T21:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "7fca242c-e4ab-5602-aceb-641a7bcfadf7",
+          "author": "ai",
+          "text": "That bug comes from the form state living in the activity. Move the form state into the ViewModel so it survives rotation, and the crash and the lost input both go away.",
+          "time": "2026-08-27T21:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "c8beb2d8-3e35-57bb-8d36-f312a6272620",
+          "author": "user",
+          "text": "How should the unit conversion between cups and grams work?",
+          "time": "2026-08-29T18:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "7165b23f-03f1-521e-a37d-8ba81a72d8f1",
+          "author": "ai",
+          "text": "Store a density per ingredient for unit conversion. When converting to grams, round to the nearest 5 grams above 100 grams and to the nearest gram below that, so amounts look like something a cook would write.",
+          "time": "2026-08-29T18:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "ca377f68-169e-5e51-9097-db51599ddede",
+          "author": "user",
+          "text": "Another bug: some photos show up sideways in the app.",
+          "time": "2026-09-01T19:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "6d739dfe-7111-598e-ae56-1b3a0619a8f9",
+          "author": "ai",
+          "text": "That's an EXIF orientation bug. Camera photos store rotation as metadata; read the orientation tag and rotate the image when you import it.",
+          "time": "2026-09-01T19:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "271494ef-ee85-50fe-9cb3-117ff9e3e09c",
+          "author": "user",
+          "text": "Can you sketch how sharing a recipe with family should work?",
+          "time": "2026-09-03T20:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "284ce5a3-463f-515e-8225-715aebacccb8",
+          "author": "ai",
+          "text": "Sharing could start from the detail view. The first option would export the recipe as a PDF card with the photo, the ingredients and the",
+          "time": "2026-09-03T20:06:00Z",
+          "visibility": "visible",
+          "status": "failed"
+        },
+        {
+          "id": "51a6ce36-18da-5b2e-83bf-e7924985ed74",
+          "author": "user",
+          "text": "Let's design the shopping list screen.",
+          "time": "2026-09-05T18:35:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "f0d53df0-1a14-5c93-b798-65be90701d06",
+          "author": "ai",
+          "text": "The shopping list screen groups items by aisle, merges duplicate ingredients from several recipes, and lets you tick items off. Ticked items move to the bottom.",
+          "time": "2026-09-05T18:36:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "7c62f77d-3f7c-5ab4-8647-d64e0b466943",
+          "author": "user",
+          "text": "Found a bug: editing a recipe duplicates all its ingredients.",
+          "time": "2026-09-08T19:25:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "485a176c-9c75-5d3e-a936-5cdc791fed0d",
+          "author": "ai",
+          "text": "The edit path inserts the ingredient rows again instead of updating them. Use an upsert keyed on the row id, and delete rows the user removed, inside one transaction. That fixes the bug.",
+          "time": "2026-09-08T19:26:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "93e16af6-2914-5a60-8cfa-1ad18464a412",
+          "author": "user",
+          "text": "How should recipe search work?",
+          "time": "2026-09-10T20:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "bb532ad1-98be-53da-baeb-dac4f6accc80",
+          "author": "ai",
+          "text": "Use a full-text search table that covers titles, ingredients and steps. It is fast even with thousands of recipes and supports prefix matches as you type.",
+          "time": "2026-09-10T20:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "71a006ce-9269-532a-b54e-036f81e4cd0d",
+          "author": "user",
+          "text": "Should recipes have tags like dessert or weeknight?",
+          "time": "2026-09-12T18:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "0f097b35-d361-52d0-bda7-c65ceab1b840",
+          "author": "ai",
+          "text": "Yes. A many-to-many tag table keeps it flexible, and the list can filter by one or more tags.",
+          "time": "2026-09-12T18:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "53588082-6aee-55bf-8ad9-3d588a885f7c",
+          "author": "user",
+          "text": "Bug report from my brother: the cooking timer notification doesn't show on his Android 13 phone.",
+          "time": "2026-09-15T19:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "c084d437-fa63-5117-9e81-fc01ef438dee",
+          "author": "ai",
+          "text": "That bug is the runtime notification permission added in Android 13. Request POST_NOTIFICATIONS the first time someone starts a timer and explain why it's needed.",
+          "time": "2026-09-15T19:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "fa7c1c21-5801-5098-af94-5de7bf074b4e",
+          "author": "user",
+          "text": "Let's design the settings screen.",
+          "time": "2026-09-17T20:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "b02cd55d-2b0a-5487-84ae-26da59a3f0d5",
+          "author": "ai",
+          "text": "The settings screen holds the theme choice, the default unit system, the backup file option and an about section. Keep it to one scrolling list.",
+          "time": "2026-09-17T20:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "8353e7c7-9a60-55be-a59b-bca858585780",
+          "author": "user",
+          "text": "What should the testing strategy be?",
+          "time": "2026-09-19T18:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "0a630976-28b0-5a63-be63-a53bfe8985ac",
+          "author": "ai",
+          "text": "Unit test the repository and the unit conversion, add Room tests for the queries, and a handful of UI tests for adding and editing a recipe.",
+          "time": "2026-09-19T18:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "a0410c69-b98a-5057-ad96-5b94b328f832",
+          "author": "user",
+          "text": "What do we need for accessibility?",
+          "time": "2026-09-22T19:35:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "dc6991e3-3f56-5c34-b8e0-c677b8d1b404",
+          "author": "ai",
+          "text": "Content descriptions on every icon button, touch targets of at least 48 dp, text that scales with the system font size, and focus order that follows the reading order.",
+          "time": "2026-09-22T19:36:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "4b3e40bc-7f92-5e7d-b30f-79c57308bbaf",
+          "author": "user",
+          "text": "Can we import recipes from websites?",
+          "time": "2026-09-24T20:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "05742a8f-0c8a-5b72-9475-13097b2cdc35",
+          "author": "ai",
+          "text": "Many recipe sites embed structured recipe data in the page. Fetch the page, read that structured block and map it to our fields, and let the user review before saving.",
+          "time": "2026-09-24T20:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "e0d3c7e9-c7ea-5fab-8002-ce720f6c375d",
+          "author": "user",
+          "text": "Bug: searching for creme brulee doesn't find my recipe because I typed it with accents.",
+          "time": "2026-09-26T18:55:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "57148d07-5c51-5a24-8584-578597d47dc5",
+          "author": "ai",
+          "text": "That bug is about normalisation. Strip accents from both the stored text and the search query before matching, so either spelling finds the recipe.",
+          "time": "2026-09-26T18:56:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "6783dbab-9079-5cb6-955f-c3c57d0744ce",
+          "author": "user",
+          "text": "How should backups work?",
+          "time": "2026-09-29T19:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "70868dee-5085-59d0-8ec7-f6379eb9c96c",
+          "author": "ai",
+          "text": "Offer an export to a single backup file in the user's chosen folder, with recipes, ingredients, tags and photos. Restore reads the same file and asks before replacing anything.",
+          "time": "2026-09-29T19:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "7bf77a41-1246-5196-9510-df36e9e661ca",
+          "author": "user",
+          "text": "Would a home screen widget be useful?",
+          "time": "2026-10-01T20:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "066e98f1-75f5-5422-9255-5c6aee643d8f",
+          "author": "ai",
+          "text": "A small widget that shows a random favourite recipe or the current shopping list would be handy. Leave it until after the first release.",
+          "time": "2026-10-01T20:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "85405c01-1fac-53f5-ad09-a5e735aa24dd",
+          "author": "user",
+          "text": "The list stutters with a lot of photos. How do we make it smoother?",
+          "time": "2026-10-04T18:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "011247c7-fe13-51aa-a302-9403eafbc94c",
+          "author": "ai",
+          "text": "Load thumbnails at the size they're shown, give each row a stable key, and avoid doing date formatting during scrolling. That usually removes the stutter.",
+          "time": "2026-10-04T18:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "d68c25fd-6ffe-5d98-a5ba-3ca5c63ef17c",
+          "author": "user",
+          "text": "How should we release the first version to the family?",
+          "time": "2026-10-07T19:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "0751659a-e86d-5178-9f51-37f0bffd4d3e",
+          "author": "ai",
+          "text": "Use the internal testing track in the Play Console. You can add family members by email and push updates without a public listing.",
+          "time": "2026-10-07T19:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "70a48fe9-1ad9-5c71-a6aa-b8bc24ab604f",
+          "author": "user",
+          "text": "Ideas for the app icon?",
+          "time": "2026-10-09T20:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "c6d19c2e-2b7c-572f-bf2c-c10ffe927f3b",
+          "author": "ai",
+          "text": "A simple recipe card with a folded corner in the accent red reads well at small sizes. Avoid fine detail that disappears on the home screen.",
+          "time": "2026-10-09T20:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "93f7e8f8-9457-53ab-a9b0-458c3199cbaf",
+          "author": "user",
+          "text": "Do we need an onboarding flow?",
+          "time": "2026-10-12T18:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "2284d8b0-630b-5360-8ad4-4fc44b93bbc4",
+          "author": "ai",
+          "text": "Keep it minimal: one welcome card that offers to add the first recipe or import one from a website.",
+          "time": "2026-10-12T18:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "ce30d240-2bf7-520a-beee-3a1641a773e9",
+          "author": "user",
+          "text": "How can the family send feedback during the beta?",
+          "time": "2026-10-14T19:55:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "10186540-7fa5-5f71-9eea-fc1dde4258f0",
+          "author": "ai",
+          "text": "Add a feedback item in settings that opens an email draft with the app version filled in.",
+          "time": "2026-10-14T19:56:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "9a5a2374-1864-563a-8f84-24fd67acebe6",
+          "author": "user",
+          "text": "What should go into version 1.1?",
+          "time": "2026-10-16T20:25:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "753b312e-46e4-5798-9302-f6a1d8b0b112",
+          "author": "ai",
+          "text": "The widget, recipe sharing, and meal planning for the week are the strongest candidates for 1.1.",
+          "time": "2026-10-16T20:26:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        }
+      ]
+    },
+    {
+      "id": "chat-companion-mira",
+      "scope": {
+        "type": "companion",
+        "id": "companion-mira",
+        "name": "Mira"
+      },
+      "messages": [
+        {
+          "id": "b30daa11-239f-5b08-bf42-2c434053753c",
+          "author": "user",
+          "text": "Hi Mira. Long day, but a good one. I finally made it through a whole week without staying up past midnight once.",
+          "time": "2026-09-01T20:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "b7b7f3d0-cdc0-5e5d-9393-93b05299caef",
+          "author": "ai",
+          "text": "Hi! That's a real accomplishment. Going to bed on time all week is harder than it sounds. How do you feel now that you've done it?",
+          "time": "2026-09-01T20:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "1b840fb4-6401-5afb-be11-7b0f42bae588",
+          "author": "user",
+          "text": "Nora and I drove out to the old Kettle Point lighthouse on Saturday and got caught in a storm. We climbed to the top anyway and watched the rain sweep in over the water. It was terrifying and wonderful.",
+          "time": "2026-09-04T21:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "c201b283-4571-5da4-8a79-467d6f0916e6",
+          "author": "ai",
+          "text": "That sounds unforgettable: the two of you at the top of the lighthouse while the storm rolled in. Those are the days you end up telling stories about for years.",
+          "time": "2026-09-04T21:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "3b0f9fb4-6738-54c0-ba47-28757c5462d8",
+          "author": "user",
+          "text": "Remember my grandmother's brass key that I thought I lost? I found it! It had slipped through a hole in the lining of my winter coat.",
+          "time": "2026-09-08T19:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "63dc1d67-2d65-5d5d-a622-0e58c63ec036",
+          "author": "ai",
+          "text": "Oh, I'm so glad! The brass key from your grandmother has been on your mind for weeks. Maybe it's time to put it on a ribbon or a hook where it can't wander off again.",
+          "time": "2026-09-08T19:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "a897667f-b0f4-5f17-b7aa-4ac4f1371fe8",
+          "author": "user",
+          "text": "Okay, this week has been a lot, so bear with me while I unload a bit. The move is finally done, but the new apartment is still a maze of boxes and I keep losing things I packed myself. On Monday the movers showed up two hours late and then one of them dropped the box with my good bowls, so that was fun. Tuesday I spent most of the evening on hold with the internet company, who swear they activated the line even though the little light on the router is still blinking orange. Wednesday was better. I found the box with the kettle and made actual tea for the first time in days, and the neighbour across the hall came over with a plant as a welcome gift, which nearly made me cry. Biscuit has been hiding under the bed most of the time, poor thing, but he came out last night and sat on the windowsill watching the pigeons. Oh, and before I forget, Biscuit's vet appointment is on the 14th at 3:40, the yearly checkup and his booster shots. Anyway, I think I just need a quiet weekend where nobody calls me about deliveries and I can put books on shelves and pretend I am settled.",
+          "time": "2026-09-12T22:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "1db33716-9497-5797-9eb2-0b6c7708872e",
+          "author": "ai",
+          "text": "That really was a week. Late movers, broken bowls, and the router saga would wear anyone out, so of course you want a quiet weekend. I'm glad the neighbour's plant and the first proper cup of tea gave you a little lift, and that Biscuit is starting to explore. Unpacking a few books at a time is a perfectly good way to start feeling at home.",
+          "time": "2026-09-12T22:06:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "bf5ea79f-9d85-529c-bcea-2b3cb1710a0e",
+          "author": "user",
+          "text": "so I'm walking home right now and I wanted to just talk through the work thing because it's been sitting on my chest all day the project review was supposed to be next week and everyone was planning around that and then my manager came by this afternoon and said the presentation got moved to Thursday the 22nd because the director is traveling after that and honestly I don't mind the date itself it's more that half the charts still have last quarter's numbers and the person who owns the data is on leave until Monday so I have to figure out who else can pull the figures and I also need to rehearse because last time I rushed the ending and nobody had time for questions and I want this one to feel calmer and more like a conversation I think if I block two mornings for slides and one afternoon for a practice run with Dana it'll be fine but I just needed to say it out loud to someone who isn't going to immediately add another task to my list okay I'm almost at the door",
+          "time": "2026-09-15T18:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "dictated"
+        },
+        {
+          "id": "5862a508-8402-56e6-a9db-b24b22d399e5",
+          "author": "ai",
+          "text": "That's a lot to absorb in one afternoon. Your plan sounds solid, though: two mornings for slides, an afternoon to rehearse with Dana, and someone else to pull the figures while the data owner is away. Leaving room for questions at the end will make it feel calmer, just like you want.",
+          "time": "2026-09-15T18:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "56fe03df-bab4-581a-b9ff-4befb2f46ce1",
+          "author": "user",
+          "text": "I'm planning a surprise party for Jonah on November 8 at the bowling alley on Fern Street. I'm writing it here so I don't forget the details.",
+          "time": "2026-09-18T20:30:00Z",
+          "visibility": "hidden",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "de426938-9665-56d7-9564-40e5d6a4f01b",
+          "author": "ai",
+          "text": "A surprise party at the bowling alley sounds like so much fun. I'll keep it quiet.",
+          "time": "2026-09-18T20:31:00Z",
+          "visibility": "hidden",
+          "status": "finished"
+        },
+        {
+          "id": "2784e11e-d359-5d90-ba1b-f54c7b317196",
+          "author": "user",
+          "text": "I'm making a list for the family lunch on Sunday and I want to think it through with you because there are a lot of moving parts this time. Fourteen people are coming, which is the most we've ever fit in my place, so I'm borrowing folding chairs from work and my aunt is bringing her long table. The plan is a big tray of roasted vegetables, the lemon chicken everyone asks for, two salads, fresh bread from the bakery on the corner, and my grandmother's apple cake for dessert. My uncle insists on bringing his chili even though it never goes with anything, and I've stopped arguing about it. The one thing I really can't mess up is that my cousin Pell is allergic to cashews, so the pesto has to be made without them and I need to check the labels on the crackers too. I'm thinking I'll do most of the chopping on Saturday night, put the chicken in to marinate before bed, and then the morning is just roasting and setting the table. Do you think I'm forgetting anything obvious? I always forget ice.",
+          "time": "2026-09-21T17:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "1a769646-fc1d-58be-b22a-8031193b02d1",
+          "author": "ai",
+          "text": "That menu sounds wonderful, and it's very kind of you to host fourteen people. The Saturday prep plan is smart. Besides the ice, think about serving spoons for every dish, a spot for coats, and a cooler for drinks if the fridge fills up. Good call on checking the cracker labels as well as the pesto.",
+          "time": "2026-09-21T17:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "2a11996b-fa07-5426-be2e-15528d41f729",
+          "author": "user",
+          "text": "okay quick voice note while I'm folding laundry because my hands are busy so I went to the library today after work and it was so nice and quiet and I sat in the big chair by the window for almost an hour which I haven't done in forever and I ended up borrowing that thick novel about the cartographer the one with the blue cover and the librarian said the library book is due on October 30 and that there's already a waitlist for it so I can't renew it which means I actually have to read it instead of letting it sit on the nightstand for six weeks like I usually do and I also signed up for their Thursday evening craft circle which starts next month so that's a thing I'm doing now apparently I think it'll be good for me to have one evening a week where I'm around people but not at work anyway that's the update from the laundry pile",
+          "time": "2026-09-24T21:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "dictated"
+        },
+        {
+          "id": "d61d70af-e2b3-5969-962d-4be61504a29b",
+          "author": "ai",
+          "text": "An hour in the window chair sounds lovely. A waitlist is a good nudge to actually read it, and the Thursday craft circle sounds like a gentle way to spend time around people. Thanks for the laundry pile update!",
+          "time": "2026-09-24T21:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "a3e8967a-b5b3-5f1d-9cd2-357f9880ad7c",
+          "author": "user",
+          "text": "Can you suggest a calm playlist for winding down in the evening?",
+          "time": "2026-09-27T20:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed",
+          "edited_from": "Can you help me write a message to my landlord about the broken heater?"
+        },
+        {
+          "id": "483aaabc-c6a4-5acf-81dc-8344ed0c135f",
+          "author": "ai",
+          "text": "Try some slow piano, a few quiet acoustic albums, and ambient tracks without lyrics. Keep the volume low and let it play while you dim the lights.",
+          "time": "2026-09-27T20:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "04612bf2-9a84-5985-9ab9-a421487aff8a",
+          "author": "user",
+          "text": "Tell me something nice to look forward to on a grey weekend.",
+          "time": "2026-09-30T19:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "79cc7517-e119-55f6-9a2d-c100b382a250",
+          "author": "ai",
+          "text": "Grey weekends are perfect for a jigsaw puzzle spread across the kitchen table with a pot of",
+          "time": "2026-09-30T19:06:00Z",
+          "visibility": "visible",
+          "status": "unfinished"
+        },
+        {
+          "id": "d555c8ca-8e99-5310-a75a-f24a9621af7d",
+          "author": "user",
+          "text": "Gift idea for Nora's birthday: the blue ceramic teapot from the Saturday market. Don't let me forget.",
+          "time": "2026-10-03T18:35:00Z",
+          "visibility": "hidden",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "379ff2b2-5406-56f1-8824-f8b226f2e993",
+          "author": "ai",
+          "text": "A blue ceramic teapot is a perfect gift for her.",
+          "time": "2026-10-03T18:36:00Z",
+          "visibility": "hidden",
+          "status": "finished"
+        },
+        {
+          "id": "6ff135da-2b52-594c-a858-ca82672c93e0",
+          "author": "user",
+          "text": "I went back to the Saturday market and bought Nora's birthday present today. She's going to love it.",
+          "time": "2026-10-05T19:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "fac4b66b-2486-5eac-9818-885b3b94b9f7",
+          "author": "ai",
+          "text": "That's lovely! It's always a good feeling to have the present sorted early. I hope her birthday is a happy one.",
+          "time": "2026-10-05T19:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "16bbe63b-3d2c-52fd-9ccd-3fffaa8df25a",
+          "author": "user",
+          "text": "I've been sleeping better since the move. The new bedroom is so much darker.",
+          "time": "2026-10-07T22:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "775792d4-ace8-55e9-8e92-8f575fb4b587",
+          "author": "ai",
+          "text": "That makes a real difference. Darkness helps your body wind down. I'm glad the new place is already giving you better nights.",
+          "time": "2026-10-07T22:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "41b0e9c3-6cfc-55cc-8d2d-daae96cac7d4",
+          "author": "user",
+          "text": "Weekend plans: farmers market in the morning, then maybe a long walk by the river.",
+          "time": "2026-10-10T16:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "9d9e3190-da26-5e5c-9d65-43c7aaf6adac",
+          "author": "ai",
+          "text": "That sounds like a lovely, unhurried weekend. Enjoy the walk by the river.",
+          "time": "2026-10-10T16:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        }
+      ]
+    },
+    {
+      "id": "chat-saltmarrow-roleplay",
+      "scope": {
+        "type": "roleplay_world",
+        "id": "world-saltmarrow-coast",
+        "name": "The Saltmarrow Coast"
+      },
+      "messages": [
+        {
+          "id": "98531994-bded-5758-b83c-551b5b3300bf",
+          "author": "user",
+          "text": "Let's start a story. I'm Wren, a fifteen year old apprentice to Ansel, the lighthouse keeper on the Saltmarrow Coast. It's my first week at the light.",
+          "time": "2026-09-05T21:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "b70f6e88-4f5e-5f3f-b22b-bfa2e897e950",
+          "author": "ai",
+          "text": "*The stair to the lamp room has one hundred and twelve steps, and Ansel makes you count them aloud on your first morning.* \"You'll climb them in the dark soon enough,\" he says. \"Better your feet know them before your eyes have to.\"",
+          "time": "2026-09-05T21:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "df7f958b-1802-585b-b5c0-bd4af03c0c66",
+          "author": "user",
+          "text": "That night a storm hits. Wren follows Ansel up to the top of the lighthouse to check the lamp.",
+          "time": "2026-09-07T21:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "ed2025cd-3b0d-55c8-ad92-165ab7a85817",
+          "author": "ai",
+          "text": "*The wind screams around the gallery as you climb. At the top, Ansel lifts the hood of the lantern and swears softly: the great lens has a crack running through one of its prisms, and the light beyond it is thrown wide and weak.* \"We keep it burning,\" he says. \"Cracked light is better than no light.\"",
+          "time": "2026-09-07T21:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "bdb6c169-ab6f-5e98-aaf3-b44862135bf9",
+          "author": "user",
+          "text": "Write the full chapter of the shipwreck rescue on the Teeth, the night the harbour bell rings for a ship in distress. Make it long.",
+          "time": "2026-09-10T20:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "3696ccf2-331b-52cb-8fe5-6531501789f4",
+          "author": "ai",
+          "text": "Chapter Four: The Night of the Gull's Promise\n\nThe bell on the harbour wall began to ring a little after the second watch, three short strokes and a long one, the old signal for a ship in distress. Wren was already awake. She had been lying in the narrow bunk under the stairs listening to the wind pick at the shutters, counting the gaps between gusts the way Ansel had taught her, and when the bell came she was on her feet before the long stroke had finished.\n\nAnsel was halfway down the spiral stair with the storm lantern in one hand and his oilskin half buttoned. His beard was flattened on one side from the pillow and his eyes were the clear, hard grey they went whenever the sea did something he did not like. \"Ship on the Teeth,\" he said. \"Two masts, maybe three. Get the long rope and the cork vests from the boathouse. Go.\"\n\nShe went. Outside the wind took the door out of her hand and slammed it against the wall so hard the hinges sang. Rain came sideways off the sea in sheets, cold enough to make her teeth ache, and the gravel path to the boathouse was a running stream. Above her the great lamp turned and turned, throwing its white arm across the water, and each time it swept past the headland she saw the shape of the ship: a dark hull heeled hard over on the rocks the fishermen called the Teeth, her foremast already gone, her sails streaming like torn laundry.\n\nThe boathouse smelled of tar and wet rope. Wren hauled the coil of long rope over her shoulder, nearly toppled under its weight, and dragged the crate of cork vests behind her down the slipway. By the time she reached the water's edge the village had woken. Lanterns bobbed along the harbour wall. Men in nightshirts and boots were running; women were shouting names; somebody's dog was barking itself hoarse. Old Hesketh, who had pulled an oar in the lifeboat for forty years and claimed he could smell a wreck before he saw it, was already standing in the stern of the boat, bellowing for crew.\n\n\"Keeper's girl,\" he said when he saw her. \"You're light. Bow. Keep the lamp up and keep your eyes on the ship, not on the waves. The waves will only frighten you.\"\n\nThere were eight of them in the boat when it slid off the ramp: Hesketh at the steering oar, Ansel and five fishermen at the sweeps, and Wren crouched in the bow with the storm lantern lashed to the stem post. The first wave lifted them so high she saw the whole harbour behind her, every lit window, the church tower, the lighthouse flashing its slow white beat. The second dropped them into a trough so deep the sky vanished and there was only black water on every side and the roar of it in her ears. She held on to the gunwale with both hands and kept her eyes on the ship.\n\nIt took them the better part of an hour to cross the bay. Twice Hesketh turned the bow into a breaking sea and shouted at the rowers to hold, and twice the boat climbed the wall of water and fell down the far side with a crash that knocked the breath out of everyone aboard. Wren was soaked through within minutes. Her fingers went numb and then stopped hurting at all, which she knew from Ansel's stories was not a good sign, so she flexed them every time the lamp swept past, counting under her breath.\n\nCloser in, the ship grew enormous. She was a coastal trader, broad in the beam, her name picked out in faded gold along the stern: the Gull's Promise. Her mainmast still stood, though it leaned at a terrible angle, and men were clinging to the rigging and to the high side of the deck where the waves could not quite reach them. Each time the lamp passed, Wren counted them. Nine. Ten. Eleven. A shape on the quarterdeck that might have been a twelfth, or might only have been a coil of sail.\n\n\"We can't come alongside,\" Hesketh shouted. \"She'll roll on us. Keeper, the line.\"\n\nAnsel stood up in the plunging boat as if it were a kitchen floor. He took the long rope from Wren's feet, tied a weighted monkey's fist to the end, and waited. The boat rose, hung, began to fall. At the top of the next rise he threw. The rope went out across the gap in a long, low curve and dropped squarely across the leaning mainmast, and on the deck of the Gull's Promise someone grabbed it and hauled it in and made it fast.\n\nWhat followed was the longest night of Wren's life. One by one the sailors came down the rope, hand over hand, their legs wrapped around it, the sea snatching at their boots. The first was a boy no older than Wren, who arrived in the lifeboat shaking so badly she had to buckle his cork vest for him. The second was the ship's cook, a vast woman with a bald head and a gold tooth who laughed out loud when her feet touched the boards. The third and fourth came together and nearly drowned them all when the boat lurched, but the fishermen dragged them in by their collars. Wren lost track of time. She buckled vests and wrapped blankets and passed a flask of something that burned her throat when she sipped it by mistake, and every time the lamp came round she looked up at the ship and counted the shapes still waiting.\n\nWhen the boat was full Hesketh took them back across the bay with seven sailors aboard, the lifeboat riding so low that the waves came over the gunwales and the rescued men bailed with their hands and hats. On the slipway the whole village was waiting. They carried the sailors up to the inn, where the landlady had every fire in the place roaring and a cauldron of soup on the hearth, and then Hesketh turned around without a word and took the boat out again.\n\nThe second crossing was worse. The tide had turned and the wind had backed into the north, and the waves came short and steep and confused, slapping the boat from two sides at once. The Gull's Promise was breaking up now. They could hear her even over the storm, a long grinding groan as the rocks worked into her hull. The four sailors left on board had climbed as high as they could into the mainmast rigging, and when the lifeboat came close the mast gave a crack like a gunshot and leaned another few degrees toward the sea.\n\n\"Quickly now,\" Ansel shouted to them. \"One at a time and don't look down.\"\n\nThree of them came down the rope. The fourth, the man on the quarterdeck that Wren had not been sure of, did not move. In the next flash of the lamp she saw why: he was an old man, the captain by his coat, and he had tied himself to the binnacle and was hanging there with his head on his chest.\n\nAnsel looked at Hesketh. Hesketh looked at the mast. Neither of them said anything. Then Ansel took off his oilskin and handed it to Wren, tied a short line around his waist, and went up the rope himself.\n\nWren never forgot what it was like to watch him go. The rope sagged and leapt with every sea, and twice he disappeared completely under the white water and came up still climbing. He reached the deck, slid down its slope to the captain, cut him free with the knife he always carried, and hoisted him over his shoulder like a sack of flour. Getting back to the rope with that weight took him a very long time. When at last he came down it, inch by inch, with the old man lashed to his back, the fishermen reached up and caught them both, and the boat nearly capsized under the shift of weight, and Hesketh swore so inventively that even the half-drowned captain opened his eyes and laughed.\n\nEleven sailors were saved that night. The twelfth shape on the quarterdeck had been nothing but a coil of sail after all, and the captain, when he could speak again, confirmed that his crew had numbered eleven including himself. The Gull's Promise went to pieces on the Teeth an hour before dawn. By morning there was nothing left of her but a scatter of planks on the beach and a single barrel of salted herring that the village children rolled up to the inn in triumph.\n\nWren slept until noon. When she woke, the storm had blown itself out and the sea was flat and pale as pewter, and Ansel was sitting at the foot of the stair cleaning the storm lantern as if nothing had happened at all. He did not mention the rope or the captain or the long climb. He only said, without looking up, \"You kept the lamp lit. Good,\" and went back to polishing the glass.\n\nShe found out later, from Hesketh, that the lantern had been the only light the sailors could see from the rigging, the only thing that told them which way to swim if the ship went down. She thought about that for a long time. She thought about it whenever she climbed the stair to wind the great lamp's clockwork, and whenever a gale came in off the sea and set the shutters rattling, and whenever she looked out at the Teeth on a clear day and saw the water breaking white over the place where the Gull's Promise had died.\n\nThat was the night she stopped thinking of herself as the keeper's apprentice, and began, very quietly, to think of herself as a keeper.",
+          "time": "2026-09-10T20:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "3ff8f35f-a068-55a9-a7f7-ee25949dec9f",
+          "author": "user",
+          "text": "While cleaning the keeper's boots, Wren finds a brass key tucked inside one of them. She's never seen it before.",
+          "time": "2026-09-14T19:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "aa0cacb7-dc76-5f67-934c-77951dcbcdc9",
+          "author": "ai",
+          "text": "*It is heavy, old, its teeth worn smooth. When you show it to Ansel he goes still, then closes your fingers around it.* \"That's the brass key to the sea gate under the cliff,\" he says. \"Keep it safe. And don't go down there alone.\"",
+          "time": "2026-09-14T19:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "6dccb9d2-177b-52d8-8619-e91e1a629f20",
+          "author": "user",
+          "text": "OOC: later in the story I want to reveal that Ansel is secretly Wren's uncle, so drop small hints but don't say it yet.",
+          "time": "2026-09-16T20:00:00Z",
+          "visibility": "hidden",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "16f1a51e-9326-58df-8bf0-0849de56fdde",
+          "author": "ai",
+          "text": "OOC: Understood. I'll seed small hints and keep it secret until you decide to reveal it.",
+          "time": "2026-09-16T20:01:00Z",
+          "visibility": "hidden",
+          "status": "finished"
+        },
+        {
+          "id": "cdff86b4-b1ae-55d7-8e48-27101756deb1",
+          "author": "user",
+          "text": "Wren goes to the market town to buy lamp oil and wicks.",
+          "time": "2026-09-19T21:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "26145357-6beb-5c83-9b95-afa41e9483d0",
+          "author": "ai",
+          "text": "*The market at Brinehollow is loud and smells of fish and woodsmoke. The chandler weighs out your oil and wicks and asks, not quite casually, how the old keeper is keeping these days.*",
+          "time": "2026-09-19T21:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "8dac2981-b257-543d-a3cc-6502846e1154",
+          "author": "user",
+          "text": "At the inn, Wren asks Hesketh about the ruined church on the island. Tell the legend of the drowned bell in full, the way the old women tell it.",
+          "time": "2026-09-23T20:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "899da559-7787-57f1-afd4-75f43d070720",
+          "author": "ai",
+          "text": "The Legend of the Drowned Bell, as the old women of Saltmarrow tell it\n\nLong before there was a lighthouse on the point, before the harbour wall was built, before anyone in the village could read or write, there was a church on the island that sits a mile out in the bay. You can still see what is left of it at low tide: a ring of black stones like broken teeth, and the stump of a tower covered in weed. In those days the island was joined to the mainland by a causeway of sand that appeared twice a day when the tide went out, and the people of Saltmarrow walked across it every Sunday to hear the bell ring and the priest preach.\n\nThe bell was the pride of the whole coast. It had been cast in the village itself, in a pit dug in the dunes, because no ship's captain would agree to carry a bell that size across open water. The bellfounder came from far inland, a thin quiet man with burn scars on both his hands, and he told the village that he had bronze enough for a bell of ordinary size but not for the great bell they wanted. If they wanted it larger, he said, they would have to give him more metal, and he did not care what kind.\n\nSo the people of Saltmarrow gave him what they had. The fishermen gave him the brass fittings from their boats. The farmers gave him old ploughshares and harness buckles. And the women of the village, who had very little of their own, gave him their wedding rings. Every married woman on the coast took the ring from her finger and dropped it into the founder's crucible, and the bell was cast from melted wedding rings and fishermen's brass and old iron, and when it was hung in the island tower and struck for the first time the sound carried so far that they heard it in the next three villages along the coast.\n\nThey named the bell Old Maud, after the founder's mother, because he asked them to, and because it had his mother's voice, he said: low and warm and impossible to ignore. Old Maud rang for every wedding and every funeral and every Sunday service for sixty years. She rang the fishing fleet out in the morning and home in the evening, and when fog rolled in off the sea she rang every quarter hour through the night, so that any boat caught out on the water could steer by her voice and find the harbour.\n\nThe women of Saltmarrow said that when they heard Old Maud ring they could hear their own rings in her, each one a small note inside the large one, and that this was why the bell was lucky: it carried a piece of every promise ever made on that coast. Girls who were courting would row out to the island and touch the bell's rim for luck. Widows would go and sit beneath the tower on the anniversaries of their husbands' deaths. It was said that no boat had ever been lost within the sound of Old Maud's voice, and for sixty years that was true.\n\nThen came the winter of the great storm. It began on the feast of Saint Lucy and did not stop for nine days. The wind blew from the south west without a pause, and the sea rose higher than anyone had ever seen it, higher than the old marks on the harbour stones, higher than the stories of the oldest grandmothers. On the third day the causeway washed away completely. On the fifth day the sea broke through the island's sea wall and flooded the churchyard. On the seventh day the priest, who had stayed on the island alone to keep the bell ringing for the boats, sent a message ashore with a gull tied with a scrap of red cloth, the old sign that he would not leave.\n\nOn the ninth night the fleet was out. They had been caught at the far fishing grounds when the storm began and had been sheltering in a cove up the coast, and when the wind dropped for a few hours on the ninth day they made a run for home. But the lull did not last. The storm came back harder than ever just as the boats rounded the point, and the fog came with it, so thick that the men in the bows could not see the men at the stern. Fourteen boats, and every one of them blind.\n\nThe priest heard them. He heard the shouts across the water, and he climbed the tower with the sea already breaking against its walls, and he rang Old Maud. He rang her all night. The people on the shore heard her ringing, steady and slow, never missing a stroke, through the howling of the wind and the crash of the waves, and one by one the boats followed the sound and found the harbour mouth and came home. Thirteen boats. Then, just before dawn, the fourteenth, the smallest, with an old man and his grandson aboard, both of them half dead with cold, guided in by the last strokes of the bell.\n\nAnd then the bell stopped.\n\nWhen the storm finally blew out and the sea went down, the people of Saltmarrow looked out at the island and saw that the tower was gone. The sea had taken it in the last hour of the night, priest and bell and all. They searched the island for days. They found the priest's hat and his book of prayers, and the wooden wheel that had hung Old Maud, but they never found the priest and they never found the bell. The island itself shrank year by year after that, as if the sea were slowly finishing what it had started, until all that was left was the ring of stones you can see at low tide.\n\nFor a long time afterwards the village could not bear to build another church. People said their prayers at home or on the beach, and on Sundays the fishermen stood bareheaded on the harbour wall at the hour when the bell used to ring, looking out at the place where the tower had been. The bellfounder came back once, an old man by then, and stood with them. He did not say anything. When he left he gave the priest's housekeeper a small bronze handbell he had cast from the scraps left over in his crucible, and that handbell still hangs in the inn above the fireplace, where Hesketh rings it at closing time.\n\nThat is not the end of the legend, though. The old women say that Old Maud is still there, lying on her side on the sea floor somewhere off the island, half buried in the sand. And they say that on nights when the fog comes in thick and a boat is in danger, you can still hear her ringing from under the water, low and warm, guiding lost boats home. Fishermen swear to it. Hesketh swears to it. He says he heard her once, forty years ago, when he was a boy lost in the fog off the point with his father, and that they turned the boat toward the sound and came safely in on a night when two other boats were lost.\n\nSome people say it is only the wind in the rocks, or the buoy bell off the Teeth, or the imagination of frightened men. But the old women of Saltmarrow do not argue with them. They only smile and touch their bare ring fingers, because to this day no woman married on that coast wears a wedding ring. They wear a twist of red thread instead, in memory of the rings that went into the bell, and of the priest who rang it, and of the night Old Maud brought thirteen boats home and then followed the fourteenth all the way to the harbour before she let herself sink.\n\nWhen the lighthouse was built on the point, a hundred years later, the first keeper hung a small brass bell beside the lamp room door, and every keeper since has rung it once at sunset, three short strokes and a long one, before lighting the lamp. Nobody remembers who started the custom or why that particular signal. The old women say it is so that Old Maud knows the light is lit and she can rest for the night. Ansel, when Wren asks him, only shrugs and says that it is the custom, and that customs on this coast are older than anyone's reasons for them.\n\nBut Wren notices that he never misses it. Not once, not on the calmest summer evening and not on the night he is sick with fever and can barely climb the stair. Three short strokes and a long one, every sunset. And sometimes, when the fog is in and the lamp is turning and the whole coast is wrapped in grey, she thinks she can hear, far out beyond the island, something answering.",
+          "time": "2026-09-23T20:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "449a39cf-f8b2-54ad-b2cb-3e7054f439a3",
+          "author": "user",
+          "text": "A stranger's boat lands at the cove at night with its lights out. Wren watches from the gallery.",
+          "time": "2026-09-27T21:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "5417ddcb-4a92-5269-85db-4ef3ade10665",
+          "author": "ai",
+          "text": "*Shapes move on the shingle, carrying long crates up toward the old smugglers' path. One of them looks up at the lighthouse, straight at you, and raises a hand as if in greeting.*",
+          "time": "2026-09-27T21:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "8edaf18d-ef4e-5264-9907-33e7e1cd65d7",
+          "author": "user",
+          "text": "Wren and Ansel replace the cracked prism with a spare from the storeroom.",
+          "time": "2026-10-01T20:05:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "823b5edd-916b-505f-b8e6-c004a327368c",
+          "author": "ai",
+          "text": "*It takes the whole afternoon. The spare prism is wrapped in oilcloth and straw, and when Ansel finally lifts it into place and tightens the brass clips, the light that comes through it is clean and bright again.*",
+          "time": "2026-10-01T20:06:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "0829711d-432f-51a1-8b66-fc29734b0917",
+          "author": "user",
+          "text": "Wren decides to use the key and open the sea gate at low tide, alone, despite the warning.",
+          "time": "2026-10-05T21:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "8c10e011-c849-5490-bc33-26a9504fea34",
+          "author": "ai",
+          "text": "*The gate groans on rusted hinges. Beyond it a tunnel slopes down into darkness that smells of salt and old stone, and somewhere far below, water is moving.*",
+          "time": "2026-10-05T21:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        }
+      ]
+    },
+    {
+      "id": "chat-book-club",
+      "scope": {
+        "type": "none"
+      },
+      "messages": [
+        {
+          "id": "56503791-4d83-5212-8633-52be15127772",
+          "author": "user",
+          "text": "I joined a book club! We meet once a month. Can you help me keep track of things here?",
+          "time": "2026-06-01T19:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "697c8dda-d94f-5f84-b735-f501f9047a8f",
+          "author": "ai",
+          "text": "Congratulations! Of course. Tell me about the books and the dates as they come up, and I can help you prepare for each meeting.",
+          "time": "2026-06-01T19:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "d6eea290-0179-5d2d-811e-9f0786a67970",
+          "author": "user",
+          "text": "Okay, I want to get my thoughts in order before Thursday because last month I froze when it was my turn and just said I liked the ending. This month's novel is the one about the two sisters who inherit the orchard, and I have opinions. I think the older sister is the real narrator even though the chapters alternate, because the younger one's chapters keep circling back to things only the older one could know. I also think the orchard is doing a lot of symbolic work that nobody in the group is going to want to talk about, especially the frost scene. The pacing in the middle dragged for me, around the part with the auction, but the last fifty pages made up for it. Practical note so I don't lose it: the meeting moved to the back room of the Linden Street cafe because the library is closed for painting. I want to bring up the mother's letters, and I want to ask whether anyone else thought the ending was hopeful or just quiet. Can you help me turn that into two or three questions I can actually ask out loud without rambling?",
+          "time": "2026-06-08T21:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "05b3f66a-a795-5db6-add4-6539da6b5a6f",
+          "author": "ai",
+          "text": "Here are three questions you can ask out loud. One: whose story is this really, given how much the younger sister seems to know? Two: what is the frost scene doing for the orchard and the family? Three: did the ending feel hopeful to you, or only quiet? Each is short, and each invites people to disagree with you, which keeps the conversation going.",
+          "time": "2026-06-08T21:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "7c9414b2-8ea6-5faf-9e77-5acc5c7918cd",
+          "author": "user",
+          "text": "right so I'm in the car and I just want to get this down before I forget it about the book club thing for Thursday I said I'd bring snacks but actually Marguerite already signed up for snacks so I'm off the hook for that which is good but I did promise to bring the spare copy for Dolores because she couldn't find the book anywhere and the library waitlist is ridiculous so I need to remember to put it in my bag tonight and also I want to mention that I think we should start ten minutes later because half of us come straight from work and the first fifteen minutes is always just people taking their coats off and apologising and nobody actually talks about the book until everyone has a drink and has settled down and honestly I'd rather have the extra ten minutes of actual conversation anyway that's all I'll check the bag tonight",
+          "time": "2026-06-10T17:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "dictated"
+        },
+        {
+          "id": "9067a0ea-451b-5539-850d-57f3d92df5c5",
+          "author": "ai",
+          "text": "Got it: no snacks needed from you, and the spare copy goes in your bag tonight for Dolores. Suggesting a slightly later start sounds sensible; you could raise it at the end of Thursday's meeting.",
+          "time": "2026-06-10T17:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "17f957f6-ceb8-5fa7-b75e-6cae3943abdb",
+          "author": "user",
+          "text": "I finished rereading the middle section last night and I'm now convinced I misread the whole book the first time. Everyone in the group talked about the narrator as reliable, kind of naive, just reporting what happened at the house that summer. But on the second read there are so many small places where she leaves something out or tells it slightly differently the second time. The biggest one: chapter 14 is where the narrator lies about the letter. She says she burned it without reading it, but in chapter 19 she quotes a line from it word for word. Once you see that, everything she says about her brother looks different, and the dinner party scene reads like a confession instead of a memory. I don't want to spring it on everyone as if I'm the clever one, because Ruth loved the narrator and took it quite personally last time someone criticised her. How do I bring it up gently? Maybe as a question rather than a claim? I'd really like the group to go back and look at it together.",
+          "time": "2026-06-14T20:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "e3f0c923-3ed8-5595-9d93-7d6b8e92d883",
+          "author": "ai",
+          "text": "Framing it as a question is a good instinct. You could say: \"I noticed something on a reread that changed the book for me, can we look at chapters 14 and 19 together?\" Then read the two passages aloud and let the group react before you offer your interpretation. That way Ruth gets to reach the conclusion herself rather than having it handed to her.",
+          "time": "2026-06-14T20:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "6f07d7b3-f7c2-583f-a949-01a5261cee0e",
+          "author": "user",
+          "text": "okay voice note about the schedule because I keep getting asked and I keep forgetting so the plan for the rest of the year is that we rotate houses like we said and July is at Ruth's place because she has the garden and we can sit outside if it's warm and then the host in August is Priya and she said she'd do a theme night with food from the book which sounds fun but also like a lot of work so I'll offer to help her and September is back at the cafe because too many people are travelling and nobody wants to clean their house for six people in the middle of moving kids back to school and then after that we said we'd decide in September what happens for the autumn and whether we keep monthly or go every six weeks and whether we try one meeting online for the people who are away I think that's everything",
+          "time": "2026-06-18T18:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "dictated"
+        },
+        {
+          "id": "2f184786-5162-52b7-8482-f60ab2d1e5ca",
+          "author": "ai",
+          "text": "Here is the schedule as you described it: July at Ruth's, August with Priya hosting a theme night, September back at the cafe, and a decision about the autumn schedule in September. Offering to help Priya is a kind idea.",
+          "time": "2026-06-18T18:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "02c4d005-2a8b-50cb-abd8-a36bdd77a139",
+          "author": "user",
+          "text": "Note to self: I didn't actually finish the book this time. Skim chapter 20 before Thursday so nobody notices.",
+          "time": "2026-06-20T22:10:00Z",
+          "visibility": "hidden",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "d4571c89-4095-57b9-af86-f2bcc17ff8f4",
+          "author": "ai",
+          "text": "Noted. Skimming chapter 20 should get you through the discussion.",
+          "time": "2026-06-20T22:11:00Z",
+          "visibility": "hidden",
+          "status": "finished"
+        },
+        {
+          "id": "e42c67e9-5f3e-5a3e-a467-8a6c716e9e2c",
+          "author": "user",
+          "text": "Should we try a poetry collection next month?",
+          "time": "2026-06-24T19:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed",
+          "edited_from": "Should we pick a mystery novel set on a train for the next book?"
+        },
+        {
+          "id": "b5d43624-08a8-5be1-bdbd-13decd3bc4c1",
+          "author": "ai",
+          "text": "A poetry collection would be a nice change of pace. Pick one with short poems so people can read a few aloud at the meeting.",
+          "time": "2026-06-24T19:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "1a181ae1-4ccd-5880-a15c-4ccb24c3f70f",
+          "author": "user",
+          "text": "Could you draft some discussion questions for the poetry collection?",
+          "time": "2026-06-28T20:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "6ef7f9fe-7320-59fc-9191-9a840d5bcbd0",
+          "author": "ai",
+          "text": "1. Which poem stayed with you longest, and why? 2. The villanelle in the second section repeats two lines throughout. How did the",
+          "time": "2026-06-28T20:46:00Z",
+          "visibility": "visible",
+          "status": "failed"
+        },
+        {
+          "id": "5f7e846a-8d11-5959-9d9e-fc28049929e7",
+          "author": "user",
+          "text": "We set up a snack rota so the host doesn't have to do everything.",
+          "time": "2026-07-03T18:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "1d7af3fc-c0e7-5ffe-862b-fd826d269f3d",
+          "author": "ai",
+          "text": "A rota is fair, and it makes hosting much less daunting. Share it in the group chat so everyone can see whose turn it is.",
+          "time": "2026-07-03T18:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "db90d940-a53e-5098-a115-d2e03182feb4",
+          "author": "user",
+          "text": "I'm reading about 30 pages a night to keep up. Is that a reasonable pace?",
+          "time": "2026-07-08T19:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "345814a5-5298-5581-8c0e-2aee738ac5ee",
+          "author": "ai",
+          "text": "That's very reasonable for a monthly club. At 30 pages a night you'll finish most novels in under two weeks and have time to reread favourite parts.",
+          "time": "2026-07-08T19:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        }
+      ]
+    },
+    {
+      "id": "chat-companion-rowan",
+      "scope": {
+        "type": "companion",
+        "id": "companion-rowan",
+        "name": "Coach Rowan"
+      },
+      "messages": [
+        {
+          "id": "48633088-357a-521b-8fd0-1d58773b7f9c",
+          "author": "user",
+          "text": "Morning, Coach. I signed up for a 10k on July 12. I can run about 20 minutes with walking breaks right now.",
+          "time": "2026-04-06T07:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "37d7e64f-df25-5883-a750-428cb887fa40",
+          "author": "ai",
+          "text": "Good morning, and congratulations on signing up! Twenty minutes with walking breaks is a perfectly good starting point for a July 10k. We have just over twelve weeks, which is enough time to build up safely.",
+          "time": "2026-04-06T07:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "af58cb60-1529-5a0e-b6a0-63ad09cbecb9",
+          "author": "user",
+          "text": "Can you write out the full twelve week plan, with every week explained? I want to print it and stick it on the fridge.",
+          "time": "2026-04-07T19:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "c5ca00e7-d4a5-5d7b-a80f-e8b47766bea9",
+          "author": "ai",
+          "text": "Here is your full twelve week plan for the 10k on July 12, written out week by week so you can see how each part builds on the one before. Everything is in kilometers and minutes, and every week has three runs: an easy run, a workout run, and a long run. On the other days you can rest, walk, or do the strength routine we talked about. If a week feels too hard, repeat it rather than pushing on. The plan only works if you arrive at the start line healthy.\n\nHow to read the effort levels. Easy means you can speak in full sentences the whole time; if you can't, slow down, even if that means walking for a minute. Steady means you can still talk, but only in short phrases. Hard means a few words at a time. Most of your running, around four fifths of it, should be easy. That is where the real fitness comes from, even though it never feels like you're doing much.\n\nWeek 1. Easy run of 20 minutes, alternating 3 minutes of running with 1 minute of walking. Workout run of 20 minutes, the same pattern, but on the last two running segments pick up the pace slightly to steady. Long run of 3 kilometers at an easy pace, walking whenever you need to. The goal of this week is simply to start, to find your easy pace and to learn what it feels like.\n\nWeek 2. Easy run of 22 minutes, running 4 minutes and walking 1. Workout run: 10 minutes easy, then 4 times 1 minute at steady with 2 minutes easy between, then 5 minutes easy. Long run of 3.5 kilometers. If your legs feel heavy after the long run, that is normal. If anything hurts sharply, stop and tell me.\n\nWeek 3. Easy run of 25 minutes, running 5 minutes and walking 1. Workout run: 10 minutes easy, 5 times 1 minute at steady with 90 seconds easy between, 5 minutes easy. Long run of 4 kilometers. This is a good week to try the route you plan to use for long runs, so you know where the water fountains and the shade are.\n\nWeek 4. This is a lighter week so your body can absorb the first three. Easy run of 20 minutes. Workout run of 20 minutes with 3 times 2 minutes at steady. Long run of 3.5 kilometers. You may feel restless and want to do more. Don't. Recovery weeks are part of the training, not a break from it.\n\nWeek 5. Easy run of 28 minutes with walking breaks only when needed. Workout run: 10 minutes easy, 3 times 3 minutes at steady with 2 minutes easy between, 5 minutes easy. Long run of 5 kilometers. Five kilometers is half your race distance, and it's worth noticing how far you've come since the first week.\n\nWeek 6. Easy run of 30 minutes continuous. Workout run: 10 minutes easy, 6 times 90 seconds at hard with 90 seconds easy between, 5 minutes easy. This is your first proper hard session; the hard segments should feel uncomfortable but controlled, and you should be able to run the last one at the same pace as the first. Long run of 6 kilometers.\n\nWeek 7. Easy run of 30 minutes. Workout run: 10 minutes easy, 2 times 8 minutes at steady with 3 minutes easy between, 5 minutes easy. Week 7 includes the first 8 kilometer long run, which is the biggest jump in the plan. Run it slower than you think you need to, take water with you, and plan a route that loops past home in case you need to stop early. This run is the moment many people realise the race is genuinely within reach.\n\nWeek 8. Another lighter week. Easy run of 25 minutes. Workout run of 25 minutes with 4 times 2 minutes at steady. Long run of 6 kilometers. Use this week to check your shoes for wear and to practise your race morning breakfast before the long run, so nothing about race day is new.\n\nWeek 9. Easy run of 35 minutes. Workout run: 10 minutes easy, 5 times 3 minutes at hard with 2 minutes easy between, 5 minutes easy. Long run of 9 kilometers. You might find the hard intervals feel easier than they did in week 6 at a faster pace. That is the fitness showing up.\n\nWeek 10. Easy run of 35 minutes. Workout run: 10 minutes easy, 20 minutes at steady, 5 minutes easy. This is a rehearsal of race effort, so practise starting a little slower than you want to and finishing strongly. Long run of 10 kilometers, at an easy pace. Yes, the whole distance. Running it easy now means running it well on race day.\n\nWeek 11. The taper begins. Easy run of 30 minutes. Workout run: 10 minutes easy, 4 times 2 minutes at race effort with 2 minutes easy between, 5 minutes easy. Long run of 7 kilometers. You will feel fresher as the week goes on. Resist the temptation to test yourself; the work is done and the fitness is in the bank.\n\nWeek 12. Race week. Easy run of 20 minutes early in the week. Workout run: 15 minutes easy with 4 short strides of 20 seconds near the end. Two days before the race, an easy 15 minutes or a walk. Lay out your kit the night before, pin your number on your shirt, and eat a familiar dinner. On race morning, eat the breakfast you practised, arrive early, and do 10 minutes of gentle jogging and a few strides before the start.\n\nRace strategy. Start at the back of your wave so you aren't pulled along too fast. Run the first two kilometers at easy pace, almost frustratingly slow. From kilometers three to seven, settle into steady effort and stay there. If you feel good at kilometer eight, start picking people off one at a time. In the last kilometer, use whatever is left. Whatever your time, finishing a 10k twelve weeks after your first 20 minute run is a real achievement.\n\nStrength routine. Twice a week, on non-running days, do three rounds of 10 squats, 10 lunges on each leg, 15 calf raises, a 30 second plank, and 10 glute bridges. This takes about fifteen minutes and makes a real difference to how your knees and hips cope with the extra running. If you only have time for one thing, do the calf raises; they protect your shins and Achilles.\n\nWarning signs. Normal training soreness is a dull, general ache in the muscles that fades within a day or two and feels better once you warm up. Stop and rest if you feel a sharp pain in one spot, pain that gets worse as you run, pain in a joint rather than a muscle, or anything that makes you change the way you run. Two or three rest days early on are much better than six weeks off later. Tell me if anything like that happens, and we'll adjust the plan together.\n\nSleep, food and water. The runs only make you fitter if you recover from them. Aim for at least seven and a half hours of sleep, especially the night after a long run. Eat a normal meal with some carbohydrate and protein within an hour or two of your long runs. Drink to thirst during the day, and carry water on any run longer than about 45 minutes once the weather warms up in June.\n\nTracking. Keep a short log of each run: the date, the distance or time, how hard it felt on a scale of one to ten, and anything you noticed, such as a sore calf or a great playlist. Looking back over the log on a bad day is the best reminder that you are making progress, even when a single run feels awful.\n\nWeather. Spring can swing from cold rain to the first warm days within a week. On cold mornings, wear a light layer you can tie around your waist once you warm up, and gloves you can stuff into a pocket. On hot days, run early or late, slow your pace and don't worry about the numbers on your watch; effort matters more than speed. If there is lightning, ice on the paths, or air quality warnings, move the run indoors or swap it with a rest day. A treadmill run at an easy effort counts just the same as one outside, and it's better to adjust the week than to slip on a frozen pavement.\n\nRunning with others. If a friend wants to join you, the easy runs are the perfect place for it, because you should be able to chat the whole way. Keep the workout runs and the long runs at your own effort, though, so you aren't pulled along faster than the plan intends.\n\nFinally, the most important rule: the plan is a guide, not a contract. Life will get in the way. If you miss a run, don't try to make it up by doubling the next one. Just carry on from where you are. Consistency over twelve weeks matters far more than any single session.",
+          "time": "2026-04-07T19:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "309ad64a-7e42-5824-9cdf-50642f3f0969",
+          "author": "user",
+          "text": "My knees feel a bit sore after the long run. Is that normal?",
+          "time": "2026-04-15T18:40:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "745fa774-533a-5d98-a8f8-f9f54853b3ae",
+          "author": "ai",
+          "text": "A general ache that fades within a day is common in the first few weeks. Make sure the long run is truly easy, keep up the strength routine, and tell me if it turns into a sharp pain or gets worse while you run.",
+          "time": "2026-04-15T18:41:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "5647b344-1591-5d2a-87b5-24bd33538ac8",
+          "author": "user",
+          "text": "Do I need special running shoes?",
+          "time": "2026-04-20T20:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "af1bbf73-c57c-5abd-aa74-7e2bfbdd5aed",
+          "author": "ai",
+          "text": "It's worth getting fitted at a running shop. Pick the pair that feels most comfortable when you jog in them, not the one with the most features, and replace them every 600 to 800 kilometers.",
+          "time": "2026-04-20T20:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "3e599c3d-902e-57df-9224-b7db347cb351",
+          "author": "user",
+          "text": "What should I eat before a morning run?",
+          "time": "2026-04-24T12:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "c0234927-b064-5228-9aeb-a954ab27a300",
+          "author": "ai",
+          "text": "Something small and easy to digest about an hour before, like toast with honey or a banana. Save bigger meals for after the run.",
+          "time": "2026-04-24T12:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "50e22ac5-0407-5071-9d07-ce8e58091f4e",
+          "author": "user",
+          "text": "I've been sleeping badly the night before long runs.",
+          "time": "2026-04-28T21:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "a3048ffd-ac63-5754-8538-3af1e25452a7",
+          "author": "ai",
+          "text": "That's common when a run feels like a big event. Lay out your kit the evening before, keep the same bedtime, and remember that one poor night doesn't affect the run as much as you'd think.",
+          "time": "2026-04-28T21:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        }
+      ]
+    },
+    {
+      "id": "chat-home-repairs",
+      "scope": {
+        "type": "none"
+      },
+      "messages": [
+        {
+          "id": "9e2a4f0d-b041-54ca-b79f-9ce6edc5455e",
+          "author": "user",
+          "text": "There's a leak under the kitchen sink. Water drips from where the pipe bends.",
+          "time": "2026-05-02T10:00:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "0d156d8b-d572-5a63-8f97-3b62432da31f",
+          "author": "ai",
+          "text": "That's usually the slip nut on the trap. Put a bowl underneath, tighten the nut a quarter turn by hand, and if the leak continues, replace the washer inside it.",
+          "time": "2026-05-02T10:01:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "9c276690-1e9f-5b2e-a673-02d23c43a8e5",
+          "author": "user",
+          "text": "The bathtub faucet has a slow leak even when it's turned off all the way.",
+          "time": "2026-05-06T19:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "8d43a9eb-fdd8-5dd2-8786-839badbf88ab",
+          "author": "ai",
+          "text": "A dripping single-handle faucet almost always needs a new cartridge. Turn off the water, pull the handle, and take the old cartridge to the hardware store to match it. That will stop the leak.",
+          "time": "2026-05-06T19:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "f4312306-967c-5efc-a4d0-deba1857dc6e",
+          "author": "user",
+          "text": "After heavy rain there's a leak in the ceiling near the chimney.",
+          "time": "2026-05-11T16:20:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "ce711e9a-51b9-5785-b9ec-aa6940eef3fc",
+          "author": "ai",
+          "text": "That points to the chimney flashing. Look for cracked sealant where the metal meets the brick and reseal it on a dry day. If the flashing itself is lifting, get a roofer to refit it before the next big rain.",
+          "time": "2026-05-11T16:21:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "a98eb298-c188-525b-bb48-04e97baab8d6",
+          "author": "user",
+          "text": "I found a leak behind the washing machine. The floor is wet.",
+          "time": "2026-05-15T18:45:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "17738a33-8428-50db-b45e-b69338e1a624",
+          "author": "ai",
+          "text": "Check the fill hoses first: the rubber ones crack with age. Replace both with braided steel hoses and the leak should stop. Dry the floor well and watch for staining underneath.",
+          "time": "2026-05-15T18:46:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "48bf8e92-843c-5636-a9a2-a7a8be798735",
+          "author": "user",
+          "text": "The bedroom door hinge squeaks every time I open it.",
+          "time": "2026-05-19T20:10:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "ffba0dd4-8638-5431-ba29-773aa78eb19c",
+          "author": "ai",
+          "text": "Lift out the hinge pin, wipe it clean, and coat it lightly with petroleum jelly or a silicone spray before putting it back.",
+          "time": "2026-05-19T20:11:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "9d5fd444-9965-5c01-bc4d-973e99735ad8",
+          "author": "user",
+          "text": "How do I prep the hallway walls before painting?",
+          "time": "2026-05-23T11:30:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "3b0b7976-7abb-5025-ae94-5e9a31ae8408",
+          "author": "ai",
+          "text": "Fill holes with spackle, sand smooth, wipe the dust off, and tape the edges. A coat of primer over any patched spots stops them showing through.",
+          "time": "2026-05-23T11:31:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "6be42279-46cd-5ac6-9f75-0a947f1a1082",
+          "author": "user",
+          "text": "The outdoor spigot has a leak around the handle whenever the hose is on.",
+          "time": "2026-05-27T17:50:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "635816b4-999f-5249-b07a-4b2fab310c0a",
+          "author": "ai",
+          "text": "Tighten the packing nut just behind the handle a little. If the leak continues, replace the packing washer under it.",
+          "time": "2026-05-27T17:51:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        },
+        {
+          "id": "116dc021-486a-5ef3-9d6b-f99e697c4b0f",
+          "author": "user",
+          "text": "How often should I change the smoke detector batteries?",
+          "time": "2026-06-01T19:15:00Z",
+          "visibility": "visible",
+          "status": "finished",
+          "input": "typed"
+        },
+        {
+          "id": "9c782569-de5e-51ec-bba4-e20947202a09",
+          "author": "ai",
+          "text": "Once a year is a good rule, and test the alarms monthly. Replace the whole detector after ten years.",
+          "time": "2026-06-01T19:16:00Z",
+          "visibility": "visible",
+          "status": "finished"
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "q-garden-exact-tomatoes",
+      "situation": "exact_detail_far_back",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "Which two tomato varieties did I decide to grow?",
+      "expect": [
+        "bf0d4b43-ffa6-58b1-a5ae-c08df640cc7e"
+      ],
+      "must_not": [
+        "8a061cc2-2a8f-546a-a2a6-194ab572fb7d",
+        "4ec76e38-a896-5da4-917c-810d9adc116d"
+      ],
+      "detail": "Cherokee Purple and Sungold"
+    },
+    {
+      "id": "q-garden-exact-soil",
+      "situation": "exact_detail_far_back",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "What was the soil mix ratio we worked out?",
+      "expect": [
+        "e92c073a-7966-5797-905d-91c1c76873ac"
+      ],
+      "must_not": [
+        "cbbd57fc-10cd-5c62-aaf4-461997461c86"
+      ],
+      "detail": "60 percent topsoil, 30 percent compost and 10 percent perlite"
+    },
+    {
+      "id": "q-garden-time-last-week",
+      "situation": "time_reference",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "What did I change in the garden plan last week?",
+      "expect": [
+        "40771e2d-a0cc-5072-bebc-2c236b065b73",
+        "371ce7e5-2d64-5dcf-ac20-c2554034b499",
+        "43ddbd42-2655-5f1f-8526-13c88ea14f58"
+      ],
+      "must_not": [
+        "3867fd66-215e-573a-8335-c22aa8ad7fe4",
+        "3faf785d-811e-54f8-a593-f6fd7aa3b8c5"
+      ],
+      "time_window": {
+        "from": "2026-05-11T00:00:00Z",
+        "to": "2026-05-17T23:59:59Z"
+      }
+    },
+    {
+      "id": "q-garden-time-march",
+      "situation": "time_reference",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "What did I plant in March?",
+      "expect": [
+        "13d3552b-4ba3-50af-9ba4-a98777469463",
+        "0a5aaf86-f1bc-5ac0-873e-ea142800f433"
+      ],
+      "must_not": [
+        "8a061cc2-2a8f-546a-a2a6-194ab572fb7d"
+      ],
+      "time_window": {
+        "from": "2026-03-01T00:00:00Z",
+        "to": "2026-03-31T23:59:59Z"
+      }
+    },
+    {
+      "id": "q-garden-subject-watering",
+      "situation": "single_subject_chat",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "How often should I water after transplanting?",
+      "expect": [
+        "5b630f52-343a-5418-bc0a-34c2daf23f97"
+      ],
+      "must_not": [
+        "9eed4f84-a1e6-5f17-9324-0235792b6046",
+        "b4af419d-4cbd-57f3-9473-d863250aa43b"
+      ]
+    },
+    {
+      "id": "q-garden-subject-slugs",
+      "situation": "single_subject_chat",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "What did we decide to do about the slugs?",
+      "expect": [
+        "5db71aba-56fd-567d-8249-4dd855a991f4"
+      ],
+      "must_not": [
+        "c3131ce6-9a53-5a82-ad35-af4fff3cd486",
+        "ad8e8ea5-4da2-5faa-b5bb-c7314fc316e9"
+      ]
+    },
+    {
+      "id": "q-garden-subject-compost",
+      "situation": "single_subject_chat",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "Where did we say the compost bin should go?",
+      "expect": [
+        "b4af419d-4cbd-57f3-9473-d863250aa43b"
+      ],
+      "must_not": [
+        "e92c073a-7966-5797-905d-91c1c76873ac",
+        "cbbd57fc-10cd-5c62-aaf4-461997461c86"
+      ]
+    },
+    {
+      "id": "q-garden-subject-squash",
+      "situation": "single_subject_chat",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "How much room does each squash plant need?",
+      "expect": [
+        "890e63aa-1582-5286-9051-97f03e26d9b9"
+      ],
+      "must_not": [
+        "a0ff0717-ec75-56ec-b8b3-09437c1a614e",
+        "3ecc0892-524e-57ca-808c-e3fae4cf7ba3"
+      ]
+    },
+    {
+      "id": "q-garden-decision-cedar",
+      "situation": "decision_changed",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "Why did we pick cedar for the beds?",
+      "expect": [
+        "aa6559e7-86fa-5c34-9afc-4e9125768646",
+        "6ab6f9e9-f605-5a7f-a07e-a5df9775aa58"
+      ],
+      "must_not": [
+        "8d3747a6-1b06-5859-b9fa-aecc958782c3"
+      ],
+      "early": "aa6559e7-86fa-5c34-9afc-4e9125768646",
+      "later": "6ab6f9e9-f605-5a7f-a07e-a5df9775aa58",
+      "matches": "early",
+      "match_terms": [
+        "cedar"
+      ]
+    },
+    {
+      "id": "q-garden-decision-steel",
+      "situation": "decision_changed",
+      "chat": "chat-backyard-garden",
+      "asked_at": "2026-05-21T18:00:00Z",
+      "message": "How tall are the galvanized steel beds going to be?",
+      "expect": [
+        "aa6559e7-86fa-5c34-9afc-4e9125768646",
+        "6ab6f9e9-f605-5a7f-a07e-a5df9775aa58"
+      ],
+      "must_not": [
+        "cde40ad8-c028-570c-ae8d-2e16cc92f717"
+      ],
+      "early": "aa6559e7-86fa-5c34-9afc-4e9125768646",
+      "later": "6ab6f9e9-f605-5a7f-a07e-a5df9775aa58",
+      "matches": "later",
+      "match_terms": [
+        "galvanized",
+        "steel"
+      ]
+    },
+    {
+      "id": "q-trip-exact-flight",
+      "situation": "exact_detail_far_back",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "What was the flight number for the outbound flight?",
+      "expect": [
+        "e73f3fef-e438-5b57-9f1e-0bf9e9e26e07"
+      ],
+      "must_not": [
+        "72b57342-2dee-50b0-a1a6-3104b25b222b"
+      ],
+      "detail": "TP 1352"
+    },
+    {
+      "id": "q-trip-exact-belem",
+      "situation": "exact_detail_far_back",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "What time are our Belem Tower tickets?",
+      "expect": [
+        "903f1381-66ee-56c2-8d1a-ab391b01ddae"
+      ],
+      "must_not": [
+        "80c744ff-d02f-5e38-aee0-c0fc8a7d3516"
+      ],
+      "detail": "4:15 in the afternoon"
+    },
+    {
+      "id": "q-trip-summary-budget",
+      "situation": "before_summary",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "How much did we budget per day for food?",
+      "expect": [
+        "0aa18248-5f91-5290-a376-133dc6a796b8"
+      ],
+      "must_not": [
+        "ed25f20e-f7df-5f0b-a016-b71d54dcd74f"
+      ],
+      "detail": "120 euros a day"
+    },
+    {
+      "id": "q-trip-summary-transit",
+      "situation": "before_summary",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "What did you tell me about the transit card in Lisbon?",
+      "expect": [
+        "205d6f97-7048-5bc0-8e2c-ab13011b1ed3"
+      ],
+      "must_not": [
+        "476cb20a-8eb9-57cb-9c59-e30e61b170dc"
+      ],
+      "detail": "Viva Viagem"
+    },
+    {
+      "id": "q-trip-summary-sintra",
+      "situation": "before_summary",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "What day are we going to Sintra and what time is the palace entry?",
+      "expect": [
+        "af6eef06-f6b4-545e-a4b3-f63c60cbd816"
+      ],
+      "must_not": [
+        "f59de7f7-c393-5c24-bdb0-38f160b3e9bd"
+      ],
+      "detail": "Pena Palace timed entry at 10:30"
+    },
+    {
+      "id": "q-trip-summary-guesthouse",
+      "situation": "before_summary",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "What's the name of the place we're staying in Porto?",
+      "expect": [
+        "365c6ff1-0f16-5127-a181-18fbae03b89d"
+      ],
+      "must_not": [
+        "516be26d-4477-5fb6-8e1b-bc5711a38c2c"
+      ],
+      "detail": "Casa das Laranjeiras"
+    },
+    {
+      "id": "q-trip-summary-teodora",
+      "situation": "before_summary",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "What was the restaurant Teodora recommended?",
+      "expect": [
+        "fbf88f7b-44bb-5f61-ab89-9a67d4b5a85a"
+      ],
+      "must_not": [
+        "bf25d2bf-e732-5e9a-8124-f23877090990"
+      ],
+      "detail": "O Gaveto Azul"
+    },
+    {
+      "id": "q-trip-time-last-week",
+      "situation": "time_reference",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "What did we plan last week?",
+      "expect": [
+        "476cb20a-8eb9-57cb-9c59-e30e61b170dc",
+        "bf25d2bf-e732-5e9a-8124-f23877090990",
+        "dbbcd7a6-10f3-5001-8fa8-f3c9dbe1e0ae"
+      ],
+      "must_not": [
+        "5aa17be3-afbf-5e44-a956-88348042ba27",
+        "516be26d-4477-5fb6-8e1b-bc5711a38c2c"
+      ],
+      "time_window": {
+        "from": "2026-03-23T00:00:00Z",
+        "to": "2026-03-29T23:59:59Z"
+      }
+    },
+    {
+      "id": "q-trip-time-january",
+      "situation": "time_reference",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "What did we book back in January?",
+      "expect": [
+        "e73f3fef-e438-5b57-9f1e-0bf9e9e26e07",
+        "af6eef06-f6b4-545e-a4b3-f63c60cbd816",
+        "903f1381-66ee-56c2-8d1a-ab391b01ddae"
+      ],
+      "must_not": [
+        "365c6ff1-0f16-5127-a181-18fbae03b89d",
+        "476cb20a-8eb9-57cb-9c59-e30e61b170dc"
+      ],
+      "time_window": {
+        "from": "2026-01-01T00:00:00Z",
+        "to": "2026-01-31T23:59:59Z"
+      }
+    },
+    {
+      "id": "q-trip-decision-train",
+      "situation": "decision_changed",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "How were we taking the Alfa Pendular train to Porto?",
+      "expect": [
+        "616bb34a-79af-5bfb-a47c-5e73e84fbb0c",
+        "5aa17be3-afbf-5e44-a956-88348042ba27"
+      ],
+      "must_not": [
+        "72b57342-2dee-50b0-a1a6-3104b25b222b"
+      ],
+      "early": "616bb34a-79af-5bfb-a47c-5e73e84fbb0c",
+      "later": "5aa17be3-afbf-5e44-a956-88348042ba27",
+      "matches": "early",
+      "match_terms": [
+        "Alfa Pendular",
+        "train"
+      ]
+    },
+    {
+      "id": "q-trip-decision-car",
+      "situation": "decision_changed",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "Remind me why we wanted to rent a car and stop in Coimbra?",
+      "expect": [
+        "616bb34a-79af-5bfb-a47c-5e73e84fbb0c",
+        "5aa17be3-afbf-5e44-a956-88348042ba27"
+      ],
+      "must_not": [
+        "5db2055e-dd8f-5a7f-b9f8-740f6ff0a17b"
+      ],
+      "early": "616bb34a-79af-5bfb-a47c-5e73e84fbb0c",
+      "later": "5aa17be3-afbf-5e44-a956-88348042ba27",
+      "matches": "later",
+      "match_terms": [
+        "rent",
+        "Coimbra"
+      ]
+    },
+    {
+      "id": "q-trip-limit-restaurants",
+      "situation": "more_than_limit",
+      "chat": "chat-portugal-trip",
+      "asked_at": "2026-04-02T18:00:00Z",
+      "message": "Which restaurants have we picked out so far?",
+      "expect": [
+        "fbf88f7b-44bb-5f61-ab89-9a67d4b5a85a",
+        "c85ae295-11e3-5593-98be-5655e3b66cc4",
+        "3ebca345-e07c-5fd5-a384-013a386b6930",
+        "ced4b311-71ad-5037-bd7f-f6b244da07a4",
+        "bf25d2bf-e732-5e9a-8124-f23877090990"
+      ],
+      "must_not": [
+        "8d9c3c3b-ba73-5624-bf5f-4d24e925f1b8"
+      ],
+      "limit": 3,
+      "match_terms": [
+        "restaurant"
+      ]
+    },
+    {
+      "id": "q-app-exact-minsdk",
+      "situation": "exact_detail_far_back",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "What minimum Android version did we settle on for the app?",
+      "expect": [
+        "9889fd5d-65eb-5a5e-b31c-4a33a821d78e"
+      ],
+      "must_not": [
+        "53588082-6aee-55bf-8ad9-3d588a885f7c"
+      ],
+      "detail": "minimum SDK 26"
+    },
+    {
+      "id": "q-app-exact-table",
+      "situation": "exact_detail_far_back",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "What did we name the database table that holds ingredients?",
+      "expect": [
+        "3658dcc7-81d9-5820-a791-99c4d72eacde"
+      ],
+      "must_not": [
+        "93e16af6-2914-5a60-8cfa-1ad18464a412"
+      ],
+      "detail": "pantry_items"
+    },
+    {
+      "id": "q-app-followup-coil",
+      "situation": "follow_up_without_subject",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "Why did we go with that one over the others?",
+      "expect": [
+        "4311e015-ef44-5f8e-ab56-9be1d5422276"
+      ],
+      "must_not": [
+        "93e16af6-2914-5a60-8cfa-1ad18464a412",
+        "0c08010d-f513-540f-be7c-3671d6a7f5be"
+      ],
+      "preceding_turns": [
+        {
+          "author": "user",
+          "text": "Which image loading library did we pick for the recipe photos?"
+        },
+        {
+          "author": "ai",
+          "text": "We picked Coil for loading the recipe photos."
+        }
+      ],
+      "subject_terms": [
+        "image loading",
+        "Coil",
+        "photos"
+      ]
+    },
+    {
+      "id": "q-app-followup-sync",
+      "situation": "follow_up_without_subject",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "And what happens when two phones change the same thing?",
+      "expect": [
+        "40a2a8ec-0da7-599e-8307-7c56667d3d8b"
+      ],
+      "must_not": [
+        "7c62f77d-3f7c-5ab4-8647-d64e0b466943"
+      ],
+      "preceding_turns": [
+        {
+          "author": "user",
+          "text": "What did we decide about offline use and syncing?"
+        },
+        {
+          "author": "ai",
+          "text": "Everything stays local first, and syncing to the cloud comes later."
+        }
+      ],
+      "subject_terms": [
+        "offline",
+        "sync",
+        "syncing"
+      ]
+    },
+    {
+      "id": "q-app-followup-theme",
+      "situation": "follow_up_without_subject",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "What contrast did you say it has to meet?",
+      "expect": [
+        "0f2793d1-8cba-5228-89ee-ef1bae31c570"
+      ],
+      "must_not": [
+        "70a48fe9-1ad9-5c71-a6aa-b8bc24ab604f"
+      ],
+      "preceding_turns": [
+        {
+          "author": "user",
+          "text": "What background color did we choose for the dark theme?"
+        },
+        {
+          "author": "ai",
+          "text": "A warm charcoal for the dark theme background."
+        }
+      ],
+      "subject_terms": [
+        "dark theme",
+        "color",
+        "colors"
+      ]
+    },
+    {
+      "id": "q-app-followup-conversion",
+      "situation": "follow_up_without_subject",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "How does the rounding work for that?",
+      "expect": [
+        "c8beb2d8-3e35-57bb-8d36-f312a6272620"
+      ],
+      "must_not": [
+        "3658dcc7-81d9-5820-a791-99c4d72eacde"
+      ],
+      "preceding_turns": [
+        {
+          "author": "user",
+          "text": "Remind me how the unit conversion from cups to grams works."
+        },
+        {
+          "author": "ai",
+          "text": "Each ingredient has a density, and that's used for the unit conversion."
+        }
+      ],
+      "subject_terms": [
+        "unit conversion",
+        "cups",
+        "grams"
+      ]
+    },
+    {
+      "id": "q-app-limit-bugs",
+      "situation": "more_than_limit",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "Which bugs have we fixed so far?",
+      "expect": [
+        "95ad3d49-58a1-58f1-bc1c-a71065cf6e1c",
+        "ca377f68-169e-5e51-9097-db51599ddede",
+        "7c62f77d-3f7c-5ab4-8647-d64e0b466943",
+        "53588082-6aee-55bf-8ad9-3d588a885f7c",
+        "e0d3c7e9-c7ea-5fab-8002-ce720f6c375d"
+      ],
+      "must_not": [
+        "8353e7c7-9a60-55be-a59b-bca858585780"
+      ],
+      "limit": 3,
+      "match_terms": [
+        "bug"
+      ]
+    },
+    {
+      "id": "q-app-limit-screens",
+      "situation": "more_than_limit",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "What screens have we designed?",
+      "expect": [
+        "7f56264d-4e5e-5bce-8650-412ca8917ae4",
+        "b81b5bda-6c17-568d-80da-6a25218b2c58",
+        "6b01707e-696e-5eee-92c2-8fa37164434a",
+        "51a6ce36-18da-5b2e-83bf-e7924985ed74",
+        "fa7c1c21-5801-5098-af94-5de7bf074b4e"
+      ],
+      "must_not": [
+        "70a48fe9-1ad9-5c71-a6aa-b8bc24ab604f"
+      ],
+      "limit": 3,
+      "match_terms": [
+        "screen"
+      ]
+    },
+    {
+      "id": "q-app-edited-firebase",
+      "situation": "edited_old_words",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "What did I ask about using Firebase for sign-in?",
+      "expect": [],
+      "must_not": [
+        "3c0b4575-d8cc-5ff1-9759-37ffd9b3c850"
+      ],
+      "edited_message": "3c0b4575-d8cc-5ff1-9759-37ffd9b3c850",
+      "match_terms": [
+        "Firebase"
+      ]
+    },
+    {
+      "id": "q-app-failed-pdf",
+      "situation": "failed_or_unfinished_reply",
+      "chat": "chat-recipe-box-app",
+      "asked_at": "2026-10-20T18:00:00Z",
+      "message": "What did you say about turning a recipe into a PDF?",
+      "expect": [],
+      "must_not": [
+        "271494ef-ee85-50fe-9cb3-117ff9e3e09c"
+      ],
+      "failed_message": "284ce5a3-463f-515e-8225-715aebacccb8",
+      "match_terms": [
+        "PDF"
+      ]
+    },
+    {
+      "id": "q-mira-typed-vet",
+      "situation": "long_typed_detail",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "When is Biscuit's vet appointment?",
+      "expect": [
+        "a897667f-b0f4-5f17-b7aa-4ac4f1371fe8"
+      ],
+      "must_not": [
+        "16bbe63b-3d2c-52fd-9ccd-3fffaa8df25a"
+      ],
+      "detail": "Biscuit's vet appointment is on the 14th at 3:40"
+    },
+    {
+      "id": "q-mira-typed-allergy",
+      "situation": "long_typed_detail",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "Which cousin has the nut allergy and what are they allergic to?",
+      "expect": [
+        "2784e11e-d359-5d90-ba1b-f54c7b317196"
+      ],
+      "must_not": [
+        "41b0e9c3-6cfc-55cc-8d2d-daae96cac7d4"
+      ],
+      "detail": "my cousin Pell is allergic to cashews"
+    },
+    {
+      "id": "q-mira-dictated-presentation",
+      "situation": "long_dictated_detail",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "When did the presentation get moved to?",
+      "expect": [
+        "bf5ea79f-9d85-529c-bcea-2b3cb1710a0e"
+      ],
+      "must_not": [
+        "2a11996b-fa07-5426-be2e-15528d41f729"
+      ],
+      "detail": "the presentation got moved to Thursday the 22nd"
+    },
+    {
+      "id": "q-mira-dictated-library",
+      "situation": "long_dictated_detail",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "When is my library book due back?",
+      "expect": [
+        "2a11996b-fa07-5426-be2e-15528d41f729"
+      ],
+      "must_not": [
+        "bf5ea79f-9d85-529c-bcea-2b3cb1710a0e"
+      ],
+      "detail": "the library book is due on October 30"
+    },
+    {
+      "id": "q-mira-hidden-party",
+      "situation": "hidden_best_match",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "When is the surprise party for Jonah?",
+      "expect": [],
+      "must_not": [
+        "56fe03df-bab4-581a-b9ff-4befb2f46ce1"
+      ],
+      "hidden_message": "56fe03df-bab4-581a-b9ff-4befb2f46ce1",
+      "match_terms": [
+        "surprise party",
+        "Jonah"
+      ]
+    },
+    {
+      "id": "q-mira-hidden-gift",
+      "situation": "hidden_best_match",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "What gift idea did I have for Nora's birthday?",
+      "expect": [
+        "6ff135da-2b52-594c-a858-ca82672c93e0"
+      ],
+      "must_not": [
+        "d555c8ca-8e99-5310-a75a-f24a9621af7d"
+      ],
+      "hidden_message": "d555c8ca-8e99-5310-a75a-f24a9621af7d",
+      "match_terms": [
+        "gift",
+        "Nora's birthday"
+      ]
+    },
+    {
+      "id": "q-mira-edited-landlord",
+      "situation": "edited_old_words",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "What did I say about the landlord and the broken heater?",
+      "expect": [],
+      "must_not": [
+        "a3e8967a-b5b3-5f1d-9cd2-357f9880ad7c"
+      ],
+      "edited_message": "a3e8967a-b5b3-5f1d-9cd2-357f9880ad7c",
+      "match_terms": [
+        "landlord",
+        "heater"
+      ]
+    },
+    {
+      "id": "q-mira-unfinished-puzzle",
+      "situation": "failed_or_unfinished_reply",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "What did you say about doing a jigsaw puzzle on the kitchen table?",
+      "expect": [],
+      "must_not": [
+        "04612bf2-9a84-5985-9ab9-a421487aff8a"
+      ],
+      "failed_message": "79cc7517-e119-55f6-9a2d-c100b382a250",
+      "match_terms": [
+        "kitchen table"
+      ]
+    },
+    {
+      "id": "q-mira-nothing-boardgame",
+      "situation": "nothing_relevant",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "Can you recommend a board game for four players?",
+      "expect": [],
+      "must_not": []
+    },
+    {
+      "id": "q-mira-nothing-bread",
+      "situation": "nothing_relevant",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "What's a quick recipe for banana bread?",
+      "expect": [],
+      "must_not": [
+        "2784e11e-d359-5d90-ba1b-f54c7b317196"
+      ]
+    },
+    {
+      "id": "q-mira-scope-lighthouse",
+      "situation": "roleplay_and_companion",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "What did I tell you about the lighthouse during the storm?",
+      "expect": [
+        "1b840fb4-6401-5afb-be11-7b0f42bae588"
+      ],
+      "must_not": [
+        "df7f958b-1802-585b-b5c0-bd4af03c0c66"
+      ],
+      "other_chat": "chat-saltmarrow-roleplay",
+      "shared_terms": [
+        "lighthouse",
+        "storm"
+      ]
+    },
+    {
+      "id": "q-mira-scope-key",
+      "situation": "roleplay_and_companion",
+      "chat": "chat-companion-mira",
+      "asked_at": "2026-10-12T19:00:00Z",
+      "message": "Where did I find the brass key?",
+      "expect": [
+        "3b0f9fb4-6738-54c0-ba47-28757c5462d8"
+      ],
+      "must_not": [
+        "3ff8f35f-a068-55a9-a7f7-ee25949dec9f"
+      ],
+      "other_chat": "chat-saltmarrow-roleplay",
+      "shared_terms": [
+        "brass key"
+      ]
+    },
+    {
+      "id": "q-salt-long-rescue",
+      "situation": "very_long_exchange",
+      "chat": "chat-saltmarrow-roleplay",
+      "asked_at": "2026-10-12T20:00:00Z",
+      "message": "In the shipwreck chapter, what was the ship called and how many sailors were saved?",
+      "expect": [
+        "bdb6c169-ab6f-5e98-aaf3-b44862135bf9"
+      ],
+      "must_not": [
+        "449a39cf-f8b2-54ad-b2cb-3e7054f439a3"
+      ]
+    },
+    {
+      "id": "q-salt-long-bell",
+      "situation": "very_long_exchange",
+      "chat": "chat-saltmarrow-roleplay",
+      "asked_at": "2026-10-12T20:00:00Z",
+      "message": "What was the drowned bell made from, and what was it called?",
+      "expect": [
+        "8dac2981-b257-543d-a3cc-6502846e1154"
+      ],
+      "must_not": [
+        "cdff86b4-b1ae-55d7-8e48-27101756deb1"
+      ]
+    },
+    {
+      "id": "q-salt-hidden-uncle",
+      "situation": "hidden_best_match",
+      "chat": "chat-saltmarrow-roleplay",
+      "asked_at": "2026-10-12T20:00:00Z",
+      "message": "Is Ansel secretly Wren's uncle?",
+      "expect": [],
+      "must_not": [
+        "6dccb9d2-177b-52d8-8619-e91e1a629f20"
+      ],
+      "hidden_message": "6dccb9d2-177b-52d8-8619-e91e1a629f20",
+      "match_terms": [
+        "uncle"
+      ]
+    },
+    {
+      "id": "q-salt-scope-lighthouse",
+      "situation": "roleplay_and_companion",
+      "chat": "chat-saltmarrow-roleplay",
+      "asked_at": "2026-10-12T20:00:00Z",
+      "message": "What did Wren find at the top of the lighthouse in the storm?",
+      "expect": [
+        "df7f958b-1802-585b-b5c0-bd4af03c0c66"
+      ],
+      "must_not": [
+        "1b840fb4-6401-5afb-be11-7b0f42bae588"
+      ],
+      "other_chat": "chat-companion-mira",
+      "shared_terms": [
+        "lighthouse",
+        "storm"
+      ]
+    },
+    {
+      "id": "q-salt-scope-key",
+      "situation": "roleplay_and_companion",
+      "chat": "chat-saltmarrow-roleplay",
+      "asked_at": "2026-10-12T20:00:00Z",
+      "message": "Where did Wren find the brass key?",
+      "expect": [
+        "3ff8f35f-a068-55a9-a7f7-ee25949dec9f"
+      ],
+      "must_not": [
+        "3b0f9fb4-6738-54c0-ba47-28757c5462d8"
+      ],
+      "other_chat": "chat-companion-mira",
+      "shared_terms": [
+        "brass key"
+      ]
+    },
+    {
+      "id": "q-club-typed-cafe",
+      "situation": "long_typed_detail",
+      "chat": "chat-book-club",
+      "asked_at": "2026-07-20T18:00:00Z",
+      "message": "Where did the book club meeting get moved to?",
+      "expect": [
+        "d6eea290-0179-5d2d-811e-9f0786a67970"
+      ],
+      "must_not": [
+        "6f07d7b3-f7c2-583f-a949-01a5261cee0e"
+      ],
+      "detail": "the meeting moved to the back room of the Linden Street cafe"
+    },
+    {
+      "id": "q-club-typed-letter",
+      "situation": "long_typed_detail",
+      "chat": "chat-book-club",
+      "asked_at": "2026-07-20T18:00:00Z",
+      "message": "Which chapter is the one where the narrator lies about the letter?",
+      "expect": [
+        "17f957f6-ceb8-5fa7-b75e-6cae3943abdb"
+      ],
+      "must_not": [
+        "02c4d005-2a8b-50cb-abd8-a36bdd77a139"
+      ],
+      "detail": "chapter 14 is where the narrator lies about the letter"
+    },
+    {
+      "id": "q-club-dictated-dolores",
+      "situation": "long_dictated_detail",
+      "chat": "chat-book-club",
+      "asked_at": "2026-07-20T18:00:00Z",
+      "message": "What did I promise to bring for Dolores?",
+      "expect": [
+        "7c9414b2-8ea6-5faf-9e77-5acc5c7918cd"
+      ],
+      "must_not": [
+        "5f7e846a-8d11-5959-9d9e-fc28049929e7"
+      ],
+      "detail": "bring the spare copy for Dolores"
+    },
+    {
+      "id": "q-club-dictated-august",
+      "situation": "long_dictated_detail",
+      "chat": "chat-book-club",
+      "asked_at": "2026-07-20T18:00:00Z",
+      "message": "Who is hosting in August?",
+      "expect": [
+        "6f07d7b3-f7c2-583f-a949-01a5261cee0e"
+      ],
+      "must_not": [
+        "7c9414b2-8ea6-5faf-9e77-5acc5c7918cd"
+      ],
+      "detail": "the host in August is Priya"
+    },
+    {
+      "id": "q-club-hidden-skim",
+      "situation": "hidden_best_match",
+      "chat": "chat-book-club",
+      "asked_at": "2026-07-20T18:00:00Z",
+      "message": "What did I say about having to skim chapter 20?",
+      "expect": [],
+      "must_not": [
+        "02c4d005-2a8b-50cb-abd8-a36bdd77a139"
+      ],
+      "hidden_message": "02c4d005-2a8b-50cb-abd8-a36bdd77a139",
+      "match_terms": [
+        "skim",
+        "chapter 20"
+      ]
+    },
+    {
+      "id": "q-club-edited-mystery",
+      "situation": "edited_old_words",
+      "chat": "chat-book-club",
+      "asked_at": "2026-07-20T18:00:00Z",
+      "message": "What did I suggest about reading a mystery novel set on a train?",
+      "expect": [],
+      "must_not": [
+        "e42c67e9-5f3e-5a3e-a467-8a6c716e9e2c"
+      ],
+      "edited_message": "e42c67e9-5f3e-5a3e-a467-8a6c716e9e2c",
+      "match_terms": [
+        "mystery",
+        "train"
+      ]
+    },
+    {
+      "id": "q-club-failed-villanelle",
+      "situation": "failed_or_unfinished_reply",
+      "chat": "chat-book-club",
+      "asked_at": "2026-07-20T18:00:00Z",
+      "message": "What was the discussion question about the villanelle?",
+      "expect": [],
+      "must_not": [
+        "1a181ae1-4ccd-5880-a15c-4ccb24c3f70f"
+      ],
+      "failed_message": "6ef7f9fe-7320-59fc-9191-9a840d5bcbd0",
+      "match_terms": [
+        "villanelle"
+      ]
+    },
+    {
+      "id": "q-club-nothing-bike",
+      "situation": "nothing_relevant",
+      "chat": "chat-book-club",
+      "asked_at": "2026-07-20T18:00:00Z",
+      "message": "How do I fix a squeaky bike brake?",
+      "expect": [],
+      "must_not": []
+    },
+    {
+      "id": "q-club-nothing-neck",
+      "situation": "nothing_relevant",
+      "chat": "chat-book-club",
+      "asked_at": "2026-07-20T18:00:00Z",
+      "message": "What's a good stretch for a stiff neck?",
+      "expect": [],
+      "must_not": []
+    },
+    {
+      "id": "q-rowan-long-week7",
+      "situation": "very_long_exchange",
+      "chat": "chat-companion-rowan",
+      "asked_at": "2026-04-30T19:00:00Z",
+      "message": "What was the long run in week 7 of my plan?",
+      "expect": [
+        "af58cb60-1529-5a0e-b6a0-63ad09cbecb9"
+      ],
+      "must_not": [
+        "309ad64a-7e42-5824-9cdf-50642f3f0969"
+      ]
+    },
+    {
+      "id": "q-rowan-nothing-paint",
+      "situation": "nothing_relevant",
+      "chat": "chat-companion-rowan",
+      "asked_at": "2026-04-30T19:00:00Z",
+      "message": "Can you help me pick a paint colour for the hallway?",
+      "expect": [],
+      "must_not": []
+    },
+    {
+      "id": "q-rowan-nothing-goldfish",
+      "situation": "nothing_relevant",
+      "chat": "chat-companion-rowan",
+      "asked_at": "2026-04-30T19:00:00Z",
+      "message": "What's a good name for a goldfish?",
+      "expect": [],
+      "must_not": []
+    },
+    {
+      "id": "q-home-limit-leaks",
+      "situation": "more_than_limit",
+      "chat": "chat-home-repairs",
+      "asked_at": "2026-06-10T18:00:00Z",
+      "message": "Which leaks have we fixed around the house?",
+      "expect": [
+        "9e2a4f0d-b041-54ca-b79f-9ce6edc5455e",
+        "9c276690-1e9f-5b2e-a673-02d23c43a8e5",
+        "f4312306-967c-5efc-a4d0-deba1857dc6e",
+        "a98eb298-c188-525b-bb48-04e97baab8d6",
+        "6be42279-46cd-5ac6-9f75-0a947f1a1082"
+      ],
+      "must_not": [
+        "48bf8e92-843c-5636-a9a2-a7a8be798735"
+      ],
+      "limit": 3,
+      "match_terms": [
+        "leak"
+      ]
+    }
+  ]
+}
