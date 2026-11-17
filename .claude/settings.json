@@ -1,5 +1,7 @@
 {
   "attribution": {
+    "commit": "",
+    "pr": "",
     "sessionUrl": false
   },
   "hooks": {
@@ -43,6 +45,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash|mcp__github__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/privacy-gate.py",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -53,6 +65,16 @@
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ui-style-reminder.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/privacy-gate.py",
+            "timeout": 15
           }
         ]
       }
