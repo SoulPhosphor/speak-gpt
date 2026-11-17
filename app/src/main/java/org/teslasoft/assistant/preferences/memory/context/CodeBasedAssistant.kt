@@ -90,7 +90,7 @@ class CodeBasedAssistant(private val store: SubjectStore = SubjectStore.shared) 
         val current = added.mapNotNull { carried -> refresh(carried, input.eligible) }
         val output = if (current.isEmpty()) ContextAssistant.Output.Nothing
         else ContextAssistant.Output.Carry(current)
-        return ContextAssistant.Assistance(output) { store.put(input.chatId, tag, next) }
+        return ContextAssistant.Assistance(output, commit = { store.put(input.chatId, tag, next) })
     }
 
     /** The carried memory as stored now, or null when it may not be used. */

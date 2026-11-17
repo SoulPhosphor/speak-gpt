@@ -140,7 +140,12 @@ def main():
         return
     name = event.get("hook_event_name", "")
     if name == "UserPromptSubmit":
-        if APPROVAL.search(event.get("prompt", "") or ""):
+        prompt = event.get("prompt", "") or ""
+        # A background-task or system notice is not a message from the owner:
+        # it neither approves nor withdraws approval.
+        if "<task-notification>" in prompt or "[SYSTEM NOTIFICATION" in prompt:
+            return
+        if APPROVAL.search(prompt):
             with open(TOKEN, "w", encoding="utf-8") as f:
                 f.write("approved by the owner's message\n")
             emit({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext":

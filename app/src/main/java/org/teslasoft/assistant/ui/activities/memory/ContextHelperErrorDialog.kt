@@ -92,11 +92,12 @@ object ContextHelperErrorDialog {
         val lines = ArrayList<String>()
         failure.profile?.let { lines += context.getString(R.string.summarizer_errors_profile_line, it) }
         failure.model?.let { lines += context.getString(R.string.summarizer_errors_model_line, it) }
-        failure.local?.let { lines += localLine(context, it) }
+        failure.local?.let { local -> localLine(context, local)?.let { lines += it } }
         return lines.joinToString("\n")
     }
 
-    private fun localLine(context: Context, local: HelperFailure.Local): String = when (local) {
+    /** Null only for a too-long reply whose limit the app no longer knows. */
+    private fun localLine(context: Context, local: HelperFailure.Local): String? = when (local) {
         HelperFailure.Local.NoModel -> context.getString(R.string.memory_context_helper_detail_no_model)
         HelperFailure.Local.ProfileGone -> context.getString(R.string.memory_context_helper_detail_profile_gone)
         HelperFailure.Local.RoutingNotSetUp -> context.getString(R.string.memory_context_helper_detail_routing)
@@ -107,7 +108,7 @@ object ContextHelperErrorDialog {
             context.getString(R.string.memory_context_helper_detail_reply_lines)
         is HelperFailure.Local.ReplyTooLong -> local.limitTokens?.let {
             context.getString(R.string.memory_context_helper_detail_reply_too_long, it)
-        } ?: context.getString(R.string.memory_context_helper_detail_reply_too_long_unknown)
+        }
     }
 
     fun titleRes(category: HelperFailure.Category): Int = when (category) {

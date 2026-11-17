@@ -28,7 +28,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.context.ContextAssistance
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.ui.util.AppDropdown
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.ui.util.NumberSettingField
 import org.teslasoft.assistant.ui.util.ScreenChrome
 

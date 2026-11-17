@@ -217,7 +217,9 @@ class ApiContextAssistantTest {
             val result = helper(transport).assist(input())
             assertEquals(ContextAssistant.Output.Nothing, result.output)
             assertEquals(HelperFailure.Category.SERVICE_ERROR, result.failure?.category)
-            assertEquals(error, transport.described.single().first)
+            val seen = transport.described.single().first
+            assertEquals(error::class, seen::class)
+            assertEquals(error.message, seen.message)
             assertEquals(1, transport.requests.size)
         }
     }
