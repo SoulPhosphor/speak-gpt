@@ -1100,5 +1100,7 @@ derived search hint before capacity is measured. Final staged proposal parts
 are deduplicated within the request, including short proposals that repeat an
 earlier split part; extra tags and relationship hints are retained. Separate
 metadata groups remain separate if their union cannot fit. Regression tests
-cover both cases. JVM resource loading is enabled for the real shared-widget
-tests; their first run otherwise failed before reaching the widget behavior.
+cover both cases. The three shared-widget UI tests run in the existing Android emulator suite
+against the real layout and main thread. The original JVM resource configuration
+is retained: enabling resources globally changed assumptions in unrelated
+composer fixtures. None of those existing tests or their assertions is changed.
