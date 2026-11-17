@@ -17,7 +17,11 @@
 package org.teslasoft.assistant.preferences.memory.context
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
+import org.teslasoft.assistant.providers.ProviderDiagnosticEvent
+import org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot
+import org.teslasoft.assistant.providers.ProviderDiagnosticSource
 import org.teslasoft.assistant.preferences.memory.context.HelperFailure.Category
 import org.teslasoft.assistant.util.GenErrorCode
 import org.teslasoft.assistant.util.GenErrorResult
@@ -60,5 +64,33 @@ class HelperFailureTest {
         assertEquals(Category.UNEXPECTED, of(GenErrorCode.U0))
         assertEquals(Category.UNEXPECTED, of(GenErrorCode.N1))
         assertEquals(Category.SERVICE_ERROR, of(GenErrorCode.U0, 500))
+    }
+
+    @Test
+    fun displayedEvidenceNeverCarriesSecretsOrConversationText() {
+        val secret = "sk-secret-key"
+        val chat = "my private message"
+        val evidence = ProviderDiagnosticSnapshot(
+            attemptId = "a",
+            outerHttpStatus = 400,
+            actualServingProvider = "Provider",
+            events = listOf(
+                ProviderDiagnosticEvent(
+                    ProviderDiagnosticSource.HTTP_RESPONSE, isError = true, isWarning = false,
+                    message = "bad key $secret for '$chat'",
+                    additionalMessages = listOf("echo: $chat"),
+                    rawPayload = "{\"key\":\"$secret\"}",
+                    code = "invalid_$secret"
+                )
+            )
+        )
+        val clean: (String?) -> String? = { it?.replace(secret, "[removed]")?.replace(chat, "[removed]") }
+        val shown = HelperFailure.sanitized(evidence, clean)
+        val all = shown.errorMessages.joinToString() + shown.providerCode + shown.events.joinToString { it.rawPayload.orEmpty() }
+        assertFalse(secret in all)
+        assertFalse(chat in all)
+        assertEquals("{\"key\":\"[removed]\"}", shown.events.single().rawPayload)
+        assertEquals("bad key [removed] for '[removed]'", shown.errorMessages.first())
+        assertEquals(400, shown.outerHttpStatus)
     }
 }

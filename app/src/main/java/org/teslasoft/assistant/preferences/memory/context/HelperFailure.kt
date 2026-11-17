@@ -66,6 +66,31 @@ data class HelperFailure(
     )
 
     companion object {
+        /**
+         * [evidence] with every provider-authored text passed through [clean],
+         * so the pop-up and its Copy action can never show a credential or
+         * conversation text a provider echoed back. Everything else the
+         * provider said is kept as it was. Classification reads the original;
+         * only display uses this copy.
+         */
+        fun sanitized(evidence: ProviderDiagnosticSnapshot, clean: (String?) -> String?): ProviderDiagnosticSnapshot =
+            evidence.copy(
+                actualServingProvider = clean(evidence.actualServingProvider),
+                finishReason = clean(evidence.finishReason),
+                generationId = clean(evidence.generationId),
+                events = evidence.events.map { event ->
+                    event.copy(
+                        message = clean(event.message),
+                        additionalMessages = event.additionalMessages.mapNotNull { clean(it) },
+                        rawPayload = clean(event.rawPayload),
+                        code = clean(event.code),
+                        type = clean(event.type),
+                        errorType = clean(event.errorType),
+                        actualServingProvider = clean(event.actualServingProvider)
+                    )
+                }
+            )
+
         /** The category a classified provider or client failure belongs to. */
         fun categoryOf(result: GenErrorResult): Category {
             when (result.providerLimit) {

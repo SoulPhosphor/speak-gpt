@@ -206,13 +206,14 @@ class ApiContextHelperTransport(context: Context) : ApiContextAssistant.HelperTr
         val exceptionMessage = SummarizerDetailSanitizer.sanitize(
             error.message?.takeIf { it.isNotBlank() } ?: error::class.java.simpleName, private
         )
-        val serving = evidence?.actualServingProvider
+        val clean: (String?) -> String? = { SummarizerDetailSanitizer.sanitize(it, private) }
+        val shownEvidence = evidence?.let { HelperFailure.sanitized(it, clean) }
+        val serving = shownEvidence?.actualServingProvider
             ?: providerMessage?.let { ProviderErrorInfo.parse(it).providerName }
         return HelperFailure(
             HelperFailure.categoryOf(result), profile, model,
             provider = HelperFailure.ProviderDetail(
-                result, exceptionMessage, providerMessage, evidence,
-                SummarizerDetailSanitizer.sanitize(serving, private)
+                result, exceptionMessage, providerMessage, shownEvidence, clean(serving)
             )
         )
     }
