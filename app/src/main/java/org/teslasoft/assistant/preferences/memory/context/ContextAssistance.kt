@@ -16,28 +16,46 @@
 
 package org.teslasoft.assistant.preferences.memory.context
 
+import android.content.Context
+import org.teslasoft.assistant.preferences.DedicatedModelRouting
 import org.teslasoft.assistant.preferences.Preferences
 
 /**
  * The app-wide context-assistance setting (Memory Context Helper Settings;
  * conversation_recall_plan.md G38): off until the user turns it on; when on,
- * the chosen method. On-device (Code-Based) is the only method built.
+ * the chosen method, one at a time: On-device (Code-Based) or API AI. No API
+ * request is ever made unless API AI is the chosen method.
  */
 object ContextAssistance {
     const val METHOD_CODE_BASED = "code_based"
+    const val METHOD_API_AI = "api_ai"
 
     private val codeBased = CodeBasedAssistant()
 
-    fun forSettings(preferences: Preferences): ContextAssistant {
+    fun forSettings(context: Context, preferences: Preferences): ContextAssistant {
         if (!preferences.getMemoryContextHelperEnabled()) return ContextAssistant.Off
         return when (preferences.getMemoryContextHelperMethod()) {
             METHOD_CODE_BASED -> codeBased
+            METHOD_API_AI -> ApiContextAssistant(
+                ApiContextHelperTransport(context),
+                preferences::getMemoryContextHelperPastExchanges
+            )
             else -> ContextAssistant.Off
         }
     }
 
+    /** API AI can be chosen only once a model is set on Memory Context
+     *  Helper Tool API (M.4 item 7). */
+    fun apiModelSet(context: Context): Boolean {
+        val routing = DedicatedModelRouting.MEMORY_CONTEXT_HELPER
+        return routing.endpointId(context).isNotBlank() && routing.modelId(context).isNotBlank()
+    }
+
     /** Drops every chat's subject, so a change of setting starts afresh. */
-    fun settingChanged() = SubjectStore.shared.clear()
+    fun settingChanged() {
+        SubjectStore.shared.clear()
+        ContextHelperNotice.reset()
+    }
 
     /** A deleted chat's subject is removed with it. */
     fun chatDeleted(chatId: String) = SubjectStore.shared.forget(chatId)

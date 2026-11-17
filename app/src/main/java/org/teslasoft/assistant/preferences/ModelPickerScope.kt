@@ -17,15 +17,17 @@
 package org.teslasoft.assistant.preferences
 
 /**
- * Which job a model picker's saved models belong to. Chat, the Summarizer and
- * the Memory Scanner (the Memory Assistant's analysis model) keep separate
+ * Which job a model picker's saved models belong to. Chat, the Summarizer,
+ * the Memory Scanner (the Memory Assistant's analysis model) and the Memory
+ * Context Helper (conversation_recall_plan.md M.4) keep separate
  * Favorites, Recent lists, favorite providers and per-model settings: they are
  * different duties, so nothing chosen for one appears in or changes another.
  */
 enum class ModelPickerScope {
     CHAT,
     SUMMARIZER,
-    MEMORY_SCANNER;
+    MEMORY_SCANNER,
+    MEMORY_CONTEXT_HELPER;
 
     /** True for a background job with one selected model of its own. */
     val isDedicated: Boolean get() = this != CHAT
@@ -36,6 +38,7 @@ enum class ModelPickerScope {
             CHAT -> ""
             SUMMARIZER -> "summarizer_"
             MEMORY_SCANNER -> "memory_scanner_"
+            MEMORY_CONTEXT_HELPER -> "memory_context_helper_"
         }
 
     companion object {

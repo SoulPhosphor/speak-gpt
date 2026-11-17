@@ -102,6 +102,25 @@
                     android:contentDescription="@string/title_memory_scanner_tool_api" />
             </LinearLayout>
 
+            <!-- Memory Context Helper Tool API (conversation_recall_plan.md M.4):
+                 the API context helper's own model and parameters, beside
+                 Memory Scanner Tool API. Title only, no subtext. -->
+            <LinearLayout
+                android:id="@+id/row_memory_context_helper_tool_api"
+                style="@style/Widget.App.Row.TitleOnly">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_memory_context_helper_tool_api" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_memory_context_helper_tool_api" />
+            </LinearLayout>
+
             <!-- Embedding Model (owner design, Nov 16 2026): download and remove
                  the on-device embedding models. Title only, no subtext. -->
             <LinearLayout

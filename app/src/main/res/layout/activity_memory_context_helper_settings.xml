@@ -81,9 +81,9 @@
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
-            <!-- Shown while the helper is on. One method is built, so it is
-                 shown as plain text; it becomes a dropdown when API AI is
-                 added (Step 4b). -->
+            <!-- Shown while the helper is on: the Helper Method dropdown,
+                 its explanation, and, for API AI, Number of Past Messages to
+                 Send (conversation_recall_plan.md G38, M.4). -->
             <LinearLayout
                 android:id="@+id/group_helper_method"
                 android:layout_width="match_parent"
@@ -98,14 +98,35 @@
                         android:text="@string/memory_context_helper_method" />
 
                     <TextView
-                        android:id="@+id/text_helper_method"
-                        style="@style/Widget.App.Dropdown.StaticValue"
+                        android:id="@+id/dropdown_helper_method"
+                        style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill"
                         android:text="@string/memory_context_helper_method_code_based" />
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/text_helper_method_hint"
                     style="@style/Widget.App.Section.Hint"
                     android:text="@string/memory_context_helper_method_code_based_hint" />
+
+                <LinearLayout
+                    android:id="@+id/row_helper_past_messages"
+                    style="@style/Widget.App.Row.Number"
+                    android:visibility="gone">
+
+                    <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                        <TextView
+                            style="@style/Widget.App.Row.Title"
+                            android:text="@string/memory_context_helper_past_messages" />
+                    </LinearLayout>
+
+                    <EditText
+                        android:id="@+id/field_helper_past_messages"
+                        style="@style/Widget.App.Row.Number.Field"
+                        android:ems="3"
+                        android:importantForAutofill="no"
+                        android:maxLength="3" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

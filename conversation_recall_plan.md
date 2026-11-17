@@ -267,33 +267,90 @@ choice keeps are unchanged (G.9, G.9b).
 the remaining technical decisions and approved these defaults).** Each is
 tested during implementation and its result reported; none is retuned
 without the owner.
-1. **Conversation input.** The new message and up to four recent
-   user/assistant exchanges from the same chat. AI replies are included,
-   because they may hold what a follow-up refers to. Historical context is
-   limited to 2,048 tokens, newest messages first, kept in chronological
-   order.
+1. **Conversation input (corrected by the owner, 2026-11-16).** The new
+   message and up to the number of recent user/assistant exchanges from
+   the same chat set in **Number of Past Messages to Send** (below; four
+   unless the user changes it). AI replies are included, because they may hold what a follow-up
+   refers to. There is **no fixed token cap** on this history: the helper
+   is an API model, separate from the on-device embedding model, and does
+   not inherit that model's 2,048-token limit. Exchanges are kept whole
+   and in chronological order as far as the selected API model's actual
+   context window allows, after the fixed instructions and the response
+   room its parameters set; when the window cannot hold all four, the
+   oldest whole exchanges are left out first, and an exchange is never
+   cut. When the app has no context window for that model, every exchange
+   the setting asks for is sent, and a provider refusal for size is
+   handled as a failure (item 4).
+
+   **Number of Past Messages to Send (Owner, 2026-11-16).** A setting on
+   Memory Context Helper Settings, shown while API AI is the Helper Method:
+   the label **Number of Past Messages to Send** and a field that takes one
+   whole number, filled in with **4**. The number is how many recent
+   exchanges (a user message and the reply to it) the helper receives with
+   the new message. The user may enter any whole number from 0 to 999 (the
+   field holds three digits); the app adds no other limit, and the
+   context-window rule above still applies. An empty or invalid entry is not saved and the field shows the
+   saved number again (the shared number field's behavior).
+
+   **Strict sliding window and caching (Owner, 2026-11-16).** The helper
+   receives exactly the newest exchanges the setting asks for, moving
+   forward one exchange each turn, so an older subject drops out and cannot
+   pollute the current one. The request is ordered so a provider's prompt
+   cache can reuse its start: the fixed instructions, then each earlier
+   message as its own chat message in order, then the newest message last.
+   On OpenRouter it carries the chat's stable cache key; it adds no explicit
+   cache marker, since short helper requests rarely reach a provider's
+   caching minimum and some providers charge to write one. A window that
+   stays anchored and grows to reuse the cache is not built.
 2. **Instructions.** A fixed, app-managed prompt. It resolves references
    and produces one standalone search query. It never answers the user,
    invents facts, or changes the actual message. No prompt editor at first.
 3. **Time allowance.** 8 seconds in text chat, 3 seconds in hands-free
    voice. No automatic retries. Latency is checked in Step 4b and the
    result reported, saying whether these limits work.
-4. **Failure.** The original message is sent normally, without helper
-   context, and chat is never blocked. A brief, non-blocking notice says
-   the helper failed, not repeated every turn. Invalid output is handled
-   the same way.
+4. **Failure (corrected by the owner, 2026-11-16).** The original message
+   is sent normally, without helper context; a helper failure never stops,
+   cancels or delays the chat request or hands-free voice. The failure is
+   shown in a **persistent pop-up** that stays until the user presses
+   **Okay** (no Snackbar, temporary notice or separate Details button),
+   because a hands-free user may not be looking at the screen. It follows
+   the app's error-detail standard (`conversation-summary-errors.md`
+   sections 1 and 2, `GenerationErrorMessages.kt`): the title **Memory
+   Context Helper Error**; the failure category as a heading; a plain
+   explanation; once the reply has finished, that the message was still sent
+   using normal memory search; then the actual sanitized provider or
+   technical error (provider message, HTTP status, codes) whenever there is
+   one, never replaced by a generic summary and never a guessed cause; and
+   **Copy** and **Okay**. The categories are Model Configuration Needed,
+   Time Allowance Exceeded, AI Service Unreachable, Connection Timed Out,
+   Response Timed Out, Access Rejected, Model Unavailable, Rate Limit
+   Reached, Quota Reached, Request Too Large, Request Rejected, AI Service
+   Error, Response Unusable and Unexpected Error, each chosen only from what
+   the app observed. API keys, credentials and conversation text are removed
+   from every detail. The pop-up does not depend on Log Chat Failures. One
+   pop-up per failure episode, as for Summarizer Errors: a repeat of the same
+   failure shows nothing until the helper works again or fails differently.
+   The exact wording is in `strings.xml` (Owner, 2026-11-16).
 5. **Cost.** Actual provider-reported usage and cost through the existing
    usage system; "Not Reported" when the provider gives none. Unknown cost
    is never shown as zero.
-6. **Privacy.** A clear disclosure before API AI is turned on, saying that
-   recent conversation messages go to the selected provider. No API helper
-   call is ever made while it is not selected.
-7. **No model selected.** API AI cannot be chosen until a model is set on
-   Memory Context Helper Tool API, and the user is directed there. If a
-   selected model becomes unavailable, the turn goes ahead with no helper.
-8. **Logging.** Failures go to the existing Provider Failure Log under the
-   function name **Memory Context Helper**, with error types and useful
-   technical details, never conversation text or API credentials.
+6. **No separate privacy warning (Owner, 2026-11-16).** The app is an
+   API chat application: the user enters their own key and assigns this
+   model themselves, so choosing API AI shows no disclosure. No API helper
+   call is ever made while API AI is not selected. A meaningful difference
+   in what is sent, or in which provider receives it, is raised with the
+   owner when it arises; ordinary API use is not treated as exceptional.
+7. **Its own model only; no model selected.** The helper uses only the
+   model set on Memory Context Helper Tool API. It never uses, copies or
+   falls back to the chat's model, the Summarizer's, the Memory Scanner's or
+   any other. API AI cannot be chosen until a model is set there, and the
+   user is directed there. If the selected model becomes unavailable, the
+   turn goes ahead with no helper.
+8. **Logging.** Writing helper failures to the Provider Failure Log under
+   the function name **Memory Context Helper**, and any debug-view label for
+   memories found through the helper, need the owner's separate approval of
+   their exact content first (`CLAUDE.md` section 7). Neither is built until
+   then; the error pop-up (item 4) is how the user sees a failure.
 9. **Starting state.** The helper starts off. When first turned on,
    Code-based is selected. API AI is only ever chosen by the user.
 10. **Testing.** Test these defaults in implementation: time limits,
@@ -446,7 +503,7 @@ finds something missed adds it here rather than guessing.
 |---|---|
 | Stage 1, memory sources | Nothing open. Decided in G43 |
 | Stage 2, Step 4a | Answered by the owner on 2026-11-16: G45 and G44 are decided; the Memory Context Helper Settings wording is in `strings.xml`; the debug view marks carried memories `[carried from earlier subject]` and top-match memories `[+3 top match]` |
-| Stage 3, Step 4b | The exact wording of the privacy disclosure, the failure notice, and the no-model message; the model and cost for the one scored run on the frozen sets. Everything else is decided in M.4 |
+| Stage 3, Step 4b | Answered by the owner on 2026-11-16: the error pop-up and its wording, the no-model message, the API AI choice and its explanation, the Memory Context Helper Tool API labels, the model picker title, the model cleanup line and the usage section are in `strings.xml`; no privacy disclosure (M.4 item 6). Still to ask: the model and cost for the one scored run on the frozen sets, and the exact content of any helper log lines (M.4 item 8) |
 | Later stages | The approvals listed in M.2's "Approve first" column |
 
 ## M.11 Where settings go (Owner, 2026-11-16)
@@ -479,6 +536,7 @@ to the owner first.
 |---|---|---|
 | Context-assistance choice (G38) and every other context-helper setting, Code-based included | **Memory Context Helper Settings**: its own screen, opened from a row in the Memory Manager's Settings section | Owner decision of 2026-11-16; position in the section and wording open |
 | API helper model and parameters (M.4) | **Memory Context Helper Tool API**, its own screen opened from AI Settings | Owner decision of 2026-11-16 |
+| Number of Past Messages to Send (M.4 item 1) | Memory Context Helper Settings, shown while API AI is the Helper Method | Owner decision of 2026-11-16; default 4 |
 | Conversation Recall setting (G.8b) | RAG Active Memory Settings | Owner decision of 2026-11-11; the screen was renamed |
 | Room for recalled text (G.8b) | RAG Active Memory Settings | Moved from Advanced Memory Settings by the 2026-11-16 reorganization |
 | Conversation Index section: Index Conversations, status, Delete Conversation Index (G.16a) | RAG Active Memory Settings, above the test rows | Moved from Advanced Memory Settings by the 2026-11-16 reorganization; wording unchanged |
@@ -1844,7 +1902,7 @@ that is not in the conversation it was given.
   embedding model's message limit. Anything else is discarded and the turn
   goes ahead with no helper.
 - Its other behavior (what it reads, instructions, time allowance, failure,
-  cost, privacy, no model, logging, starting state and testing) is decided:
+  cost, privacy, its own model, logging, starting state and testing) is decided:
   M.4, "Memory Context Helper defaults".
 - Before it is described as better than Code-based, it is scored once on
   the two frozen carry-over sets exactly as `CarryOverFinalEvaluationTest`
@@ -2821,9 +2879,16 @@ measurements and verification results.
   (`ui-style-guide.md`).
 - **Preserve:** the chat, Summarizer and embedding models and their
   settings are untouched; the user's message is unchanged; no request is
-  made unless the user chose API AI.
+  made unless the user chose API AI; the helper uses only its own model
+  from Memory Context Helper Tool API, never the chat's model (M.4 item 7);
+  its conversation input has no fixed token cap and keeps whole exchanges
+  within the selected model's context window (M.4 item 1); no privacy
+  disclosure (M.4 item 6).
 - **Verify and report:** unit tests with a stand-in provider for a valid
-  query, discarded output, timeout, provider error and no network; one
+  query, discarded output, timeout, provider error and no network; the
+  conversation input keeping whole exchanges within a model's context
+  window, honoring Number of Past Messages to Send, and sending every
+  requested exchange when no window is known; one
   scored run on the two frozen carry-over sets with the model and cost the
   owner approved, recorded in `memory baseline.md`; send-time delay on a
   physical phone. Local AI is not built, but nothing in the interface
@@ -3331,7 +3396,7 @@ about to start. Each has a recommendation.
 | G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
 | G38 | The context helper's setting | **Decided (owner, 2026-11-16):** on Memory Context Helper Settings (M.11); optional, an on/off toggle that starts off; when on, a dropdown of Code-based or API AI, one at a time; Code-based selected when first turned on; Local AI not shown now; no placeholder screens. Labels and explanations are asked when Step 4a starts (M.10). How Code-based rebuilds the subject after a restart is an engineering choice for the builder | Decided |
-| G39 | The Memory Context Helper Tool API (M.4) | **Decided (owner, 2026-11-16):** the name and place, the user's own API model, every parameter, Memory Scanner Tool API's arrangement, and the ten defaults in M.4 (input, fixed instructions, 8 s / 3 s time allowance, failure fallback, cost, privacy disclosure, no model, logging as "Memory Context Helper", starting state, testing). Wording of the disclosure and notices, and the model and cost of the scored run, are asked when Step 4b starts (M.10) | Decided |
+| G39 | The Memory Context Helper Tool API (M.4) | **Decided (owner, 2026-11-16):** the name and place, the user's own API model, every parameter, Memory Scanner Tool API's arrangement, and the ten defaults in M.4 (input, fixed instructions, 8 s / 3 s time allowance, failure fallback, cost, no separate privacy warning, its own model only, logging as "Memory Context Helper", starting state, testing). Corrected by the owner on 2026-11-16: no fixed token cap on the conversation input, and no privacy disclosure. Wording of the notices and labels, and the model and cost of the scored run, are asked when Step 4b starts (M.10) | Decided |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
 | G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
@@ -3509,3 +3574,5 @@ request. Detailed results stay in the file named by G.16.
 - Carry-over evaluation (before Step 4) — methods and +3 rules fixed in advance and scored on a development set and a held-out set with Android ONNX Runtime 1.20 similarities and desktop vectors. Results are in `memory baseline.md`; the owner's decisions are G37 and G40.
 
 - Stage 2, Step 4a — context assistance behind one interface (`memory/context/`): Off and On-device (Code-Based) subject tracking, exactly `subject_anchor`, with the subject kept per chat and embedding model in memory, dropped when the chat is deleted or renamed, and rebuilt after a restart from up to three earlier user messages only when a message has no confident match. The +3 top-match rule (G.10) in the whole-message search, so the Memory Search Test shows it. Memory Context Helper Settings (off by default) from the Memory Manager. With the owner's G45 decision: typed sending, voice and resending use the same lorebook selection (Lorebook Settings and the RAG Active Memory Settings override), lorebook entries are always their own request layer, take no Memory Space, and every way of sending drops a memory that repeats one. With the rule off, the app's Off and Code-based reproduce the recorded carry-over results exactly; results are in `memory baseline.md`.
+
+- Stage 3, Step 4b — the API AI context helper behind the Step 4a interface (`memory/context/ApiContextHelper.kt`): its own model on the new Memory Context Helper Tool API screen in AI Settings (own endpoint, model, routing and every parameter, kept in the model settings backup), never the chat's or any other model; the new message and a strict sliding window of the last Number of Past Messages to Send exchanges (default 4), whole exchanges within the model's context window and no fixed token cap; requests ordered for prompt caching with OpenRouter's stable cache key and no explicit cache marker; 8 s / 3 s time allowance, no retries; output checked before use; provider-reported usage in its own Memory Context Helper usage section; failures shown in a persistent error pop-up with the actual sanitized error details, one per failure episode, without stopping or delaying the chat or hands-free voice. No diagnostic logging (awaits approval, M.4 item 8). The one scored run on the frozen carry-over sets awaits the owner's model and cost, so API AI is not described as better than On-device.

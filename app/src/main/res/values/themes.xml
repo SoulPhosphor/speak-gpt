@@ -384,6 +384,22 @@
         <item name="android:paddingEnd">@dimen/dialog_content_padding_horizontal</item>
     </style>
 
+    <!-- Error report inside a pop-up (ui-style-guide.md, Error report): the
+         failure category as a heading, its plain explanation, then the
+         actual technical details in smaller, selectable text. -->
+    <style name="Widget.App.ErrorReport.Heading" parent="Widget.App.Section.Title">
+        <item name="android:paddingTop">@dimen/error_report_heading_padding_top</item>
+    </style>
+
+    <style name="Widget.App.ErrorReport.Body" parent="Widget.App.Screen.Intro">
+        <item name="android:paddingTop">@dimen/error_report_body_padding_top</item>
+    </style>
+
+    <style name="Widget.App.ErrorReport.Details" parent="Widget.App.Section.Hint">
+        <item name="android:paddingTop">@dimen/error_report_details_padding_top</item>
+        <item name="android:textIsSelectable">true</item>
+    </style>
+
     <!-- Progress pop-up (owner ruling, Nov 2 2026): a title with the
          percentage done on the same line, a bar showing that percentage,
          and a status line with three looping dots. The title is left-aligned

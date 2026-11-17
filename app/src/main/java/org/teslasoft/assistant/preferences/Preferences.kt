@@ -73,6 +73,8 @@ class Preferences internal constructor(
          * Log — keeps at most 50 entries.
          */
         const val LOG_MAX_ENTRIES_LIMIT = 50
+        /** Number of Past Messages to Send, as specified (M.4 item 1). */
+        const val MEMORY_CONTEXT_HELPER_DEFAULT_PAST_EXCHANGES = 4
         const val LOG_MAX_DAYS_LIMIT = 30
         const val LOG_DEFAULT_MAX_ENTRIES = 50
         const val LOG_DEFAULT_MAX_DAYS = 7
@@ -2014,6 +2016,83 @@ class Preferences internal constructor(
 
     fun setMemoryContextHelperMethod(method: String) {
         putGlobalString("memory_context_helper_method", method, "code_based")
+    }
+
+    /** Number of Past Messages to Send (conversation_recall_plan.md M.4 item
+     *  1): how many recent exchanges the API helper receives. Default 4; any
+     *  whole number from 0 up. */
+    fun getMemoryContextHelperPastExchanges(): Int =
+        getGlobalString("memory_context_helper_past_exchanges", "").toIntOrNull()
+            ?.takeIf { it >= 0 } ?: MEMORY_CONTEXT_HELPER_DEFAULT_PAST_EXCHANGES
+
+    fun setMemoryContextHelperPastExchanges(value: Int) {
+        putGlobalString("memory_context_helper_past_exchanges", value.coerceAtLeast(0).toString())
+    }
+
+    /* Memory Context Helper Tool API (M.4): the API helper's own endpoint,
+     * model, routing and parameters, separate from every other model. Empty
+     * = not configured; nothing ever falls back to another job's model. */
+
+    fun getMemoryContextHelperEndpointId(): String =
+        getGlobalString("memory_context_helper_endpoint_id", "")
+
+    fun setMemoryContextHelperEndpointId(id: String) {
+        putGlobalString("memory_context_helper_endpoint_id", id)
+    }
+
+    fun getMemoryContextHelperModel(): String =
+        getGlobalString("memory_context_helper_model", "")
+
+    fun setMemoryContextHelperModel(model: String) {
+        putGlobalString("memory_context_helper_model", model)
+    }
+
+    /** The helper's own provider routing for its selected model. "" = none. */
+    fun getMemoryContextHelperRoutingOverride(): String =
+        getGlobalString("memory_context_helper_routing_override", "")
+
+    fun setMemoryContextHelperRoutingOverride(json: String) {
+        putGlobalString("memory_context_helper_routing_override", json)
+    }
+
+    fun getMemoryContextHelperStreaming(): Boolean =
+        getGlobalString("memory_context_helper_streaming", "").toBooleanStrictOrNull()
+            ?: RecommendedModelParameters.STREAMING
+
+    fun setMemoryContextHelperStreaming(value: Boolean) {
+        putGlobalString("memory_context_helper_streaming", value.toString())
+    }
+
+    fun getMemoryContextHelperTemperature(): Float =
+        getGlobalString("memory_context_helper_temperature", "").toFloatOrNull()
+            ?: RecommendedModelParameters.TEMPERATURE
+
+    fun setMemoryContextHelperTemperature(value: Float) {
+        putGlobalString("memory_context_helper_temperature", value.toString())
+    }
+
+    fun getMemoryContextHelperTopP(): Float =
+        getGlobalString("memory_context_helper_top_p", "").toFloatOrNull()
+            ?: RecommendedModelParameters.TOP_P
+
+    fun setMemoryContextHelperTopP(value: Float) {
+        putGlobalString("memory_context_helper_top_p", value.toString())
+    }
+
+    fun getMemoryContextHelperFrequencyPenalty(): Float =
+        getGlobalString("memory_context_helper_frequency_penalty", "").toFloatOrNull()
+            ?: RecommendedModelParameters.FREQUENCY_PENALTY
+
+    fun setMemoryContextHelperFrequencyPenalty(value: Float) {
+        putGlobalString("memory_context_helper_frequency_penalty", value.toString())
+    }
+
+    fun getMemoryContextHelperPresencePenalty(): Float =
+        getGlobalString("memory_context_helper_presence_penalty", "").toFloatOrNull()
+            ?: RecommendedModelParameters.PRESENCE_PENALTY
+
+    fun setMemoryContextHelperPresencePenalty(value: Float) {
+        putGlobalString("memory_context_helper_presence_penalty", value.toString())
     }
 
     /** Lorebook Settings and the RAG Active Memory Settings override; see

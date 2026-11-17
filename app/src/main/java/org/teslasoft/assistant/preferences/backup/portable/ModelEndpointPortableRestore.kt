@@ -32,6 +32,9 @@ object ModelEndpointPortableRestore {
                 data.memoryScanner?.let {
                     DedicatedModelsBackup.apply(context.applicationContext, it, ModelPickerScope.MEMORY_SCANNER)
                 }
+                data.memoryContextHelper?.let {
+                    DedicatedModelsBackup.apply(context.applicationContext, it, ModelPickerScope.MEMORY_CONTEXT_HELPER)
+                }
             }
         }
     } catch (_: Exception) {

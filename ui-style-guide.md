@@ -310,6 +310,24 @@ its own line beneath the row. Spacing lives in `dialog_actions_*` and
 and Backup Attempts Failed all use these styles. A pop-up's own scrolling
 content column (the Summarizer Errors list) uses `Widget.App.Dialog.Content`.
 
+### Error report
+
+`Widget.App.ErrorReport.Heading`
+
+`Widget.App.ErrorReport.Body`
+
+`Widget.App.ErrorReport.Details`
+
+An error pop-up that follows the app's error-detail standard (a failure
+category, its plain explanation, then the actual sanitized provider or
+technical error) puts its content in a `Widget.App.Dialog.Content` column:
+the category in `ErrorReport.Heading`, each explanation line in
+`ErrorReport.Body`, and the technical details in `ErrorReport.Details`
+(smaller, selectable). Spacing lives in the `error_report_*` dimensions. The
+actions are a `DialogActionRow` of `AppButton.Primary.Inline` buttons. Current
+user: the Memory Context Helper error pop-up (`dialog_context_helper_error.xml`,
+**Copy** and **Okay**).
+
 Parameter information boxes use `ParameterInfoDialog` and the shared
 `view_parameter_info_title.xml` heading, styled by `Widget.App.ParameterInfo.*`.
 The ordinary title TextView inherits the standard dialog title typography and

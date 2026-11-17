@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Memory Context Helper error pop-up (conversation_recall_plan.md M.4 item
+     4): the failure category as a heading, its explanation, that the message
+     was still sent, then the actual error details; Copy and Okay. Built from
+     shared styles only (ui-style-guide.md, Error report). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:fadeScrollbars="false">
+
+        <LinearLayout style="@style/Widget.App.Dialog.Content">
+
+            <TextView
+                android:id="@+id/context_helper_error_heading"
+                style="@style/Widget.App.ErrorReport.Heading" />
+
+            <TextView
+                android:id="@+id/context_helper_error_message"
+                style="@style/Widget.App.ErrorReport.Body" />
+
+            <TextView
+                android:id="@+id/context_helper_error_status"
+                style="@style/Widget.App.ErrorReport.Body" />
+
+            <TextView
+                android:id="@+id/context_helper_error_details"
+                style="@style/Widget.App.ErrorReport.Details" />
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout style="@style/Widget.App.Dialog.Actions">
+
+        <org.teslasoft.assistant.ui.widgets.DialogActionRow style="@style/Widget.App.Dialog.Actions.EndRow">
+
+            <androidx.constraintlayout.helper.widget.Flow
+                style="@style/Widget.App.Dialog.Actions.EndRowFlow"
+                app:constraint_referenced_ids="btn_context_helper_error_copy,btn_context_helper_error_okay" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_context_helper_error_copy"
+                style="@style/AppButton.Primary.Inline"
+                android:text="@string/summarizer_errors_copy" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_context_helper_error_okay"
+                style="@style/AppButton.Primary.Inline"
+                android:text="@string/summarizer_errors_okay" />
+        </org.teslasoft.assistant.ui.widgets.DialogActionRow>
+    </LinearLayout>
+</LinearLayout>

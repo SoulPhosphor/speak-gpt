@@ -152,6 +152,9 @@ class ModelEndpointRestoreParticipant internal constructor(
             data.recents?.let { RecentModelsBackup.apply(appContext, it) }
             data.summarizer?.let { DedicatedModelsBackup.apply(appContext, it, ModelPickerScope.SUMMARIZER) }
             data.memoryScanner?.let { DedicatedModelsBackup.apply(appContext, it, ModelPickerScope.MEMORY_SCANNER) }
+            data.memoryContextHelper?.let {
+                DedicatedModelsBackup.apply(appContext, it, ModelPickerScope.MEMORY_CONTEXT_HELPER)
+            }
             true
         } catch (_: Exception) {
             note.fail("recent_models_not_saved")

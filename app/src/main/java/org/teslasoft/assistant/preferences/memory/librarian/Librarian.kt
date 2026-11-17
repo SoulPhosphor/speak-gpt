@@ -456,6 +456,17 @@ class Librarian private constructor(private val appContext: Context) {
 
     fun hasUsableModel(): Boolean = ensureModel() != null
 
+    /** Whether [text], searched as a message, fits the embedding model's
+     *  message limit (the API helper's output check, G.9b). With no usable
+     *  model there is no limit to enforce. Counts with the tokenizer only. */
+    fun fitsMessageLimit(text: String): Boolean {
+        val m = ensureModel() ?: return true
+        return m.countTokens(text, isQuery = true) <= m.messageTokenLimit
+    }
+
+    /** The embedding model's message limit in tokens, or null with no usable model. */
+    fun messageTokenLimit(): Int? = ensureModel()?.messageTokenLimit
+
     @Synchronized
     private fun ensureModel(): EmbeddingModel? {
         model?.let { return it }

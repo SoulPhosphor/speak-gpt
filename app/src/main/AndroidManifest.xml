@@ -502,6 +502,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.MemoryContextHelperToolApiActivity"
+            android:exported="false"
+            android:label="@string/title_memory_context_helper_tool_api"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.MemoryAssistantAdvancedSettingsActivity"
             android:exported="false"
             android:label="@string/title_memory_assistant_advanced"

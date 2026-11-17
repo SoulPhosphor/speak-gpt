@@ -197,9 +197,13 @@ class DedicatedModelListsTest {
 
     @Test
     fun eachJobKeepsItsOwnFiles() {
-        assertEquals(setOf("", "summarizer_", "memory_scanner_"), ModelPickerScope.entries.map { it.filePrefix }.toSet())
+        assertEquals(
+            setOf("", "summarizer_", "memory_scanner_", "memory_context_helper_"),
+            ModelPickerScope.entries.map { it.filePrefix }.toSet()
+        )
         assertFalse(ModelPickerScope.CHAT.isDedicated)
         assertTrue(ModelPickerScope.SUMMARIZER.isDedicated && ModelPickerScope.MEMORY_SCANNER.isDedicated)
+        assertTrue(ModelPickerScope.MEMORY_CONTEXT_HELPER.isDedicated)
     }
 
     @Test

@@ -868,7 +868,8 @@ object UnifiedPortableRestore {
                 Hash.hash(ModelEndpointPortableCodec.encode(current.copy(
                     recents = null,
                     summarizer = DedicatedModelsBackup.withoutHistory(current.summarizer),
-                    memoryScanner = DedicatedModelsBackup.withoutHistory(current.memoryScanner)
+                    memoryScanner = DedicatedModelsBackup.withoutHistory(current.memoryScanner),
+                    memoryContextHelper = DedicatedModelsBackup.withoutHistory(current.memoryContextHelper)
                 )))
             current
         } else null

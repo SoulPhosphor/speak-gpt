@@ -267,6 +267,9 @@ import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
 import org.teslasoft.assistant.preferences.lorebook.LoreBookBudget
 import org.teslasoft.assistant.preferences.lorebook.LorebookLimits
 import org.teslasoft.assistant.preferences.memory.context.EarlierUserMessages
+import org.teslasoft.assistant.preferences.memory.context.ContextHelperNotice
+import org.teslasoft.assistant.ui.activities.memory.ContextHelperErrorDialog
+import org.teslasoft.assistant.preferences.memory.context.HelperConversation
 import org.teslasoft.assistant.preferences.lorebook.ChatLoreBookSelection
 import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
@@ -549,6 +552,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // screen goes away.
     private var btnConversationSummary: ImageButton? = null
     private var btnSummarizerErrors: ImageButton? = null
+    /** A Memory Context Helper failure waiting for its reply to end. */
+    @Volatile private var pendingContextHelperFailure:
+        org.teslasoft.assistant.preferences.memory.context.HelperFailure? = null
     private var btnActiveProfile: ImageButton? = null
     private var summarizerErrorBadge: TextView? = null
     private var summarizerController: org.teslasoft.assistant.util.summarizer.SummarizerController? = null
@@ -12415,6 +12421,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // Every way a regeneration can end passes here; one that produced
             // no reply puts the removed reply back.
             settlePendingRegeneration()
+            showPendingContextHelperFailure()
         }
     }
 
@@ -12861,6 +12868,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // it is genuinely once PER PROCESS: an instance field re-armed on every
     // ChatActivity recreation (e.g. rotation), turning "once, softly" into a
     // repeat toast for the same degraded session.
+    /** The API context helper's outcome for a message that is being sent:
+     *  a failure that starts a new episode waits to be shown once the reply
+     *  ends (ContextHelperErrorDialog). */
+    private fun onContextHelperOutcome(
+        failure: org.teslasoft.assistant.preferences.memory.context.HelperFailure?
+    ) {
+        if (ContextHelperNotice.shouldShow(failure)) pendingContextHelperFailure = failure
+    }
+
+    /** Shows a waiting helper failure when the reply ends. The pop-up says the
+     *  message was sent only when the reply actually finished. */
+    private fun showPendingContextHelperFailure() {
+        val failure = pendingContextHelperFailure ?: return
+        pendingContextHelperFailure = null
+        val delivered = messages.lastOrNull()?.let {
+            it["isBot"] == true && it[MessageCompletionState.KEY_STATE] == MessageCompletionState.DONE
+        } == true
+        runOnUiThread { ContextHelperErrorDialog.show(this, failure, delivered) }
+    }
+
     private fun notifyMemoryDegradedOnce() {
         if (!memoryDegradedNotified.compareAndSet(false, true)) return
         runOnUiThread {
@@ -13631,7 +13658,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                     conversationProjection.memoryContext
                                 ),
                                 useContextAssistance = !experimentalModeOn(),
-                                deferContextCommit = { commitContext = it }
+                                deferContextCommit = { commitContext = it },
+                                conversation = HelperConversation.turnsBefore(
+                                    conversationProjection.memoryContext
+                                ),
+                                handsFree = isHandsFreeEngaged(),
+                                onContextHelperOutcome = ::onContextHelperOutcome
                             )
                         )
                 }
@@ -14038,7 +14070,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 automaticMemoryEnabled = preferences?.getChatMemoryEnabled() == true,
                                 earlierUserMessages = if (legacyExperimental) emptyList() else
                                     EarlierUserMessages.from(chatMessages),
-                                useContextAssistance = !legacyExperimental
+                                useContextAssistance = !legacyExperimental,
+                                conversation = if (legacyExperimental) emptyList() else
+                                    HelperConversation.turnsBefore(chatMessages),
+                                handsFree = isHandsFreeEngaged(),
+                                onContextHelperOutcome = ::onContextHelperOutcome
                             )
                         )
                 }

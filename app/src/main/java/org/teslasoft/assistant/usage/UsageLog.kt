@@ -21,6 +21,9 @@ enum class UsageCategory(val key: String) {
     CHAT("chat"),
     IMAGE_GENERATION("image_generation"),
     SUMMARIZING("summarizing"),
+    /** The Memory Context Helper's API requests, shown beside Summarizing
+     *  (conversation_recall_plan.md M.4 item 5). */
+    MEMORY_CONTEXT_HELPER("memory_context_helper"),
     STT("stt"),
     TTS("tts");
 
