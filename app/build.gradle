@@ -46,6 +46,8 @@ android {
     }
 
     testOptions {
+        // The live memory meter tests inflate the actual shared layout/styles.
+        unitTests.includeAndroidResources = true
         unitTests.all {
             // Keep framework regression failures diagnosable in CI logs.
             testLogging.exceptionFormat = 'full'
