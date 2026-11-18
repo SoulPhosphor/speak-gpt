@@ -301,6 +301,9 @@ class MemoryAnalysisForegroundService : Service() {
                         }
                     }
                 }
+                // Chat scans the run took between its conversations get the
+                // same stop refinement on their own records.
+                refineStoppedChatScans(appContext, outcome.stoppedChatScanRunIds)
                 // "already_running" should be unreachable from here (the
                 // gates above), but if it ever happens the LIVE run owns the
                 // state — don't clobber it with a losing start's outcome.
@@ -337,6 +340,7 @@ class MemoryAnalysisForegroundService : Service() {
                             analysisType = next.analysisType
                         )
                     }
+                    refineStoppedChatScans(appContext, chatOutcome.stoppedChatScanRunIds)
                     val refinedChatOutcome = refineHandedOverStop(appContext, chatOutcome)
                     if (refinedChatOutcome.outcome != "already_running") {
                         state.value = MemoryAnalysisState.Finished(refinedChatOutcome)
@@ -357,6 +361,19 @@ class MemoryAnalysisForegroundService : Service() {
      * limit, or a generic system stop), for a chat scan handed over at the end
      * of a run. The refined value is also written to its durable run record.
      */
+    private fun refineStoppedChatScans(appContext: Context, runIds: List<String>) {
+        val refined = when {
+            userCancelRequested -> "cancelled_user"
+            timeLimitReached -> "stopped_time_limit"
+            else -> return
+        }
+        for (id in runIds) {
+            try {
+                MemoryStore.getInstance(appContext).updateArchivistRunOutcome(id, refined, null)
+            } catch (_: Exception) { /* the parent run's outcome is unaffected */ }
+        }
+    }
+
     private fun refineHandedOverStop(appContext: Context, outcome: Archivist.RunOutcome): Archivist.RunOutcome {
         if (outcome.outcome != "cancelled") return outcome
         val refined = when {

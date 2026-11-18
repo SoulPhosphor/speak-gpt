@@ -181,7 +181,11 @@ object Archivist {
         /** For a partial failure, how many failed conversations fell into each
          *  ArchivistFailureCategory — the screen uses a specific title when they
          *  all share one cause, or a mixed-cause breakdown otherwise. */
-        val failureCategoryCounts: Map<String, Int> = emptyMap()
+        val failureCategoryCounts: Map<String, Int> = emptyMap(),
+        /** Chat scans run between this run's conversations that ended in a
+         *  stop ("cancelled"), so the caller can refine their records the same
+         *  way it refines this run's. */
+        val stoppedChatScanRunIds: List<String> = emptyList()
     ) {
         val notConfigured: Boolean get() = outcome == "not_configured"
     }
@@ -627,6 +631,7 @@ object Archivist {
         var runError: String? = null
         var runErrorFailure: ArchivistFailure? = null
         var interrupted = false
+        val stoppedChatScans = ArrayList<String>()
 
         try {
             // Display batches (owner answer 4): size-grouped, presentation
@@ -656,6 +661,15 @@ object Archivist {
                         } else {
                             requests.distinctBy { it.chatId }
                         }
+                        // A moved-forward chat covers only what this run froze at
+                        // its start. The request waits once more, so anything the
+                        // chat gained since then is scanned right after it.
+                        if (markProcessed) {
+                            val separateIds = separate.map { it.chatId }.toSet()
+                            requests.distinctBy { it.chatId }
+                                .filter { it.chatId !in separateIds }
+                                .forEach { pendingChatScans.add(it) }
+                        }
                         for (request in separate) {
                             // Scanned as its own run with its own type, between
                             // this run's conversations.
@@ -667,7 +681,7 @@ object Archivist {
                             if (chat.isEmpty()) continue
                             chatScansTotal += chat.size
                             try {
-                                runLocked(
+                                val chatOutcome = runLocked(
                                     context, { chat }, markProcessed = true,
                                     analysisType = request.analysisType,
                                     onProgress = { p ->
@@ -683,6 +697,9 @@ object Archivist {
                                     reconcileDeadRuns = false,
                                     takeChatScanRequests = false
                                 )
+                                if (chatOutcome.outcome == "cancelled") {
+                                    chatOutcome.runId?.let { stoppedChatScans.add(it) }
+                                }
                             } catch (ce: kotlinx.coroutines.CancellationException) {
                                 throw ce
                             } catch (_: Exception) {
@@ -1250,7 +1267,8 @@ object Archivist {
             upstreamProvider = providerInfo.providerName?.trim()?.ifBlank { null },
             providerMessage = providerInfo.message?.trim()?.ifBlank { null },
             model = runModel,
-            failureCategoryCounts = failureCategoryCounts
+            failureCategoryCounts = failureCategoryCounts,
+            stoppedChatScanRunIds = stoppedChatScans
         )
     }
 
