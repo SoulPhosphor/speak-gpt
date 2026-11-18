@@ -26,14 +26,7 @@ comments and tests cite its section numbers.
 - **`memory baseline.md`** remains the evidence record for every
   saved-memory measurement. Results are never copied into this plan.
 
-**State on 2026-11-16.** Steps 0–3 are built, Step 3's repair is merged in
-#205, and the carry-over evaluation is merged in #206 with its results in
-`memory baseline.md`. The owner's decisions of 2026-11-16 replace searching
-with the previous messages by a selectable context assistance (G.9, G.9b),
-approve a narrow +3 exception (G.10), and keep embedding models replaceable
-(G.9c). The next stage is memory sources (M.3), which has nothing waiting
-on the owner; then Step 4a, whose remaining owner questions are asked when
-it starts (M.10).
+**Current handoff · November 18, 2026.** Stages 1–6 merged in [#209](https://github.com/SoulPhosphor/speak-gpt/pull/209), [#210](https://github.com/SoulPhosphor/speak-gpt/pull/210), [#211](https://github.com/SoulPhosphor/speak-gpt/pull/211), [#212](https://github.com/SoulPhosphor/speak-gpt/pull/212), [#213](https://github.com/SoulPhosphor/speak-gpt/pull/213), and [#214](https://github.com/SoulPhosphor/speak-gpt/pull/214). Stage 6 delivered the recall test chats. The next assignment is **Stage 6A — reliable reading and resume**. Complete Stages 6A–6D before Stage 7. M.2 owns sequencing and the [November 18 scanner proposal](<Memory Scanner update proposal nov 18.md>) owns the scanner design. Implementation of these four stages is pending.
 
 # Part M: Roadmap, status, and consolidation
 
@@ -69,6 +62,9 @@ it starts (M.10).
 | Step 2: long and dictated messages searched in sections; repairs restore the original quality gate and calibrate Stand-Out Strength 2.53 and Minimum Spread 0.034 | #200, #201, #202 | `memory baseline.md` |
 | Step 3: previous-message search helper, not connected to sending; repair applies the owner's +3 rule to section matches | #203, #205 | `memory baseline.md` |
 | Carry-over evaluation on a development and a held-out set with Android similarities | #206 | `memory baseline.md`; decisions G37, G40 |
+| Stages 1–3: conversation sources, code-based context assistance, and the API context helper | #209–211 | M.3, M.4 and Build record; the API helper's model-and-cost-dependent evaluation remains a separate item |
+| Stages 4–5: token-capacity meter and saving check, Archived view and Memory Handling Preferences | #212–213 | G34 and M.10 |
+| Stage 6: conversation-recall test chats and fixture validation | #214 | Step 6 and Build record |
 
 **Closed investigations. Do not repeat them:**
 - Android ONNX Runtime 1.29 and forced FP32 activations: no accuracy
@@ -89,9 +85,13 @@ it starts (M.10).
 | 2 | **Context assistance: Off and Code-based** | Step 4a: the context-assistance interface, no helper and Code-based, the +3 top-match rule, Memory Context Helper Settings with its toggle and dropdown | #205 and #206 merged (done) | The Step 4a questions in M.10 | Follow-ups keep their memories; the context-assistance setting |
 | 3 | **Context assistance: API AI** | Step 4b, with the Memory Context Helper Tool API screen in AI Settings (M.4) | Stage 2 | The Step 4b questions in M.10 | The API AI choice and the Memory Context Helper Tool API screen |
 | 4 | **Memory length limit** | Step 5: informational word count, live full-input token meter, exact token saving check, lossless Memory Assistant splitting | Step 1 (done) | Nothing (corrected G34 decided) | Word count, token usage and filling bar |
-| 5 | **Data control** | Memory plan Phase 2: the view dropdown, Retired, Memory Handling Preferences, Delete to Retired, with every new field in backups | Stage 1 (both are expected to change the memory database; building them one after the other avoids competing migrations) | Wording and layout; D44 default | Retired view and Memory Handling Preferences |
+| 5 | **Data control** | Memory plan Phase 2: the view dropdown, Archived, Memory Handling Preferences, Delete Moves to Archived, with the setting in backups | Stage 1 (both are expected to change the memory database; building them one after the other avoids competing migrations) | Wording and layout; D44 default | Archived view and Memory Handling Preferences |
 | 6 | **Conversation test chats** | Step 6 | Nothing unbuilt | Nothing | Nothing |
-| 7 | **Conversation index: cutter and stores** | Steps 7 and 8 | Stage 6; Step 1 (done) | G35 | Nothing |
+| 6A | **Reliable reading and resume** | M.2 scanner work below | Existing scanner and encrypted staging | Existing approval rules for any changed wording | Reliable short and long scans through the existing controls |
+| 6B | **Draft corrections and memory matching** | M.2 scanner work below | 6A | Changed AI-facing instructions | Later updates and retellings handled within a scan |
+| 6C | **Browser match cards and comparison** | M.2 scanner work below | Stage 6B match data | Card, comparison layout and labels | Open the exact matched pair and return to the same list position |
+| 6D | **Browser review actions and end-to-end evaluation** | M.2 scanner work below | Stage 6C pair view and Stage 6B conflict data | New review actions and wording | Resolve Pending alternatives safely and complete the scan-to-review workflow |
+| 7 | **Conversation index: cutter and stores** | Steps 7 and 8 | Stage 6 and Step 1 complete; scheduled after Stage 6D | G35 | Nothing |
 | 8 | **Conversation index: embedding and upkeep** | Steps 9 and 10 | Stage 7 | Nothing after G35 | Nothing |
 | 9 | **Conversation index: settings, progress, after close** | Steps 11, 12 and 13 | Stage 8 | G20, G28, G31; Step 13's mechanism and stopped-for-the-day wording | Conversation Index settings, progress icon and pop-up, notification |
 | 10 | **Recall retrieval and inspector** | Steps 14 and 15 | Stages 2 and 8 | G36; inspector labels | Conversation Recall Test screen |
@@ -104,7 +104,18 @@ it starts (M.10).
 | Any time | Not a stage of its own | **Automatic companion linking** (M.6, Owner 2026-11-16): every companion the user creates is linked to the memory system automatically | Nothing unbuilt | Nothing; the behavior is decided | Nothing new; companions appear in the memory system as soon as they are saved |
 | Any time | Not a stage of its own | The memory-use instruction (D41) can be added to any stage that touches the memory instructions once its exact text is approved | — | D41 text | Changed AI behavior |
 
-**Why this order (Owner approved, 2026-11-16, G42):**
+### Scanner work between Stages 6 and 7
+
+The owner prioritized the scanner on November 18. The four stages below are the recommended delivery split. The numbered Steps in G.16 keep their original identities. Scanner work uses eligible transcript rows plus local memory records and existing embedding facilities. Stage 7’s conversation passage index serves later live recall. A broader Memory Browser redesign can proceed separately.
+
+1. **Stage 6A — reliable reading and resume.** Use the existing single-chat and batch entry points. Implement the short/long request paths, stable turn and fragment references, bounded excerpts, cache-friendly request order, and lossless retry of an oversized turn. Persist the validated working state and exact next unread position together. Preserve cancellation, progress reporting, and automatic-backup coordination from #216–217. Demonstrate that killing the process after a completed section resumes from its checkpoint and that split fragments cover the entire original turn. Existing screens are sufficient for this phase.
+2. **Stage 6B — draft corrections and memory matching.** Implement scan-local edits and bounded repair, model-sized overlapping lookup windows, scoped Active/Pending/Archived and working-draft comparisons, the keyword fallback, chronological reconciliation, ranked selection under the cap, and filing-time rechecks. Carry validated record IDs, statuses, match method, actual similarity when available, and unresolved alternatives through to the review layer. Use the existing Possible Match flow for cases it can represent. Deliver any behavior requiring a new human review action together with that action in Stage 6D. Verify that an early “waiting” draft becomes one accurate memory after a late reply, and that retelling it in another scan creates no extra card.
+3. **Stage 6C — Browser match cards and comparison.** Add the related-memory preview, status, match method and available similarity score to Pending cards. Open the exact pair by ID, show the full wording of both records, expose additional matches, and restore the user’s list position on return. Reuse the comparison screen and existing review actions where applicable. Cover changed or missing targets, and present keyword matches accurately when embeddings are unavailable. Keep the Stage 4 meter in the existing creating, editing and reading views.
+4. **Stage 6D — Browser review actions and end-to-end evaluation.** Add the decisions for two pending drafts and unresolved alternatives, including a linked pair that occupies one review choice at a cap of one. Keep both pending, edit or discard the redundant proposal, or apply an existing approval action according to the user's choice. Revalidate before applying a decision so reviewing a pair never activates or overwrites a memory accidentally. Exercise the complete scan-to-review path with and without embeddings and measure quality, token usage, conditional comparisons and phone review effort as specified in the scanner proposal. Resume at **Stage 7 (Steps 7 and 8)**.
+
+Temporary scanner passage references support editing and recovery inside a scan. M.3 remains authoritative for permanent source information in the editor and backups. Archived memory comparison is scanner-only. The installed-model requirement in G.16 applies to Conversation Recall; the scanner also supports local keyword fallback. Stage 6’s frozen corpus remains the reference for recall, with scanner-specific expected results evaluated separately. Stage 15 still owns proposals for important dates.
+
+**Original order rationale (G42, November 16; scanner priority added November 18)**
 - **Provenance first.** The owner wants to build a memory collection now.
   Every memory saved before provenance exists has no recorded source, and
   that source cannot be recovered later. Provenance does not depend on any
@@ -400,17 +411,13 @@ default, not a permanent restriction. In addition:
   owner sees its exact wording, screens and AI-facing text, as Part E
   requires.
 - **Database versions.** Phase 3 in the memory plan says "from version 33".
-  The database is at version 34, and provenance adds the next version. Each
+  Provenance used version 35 and Stage 5 used version 36. Each
   stage takes the next version when it is built.
-- **Provenance and later phases.** Retired memories keep their sources.
-  Fading and Retired never delete sources. Provenance's event date and
+- **Provenance and later phases.** Archived memories keep their sources.
+  Fading and archiving preserve sources. Provenance's event date and
   Phase 4's important date are one field (Owner, 2026-11-16), built in
   Phase 4.
-- **Step 1.13 is still unbuilt** (checked 2026-11-16): the frozen request
-  path (`buildFrozenRegularRequest`) passes no lorebook matches to the
-  memory system, so the check that drops a memory repeating a lorebook entry
-  runs only on the other path (memory plan A.9). **Proposed (G45):** include
-  it in Step 4a, which already verifies lore overlap with carried memories.
+- **Step 1.13** shipped with Stage 2 under G45. See its Build record for the shared lorebook selection and duplicate check.
 - **Step 1.2** is replaced by the Step 0 set and the two carry-over sets.
 - **Step 1.12 and B.5's carry-over rule** are replaced by context assistance
   (G.9, G.9b).
@@ -481,7 +488,8 @@ default, not a permanent restriction. In addition:
 
 | Document | Role |
 |---|---|
-| This plan | Authoritative: order, status, designs, work orders, decisions |
+| This plan | Authoritative build order and status for memory work, with the numbered recall work orders |
+| [November 18 scanner proposal](<Memory Scanner update proposal nov 18.md>) | Detailed scanner behavior, comparison UI and evaluation for Stages 6A–6D in M.2 |
 | `memory baseline.md` | Evidence for every saved-memory measurement |
 | `conversation_recall_baseline.md` | Created by Step 14 for conversation-recall results (G.16) |
 | `Memory System/dynamic_memory_plan.md` | Reference: saved-memory search design and later saved-memory feature designs, D-decisions, research |
@@ -517,13 +525,13 @@ Memory Repair Settings.** A stage that adds a setting puts it on the screen
 below. Its exact position on that screen, label and wording are still shown
 to the owner first.
 
-**The screens as of 2026-11-16:**
+**Memory screens and entry points:**
 
 | Screen | Opened from | Holds |
 |---|---|---|
-| Memory Browser | Memory Manager | Memories, Pending, the memory editor |
+| Memory Browser | Memory Manager | Memories, Pending, Archived, the memory editor and Possible Match review |
 | Lorebook Browser | Memory Manager | Lorebooks |
-| Memory Scanner Tool | Memory Manager | Running the Memory Scanner (Memory Assistant) |
+| Memory Scanner Tool | Memory Manager | Running the Memory Scanner (Memory Assistant); the chat menu also offers Scan for Memories |
 | Memory Scanner Tool Settings | Memory Manager, Settings section | How scans behave: suggestion limit, token amounts, Minimum Importance, the Associative and Lorebook Memory Prompts |
 | RAG Active Memory Settings (formerly Memory Controls) | Memory Manager, Settings section | How memories are searched and sent in chats: Memory Defaults, Memory Engine; Memory Search Test last |
 | Memory Repair Settings (formerly Advanced Memory Settings) | Memory Manager, Settings section, last | System Status and Rebuild memory index |
@@ -547,7 +555,7 @@ to the owner first.
 | Source lines: User, Companion, Date, Last Message Date, Source Conversation, then the important date (M.3) | Memory editor opened from the Memory Browser, directly under Tags | Owner decision of 2026-11-16 |
 | Word count and token-capacity meter (Step 5) | Top of memory creation, editing and reading views | Owner decision of 2026-11-17, corrected G34 |
 | Memory Handling Preferences (memory plan Phase 2) | Its own screen, opened from a row in the Memory Manager's Settings section, after Memory Context Helper Settings | Owner decision of 2026-11-17; wording in `strings.xml` |
-| Always, Retired and Dates views (Phases 2–4) | Memory Browser view dropdown | Owner design |
+| Always, Archived and Dates views (Phases 2–4) | Memory Browser view dropdown | Owner design |
 | Other embedding models, local or API (G41) | AI Settings, Embedding Model | Placement by the rule; Later |
 | Live AI worker's model (G.11) | AI Settings | Placement by the rule; Later |
 
@@ -559,8 +567,7 @@ Part M.
 ## G.0 Status and how to read this plan
 
 - **This plan is a proposal.** It was written on 2026-11-10 from the current
-  code, the review of #180, and published research. Steps 0–3 are built;
-  the status and order of every Step are in M.2.
+  code, the review of #180, and published research. The Build record and M.2 give current status and execution order.
 - **Two labels are used throughout:**
   - **Owner** means the owner said it on the date shown, or on 2026-11-10
     where no date is given. These are decisions.
@@ -3403,7 +3410,7 @@ about to start. Each has a recommendation.
 | G39 | The Memory Context Helper Tool API (M.4) | **Decided (owner, 2026-11-16):** the name and place, the user's own API model, every parameter, Memory Scanner Tool API's arrangement, and the ten defaults in M.4 (input, fixed instructions, 8 s / 3 s time allowance, failure fallback, cost, no separate privacy warning, its own model only, logging as "Memory Context Helper", starting state, testing). Corrected by the owner on 2026-11-16: no fixed token cap on the conversation input, and no privacy disclosure. Wording of the notices and labels, and the model and cost of the scored run, are asked when Step 4b starts (M.10) | Decided |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
-| G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection | Decided |
+| G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection. Updated November 18: complete the scanner update after Stage 6 and before Stage 7 (M.2) | Decided |
 | G43 | The memory provenance design (M.3) and its details | **Decided (owner, 2026-11-16):** the source is the whole conversation, never a scanner-chosen message; the memory editor shows User, Companion, Date, Last Message Date and Source Conversation as M.3 describes; no sources are carried through Replace, Supersede or merge; a memory the user writes shows its creation date; the user cannot edit sources or dates; the important date is built in Phase 4. Participant-specific attribution and user-added sources are possible later features | Decided |
 | G44 | Release Step 4a's setting before Step 4b adds API AI | **Decided (owner, 2026-11-16):** yes; the setting ships with On-device (Code-Based) only, shown as plain text until API AI makes it a dropdown | Decided |
 | G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | **Decided (owner, 2026-11-16):** yes, on typed sending, voice and resending alike. With it the owner decided that every way of sending uses the same lorebook rules: every match after duplicate removal up to Maximum Lorebook Entries (Lorebook Settings, default 20, 1–99, no unlimited), an optional character limit (off, up to 9,999), an optional entry limit on RAG Active Memory Settings that replaces it while memory is on and a valid number is entered, and lorebook text never uses Memory Space | Decided |
@@ -3514,7 +3521,7 @@ this plan. These rules keep that safe.
   the conversation index.
 - **Build only the assigned stage or Step from M.2.** Do not start the
   next one. A session's changes go in one pull request (`CLAUDE.md`).
-  Steps 0–3 have implementations; their repairs and verification are recorded in `memory baseline.md`. Do not begin Step 4a until G38 is approved; Step 4b also needs G39 and G44; memory provenance needs G43. Every stage follows the code
+  Stages 1–6 have merged. Use the current handoff in Part M and the detailed specification linked for the assigned stage. Every stage follows the code
   workflow in `CLAUDE.md`.
 - **Do not start a stage out of order or while its "Approve first" entry in
   M.2 is not satisfied.** Say what is waiting and stop.
