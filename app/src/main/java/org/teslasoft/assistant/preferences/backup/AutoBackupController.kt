@@ -62,6 +62,11 @@ object AutoBackupController {
         PERMISSION_LOST,
         NOT_DUE,
         ALREADY_RUNNING,
+        /** Due, but a memory scan is running: a backup taken while the scan
+         *  writes can never be consistent, so it waits (owner ruling, Nov 18
+         *  2026). Not an attempt and not a failure; the analysis service
+         *  starts it when the scan ends. */
+        WAITING_FOR_MEMORY_SCAN,
         /** Ran and the whole pass was genuinely clean: every type either backed
          *  up or had nothing to back up. The ONLY outcome that advances the
          *  schedule. */
@@ -74,6 +79,10 @@ object AutoBackupController {
          *  backoff-retry. */
         RETRYABLE_FAILURE
     }
+
+    private fun memoryScanRunning(): Boolean =
+        org.teslasoft.assistant.service.MemoryAnalysisForegroundService.state.value is
+            org.teslasoft.assistant.service.MemoryAnalysisState.Running
 
     /** Scheduled / app-open trigger: run only if actually due. */
     fun runIfDue(context: Context): Outcome = run(context, requireDue = true)
@@ -123,6 +132,10 @@ object AutoBackupController {
             AutoBackupScheduler.Decision.RUN -> { /* fall through */ }
         }
 
+        // An automatic backup waits for a running memory scan; the user's own
+        // Retry / Back up now is never held back.
+        if (requireDue && memoryScanRunning()) return Outcome.WAITING_FOR_MEMORY_SCAN
+
         // Claim the single-run latch. A lost race here means another thread is
         // already running the pass — never start a second. This CAS is the real
         // duplicate-prevention gate: even if two threads both observed
@@ -153,7 +166,9 @@ object AutoBackupController {
                             RecoveryBackupState.recordNothingToBackUp(appContext, type, now)
                         }
                     }
-                    RecoveryBackupState.recordAutoSuccess(appContext, now, result.sizeBytes)
+                    RecoveryBackupState.recordAutoSuccess(
+                        appContext, now, result.sizeBytes, result.missingReferences
+                    )
                     return Outcome.COMPLETED
                 }
                 AutomaticPortableBackupWriter.Result.NothingToBackUp -> {

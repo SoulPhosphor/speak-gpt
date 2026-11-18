@@ -88,7 +88,11 @@ object PortableRecoveryWriter {
             val profileImageBytes: Long = 0L,
             /** Which chat storage this package was captured from; the caller
              *  records it in [RecoveryBackupReceipt] once the package is saved. */
-            val chatSource: RecoveryBackupReceipt.Source? = null
+            val chatSource: RecoveryBackupReceipt.Source? = null,
+            /** Chats point to generated images the image catalog does not
+             *  have; the backup completed without them and the error log
+             *  names the chats. */
+            val missingReferences: Boolean = false
         ) : Result()
 
         /** [chatFailure] refines CHATS_UNAVAILABLE with WHICH part of chat
@@ -471,6 +475,8 @@ object PortableRecoveryWriter {
                         runCatching { out.delete() }
                         return failed(context, Reason.PACKAGE_VERIFY_FAILED, "reopening the finished backup", problem)
                     }
+                    val missingImages = semantic.missingGeneratedImagesByChat
+                    if (missingImages.isNotEmpty()) logMissingGeneratedImages(context, missingImages)
                     MemoryLog.log(context, "PortableRecovery", "info",
                         "Portable recovery package created and verified (${artifacts.size} artifact(s), ${written.chatCount} chat(s), " +
                             (if (recoverySecret != null) "encrypted" else "unencrypted") + ").")
@@ -478,6 +484,7 @@ object PortableRecoveryWriter {
                         chatCount = written.chatCount,
                         artifactCount = artifacts.size,
                         includedTypes = includedTypes,
+                        missingReferences = missingImages.isNotEmpty(),
                         generatedImageCount = generatedImageCount,
                         generatedImageBytes = generatedImageBytes,
                         profileImageCount = profileImageCount,
@@ -542,6 +549,30 @@ object PortableRecoveryWriter {
      * failure. Details name steps, counts, chat IDs and positions, never
      * message text.
      */
+    /**
+     * Error log entry for chats that point to generated images the image
+     * catalog does not have (owner wording, Nov 18 2026). Each chat name is
+     * followed by its link marker, which the error log shows as a tappable
+     * chat name ([ErrorLogChatLinks]).
+     */
+    private fun logMissingGeneratedImages(context: Context, missing: Map<String, Set<String>>) {
+        runCatching {
+            val count = missing.values.flatten().toSet().size
+            val chats = missing.keys.joinToString(", ") { chatId ->
+                val name = runCatching {
+                    org.teslasoft.assistant.preferences.ChatPreferences.getChatPreferences()
+                        .getChatName(context, chatId)
+                }.getOrNull().orEmpty().ifBlank { chatId }
+                org.teslasoft.assistant.ui.util.ErrorLogChatLinks.mark(name, chatId)
+            }
+            Logger.log(
+                context, "crash", "RecoveryBackup", "warning",
+                "Recovery Backup: $count generated image(s) referenced by chats are not in the image " +
+                    "catalog and were left out. Chats: $chats."
+            )
+        }
+    }
+
     private fun failed(
         context: Context,
         reason: Reason,

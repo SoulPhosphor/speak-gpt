@@ -160,6 +160,9 @@ class ChatsArtifactScannerTest {
         assertEquals(setOf(chatA to pdfHash, chatB to pendingPdfHash), summary.pdfRefs.map { it.chatId to it.hash }.toSet())
         assertEquals(setOf("img-1"), summary.imageIdsRequired)
         assertEquals(setOf("img-1", "img-2"), summary.imageIdsAll)
+        // The required image is traced back to the chat that points to it.
+        assertEquals(setOf("img-1"), summary.requiredImageIdsByChat.values.flatten().toSet())
+        assertEquals(summary.imageIdsRequired, summary.requiredImageIdsByChat.values.flatten().toSet())
     }
 
     @Test

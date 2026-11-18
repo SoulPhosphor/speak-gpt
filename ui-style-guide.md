@@ -1329,9 +1329,10 @@ Their shared runtime blur radius is `@dimen/chat_action_menu_blur_radius`; keep 
 `Widget.App.Chat.HeaderAction.Activity` is the Material Symbols
 `manufacturing` icon (`ic_manufacturing`) on the chat header's left, directly
 after the drawer icon (owner design, Nov 18 2026). It shows only while a
-memory scan or summarizing runs. It is tinted with the theme's primary text
-color (`?android:attr/textColorPrimary`, the chat menu's text color) instead of
-the header actions' `colorPrimary`. The right-side actions keep their places.
+memory scan or summarizing runs. It is the glyph alone on a clear background
+(borderless ripple only), tinted with the chat title's color
+(`?attr/appTitleTextColor`) instead of the header actions' `colorPrimary`
+(owner ruling, Nov 18 2026). The right-side actions keep their places.
 
 Tapping it opens the popover, `layout/view_chat_activity_popover.xml`: a
 `PopupWindow` below the header holding `Widget.App.Chat.ActivityPopover.Holder`
@@ -1343,6 +1344,14 @@ is `divider_chat_activity_popover`, so it appears only between lines that
 show. It has no buttons, closes on a tap elsewhere, follows progress while
 open, and closes with the icon when the work ends. Sizes live in
 `chat_activity_popover_*` dimensions. Owner: `ui.chat.ChatBackgroundActivity`.
+
+### Error log chat links
+
+A chat named in an error log entry is a tappable link that opens that chat
+(owner design, Nov 18 2026). The entry stores the chat as
+`"Chat name" [chat:ID]`; `ErrorLogChatLinks` shows only the quoted name, as a
+`ClickableSpan` in the log text view's own theme link color. Nothing about its
+look is set in code. A chat deleted since is not opened.
 
 ### Chat message action icons
 

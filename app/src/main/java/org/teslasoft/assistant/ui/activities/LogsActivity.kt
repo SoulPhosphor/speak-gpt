@@ -29,14 +29,20 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.ErrorLogChatLinks
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
 class LogsActivity : SettingsPageActivity() {
@@ -93,12 +99,16 @@ class LogsActivity : SettingsPageActivity() {
      * date+time render in RED so they stand out when scanning; everything
      * else stays plain. Only the "crash" channel gets this pass.
      */
-    private fun renderErrorLog(raw: String): CharSequence {
-        if (raw.isEmpty() || !raw.contains("[DatabaseHealth]")) return raw
+    private fun renderErrorLog(raw: String, view: TextView): CharSequence {
+        // Chat names in a line become links that open the chat (owner design,
+        // Nov 18 2026); the marker after each name is never shown.
+        val linked = ErrorLogChatLinks.render(raw) { chatId -> openLoggedChat(chatId) }
+        if (linked !== raw) view.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        if (linked.isEmpty() || !linked.contains("[DatabaseHealth]")) return linked
         return try {
-            val spannable = android.text.SpannableString(raw)
+            val spannable = android.text.SpannableString(linked)
             val red = androidx.core.content.res.ResourcesCompat.getColor(resources, R.color.light_red, theme)
-            for (match in HEALTH_HEADER.findAll(raw)) {
+            for (match in HEALTH_HEADER.findAll(linked)) {
                 val group = match.groups[1] ?: continue
                 spannable.setSpan(
                     android.text.style.ForegroundColorSpan(red),
@@ -108,7 +118,31 @@ class LogsActivity : SettingsPageActivity() {
             }
             spannable
         } catch (_: Exception) {
-            raw
+            linked
+        }
+    }
+
+    /** Opens a chat named in the error log, only if it still exists; a chat
+     *  deleted since then is left alone. */
+    private fun openLoggedChat(chatId: String) {
+        lifecycleScope.launch {
+            val name = withContext(Dispatchers.IO) {
+                try {
+                    val list = ChatPreferences.getChatPreferences()
+                        .getChatListResult(this@LogsActivity, includeFirstMessage = false)
+                    list.chats.firstOrNull { ChatPreferences.storedChatId(it) == chatId }
+                        ?.let { it["name"] ?: "" }
+                } catch (_: Exception) {
+                    null
+                }
+            } ?: return@launch
+            if (isFinishing || isDestroyed) return@launch
+            startActivity(
+                Intent(this@LogsActivity, ChatActivity::class.java)
+                    .putExtra("chatId", chatId)
+                    .putExtra("name", name)
+                    .setAction(Intent.ACTION_VIEW)
+            )
         }
     }
 
@@ -158,13 +192,19 @@ class LogsActivity : SettingsPageActivity() {
      */
     private fun renderLog() {
         val entries = Logger.entriesForDisplay(rawForType(), newestFirst)
+            // Chat link markers are hidden everywhere the log is shown or copied.
+            .map { if (logType == "crash") ErrorLogChatLinks.parse(it).first else it }
+        val linkedEntries = if (logType == "crash") {
+            Logger.entriesForDisplay(rawForType(), newestFirst)
+        } else entries
         displayedLog = entries.joinToString("\n\n")
         val showCopy = preferences?.getShowLogCopyButtons() ?: true
         logEntries?.removeAllViews()
-        for (entry in entries) {
+        for ((index, entry) in entries.withIndex()) {
             val row = layoutInflater.inflate(R.layout.view_log_entry, logEntries, false)
-            row.findViewById<TextView>(R.id.log_entry_text).text = when (logType) {
-                "crash" -> renderErrorLog(entry)
+            val text = row.findViewById<TextView>(R.id.log_entry_text)
+            text.text = when (logType) {
+                "crash" -> renderErrorLog(linkedEntries[index], text)
                 "response_lifecycle" -> renderLifecycleLog(entry)
                 else -> entry
             }

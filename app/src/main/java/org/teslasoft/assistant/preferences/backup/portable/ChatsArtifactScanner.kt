@@ -56,7 +56,10 @@ internal object ChatsArtifactScanner {
         val pdfRefs: List<PdfRef>,
         val requiredPdfHashes: Set<String>,
         val imageIdsAll: Set<String>,
-        val imageIdsRequired: Set<String>
+        val imageIdsRequired: Set<String>,
+        /** Each chat's required generated-image ids, so a missing image can be
+         *  traced back to the chats that point to it. */
+        val requiredImageIdsByChat: Map<String, Set<String>> = emptyMap()
     )
 
     sealed class Result {
@@ -160,7 +163,9 @@ internal object ChatsArtifactScanner {
                 pdfRefs = pdfRefs,
                 requiredPdfHashes = pdfRefs.mapTo(LinkedHashSet()) { it.hash },
                 imageIdsAll = chats.flatMapTo(LinkedHashSet()) { it.imageIdsAll },
-                imageIdsRequired = chats.flatMapTo(LinkedHashSet()) { it.imageIdsRequired }
+                imageIdsRequired = chats.flatMapTo(LinkedHashSet()) { it.imageIdsRequired },
+                requiredImageIdsByChat = byId.filterValues { it.imageIdsRequired.isNotEmpty() }
+                    .mapValues { it.value.imageIdsRequired }
             )
         )
     }

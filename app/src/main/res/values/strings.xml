@@ -1053,7 +1053,7 @@
     <string name="gen_error_u0">An unexpected error occurred.</string>
     <!-- Pointer to the Error Log. Appended only where the reader is NOT
          already reading the Error Log; an entry never points at itself. -->
-    <string name="gen_error_u0_log_note">The technical details were saved to the Error Log.</string>
+    <string name="gen_error_u0_log_note">The technical details were saved to the error log.</string>
     <string name="provider_context_overflow">The provider rejected the complete request because it exceeded the selected model’s context limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
     <string name="provider_input_limit">The provider rejected the request because the complete input exceeded the selected model’s input limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose another model.</string>
     <string name="provider_request_body_limit">The server rejected the request because the request body was larger than it accepts. This is a server request-size limit, not necessarily the model’s context limit. Nothing was shortened or retried.</string>
@@ -1094,7 +1094,7 @@
     <string name="provider_function_summarize_file">Summarize %1$s</string>
     <string name="provider_function_summarize_image_prompt">Summarize Image Prompt</string>
     <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried.</string>
-    <string name="provider_unknown_limit_log_note">Technical details were saved to the Error Log.</string>
+    <string name="provider_unknown_limit_log_note">Technical details were saved to the error log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
     <string name="label_use_camera">Use camera</string>
@@ -1558,8 +1558,8 @@
          the applicable sentences, a blank line, then one problem per line.
          The dialog tells the user details were saved to the Error Log; the
          Error Log itself uses the corresponding non-self-referential strings. -->
-    <string name="portable_partial_missing_references">Some existing data has missing references. Details have been saved to the Error Log.</string>
-    <string name="portable_partial_not_restored">Some items could not be restored. Details have been saved to the Error Log.</string>
+    <string name="portable_partial_missing_references">Some existing data has missing references. Details have been saved to the error log.</string>
+    <string name="portable_partial_not_restored">Some items could not be restored. Details have been saved to the error log.</string>
     <string name="portable_partial_missing_references_log">Some existing data has missing references.</string>
     <string name="portable_partial_not_restored_log">Some items could not be restored.</string>
     <string name="portable_missing_chat_image">Chat \"%1$s\" — image generated %2$s with %3$s: \"%4$s\" — file missing</string>
@@ -3558,7 +3558,7 @@
     <string name="include_condense_failed">Document could not be condensed. The full document is still included.</string>
     <!-- Last line of the failure details in the Condense/Reduce pop-up. -->
     <string name="include_failure_in_provider_log">This message can be found in the Provider Failure Log.</string>
-    <string name="include_failure_in_error_log">This message can be found in the Error Log.</string>
+    <string name="include_failure_in_error_log">This message can be found in the error log.</string>
     <string name="include_condense_not_shorter">The AI did not return a shorter summary. The full document is still included.</string>
     <string name="include_edit_empty">Summary cannot be empty.</string>
 
@@ -3763,7 +3763,7 @@
     <string name="outline_dialog_title">Creating Outline</string>
     <string name="outline_dialog_complete">Outline complete!</string>
     <!-- The words in an outline error message that open the Error Log. -->
-    <string name="outline_err_log_link">Error Log</string>
+    <string name="outline_err_log_link">error log</string>
     <!-- What the Error Log and Provider Failure Log call a failed tag suggestion. -->
     <string name="chat_outline_tags_log_function">Chat Outline Tags</string>
     <!-- Chat Outline error box: what failed, what was kept, what to do next. -->
@@ -3792,9 +3792,9 @@
     <string name="outline_err_unreadable_title">Outline Response Unreadable</string>
     <string name="outline_err_unreadable">The AI service sent back a response that couldn\'t be used as an outline, so nothing was saved. Your existing outlines were not changed. Try another Summary Model or check whether the endpoint supports chat completions.</string>
     <string name="outline_err_save_title">Couldn\'t Save Outline</string>
-    <string name="outline_err_save">The app couldn\'t save the outline on this device. Your existing outlines were not changed. Technical details were recorded in the Error Log. Check available storage and try again.</string>
+    <string name="outline_err_save">The app couldn\'t save the outline on this device. Your existing outlines were not changed. Technical details were recorded in the error log. Check available storage and try again.</string>
     <string name="outline_err_unexpected_title">Outline Stopped Unexpectedly</string>
-    <string name="outline_err_unexpected">Something went wrong inside the app while creating the outline, so nothing was saved. Your existing outlines were not changed. Technical details were recorded in the Error Log. Try again.</string>
+    <string name="outline_err_unexpected">Something went wrong inside the app while creating the outline, so nothing was saved. Your existing outlines were not changed. Technical details were recorded in the error log. Try again.</string>
     <string name="summarizer_prompts_image_intro">This single prompt tells the Summarizer Model how to shorten an image prompt. The short version is what the AI receives each turn as a reminder of the image, instead of the full prompt.</string>
     <string name="summarizer_prompts_how_it_works">Only one prompt can be active at a time. The first two prompts are suggested styles.\n\nPresets one and two can always be reverted back to the original preset. Presets 3 through 5 will revert to the last saved prompt text.</string>
     <string name="summarizer_prompts_field_hint">Write your prompt here…</string>
@@ -3854,9 +3854,9 @@
     <string name="compaction_err_unreadable_title">Unusable Reply</string>
     <string name="compaction_err_unreadable">The model\'s reply couldn\'t be used.</string>
     <string name="compaction_err_save_title">Couldn\'t Save</string>
-    <string name="compaction_err_save">The app couldn\'t save the compacted state. Technical details were recorded in the Error Log.</string>
+    <string name="compaction_err_save">The app couldn\'t save the compacted state. Technical details were recorded in the error log.</string>
     <string name="compaction_err_unexpected_title">Internal Compaction Error</string>
-    <string name="compaction_err_unexpected">An internal compaction error occurred. Technical details were recorded in the Error Log.</string>
+    <string name="compaction_err_unexpected">An internal compaction error occurred. Technical details were recorded in the error log.</string>
     <string name="compaction_err_provider">Provider error: %1$s</string>
     <string name="compaction_recompact_after_delete_title">Recompact Conversation?</string>
     <string name="compaction_edit_summary">Edit Summary</string>
@@ -3973,9 +3973,9 @@
     <string name="summarizer_err_unreadable_title">Summary Response Unreadable</string>
     <string name="summarizer_err_unreadable">The AI service returned an unusable response for this Summary Section. Existing sections were not replaced by that response. Try another model or check whether the endpoint supports chat completions.</string>
     <string name="summarizer_err_save_title">Couldn\'t Save Summary</string>
-    <string name="summarizer_err_save">The app couldn\'t save Summary Section state on this device. Technical details were recorded in the Error Log. Check available storage and try again.</string>
+    <string name="summarizer_err_save">The app couldn\'t save Summary Section state on this device. Technical details were recorded in the error log. Check available storage and try again.</string>
     <string name="summarizer_err_unexpected_title">Internal Summarizer Error</string>
-    <string name="summarizer_err_unexpected">An internal Summary Section error occurred. Technical details were recorded in the Error Log.</string>
+    <string name="summarizer_err_unexpected">An internal Summary Section error occurred. Technical details were recorded in the error log.</string>
 
     <!-- Model-facing label for the injected summary (decision 14; approved
          July 29 2026). Sent as its own system message, never shown in chat. -->

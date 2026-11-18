@@ -162,6 +162,9 @@ class RecoveryBackupActivity : SettingsPageActivity() {
      *  rule: never claim a failed or unfinished attempt succeeded). */
     private var stagedIncludedTypes: Set<BackupType> = emptySet()
     private var stagedReceiptSource: RecoveryBackupReceipt.Source? = null
+    /** The staged package completed without some generated images chats
+     *  point to (they were already missing from the image catalog). */
+    private var stagedMissingReferences = false
 
     /** Final name used only after the selected incomplete SAF document has
      * passed byte verification. */
@@ -472,6 +475,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                             stagedSha = sha
                             stagedIncludedTypes = result.includedTypes
                             stagedReceiptSource = result.chatSource
+                            stagedMissingReferences = result.missingReferences
                             val name = RecoveryFileNaming.manualRecoveryPackage(
                                 BackupBrand.resolve(this), protected, System.currentTimeMillis()
                             )
@@ -523,6 +527,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
 
         val includedTypes = stagedIncludedTypes
         val receiptSource = stagedReceiptSource
+        val missingReferences = stagedMissingReferences
         val finalName = pendingFinalFileName
         if (finalName == null) {
             cleanupStaged()
@@ -577,7 +582,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
                 receiptSource?.let { RecoveryBackupReceipt.record(this, it, now) }
 
                 val where = BackupLocationDisplay.describeSaveAs(this, finalUri)
-                runOnUiThread { showSaved(where) }
+                runOnUiThread { showSaved(where, missingReferences) }
             } catch (e: Exception) {
                 logSaveFailure(uri, "${e.javaClass.name}: ${e.message}")
                 discardDestination(uri)
@@ -651,6 +656,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
         stagedSha = null
         stagedIncludedTypes = emptySet()
         stagedReceiptSource = null
+        stagedMissingReferences = false
         pendingFinalFileName = null
     }
 
@@ -700,7 +706,7 @@ class RecoveryBackupActivity : SettingsPageActivity() {
         }
     }
 
-    private fun showSaved(where: BackupLocationDisplay.SaveAsDescription) {
+    private fun showSaved(where: BackupLocationDisplay.SaveAsDescription, missingReferences: Boolean) {
         showResult()
         val destination = where.breadcrumb ?: where.providerLabel
         textResult?.text = if (destination != null) {
@@ -708,8 +714,14 @@ class RecoveryBackupActivity : SettingsPageActivity() {
         } else {
             getString(R.string.recovery_saved_generic)
         }
-        if (where.fileName != null) {
-            textResultDetail?.text = getString(R.string.recovery_saved_file, where.fileName)
+        // The backup completed without generated images that chats point to
+        // but the image catalog no longer has (owner ruling, Nov 18 2026).
+        val details = listOfNotNull(
+            where.fileName?.let { getString(R.string.recovery_saved_file, it) },
+            if (missingReferences) getString(R.string.portable_partial_missing_references) else null
+        )
+        if (details.isNotEmpty()) {
+            textResultDetail?.text = details.joinToString("\n\n")
             textResultDetail?.visibility = View.VISIBLE
         } else {
             textResultDetail?.visibility = View.GONE

@@ -2066,12 +2066,14 @@
 
     <!-- Background-work icon, directly after the drawer icon on the left
          (owner design, Nov 18 2026). Shown only while background work runs.
-         Tinted with the same theme color as the chat menu's text instead of
-         the header's primary color, so it stands apart from the actions. -->
+         The glyph alone on a clear background (icons have no background of
+         their own), in the chat title's color so it stands apart from the
+         header actions (owner ruling, Nov 18 2026). -->
     <style name="Widget.App.Chat.HeaderAction.Activity">
         <item name="android:layout_marginStart">@dimen/chat_header_action_gap</item>
         <item name="android:layout_marginEnd">0dp</item>
-        <item name="android:tint">?android:attr/textColorPrimary</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:tint">?attr/appTitleTextColor</item>
     </style>
 
     <!-- The background-work popover under the header: a rounded surface

@@ -196,6 +196,7 @@ object RecoveryBackupState {
     // no migration needed.
     private const val KEY_AUTO_LAST_REASON = "backup.auto.last_category"
     private const val KEY_AUTO_LAST_SUCCESS_SIZE = "backup.auto.last_success_size"
+    private const val KEY_AUTO_LAST_SUCCESS_MISSING_REFERENCES = "backup.auto.last_success_missing_references"
 
     /** When the last automatic pass was ATTEMPTED — every genuine attempt
      *  stamps this, success or failure alike — or 0 if never. There is
@@ -211,6 +212,11 @@ object RecoveryBackupState {
      *  SOLE due anchor. A failed or partially-failed pass must never move this:
      *  the normal backup frequency is calculated from the last real success,
      *  not merely the last attempt. */
+    /** The last successful automatic backup completed without some generated
+     *  images that chats point to (they were already missing). */
+    fun getAutoLastSuccessMissingReferences(context: Context): Boolean =
+        try { prefs(context).getBoolean(KEY_AUTO_LAST_SUCCESS_MISSING_REFERENCES, false) } catch (_: Exception) { false }
+
     fun getAutoLastSuccess(context: Context): Long =
         try { prefs(context).getLong(KEY_AUTO_LAST_SUCCESS, 0L) } catch (_: Exception) { 0L }
 
@@ -251,10 +257,16 @@ object RecoveryBackupState {
      *  this when the pass was genuinely fully successful — never on a partial
      *  or failed pass (a failed attempt must not be treated as though the
      *  scheduled backup succeeded). */
-    fun recordAutoSuccess(context: Context, atMillis: Long, totalSizeBytes: Long?) {
+    fun recordAutoSuccess(
+        context: Context,
+        atMillis: Long,
+        totalSizeBytes: Long?,
+        missingReferences: Boolean = false
+    ) {
         try {
             prefs(context).edit(commit = true) {
                 putLong(KEY_AUTO_LAST_SUCCESS, atMillis)
+                putBoolean(KEY_AUTO_LAST_SUCCESS_MISSING_REFERENCES, missingReferences)
                 if (totalSizeBytes != null && totalSizeBytes >= 0L) {
                     putLong(KEY_AUTO_LAST_SUCCESS_SIZE, totalSizeBytes)
                 } else {

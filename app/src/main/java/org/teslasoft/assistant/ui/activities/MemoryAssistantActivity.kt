@@ -956,8 +956,7 @@ class MemoryAssistantActivity : SettingsPageActivity() {
         clearStatusBlock()
         analysisProgressContainer?.visibility = View.VISIBLE
         if (p != null && p.overallCount > 0) {
-            val completed = (p.overallIndex - 1).coerceAtLeast(0)
-            val percent = (completed * 100 / p.overallCount).coerceIn(0, 100)
+            val percent = p.percent()
             analysisBar?.visibility = View.VISIBLE
             analysisBar?.isIndeterminate = false
             analysisBar?.max = 100

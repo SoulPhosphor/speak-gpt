@@ -143,11 +143,7 @@ class ChatBackgroundActivity(
 /** The percentage each background activity reports, from work actually done. */
 object BackgroundActivityPercent {
 
-    /** Completed conversations over the run's known total; 0 until the total
-     *  is known (the conversation in progress is not yet complete). */
-    fun memoryScan(progress: Archivist.Progress?): Int {
-        if (progress == null || progress.overallCount <= 0) return 0
-        val completed = (progress.overallIndex - 1).coerceAtLeast(0)
-        return (completed * 100 / progress.overallCount).coerceIn(0, 100)
-    }
+    /** The scan's approved percentage ([Archivist.Progress.percent]); 0
+     *  before the scan reports anything. */
+    fun memoryScan(progress: Archivist.Progress?): Int = progress?.percent() ?: 0
 }

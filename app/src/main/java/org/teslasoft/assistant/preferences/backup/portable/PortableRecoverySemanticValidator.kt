@@ -23,7 +23,12 @@ object PortableRecoverySemanticValidator {
     sealed interface Result {
         data class Valid(
             val inventory: PortableRestoreInventory.Inventory,
-            val recordCounts: Map<PortableRestoreCategory, Long>
+            val recordCounts: Map<PortableRestoreCategory, Long>,
+            /** Generated images chats point to that the image catalog does not
+             *  have: chat id -> those image ids. A backup still completes without
+             *  them (owner ruling, Nov 18 2026); restore already handles
+             *  missing references. */
+            val missingGeneratedImagesByChat: Map<String, Set<String>> = emptyMap()
         ) : Result
         /** [detail] names the failed check without quoting content, for the Error Log. */
         data class Invalid(val detail: String) : Result
@@ -245,13 +250,10 @@ object PortableRecoverySemanticValidator {
             )
         ) return Result.Invalid("the artifacts present do not match the categories declared")
 
-        val chatReferences = chats?.imageIdsRequired.orEmpty()
         val generatedIds = generated?.snapshot?.active.orEmpty().mapTo(HashSet()) { it.imageId }
-        if (!generatedIds.containsAll(chatReferences)) {
-            return Result.Invalid(
-                "${(chatReferences - generatedIds).size} generated image(s) referenced by chats are not in the image catalog"
-            )
-        }
+        val missingGeneratedImagesByChat = missingGeneratedImages(
+            chats?.requiredImageIdsByChat.orEmpty(), generatedIds
+        )
 
         val identityImageHashes = identityImageHashes(identities)
         val carriedIdentityImages = identities?.images.orEmpty().mapTo(HashSet()) { it.hash }
@@ -282,8 +284,17 @@ object PortableRecoverySemanticValidator {
                 .map { (category, count) -> "${category.key} declared $count, found ${counts[category]}" }
             return Result.Invalid("record counts disagree: ${differing.joinToString("; ")}")
         }
-        return Result.Valid(inventory, counts)
+        return Result.Valid(inventory, counts, missingGeneratedImagesByChat)
     }
+
+    /** Chat id -> its required generated images that [catalogIds] lacks;
+     *  chats with none missing are left out. */
+    internal fun missingGeneratedImages(
+        requiredByChat: Map<String, Set<String>>,
+        catalogIds: Set<String>
+    ): Map<String, Set<String>> = requiredByChat
+        .mapValues { (_, ids) -> ids.filterTo(LinkedHashSet()) { it !in catalogIds } }
+        .filterValues { it.isNotEmpty() }
 
     /** The declared-count projection for each category, shared by the full
      * gate and by selected-category restore planning. */

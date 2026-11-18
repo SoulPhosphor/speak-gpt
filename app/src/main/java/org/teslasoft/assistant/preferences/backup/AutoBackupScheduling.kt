@@ -82,6 +82,25 @@ object AutoBackupScheduling {
             .enqueueUniquePeriodicWork(UNIQUE_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
+    /** One-time follow-up for an automatic backup that came due while a
+     *  memory scan was running: it runs the ordinary due check once the scan
+     *  has ended. A no-op when nothing is due by then. */
+    fun runAfterMemoryScan(context: Context) {
+        try {
+            if (!RecoveryBackupState.isEnabled(context) ||
+                RecoveryBackupState.getAutoFolderUri(context) == null
+            ) return
+            val request = androidx.work.OneTimeWorkRequestBuilder<AutoBackupWorker>()
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
+                .build()
+            WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+                AFTER_MEMORY_SCAN_WORK, androidx.work.ExistingWorkPolicy.REPLACE, request
+            )
+        } catch (_: Throwable) { /* best-effort; the periodic job and app-open check still run */ }
+    }
+
+    private const val AFTER_MEMORY_SCAN_WORK = "auto_recovery_backup_after_memory_scan"
+
     private fun cancel(context: Context) {
         WorkManager.getInstance(context.applicationContext).cancelUniqueWork(UNIQUE_WORK)
     }
