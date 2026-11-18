@@ -3926,9 +3926,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     }
 
     /** [chatId]'s rows split by the chat's bookmark, for its scan progress:
-     *  [scanned] are the rows at or before the bookmark, and [hasPending] is
-     *  whether any row after it still waits. Skipped rows count as neither. */
-    data class ChatScanRows(val scanned: List<TranscriptRecord>, val hasPending: Boolean)
+     *  [scanned] are the rows at or before the bookmark, and [pendingIds] the
+     *  rows after it that still wait. Skipped rows count as neither. */
+    data class ChatScanRows(val scanned: List<TranscriptRecord>, val pendingIds: List<String>) {
+        val hasPending: Boolean get() = pendingIds.isNotEmpty()
+    }
 
     fun chatScanRows(chatId: String): ChatScanRows {
         val db = writableDatabase
@@ -3943,7 +3945,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 AnalysisBookmark.isAfter(transcriptBoundary(it), boundary)
             }
             db.setTransactionSuccessful()
-            return ChatScanRows(scanned, pending.isNotEmpty())
+            return ChatScanRows(scanned, pending.map { it.transcriptId })
         } finally {
             db.endTransaction()
         }

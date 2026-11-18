@@ -308,9 +308,62 @@ object Archivist {
         chatId: String,
         analysisType: String,
         onProgress: (Progress) -> Unit
-    ): RunOutcome =
+    ): RunOutcome = scanChatThroughSkips(context, chatId) {
         run(context, { chatScanConversations(context, chatId) }, markProcessed = true,
             analysisType = analysisType, onProgress = onProgress, ignoreArchivePause = true)
+    }
+
+    /** Most passes one chat scan makes; each pass can only stop at a skipped
+     *  row, so this is a safety bound, not an expected count. */
+    private const val CHAT_SCAN_MAX_PASSES = 20
+
+    /**
+     * A selection stops at a skipped row, and only a commit moves the bookmark
+     * past it. A chat scan therefore repeats [once] while history that was
+     * waiting when it was asked for is still unscanned, so the user's request
+     * covers the whole chat. It stops at the first pass that does not finish
+     * cleanly (a failure, stop or nothing selected).
+     */
+    private suspend fun scanChatThroughSkips(
+        context: Context,
+        chatId: String,
+        once: suspend () -> RunOutcome
+    ): RunOutcome {
+        val target = try {
+            MemoryStore.getInstance(context).chatScanRows(chatId).pendingIds.toHashSet()
+        } catch (_: Exception) {
+            emptySet()
+        }
+        var result = once()
+        var passes = 1
+        while (passes < CHAT_SCAN_MAX_PASSES &&
+            (result.outcome == "completed" || result.outcome == "no_new")
+        ) {
+            val next = try {
+                chatScanConversations(context, chatId)
+            } catch (_: Exception) {
+                emptyList()
+            }
+            if (next.none { c -> c.transcripts.any { it.transcriptId in target } }) break
+            result = mergePasses(result, once())
+            passes++
+        }
+        return result
+    }
+
+    private fun mergePasses(first: RunOutcome, next: RunOutcome): RunOutcome = next.copy(
+        conversationsSelected = first.conversationsSelected + next.conversationsSelected,
+        conversationsAnalyzed = first.conversationsAnalyzed + next.conversationsAnalyzed,
+        memoriesFound = first.memoriesFound + next.memoriesFound,
+        ruleDraftsFound = first.ruleDraftsFound + next.ruleDraftsFound,
+        failedChatIds = first.failedChatIds + next.failedChatIds,
+        duplicatesSkipped = first.duplicatesSkipped + next.duplicatesSkipped,
+        incompleteTurnsExcluded = first.incompleteTurnsExcluded + next.incompleteTurnsExcluded,
+        // Something found in an earlier pass is not undone by a later pass
+        // that found nothing new.
+        outcome = if (next.outcome == "no_new" && first.outcome == "completed") "completed" else next.outcome,
+        stoppedChatScanRunIds = first.stoppedChatScanRunIds + next.stoppedChatScanRunIds
+    )
 
     /** True when the Memory Assistant has everything a run needs before it
      *  can start: an endpoint with a host, a model, and satisfiable provider
@@ -701,22 +754,25 @@ object Archivist {
                             if (chat.isEmpty()) continue
                             chatScansTotal += chat.size
                             try {
-                                val chatOutcome = runLocked(
-                                    context, { chat }, markProcessed = true,
-                                    analysisType = request.analysisType,
-                                    onProgress = { p ->
-                                        onProgress(Progress(
-                                            batchIndex + 1, batches.size, posInBatch + 1, batchSize,
-                                            overallIndex = position + chatScansDone + p.overallIndex,
-                                            overallCount = queue.size + chatScansTotal
-                                        ))
-                                    },
-                                    prefs = prefs, endpoint = endpoint, model = model,
-                                    providerRouting = providerRouting,
-                                    ignoreArchivePause = true,
-                                    reconcileDeadRuns = false,
-                                    takeChatScanRequests = false
-                                )
+                                val chatOutcome = scanChatThroughSkips(context, request.chatId) {
+                                    runLocked(
+                                        context, { chatScanConversations(context, request.chatId) },
+                                        markProcessed = true,
+                                        analysisType = request.analysisType,
+                                        onProgress = { p ->
+                                            onProgress(Progress(
+                                                batchIndex + 1, batches.size, posInBatch + 1, batchSize,
+                                                overallIndex = position + chatScansDone + p.overallIndex,
+                                                overallCount = queue.size + chatScansTotal
+                                            ))
+                                        },
+                                        prefs = prefs, endpoint = endpoint, model = model,
+                                        providerRouting = providerRouting,
+                                        ignoreArchivePause = true,
+                                        reconcileDeadRuns = false,
+                                        takeChatScanRequests = false
+                                    )
+                                }
                                 if (chatOutcome.outcome == "cancelled") {
                                     chatOutcome.runId?.let { stoppedChatScans.add(it) }
                                 }
