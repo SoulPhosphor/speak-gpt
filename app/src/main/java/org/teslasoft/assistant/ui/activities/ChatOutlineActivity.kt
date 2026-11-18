@@ -171,6 +171,14 @@ class ChatOutlineActivity : FragmentActivity() {
         SummarizerControllerRegistry.addAppListener(operationListener)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Refreshed on every return, so a scan that finished meanwhile shows.
+        findViewById<TextView>(R.id.text_memory_scan_progress)?.let {
+            org.teslasoft.assistant.ui.chat.ChatScanProgressLine.bind(this, this, it, chatId)
+        }
+    }
+
     override fun onDestroy() {
         SummarizerControllerRegistry.removeAppListener(operationListener)
         dotsHandler.removeCallbacks(dotsTick)

@@ -614,6 +614,16 @@ class Preferences internal constructor(
         putGlobalBoolean("open_last_used_chat_at_launch", state, false)
     }
 
+    /** Show Chat Memory Scan Status (App Appearance): the Create Outline
+     *  screen's Memory Scan Progress line. On by default (owner ruling, Nov 18
+     *  2026). */
+    fun getShowChatMemoryScanStatus(): Boolean =
+        getGlobalBoolean("show_chat_memory_scan_status", true)
+
+    fun setShowChatMemoryScanStatus(state: Boolean) {
+        putGlobalBoolean("show_chat_memory_scan_status", state, true)
+    }
+
     /** Enable Model Settings (App Appearance). Off by default: no settings are
      *  saved per model and every chat starts from the API profile's defaults. */
     fun getModelSettingsEnabled(): Boolean =
@@ -738,6 +748,14 @@ class Preferences internal constructor(
      *  touches the per-message stored level, so turning it back on restores
      *  every glyph exactly. */
     fun getShowThinkingIndicator(): Boolean = getGlobalBoolean("chat_show_thinking_indicator", true)
+
+    /** Show Message Number (Chat Settings): "Message N" in each message's
+     *  information pop-up. Off by default (owner ruling, Nov 18 2026). */
+    fun getShowMessageNumber(): Boolean = getGlobalBoolean("chat_show_message_number", false)
+
+    fun setShowMessageNumber(state: Boolean) {
+        putGlobalBoolean("chat_show_message_number", state, false)
+    }
 
     fun setShowThinkingIndicator(state: Boolean) {
         putGlobalBoolean("chat_show_thinking_indicator", state, true)

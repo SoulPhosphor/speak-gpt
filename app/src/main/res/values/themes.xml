@@ -2064,6 +2064,53 @@
         <item name="android:layout_marginEnd">0dp</item>
     </style>
 
+    <!-- Background-work icon, directly after the drawer icon on the left
+         (owner design, Nov 18 2026). Shown only while background work runs.
+         Tinted with the same theme color as the chat menu's text instead of
+         the header's primary color, so it stands apart from the actions. -->
+    <style name="Widget.App.Chat.HeaderAction.Activity">
+        <item name="android:layout_marginStart">@dimen/chat_header_action_gap</item>
+        <item name="android:layout_marginEnd">0dp</item>
+        <item name="android:tint">?android:attr/textColorPrimary</item>
+    </style>
+
+    <!-- The background-work popover under the header: a rounded surface
+         across the message bubbles' area, one centered line per activity. -->
+    <style name="Widget.App.Chat.ActivityPopover" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/chat_activity_popover_margin_start</item>
+        <item name="android:layout_marginEnd">@dimen/chat_activity_popover_margin_end</item>
+        <item name="android:layout_marginTop">@dimen/chat_activity_popover_margin_top</item>
+        <item name="android:paddingStart">@dimen/chat_activity_popover_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/chat_activity_popover_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/chat_activity_popover_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/chat_activity_popover_padding_vertical</item>
+        <item name="android:background">@drawable/bg_chat_activity_popover</item>
+        <item name="android:elevation">@dimen/chat_activity_popover_elevation</item>
+        <item name="android:orientation">vertical</item>
+        <!-- The gap between lines appears only between lines that show. -->
+        <item name="android:divider">@drawable/divider_chat_activity_popover</item>
+        <item name="android:showDividers">middle</item>
+    </style>
+
+    <!-- Transparent full-width holder the popover window shows; it gives the
+         popover room for its margins and shadow. -->
+    <style name="Widget.App.Chat.ActivityPopover.Holder" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingBottom">@dimen/chat_activity_popover_elevation</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActivityPopover.Line" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAlignment">center</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textSize">@dimen/chat_activity_popover_text_size</item>
+    </style>
+
     <!-- Selection Mode area beneath the chat header: the header's own color
          on a rounded surface. -->
     <style name="Widget.App.Chat.SelectionBar" parent="">
@@ -3229,6 +3276,21 @@
     </style>
 
     <!-- "Creating outline…" status line: a small spinner, then Screen.Intro text. -->
+    <!-- The chat's title at the top of the page, centered (owner ruling,
+         Nov 18 2026). -->
+    <style name="Widget.App.ChatOutline.ChatTitle" parent="Widget.App.Section.Title">
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:textAlignment">center</item>
+    </style>
+
+    <!-- "Memory Scan Progress: …" centered under the chat's title, shown
+         while Show Chat Memory Scan Status is on. -->
+    <style name="Widget.App.ChatOutline.ScanProgress" parent="Widget.App.Screen.Intro">
+        <item name="android:layout_marginTop">@dimen/chat_outline_scan_progress_gap</item>
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:textAlignment">center</item>
+    </style>
+
     <style name="Widget.App.ChatOutline.StatusSpinner" parent="Widget.Material3.CircularProgressIndicator.ExtraSmall">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>

@@ -110,6 +110,14 @@
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_open_last_used_chat" style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/show_chat_memory_scan_status" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:text="@string/show_chat_memory_scan_status_hint" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_show_chat_memory_scan_status" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
             <LinearLayout style="@style/Widget.App.Row.Number">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title"

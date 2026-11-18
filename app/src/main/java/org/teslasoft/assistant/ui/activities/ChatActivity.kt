@@ -248,6 +248,8 @@ import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.ui.util.ChatExportDialog
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
+import org.teslasoft.assistant.ui.chat.ChatBackgroundActivity
+import org.teslasoft.assistant.ui.chat.ChatMemoryScan
 import org.teslasoft.assistant.ui.chat.MemoryAttachmentController
 import org.teslasoft.assistant.ui.util.IncludeStripController
 import org.teslasoft.assistant.ui.util.IncludesPopupController
@@ -565,6 +567,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var summarizerOperationCancel: com.google.android.material.button.MaterialButton? = null
     private val summarizerStatusHandler = Handler(Looper.getMainLooper())
     private var projectionStatusVisible = false
+    /** The header's background-work icon and popover. */
+    private var backgroundActivity: ChatBackgroundActivity? = null
     private val hideSummarizerStatus = Runnable {
         projectionStatusVisible = false
         summarizerOperationChip?.visibility = View.GONE
@@ -1812,7 +1816,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Force the chat's top action bar and its buttons back to fully visible. */
     private fun restoreTopBarVisibility() {
-        for (v in listOf(actionBar, btnBack, activityTitle, btnSettings)) {
+        // The chat title stays hidden (owner ruling, Nov 18 2026); add
+        // activityTitle back to this list to bring it back.
+        for (v in listOf(actionBar, btnBack, btnSettings)) {
             v?.visibility = View.VISIBLE
             v?.alpha = 1f
         }
@@ -3114,6 +3120,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
+        backgroundActivity?.release()
         org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.unregister(chatOutlineStarter)
         bookmarkNavigation?.dispose()
         bookmarkNavigation = null
@@ -3408,6 +3415,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnActiveProfile?.setOnClickListener { showActiveProfile() }
         summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
         summarizerOperationChip = findViewById(R.id.summarizer_operation_chip)
+        actionBar?.let { header ->
+            backgroundActivity = ChatBackgroundActivity(
+                this, findViewById(R.id.btn_background_activity), header
+            ).also { it.attach() }
+        }
         summarizerOperationSpinner = findViewById(R.id.summarizer_operation_spinner)
         summarizerOperationSuccess = findViewById(R.id.summarizer_operation_success)
         summarizerOperationText = findViewById(R.id.summarizer_operation_text)
@@ -3587,20 +3599,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnBack?.contentDescription = getString(R.string.drawer_open)
         btnBack?.setOnClickListener { drawerController?.open() }
 
-        activityTitle?.setOnClickListener {
-            // While a chat is still waiting on its AI-generated name, chatName
-            // holds the internal "_autoname_N" placeholder — show the same
-            // "Untitled chat" fallback the header itself displays rather than
-            // leaking the placeholder into the editable field.
-            val currentTitle = if (chatName.trim().contains("_autoname_")) {
-                getString(R.string.label_untitled_chat)
-            } else {
-                chatName
-            }
-            EditChatTitleDialog.show(this, currentTitle) { newTitle ->
-                renameChatTitle(newTitle)
-            }
-        }
+        activityTitle?.setOnClickListener { showRenameChatDialog() }
 
         val linearLayoutManager = ChatTranscriptLayoutManager(this)
         // linearLayoutManager.stackFromEnd = true
@@ -5315,9 +5314,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return SavedChatRow(chatId, row["pinned"] == "true")
     }
 
+    /** The chat title's rename box, opened from the menu's Rename (and from
+     *  the header title while that is shown). */
+    private fun showRenameChatDialog() {
+        // While a chat is still waiting on its AI-generated name, chatName
+        // holds the internal "_autoname_N" placeholder — show the same
+        // "Untitled chat" fallback the header itself displays rather than
+        // leaking the placeholder into the editable field.
+        val currentTitle = if (chatName.trim().contains("_autoname_")) {
+            getString(R.string.label_untitled_chat)
+        } else {
+            chatName
+        }
+        EditChatTitleDialog.show(this, currentTitle) { newTitle ->
+            renameChatTitle(newTitle)
+        }
+    }
+
     private fun showChatOptionsMenu(anchor: View) {
         lifecycleScope.launch {
             val savedChat = withContext(Dispatchers.IO) { readSavedChatRow() }
+            // Scan for Memories shows only for a saved chat once the memory
+            // scanner is set up.
+            val memoryScanAvailable = savedChat != null &&
+                withContext(Dispatchers.IO) { ChatMemoryScan.isAvailable(this@ChatActivity) }
             if (isFinishing || isDestroyed) return@launch
             PopupMenu(this@ChatActivity, anchor).apply {
                 savedChat?.let {
@@ -5351,6 +5371,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         else R.string.chat_menu_create_outline
                     )
                 }
+                if (memoryScanAvailable) {
+                    menu.add(Menu.NONE, 12, 5, R.string.chat_menu_scan_memories)
+                }
+                // Rename sits directly above Delete (owner ruling, Nov 18 2026).
+                menu.add(Menu.NONE, 11, 5, R.string.prompt_menu_rename)
                 if (savedChat != null) {
                     menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)
                     menu.add(Menu.NONE, 3, 5, R.string.btn_delete)
@@ -5407,6 +5432,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         }
                         3 -> {
                             showChatDeleteDialog()
+                            true
+                        }
+                        11 -> {
+                            showRenameChatDialog()
+                            true
+                        }
+                        12 -> {
+                            ChatMemoryScan.start(this@ChatActivity, chatId)
                             true
                         }
                         else -> false
@@ -5579,6 +5612,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun renderSummarizerOperation(
         state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
     ) {
+        backgroundActivity?.setSummarizing(
+            (state as? org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running)
+                ?.takeIf {
+                    it.kind == org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.SUMMARIZING
+                }?.percent
+        )
         if (renderCompactionDialog(state)) return
         // A Chat Outline run shows its progress on the Chat Outline screen and
         // in its notification, not in the chat's summarizer status.
@@ -5595,29 +5634,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         when (state) {
             org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Idle ->
                 if (!projectionStatusVisible) summarizerOperationChip?.visibility = View.GONE
-            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running -> {
-                summarizerOperationChip?.visibility = View.VISIBLE
-                summarizerOperationSpinner?.visibility = View.VISIBLE
-                summarizerOperationSuccess?.visibility = View.GONE
-                summarizerOperationCancel?.visibility = View.VISIBLE
-                summarizerOperationText?.setText(
-                    if (state.kind == org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.COMPACTING) {
-                        R.string.compaction_status_running
-                    } else R.string.summarizer_status_running
-                )
-            }
-            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded -> {
-                summarizerOperationChip?.visibility = View.VISIBLE
-                summarizerOperationSpinner?.visibility = View.GONE
-                summarizerOperationSuccess?.visibility = View.VISIBLE
-                summarizerOperationCancel?.visibility = View.GONE
-                summarizerOperationText?.setText(
-                    if (state.kind == org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.COMPACTING) {
-                        R.string.compaction_status_complete
-                    } else R.string.summarizer_status_complete
-                )
-                summarizerStatusHandler.postDelayed(hideSummarizerStatus, 3000L)
-            }
+            // Summarizing shows in the header's background-work icon and
+            // popover, with no Cancel (owner ruling, Nov 18 2026); the icon
+            // goes away when it finishes.
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running ->
+                summarizerOperationChip?.visibility = View.GONE
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded ->
+                summarizerOperationChip?.visibility = View.GONE
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed ->
                 // A failure is already recorded in this chat's Summarizer Errors
                 // log — badge, the dedicated error sound, and the errors dialog —

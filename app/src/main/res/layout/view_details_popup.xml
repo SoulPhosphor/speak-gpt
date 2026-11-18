@@ -35,6 +35,12 @@
         android:id="@+id/details_value_datetime"
         style="@style/Widget.App.MessageDetails.FirstValue" />
 
+    <!-- "Message N", the message's place in the chat, while Show Message
+         Number is on (owner design, Nov 18 2026). -->
+    <TextView
+        android:id="@+id/details_value_message_number"
+        style="@style/Widget.App.MessageDetails.Value" />
+
     <TextView
         android:id="@+id/details_value_model"
         style="@style/Widget.App.MessageDetails.Value" />

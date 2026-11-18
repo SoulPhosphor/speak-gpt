@@ -122,6 +122,11 @@ class ChatSettingsActivity : SettingsPageActivity() {
             setOnCheckedChangeListener { _, value -> preferences.setShowThinkingIndicator(value) }
         }
 
+        findViewById<MaterialSwitch>(R.id.switch_show_message_number)?.apply {
+            isChecked = preferences.getShowMessageNumber()
+            setOnCheckedChangeListener { _, value -> preferences.setShowMessageNumber(value) }
+        }
+
         findViewById<MaterialSwitch>(R.id.switch_show_thinking)?.apply {
             isChecked = preferences.getShowThinking()
             setOnCheckedChangeListener { _, value -> preferences.setShowThinking(value) }

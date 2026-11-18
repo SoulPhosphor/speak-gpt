@@ -1826,9 +1826,9 @@
          with visible spacing between them. -->
     <string name="memory_analysis_type_title">Memory Analysis Type</string>
     <string name="memory_analysis_type_p1">Choose which memory system this analysis should create suggestions for.</string>
-    <string name="memory_analysis_type_p2">Associative Memories use an embedding model to surface memories connected to the ideas and topics being discussed.</string>
+    <string name="memory_analysis_type_p2">RAG Active Memories use an embedding model to surface memories connected to the ideas and topics being discussed.</string>
     <string name="memory_analysis_type_p3">Lorebook Memories are activated by specific keywords and do not require an embedding model.</string>
-    <string name="memory_analysis_type_associative">Associative Memories</string>
+    <string name="memory_analysis_type_associative">RAG Active Memories</string>
     <string name="memory_analysis_type_lorebook">Lorebook Memories</string>
 
     <!-- Lorebook analysis result on the Memory Assistant (Step 1.7 — owner
@@ -1855,7 +1855,7 @@
     <!-- Memory Browser reminder while no embedding model is installed (Step 1.7
          — owner approved, plan_one_page.md). A dismissible per-visit reminder,
          never a permanent banner. -->
-    <string name="lore_no_model_reminder">Associative Search can\'t be used in chats until an embedding model is installed.</string>
+    <string name="lore_no_model_reminder">RAG Active Search can\'t be used in chats until an embedding model is installed.</string>
     <string name="lore_no_model_reminder_ok">Okay</string>
 
     <!-- Two-mode memory browser + pending actions (owner design, July 8 2026
@@ -1957,7 +1957,7 @@
     <string name="memory_engine_picker_title">Choose memory engine</string>
     <!-- Owner wording, July 9 2026 — shown inline (persistent) under the
          Memory Engine control, never a toast. -->
-    <string name="memory_engine_needs_embedding">Install the embedding model in AI Settings, under Embedding Model, to enable Associative Search.</string>
+    <string name="memory_engine_needs_embedding">Install the embedding model in AI Settings, under Embedding Model, to enable RAG Active Search.</string>
     <string name="memory_archivist_endpoint_picker_title">Choose an endpoint</string>
     <string name="memory_archivist_endpoint_none_toast">No saved API endpoints yet — add one in API Endpoints first.</string>
     <string name="memory_archivist_model_hint">e.g. gpt-4o-mini</string>
@@ -2359,7 +2359,7 @@
     <string name="memory_controls_row_engine_hint">Choose how much memory support the app uses.</string>
     <string name="memory_controls_engine_none">None</string>
     <string name="memory_controls_engine_lorebooks">Lorebooks Only</string>
-    <string name="memory_controls_engine_associative">Associative Search Only</string>
+    <string name="memory_controls_engine_associative">RAG Active Search Only</string>
     <string name="memory_controls_engine_both">Both Memory Systems</string>
     <string name="memory_controls_section_assistant_model">Memory Assistant Model</string>
     <string name="memory_controls_row_assistant_endpoint">Memory Assistant Endpoint</string>
@@ -2873,7 +2873,7 @@
     <string name="memory_assistant_adv_min_importance_hint">Only create memory drafts at or above this importance level.</string>
     <!-- Step 1.7: each analysis type has its own editable prompt slot. The two
          labels are the owner-specified names of the slots. -->
-    <string name="memory_assistant_adv_associative_prompt">Associative Memory Prompt</string>
+    <string name="memory_assistant_adv_associative_prompt">RAG Active Memory Prompt</string>
     <string name="memory_assistant_adv_lorebook_prompt">Lorebook Memory Prompt</string>
     <string name="memory_assistant_adv_extraction_prompt_hint">Instructs AI how to analyze conversation history.</string>
     <string name="memory_assistant_adv_reset_prompt">Reset Prompt</string>
@@ -4001,6 +4001,28 @@
     <!-- Chat menu action and its confirmation (owner wording, Nov 2 2026). -->
     <string name="chat_menu_show_all">Show All</string>
     <string name="chat_menu_selection_mode">Selection Mode</string>
+    <!-- Scan for Memories (chat menu) and the chat header's background-work
+         indicator. Owner wording, Nov 18 2026. -->
+    <string name="chat_menu_scan_memories">Scan for Memories</string>
+    <string name="chat_scan_type_title">Choose Memory Scanner Type</string>
+    <string name="chat_scan_type_rag_active">RAG Active</string>
+    <string name="chat_scan_in_progress_title">Memory Scan in Progress</string>
+    <string name="chat_scan_in_progress_msg">Conversation will be scanned shortly. Another scan is in process and must finish its current conversation before working on this one. It will then proceed to finish the previously started scanning work.</string>
+    <string name="chat_scan_nothing_new_title">Nothing New to Scan</string>
+    <string name="chat_scan_nothing_new_msg">Every message in this conversation has already been scanned for memories.</string>
+    <string name="chat_activity_memory_scan">Memory Scan in Progress %1$d%%</string>
+    <string name="chat_activity_summarizing">Message Summarizing in Progress %1$d%%</string>
+    <!-- Create Outline screen's Memory Scan Progress line and its App
+         Appearance switch, and Show Message Number. Owner wording, Nov 18 2026. -->
+    <string name="chat_outline_memory_scan_progress">Memory Scan Progress: %1$s</string>
+    <string name="chat_outline_memory_scan_complete" formatted="false">100%</string>
+    <string name="chat_outline_memory_scan_unscanned">Unscanned</string>
+    <string name="chat_outline_memory_scan_range">%1$d-%2$d</string>
+    <string name="show_chat_memory_scan_status">Show Chat Memory Scan Status</string>
+    <string name="show_chat_memory_scan_status_hint">This will show how many memories have been scanned for a conversation inside of the create outline screen.</string>
+    <string name="chat_settings_show_message_number">Show Message Number</string>
+    <string name="chat_settings_show_message_number_hint">Shows each message\'s number in the conversation when you tap its information icon.</string>
+    <string name="chat_message_number">Message %1$d</string>
     <string name="chat_selection_count">%1$d Selected</string>
     <string name="chat_selection_hint">Tap a message to toggle selection</string>
     <string name="chat_selection_copy">Copy Selected</string>
