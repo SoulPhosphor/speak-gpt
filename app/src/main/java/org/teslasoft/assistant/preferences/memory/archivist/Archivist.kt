@@ -351,7 +351,7 @@ object Archivist {
         return result
     }
 
-    private fun mergePasses(first: RunOutcome, next: RunOutcome): RunOutcome = next.copy(
+    internal fun mergePasses(first: RunOutcome, next: RunOutcome): RunOutcome = next.copy(
         conversationsSelected = first.conversationsSelected + next.conversationsSelected,
         conversationsAnalyzed = first.conversationsAnalyzed + next.conversationsAnalyzed,
         memoriesFound = first.memoriesFound + next.memoriesFound,
@@ -359,9 +359,15 @@ object Archivist {
         failedChatIds = first.failedChatIds + next.failedChatIds,
         duplicatesSkipped = first.duplicatesSkipped + next.duplicatesSkipped,
         incompleteTurnsExcluded = first.incompleteTurnsExcluded + next.incompleteTurnsExcluded,
-        // Something found in an earlier pass is not undone by a later pass
-        // that found nothing new.
-        outcome = if (next.outcome == "no_new" && first.outcome == "completed") "completed" else next.outcome,
+        // Something saved in an earlier pass is never denied by a later pass:
+        // finding nothing new keeps it complete, and a later failure makes the
+        // whole scan a partial one (owner ruling, Fix #5).
+        outcome = when {
+            first.memoriesFound + first.ruleDraftsFound == 0 -> next.outcome
+            next.outcome == "no_new" -> "completed"
+            next.outcome == "full_failed" -> "partial_failed"
+            else -> next.outcome
+        },
         stoppedChatScanRunIds = first.stoppedChatScanRunIds + next.stoppedChatScanRunIds
     )
 
