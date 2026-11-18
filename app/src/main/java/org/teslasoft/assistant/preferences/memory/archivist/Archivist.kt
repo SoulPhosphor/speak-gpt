@@ -632,6 +632,9 @@ object Archivist {
         var runErrorFailure: ArchivistFailure? = null
         var interrupted = false
         val stoppedChatScans = ArrayList<String>()
+        // Chats handed back out of this run to a chat scan of the other type;
+        // they are not this run's conversations any more.
+        var handedBack = 0
 
         try {
             // Display batches (owner answer 4): size-grouped, presentation
@@ -647,26 +650,43 @@ object Archivist {
             // total so the percentage covers all of the work being done.
             var chatScansDone = 0
             var chatScansTotal = 0
-            for ((batchIndex, range) in batches.withIndex()) {
+            batches@ for ((batchIndex, range) in batches.withIndex()) {
                 val batchSize = range.last - range.first + 1
                 for (posInBatch in 0 until batchSize) {
                     val position = range.first + posInBatch
                     if (takeChatScanRequests) {
                         val requests = generateSequence { pendingChatScans.poll() }.toList()
-                        // Only a run that scans and advances bookmarks can take
-                        // a requested chat in its own queue; a rerun of a past
-                        // run scans the chat separately.
-                        val separate = if (markProcessed) {
-                            ChatScanOrder.promote(queue, position, requests) { it.chatId }
+                        // Only a run that scans and advances bookmarks, of the
+                        // type the user chose, can take a requested chat in its
+                        // own queue. A rerun of a past run, or a request for the
+                        // other type, scans the chat separately.
+                        val (sameType, otherType) = if (markProcessed) {
+                            requests.partition { it.analysisType == analysisType }
                         } else {
-                            requests.distinctBy { it.chatId }
+                            Pair(emptyList(), requests)
                         }
+                        val promotedSeparate = ChatScanOrder.promote(queue, position, sameType) { it.chatId }
+                        val otherTypeChats = otherType.distinctBy { it.chatId }
+                        if (markProcessed) {
+                            // A chat still waiting in this run is handed back out
+                            // so the separate scan can claim it with its own type.
+                            for (request in otherTypeChats) {
+                                val waiting = (position until queue.size)
+                                    .firstOrNull { queue[it].chatId == request.chatId } ?: continue
+                                queue.removeAt(waiting)
+                                handedBack++
+                                try {
+                                    store.releaseChatAnalysisClaim(runId, request.chatId)
+                                } catch (_: Exception) { /* its scan then finds nothing to claim */ }
+                            }
+                        }
+                        val separate = (promotedSeparate + otherTypeChats).distinctBy { it.chatId }
                         // A moved-forward chat covers only what this run froze at
                         // its start. The request waits once more, so anything the
                         // chat gained since then is scanned right after it.
                         if (markProcessed) {
                             val separateIds = separate.map { it.chatId }.toSet()
-                            requests.distinctBy { it.chatId }
+                            sameType.distinctBy { it.chatId }
                                 .filter { it.chatId !in separateIds }
                                 .forEach { pendingChatScans.add(it) }
                         }
@@ -711,6 +731,8 @@ object Archivist {
                             currentCoroutineContext().ensureActive()
                         }
                     }
+                    // Chats handed back out shorten this run's own queue.
+                    if (position >= queue.size) break@batches
                     val conversation = queue[position]
                     onProgress(Progress(
                         batchIndex + 1, batches.size, posInBatch + 1, batchSize,
@@ -1148,7 +1170,7 @@ object Archivist {
 
         // Display outcome (archivist_status_wording_spec.md). A partial
         // success is never called a full failure; "no new" is not an error.
-        val selected = conversations.size
+        val selected = conversations.size - handedBack
         // A run that saved at least one draft/suggestion before a later failure
         // is NEVER a full failure (owner ruling, Fix #5): full failure requires
         // that nothing completed AND nothing was saved. Anything saved before an

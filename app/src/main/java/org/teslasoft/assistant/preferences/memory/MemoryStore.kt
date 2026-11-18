@@ -4218,6 +4218,39 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
+    /** Hands one chat back out of a live run before the run reaches it, so a
+     *  Scan for Memories request of a different type can scan it instead.
+     *  Releases only that chat's claims, frozen range and temporary
+     *  candidates; the run keeps everything else. */
+    fun releaseChatAnalysisClaim(runId: String, chatId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val ranges = ArrayList<String>()
+            db.rawQuery(
+                "SELECT range_id FROM analysis_chat_ranges WHERE run_id = ? AND chat_id = ?",
+                arrayOf(runId, chatId)
+            ).use { while (it.moveToNext()) ranges.add(it.getString(0)) }
+            db.execSQL(
+                "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ? AND chat_id = ?",
+                arrayOf(runId, chatId)
+            )
+            db.delete(
+                "analysis_chat_ranges", "run_id = ? AND chat_id = ? AND status = 'running'",
+                arrayOf(runId, chatId)
+            )
+            for (rangeId in ranges) {
+                db.delete("analysis_candidates", "run_id = ?", arrayOf(rangeId))
+                db.delete("analysis_run_state", "run_id = ?", arrayOf(rangeId))
+            }
+            excludeTranscriptIdsTx(db, chatId, emptyList())
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+            chatListMemoryChanged(chatId)
+        }
+    }
+
     private fun insertPreparedOutputsTx(
         db: SQLiteDatabase,
         memories: List<MemoryRecord>,
