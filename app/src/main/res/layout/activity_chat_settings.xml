@@ -157,6 +157,9 @@
                     <TextView
                         style="@style/Widget.App.Row.Title"
                         android:text="@string/chat_settings_show_message_number" />
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/chat_settings_show_message_number_hint" />
                 </LinearLayout>
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_show_message_number"

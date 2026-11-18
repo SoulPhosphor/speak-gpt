@@ -4019,8 +4019,9 @@
     <string name="chat_outline_memory_scan_unscanned">Unscanned</string>
     <string name="chat_outline_memory_scan_range">%1$d-%2$d</string>
     <string name="show_chat_memory_scan_status">Show Chat Memory Scan Status</string>
-    <string name="show_chat_memory_scan_status_hint">This will show how many memories have been scanned for a conversation inside of the Create Outline screen.</string>
+    <string name="show_chat_memory_scan_status_hint">This will show how many memories have been scanned for a conversation inside of the create outline screen.</string>
     <string name="chat_settings_show_message_number">Show Message Number</string>
+    <string name="chat_settings_show_message_number_hint">Shows each message\'s number in the conversation when you tap its information icon.</string>
     <string name="chat_message_number">Message %1$d</string>
     <string name="chat_selection_count">%1$d Selected</string>
     <string name="chat_selection_hint">Tap a message to toggle selection</string>
