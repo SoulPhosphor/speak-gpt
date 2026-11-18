@@ -346,6 +346,10 @@ class MemoryAnalysisForegroundService : Service() {
                         state.value = MemoryAnalysisState.Finished(refinedChatOutcome)
                     }
                 }
+                // An automatic backup that came due during the scan waited for
+                // it; let it run now that the scan is over.
+                org.teslasoft.assistant.preferences.backup.AutoBackupScheduling
+                    .runAfterMemoryScan(appContext)
                 // Only the latest start may stop the service, so a start that
                 // arrives after the hand-over above keeps it running.
                 stopSelf(stopId)
@@ -476,11 +480,10 @@ class MemoryAnalysisForegroundService : Service() {
             // (owner rule: never invent a percentage before the total exists).
             builder.setProgress(0, 0, true)
         } else {
-            // Determinate bar with "X% complete": completed conversations over
-            // the fixed total the run sealed. The conversation in flight is not
-            // yet complete, so the bar reaches 100% only after the run finishes.
-            val completed = (progress.overallIndex - 1).coerceAtLeast(0)
-            val percent = (completed * 100 / progress.overallCount).coerceIn(0, 100)
+            // Determinate bar with "X% complete": finished conversations over
+            // the run's total, or finished sections when the run is one chat
+            // (Archivist.Progress.percent). Work in flight never counts.
+            val percent = progress.percent()
             builder.setContentText(getString(R.string.memory_analysis_notification_progress, percent))
             builder.setProgress(100, percent, false)
         }

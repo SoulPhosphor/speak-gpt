@@ -2477,6 +2477,9 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                     RecoveryBackupState.getAutoLastSuccess(this), autoFrequency
                 )
                 lines += getString(R.string.backup_auto_status_next_due, BackupStatusFormatter.formatDateTime(nextDue))
+                if (RecoveryBackupState.getAutoLastSuccessMissingReferences(this)) {
+                    lines += getString(R.string.portable_partial_missing_references)
+                }
             }
             AutoBackupStatusPresenter.Kind.PAUSED -> {
                 lines += autoFailureMessage(view.failureReason)

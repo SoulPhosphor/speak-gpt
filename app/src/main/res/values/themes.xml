@@ -33,6 +33,18 @@
              Add, etc.) across the app; buttons that set an explicit style keep
              theirs. -->
         <item name="materialButtonStyle">@style/App.Button</item>
+        <!-- Every progress bar is one continuous track (owner ruling, Nov 18
+             2026); see Widget.App.ProgressBar. -->
+        <item name="linearProgressIndicatorStyle">@style/Widget.App.ProgressBar</item>
+    </style>
+
+    <!-- The app's progress bar (owner ruling, Nov 18 2026): one continuous
+         track with the filled part merged into it, never Material's split
+         look of two pills separated by a gap, and no end dot. Every bar in
+         the app inherits this, by theme default or by its own style. -->
+    <style name="Widget.App.ProgressBar" parent="Widget.Material3.LinearProgressIndicator">
+        <item name="indicatorTrackGapSize">@dimen/progress_bar_track_gap</item>
+        <item name="trackStopIndicatorSize">@dimen/progress_bar_stop_indicator</item>
     </style>
 
     <!-- Default filled button, reshaped to 4dp corners (owner: no pills). -->
@@ -432,7 +444,7 @@
         <item name="android:textSize">@dimen/progress_dialog_percent_size</item>
     </style>
 
-    <style name="Widget.App.ProgressDialog.Bar" parent="Widget.Material3.LinearProgressIndicator">
+    <style name="Widget.App.ProgressDialog.Bar" parent="Widget.App.ProgressBar">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">@dimen/progress_dialog_bar_gap</item>
@@ -2066,12 +2078,14 @@
 
     <!-- Background-work icon, directly after the drawer icon on the left
          (owner design, Nov 18 2026). Shown only while background work runs.
-         Tinted with the same theme color as the chat menu's text instead of
-         the header's primary color, so it stands apart from the actions. -->
+         The glyph alone on a clear background (icons have no background of
+         their own), in the chat title's color so it stands apart from the
+         header actions (owner ruling, Nov 18 2026). -->
     <style name="Widget.App.Chat.HeaderAction.Activity">
         <item name="android:layout_marginStart">@dimen/chat_header_action_gap</item>
         <item name="android:layout_marginEnd">0dp</item>
-        <item name="android:tint">?android:attr/textColorPrimary</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:tint">?attr/appTitleTextColor</item>
     </style>
 
     <!-- The background-work popover under the header: a rounded surface
@@ -4060,7 +4074,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_marginTop">0dp</item>
     </style>
-    <style name="Widget.App.MemoryTokens.Bar" parent="Widget.Material3.LinearProgressIndicator">
+    <style name="Widget.App.MemoryTokens.Bar" parent="Widget.App.ProgressBar">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">@dimen/memory_token_meter_gap</item>

@@ -346,6 +346,18 @@ heading during measurement and retain that smaller size. Keep the body and
 Close action in the standard Material dialog; do not special-case individual
 parameter headings or set their text size in Kotlin.
 
+### Progress bars
+
+Every progress bar in the app is one continuous track with the filled part
+merged into it (owner ruling, Nov 18 2026). Never Material's split look,
+where the filled part and the rest of the track are two separate pills with
+a gap between them, and no end dot. `Widget.App.ProgressBar` sets this
+(`progress_bar_track_gap` and `progress_bar_stop_indicator`, both 0). Every
+`Theme.App` variant makes it the default `linearProgressIndicatorStyle`, and
+every bar style inherits it (`Widget.App.ProgressDialog.Bar`,
+`Widget.App.MemoryTokens.Bar`). A new bar style must also inherit it. Bars in
+phone notifications are drawn by Android, and the app cannot style them.
+
 ### Progress pop-up
 
 Use `Widget.App.ProgressDialog.*` for a pop-up that shows real progress:
@@ -1329,9 +1341,10 @@ Their shared runtime blur radius is `@dimen/chat_action_menu_blur_radius`; keep 
 `Widget.App.Chat.HeaderAction.Activity` is the Material Symbols
 `manufacturing` icon (`ic_manufacturing`) on the chat header's left, directly
 after the drawer icon (owner design, Nov 18 2026). It shows only while a
-memory scan or summarizing runs. It is tinted with the theme's primary text
-color (`?android:attr/textColorPrimary`, the chat menu's text color) instead of
-the header actions' `colorPrimary`. The right-side actions keep their places.
+memory scan or summarizing runs. It is the glyph alone on a clear background
+(borderless ripple only), tinted with the chat title's color
+(`?attr/appTitleTextColor`) instead of the header actions' `colorPrimary`
+(owner ruling, Nov 18 2026). The right-side actions keep their places.
 
 Tapping it opens the popover, `layout/view_chat_activity_popover.xml`: a
 `PopupWindow` below the header holding `Widget.App.Chat.ActivityPopover.Holder`
@@ -1343,6 +1356,14 @@ is `divider_chat_activity_popover`, so it appears only between lines that
 show. It has no buttons, closes on a tap elsewhere, follows progress while
 open, and closes with the icon when the work ends. Sizes live in
 `chat_activity_popover_*` dimensions. Owner: `ui.chat.ChatBackgroundActivity`.
+
+### Error log chat links
+
+A chat named in an error log entry is a tappable link that opens that chat
+(owner design, Nov 18 2026). The entry stores the chat as
+`"Chat name" [chat:ID]`; `ErrorLogChatLinks` shows only the quoted name, as a
+`ClickableSpan` in the log text view's own theme link color. Nothing about its
+look is set in code. A chat deleted since is not opened.
 
 ### Chat message action icons
 

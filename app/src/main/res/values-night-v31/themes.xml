@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.App" parent="Theme.Material3.DynamicColors.DayNight">
+        <!-- One continuous progress bar track (owner ruling, Nov 18 2026). -->
+        <item name="linearProgressIndicatorStyle">@style/Widget.App.ProgressBar</item>
         <item name="colorPrimary">@color/accent_900</item>
         <item name="colorOnPrimary">@color/window_background</item>
         <item name="colorSecondary">@color/accent_900</item>

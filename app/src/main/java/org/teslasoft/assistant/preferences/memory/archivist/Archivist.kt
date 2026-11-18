@@ -208,8 +208,27 @@ object Archivist {
          *  its start — the basis for the approved percentage. 0 on legacy
          *  callers. */
         val overallIndex: Int = 0,
-        val overallCount: Int = 0
-    )
+        val overallCount: Int = 0,
+        /** Sections of the conversation in progress already finished, and how
+         *  many it was split into (0 until it has been split). */
+        val sectionsDone: Int = 0,
+        val sectionsTotal: Int = 0
+    ) {
+        /**
+         * The approved percentage, from work actually done. A run of one chat
+         * counts finished sections of that chat (owner ruling, Nov 18 2026);
+         * a batch counts finished conversations, as before. 0 until the
+         * total is known.
+         */
+        fun percent(): Int {
+            if (overallCount <= 0) return 0
+            if (overallCount == 1 && sectionsTotal > 0) {
+                return (sectionsDone * 100 / sectionsTotal).coerceIn(0, 100)
+            }
+            val completed = (overallIndex - 1).coerceAtLeast(0)
+            return (completed * 100 / overallCount).coerceIn(0, 100)
+        }
+    }
 
     /** Bookmark-led eligibility for chats that still exist in app storage.
      * Deleted conversations do not count; claim state temporarily seals an
@@ -858,6 +877,13 @@ object Archivist {
                             .executeWithStaged<ArchivistRequestChunk, ParsedChunk, ChatCommit>(
                             chunks = chunks,
                             analyzeChunk = { chunk, earlierChunks ->
+                                onProgress(Progress(
+                                    batchIndex + 1, batches.size, posInBatch + 1, batchSize,
+                                    overallIndex = position + chatScansDone + 1,
+                                    overallCount = queue.size + chatScansTotal,
+                                    sectionsDone = earlierChunks.size,
+                                    sectionsTotal = chunks.size
+                                ))
                                 val retried = ArchivistBoundedShrinkExecutor
                                     .execute<ArchivistRequestChunk, ParsedChunk>(
                                     initial = chunk,

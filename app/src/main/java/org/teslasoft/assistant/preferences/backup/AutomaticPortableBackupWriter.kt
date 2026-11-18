@@ -24,7 +24,10 @@ object AutomaticPortableBackupWriter {
     sealed class Result {
         data class Success(
             val sizeBytes: Long,
-            val includedTypes: Set<BackupType>
+            val includedTypes: Set<BackupType>,
+            /** Chats point to generated images the catalog does not have; the
+             *  backup completed without them. */
+            val missingReferences: Boolean = false
         ) : Result()
 
         data object NothingToBackUp : Result()
@@ -126,7 +129,7 @@ object AutomaticPortableBackupWriter {
             built.chatSource?.let {
                 RecoveryBackupReceipt.record(app, it, System.currentTimeMillis())
             }
-            return Result.Success(finalVerified.second, built.includedTypes)
+            return Result.Success(finalVerified.second, built.includedTypes, built.missingReferences)
         } catch (error: Exception) {
             discardDestination(app, destination)
             return Result.Failed(
