@@ -29,6 +29,8 @@ import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
 import com.aallam.openai.client.OpenAIHost
 import com.aallam.openai.client.RetryStrategy
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -268,6 +270,49 @@ object Archivist {
         run(context, { eligibleConversations(context) }, markProcessed = true,
             analysisType = analysisType, onProgress = onProgress)
 
+    /** One chat's Scan for Memories request (owner design, Nov 18 2026). */
+    data class ChatScanRequest(val chatId: String, val analysisType: String)
+
+    /** Chat scans asked for while another run is live. That run takes them
+     *  between conversations — it never stops a conversation part way — and
+     *  then continues its own work. Anything still waiting when it ends is
+     *  started by the analysis service. In memory only: a process death
+     *  drops a waiting request along with the run itself. */
+    private val pendingChatScans = java.util.concurrent.ConcurrentLinkedQueue<ChatScanRequest>()
+
+    fun requestChatScan(request: ChatScanRequest) {
+        pendingChatScans.add(request)
+    }
+
+    fun pollChatScanRequest(): ChatScanRequest? = pendingChatScans.poll()
+
+    fun clearChatScanRequests() = pendingChatScans.clear()
+
+    /** The part of one chat that a Scan for Memories run would freeze now:
+     *  everything after its bookmark, even while the chat's Archive switch
+     *  is off (owner ruling: the user's own request decides). */
+    fun chatScanConversations(context: Context, chatId: String): List<Conversation> {
+        if (!MemoryStore.isProvisioned(context)) return emptyList()
+        val name = liveChatNamesById(context)[chatId] ?: return emptyList()
+        val rows = MemoryStore.getInstance(context).chatScanEligibleTranscripts(chatId)
+        return if (rows.isEmpty()) emptyList() else listOf(Conversation(chatId, name, rows))
+    }
+
+    /** Scan only [chatId]'s not-yet-scanned part. */
+    suspend fun analyzeChat(
+        context: Context,
+        chatId: String,
+        analysisType: String,
+        onProgress: (Progress) -> Unit
+    ): RunOutcome =
+        run(context, { chatScanConversations(context, chatId) }, markProcessed = true,
+            analysisType = analysisType, onProgress = onProgress, ignoreArchivePause = true)
+
+    /** True when the Memory Assistant has everything a run needs before it
+     *  can start: an endpoint with a host, a model, and satisfiable provider
+     *  routing. The same checks [run] makes, without logging. */
+    fun isScannerReady(context: Context): Boolean = scannerSetup(context) is ScannerSetup.Ready
+
     /** Re-analyze a past run's conversations (the Rerun row action): re-feeds
      *  exactly the transcript rows that run stored, for chats that still
      *  exist. Files any NEW findings as drafts (existing identical drafts are
@@ -302,33 +347,33 @@ object Archivist {
         }, markProcessed = false, analysisType = past.analysisType, onProgress = onProgress)
     }
 
-    private suspend fun run(
-        context: Context,
-        selectConversations: () -> List<Conversation>,
-        markProcessed: Boolean,
-        analysisType: String,
-        onProgress: (Progress) -> Unit
-    ): RunOutcome {
+    /** What [run] needs from the Memory Assistant's settings, or which piece
+     *  is missing. */
+    private sealed interface ScannerSetup {
+        data object NoEndpointSelected : ScannerSetup
+        data object EndpointHostEmpty : ScannerSetup
+        data object NoModel : ScannerSetup
+        data object RoutingNotConfigured : ScannerSetup
+        data object RoutingUnsatisfiable : ScannerSetup
+        data class Ready(
+            val prefs: Preferences,
+            val endpoint: ApiEndpointObject,
+            val model: String,
+            val providerRouting: com.google.gson.JsonObject?
+        ) : ScannerSetup
+    }
+
+    private fun scannerSetup(context: Context): ScannerSetup {
         val prefs = Preferences.getPreferences(context, "")
         val endpointId = prefs.getArchivistEndpointId()
-        val endpoint = if (endpointId.isBlank()) null
-        else ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
-        if (endpoint == null || endpoint.host.isBlank()) {
-            // Always logged (spec): user-relevant recovery information.
-            MemoryLog.logAlways(context, "Archivist", "warn",
-                "Archivist Not Ready — Memory Archivist needs a model before it can run. " +
-                    "Missing: ${if (endpointId.isBlank()) "endpoint profile not selected" else "endpoint host empty"}")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
-        }
+        if (endpointId.isBlank()) return ScannerSetup.NoEndpointSelected
+        val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
+        if (endpoint == null || endpoint.host.isBlank()) return ScannerSetup.EndpointHostEmpty
         // The Memory Assistant model is an explicit selection. Changing its
         // endpoint clears this value and shows "Select"; never silently fall
         // back to the endpoint profile's ordinary-chat model behind that UI.
         val model = prefs.getArchivistModel()
-        if (model.isBlank()) {
-            MemoryLog.logAlways(context, "Archivist", "warn",
-                "Archivist Not Ready — Memory Archivist needs a model before it can run. Missing: model name")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
-        }
+        if (model.isBlank()) return ScannerSetup.NoModel
 
         // The Memory Scanner's own routing (its favorites, or its own routing
         // for the selected model), never the chat's.
@@ -339,19 +384,43 @@ object Archivist {
         }
         if (requestFavorite != null &&
             DedicatedModelRoutingPolicy.needsSetup(requestFavorite.routingType, requestFavorite)
-        ) {
-            MemoryLog.logAlways(context, "Archivist", "warn",
-                "Archivist Not Ready — selected provider routing is not configured for the Memory Assistant model")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
-        }
+        ) return ScannerSetup.RoutingNotConfigured
         val routingResolution = ProviderRoutingResolver.resolve(
             endpoint.isOpenRouterRouting(), requestFavorite
         )
-        if (routingResolution.block != RoutingBlock.NONE) {
-            MemoryLog.logAlways(context, "Archivist", "warn",
-                "Archivist Not Ready — selected provider routing cannot be satisfied")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
+        if (routingResolution.block != RoutingBlock.NONE) return ScannerSetup.RoutingUnsatisfiable
+        return ScannerSetup.Ready(prefs, endpoint, model, routingResolution.providerJson)
+    }
+
+    private suspend fun run(
+        context: Context,
+        selectConversations: () -> List<Conversation>,
+        markProcessed: Boolean,
+        analysisType: String,
+        onProgress: (Progress) -> Unit,
+        ignoreArchivePause: Boolean = false
+    ): RunOutcome {
+        val ready = when (val setup = scannerSetup(context)) {
+            is ScannerSetup.Ready -> setup
+            else -> {
+                // Always logged (spec): user-relevant recovery information.
+                MemoryLog.logAlways(context, "Archivist", "warn", when (setup) {
+                    ScannerSetup.NoModel ->
+                        "Archivist Not Ready — Memory Archivist needs a model before it can run. Missing: model name"
+                    ScannerSetup.RoutingNotConfigured ->
+                        "Archivist Not Ready — selected provider routing is not configured for the Memory Assistant model"
+                    ScannerSetup.RoutingUnsatisfiable ->
+                        "Archivist Not Ready — selected provider routing cannot be satisfied"
+                    else ->
+                        "Archivist Not Ready — Memory Archivist needs a model before it can run. " +
+                            "Missing: ${if (setup == ScannerSetup.NoEndpointSelected) "endpoint profile not selected" else "endpoint host empty"}"
+                })
+                return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
+            }
         }
+        val prefs = ready.prefs
+        val endpoint = ready.endpoint
+        val model = ready.model
 
         // One live run at a time (§4(a)). The in-process gate must be held
         // BEFORE reconciliation: reconciling while another run is live would
@@ -364,7 +433,10 @@ object Archivist {
         try {
             return runLocked(
                 context, selectConversations, markProcessed, analysisType,
-                onProgress, prefs, endpoint, model, routingResolution.providerJson
+                onProgress, prefs, endpoint, model, ready.providerRouting,
+                ignoreArchivePause = ignoreArchivePause,
+                reconcileDeadRuns = true,
+                takeChatScanRequests = true
             )
         } finally {
             liveRun.set(false)
@@ -380,7 +452,10 @@ object Archivist {
         prefs: Preferences,
         endpoint: ApiEndpointObject,
         model: String,
-        providerRouting: com.google.gson.JsonObject?
+        providerRouting: com.google.gson.JsonObject?,
+        ignoreArchivePause: Boolean,
+        reconcileDeadRuns: Boolean,
+        takeChatScanRequests: Boolean
     ): RunOutcome {
         val lorebookMode = analysisType == "lorebook"
         val store = MemoryStore.getInstance(context)
@@ -389,7 +464,9 @@ object Archivist {
         // API run found now is dead — the gate above proves nothing else is
         // live in this process, and a run never survives its process. Its
         // claims are released so this run can pick those rows up.
-        val recovered = store.reconcileInterruptedAnalysisRuns()
+        // A chat scan taken inside a live run skips this: the live run's own
+        // 'running' row is not dead and must keep its claims.
+        val recovered = if (reconcileDeadRuns) store.reconcileInterruptedAnalysisRuns() else 0
         if (recovered > 0) {
             MemoryLog.logAlways(context, "Archivist", "warn",
                 "recovered $recovered interrupted run(s) — unfinished conversations were released back to the review queue; nothing unseen was marked processed")
@@ -425,7 +502,8 @@ object Archivist {
         if (markProcessed) {
             frozenRanges = store.beginAnalysisRun(
                 runningRow,
-                conversations.associate { c -> c.chatId to c.transcripts.map { it.transcriptId } }
+                conversations.associate { c -> c.chatId to c.transcripts.map { it.transcriptId } },
+                ignoreArchivePause
             )
             conversations = conversations.mapNotNull { c ->
                 frozenRanges[c.chatId]?.let { c.copy(transcripts = it.transcripts) }
@@ -556,13 +634,64 @@ object Archivist {
             val batches = ArchivistBatchPlanner.planBatches(
                 conversations.map { c -> c.transcripts.sumOf { it.content.length } }
             )
+            // The run's own conversations, in the order they will be taken. A
+            // chat scan request can move one of them forward (never ahead of
+            // the conversation already in progress).
+            val queue = conversations.toMutableList()
+            // Chat scans taken in the middle of this run: they join the run's
+            // total so the percentage covers all of the work being done.
+            var chatScansDone = 0
+            var chatScansTotal = 0
             for ((batchIndex, range) in batches.withIndex()) {
-                val batch = conversations.slice(range)
-                for ((posInBatch, conversation) in batch.withIndex()) {
+                val batchSize = range.last - range.first + 1
+                for (posInBatch in 0 until batchSize) {
+                    val position = range.first + posInBatch
+                    if (takeChatScanRequests) {
+                        val requests = generateSequence { pendingChatScans.poll() }.toList()
+                        val separate = ChatScanOrder.promote(queue, position, requests) { it.chatId }
+                        for (request in separate) {
+                            // Scanned as its own run with its own type, between
+                            // this run's conversations.
+                            val chat = try {
+                                chatScanConversations(context, request.chatId)
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
+                            if (chat.isEmpty()) continue
+                            chatScansTotal += chat.size
+                            try {
+                                runLocked(
+                                    context, { chat }, markProcessed = true,
+                                    analysisType = request.analysisType,
+                                    onProgress = { p ->
+                                        onProgress(Progress(
+                                            batchIndex + 1, batches.size, posInBatch + 1, batchSize,
+                                            overallIndex = position + chatScansDone + p.overallIndex,
+                                            overallCount = queue.size + chatScansTotal
+                                        ))
+                                    },
+                                    prefs = prefs, endpoint = endpoint, model = model,
+                                    providerRouting = providerRouting,
+                                    ignoreArchivePause = true,
+                                    reconcileDeadRuns = false,
+                                    takeChatScanRequests = false
+                                )
+                            } catch (ce: kotlinx.coroutines.CancellationException) {
+                                throw ce
+                            } catch (_: Exception) {
+                                // The chat scan records its own failures; this
+                                // run carries on with its own work.
+                            }
+                            chatScansDone += chat.size
+                            // A Cancel during the chat scan stops this run too.
+                            currentCoroutineContext().ensureActive()
+                        }
+                    }
+                    val conversation = queue[position]
                     onProgress(Progress(
-                        batchIndex + 1, batches.size, posInBatch + 1, batch.size,
-                        overallIndex = range.first + posInBatch + 1,
-                        overallCount = conversations.size
+                        batchIndex + 1, batches.size, posInBatch + 1, batchSize,
+                        overallIndex = position + chatScansDone + 1,
+                        overallCount = queue.size + chatScansTotal
                     ))
                     var candidateCollectionId: String? = null
                     try {

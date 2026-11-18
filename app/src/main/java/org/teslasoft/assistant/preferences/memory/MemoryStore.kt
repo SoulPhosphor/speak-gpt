@@ -3879,20 +3879,66 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      * review_status or processed_at. Bookmark position, snapshotted skips, and
      * temporary claims/ranges are the complete authority.
      */
-    private fun eligibleTranscriptsForChatTx(db: SQLiteDatabase, chatId: String): List<TranscriptRecord> {
+    /** [ignoreArchivePause] is true only for the user's own Scan for Memories
+     *  request on one chat: that request scans the chat even while its memory
+     *  Archive switch is off. Ordinary runs always respect the pause. */
+    private fun eligibleTranscriptsForChatTx(
+        db: SQLiteDatabase,
+        chatId: String,
+        ignoreArchivePause: Boolean = false
+    ): List<TranscriptRecord> =
+        // A claim is a temporary concurrency seal. Stop at it; never jump over
+        // an in-flight range and claim later history out of order.
+        unscannedTranscriptsForChatTx(db, chatId, ignoreArchivePause)
+            .takeWhile { it.claimRunId == null }
+
+    /** Every row after the chat's bookmark that is not skipped, claimed or not. */
+    private fun unscannedTranscriptsForChatTx(
+        db: SQLiteDatabase,
+        chatId: String,
+        ignoreArchivePause: Boolean
+    ): List<TranscriptRecord> {
         val bookmark = analysisBookmarkTx(db, chatId)
-        if (bookmark.archivePaused) return emptyList()
+        if (bookmark.archivePaused && !ignoreArchivePause) return emptyList()
         val ordered = transcriptsForChatTx(db, chatId)
-        val unskipped = AnalysisBookmark.eligibleRange(
+        return AnalysisBookmark.eligibleRange(
             rows = ordered,
             boundary = bookmarkBoundary(bookmark),
             skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
             idOf = { it.transcriptId },
             boundaryOf = { transcriptBoundary(it) }
         )
-        // A claim is a temporary concurrency seal. Stop at it; never jump over
-        // an in-flight range and claim later history out of order.
-        return unskipped.takeWhile { it.claimRunId == null }
+    }
+
+    /** Scan for Memories on one chat: the part of [chatId] a scan could
+     *  freeze now, including while the chat's Archive switch is off. */
+    fun chatScanEligibleTranscripts(chatId: String): List<TranscriptRecord> {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            requireBookmarkCutover(db)
+            val rows = eligibleTranscriptsForChatTx(db, chatId, ignoreArchivePause = true)
+            db.setTransactionSuccessful()
+            return rows
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** True when [chatId] has messages not yet scanned for memories, including
+     *  rows a running scan has already claimed but not finished. False means
+     *  Scan for Memories has nothing new to do for this chat. */
+    fun chatHasUnscannedTranscripts(chatId: String): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            requireBookmarkCutover(db)
+            val any = unscannedTranscriptsForChatTx(db, chatId, ignoreArchivePause = true).isNotEmpty()
+            db.setTransactionSuccessful()
+            return any
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /** Everything the next API run may freeze, chronological and bookmark-led. */
@@ -3940,11 +3986,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      * The supplied ids are the eligibility snapshot the caller displayed; rows
      * appended after that snapshot are deliberately not claimed and belong to
      * the next run. All claims and frozen-range records are sealed beside the
-     * running history row in one transaction.
+     * running history row in one transaction. [ignoreArchivePause] is set
+     * only by a single-chat Scan for Memories run.
      */
     fun beginAnalysisRun(
         run: ArchivistRunRecord,
-        transcriptIdsByChat: Map<String, List<String>>
+        transcriptIdsByChat: Map<String, List<String>>,
+        ignoreArchivePause: Boolean = false
     ): Map<String, FrozenChatRange> {
         val db = writableDatabase
         val frozen = linkedMapOf<String, FrozenChatRange>()
@@ -3957,7 +4005,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             for ((chatId, requestedIds) in transcriptIdsByChat) {
                 if (requestedIds.isEmpty()) continue
                 val requested = requestedIds.toHashSet()
-                val eligible = eligibleTranscriptsForChatTx(db, chatId)
+                val eligible = eligibleTranscriptsForChatTx(db, chatId, ignoreArchivePause)
                 val selected = ArrayList<TranscriptRecord>()
                 // Freeze only the requested contiguous prefix. A late row is
                 // the first non-requested row and stays unclaimed for next time.
