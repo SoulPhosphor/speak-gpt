@@ -399,6 +399,34 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
+    fun chatScanIncludesAPausedChatOnlyWhenTheUserAsksForIt() {
+        val store = open(freshDbName())
+        insertTranscript(store, "s1", "chat-scan", "1", "processed", "1")
+        insertTranscript(store, "s2", "chat-scan", "2", "pending", null)
+        store.rebuildBookmarkCutoverForTest()
+        store.setChatTranscriptsExcluded("chat-scan", true)
+
+        // Ordinary runs respect the pause; the chat's own scan does not.
+        assertTrue(store.bookmarkEligibleTranscripts().none { it.chatId == "chat-scan" })
+        assertEquals(listOf("s2"), store.chatScanEligibleTranscripts("chat-scan").map { it.transcriptId })
+        assertTrue(store.chatHasUnscannedTranscripts("chat-scan"))
+        assertEquals(listOf("s1"), store.chatScannedTranscripts("chat-scan").map { it.transcriptId })
+
+        assertTrue(store.beginAnalysisRun(runRecord("run-paused"), mapOf("chat-scan" to listOf("s2"))).isEmpty())
+        val frozen = store.beginAnalysisRun(
+            runRecord("run-chat-scan"), mapOf("chat-scan" to listOf("s2")), ignoreArchivePause = true
+        ).getValue("chat-scan")
+        // A claimed row still counts as unscanned, but cannot be claimed twice.
+        assertTrue(store.chatHasUnscannedTranscripts("chat-scan"))
+        assertTrue(store.chatScanEligibleTranscripts("chat-scan").isEmpty())
+
+        store.commitFrozenChatRange(frozen, emptyList(), emptyList(), emptyList())
+        assertFalse(store.chatHasUnscannedTranscripts("chat-scan"))
+        assertEquals(listOf("s1", "s2"), store.chatScannedTranscripts("chat-scan").map { it.transcriptId })
+        assertTrue(store.getAnalysisBookmark("chat-scan")!!.archivePaused)
+    }
+
+    @Test
     fun frozenRangeCommitAdvancesBookmarkAndLeavesLateMessageForNextRun() {
         val store = open(freshDbName())
         insertTranscript(store, "t1", "chat-a", "1", "pending", null)

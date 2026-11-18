@@ -57,6 +57,11 @@ inside a title unless they are the first word. Literal command names such as
 Sentence case is for explanatory prose: subtitles, hints, messages, body
 text, and spoken announcements — anything that explains rather than names.
 
+Inside a sentence, the name of a screen, setting, or control is written in
+lowercase like ordinary words, even though its own title or label is in Title
+Caps (owner ruling, Nov 18 2026). Example: "…inside of the create outline
+screen."
+
 When writing or proposing any new label, apply this rule. Do not carry
 sentence case from drafts, examples, or upstream strings into a label.
 
@@ -231,6 +236,10 @@ the right.
   Scanner parameters (**Discard Changes?** / "You have unsaved parameter
   changes." with **Cancel** (stay), **Save & Exit**, **Okay** (leave without
   saving)).
+- `layout/dialog_cancel_two_choices_row.xml`: Cancel
+  (`AppButton.Destructive.Inline`), then two equal, non-destructive choices
+  (`AppButton.Primary.Inline`). User: Choose Memory Scanner Type from the chat
+  menu's Scan for Memories (**Cancel**, **RAG Active**, **Lorebook**).
 - `layout/dialog_three_choices_row.xml`: three equal, non-destructive choices
   with no Cancel, all `AppButton.Primary.Inline`. User: the on-device Whisper
   missing-model pop-up (**Download Whisper**, **Google Dictation**, **API**).
@@ -613,7 +622,7 @@ Every non-chat screen and panel header title uses the shared `Widget.App.HeaderT
 
 Centered titles reserve shared space on both sides for header controls. Titles before measured actions use `ActionBar.Title.BeforeAction`; those following Back use `ActionBar.Title.NearBack` with an end constraint to the nearest action. Older 20sp centered titles use `ActionBar.Title.Compact`. Standalone page headers use `HeaderTitle.Floating`. Gallery selection counts remain at their existing 18sp floor and wrap to two lines through `HeaderTitle.Selection`.
 
-The chat header uses its independent `Widget.App.Chat.HeaderTitle` family and is unchanged. Lorebook screens use the generic Edit Lorebook header; the Logit Bias editor uses Logit Bias instead of a configuration name.
+The chat header uses its independent `Widget.App.Chat.HeaderTitle` family. Its title is hidden for now (owner ruling, Nov 18 2026; rename is in the chat menu), and the style is kept for its return. Lorebook screens use the generic Edit Lorebook header; the Logit Bias editor uses Logit Bias instead of a configuration name.
 
 ### Header joined to the top edge
 
@@ -874,10 +883,11 @@ The shown tab uses `Widget.App.PromptTab.Active`; other tabs use `Widget.App.Pro
 
 ### Chat Outline screen
 
-The Chat Outline screen (`activity_chat_outline.xml`, owner design Nov 13 2026) is laid out like the Compaction Summary screen from shared families: the header (`ActionBar`, `BackButton`, `Title.NearBack`, a `ChainedButton` trash can, `SaveButton`), `Widget.App.Page.Content`, the chat's title as `Widget.App.Section.Title`, Generate New Outline and Replace All Outlines With New as `AppButton.Primary.Inline.Centered.BelowIntro`, and the outline tabs on the `VersionTabs` family with `PromptTab` / `PromptTab.Active`. It adds only:
+The Chat Outline screen (`activity_chat_outline.xml`, owner design Nov 13 2026) is laid out like the Compaction Summary screen from shared families: the header (`ActionBar`, `BackButton`, `Title.NearBack`, a `ChainedButton` trash can, `SaveButton`), `Widget.App.Page.Content`, the chat's title centered as `Widget.App.ChatOutline.ChatTitle` (a centered `Widget.App.Section.Title`, owner ruling Nov 18 2026), Generate New Outline and Replace All Outlines With New as `AppButton.Primary.Inline.Centered.BelowIntro`, and the outline tabs on the `VersionTabs` family with `PromptTab` / `PromptTab.Active`. It adds only:
 
 - `Widget.App.ChatOutline.Text` — a tab's outline shown as formatted markdown inside `VersionTabs.Frame` (`version_tab_field_padding`, `chat_outline_text_size`).
 - `Widget.App.ChatOutline.Field` — the same tab's raw markdown while Edit is on (`VersionTabs.Field` with the outline text size and color).
+- `Widget.App.ChatOutline.ScanProgress` — the centered "Memory Scan Progress: …" line under the chat's title (`Widget.App.Screen.Intro`, `chat_outline_scan_progress_gap`), shown while App Appearance's Show Chat Memory Scan Status is on.
 - `Widget.App.ChatOutline.StatusSpinner` — the small spinner before the "Creating outline…" status, which uses `Widget.App.Screen.Intro` (`chat_outline_status_spinner_gap`).
 
 Its Tags box is the standard label-above-box field (`Widget.App.Field.Label.AfterRow`, then `Widget.App.Field.Box`) in the bounded, internally-scrolling form: one line tall, growing with the tags up to ten lines, then scrolling inside the box (`BoundedFieldScroll` lets it scroll inside the page).
@@ -1313,6 +1323,26 @@ Use the complete `Widget.App.Chat.ActionMenu.*` family for the labeled action po
 Camera/Image/Document and the conditional Compact/Create Image menu share this family. Availability and click behavior remain in the owning chat screen; appearance must not be restated or recolored there.
 
 Their shared runtime blur radius is `@dimen/chat_action_menu_blur_radius`; keep it centralized with this family rather than placing a numeric radius in `ChatActivity`.
+
+### Chat background-work icon and popover
+
+`Widget.App.Chat.HeaderAction.Activity` is the Material Symbols
+`manufacturing` icon (`ic_manufacturing`) on the chat header's left, directly
+after the drawer icon (owner design, Nov 18 2026). It shows only while a
+memory scan or summarizing runs. It is tinted with the theme's primary text
+color (`?android:attr/textColorPrimary`, the chat menu's text color) instead of
+the header actions' `colorPrimary`. The right-side actions keep their places.
+
+Tapping it opens the popover, `layout/view_chat_activity_popover.xml`: a
+`PopupWindow` below the header holding `Widget.App.Chat.ActivityPopover.Holder`
+(transparent, full width) and `Widget.App.Chat.ActivityPopover` (the rounded
+`bg_chat_activity_popover` surface across the message bubbles' area, from
+`chat_message_speaker_inset` to `chat_message_ai_right_inset`). Each activity
+is one centered `Widget.App.Chat.ActivityPopover.Line`; the gap between lines
+is `divider_chat_activity_popover`, so it appears only between lines that
+show. It has no buttons, closes on a tap elsewhere, follows progress while
+open, and closes with the icon when the work ends. Sizes live in
+`chat_activity_popover_*` dimensions. Owner: `ui.chat.ChatBackgroundActivity`.
 
 ### Chat message action icons
 
