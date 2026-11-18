@@ -4,6 +4,19 @@
 
 Use the original eligible messages as the source for extraction, with the editable Associative Memory prompt and per-chat Analysis Note guiding what to keep. Let the scanner revise its own temporary drafts as it reads. Use the on-device embedding model to find related memories and show the user why two records were brought together. Keep a straightforward short scan to one generative request whenever possible.
 
+## Implementation order
+
+The [memory roadmap, M.2](conversation_recall_plan.md#m2-the-build-order) schedules this proposal after completed Stage 6 and before Stage 7. Assign one lettered stage at a time.
+
+| Stage | Deliverable |
+|---|---|
+| **6A — Reliable reading and resume** | Short and long request paths, excerpts, turn references, oversized-turn retry, and interruption recovery through existing scan controls. |
+| **6B — Draft corrections and memory matching** | Working-draft edits, local lookup, linked candidates and conflicts, conditional review, cap handling, and revalidation at filing. |
+| **6C — Browser match cards and comparison** | Show matches and their status, open the exact pair, read both records, and return to the same list position. |
+| **6D — Browser review actions and end-to-end evaluation** | Resolve Pending pairs and conflicts safely, then evaluate the complete scan-to-review experience. |
+
+6A can start with the current Browser. 6B defines the data the Browser consumes. Ship workflows needing new human decisions with their corresponding actions in 6D. Wider Browser redesign work can be scoped separately.
+
 ## What happens today
 
 On `main` at `a3c0751`, the scanner reads a frozen range of eligible transcript rows. A normal chat scan starts after its bookmark. Before each extraction request it can already search **active memories** using embeddings, with keyword fallback. Each chunk sees a bounded selection of earlier proposals (up to ten within a text budget). The model can write a correction, but the collector combines exact repeats and otherwise keeps proposals in arrival order. The first eligible proposals can fill the user's limit before a later correction is filed.
