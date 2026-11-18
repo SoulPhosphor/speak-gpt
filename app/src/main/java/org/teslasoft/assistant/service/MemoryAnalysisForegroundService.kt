@@ -337,8 +337,9 @@ class MemoryAnalysisForegroundService : Service() {
                             analysisType = next.analysisType
                         )
                     }
-                    if (chatOutcome.outcome != "already_running") {
-                        state.value = MemoryAnalysisState.Finished(chatOutcome)
+                    val refinedChatOutcome = refineHandedOverStop(appContext, chatOutcome)
+                    if (refinedChatOutcome.outcome != "already_running") {
+                        state.value = MemoryAnalysisState.Finished(refinedChatOutcome)
                     }
                 }
                 // Only the latest start may stop the service, so a start that
@@ -349,6 +350,26 @@ class MemoryAnalysisForegroundService : Service() {
         // NOT sticky: a resurrected service with no run in flight would hold
         // a notification for nothing — recovery is the durable reconcile.
         return START_NOT_STICKY
+    }
+
+    /**
+     * The same stop refinement as the main run applies (user Cancel, runtime
+     * limit, or a generic system stop), for a chat scan handed over at the end
+     * of a run. The refined value is also written to its durable run record.
+     */
+    private fun refineHandedOverStop(appContext: Context, outcome: Archivist.RunOutcome): Archivist.RunOutcome {
+        if (outcome.outcome != "cancelled") return outcome
+        val refined = when {
+            userCancelRequested -> "cancelled_user"
+            timeLimitReached -> "stopped_time_limit"
+            else -> return outcome
+        }
+        outcome.runId?.let { id ->
+            try {
+                MemoryStore.getInstance(appContext).updateArchivistRunOutcome(id, refined, null)
+            } catch (_: Exception) { /* the outcome shown on screen is still refined */ }
+        }
+        return outcome.copy(outcome = refined)
     }
 
     /** Android 15+ can time out dataSync services. Cancel the run cleanly —

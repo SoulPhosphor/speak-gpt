@@ -410,7 +410,8 @@ class MemoryStoreInstrumentedTest {
         assertTrue(store.bookmarkEligibleTranscripts().none { it.chatId == "chat-scan" })
         assertEquals(listOf("s2"), store.chatScanEligibleTranscripts("chat-scan").map { it.transcriptId })
         assertTrue(store.chatHasUnscannedTranscripts("chat-scan"))
-        assertEquals(listOf("s1"), store.chatScannedTranscripts("chat-scan").map { it.transcriptId })
+        assertEquals(listOf("s1"), store.chatScanRows("chat-scan").scanned.map { it.transcriptId })
+        assertTrue(store.chatScanRows("chat-scan").hasPending)
 
         assertTrue(store.beginAnalysisRun(runRecord("run-paused"), mapOf("chat-scan" to listOf("s2"))).isEmpty())
         val frozen = store.beginAnalysisRun(
@@ -422,7 +423,8 @@ class MemoryStoreInstrumentedTest {
 
         store.commitFrozenChatRange(frozen, emptyList(), emptyList(), emptyList())
         assertFalse(store.chatHasUnscannedTranscripts("chat-scan"))
-        assertEquals(listOf("s1", "s2"), store.chatScannedTranscripts("chat-scan").map { it.transcriptId })
+        assertEquals(listOf("s1", "s2"), store.chatScanRows("chat-scan").scanned.map { it.transcriptId })
+        assertFalse(store.chatScanRows("chat-scan").hasPending)
         assertTrue(store.getAnalysisBookmark("chat-scan")!!.archivePaused)
     }
 

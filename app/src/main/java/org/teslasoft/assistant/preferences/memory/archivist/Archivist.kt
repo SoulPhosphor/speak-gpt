@@ -648,7 +648,14 @@ object Archivist {
                     val position = range.first + posInBatch
                     if (takeChatScanRequests) {
                         val requests = generateSequence { pendingChatScans.poll() }.toList()
-                        val separate = ChatScanOrder.promote(queue, position, requests) { it.chatId }
+                        // Only a run that scans and advances bookmarks can take
+                        // a requested chat in its own queue; a rerun of a past
+                        // run scans the chat separately.
+                        val separate = if (markProcessed) {
+                            ChatScanOrder.promote(queue, position, requests) { it.chatId }
+                        } else {
+                            requests.distinctBy { it.chatId }
+                        }
                         for (request in separate) {
                             // Scanned as its own run with its own type, between
                             // this run's conversations.

@@ -73,9 +73,9 @@ object ChatScanProgressLine {
 
     private fun status(context: Context, chatId: String): ChatScanCoverage.Status? {
         if (!MemoryStore.isProvisioned(context)) return null
-        val store = MemoryStore.getInstance(context)
-        val scanned = store.chatScannedTranscripts(chatId).map { it.content }
-        val hasUnscanned = store.chatHasUnscannedTranscripts(chatId)
+        val rows = MemoryStore.getInstance(context).chatScanRows(chatId)
+        val scanned = rows.scanned.map { it.content }
+        val hasUnscanned = rows.hasPending
         // The chat itself is read only when a message range is needed.
         val messages = if (scanned.isNotEmpty() && hasUnscanned) {
             ChatPreferences.getChatPreferences()

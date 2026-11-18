@@ -3925,20 +3925,25 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
-    /** The rows of [chatId] already scanned for memories: everything up to
-     *  the chat's bookmark, less any rows skipped from analysis. */
-    fun chatScannedTranscripts(chatId: String): List<TranscriptRecord> {
+    /** [chatId]'s rows split by the chat's bookmark, for its scan progress:
+     *  [scanned] are the rows at or before the bookmark, and [hasPending] is
+     *  whether any row after it still waits. Skipped rows count as neither. */
+    data class ChatScanRows(val scanned: List<TranscriptRecord>, val hasPending: Boolean)
+
+    fun chatScanRows(chatId: String): ChatScanRows {
         val db = writableDatabase
         db.beginTransaction()
         try {
             requireBookmarkCutover(db)
-            val unscanned = unscannedTranscriptsForChatTx(db, chatId, ignoreArchivePause = true)
-                .map { it.transcriptId }.toHashSet()
-            val skipped = analysisBookmarkTx(db, chatId).skippedTranscriptIds.toHashSet()
-            val scanned = transcriptsForChatTx(db, chatId)
-                .filter { it.transcriptId !in unscanned && it.transcriptId !in skipped }
+            val bookmark = analysisBookmarkTx(db, chatId)
+            val boundary = bookmarkBoundary(bookmark)
+            val skipped = bookmark.skippedTranscriptIds.toHashSet()
+            val rows = transcriptsForChatTx(db, chatId).filter { it.transcriptId !in skipped }
+            val (pending, scanned) = rows.partition {
+                AnalysisBookmark.isAfter(transcriptBoundary(it), boundary)
+            }
             db.setTransactionSuccessful()
-            return scanned
+            return ChatScanRows(scanned, pending.isNotEmpty())
         } finally {
             db.endTransaction()
         }
