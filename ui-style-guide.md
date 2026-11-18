@@ -346,6 +346,18 @@ heading during measurement and retain that smaller size. Keep the body and
 Close action in the standard Material dialog; do not special-case individual
 parameter headings or set their text size in Kotlin.
 
+### Progress bars
+
+Every progress bar in the app is one continuous track with the filled part
+merged into it (owner ruling, Nov 18 2026). Never Material's split look,
+where the filled part and the rest of the track are two separate pills with
+a gap between them, and no end dot. `Widget.App.ProgressBar` sets this
+(`progress_bar_track_gap` and `progress_bar_stop_indicator`, both 0). Every
+`Theme.App` variant makes it the default `linearProgressIndicatorStyle`, and
+every bar style inherits it (`Widget.App.ProgressDialog.Bar`,
+`Widget.App.MemoryTokens.Bar`). A new bar style must also inherit it. Bars in
+phone notifications are drawn by Android, and the app cannot style them.
+
 ### Progress pop-up
 
 Use `Widget.App.ProgressDialog.*` for a pop-up that shows real progress:

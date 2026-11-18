@@ -142,6 +142,8 @@ object AutoBackupController {
         // `alreadyRunning == false` in plan() above, only one wins the CAS here
         // and actually calls the backup engine.
         if (!running.compareAndSet(false, true)) return Outcome.ALREADY_RUNNING
+        // The phone shows that a backup is running for as long as it runs.
+        AutoBackupNotification.show(appContext)
         try {
             // lastAttempt stamps for EVERY genuine attempt, before the outcome is
             // known — never conditioned on success.
@@ -230,6 +232,7 @@ object AutoBackupController {
             } catch (_: Exception) { }
             return Outcome.RETRYABLE_FAILURE
         } finally {
+            AutoBackupNotification.hide(appContext)
             running.set(false)
         }
     }

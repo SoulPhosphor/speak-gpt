@@ -8,6 +8,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -89,7 +90,9 @@ class PortableRecoverySemanticValidatorTest {
     }
 
     @Test
-    fun chatGeneratedImageReferenceMustResolveInsideThePackage() {
+    fun chatGeneratedImageMissingFromThePackageIsReportedNotRefused() {
+        // Owner ruling, Nov 18 2026: a backup completes when chats point to
+        // generated images the catalog lacks; the chat and image are reported.
         val imageId = UUID.randomUUID().toString()
         val metadata = GeneratedImageMetadata(
             imageId, "a".repeat(64), "image/png", 1, 1,
@@ -112,7 +115,11 @@ class PortableRecoverySemanticValidatorTest {
             context,
             listOf(artifact("chats.json", PortablePackage.TYPE_CHATS_JSON, chats.toByteArray()))
         )
-        assertTrue(result is PortableRecoverySemanticValidator.Result.Invalid)
+        assertTrue(result is PortableRecoverySemanticValidator.Result.Valid)
+        assertEquals(
+            mapOf(chatId to setOf(imageId)),
+            (result as PortableRecoverySemanticValidator.Result.Valid).missingGeneratedImagesByChat
+        )
     }
 
     @Test

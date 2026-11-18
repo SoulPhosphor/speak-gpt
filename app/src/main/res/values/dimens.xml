@@ -272,6 +272,11 @@
     <dimen name="list_tools_pending_count_text_size">13sp</dimen>
     <!-- Chat Selection Mode: the area beneath the header and the dashed
          outline around selected messages. -->
+    <!-- Shared progress bar: no gap between the filled part and the track,
+         and no end dot (owner ruling, Nov 18 2026). -->
+    <dimen name="progress_bar_track_gap">0dp</dimen>
+    <dimen name="progress_bar_stop_indicator">0dp</dimen>
+
     <!-- Chat header background-work icon and its popover (owner design,
          Nov 18 2026): the popover spans the message bubbles' area. -->
     <dimen name="chat_activity_popover_margin_start">@dimen/chat_message_speaker_inset</dimen>
