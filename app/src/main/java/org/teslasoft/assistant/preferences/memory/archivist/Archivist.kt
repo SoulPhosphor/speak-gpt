@@ -749,6 +749,11 @@ object Archivist {
                                 .filter { it.chatId !in separateIds }
                                 .forEach { pendingChatScans.add(it) }
                         }
+                        // Requests whose chat is still held by this run (for
+                        // example a conversation that failed keeps its claim
+                        // until the run ends): they wait, and run once the
+                        // claim is released, by this run or by the service.
+                        val stillHeld = ArrayList<ChatScanRequest>()
                         for (request in separate) {
                             // Scanned as its own run with its own type, between
                             // this run's conversations.
@@ -757,7 +762,15 @@ object Archivist {
                             } catch (_: Exception) {
                                 emptyList()
                             }
-                            if (chat.isEmpty()) continue
+                            if (chat.isEmpty()) {
+                                val unscanned = try {
+                                    store.chatHasUnscannedTranscripts(request.chatId)
+                                } catch (_: Exception) {
+                                    false
+                                }
+                                if (unscanned) stillHeld.add(request)
+                                continue
+                            }
                             chatScansTotal += chat.size
                             try {
                                 val chatOutcome = scanChatThroughSkips(context, request.chatId) {
@@ -792,6 +805,7 @@ object Archivist {
                             // A Cancel during the chat scan stops this run too.
                             currentCoroutineContext().ensureActive()
                         }
+                        stillHeld.forEach { pendingChatScans.add(it) }
                     }
                     // Chats handed back out shorten this run's own queue.
                     if (position >= queue.size) break@batches
