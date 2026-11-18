@@ -3925,6 +3925,25 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
+    /** The rows of [chatId] already scanned for memories: everything up to
+     *  the chat's bookmark, less any rows skipped from analysis. */
+    fun chatScannedTranscripts(chatId: String): List<TranscriptRecord> {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            requireBookmarkCutover(db)
+            val unscanned = unscannedTranscriptsForChatTx(db, chatId, ignoreArchivePause = true)
+                .map { it.transcriptId }.toHashSet()
+            val skipped = analysisBookmarkTx(db, chatId).skippedTranscriptIds.toHashSet()
+            val scanned = transcriptsForChatTx(db, chatId)
+                .filter { it.transcriptId !in unscanned && it.transcriptId !in skipped }
+            db.setTransactionSuccessful()
+            return scanned
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /** True when [chatId] has messages not yet scanned for memories, including
      *  rows a running scan has already claimed but not finished. False means
      *  Scan for Memories has nothing new to do for this chat. */

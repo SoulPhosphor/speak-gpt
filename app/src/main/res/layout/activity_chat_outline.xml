@@ -56,7 +56,12 @@
 
             <TextView
                 android:id="@+id/text_chat_title"
-                style="@style/Widget.App.Section.Title" />
+                style="@style/Widget.App.ChatOutline.ChatTitle" />
+
+            <TextView
+                android:id="@+id/text_memory_scan_progress"
+                style="@style/Widget.App.ChatOutline.ScanProgress"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_generate_new_outline"

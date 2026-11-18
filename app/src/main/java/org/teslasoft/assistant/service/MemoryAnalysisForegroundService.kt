@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
@@ -41,7 +42,6 @@ import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.archivist.Archivist
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailure
 import org.teslasoft.assistant.ui.activities.MemoryAssistantActivity
-import java.util.concurrent.atomic.AtomicBoolean
 
 /** What the Memory Assistant screen renders for the service-owned run.
  *  Running carries the latest progress (null until the first conversation
@@ -80,6 +80,7 @@ class MemoryAnalysisForegroundService : Service() {
         private const val WAKE_LOCK_TAG = "PhosphorShines:MemoryAnalysis"
         private const val EXTRA_RERUN_ID = "rerunOfRunId"
         private const val EXTRA_ANALYSIS_TYPE = "analysisType"
+        private const val EXTRA_CHAT_ID = "chatId"
         private const val ACTION_CANCEL = "org.teslasoft.assistant.action.CANCEL_ANALYSIS"
 
         val state = MutableStateFlow<MemoryAnalysisState?>(null)
@@ -124,10 +125,24 @@ class MemoryAnalysisForegroundService : Service() {
          * the caller must show a durable failure (never fall back to an
          * Activity-owned run).
          */
-        fun start(context: Context, rerunOfRunId: String?, analysisType: String): Boolean {
-            val intent = Intent(context, MemoryAnalysisForegroundService::class.java)
+        fun start(context: Context, rerunOfRunId: String?, analysisType: String): Boolean =
+            startCommand(context, Intent(context, MemoryAnalysisForegroundService::class.java)
                 .putExtra(EXTRA_RERUN_ID, rerunOfRunId)
-                .putExtra(EXTRA_ANALYSIS_TYPE, analysisType)
+                .putExtra(EXTRA_ANALYSIS_TYPE, analysisType))
+
+        /**
+         * Scan for Memories on one chat (owner design, Nov 18 2026). With no
+         * run live, the chat's not-yet-scanned part is scanned now. While
+         * another run is live, that run finishes the conversation it is on,
+         * takes this chat next, then returns to its own work. Same failure
+         * contract as [start].
+         */
+        fun startChatScan(context: Context, chatId: String, analysisType: String): Boolean =
+            startCommand(context, Intent(context, MemoryAnalysisForegroundService::class.java)
+                .putExtra(EXTRA_CHAT_ID, chatId)
+                .putExtra(EXTRA_ANALYSIS_TYPE, analysisType))
+
+        private fun startCommand(context: Context, intent: Intent): Boolean {
             return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
@@ -147,7 +162,12 @@ class MemoryAnalysisForegroundService : Service() {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val runActive = AtomicBoolean(false)
+    /** Guards [runActive] together with the hand-over of waiting chat scans,
+     *  so a chat scan asked for as the run ends is never dropped. */
+    private val runLock = Any()
+    private var runActive = false
+    /** The newest start command's id, read and written under [runLock]. */
+    private var lastStartId = 0
     private var wakeLock: PowerManager.WakeLock? = null
     private var runJob: Job? = null
 
@@ -186,6 +206,9 @@ class MemoryAnalysisForegroundService : Service() {
         // delivers the finished state and stops the service. If nothing is
         // running, stop now (startForeground above must be matched by a stop).
         if (intent?.action == ACTION_CANCEL) {
+            // The run's own stop must still be able to stop the service after
+            // this newer command.
+            synchronized(runLock) { lastStartId = startId }
             userCancelRequested = true
             val job = runJob
             if (job != null && job.isActive) job.cancel() else stopSelf()
@@ -197,7 +220,24 @@ class MemoryAnalysisForegroundService : Service() {
         // durable one-run gate both already prevent it — this keeps a
         // redundant command from ever spawning a second coroutine or
         // stopping the live one's foreground state).
-        if (runActive.compareAndSet(false, true)) {
+        val chatId = intent?.getStringExtra(EXTRA_CHAT_ID)
+        val startsRun = synchronized(runLock) {
+            lastStartId = startId
+            if (runActive) {
+                // A chat scan asked for during a live run waits for that run
+                // to reach its next conversation.
+                if (chatId != null) {
+                    Archivist.requestChatScan(Archivist.ChatScanRequest(
+                        chatId, intent?.getStringExtra(EXTRA_ANALYSIS_TYPE) ?: "associative"
+                    ))
+                }
+                false
+            } else {
+                runActive = true
+                true
+            }
+        }
+        if (startsRun) {
             acquireWakeLock()
             userCancelRequested = false
             timeLimitReached = false
@@ -211,8 +251,11 @@ class MemoryAnalysisForegroundService : Service() {
                 }
                 val appContext = applicationContext
                 var outcome = try {
-                    if (rerunOfRunId == null) Archivist.analyze(appContext, analysisType, onProgress)
-                    else Archivist.rerun(appContext, rerunOfRunId, analysisType, onProgress)
+                    when {
+                        chatId != null -> Archivist.analyzeChat(appContext, chatId, analysisType, onProgress)
+                        rerunOfRunId == null -> Archivist.analyze(appContext, analysisType, onProgress)
+                        else -> Archivist.rerun(appContext, rerunOfRunId, analysisType, onProgress)
+                    }
                 } catch (e: Exception) {
                     Archivist.RunOutcome(
                         null, 0, 0, 0, 0, emptyList(),
@@ -264,7 +307,43 @@ class MemoryAnalysisForegroundService : Service() {
                 if (outcome.outcome != "already_running") {
                     state.value = MemoryAnalysisState.Finished(outcome)
                 }
-                stopSelf()
+                // Chat scans that arrived too late for the run to take them
+                // between its conversations run now, one after another. A
+                // Cancel or system stop drops them along with the run.
+                var stopId = 0
+                while (true) {
+                    val next = synchronized(runLock) {
+                        val request = if (isActive && !userCancelRequested && !timeLimitReached) {
+                            Archivist.pollChatScanRequest()
+                        } else {
+                            Archivist.clearChatScanRequests()
+                            null
+                        }
+                        if (request == null) {
+                            runActive = false
+                            stopId = lastStartId
+                        }
+                        request
+                    } ?: break
+                    state.value = MemoryAnalysisState.Running(null)
+                    val chatOutcome = try {
+                        Archivist.analyzeChat(appContext, next.chatId, next.analysisType, onProgress)
+                    } catch (e: Exception) {
+                        Archivist.RunOutcome(
+                            null, 0, 0, 0, 0, emptyList(),
+                            outcome = "full_failed",
+                            failureReason = ArchivistFailure.classify(e),
+                            error = e.message,
+                            analysisType = next.analysisType
+                        )
+                    }
+                    if (chatOutcome.outcome != "already_running") {
+                        state.value = MemoryAnalysisState.Finished(chatOutcome)
+                    }
+                }
+                // Only the latest start may stop the service, so a start that
+                // arrives after the hand-over above keeps it running.
+                stopSelf(stopId)
             }
         }
         // NOT sticky: a resurrected service with no run in flight would hold
@@ -384,7 +463,7 @@ class MemoryAnalysisForegroundService : Service() {
         // stopSelf, so cancel() is a no-op there.
         scope.cancel()
         releaseWakeLock()
-        runActive.set(false)
+        synchronized(runLock) { runActive = false }
         super.onDestroy()
     }
 }

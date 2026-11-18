@@ -393,11 +393,30 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_back" />
 
+            <!-- Background work in progress (owner design, Nov 18 2026): shown
+                 only while a memory scan or summarizing runs; tapping it shows
+                 the progress popover. Left side, right after the drawer icon;
+                 the right-side actions keep their places. -->
+            <ImageButton
+                android:id="@+id/btn_background_activity"
+                style="@style/Widget.App.Chat.HeaderAction.Activity"
+                android:contentDescription="@null"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toEndOf="@+id/btn_back"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_manufacturing"
+                tools:visibility="visible" />
+
+            <!-- The chat title is hidden for now (owner ruling, Nov 18 2026);
+                 rename moved to the chat menu. Set this back to visible (and
+                 put it back in restoreTopBarVisibility) to bring it back. -->
             <TextView
                 android:id="@+id/chat_activity_title"
                 style="@style/Widget.App.Chat.HeaderTitle"
                 android:layout_width="0dp"
                 android:clickable="true"
+                android:visibility="gone"
                 android:text="debug.chat.name"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/action_buttons_start"
