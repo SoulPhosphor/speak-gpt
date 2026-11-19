@@ -7,14 +7,17 @@ import org.junit.Test
 class BackupRestoreScreenContractTest {
 
     @Test
-    fun mainSettingsPlacesBackupRestoreImmediatelyBeforeAlerts() {
+    fun mainSettingsPlacesBackupRestoreImmediatelyBeforeLogCabin() {
+        // The Alerts, Errors & Logs row left Settings (it is now Logging
+        // Preferences inside The Log Cabin), so The Log Cabin follows Backup.
         val layout = source("activity_settings.xml")
         val appearance = layout.indexOf("@+id/tile_appearance")
         val backup = layout.indexOf("@+id/tile_backup_restore")
-        val alerts = layout.indexOf("@+id/tile_alert_debug_menu")
-        assertTrue(appearance >= 0 && backup > appearance && alerts > backup)
+        val logCabin = layout.indexOf("@+id/tile_log_cabin")
+        assertTrue(appearance >= 0 && backup > appearance && logCabin > backup)
+        assertTrue(!layout.contains("@+id/tile_alert_debug_menu"))
         assertTrue(
-            layout.substringAfter("@+id/tile_alert_debug_menu")
+            layout.substringAfter("@+id/tile_log_cabin")
                 .substringBefore("</LinearLayout>")
                 .contains("layout_constraintTop_toBottomOf=\"@+id/tile_backup_restore\"")
         )
