@@ -89,6 +89,16 @@ class ImageJobDeletionGuardTest {
         assertTrue(guard.isChatDeleted(job))
     }
 
+    @Test fun blockRunsOnlyWhileTheChatExists() {
+        val job = Job("chat")
+        guard.track(job)
+        assertEquals("registered", guard.unlessChatDeleted(job) { "registered" })
+        guard.markChatsDeleted(setOf("chat"))
+        var ran = false
+        assertEquals(null, guard.unlessChatDeleted(job) { ran = true })
+        assertFalse(ran)
+    }
+
     @Test fun deliveryRules() {
         assertEquals(ImageJobDelivery.DISCARD, imageJobDelivery(chatDeleted = true, screenAttached = true))
         assertEquals(ImageJobDelivery.DISCARD, imageJobDelivery(chatDeleted = true, screenAttached = false))

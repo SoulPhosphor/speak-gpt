@@ -359,6 +359,9 @@ object ImageGenerationJobRegistry {
                 val imagesDir = app.getExternalFilesDir("images")
                     ?: return@withContext false
                 val target = File(imagesDir, assetFileName)
+                // A chat deleted while the image was generating never gets it:
+                // skip the file and catalog entirely.
+                if (deletionGuard.isChatDeleted(record)) return@withContext false
                 if (!GeneratedImageRegistrationJournal.begin(app, record.imageId, assetFileName)) {
                     return@withContext false
                 }
@@ -373,25 +376,41 @@ object ImageGenerationJobRegistry {
                         fileResult == AtomicFileWriter.ByteWriteResult.WRITTEN
                     )
                 ) return@withContext false
-                val catalogResult = GeneratedImageCatalogStore.register(
-                    app,
-                    GeneratedImageCatalogRecord(
-                        imageId = record.imageId,
-                        fileHash = marker,
-                        assetFileName = assetFileName,
-                        mimeType = outcome.image.mimeType,
-                        width = bounds.outWidth.takeIf { it > 0 },
-                        height = bounds.outHeight.takeIf { it > 0 },
-                        createdAt = metadata.createdAt,
-                        originChatId = record.originChatId.takeIf { it.isNotBlank() },
-                        originChatName = record.originChatName?.takeIf { it.isNotBlank() },
-                        // imageId is also the stable exact-image locator until
-                        // messages gain a separate durable message UUID.
-                        originMessageId = record.imageId,
-                        locked = false,
-                        source = GeneratedImageCatalogRecord.Source.GENERATED
+                // Registered only while the chat still exists, atomically with
+                // the deletion mark: an image registered first is already in
+                // the catalog when the deletion applies its keep/delete-images
+                // decision (Lock included); one that would come after is never
+                // registered.
+                val catalogResult = deletionGuard.unlessChatDeleted(record) {
+                    GeneratedImageCatalogStore.register(
+                        app,
+                        GeneratedImageCatalogRecord(
+                            imageId = record.imageId,
+                            fileHash = marker,
+                            assetFileName = assetFileName,
+                            mimeType = outcome.image.mimeType,
+                            width = bounds.outWidth.takeIf { it > 0 },
+                            height = bounds.outHeight.takeIf { it > 0 },
+                            createdAt = metadata.createdAt,
+                            originChatId = record.originChatId.takeIf { it.isNotBlank() },
+                            originChatName = record.originChatName?.takeIf { it.isNotBlank() },
+                            // imageId is also the stable exact-image locator until
+                            // messages gain a separate durable message UUID.
+                            originMessageId = record.imageId,
+                            locked = false,
+                            source = GeneratedImageCatalogRecord.Source.GENERATED
+                        )
                     )
-                )
+                }
+                if (catalogResult == null) {
+                    // The chat was deleted. Remove only the file this job just
+                    // wrote, and only while no catalog record uses it.
+                    if (fileResult == AtomicFileWriter.ByteWriteResult.WRITTEN) {
+                        GeneratedImageCatalogStore.deleteAssetIfUnreferenced(app, assetFileName)
+                    }
+                    GeneratedImageRegistrationJournal.complete(app, record.imageId)
+                    return@withContext false
+                }
                 if (catalogResult.success) {
                     GeneratedImageRegistrationJournal.complete(app, record.imageId)
                     return@withContext true
@@ -417,6 +436,13 @@ object ImageGenerationJobRegistry {
                 false
             }
             if (!registration) {
+                if (deletionGuard.isChatDeleted(record)) {
+                    // Nothing is delivered to a deleted chat; the job ends as
+                    // Cancelled for anything awaiting it.
+                    return Terminal.Cancelled(
+                        metadataFor(record, GeneratedImageMetadata.STATUS_CANCELLED)
+                    )
+                }
                 return Terminal.Failed(
                     ImageErrorCause.PROVIDER_ERROR,
                     metadataFor(

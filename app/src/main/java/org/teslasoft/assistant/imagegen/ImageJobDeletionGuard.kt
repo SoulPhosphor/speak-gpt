@@ -50,6 +50,17 @@ internal class ImageJobDeletionGuard<J : Any>(
 
     fun isChatDeleted(job: J): Boolean = synchronized(lock) { live[job] == true }
 
+    /**
+     * Runs [block] only while [job]'s chat is not deleted, holding the lock
+     * for the whole block; returns null without running it otherwise. A
+     * deletion therefore marks the job either after [block] finished — so
+     * whatever [block] recorded already exists when the deletion's own
+     * cleanup looks for it — or before it, and [block] never runs.
+     */
+    fun <T> unlessChatDeleted(job: J, block: () -> T): T? = synchronized(lock) {
+        if (live[job] == true) null else block()
+    }
+
     /** Number of jobs currently tracked. For tests. */
     fun trackedCount(): Int = synchronized(lock) { live.size }
 }
