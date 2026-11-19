@@ -13,11 +13,11 @@ class BackupRestoreScreenContractTest {
         val layout = source("activity_settings.xml")
         val appearance = layout.indexOf("@+id/tile_appearance")
         val backup = layout.indexOf("@+id/tile_backup_restore")
-        val logCabin = layout.indexOf("@+id/tile_log_cabin")
+        val logCabin = layout.indexOf("android:id=\"@+id/tile_log_cabin\"")
         assertTrue(appearance >= 0 && backup > appearance && logCabin > backup)
         assertTrue(!layout.contains("@+id/tile_alert_debug_menu"))
         assertTrue(
-            layout.substringAfter("@+id/tile_log_cabin")
+            layout.substringAfter("android:id=\"@+id/tile_log_cabin\"")
                 .substringBefore("</LinearLayout>")
                 .contains("layout_constraintTop_toBottomOf=\"@+id/tile_backup_restore\"")
         )
