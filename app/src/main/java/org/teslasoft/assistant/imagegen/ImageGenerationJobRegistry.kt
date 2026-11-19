@@ -480,16 +480,17 @@ object ImageGenerationJobRegistry {
         jobs.remove(record.chatId)
         val listener = listeners[record.chatId]
         try {
-            when (imageJobDelivery(deletionGuard.isChatDeleted(record), listener != null)) {
-                ImageJobDelivery.DISCARD -> { /* the chat was deleted */ }
-                ImageJobDelivery.SCREEN -> try {
-                    listener!!.onImageJobFinished(record, terminal)
+            val delivery = imageJobDelivery(deletionGuard.isChatDeleted(record), listener != null)
+            if (delivery == ImageJobDelivery.SCREEN && listener != null) {
+                try {
+                    listener.onImageJobFinished(record, terminal)
                 } catch (_: Exception) {
                     persistTerminalWithoutScreen(app, record, terminal)
                 }
-                ImageJobDelivery.STORED_HISTORY ->
-                    persistTerminalWithoutScreen(app, record, terminal)
+            } else if (delivery == ImageJobDelivery.STORED_HISTORY) {
+                persistTerminalWithoutScreen(app, record, terminal)
             }
+            // DISCARD: the chat was deleted; nothing is delivered to it.
         } finally {
             deletionGuard.untrack(record)
             // Release a model tool continuation only after the image/failure
