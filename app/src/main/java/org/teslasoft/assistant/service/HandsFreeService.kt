@@ -414,6 +414,20 @@ class HandsFreeService : Service() {
         )
     }
 
+    /**
+     * Android calls this when the app's card is dismissed from the recent-apps
+     * view while this service runs. That dismissal closes the chat screen the
+     * same way as the user closing it, so this line is the only record that
+     * separates the two. Written synchronously: the process may end soon after.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        try {
+            Logger.log(applicationContext, "event", "HandsFreeService", "warning",
+                "app removed from recent apps while the voice conversation was running")
+        } catch (_: Throwable) { /* a diagnostic must never crash the service */ }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         val before = snapshotWakeLockDiagnostics()
         cancelWakeLockRenewal()

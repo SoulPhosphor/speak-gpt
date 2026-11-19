@@ -187,8 +187,9 @@ class LogsActivity : SettingsPageActivity() {
      * (newest or oldest first) through [Logger.entriesForDisplay], then give
      * each entry its own view with the per-log color pass (Error Log health
      * headers, Response Lifecycle failed outcomes) and, while Show Copy Button
-     * on Logs is on, a Copy for that entry. One path used by the initial load,
-     * the ordering toggle, and clearing, so all three stay consistent.
+     * on Logs is on, a Copy that copies every entry from that entry's minute.
+     * One path used by the initial load, the ordering toggle, and clearing, so
+     * all three stay consistent.
      */
     private fun renderLog() {
         val entries = Logger.entriesForDisplay(rawForType(), newestFirst)
@@ -199,6 +200,9 @@ class LogsActivity : SettingsPageActivity() {
         } else entries
         displayedLog = entries.joinToString("\n\n")
         val showCopy = preferences?.getShowLogCopyButtons() ?: true
+        // Each entry's Copy takes every entry of this log written in the same
+        // minute, so a burst of related lines is copied in one tap.
+        val copyText = Logger.sameMinuteCopyText(entries)
         logEntries?.removeAllViews()
         for ((index, entry) in entries.withIndex()) {
             val row = layoutInflater.inflate(R.layout.view_log_entry, logEntries, false)
@@ -210,7 +214,7 @@ class LogsActivity : SettingsPageActivity() {
             }
             row.findViewById<MaterialButton>(R.id.btn_log_entry_copy).apply {
                 visibility = if (showCopy) android.view.View.VISIBLE else android.view.View.GONE
-                setOnClickListener { copyToClipboard(entry) }
+                setOnClickListener { copyToClipboard(copyText[index]) }
             }
             logEntries?.addView(row)
         }
