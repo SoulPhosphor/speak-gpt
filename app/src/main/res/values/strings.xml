@@ -903,6 +903,10 @@
     <string name="tts_lifecycle_logging_title">Text to Speech</string>
     <string name="tts_lifecycle_logging_desc">Records the TTS lifecycle.</string>
     <string name="title_tts_lifecycle_log">Text to Speech Log</string>
+    <!-- System Logs: application-wide process lifecycle log (toggle title,
+         Log Cabin row and viewer header) and its toggle subtext. -->
+    <string name="system_logs_title">System Logs</string>
+    <string name="system_logs_desc">Records the process lifecycle.</string>
     <string name="title_damaged_chat_files">Damaged Chat Files</string>
     <string name="damaged_chat_logs_title">Damaged Chat Logs</string>
     <string name="damaged_chat_section_detected">Detected Damaged Chats</string>

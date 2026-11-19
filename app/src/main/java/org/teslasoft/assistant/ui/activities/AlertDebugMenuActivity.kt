@@ -95,6 +95,9 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
     private var switchKeyboardChatDebugging: MaterialSwitch? = null
     private var fieldTtsLifecycleMaxLogs: EditText? = null
     private var fieldTtsLifecycleMaxDays: EditText? = null
+    private var switchSystemLogging: MaterialSwitch? = null
+    private var fieldSystemLogMaxLogs: EditText? = null
+    private var fieldSystemLogMaxDays: EditText? = null
     // Image generation logs (image-generation-rebuild-plan.md §13): the two
     // recording toggles and the success log's own retention pair, where
     // ZERO means unlimited (only these two fields — never the error logs).
@@ -144,6 +147,9 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         switchKeyboardChatDebugging = findViewById(R.id.switch_keyboard_chat_debugging)
         fieldTtsLifecycleMaxLogs = findViewById(R.id.field_tts_lifecycle_max_logs)
         fieldTtsLifecycleMaxDays = findViewById(R.id.field_tts_lifecycle_max_days)
+        switchSystemLogging = findViewById(R.id.switch_system_logging)
+        fieldSystemLogMaxLogs = findViewById(R.id.field_system_log_max_logs)
+        fieldSystemLogMaxDays = findViewById(R.id.field_system_log_max_days)
         switchImageGenErrors = findViewById(R.id.switch_image_gen_errors)
         switchSuccessfulImageTracking = findViewById(R.id.switch_successful_image_tracking)
         fieldImageGenMaxInfo = findViewById(R.id.field_image_gen_max_info)
@@ -203,6 +209,10 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         switchKeyboardChatDebugging?.isChecked = p.getKeyboardChatInteractionDebugging()
         fieldTtsLifecycleMaxLogs?.setText(p.getTtsLifecycleLogMaxEntries().toString())
         fieldTtsLifecycleMaxDays?.setText(p.getTtsLifecycleLogMaxDays().toString())
+
+        switchSystemLogging?.isChecked = p.getSystemLogging()
+        fieldSystemLogMaxLogs?.setText(p.getSystemLogMaxEntries().toString())
+        fieldSystemLogMaxDays?.setText(p.getSystemLogMaxDays().toString())
 
         switchImageGenErrors?.isChecked = p.getImageGenErrorLogging()
         switchSuccessfulImageTracking?.isChecked = p.getSuccessfulImageTracking()
@@ -290,6 +300,18 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         wireRetentionField(
             fieldTtsLifecycleMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
             { p.getTtsLifecycleLogMaxDays() }, { v -> p.setTtsLifecycleLogMaxDays(v) },
+            R.string.dialog_max_days_exceeded
+        )
+
+        switchSystemLogging?.setOnCheckedChangeListener { _, checked -> p.setSystemLogging(checked) }
+        wireRetentionField(
+            fieldSystemLogMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
+            { p.getSystemLogMaxEntries() }, { v -> p.setSystemLogMaxEntries(v) },
+            R.string.dialog_max_logs_exceeded
+        )
+        wireRetentionField(
+            fieldSystemLogMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
+            { p.getSystemLogMaxDays() }, { v -> p.setSystemLogMaxDays(v) },
             R.string.dialog_max_days_exceeded
         )
 

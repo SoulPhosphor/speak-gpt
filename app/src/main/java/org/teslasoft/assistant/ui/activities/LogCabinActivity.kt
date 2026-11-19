@@ -30,6 +30,7 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 
@@ -66,6 +67,7 @@ class LogCabinActivity : SettingsPageActivity() {
     private var rowImageGenLog: LinearLayout? = null
     private var rowTtsLifecycleLog: LinearLayout? = null
     private var rowDamagedChatFiles: LinearLayout? = null
+    private var rowSystemLog: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,6 +97,7 @@ class LogCabinActivity : SettingsPageActivity() {
         rowImageGenLog = findViewById(R.id.row_image_gen_log)
         rowTtsLifecycleLog = findViewById(R.id.row_tts_lifecycle_log)
         rowDamagedChatFiles = findViewById(R.id.row_damaged_chat_files)
+        rowSystemLog = findViewById(R.id.row_system_log)
     }
 
     @Suppress("DEPRECATION")
@@ -155,6 +158,9 @@ class LogCabinActivity : SettingsPageActivity() {
         }
         rowDamagedChatFiles?.setOnClickListener {
             startActivity(Intent(this, DamagedChatLogActivity::class.java))
+        }
+        rowSystemLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", Logger.SYSTEM_LOG_TYPE).putExtra("chatId", chatId))
         }
     }
 
