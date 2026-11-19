@@ -27,24 +27,26 @@ class VoiceLogGroup(private val write: (tag: String, level: String, message: Str
 
     data class Line(val tag: String, val level: String, val message: String)
 
-    private var depth = 0
-    private var owner: Thread? = null
-    private val lines = ArrayList<Line>()
+    /** One open moment per thread; other threads never see or touch it. */
+    private class Moment {
+        var depth = 0
+        val lines = ArrayList<Line>()
+    }
+
+    private val moment = ThreadLocal<Moment>()
 
     /** Runs [block]; the lines it offers are written as one entry afterwards.
-     *  Nested calls join the outermost one. */
+     *  Nested calls on the same thread join the outermost one. */
     fun <T> run(block: () -> T): T {
-        val current = Thread.currentThread()
-        if (depth > 0 && owner !== current) return block()
-        if (depth == 0) owner = current
-        depth++
+        val open = moment.get() ?: Moment().also { moment.set(it) }
+        open.depth++
         try {
             return block()
         } finally {
-            depth--
-            if (depth == 0) {
-                owner = null
-                flush()
+            open.depth--
+            if (open.depth == 0) {
+                moment.remove()
+                flush(open.lines)
             }
         }
     }
@@ -52,15 +54,12 @@ class VoiceLogGroup(private val write: (tag: String, level: String, message: Str
     /** True when the line was collected for the current moment; false means
      *  no moment is open on this thread and the caller writes it now. */
     fun offer(tag: String, level: String, message: String): Boolean {
-        if (depth == 0 || owner !== Thread.currentThread()) return false
-        lines.add(Line(tag, level, message))
+        val open = moment.get() ?: return false
+        open.lines.add(Line(tag, level, message))
         return true
     }
 
-    private fun flush() {
-        if (lines.isEmpty()) return
-        val collected = lines.toList()
-        lines.clear()
+    private fun flush(collected: List<Line>) {
         val entry = compose(collected) ?: return
         try {
             write(entry.tag, entry.level, entry.message)

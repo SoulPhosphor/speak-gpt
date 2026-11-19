@@ -3142,41 +3142,41 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 (try { tts?.isSpeaking == true } catch (_: Exception) { false }) ||
                 (try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false })
         voiceLogGroup.run {
-        if (voiceWasLive) {
-            logVoiceEvent("chat screen destroyed while voice was active — readback and mic loop torn down" +
-                    if (isFinishing) " (screen was closed)" else " (destroyed by the system)")
-        }
-        // Decisive lifecycle record for the screen-off / route-change interruption
-        // investigation. onDestroy currently always runs the full session teardown
-        // below (killAllProcesses + stopHandsFreeService), so changingConfig=true
-        // here means a mere Android configuration recreation is being treated as a
-        // genuine conversation end — the exact condition that produced an
-        // app_cancel "screen was closed" on a turn the user never abandoned. With
-        // uiMode now handled in the manifest, a night-mode flip should no longer
-        // reach this path; if this line still reports changingConfig=true after
-        // the fix, a different configuration change is recreating the Activity and
-        // the teardown must learn to distinguish the two. Always persisted (bounded
-        // to once per destroy) so the next reproduction is conclusive.
-        val teardownAction = if (isChangingConfigurations)
-            "full teardown (configuration recreation — session state will be lost)"
-        else "full teardown (genuine destroy)"
-        logVoiceEventAlways(
-            "ChatActivity destroy: finishing=$isFinishing" +
-                    " changingConfig=$isChangingConfigurations" +
-                    " generationActive=${requestPreparationInProgress || providerRequestDispatched}" +
-                    " providerDispatched=$providerRequestDispatched" +
-                    " readbackActive=$voiceWasLive" +
-                    " readbackExpected=$handsFreeReadbackExpected" +
-                    " handsFreePref=${preferences?.getHandsFreeMode() == true}" +
-                    " handsFreeService=${HandsFreeService.isRunning}" +
-                    " turn=${currentLifecycleTurnId.ifBlank { "none" }}" +
-                    " action=$teardownAction"
-        )
-        // Route snapshot at destruction, in the separate AudioRoute family. Pairs
-        // with the "readback start" snapshot and any device add/remove lines so a
-        // destroy at the TTS/readback boundary can be matched against whatever the
-        // audio route was doing at that moment.
-        logVoiceEventAlways("AudioRoute [chat destroy]: ${describeAudioOutputRoute()}")
+            if (voiceWasLive) {
+                logVoiceEvent("chat screen destroyed while voice was active — readback and mic loop torn down" +
+                        if (isFinishing) " (screen was closed)" else " (destroyed by the system)")
+            }
+            // Decisive lifecycle record for the screen-off / route-change interruption
+            // investigation. onDestroy currently always runs the full session teardown
+            // below (killAllProcesses + stopHandsFreeService), so changingConfig=true
+            // here means a mere Android configuration recreation is being treated as a
+            // genuine conversation end — the exact condition that produced an
+            // app_cancel "screen was closed" on a turn the user never abandoned. With
+            // uiMode now handled in the manifest, a night-mode flip should no longer
+            // reach this path; if this line still reports changingConfig=true after
+            // the fix, a different configuration change is recreating the Activity and
+            // the teardown must learn to distinguish the two. Always persisted (bounded
+            // to once per destroy) so the next reproduction is conclusive.
+            val teardownAction = if (isChangingConfigurations)
+                "full teardown (configuration recreation — session state will be lost)"
+            else "full teardown (genuine destroy)"
+            logVoiceEventAlways(
+                "ChatActivity destroy: finishing=$isFinishing" +
+                        " changingConfig=$isChangingConfigurations" +
+                        " generationActive=${requestPreparationInProgress || providerRequestDispatched}" +
+                        " providerDispatched=$providerRequestDispatched" +
+                        " readbackActive=$voiceWasLive" +
+                        " readbackExpected=$handsFreeReadbackExpected" +
+                        " handsFreePref=${preferences?.getHandsFreeMode() == true}" +
+                        " handsFreeService=${HandsFreeService.isRunning}" +
+                        " turn=${currentLifecycleTurnId.ifBlank { "none" }}" +
+                        " action=$teardownAction"
+            )
+            // Route snapshot at destruction, in the separate AudioRoute family. Pairs
+            // with the "readback start" snapshot and any device add/remove lines so a
+            // destroy at the TTS/readback boundary can be matched against whatever the
+            // audio route was doing at that moment.
+            logVoiceEventAlways("AudioRoute [chat destroy]: ${describeAudioOutputRoute()}")
         }
         if (tts != null) {
             tts!!.stop()

@@ -187,8 +187,9 @@ class LogsActivity : SettingsPageActivity() {
      * (newest or oldest first) through [Logger.entriesForDisplay], then give
      * each entry its own view with the per-log color pass (Error Log health
      * headers, Response Lifecycle failed outcomes) and, while Show Copy Button
-     * on Logs is on, a Copy that copies every entry from that entry's minute. One path used by the initial load,
-     * the ordering toggle, and clearing, so all three stay consistent.
+     * on Logs is on, a Copy that copies every entry from that entry's minute.
+     * One path used by the initial load, the ordering toggle, and clearing, so
+     * all three stay consistent.
      */
     private fun renderLog() {
         val entries = Logger.entriesForDisplay(rawForType(), newestFirst)
