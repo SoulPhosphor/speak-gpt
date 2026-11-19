@@ -48,11 +48,17 @@ internal class WhisperModelContext(private val native: NativeOps) {
         fun clearAbort()
     }
 
-    /** One loaded context. Identity matters: [release] frees only the
-     *  context that was loaded when it was requested. */
-    class Loaded internal constructor(val handle: Long, val modelId: String)
+    /** One loaded context. [loadTicket] is the release-request count when
+     *  its load began; a release requested later frees it, one requested
+     *  earlier does not. */
+    class Loaded internal constructor(
+        val handle: Long,
+        val modelId: String,
+        internal val loadTicket: Long
+    )
 
     @Volatile private var loaded: Loaded? = null
+    private val releaseRequests = java.util.concurrent.atomic.AtomicLong(0)
     private val contextMutex = Mutex()
     private val transcribeMutex = Mutex()
 
@@ -72,26 +78,39 @@ internal class WhisperModelContext(private val native: NativeOps) {
             if (modelId.isEmpty()) return@withLock false
             if (loaded?.modelId == modelId) return@withLock true
             loaded?.let { freeLocked(it) }
+            // Read before the load starts: a release requested from here on
+            // must also cover this load, even though it is not loaded yet.
+            val ticket = releaseRequests.get()
             val path = resolvePath() ?: return@withLock false
             val handle = try { native.init(modelId, path) } catch (_: Throwable) { 0L }
             if (handle == 0L) return@withLock false
-            loaded = Loaded(handle, modelId)
+            loaded = Loaded(handle, modelId, ticket)
             true
         }
 
     /**
-     * Frees [expected] if it is still the loaded context; with null, frees
-     * whatever is loaded. A context already replaced by a model switch was
-     * freed by that switch, so a release requested earlier never frees the
-     * model loaded after it. Waits for a running transcription to stop.
+     * Records a release request and returns its ticket. Call this at the
+     * moment of the request; pass the ticket to [releaseLoadedBefore].
      */
-    suspend fun release(expected: Loaded? = null) {
+    fun requestRelease(): Long = releaseRequests.incrementAndGet()
+
+    /**
+     * Frees the loaded context if its load began before release request
+     * [ticket] — including a load that was still in progress when the
+     * release was requested, since this waits for it to finish. A context
+     * whose load began after the request (a newer model) is kept. Waits for
+     * a running transcription to stop.
+     */
+    suspend fun releaseLoadedBefore(ticket: Long) {
         contextMutex.withLock {
             val target = loaded ?: return@withLock
-            if (expected != null && target !== expected) return@withLock
+            if (target.loadTicket >= ticket) return@withLock
             freeLocked(target)
         }
     }
+
+    /** Frees whatever is loaded now. */
+    suspend fun release() = releaseLoadedBefore(requestRelease())
 
     /** Caller holds the context lock. */
     private suspend fun freeLocked(target: Loaded) {

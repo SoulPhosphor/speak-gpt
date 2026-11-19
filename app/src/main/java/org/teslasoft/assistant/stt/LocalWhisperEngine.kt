@@ -1049,14 +1049,15 @@ class LocalWhisperEngine private constructor() {
     /**
      * Frees the loaded whisper context. Safe to call multiple times and from
      * any thread. Returns at once; the free itself waits for a running
-     * transcription to stop (it is asked to abort). Only the context loaded
-     * at the time of this call is freed. Subsequent transcribe calls will
+     * transcription to stop (it is asked to abort). Frees the context loaded
+     * at the time of this call, or still loading then; a model whose load
+     * starts after this call is kept. Subsequent transcribe calls will
      * reload from disk.
      */
     fun release() {
         cancel()
-        val target = modelContext.current() ?: return
-        releaseScope.launch { modelContext.release(target) }
+        val ticket = modelContext.requestRelease()
+        releaseScope.launch { modelContext.releaseLoadedBefore(ticket) }
     }
 
     private fun drainBuffer(): ShortArray {

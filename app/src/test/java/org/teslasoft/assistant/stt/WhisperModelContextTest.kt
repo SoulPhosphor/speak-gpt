@@ -31,10 +31,13 @@ class WhisperModelContextTest {
         val frees = AtomicInteger()
         val abort = AtomicBoolean(false)
         private val nextHandle = AtomicLong(100)
+        /** Runs inside a load, before it completes. */
+        @Volatile var duringInit: (String) -> Unit = {}
 
         override fun libraryReady() = ready
         override fun init(modelId: String, path: String): Long {
             inits.incrementAndGet()
+            duringInit(modelId)
             Thread.sleep(5) // a load takes time; lets other callers pile up
             return nextHandle.incrementAndGet().also { live.add(it) }
         }
@@ -132,11 +135,59 @@ class WhisperModelContextTest {
 
     @Test fun staleReleaseDoesNotFreeTheModelLoadedAfterIt() = runBlocking {
         ensure("base")
-        val requested = context.current()
+        val ticket = context.requestRelease()
         ensure("small") // the switch already freed base
-        context.release(requested)
+        context.releaseLoadedBefore(ticket)
         assertEquals("small", context.current()?.modelId)
         assertEquals(1, native.frees.get())
+    }
+
+    @Test fun releaseRequestedWhileTheModelIsStillLoadingFreesItOnceLoaded() =
+        runBlocking(Dispatchers.Default) {
+            // Uninstall during a load: nothing is loaded yet when the release
+            // is requested, but the model that finishes loading must not stay.
+            val loading = CountDownLatch(1)
+            val finishLoad = CountDownLatch(1)
+            native.duringInit = {
+                loading.countDown()
+                finishLoad.await(5, TimeUnit.SECONDS)
+            }
+            val load = async(Dispatchers.IO) { ensure("small") }
+            assertTrue(loading.await(5, TimeUnit.SECONDS))
+            assertNull("nothing is loaded while the load runs", context.current())
+            val ticket = context.requestRelease()
+            val release = launch(Dispatchers.IO) { context.releaseLoadedBefore(ticket) }
+            finishLoad.countDown()
+            assertTrue(load.await())
+            withTimeout(5_000) { release.join() }
+            assertNull(context.current())
+            assertTrue(native.live.isEmpty())
+            assertEquals(1, native.frees.get())
+            assertTrue(native.violations.isEmpty())
+        }
+
+    @Test fun modelWhoseLoadStartsAfterTheReleaseRequestIsKept() = runBlocking {
+        val ticket = context.requestRelease()
+        ensure("small")
+        context.releaseLoadedBefore(ticket)
+        assertEquals("small", context.current()?.modelId)
+        assertEquals(0, native.frees.get())
+    }
+
+    @Test fun engineReleaseRecordsTheRequestEvenWhenNothingIsLoadedYet() {
+        // The engine must take its ticket when release() is called, never
+        // return early because no model has finished loading yet.
+        val relative = "src/main/java/org/teslasoft/assistant/stt/LocalWhisperEngine.kt"
+        val file = listOf(java.io.File(relative), java.io.File("app/$relative")).first { it.isFile }
+        val source = file.readText()
+        val start = source.indexOf("    fun release() {")
+        assertTrue("LocalWhisperEngine.release() not found", start >= 0)
+        val body = source.substring(start, source.indexOf("\n    }\n", start))
+        val ticketAt = body.indexOf("modelContext.requestRelease()")
+        assertTrue(ticketAt >= 0)
+        assertTrue(ticketAt < body.indexOf("releaseScope.launch"))
+        assertTrue(body.contains("releaseLoadedBefore(ticket)"))
+        assertFalse(body.contains("?: return"))
     }
 
     @Test fun releaseOfNothingLoadedIsHarmless() = runBlocking {
@@ -154,7 +205,10 @@ class WhisperModelContextTest {
                 when (pick) {
                     0 -> ensure(model)
                     1 -> context.release()
-                    2 -> context.release(context.current())
+                    2 -> {
+                        val ticket = context.requestRelease()
+                        context.releaseLoadedBefore(ticket)
+                    }
                     else -> context.withTranscription(model) { handle ->
                         if (handle != 0L) native.decode(handle, steps = 3 + i % 5)
                     }
