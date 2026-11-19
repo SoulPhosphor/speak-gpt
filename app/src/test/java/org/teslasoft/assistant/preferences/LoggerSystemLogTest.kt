@@ -49,6 +49,22 @@ class LoggerSystemLogTest {
         )
     }
 
+    @Test fun exitAndNextStartAreOneEntryDisplayedAndCopiedTogether() {
+        val body = Logger.systemProcessExitEntry(
+            "previous app session ended at 2026-11-19 4:02 PM: low memory", "2026-11-19 4:15 PM"
+        )
+        assertEquals(
+            "Exit: previous app session ended at 2026-11-19 4:02 PM: low memory\n" +
+                "Next: app session started at 2026-11-19 4:15 PM",
+            body
+        )
+        val log = "[2026-11-19 4:15 PM] [ProcessExit] [WARNING] $body\n"
+        val entries = Logger.entriesForDisplay(log, newestFirst = true)
+        assertEquals(1, entries.size)
+        assertTrue(entries[0].contains("Exit: ") && entries[0].contains("Next: "))
+        assertEquals(entries, Logger.sameMinuteCopyText(entries))
+    }
+
     @Test fun systemLogDefaultRetentionKeepsNewestTen() {
         assertEquals(10, Preferences.SYSTEM_LOG_DEFAULT_MAX_ENTRIES)
         val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a")

@@ -905,6 +905,16 @@ class Logger {
             return channels
         }
 
+        /**
+         * One grouped System Logs record for a process exit: the exit and the
+         * app start that followed it, written as a single entry so they are
+         * displayed, copied and trimmed together. [exitMessage] is the same
+         * "previous app session ended at ..." text the Error Log copy uses.
+         * Pure so the shape is unit-tested.
+         */
+        internal fun systemProcessExitEntry(exitMessage: String, nextStart: String): String =
+            "Exit: $exitMessage\nNext: app session started at $nextStart"
+
         @RequiresApi(Build.VERSION_CODES.R)
         private fun collectAndLogLastExitReason(context: Context) {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
@@ -934,7 +944,13 @@ class Logger {
             val channels = processExitChannels(
                 Preferences.getPreferences(context, "").getSystemLogging(), appBreaking
             )
-            if (SYSTEM_LOG_TYPE in channels) log(context, SYSTEM_LOG_TYPE, "ProcessExit", level, message)
+            if (SYSTEM_LOG_TYPE in channels) {
+                // This runs on the launch after the exit, so "now" is the
+                // next app start that pairs with it.
+                val nextStart = LocalDateTime.now().format(LOG_TIME_FORMAT)
+                log(context, SYSTEM_LOG_TYPE, "ProcessExit", level,
+                    systemProcessExitEntry(message, nextStart))
+            }
 
             // A crash or serious freeze that makes the app unusable must ALSO
             // leave a record in the Error Log (the "crash" channel) — where a
