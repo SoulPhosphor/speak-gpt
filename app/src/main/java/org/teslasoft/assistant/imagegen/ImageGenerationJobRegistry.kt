@@ -192,6 +192,22 @@ object ImageGenerationJobRegistry {
     private val jobs = HashMap<String, ActiveJob>()
     private val listeners = HashMap<String, Listener>()
 
+    // Jobs whose chat was deleted while they ran. Shares the chat list lock
+    // with the stored-history write, so a late result can never recreate or
+    // modify a deleted chat, whichever screen (if any) is attached.
+    private val deletionGuard =
+        ImageJobDeletionGuard<ActiveJob>(ChatPreferences.CHAT_LIST_LOCK) { it.chatId }
+
+    /** Number of chat screens currently attached. */
+    internal fun attachedScreenCount(): Int = listeners.size
+
+    /** Every chat deletion path calls this once the deletion has committed
+     *  (any thread). A running job for one of these chats still ends in its
+     *  single terminal state, but nothing is delivered to the chat. */
+    fun markChatsDeleted(chatIds: Set<String>) {
+        deletionGuard.markChatsDeleted(chatIds)
+    }
+
     /** The chat's in-flight generation, or null — the screen's restore
      *  check on (re)open. */
     fun activeJob(chatId: String): ActiveJob? = jobs[chatId]
@@ -292,6 +308,7 @@ object ImageGenerationJobRegistry {
         }
         record.job = job
         jobs[chatId] = record
+        deletionGuard.track(record)
         job.start()
         return record
     }
@@ -463,16 +480,18 @@ object ImageGenerationJobRegistry {
         jobs.remove(record.chatId)
         val listener = listeners[record.chatId]
         try {
-            if (listener != null) {
-                try {
-                    listener.onImageJobFinished(record, terminal)
+            when (imageJobDelivery(deletionGuard.isChatDeleted(record), listener != null)) {
+                ImageJobDelivery.DISCARD -> { /* the chat was deleted */ }
+                ImageJobDelivery.SCREEN -> try {
+                    listener!!.onImageJobFinished(record, terminal)
                 } catch (_: Exception) {
                     persistTerminalWithoutScreen(app, record, terminal)
                 }
-            } else {
-                persistTerminalWithoutScreen(app, record, terminal)
+                ImageJobDelivery.STORED_HISTORY ->
+                    persistTerminalWithoutScreen(app, record, terminal)
             }
         } finally {
+            deletionGuard.untrack(record)
             // Release a model tool continuation only after the image/failure
             // has been inserted into the visible chat or durable history.
             // Completing first caused the assistant follow-up to appear while
@@ -500,6 +519,9 @@ object ImageGenerationJobRegistry {
                 // background username fill and chat repair hold, so neither can
                 // overwrite the other's change to this history.
                 synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+                    // A deletion that committed after the delivery decision
+                    // above is caught here, under the same lock it marks with.
+                    if (deletionGuard.isChatDeleted(record)) return@withContext
                     val chatPreferences = ChatPreferences.getChatPreferences()
                     val result = chatPreferences.getChatByIdResult(app, record.chatId, DamagedChatOperation.IMAGE_GALLERY)
                     // A locked or preserved-corrupt history must never be

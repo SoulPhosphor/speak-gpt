@@ -8,6 +8,7 @@ package org.teslasoft.assistant.preferences.chatdeletion
 import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import android.content.Context
 import java.util.UUID
+import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
@@ -143,7 +144,12 @@ class ChatDeletionCoordinator internal constructor(
                 deleteImagesWithChat = {
                     Preferences.getPreferences(app, "").getDeleteImagesWithChat()
                 },
-                onChatsDeleted = { ChatSearchIndexManager.get(app).scheduleChatsDeleted(it) }
+                onChatsDeleted = {
+                    // Before the chat data is cleaned up, so a late image
+                    // result can never write the deleted chat back.
+                    ImageGenerationJobRegistry.markChatsDeleted(it)
+                    ChatSearchIndexManager.get(app).scheduleChatsDeleted(it)
+                }
             )
         }
     }
