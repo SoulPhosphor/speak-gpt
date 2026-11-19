@@ -60,6 +60,9 @@ class AppearanceActivity : SettingsPageActivity() {
         findViewById<View>(R.id.row_chat_behaviors)?.setOnClickListener {
             startActivity(Intent(this, ChatBehaviorsActivity::class.java))
         }
+        findViewById<View>(R.id.row_alert_sounds)?.setOnClickListener {
+            startActivity(Intent(this, AlertSoundsActivity::class.java))
+        }
     }
 
     override fun onAttachedToWindow() {

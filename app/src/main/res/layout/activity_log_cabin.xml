@@ -53,6 +53,28 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
+            <!-- Logging Preferences: first row (owner instruction); opens the
+                 screen that used to be reached from Settings. -->
+            <LinearLayout
+                android:id="@+id/row_logging_preferences"
+                style="@style/Widget.App.Row.WithSubtitle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_alert_debug_menu_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/tile_alert_debug_menu_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_alert_debug_menu_title" />
+            </LinearLayout>
+
             <!-- ============ Logs ============ -->
             <!-- Plain "label >" rows, not tiles: tapping a row opens that log.
                  Logs are local-only and always available (CLAUDE.md: the Logger

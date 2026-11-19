@@ -56,6 +56,7 @@ class LogCabinActivity : SettingsPageActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
 
+    private var rowLoggingPreferences: LinearLayout? = null
     private var rowCrashLog: LinearLayout? = null
     private var rowEventLog: LinearLayout? = null
     private var rowMemoryLog: LinearLayout? = null
@@ -86,6 +87,7 @@ class LogCabinActivity : SettingsPageActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
 
+        rowLoggingPreferences = findViewById(R.id.row_logging_preferences)
         rowCrashLog = findViewById(R.id.row_crash_log)
         rowEventLog = findViewById(R.id.row_event_log)
         rowMemoryLog = findViewById(R.id.row_memory_log)
@@ -126,6 +128,9 @@ class LogCabinActivity : SettingsPageActivity() {
     private fun initLogic() {
         btnBack?.setOnClickListener { finish() }
 
+        rowLoggingPreferences?.setOnClickListener {
+            startActivity(Intent(this, AlertDebugMenuActivity::class.java).putExtra("chatId", chatId))
+        }
         rowCrashLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "crash").putExtra("chatId", chatId))
         }

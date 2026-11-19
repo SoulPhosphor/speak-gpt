@@ -70,7 +70,6 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
 
-    private var switchErrorSound: MaterialSwitch? = null
     private var switchMemoryDebug: MaterialSwitch? = null
     private var switchWhisperPerf: MaterialSwitch? = null
     private var switchMemoryUsage: MaterialSwitch? = null
@@ -127,7 +126,6 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
 
-        switchErrorSound = findViewById(R.id.switch_error_sound)
         switchMemoryDebug = findViewById(R.id.switch_memory_debug)
         switchWhisperPerf = findViewById(R.id.switch_whisper_perf)
         switchMemoryUsage = findViewById(R.id.switch_memory_usage)
@@ -182,7 +180,6 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
 
     private fun loadValues() {
         val p = preferences ?: return
-        switchErrorSound?.isChecked = p.getErrorSound()
         switchMemoryDebug?.isChecked = p.getMemoryDebugLogging()
         switchWhisperPerf?.isChecked = p.getWhisperPerfLogging()
         switchMemoryUsage?.isChecked = p.getMemoryUsageLogging()
@@ -225,7 +222,6 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
 
         btnBack?.setOnClickListener { finish() }
 
-        switchErrorSound?.setOnCheckedChangeListener { _, checked -> p.setErrorSound(checked) }
         switchMemoryDebug?.setOnCheckedChangeListener { _, checked -> p.setMemoryDebugLogging(checked) }
         switchWhisperPerf?.setOnCheckedChangeListener { _, checked -> p.setWhisperPerfLogging(checked) }
         switchMemoryUsage?.setOnCheckedChangeListener { _, checked -> p.setMemoryUsageLogging(checked) }
