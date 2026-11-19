@@ -968,7 +968,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val hangUpReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != ACTION_HANG_UP) return
-            runOnUiThread {
+            runOnUiThread { voiceLogGroup.run {
                 // Always persisted: a Hang Up can be fired without any human
                 // tap on this phone (a paired watch/car surface, or any app
                 // granted notification access can press notification buttons).
@@ -977,7 +977,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         "(the notification button, a paired device, or an app with notification access) — stopping everything")
                 cancelAllAiActivity("notification Hang Up action")
                 restoreUIState()
-            }
+            } }
         }
     }
 
@@ -997,6 +997,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // generation path.
     private var parseMessageScope: CoroutineScope? = null
     private var requestPreparationInProgress = false
+
+    // Joins the Voice Debug Log lines one voice moment writes at the same
+    // instant into a single entry (see VoiceLogGroup).
+    private val voiceLogGroup = org.teslasoft.assistant.ui.chat.VoiceLogGroup { tag, level, message ->
+        org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", tag, level, message)
+    }
     /** FULL-image files held until their current request has copied bytes into
      *  its immutable projection. Include edits still update canonical state;
      *  only physical deletion is deferred for snapshot consistency. */
@@ -2433,15 +2439,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 return
             }
             handsFreeTurnRetries = 0
-            logVoiceEvent("readback finished; reopening mic ($effModel)")
-            if (effModel == "whisper-local") {
-                // Re-arm an on-device Whisper turn; the service and
-                // loop are already running so this is not a fresh turn.
-                startLocalWhisperHandsFreeTurn(freshTurn = false)
-            } else {
-                isRecording = true
-                micHandsFreeActive(listening = true)
-                startRecognition(true)
+            voiceLogGroup.run {
+                logVoiceEvent("readback finished; reopening mic ($effModel)")
+                if (effModel == "whisper-local") {
+                    // Re-arm an on-device Whisper turn; the service and
+                    // loop are already running so this is not a fresh turn.
+                    startLocalWhisperHandsFreeTurn(freshTurn = false)
+                } else {
+                    isRecording = true
+                    micHandsFreeActive(listening = true)
+                    startRecognition(true)
+                }
             }
         } else if (handsFree) {
             logVoiceEvent("mic NOT reopened after readback: engine=$effModel " +
@@ -3133,6 +3141,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val voiceWasLive = isRecording || handsFreeReadbackExpected ||
                 (try { tts?.isSpeaking == true } catch (_: Exception) { false }) ||
                 (try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false })
+        voiceLogGroup.run {
         if (voiceWasLive) {
             logVoiceEvent("chat screen destroyed while voice was active — readback and mic loop torn down" +
                     if (isFinishing) " (screen was closed)" else " (destroyed by the system)")
@@ -3168,6 +3177,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // destroy at the TTS/readback boundary can be matched against whatever the
         // audio route was doing at that moment.
         logVoiceEventAlways("AudioRoute [chat destroy]: ${describeAudioOutputRoute()}")
+        }
         if (tts != null) {
             tts!!.stop()
             tts!!.shutdown()
@@ -7329,8 +7339,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         handsFreeTurnRetries = 0
-        logVoiceEvent(if (freshTurn) "listening turn started (mic button)" else "listening turn started (auto re-arm)")
-        logMicRoute()
+        voiceLogGroup.run {
+            logVoiceEvent(if (freshTurn) "listening turn started (mic button)" else "listening turn started (auto re-arm)")
+            logMicRoute()
+        }
         preloadActiveLocalWhisperModel()
     }
 
@@ -7342,8 +7354,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         isRecording = false
         // The turn made real progress — restore the mid-turn failure budget.
         whisperCaptureErrorBudget.reset()
-        logVoiceEvent("end of turn detected; transcribing")
-        logVadDiagnostics("end-of-turn", showToast = false)
+        voiceLogGroup.run {
+            logVoiceEvent("end of turn detected; transcribing")
+            logVadDiagnostics("end-of-turn", showToast = false)
+        }
         // stopLocalWhisper() transcribes the buffered audio and routes through
         // processLocalWhisperTranscript → generateResponse → speak; the
         // readback completion re-arms the next turn.
@@ -7353,8 +7367,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** VAD saw no speech within the window — end the loop like Google does. */
     private fun onHandsFreeWhisperNoSpeech() {
         if (handsFreeStopped) return
-        logVadDiagnostics("no-speech-timeout")
-        stopHandsFreeLoop("no speech within the no-speech window", notify = true)
+        voiceLogGroup.run {
+            logVadDiagnostics("no-speech-timeout")
+            stopHandsFreeLoop("no speech within the no-speech window", notify = true)
+        }
         LocalWhisperEngine.get().cancel()
     }
 
@@ -7370,7 +7386,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * tells the user with the existing audio-error dialog. Late or duplicate
      * deliveries are filtered by the turn token before this runs.
      */
-    private fun onWhisperCaptureError(reason: org.teslasoft.assistant.stt.CaptureErrorReason, detail: String) {
+    private fun onWhisperCaptureError(reason: org.teslasoft.assistant.stt.CaptureErrorReason, detail: String) =
+        voiceLogGroup.run { onWhisperCaptureErrorGrouped(reason, detail) }
+
+    private fun onWhisperCaptureErrorGrouped(reason: org.teslasoft.assistant.stt.CaptureErrorReason, detail: String) {
         logVoiceEventAlways("on-device capture failed ($reason): $detail")
         val wasHandsFreeTurn = preferences?.getHandsFreeMode() == true &&
                 !handsFreeStopped && !cancelState && isRecording
@@ -7445,6 +7464,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (voiceDiagnosticsEnabled() && vadDiag.isNotEmpty()) parts.add("VAD: $vadDiag")
         if (audioHealthOn && audioDiag.isNotEmpty()) parts.add(audioDiag)
         if (parts.isEmpty()) return
+        if (voiceLogGroup.offer("VoiceDiag", "debug", "$reason\n${parts.joinToString("\n")}")) return
         try {
             org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceDiag", "debug", "$reason\n${parts.joinToString("\n")}")
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
@@ -7462,6 +7482,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (diag.isEmpty()) return
         Log.i("VoiceLoop", "mic route: $diag")
         if (preferences?.getAudioHealthLogging() != true && !voiceDiagnosticsEnabled()) return
+        if (voiceLogGroup.offer("MicRoute", "info", diag)) return
         try {
             org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "MicRoute", "info", diag)
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
@@ -7488,6 +7509,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun logVoiceEvent(message: String) {
         Log.i("VoiceLoop", message)
         if (!voiceDiagnosticsEnabled()) return
+        if (voiceLogGroup.offer("VoiceLoop", "info", message)) return
         try {
             org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceLoop", "info", message)
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
@@ -7499,6 +7521,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  bounded (e.g. the capped TTS retry path) so this can't spam the log. */
     private fun logVoiceEventAlways(message: String) {
         Log.w("VoiceLoop", message)
+        if (voiceLogGroup.offer("VoiceLoop", "warning", message)) return
         try {
             org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceLoop", "warning", message)
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
@@ -11169,8 +11192,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         preferences?.setHandsFreeMode(true)
         handsFreeStopped = false
-        logVoiceEvent("hands-free engaged (conversation button)")
-        if (engine == "google") handleGoogleSpeechRecognition() else handleLocalWhisperSpeechRecognition()
+        voiceLogGroup.run {
+            logVoiceEvent("hands-free engaged (conversation button)")
+            if (engine == "google") handleGoogleSpeechRecognition() else handleLocalWhisperSpeechRecognition()
+        }
     }
 
     /** Stop hands-free from the conversation button. cancelAllAiActivity is the
@@ -11178,8 +11203,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  (cancels a still-streaming reply, silences readback, closes the mic, stops
      *  the service) and already clears the engaged flag and resets this button. */
     private fun stopHandsFreeByUser() {
-        logVoiceEvent("hands-free stopped (conversation button)")
-        cancelAllAiActivity("conversation button tap (stop hands-free)")
+        voiceLogGroup.run {
+            logVoiceEvent("hands-free stopped (conversation button)")
+            cancelAllAiActivity("conversation button tap (stop hands-free)")
+        }
     }
 
     /** True while the AI is generating, speaking through TTS, playing back
@@ -11219,7 +11246,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  (impossible with the screen off) and the notification Hang Up
      *  PendingIntent — which any paired device or app with notification access
      *  can fire without a human tap. */
-    private fun cancelAllAiActivity(source: String) {
+    private fun cancelAllAiActivity(source: String) =
+        voiceLogGroup.run { cancelAllAiActivityGrouped(source) }
+
+    private fun cancelAllAiActivityGrouped(source: String) {
         logVoiceEvent("all AI activity cancelled ($source)")
         cancelState = true
         // This funnel is only ever reached from a deliberate user action (Stop
@@ -14590,12 +14620,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // through instead of inviting another guess.
             val protection = if (HandsFreeService.isRunning) "hands-free service"
                              else "readback keep-alive (hands-free loop idle)"
-            logVoiceEvent("reply ready; reading it back (${preferences?.getTtsEngine()}); protected by: $protection")
-            // TTS/readback boundary — the point the later reproduction reported the
-            // chat being destroyed right at. Snapshot the output route here so a
-            // Bluetooth handoff at this boundary can be correlated with (or ruled
-            // out against) an Activity destruction recorded moments later.
-            logAudioRoute("readback start")
+            voiceLogGroup.run {
+                logVoiceEvent("reply ready; reading it back (${preferences?.getTtsEngine()}); protected by: $protection")
+                // TTS/readback boundary — the point the later reproduction reported the
+                // chat being destroyed right at. Snapshot the output route here so a
+                // Bluetooth handoff at this boundary can be correlated with (or ruled
+                // out against) an Activity destruction recorded moments later.
+                logAudioRoute("readback start")
+            }
             // This is a loop readback: its completion is what re-arms the mic.
             // (Manual speaker-button re-reads never set this flag, so they
             // never reopen the mic.)
