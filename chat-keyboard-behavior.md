@@ -1,7 +1,8 @@
 # Chat positioning and the keyboard
 
 Approved behavior for how the conversation moves and does not move on the
-chat screen. This is the whole contract. Nothing else in this file.
+chat screen. The behavior sections are the contract. The engineering notes
+below explain how to preserve and repair it, not new movement rules.
 
 If the chat starts jumping to places the user did not put it, this file is the
 reference. Read it before changing anything on the chat screen that touches
@@ -262,6 +263,228 @@ message box at the end of a turn runs the composer's focus listener, which shows
 the keyboard. No completion path may focus the composer, in any mode. Putting a
 `messageInput?.requestFocus()` back into a completion path is exactly what makes
 the keyboard pop up on its own again (rule 8).
+
+## Engineering repair guide: calculations and failure diagnosis
+
+This is a repair map for the existing user-approved rules, **not** permission
+to change them. Verify code against the current branch before repairing; if
+method names change, preserve the behavior and its invariants, not old names.
+
+### 1. The actual resize math (pixels, not dp)
+
+The conversation is a `ChatTranscriptRecyclerView` constrained above the
+composer host in `activity_chat.xml`. Its viewport height changes when the
+IME, composer mode, or multiline draft changes. Capture the **last visible
+row** in its *old* layout, before the viewport changes:
+
+```text
+p         = adapter position of last visible row
+H_old     = old transcript viewport height
+T_old     = top of row p in transcript-local coordinates
+D         = T_old - H_old              (distance from bottom/composer)
+H_new     = new viewport height
+T_target  = H_new + D
+          = T_old + (H_new - H_old)
+
+layoutManager.scrollToPositionWithOffset(p, T_target)
+```
+
+The equality on the fourth line describes geometry; **do not implement it
+as an extra scrollBy(H_new - H_old)**. RecyclerView may have already
+moved children while measuring, so a relative scroll doubles the correction.
+An **absolute row + offset** is applied by
+`ChatTranscriptRecyclerView.onSizeChanged()` before the new-height child
+layout. Do not `post` the restore, run it after the layout, or add an
+IME animation scroll. The next keyboard frame can overtake either.
+
+Example: row top 300px in a 1000px viewport gives `D = -700px`.
+An 800px viewport needs top 100px. On return to 1000px it needs top
+300px. The *same row* must be measured, not a newly chosen visible row.
+
+At the real end of a long conversation, the last row's bottom is normally
+`H - paddingBottom`, so this same hold moves that bottom with the composer
+by precisely the viewport-height change, even when the final reply is
+taller than the screen. Do not invent a separate end-only correction or
+use `stackFromEnd`: short conversations must start at the top, stay there
+while they fit, shift upward only by the overflow when necessary, and
+return to top alignment as the keyboard closes. `scrollToTranscriptEnd()`
+is an intentional initial chat-open navigation helper, **not** a general
+keyboard-resize repair.
+
+**Freshness is critical.** Before the new layout, if
+`layoutManager.height == oldh`, the child rows still describe the old
+height: `onSizeChanged()` makes a fresh capture and replaces a potentially
+stale pending capture. If layout/measurement has *already* put children at
+another height, keep the earlier valid pre-resize capture. Recapturing from
+wrong-height children poisons the anchor.
+`aFreshMeasurementReplacesAnAnchorThatWentStaleBeforeTheResize` covers this.
+
+**Check physical screen coordinates, too:**
+
+```text
+rowFromComposerOnScreen =
+  transcriptTopOnScreen + rowTopLocal - composerTopOnScreen
+
+gapToComposer =
+  composerTopOnScreen - (transcriptTopOnScreen + transcriptHeight)
+```
+
+When the viewport bottom meets the composer, `gapToComposer = 0` and
+`rowTopLocal - transcriptHeight` equals the screen metric. If the local
+hold is perfect but the screen metric jumps, inspect the real constraints,
+insets, translations, and view geometry instead of changing anchor math.
+`ChatTranscriptRecyclerView.screenDistanceFromComposer()` and
+`screenGeometry()` report that distinction.
+
+### 2. One inset owner; two kinds of keyboard close
+
+`ChatImeInsetLayout` in `ChatComposerLayout.kt` is the single owner:
+
+```text
+bottomPadding = baseBottom + max(navigationBarInset, imeBottomInset)
+keyboardOpen  = imeBottomInset > 0
+retreating    = imeBottomInset < previousImeBottomInset
+```
+
+`onBottomInsetChanging` invokes `ChatActivity.captureTranscriptAnchor()`
+**before** applying the new padding. Composer
+promotion/expansion/collapse calls `beforeResize` as well. Simply typing
+another line can resize the composer without either callback, so
+`ChatTranscriptRecyclerView.onSizeChanged()` is also a capture backstop.
+Do not install another IME owner, duplicate navigation padding, or add
+a second keyboard-height offset.
+
+A **manual keyboard close** holds the conversation. A **Send close** does
+not: the Send path releases the anchor, resets reply-follow permission,
+sets `imeClosingForSend`, and calls `dismissImeForSend()`. During the
+retreating IME frames `releaseResizeAnchorForNextLayout()` prevents even
+the final zero-inset layout from reviving the old hold. The Send exception
+ends when the keyboard is actually gone, **not on the first closing
+frame**. Reopening mid-reply immediately cancels following and establishes
+a new hold. A keyboard opening during request preparation cancels
+following too; the app must not wait for the first streamed token.
+
+### 3. Touch priority and queued scrolls
+
+A user's finger takes priority over automatic position holds. On
+`dispatchTouchEvent(ACTION_DOWN)`, the transcript releases any pending
+anchor and notifies `ChatActivity` **before a message child can consume
+the touch**. While a finger is on the transcript, preserve the first
+visible row's position from the **top** of the viewport, not the bottom:
+
+```text
+topOffset = firstVisibleRow.top - paddingTop
+targetTop = paddingTop + topOffset
+correctionAfterLayout = targetTop - actualRow.top
+```
+
+`onLayout()` uses `offsetChildrenVertical(correctionAfterLayout)` to undo
+LinearLayoutManager's automatic bottom-gap fill. A `scrollBy` may clamp
+and cannot reliably do this. `retainPositionAfterTouch` protects the
+stopped location from a later adapter relayout, until a new Send or an
+intentional jump releases it.
+
+`ChatAutoScrollGate` maintains a permission revision. A posted scroll
+must recheck that revision, `disableAutoScroll`, and keyboard-hold state
+**at execution time**, not merely when queued. Touching or opening
+the keyboard during an AI turn disables following for the rest of that
+turn; manual keyboard close and finger-up do not restart it.
+Only a new Send begins another follow period.
+
+The allowed streaming follow uses
+`StreamingBubbleScrollPolicy.distance()`:
+
+```text
+bottomClipped = max(itemBottom - viewportBottom, 0)
+spaceAbove    = max(itemTop - viewportTop, 0)
+scrollPixels  = min(bottomClipped, spaceAbove)
+```
+
+Once the response top reaches the viewport top, `spaceAbove = 0`:
+stop following even if the long response keeps growing.
+`ChatActivity.scroll()` and `scrollX()` must respect the gate.
+
+### 4. Known regression that the anchor math could not catch
+
+A keyboard-opening jump can happen **before any viewport resize**.
+In the Oct 31 fix (PR #164), moving the same focused composer `EditText`
+between compact and editing parents temporarily focused a message row.
+RecyclerView then invoked an ordinary focus-driven `smoothScrollBy`
+(about 1750px in the recorded incident). The resize hold subsequently
+preserved the **already wrong** location. Therefore a trace ending with
+`ROW HELD` does not necessarily prove that the user's place was held
+through the whole tap-to-type gesture.
+
+`ChatTranscriptLayoutManager.onRequestChildFocus()` now suppresses
+automatic bring-into-view scrolling for ordinary message-row focus,
+while deliberately allowing it for an `EditText` inside a row (the
+image-summary editor). `ChatComposerLayout` also defers editor
+reparenting until after the focus tap and preserves the editor/caret.
+Do not undo these protections or treat focus scrolling as an IME
+offset problem. Investigate the **first** unintended scroll, including
+`smoothScrollBy` *before* `IME OPENING` or anchor capture.
+
+### 5. Diagnose the first wrong event, not the final log title
+
+When investigating, turn on **Turn On Keyboard Chat Interaction
+Debugging** under **Alerts, Errors & Logs**. The geometry-only trace
+is in `app/src/main/java/org/teslasoft/assistant/ui/chat/ResizeTrace.kt`.
+Read the full chronological record:
+
+1. Find `composer tapped`, first `IME OPENING` or `IME CLOSING`,
+   `onSizeChanged`, adapter updates, and the earliest `scrollBy`,
+   `smoothScrollBy`, or `scrollToPosition`. The call site identifies
+   whether focus, explicit navigation, reply follow, or resize moved first.
+2. If movement precedes the first capture, inspect focus handoff,
+   message-row focus, unexpected initial chat navigation, and queued
+   auto-follow before touching the resize equation.
+3. If IME changes, verify the inset owner changes bottom padding once,
+   captures before doing so, and the chat viewport actually resizes.
+   `KEYBOARD OPEN / NO CHAT RESIZE` is **not a passing keyboard hold**.
+4. Compare captured `p` and `D` with the requested
+   `scrollToPositionWithOffset(p, H_new + D)`. Check
+   `childrenAtOldHeight` and any stale capture.
+5. Compare local drift with the screen row-to-composer measurement.
+   Inspect `touching`, `retainAfterTouch`, `disableAutoScroll`,
+   `imeClosingForSend`, and queued movement before blaming geometry.
+
+A `COMPOSER/OTHER (no keyboard motion recorded) / ROW HELD` log is
+**not a keyboard-opening test**. `ROW HELD` means the observed anchor
+met the logger's drift criterion after its baseline; a prior jump
+may already have happened. `DRIFT` and `SPIN-OUT` indicate failures
+worth tracing back to their *first* cause. Logging tolerance is for
+classification, not approval to move the user's content.
+
+### 6. Regression checks required before declaring repair
+
+Keep all existing tests and run the targeted
+`ChatTranscriptResizeAnchorTest`,
+`ChatKeyboardPositionIntegrationTest` (Android 28 and 36),
+`ChatAutoScrollGateTest`, `StreamingBubbleScrollPolicyTest`,
+`ChatComposerLayoutTest`, and `ChatActionSurfaceSourceContractTest`.
+The source-contract test checks mechanisms and string patterns;
+it cannot simulate the real keyboard or focus transitions.
+
+On a **real device**, repeat keyboard opening and manual closing
+several times in a long chat, at its end, mid-chat, after a large last
+reply, and on both kinds of short chat. Check one line adjacent to the
+composer before, during, and after animation. Also test typing enough
+to grow the composer, draft expansion/collapse, touch and scroll while
+IME frames run, finger-up before all frames finish, a reply streaming
+with keyboard open, keyboard reopening during generation, and Send
+while the keyboard is open. Test ordinary compact-composer tap focus
+and a message-row EditText separately: the first must never
+auto-scroll; the second still needs its intended focus behavior.
+Test turn completion without reopening the keyboard.
+
+If the focus handoff changes again, add targeted automated coverage
+for unauthorized focus-driven scrolling; resize-only tests cannot
+fully protect it. Passing CI or one successful open/close cycle
+does not establish that an intermittent on-device bug is resolved.
+Never alter a behavior test merely to make a new implementation pass
+unless the owner explicitly changes the behavior contract.
+
+---
 
 ## The test that holds it
 
