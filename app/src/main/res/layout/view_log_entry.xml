@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   One entry in the log viewer (activity_logs.xml): the entry's text, then a
-  right-aligned Copy for that entry alone, shown while Show Copy Button on
-  Logs (App Appearance) is on. Built by LogsActivity.
+  right-aligned Copy that copies every entry of this log written in the same
+  minute, shown while Show Copy Button on Logs (App Appearance) is on. Built
+  by LogsActivity.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"

@@ -688,6 +688,37 @@ class Logger {
         }
 
         /**
+         * The minute an entry was written, from its header, so entries from the
+         * same minute can be copied together. Older entries that also carry
+         * seconds share the key of their minute. Null when [entry] does not
+         * start with an entry header (it is then copied on its own).
+         */
+        fun entryMinuteKey(entry: String): String? {
+            val match = ENTRY_HEADER.find(entry) ?: return null
+            if (match.range.first != 0) return null
+            return match.groupValues[1].replace(SECONDS_FIELD, "$1")
+        }
+
+        /**
+         * Groups displayed [entries] by the minute they were written, keeping
+         * their order: for each entry, the text of every entry from the same
+         * minute, joined the same way the log is displayed. An entry without a
+         * header stands alone. Used by the log viewer's Copy buttons.
+         */
+        fun sameMinuteCopyText(entries: List<String>): List<String> {
+            val keys = entries.map { entryMinuteKey(it) }
+            val byMinute = HashMap<String, MutableList<String>>()
+            entries.forEachIndexed { i, entry ->
+                keys[i]?.let { byMinute.getOrPut(it) { ArrayList() }.add(entry) }
+            }
+            return entries.mapIndexed { i, entry ->
+                keys[i]?.let { byMinute.getValue(it).joinToString("\n\n") } ?: entry
+            }
+        }
+
+        private val SECONDS_FIELD = Regex("""(\d{1,2}:\d{2}):\d{2}""")
+
+        /**
          * Keeps only the newest [keep] entries whose header carries [tag];
          * entries with any other tag, and text before the first entry, are
          * kept unchanged and in order. `internal` for unit testing.
