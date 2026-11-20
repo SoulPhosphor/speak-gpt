@@ -1872,7 +1872,9 @@ places the hidden-from-AI marker (`ic_visibility_off`, sized by
 `bookmark_icon_size`) on the other side of the name; with names off, the same
 line keeps the markers in the name's place. `AppButton.Primary.Inline.BookmarkSearch`
 inherits the shared label-sized Search button. Measurements live in `dimens.xml`;
-`bookmark_action_tint` resolves enabled and disabled colors from theme attributes.
+Every icon on the strip (`Widget.App.Bookmark.Action`) is tinted with the
+counter's own text color, `?attr/appTextColor`, so the icons always match the
+text beside them.
 The strip is part of the chat layout beneath its header and above the transcript;
 it reserves space rather than covering messages or portraits. It is independent
 of the existing summarizer section flags. The bookmark-star and double-arrow

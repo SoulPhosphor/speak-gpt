@@ -3508,7 +3508,7 @@
         <item name="android:padding">@dimen/bookmark_action_padding</item>
         <item name="android:scaleType">fitCenter</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
-        <item name="android:tint">@color/bookmark_action_tint</item>
+        <item name="android:tint">?attr/appTextColor</item>
     </style>
     <style name="Widget.App.Bookmark.Counter" parent="">
         <item name="android:layout_width">wrap_content</item>

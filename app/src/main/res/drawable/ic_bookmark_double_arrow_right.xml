@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Google Material Symbols Outlined "keyboard_double_arrow_right"; Apache License 2.0.
      The fill is only an opaque mask: the visible color always comes from the
-     button style's tint (Widget.App.Bookmark.Action / bookmark_action_tint). -->
+     button style's tint (Widget.App.Bookmark.Action). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="@dimen/bookmark_icon_size" android:height="@dimen/bookmark_icon_size"
     android:viewportWidth="960" android:viewportHeight="960">
