@@ -33,7 +33,7 @@ class ChatJumpButtonsController(
         applySettings()
     }
 
-    private fun applySettings() {
+    internal fun applySettings() {
         if (disposed) return
         val preferences = Preferences.getPreferences(rail.context, "")
         enabled = preferences.getShowChatScrollNavigation()
@@ -62,6 +62,7 @@ class ChatJumpButtonsController(
     }
 
     private fun jumpToBottom() {
+        if ((transcript.adapter?.itemCount ?: 0) == 0) return
         transcript.onUserInteraction?.invoke()
         transcript.stopScroll()
         transcript.scrollToTranscriptEnd()

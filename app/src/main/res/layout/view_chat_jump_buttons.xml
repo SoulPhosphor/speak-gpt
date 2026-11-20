@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Jump to the start / end of the transcript. A narrow rail laid over the
-     message list's end margin; it does not take touches outside its buttons. -->
+<!-- Scroll to Top / Scroll to Bottom. A narrow rail laid over the message
+     list's left or right margin (Chat Settings); it does not take touches
+     outside its buttons. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/chat_jump_rail"
     style="@style/Widget.App.Chat.JumpRail">

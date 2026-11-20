@@ -634,15 +634,6 @@
         <item name="android:textStyle">normal</item>
     </style>
 
-    <!-- Stacked single-choice radio row for a settings screen: a full-width,
-         tappable RadioButton whose label matches the shared row-title
-         typography (16sp, appRowTitleColor) and whose control tint resolves
-         from the theme (colorPrimary). Put the RadioButtons directly in a
-         vertical RadioGroup so it handles single-selection; the group supplies
-         the horizontal padding that aligns the rows with the screen's other
-         rows. Nothing here is hard-coded in the layout — size, color, and
-         geometry all live in this style so a future theme pass changes them in
-         one place. -->
     <!-- Vertical RadioGroup holding Widget.App.Row.Radio rows. It adds no
          inset of its own: the page content's gutter aligns it with the
          screen's other rows. -->
@@ -652,6 +643,15 @@
         <item name="android:orientation">vertical</item>
     </style>
 
+    <!-- Stacked single-choice radio row for a settings screen: a full-width,
+         tappable RadioButton whose label matches the shared row-title
+         typography (16sp, appRowTitleColor) and whose control tint resolves
+         from the theme (colorPrimary). Put the RadioButtons directly in a
+         vertical RadioGroup so it handles single-selection; the group supplies
+         the horizontal padding that aligns the rows with the screen's other
+         rows. Nothing here is hard-coded in the layout — size, color, and
+         geometry all live in this style so a future theme pass changes them in
+         one place. -->
     <style name="Widget.App.Row.Radio" parent="Widget.Material3.CompoundButton.RadioButton">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
