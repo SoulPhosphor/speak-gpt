@@ -1292,6 +1292,9 @@ the horizontal padding that aligns the rows with the screen's other rows. All
 size, color, and geometry live in the style, never in the layout or Kotlin.
 First use: the Voice Input engine choice on Voice & Speech.
 
+`Widget.App.Row.RadioGroup` is that vertical group; it adds no inset of its
+own, so the page content's gutter aligns it with the screen's other rows.
+
 This is for a persistent on-screen choice. It is not the "checked tile"
 pick-list (`Widget.App.PickList.Row`) used inside a Select pop-up, and it is
 not the equal-width horizontal segmented control
@@ -1389,7 +1392,7 @@ opposite the speaker's name.
 ### Chat Jump to Top / Bottom
 
 `view_chat_jump_buttons.xml` lays a narrow rail (`Widget.App.Chat.JumpRail`)
-over the message list's end margin, from the top of the message area to its
+over the message list's side margin, from the top of the message area to its
 bottom, so it follows the message area when the keyboard opens. It holds two
 tiny arrows (Material Symbols `keyboard_double_arrow_up` / `_down`):
 `Widget.App.Chat.JumpButton.Top` at the top and `.Bottom` at the bottom. Each
@@ -1399,7 +1402,9 @@ the screen edge. The rail draws above message rows (portraits pass under it)
 and above the floating Includes strip (`chat_jump_rail_elevation`). The arrows
 use the chat icons' accent, `colorPrimary`, slightly subdued
 (`chat_jump_tint`, `chat_jump_icon_alpha`); there is no background, only the
-borderless ripple.
+borderless ripple. Chat Settings' Show Chat Scrolling Navigation (on by
+default) turns the rail on or off, and its Left Side / Right Side choice
+(default Right Side) places it in the left or right margin.
 
 ### Chat Selection Mode
 

@@ -643,6 +643,15 @@
          rows. Nothing here is hard-coded in the layout — size, color, and
          geometry all live in this style so a future theme pass changes them in
          one place. -->
+    <!-- Vertical RadioGroup holding Widget.App.Row.Radio rows. It adds no
+         inset of its own: the page content's gutter aligns it with the
+         screen's other rows. -->
+    <style name="Widget.App.Row.RadioGroup" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
     <style name="Widget.App.Row.Radio" parent="Widget.Material3.CompoundButton.RadioButton">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

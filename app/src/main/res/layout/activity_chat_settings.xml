@@ -210,6 +210,31 @@
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/chat_settings_scroll_navigation" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_scroll_navigation"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <!-- Shown only while Show Chat Scrolling Navigation is on. -->
+            <RadioGroup
+                android:id="@+id/group_scroll_navigation_side"
+                style="@style/Widget.App.Row.RadioGroup">
+                <RadioButton
+                    android:id="@+id/radio_scroll_navigation_left"
+                    style="@style/Widget.App.Row.Radio"
+                    android:text="@string/chat_settings_scroll_navigation_left" />
+                <RadioButton
+                    android:id="@+id/radio_scroll_navigation_right"
+                    style="@style/Widget.App.Row.Radio"
+                    android:text="@string/chat_settings_scroll_navigation_right" />
+            </RadioGroup>
+
             <TextView style="@style/Widget.App.Section.Title.BeforeField"
                 android:text="@string/chat_behavior_section_identity" />
 
