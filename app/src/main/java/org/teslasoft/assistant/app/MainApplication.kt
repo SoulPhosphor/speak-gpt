@@ -49,7 +49,6 @@ import org.teslasoft.assistant.preferences.backup.portable.GeneratedImagePortabl
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestore
 import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestoreCoordinator
-import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
@@ -80,7 +79,8 @@ class MainApplication : Application() {
             try {
                 if (Preferences.getPreferences(this@MainApplication, "").getMemoryUsageLogging()) {
                     Logger.log(this@MainApplication, "memory_usage", "MemSample", "info",
-                        MemoryDiagnostics.snapshotFull(this@MainApplication))
+                        MemoryDiagnostics.snapshotFull(this@MainApplication) + " | " +
+                            org.teslasoft.assistant.util.ResourceDiagnostics.fields())
                 }
             } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
             memSampleHandler?.postDelayed(this, MEM_SAMPLE_INTERVAL_MS)
@@ -331,7 +331,10 @@ class MainApplication : Application() {
                             store.setMeta(MemoryStore.META_BACKFILL_DONE, "1")
                         }
                     }
-                    MemoryExporter.autoExportIfDue(this)
+                    // The legacy automatic memory export no longer runs here:
+                    // automatic backups (memories included) are made only by
+                    // Automatic Recovery Backups, below, which never hold the
+                    // whole backup in memory.
                 }
             } catch (e: Exception) {
                 MemoryLog.log(this, "MemoryStore", "error", "Memory store startup housekeeping failed: ${e.message}")
@@ -395,7 +398,8 @@ class MainApplication : Application() {
         try {
             if (Preferences.getPreferences(this, "").getMemoryUsageLogging()) {
                 Logger.log(this, "memory_usage", "MemTrim", "warning",
-                    "onTrimMemory ${trimLevelName(level)} | ${MemoryDiagnostics.snapshotFull(this)}")
+                    "onTrimMemory ${trimLevelName(level)} | ${MemoryDiagnostics.snapshotFull(this)} | " +
+                        org.teslasoft.assistant.util.ResourceDiagnostics.fields())
             }
         } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
     }
@@ -406,7 +410,8 @@ class MainApplication : Application() {
         try {
             if (Preferences.getPreferences(this, "").getMemoryUsageLogging()) {
                 Logger.log(this, "memory_usage", "MemTrim", "warning",
-                    "onLowMemory | ${MemoryDiagnostics.snapshotFull(this)}")
+                    "onLowMemory | ${MemoryDiagnostics.snapshotFull(this)} | " +
+                        org.teslasoft.assistant.util.ResourceDiagnostics.fields())
             }
         } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
     }

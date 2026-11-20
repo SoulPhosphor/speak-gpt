@@ -578,6 +578,31 @@ object MemorySeedCodec {
         exportedAtIso: String? = null,
         appChatsComplete: Boolean = true
     ): String {
+        val root = memoryRoot(data)
+        appChats?.let { root.put("app_chats", it) }
+        root.put("export_meta", exportMeta(exportedAtIso, appChatsComplete))
+        return root.toString(2)
+    }
+
+    /**
+     * The document's `export_meta` block, written last. Absent
+     * `app_chats_complete` = complete (same convention as message completion
+     * states, so every older export stays trusted). It is written only when
+     * chat storage was locked or partially unreadable at export time — the
+     * file must never be mistaken for a full copy of the user's chats, and
+     * older app versions simply ignore the extra key.
+     */
+    internal fun exportMeta(exportedAtIso: String?, appChatsComplete: Boolean): JSONObject =
+        JSONObject().apply {
+            put("app", "Phosphor Shines")
+            put("format", EXPORT_FORMAT)
+            putIfNotNull("exported_at", exportedAtIso)
+            if (!appChatsComplete) put("app_chats_complete", false)
+        }
+
+    /** Every top-level member of the export except `app_chats` and
+     *  `export_meta`, which [serialize] (or the streaming export) adds after. */
+    internal fun memoryRoot(data: MemoryStoreData): JSONObject {
         val root = JSONObject()
         root.put("schema_version", data.schemaVersion)
 
@@ -1009,21 +1034,6 @@ object MemorySeedCodec {
             })
         }
 
-        appChats?.let { root.put("app_chats", it) }
-
-        root.put("export_meta", JSONObject().apply {
-            put("app", "Phosphor Shines")
-            put("format", EXPORT_FORMAT)
-            putIfNotNull("exported_at", exportedAtIso)
-            // Absent = complete (same convention as message completion
-            // states, so every older export stays trusted). Written only
-            // when chat storage was locked or partially unreadable at
-            // export time — this file must never be mistaken for a full
-            // copy of the user's chats, and older app versions simply
-            // ignore the extra key.
-            if (!appChatsComplete) put("app_chats_complete", false)
-        })
-
-        return root.toString(2)
+        return root
     }
 }

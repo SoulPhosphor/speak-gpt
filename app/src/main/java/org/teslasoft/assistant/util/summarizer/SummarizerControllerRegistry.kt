@@ -46,6 +46,10 @@ object SummarizerControllerRegistry {
         records[chatId]?.let { if (it.listener === listener) it.listener = null }
     }
 
+    /** Number of chat screens currently attached, for the diagnostic logs. */
+    @Synchronized
+    fun attachedScreenCount(): Int = records.values.count { it.listener != null }
+
     @Synchronized
     fun addAppListener(listener: AppListener) { appListeners.add(listener) }
 

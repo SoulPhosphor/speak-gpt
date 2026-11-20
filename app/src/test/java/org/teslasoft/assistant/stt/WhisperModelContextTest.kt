@@ -180,7 +180,7 @@ class WhisperModelContextTest {
         val relative = "src/main/java/org/teslasoft/assistant/stt/LocalWhisperEngine.kt"
         val file = listOf(java.io.File(relative), java.io.File("app/$relative")).first { it.isFile }
         val source = file.readText()
-        val start = source.indexOf("    fun release() {")
+        val start = source.indexOf("    fun release(")
         assertTrue("LocalWhisperEngine.release() not found", start >= 0)
         val body = source.substring(start, source.indexOf("\n    }\n", start))
         val ticketAt = body.indexOf("modelContext.requestRelease()")
@@ -188,6 +188,12 @@ class WhisperModelContextTest {
         assertTrue(ticketAt < body.indexOf("releaseScope.launch"))
         assertTrue(body.contains("releaseLoadedBefore(ticket)"))
         assertFalse(body.contains("?: return"))
+    }
+
+    @Test fun releaseReportsTheModelItFreed() = runBlocking {
+        ensure("small")
+        assertEquals("small", context.release()?.modelId)
+        assertNull("nothing left to free", context.release())
     }
 
     @Test fun releaseOfNothingLoadedIsHarmless() = runBlocking {

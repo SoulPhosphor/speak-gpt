@@ -101,24 +101,24 @@ internal class WhisperModelContext(private val native: NativeOps) {
      * whose load began after the request (a newer model) is kept. Waits for
      * a running transcription to stop.
      */
-    suspend fun releaseLoadedBefore(ticket: Long) {
+    suspend fun releaseLoadedBefore(ticket: Long): Loaded? =
         contextMutex.withLock {
-            val target = loaded ?: return@withLock
-            if (target.loadTicket >= ticket) return@withLock
-            freeLocked(target)
+            val target = loaded ?: return@withLock null
+            if (target.loadTicket >= ticket) return@withLock null
+            if (freeLocked(target)) target else null
         }
-    }
 
-    /** Frees whatever is loaded now. */
-    suspend fun release() = releaseLoadedBefore(requestRelease())
+    /** Frees whatever is loaded now. Returns the context it freed, or null. */
+    suspend fun release(): Loaded? = releaseLoadedBefore(requestRelease())
 
-    /** Caller holds the context lock. */
-    private suspend fun freeLocked(target: Loaded) {
+    /** Caller holds the context lock. True when [target] was freed here. */
+    private suspend fun freeLocked(target: Loaded): Boolean {
         native.signalAbort()
-        transcribeMutex.withLock {
-            if (loaded !== target) return@withLock
+        return transcribeMutex.withLock {
+            if (loaded !== target) return@withLock false
             loaded = null
             try { native.free(target.handle) } catch (_: Throwable) { /* best-effort */ }
+            true
         }
     }
 

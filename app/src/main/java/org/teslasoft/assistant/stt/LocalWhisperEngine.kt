@@ -37,6 +37,7 @@ import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.util.MemoryDiagnostics
+import org.teslasoft.assistant.util.ResourceDiagnostics
 
 /**
  * Owns the audio-capture + whisper.cpp transcription path for "on-device
@@ -275,6 +276,9 @@ class LocalWhisperEngine private constructor() {
     /** True iff the context for [activeModelId] is already resident in RAM. */
     fun isModelLoaded(activeModelId: String): Boolean =
         modelContext.isLoaded(activeModelId)
+
+    /** The model resident in memory right now, or null. */
+    fun loadedModelId(): String? = modelContext.current()?.modelId
 
     /**
      * Loads the model context into native RAM ahead of time. Safe to call
@@ -928,6 +932,7 @@ class LocalWhisperEngine private constructor() {
             modelContext.withTranscription(activeModelId) { handle ->
                 val mutexWaitMs = SystemClock.elapsedRealtime() - mutexWaitStartMs
                 var decodeMs = 0L
+                var nativeBeforeDecodeMb = 0L
                 var outcome = "native-error"
                 val decodeStartedAtMs = SystemClock.elapsedRealtime()
                 try {
@@ -936,6 +941,7 @@ class LocalWhisperEngine private constructor() {
                         outcome = "model-handle-missing"
                         return@withTranscription null
                     }
+                    nativeBeforeDecodeMb = ResourceDiagnostics.nativeHeapMb()
                     val text = LocalWhisperNative.transcribeNative(
                         handle, samples, SAMPLE_RATE, language,
                         useBeam, beamSize, temperature,
@@ -963,7 +969,8 @@ class LocalWhisperEngine private constructor() {
                         try {
                             val perfLine = "turn=$captureTurn sessionMin=${MemoryDiagnostics.processUptimeMinutes()} " +
                                     "audio=${audioMs}ms load=${loadMs}ms decode=${decodeMs}ms model=$activeModelId " +
-                                    "decoder=${if (useBeam) "beam($beamSize)" else "greedy"} | " +
+                                                    "decoder=${if (useBeam) "beam($beamSize)" else "greedy"} " +
+                                    "nativeBefore=${nativeBeforeDecodeMb}MB | " +
                                     MemoryDiagnostics.snapshotCompact(appContext)
                             Logger.log(appContext, "whisper_perf", "WhisperPerf", "info", perfLine)
                         } catch (_: Throwable) { /* diagnostics must never break STT */ }
@@ -1054,10 +1061,21 @@ class LocalWhisperEngine private constructor() {
      * starts after this call is kept. Subsequent transcribe calls will
      * reload from disk.
      */
-    fun release() {
+    fun release(reason: String = "requested") {
         cancel()
         val ticket = modelContext.requestRelease()
-        releaseScope.launch { modelContext.releaseLoadedBefore(ticket) }
+        releaseScope.launch {
+            val nativeBefore = ResourceDiagnostics.nativeHeapMb()
+            val freed = modelContext.releaseLoadedBefore(ticket)
+            val context = logContext
+            if (context != null && freed != null) {
+                logWhisperModel(
+                    context,
+                    "model released: model=${freed.modelId} reason=$reason " +
+                        "nativeBefore=${nativeBefore}MB nativeAfter=${ResourceDiagnostics.nativeHeapMb()}MB"
+                )
+            }
+        }
     }
 
     private fun drainBuffer(): ShortArray {
@@ -1081,7 +1099,12 @@ class LocalWhisperEngine private constructor() {
      */
     private suspend fun ensureContext(context: Context, activeModelId: String): Boolean =
         withContext(Dispatchers.IO) {
-            modelContext.ensure(activeModelId) {
+            val appContext = context.applicationContext
+            logContext = appContext
+            val before = modelContext.current()
+            val nativeBefore = ResourceDiagnostics.nativeHeapMb()
+            val startedAt = SystemClock.elapsedRealtime()
+            val ready = modelContext.ensure(activeModelId) {
                 val model = LocalWhisperModels.byId(activeModelId) ?: return@ensure null
                 val file = LocalWhisperStorage.fileFor(context, model)
                 if (!file.exists() || file.length() == 0L) {
@@ -1090,7 +1113,36 @@ class LocalWhisperEngine private constructor() {
                 }
                 file.absolutePath
             }
+            val after = modelContext.current()
+            if (after != null && after !== before) {
+                val loadMs = SystemClock.elapsedRealtime() - startedAt
+                val nativeAfter = ResourceDiagnostics.nativeHeapMb()
+                logWhisperModel(
+                    appContext,
+                    if (before == null) {
+                        "model loaded: model=${after.modelId} loadTime=${loadMs}ms " +
+                            "nativeBefore=${nativeBefore}MB nativeAfter=${nativeAfter}MB"
+                    } else {
+                        "model switched: from=${before.modelId} to=${after.modelId} loadTime=${loadMs}ms " +
+                            "nativeBefore=${nativeBefore}MB nativeAfter=${nativeAfter}MB"
+                    }
+                )
+            }
+            ready
         }
+
+    // Application context for the model load/release lines, which can be
+    // written from release() where no caller context is passed in.
+    @Volatile private var logContext: Context? = null
+
+    /** Whisper Performance Log line about the resident model; only while
+     *  Whisper performance logging is on. */
+    private fun logWhisperModel(context: Context, message: String) {
+        try {
+            if (!Preferences.getPreferences(context, "").getWhisperPerfLogging()) return
+            Logger.log(context, "whisper_perf", "WhisperModel", "info", message)
+        } catch (_: Throwable) { /* diagnostics must never break STT */ }
+    }
 }
 
 /**
