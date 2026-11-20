@@ -27,12 +27,11 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
@@ -136,22 +135,45 @@ class LocalWhisperEngine private constructor() {
         }
     }
 
-    @Volatile private var nativeHandle: Long = 0L
-    @Volatile private var loadedModelId: String = ""
-
-    // Serializes context init/release so a warm-up preload and a real
-    // transcribe can't both call initContextNative for the same model and
-    // leak a handle (or double-free on a model swap).
-    private val contextMutex = Mutex()
-
-    // Serializes the actual whisper_full call. A whisper_context is NOT
-    // thread-safe: running two transcriptions on the same loaded model at
-    // once corrupts native memory and crashes the process with no Java
+    // The loaded model context and its locks. Loading, switching and
+    // releasing are serialized so a warm-up preload and a real transcribe
+    // can't both load the same model and leak a handle, or double-free on a
+    // swap. whisper_full is serialized too: a whisper_context is NOT
+    // thread-safe, and running two transcriptions on the same loaded model
+    // at once corrupts native memory and crashes the process with no Java
     // exception (the app just vanishes back to the previous app). The UI's
     // "cancel" only stops the coroutine awaiting the result — the native
-    // call keeps running — so without this lock a user who gives up and
-    // re-records would kick off a second concurrent whisper_full.
-    private val transcribeMutex = Mutex()
+    // call keeps running — so without this a user who gives up and
+    // re-records would kick off a second concurrent whisper_full. A context
+    // is only ever freed while no transcription is using it.
+    private val modelContext = WhisperModelContext(object : WhisperModelContext.NativeOps {
+        override fun libraryReady(): Boolean = LocalWhisperNative.ensureLoaded()
+
+        override fun init(modelId: String, path: String): Long {
+            val startedAt = SystemClock.elapsedRealtime()
+            val handle = try {
+                LocalWhisperNative.initContextNative(path)
+            } catch (t: Throwable) {
+                Log.w(TAG, "initContextNative threw", t)
+                0L
+            }
+            if (handle == 0L) {
+                Log.w(TAG, "initContextNative returned 0 for $path")
+                return 0L
+            }
+            val elapsed = SystemClock.elapsedRealtime() - startedAt
+            Log.i(TAG, "Loaded whisper model $modelId in ${elapsed}ms")
+            return handle
+        }
+
+        override fun free(handle: Long) = LocalWhisperNative.releaseContextNative(handle)
+        override fun signalAbort() = LocalWhisperNative.signalAbort()
+        override fun clearAbort() = LocalWhisperNative.clearAbort()
+    })
+
+    // Runs a requested release off the caller's thread: freeing has to wait
+    // for a running transcription to stop, which must not block the UI.
+    private val releaseScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * One live recording session. Exists so that every teardown path —
@@ -252,7 +274,7 @@ class LocalWhisperEngine private constructor() {
 
     /** True iff the context for [activeModelId] is already resident in RAM. */
     fun isModelLoaded(activeModelId: String): Boolean =
-        nativeHandle != 0L && loadedModelId == activeModelId
+        modelContext.isLoaded(activeModelId)
 
     /**
      * Loads the model context into native RAM ahead of time. Safe to call
@@ -875,18 +897,6 @@ class LocalWhisperEngine private constructor() {
             return null
         }
         val loadMs = SystemClock.elapsedRealtime() - loadStart
-        val handle = nativeHandle
-        if (handle == 0L) {
-            logAudioHealthTiming(
-                level = "warning",
-                message = "Transcription end: turn=$captureTurn outcome=model-handle-missing " +
-                        "total=${SystemClock.elapsedRealtime() - totalStartMs}ms " +
-                        "captureShutdown=${captureShutdownMs}ms modelPrep=${loadMs}ms " +
-                        "mutexWait=0ms nativeDecode=0ms " +
-                        HandsFreeService.wakeLockDiagnostics().asLogFields()
-            )
-            return null
-        }
 
         onPhase?.invoke(Phase.TRANSCRIBING)
 
@@ -912,16 +922,20 @@ class LocalWhisperEngine private constructor() {
             // critically, guarantees we never run two whisper_full calls on
             // the same context at once.
             val mutexWaitStartMs = SystemClock.elapsedRealtime()
-            LocalWhisperNative.signalAbort()
-            transcribeMutex.withLock {
+            // We become the only transcription; the abort raised for an
+            // earlier run is cleared before ours starts. The handle is read
+            // under that same lock, so it cannot be freed while we use it.
+            modelContext.withTranscription(activeModelId) { handle ->
                 val mutexWaitMs = SystemClock.elapsedRealtime() - mutexWaitStartMs
-                // We now own the only transcription. Clear the abort flag so
-                // this run isn't cut short by the signal we just raised.
-                LocalWhisperNative.clearAbort()
                 var decodeMs = 0L
                 var outcome = "native-error"
                 val decodeStartedAtMs = SystemClock.elapsedRealtime()
                 try {
+                    if (handle == 0L) {
+                        // Released or switched away after it was ensured above.
+                        outcome = "model-handle-missing"
+                        return@withTranscription null
+                    }
                     val text = LocalWhisperNative.transcribeNative(
                         handle, samples, SAMPLE_RATE, language,
                         useBeam, beamSize, temperature,
@@ -976,7 +990,9 @@ class LocalWhisperEngine private constructor() {
                         decodeMs = SystemClock.elapsedRealtime() - decodeStartedAtMs
                     }
                     logAudioHealthTiming(
-                        level = if (outcome.startsWith("native-error")) "warning" else "debug",
+                        // Same levels as before: a missing model handle stays a warning.
+                        level = if (outcome.startsWith("native-error") ||
+                            outcome == "model-handle-missing") "warning" else "debug",
                         message = "Transcription end: turn=$captureTurn outcome=$outcome " +
                                 "total=${SystemClock.elapsedRealtime() - totalStartMs}ms " +
                                 "captureShutdown=${captureShutdownMs}ms modelPrep=${loadMs}ms " +
@@ -1031,17 +1047,17 @@ class LocalWhisperEngine private constructor() {
     }
 
     /**
-     * Frees the loaded whisper context. Safe to call multiple times.
-     * Subsequent transcribe calls will reload from disk.
+     * Frees the loaded whisper context. Safe to call multiple times and from
+     * any thread. Returns at once; the free itself waits for a running
+     * transcription to stop (it is asked to abort). Frees the context loaded
+     * at the time of this call, or still loading then; a model whose load
+     * starts after this call is kept. Subsequent transcribe calls will
+     * reload from disk.
      */
     fun release() {
         cancel()
-        val handle = nativeHandle
-        if (handle != 0L) {
-            try { LocalWhisperNative.releaseContextNative(handle) } catch (_: Throwable) {}
-            nativeHandle = 0L
-            loadedModelId = ""
-        }
+        val ticket = modelContext.requestRelease()
+        releaseScope.launch { modelContext.releaseLoadedBefore(ticket) }
     }
 
     private fun drainBuffer(): ShortArray {
@@ -1065,52 +1081,14 @@ class LocalWhisperEngine private constructor() {
      */
     private suspend fun ensureContext(context: Context, activeModelId: String): Boolean =
         withContext(Dispatchers.IO) {
-            contextMutex.withLock {
-                if (!LocalWhisperNative.ensureLoaded()) return@withLock false
-                if (activeModelId.isEmpty()) return@withLock false
-
-                // Reuse existing context if the model hasn't changed.
-                if (nativeHandle != 0L && loadedModelId == activeModelId) return@withLock true
-
-                // Swap out the old context if we're switching models. Freeing
-                // a context out from under a running whisper_full is a
-                // use-after-free, so abort any in-flight run and wait for it
-                // to release the transcribe lock before we free. (No deadlock:
-                // transcription only takes transcribeMutex after ensureContext
-                // has already returned and released contextMutex.)
-                if (nativeHandle != 0L) {
-                    LocalWhisperNative.signalAbort()
-                    transcribeMutex.withLock {
-                        try { LocalWhisperNative.releaseContextNative(nativeHandle) } catch (_: Throwable) {}
-                        nativeHandle = 0L
-                        loadedModelId = ""
-                    }
-                }
-
-                val model = LocalWhisperModels.byId(activeModelId) ?: return@withLock false
+            modelContext.ensure(activeModelId) {
+                val model = LocalWhisperModels.byId(activeModelId) ?: return@ensure null
                 val file = LocalWhisperStorage.fileFor(context, model)
                 if (!file.exists() || file.length() == 0L) {
                     Log.w(TAG, "Model file missing for $activeModelId at ${file.absolutePath}")
-                    return@withLock false
+                    return@ensure null
                 }
-
-                val startedAt = SystemClock.elapsedRealtime()
-                val handle = try {
-                    LocalWhisperNative.initContextNative(file.absolutePath)
-                } catch (t: Throwable) {
-                    Log.w(TAG, "initContextNative threw", t)
-                    0L
-                }
-                if (handle == 0L) {
-                    Log.w(TAG, "initContextNative returned 0 for ${file.absolutePath}")
-                    return@withLock false
-                }
-
-                nativeHandle = handle
-                loadedModelId = activeModelId
-                val elapsed = SystemClock.elapsedRealtime() - startedAt
-                Log.i(TAG, "Loaded whisper model $activeModelId in ${elapsed}ms")
-                true
+                file.absolutePath
             }
         }
 }

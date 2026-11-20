@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.imagegen.ImageJobDeletionGuard
 import org.teslasoft.assistant.preferences.FakeSharedPreferences
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecord
 
@@ -123,6 +124,101 @@ class ChatDeletionCoordinatorTest {
         assertEquals(listOf("image"), fixture.catalog.records.map { it.imageId })
     }
 
+    @Test fun deletedChatsAreAnnouncedAfterTheCommitAndBeforeCleanup() {
+        // Late image results are discarded from this announcement on, so it
+        // must come once the chat is gone from the list and before its data
+        // is cleaned up.
+        val fixture = Fixture(listOf("chat" to null))
+        val events = mutableListOf<String>()
+        fixture.cleanup.onCleanup = { events.add("cleanup $it") }
+        val coordinator = fixture.coordinator(setting = false) { ids ->
+            assertTrue(fixture.navigation.chats.isEmpty())
+            events.add("deleted $ids")
+        }
+        val preflight = (coordinator.preflight(ChatDeletionTarget.Chats(setOf("chat")))
+            as ChatDeletionPreflightResult.Ready).value
+        coordinator.execute(preflight, ChatDeletionDecision.DELETE_CHAT_ONLY)
+        assertEquals(listOf("deleted [chat]", "cleanup chat"), events)
+    }
+
+    @Test fun failedDeletionAnnouncesNothing() {
+        val fixture = Fixture(listOf("one" to folderId), folders = mutableSetOf(folderId))
+        val announced = mutableListOf<Set<String>>()
+        val coordinator = fixture.coordinator(setting = true) { announced.add(it) }
+        val preflight = (coordinator.preflight(ChatDeletionTarget.Folder(folderId))
+            as ChatDeletionPreflightResult.Ready).value
+        fixture.navigation.chats.add("two" to folderId)
+
+        val result = coordinator.execute(preflight, ChatDeletionDecision.DELETE_CHAT_ONLY)
+        assertFalse(result.metadataCommitted)
+        assertTrue(announced.isEmpty())
+    }
+
+    // A running image job registers its image through the deletion guard; the
+    // deletion marks the guard once committed. These run the real deletion
+    // sequence against that registration.
+    private class ImageJob(val chatId: String)
+
+    @Test fun imageFinishingAfterTheDeletionCommitIsNeverRegistered() {
+        val fixture = Fixture(listOf("chat" to null))
+        val guard = ImageJobDeletionGuard<ImageJob>(Any()) { it.chatId }
+        val job = ImageJob("chat").also { guard.track(it) }
+        // The image finishes while the deleted chat's data is being cleaned up.
+        fixture.cleanup.onCleanup = {
+            guard.unlessChatDeleted(job) { fixture.catalog.records.add(image("late", "chat")) }
+        }
+        val coordinator = fixture.coordinator(setting = false) { guard.markChatsDeleted(it) }
+        val preflight = (coordinator.preflight(ChatDeletionTarget.Chats(setOf("chat")))
+            as ChatDeletionPreflightResult.Ready).value
+        coordinator.execute(preflight, ChatDeletionDecision.DELETE_CHAT_ONLY)
+        assertTrue(fixture.catalog.records.none { it.imageId == "late" })
+    }
+
+    @Test fun imageRegisteredBeforeTheCommitFollowsTheDeleteImagesDecisionAndLock() {
+        val fixture = Fixture(
+            listOf("chat" to null),
+            records = mutableListOf(image("kept-locked", "chat").copy(locked = true))
+        )
+        val guard = ImageJobDeletionGuard<ImageJob>(Any()) { it.chatId }
+        val job = ImageJob("chat").also { guard.track(it) }
+        val coordinator = fixture.coordinator(setting = true) { guard.markChatsDeleted(it) }
+        val preflight = (coordinator.preflight(ChatDeletionTarget.Chats(setOf("chat")))
+            as ChatDeletionPreflightResult.Ready).value
+        // Registered after the dialog, before the deletion commits.
+        guard.unlessChatDeleted(job) { fixture.catalog.records.add(image("late", "chat")) }
+        coordinator.execute(preflight, ChatDeletionDecision.DELETE_ALL)
+        assertEquals(listOf("kept-locked"), fixture.catalog.records.map { it.imageId })
+    }
+
+    @Test fun registrationInProgressFinishesBeforeTheDeletionMarksAndIsSettled() {
+        // An existing image makes Delete All available in the dialog.
+        val fixture = Fixture(listOf("chat" to null), records = mutableListOf(image("earlier", "chat")))
+        val lock = Any()
+        val guard = ImageJobDeletionGuard<ImageJob>(lock) { it.chatId }
+        val job = ImageJob("chat").also { guard.track(it) }
+        val coordinator = fixture.coordinator(setting = true) { guard.markChatsDeleted(it) }
+        val preflight = (coordinator.preflight(ChatDeletionTarget.Chats(setOf("chat")))
+            as ChatDeletionPreflightResult.Ready).value
+        val registering = java.util.concurrent.CountDownLatch(1)
+        val registration = Thread {
+            guard.unlessChatDeleted(job) {
+                registering.countDown()
+                Thread.sleep(100) // the deletion commits meanwhile
+                synchronized(fixture.catalog.records) {
+                    fixture.catalog.records.add(image("late", "chat"))
+                }
+            }
+        }
+        registration.start()
+        assertTrue(registering.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        coordinator.execute(preflight, ChatDeletionDecision.DELETE_ALL)
+        registration.join(5_000)
+        // The mark waited for the registration, so the delete-images
+        // settlement that follows it found and removed the image.
+        assertTrue(fixture.catalog.records.isEmpty())
+        assertTrue(guard.isChatDeleted(job))
+    }
+
     private fun image(id: String, owner: String) = GeneratedImageCatalogRecord(
         imageId = id,
         fileHash = "hash-$id",
@@ -149,12 +245,16 @@ class ChatDeletionCoordinatorTest {
             idFactory = { journalId }
         )
 
-        fun coordinator(setting: Boolean) = ChatDeletionCoordinator(
+        fun coordinator(
+            setting: Boolean,
+            onChatsDeleted: (Set<String>) -> Unit = {}
+        ) = ChatDeletionCoordinator(
             navigation,
             catalog,
             journal,
             cleanup,
-            deleteImagesWithChat = { setting }
+            deleteImagesWithChat = { setting },
+            onChatsDeleted = onChatsDeleted
         )
     }
 
@@ -210,7 +310,9 @@ class ChatDeletionCoordinatorTest {
     private class FakeCleanup : ChatDeletionCleanupGateway {
         val cleaned = LinkedHashSet<String>()
         var succeeds = true
+        var onCleanup: (String) -> Unit = {}
         override fun cleanupChat(chatId: String): Boolean {
+            onCleanup(chatId)
             cleaned.add(chatId)
             return succeeds
         }
