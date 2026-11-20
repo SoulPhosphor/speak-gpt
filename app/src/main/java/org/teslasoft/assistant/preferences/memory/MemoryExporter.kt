@@ -18,16 +18,11 @@ package org.teslasoft.assistant.preferences.memory
 
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import android.content.Context
-import com.google.gson.Gson
-import org.json.JSONArray
-import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
-import org.teslasoft.assistant.util.AtomicFileWriter
-import org.teslasoft.assistant.util.Hash
 import java.io.File
-import java.time.Instant
-import java.time.temporal.ChronoUnit
+import java.io.FileInputStream
+import java.io.OutputStream
 
 /**
  * Backup/export for the companion memory store. One format everywhere: the
@@ -48,15 +43,24 @@ object MemoryExporter {
     private const val BACKUP_DIR = "memory_backups"
     private const val ROTATION_KEEP = 5
 
+    /** Leftover temporary files of an export that was cut off (the app was
+     *  killed mid-write). Only this exporter writes them, so removing them
+     *  while it holds [exportLock] never touches a running export. */
+    private val STALE_TEMP = Regex("^memory-(?:export|backup)-.+\\.json\\.tmp$")
+
+    /** One export at a time: the backup before a reset and the manual
+     *  export never write together. */
+    private val exportLock = Any()
+
     /**
      * Write a backup right now into the rotating backup dir, ignoring the daily
      * throttle. Used by "Reset memories" when the user leaves the backup-first
      * option checked. Returns the file name, or null on failure.
      *
      * The caller is about to DELETE the store on the strength of this file,
-     * so "probably written" isn't enough: the write is atomic (temp file →
-     * rename) and read back before success is reported. A null return means
-     * the reset must not proceed.
+     * so "probably written" isn't enough: the file is streamed to a temporary
+     * name, forced to disk, read back and checked complete before it takes
+     * its real name. A null return means the reset must not proceed.
      */
     fun writeBackupNow(context: Context): String? {
         return try {
@@ -77,7 +81,7 @@ object MemoryExporter {
             } else {
                 val stamp = MemoryStore.nowIso().replace(":", "-")
                 val file = File(dir, "memory-backup-$stamp.json")
-                if (AtomicFileWriter.writeAndVerify(file, buildExportJson(context))) {
+                if (writeExportFile(context, dir, file) != null) {
                     MemoryLog.log(context, "MemoryExport", "info", "Backup written before reset: ${file.name}")
                     file.name
                 } else {
@@ -91,6 +95,31 @@ object MemoryExporter {
             if (e !is Exception && e !is OutOfMemoryError) throw e
             MemoryLog.log(context, "MemoryExport", "error", "Backup-before-reset failed: ${e.message}")
             null
+        }
+    }
+
+    /**
+     * The manual export to a file the user chose. The export is streamed to
+     * a private temporary file and checked complete first, then copied to
+     * the file the user chose, so a failure never leaves a cut-off backup in the
+     * user's folder. Throws on failure; the caller reports it.
+     */
+    fun exportTo(context: Context, openDestination: () -> OutputStream?) {
+        val staged = File(context.cacheDir, "memory-export-staging-${System.nanoTime()}.json")
+        try {
+            synchronized(exportLock) {
+                MemoryExportStream.writeVerifiedFile(staged) { out -> streamExport(context, out) }
+            } ?: throw IllegalStateException("the export did not verify after writing")
+            // Opened only now: a failed export never creates or empties the
+            // user's file.
+            val destination = openDestination()
+                ?: throw IllegalStateException("the destination file could not be opened")
+            destination.use { out ->
+                FileInputStream(staged).use { input -> input.copyTo(out, 64 * 1024) }
+                out.flush()
+            }
+        } finally {
+            staged.delete()
         }
     }
 
@@ -112,23 +141,34 @@ object MemoryExporter {
         true // unknown state fails conservatively: no backup claimed complete
     }
 
-    fun buildExportJson(context: Context): String {
+    /**
+     * Streams the full export into [out]: the memory store, then every chat
+     * one at a time, then `export_meta`. Same document [MemorySeedCodec
+     * .serialize] produces, without ever holding it in memory.
+     */
+    internal fun streamExport(context: Context, out: OutputStream): MemoryExportStream.Written {
         val store = MemoryStore.getInstance(context)
         // Belt: callers gate on isChatListUnavailable before invoking. If a
         // path reaches here anyway while the list is unavailable, omit the
         // chat envelope entirely and mark it incomplete — never serialize a
         // masked empty list as though it were all chats.
         val listUnavailable = isChatListUnavailable(context)
-        val chats = if (listUnavailable) AppChats(JSONArray(), complete = false) else buildAppChats(context)
-        return MemorySeedCodec.serialize(
-            store.exportData(),
-            appChats = if (listUnavailable) null else chats.array,
+        return MemoryExportStream.write(
+            out,
+            memoryRoot = MemorySeedCodec.memoryRoot(store.exportData()),
+            chats = if (listUnavailable) null else appChats(context),
             exportedAtIso = MemoryStore.nowIso(),
-            appChatsComplete = chats.complete && !chatStorageDegraded(context)
+            storageDegraded = { chatStorageDegraded(context) }
         )
     }
 
-    private data class AppChats(val array: JSONArray, val complete: Boolean)
+    /** Streams into [file] inside [dir] after clearing leftovers of cut-off
+     *  exports. Null when the result did not verify. */
+    private fun writeExportFile(context: Context, dir: File, file: File): MemoryExportStream.Written? =
+        synchronized(exportLock) {
+            dir.listFiles { f -> STALE_TEMP.matches(f.name) }?.forEach { it.delete() }
+            MemoryExportStream.writeVerifiedFile(file) { out -> streamExport(context, out) }
+        }
 
     private fun chatStorageDegraded(context: Context): Boolean = try {
         ChatStorageHealth.anyChatDataDegraded(context)
@@ -137,106 +177,51 @@ object MemoryExporter {
     }
 
     /**
-     * The app's chats serialized verbatim (list metadata + raw message maps).
-     * Chat import/merge is deliberately NOT part of this phase — the envelope
-     * exists so today's backups already carry everything a future device needs.
+     * The app's chats serialized verbatim (list metadata + raw message maps),
+     * read one chat at a time as the stream asks for them. Chat import/merge
+     * is deliberately NOT part of this phase — the envelope exists so today's
+     * backups already carry everything a future device needs.
      *
      * A chat whose history is LOCKED/CORRUPT/FAILED (Round 4) is carried as
      * an identifier-only entry with `"unavailable": true` and NO "messages"
      * key — never a fabricated empty history — and the whole export is
      * marked incomplete. Recovery snapshots are never included as chats.
      */
-    private fun buildAppChats(context: Context): AppChats {
-        val gson = Gson()
-        val chats = JSONArray()
-        var complete = true
+    private fun appChats(context: Context): Iterator<MemoryExportStream.Chat> {
         val chatPreferences = ChatPreferences.getChatPreferences()
-        // first_message is discarded below (line skips it); read the list
+        // first_message is discarded (chatHeader skips it); read the list
         // without the whole-store history parse and read each chat's history
         // exactly once, via getChatByIdResult.
-        for (chat in chatPreferences.getChatListResult(context, includeFirstMessage = false).chats) {
-            val name = chat["name"] ?: continue
-            val obj = JSONObject()
-            obj.put("name", name)
-            obj.put("chat_id", ChatPreferences.storedChatId(chat))
-            for ((key, value) in chat) {
-                if (key != "name" && key != "first_message") obj.put(key, value)
+        val list = chatPreferences.getChatListResult(context, includeFirstMessage = false).chats
+        return list.asSequence()
+            .mapNotNull { chat ->
+                val header = chatHeader(chat, ChatPreferences.storedChatId(chat)) ?: return@mapNotNull null
+                val history = chatPreferences.getChatByIdResult(
+                    context, ChatPreferences.storedChatId(chat), DamagedChatOperation.MEMORY
+                )
+                MemoryExportStream.Chat(
+                    header,
+                    if (ChatStorageHealth.isAuthoritative(history.state)) history.messages else null
+                )
             }
-            val history = chatPreferences.getChatByIdResult(context, ChatPreferences.storedChatId(chat), DamagedChatOperation.MEMORY)
-            if (ChatStorageHealth.isAuthoritative(history.state)) {
-                obj.put("messages", JSONArray(gson.toJson(history.messages)))
-            } else {
-                obj.put("unavailable", true)
-                complete = false
-            }
-            chats.put(obj)
-        }
-        return AppChats(chats, complete)
+            .iterator()
     }
 
     /**
-     * Startup housekeeping: write a rotating export if the last one is older
-     * than a day. Caller guarantees the store is provisioned; everything else
-     * is guarded here (the toggle in memory settings, the throttle, rotation).
+     * A chat's list entry as written in `app_chats`: `name`, then `chat_id`,
+     * then every other list field except `first_message`. A field present in
+     * the list entry replaces the derived one, and a null field is left out,
+     * exactly as the previous object-based export did. Null without a name.
      */
-    fun autoExportIfDue(context: Context) {
-        try {
-            // Automatic backup PAUSES while the chat list is unreadable
-            // (Round 4, owner policy): nothing is written and nothing is
-            // rotated, so the newest existing backups — the last complete
-            // ones — survive the outage untouched. The throttle marker is
-            // not advanced, so the first healthy start exports immediately.
-            if (isChatListUnavailable(context)) {
-                MemoryLog.log(context, "MemoryExport", "warning",
-                    "Automatic backup paused: encrypted chat storage is unavailable. Existing backups are preserved; backups resume when storage opens.")
-                return
-            }
-            val store = MemoryStore.getInstance(context)
-            if (store.getMeta(MemoryStore.META_AUTO_EXPORT_ENABLED) == "0") return
-
-            val last = store.getMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT)
-            if (last != null) {
-                try {
-                    if (Instant.parse(last).isAfter(Instant.now().minus(24, ChronoUnit.HOURS))) return
-                } catch (_: Exception) { /* unparseable timestamp: export now */ }
-            }
-
-            val dir = File(context.getExternalFilesDir(null), BACKUP_DIR)
-            if (!dir.exists() && !dir.mkdirs()) return
-
-            val stamp = MemoryStore.nowIso().replace(":", "-")
-            val file = File(dir, "memory-export-$stamp.json")
-            // Atomic + verified like the pre-reset backup: a torn write must
-            // not leave a truncated file as the NEWEST backup (the one a user
-            // in trouble grabs first). On failure the throttle marker is left
-            // unset so the next start retries.
-            if (!AtomicFileWriter.writeAndVerify(file, buildExportJson(context))) {
-                MemoryLog.log(context, "MemoryExport", "error", "Automatic memory backup did not verify after writing; will retry on the next start.")
-                return
-            }
-            store.setMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT, MemoryStore.nowIso())
-
-            // Rotation is suspended while chat storage is degraded: the
-            // exports written during an outage carry an incomplete chat
-            // envelope, and rotating on schedule would age out the last
-            // backups that still hold the full chat set. Extra files
-            // accumulate at most one per day until the outage ends.
-            if (chatStorageDegraded(context)) {
-                MemoryLog.log(context, "MemoryExport", "warning",
-                    "Automatic memory backup written with an incomplete chat set (chat storage is currently locked or partially unreadable): ${file.name}. Older backups are being kept until a complete backup succeeds.")
-            } else {
-                val backups = dir.listFiles { f -> f.name.startsWith("memory-export-") && f.name.endsWith(".json") }
-                if (backups != null && backups.size > ROTATION_KEEP) {
-                    backups.sortedBy { it.name }.dropLast(ROTATION_KEEP).forEach { it.delete() }
-                }
-                MemoryLog.log(context, "MemoryExport", "info", "Automatic memory backup written: ${file.name}")
-            }
-        } catch (e: Throwable) {
-            // OutOfMemoryError is caught too: this runs on every app start, so
-            // an uncaught one would crash the app and, with the throttle
-            // marker still unset, crash it again on each following start.
-            if (e !is Exception && e !is OutOfMemoryError) throw e
-            MemoryLog.log(context, "MemoryExport", "error", "Automatic memory backup failed: ${e.message}")
+    internal fun chatHeader(chat: Map<String, Any?>, storedChatId: String): Map<String, Any>? {
+        val name = chat["name"] ?: return null
+        val header = LinkedHashMap<String, Any>()
+        header["name"] = name
+        header["chat_id"] = storedChatId
+        for ((key, value) in chat) {
+            if (key == "name" || key == "first_message") continue
+            if (value == null) header.remove(key) else header[key] = value
         }
+        return header
     }
 }

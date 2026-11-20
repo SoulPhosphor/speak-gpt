@@ -2670,9 +2670,9 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                 runOnUiThread { showChatBackupUnavailableDialog() }
                 return@runOffThread
             }
-            val json = MemoryExporter.buildExportJson(this)
-            contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(json) }
-                ?: throw IllegalStateException(getString(R.string.memory_file_unreadable))
+            // Streamed: the export is never held in memory as one string, and
+            // the chosen file is written only after the export verified.
+            MemoryExporter.exportTo(this) { contentResolver.openOutputStream(uri, "wt") }
             MemoryStore.getInstance(this).setMeta(MemoryStore.META_LAST_AUTO_EXPORT_AT, MemoryStore.nowIso())
             val where = BackupLocationDisplay.describeSaveAs(this, uri)
             val destination = where.breadcrumb ?: where.providerLabel
