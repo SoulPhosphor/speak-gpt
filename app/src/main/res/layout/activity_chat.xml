@@ -516,6 +516,13 @@
             app:layout_constraintTop_toBottomOf="@+id/health_banner"
             tools:listitem="@layout/view_assistant_bot_message" />
 
+        <include layout="@layout/view_chat_jump_buttons"
+            android:layout_width="wrap_content"
+            android:layout_height="0dp"
+            app:layout_constraintTop_toTopOf="@id/messages"
+            app:layout_constraintBottom_toBottomOf="@id/messages"
+            app:layout_constraintRight_toRightOf="@id/messages" />
+
         <!-- Pending Includes strip: one row per unsent document, directly above the
              message box. Sent attachments leave this surface and appear in
              the transcript under the user name.

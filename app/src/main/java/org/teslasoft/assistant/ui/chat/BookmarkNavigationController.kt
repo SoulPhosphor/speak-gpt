@@ -113,8 +113,10 @@ class BookmarkNavigationController(
             if (navigation.query == null) R.string.bookmark_count else R.string.bookmark_result_count,
             navigation.ordinal, navigation.count
         )
-        previous.isEnabled = navigation.canNavigate
-        next.isEnabled = navigation.canNavigate
+        // Back and forward appear only when there are at least two to move between.
+        val arrows = if (navigation.canNavigate) View.VISIBLE else View.GONE
+        previous.visibility = arrows
+        next.visibility = arrows
     }
 
     private fun releaseSearchKeyboard() {

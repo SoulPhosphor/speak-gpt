@@ -9,8 +9,10 @@ package org.teslasoft.assistant.ui.activities
 
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.widget.doAfterTextChanged
@@ -110,6 +112,8 @@ class ChatSettingsActivity : SettingsPageActivity() {
             preferences.setHardwareKeyboardShortcuts(it)
         }
 
+        bindScrollNavigation()
+
         findViewById<MaterialSwitch>(R.id.switch_top_positioned_audio_control)?.apply {
             isChecked = preferences.getTopPositionedAudioControl()
             setOnCheckedChangeListener { _, value ->
@@ -157,6 +161,24 @@ class ChatSettingsActivity : SettingsPageActivity() {
             ChatSearchIndexManager.get(this).rebuild {
                 runOnUiThread { if (!isFinishing && !isDestroyed) button.isEnabled = true }
             }
+        }
+    }
+
+    /** Show Chat Scrolling Navigation, with its side choice shown only while on. */
+    private fun bindScrollNavigation() {
+        val sides = findViewById<RadioGroup>(R.id.group_scroll_navigation_side) ?: return
+        sides.check(
+            if (preferences.getChatScrollNavigationOnLeft()) R.id.radio_scroll_navigation_left
+            else R.id.radio_scroll_navigation_right
+        )
+        sides.setOnCheckedChangeListener { _, checkedId ->
+            preferences.setChatScrollNavigationOnLeft(checkedId == R.id.radio_scroll_navigation_left)
+        }
+        val shown = preferences.getShowChatScrollNavigation()
+        sides.visibility = if (shown) View.VISIBLE else View.GONE
+        bindSwitch(R.id.switch_scroll_navigation, shown) {
+            preferences.setShowChatScrollNavigation(it)
+            sides.visibility = if (it) View.VISIBLE else View.GONE
         }
     }
 

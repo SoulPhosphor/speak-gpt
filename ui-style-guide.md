@@ -1292,6 +1292,9 @@ the horizontal padding that aligns the rows with the screen's other rows. All
 size, color, and geometry live in the style, never in the layout or Kotlin.
 First use: the Voice Input engine choice on Voice & Speech.
 
+`Widget.App.Row.RadioGroup` is that vertical group; it adds no inset of its
+own, so the page content's gutter aligns it with the screen's other rows.
+
 This is for a persistent on-screen choice. It is not the "checked tile"
 pick-list (`Widget.App.PickList.Row`) used inside a Select pop-up, and it is
 not the equal-width horizontal segmented control
@@ -1385,6 +1388,23 @@ Edit, More, and the rest): `chat_message_action_size` square, spaced by
 chat adapter colors every action icon with the bubble's foreground in one
 place, so the icons contrast with any bubble. The row sits in the bottom corner
 opposite the speaker's name.
+
+### Chat Jump to Top / Bottom
+
+`view_chat_jump_buttons.xml` lays a narrow rail (`Widget.App.Chat.JumpRail`)
+over the message list's side margin, from the top of the message area to its
+bottom, so it follows the message area when the keyboard opens. It holds two
+tiny arrows (Material Symbols `keyboard_double_arrow_up` / `_down`):
+`Widget.App.Chat.JumpButton.Top` at the top and `.Bottom` at the bottom. Each
+is exactly as wide as the narrowest bubble margin (`chat_jump_rail_width`), with
+a small centered icon (`chat_jump_icon_size`), so it touches neither a bubble nor
+the screen edge. The rail draws above message rows (portraits pass under it)
+and above the floating Includes strip (`chat_jump_rail_elevation`). The arrows
+use the chat icons' accent, `colorPrimary`, slightly subdued
+(`chat_jump_tint`, `chat_jump_icon_alpha`); there is no background, only the
+borderless ripple. Chat Settings' Show Chat Scrolling Navigation (on by
+default) turns the rail on or off, and its Left Side / Right Side choice
+(default Right Side) places it in the left or right margin.
 
 ### Chat Selection Mode
 
@@ -1862,12 +1882,19 @@ When this guide and current style definitions disagree, inspect `themes.xml`, ve
 
 `Widget.App.Bookmark.*` owns the fixed bookmark navigation strip, centered
 counter, borderless navigation controls, expandable search field, and
-speaker-marker spacing. The speaker marker spacing also
+speaker-marker spacing. The strip's row has Search toggle at the start and
+Close (`ic_close`) at the end. The counter is centered on the whole row, not
+on the space between those buttons, with Previous and Next (Material Symbols
+`keyboard_double_arrow_left` / `_right`) directly beside it. Previous and
+Next show only while there are at least two bookmarks or results to move
+between. The speaker marker spacing also
 places the hidden-from-AI marker (`ic_visibility_off`, sized by
 `bookmark_icon_size`) on the other side of the name; with names off, the same
 line keeps the markers in the name's place. `AppButton.Primary.Inline.BookmarkSearch`
 inherits the shared label-sized Search button. Measurements live in `dimens.xml`;
-`bookmark_action_tint` resolves enabled and disabled colors from theme attributes.
+Every icon on the strip (`Widget.App.Bookmark.Action`) is tinted with the
+counter's own text color, `?attr/appTextColor`, so the icons always match the
+text beside them.
 The strip is part of the chat layout beneath its header and above the transcript;
 it reserves space rather than covering messages or portraits. It is independent
 of the existing summarizer section flags. The bookmark-star and double-arrow

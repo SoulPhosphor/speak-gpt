@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Google Material Symbols Outlined "keyboard_double_arrow_up"; Apache License 2.0.
+     The fill is only an opaque mask: the visible color always comes from the
+     button style's tint (Widget.App.Chat.JumpButton). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="@dimen/chat_jump_icon_size" android:height="@dimen/chat_jump_icon_size"
+    android:viewportWidth="960" android:viewportHeight="960">
+    <path android:fillColor="@android:color/white"
+        android:pathData="M296,736L240,680L480,440L720,680L664,736L480,553L296,736ZM296,496L240,440L480,200L720,440L664,496L480,313L296,496Z" />
+</vector>

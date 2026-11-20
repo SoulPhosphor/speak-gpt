@@ -634,6 +634,15 @@
         <item name="android:textStyle">normal</item>
     </style>
 
+    <!-- Vertical RadioGroup holding Widget.App.Row.Radio rows. It adds no
+         inset of its own: the page content's gutter aligns it with the
+         screen's other rows. -->
+    <style name="Widget.App.Row.RadioGroup" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
     <!-- Stacked single-choice radio row for a settings screen: a full-width,
          tappable RadioButton whose label matches the shared row-title
          typography (16sp, appRowTitleColor) and whose control tint resolves
@@ -2178,6 +2187,29 @@
 
     <!-- Bare primary actions in the composer control row. Geometry, icon
          tint, and the absence of a background remain centrally themeable. -->
+    <!-- Jump to Top / Bottom (view_chat_jump_buttons.xml): a rail over the
+         message list's end margin; the arrows sit at its top and bottom. -->
+    <style name="Widget.App.Chat.JumpRail" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:elevation">@dimen/chat_jump_rail_elevation</item>
+    </style>
+    <style name="Widget.App.Chat.JumpButton" parent="">
+        <item name="android:layout_width">@dimen/chat_jump_rail_width</item>
+        <item name="android:layout_height">@dimen/chat_jump_button_height</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:tint">@color/chat_jump_tint</item>
+    </style>
+    <style name="Widget.App.Chat.JumpButton.Top">
+        <item name="android:layout_gravity">top</item>
+        <item name="android:layout_marginTop">@dimen/chat_jump_edge_gap</item>
+    </style>
+    <style name="Widget.App.Chat.JumpButton.Bottom">
+        <item name="android:layout_gravity">bottom</item>
+        <item name="android:layout_marginBottom">@dimen/chat_jump_bottom_gap</item>
+    </style>
+
     <style name="Widget.App.Chat.ComposerAction" parent="">
         <item name="android:layout_width">48dp</item>
         <item name="android:layout_height">48dp</item>
@@ -3508,10 +3540,10 @@
         <item name="android:padding">@dimen/bookmark_action_padding</item>
         <item name="android:scaleType">fitCenter</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
-        <item name="android:tint">@color/bookmark_action_tint</item>
+        <item name="android:tint">?attr/appTextColor</item>
     </style>
     <style name="Widget.App.Bookmark.Counter" parent="">
-        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:gravity">center</item>
         <item name="android:textColor">?attr/appTextColor</item>

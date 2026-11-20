@@ -820,6 +820,22 @@ class Preferences internal constructor(
         setDesktopMode(state)
     }
 
+    /** Scroll to Top / Bottom arrows in the chat's side margin. */
+    fun getShowChatScrollNavigation(): Boolean =
+        getGlobalBoolean("chat_scroll_navigation", true)
+
+    fun setShowChatScrollNavigation(state: Boolean) {
+        putGlobalBoolean("chat_scroll_navigation", state, true)
+    }
+
+    /** True: the arrows sit in the left margin; false (default): the right. */
+    fun getChatScrollNavigationOnLeft(): Boolean =
+        getGlobalBoolean("chat_scroll_navigation_left", false)
+
+    fun setChatScrollNavigationOnLeft(state: Boolean) {
+        putGlobalBoolean("chat_scroll_navigation_left", state, false)
+    }
+
     fun getHighlightFullSizeAttachments(): Boolean =
         getGlobalBoolean("chat_highlight_full_size_attachments", false)
 

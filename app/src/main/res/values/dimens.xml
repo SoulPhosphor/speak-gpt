@@ -80,6 +80,17 @@
          owner-approved visual target tuned on Aug 13 2026. -->
     <dimen name="chat_message_speaker_inset">25dp</dimen>
     <dimen name="chat_message_ai_right_inset">28dp</dimen>
+    <!-- Jump to Top / Bottom rail: exactly the narrowest bubble margin (the
+         user side), so the centered icon clears both bubble and screen edge. -->
+    <dimen name="chat_jump_rail_width">@dimen/chat_message_speaker_inset</dimen>
+    <dimen name="chat_jump_button_height">24dp</dimen>
+    <dimen name="chat_jump_icon_size">13dp</dimen>
+    <dimen name="chat_jump_edge_gap">4dp</dimen>
+    <!-- The bottom arrow sits closer to the message box than the top one sits to the header. -->
+    <dimen name="chat_jump_bottom_gap">0dp</dimen>
+    <!-- Above the floating Includes strip (10dp) so the arrows always show. -->
+    <dimen name="chat_jump_rail_elevation">12dp</dimen>
+    <item name="chat_jump_icon_alpha" format="float" type="dimen">0.7</item>
     <dimen name="chat_message_user_left_inset">49dp</dimen>
     <dimen name="chat_message_content_padding">14dp</dimen>
     <!-- The tuner gives every message 22dp of leading space and exposes the
