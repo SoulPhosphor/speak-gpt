@@ -109,7 +109,8 @@ class MainApplication : Application() {
         // voice channel); clearing stays user-driven via the button in LogsActivity.
 
         // Record *why the previous process died* (low memory, force-stop, crash)
-        // into the Voice Debug Log. A hard kill runs no code on the way out, so
+        // into System Logs (only while its own toggle is on; no voice setting
+        // affects it). A hard kill runs no code on the way out, so
         // this after-the-fact query is the only way a screen-off readback that
         // was killed mid-sentence leaves any trace. Deduped + best-effort inside.
         Logger.logLastExitReason(this)

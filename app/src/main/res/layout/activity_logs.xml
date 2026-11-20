@@ -23,6 +23,36 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Search panel: declared before the header so the header draws over
+         it while it slides down from behind (LogSearchBar). Searches only
+         this log. -->
+    <LinearLayout
+        android:id="@+id/log_search_panel"
+        style="@style/Widget.App.ActionBar.SearchPanel"
+        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+
+        <LinearLayout style="@style/Widget.App.SearchPill.InPanel">
+
+            <ImageView
+                style="@style/Widget.App.SearchPill.Icon"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_search" />
+
+            <EditText
+                android:id="@+id/log_search_field"
+                style="@style/Widget.App.SearchPill.Field"
+                android:layout_weight="1"
+                android:hint="@string/hint_search"
+                android:imeOptions="actionSearch"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:saveEnabled="false" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Header with trailing icons: Search is always last; the Voice Debug
+         log's jump to Advanced Voice settings chains before it (hidden on
+         every other log, where the title then ends at Search). -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/action_bar"
         style="@style/Widget.App.ActionBar">
@@ -31,21 +61,11 @@
             android:id="@+id/btn_back"
             style="@style/Widget.App.ActionBar.BackButton" />
 
-        <!-- Two title styles, one shown at a time (LogsActivity picks per log):
-             the Voice Debug log carries the trailing icon below, so it uses the
-             left-aligned, icon-aware title; every other log has no trailing icon
-             and uses the plain centered title. -->
         <TextView
             android:id="@+id/activity_logs_title"
             style="@style/Widget.App.ActionBar.Title.NearBack"
             android:text="@string/title_logs"
-            android:visibility="gone"
             app:layout_constraintEnd_toStartOf="@+id/btn_voice_advanced" />
-
-        <TextView
-            android:id="@+id/activity_logs_title_centered"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/title_logs" />
 
         <!-- One-tap jump to the advanced voice & debugging screen, shown only on
              the Event log (set in LogsActivity) so the user can read what's
@@ -53,12 +73,20 @@
              that tile. -->
         <ImageButton
             android:id="@+id/btn_voice_advanced"
-            style="@style/Widget.App.ActionBar.SecondaryButton"
+            style="@style/Widget.App.ActionBar.ChainedButton"
             android:contentDescription="@string/btn_open_voice_advanced"
             android:src="@drawable/ic_terminal"
             android:tooltipText="@string/btn_open_voice_advanced"
             android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@+id/btn_log_search"
             app:srcCompat="@drawable/ic_terminal" />
+
+        <ImageButton
+            android:id="@+id/btn_log_search"
+            style="@style/Widget.App.ActionBar.SecondaryButton"
+            android:contentDescription="@string/hint_search"
+            android:src="@drawable/ic_search"
+            android:tooltipText="@string/hint_search" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Clear (left) and Copy / Export (right) share one line. Clear uses the
@@ -102,7 +130,7 @@
         app:layout_constraintBottom_toTopOf="@+id/btn_clear_log"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/action_bar">
+        app:layout_constraintTop_toBottomOf="@+id/log_search_panel">
 
         <LinearLayout
             android:layout_width="match_parent"

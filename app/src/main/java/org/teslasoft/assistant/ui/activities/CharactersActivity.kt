@@ -45,6 +45,7 @@ class CharactersActivity : SettingsPageActivity() {
     private var rowPersonas: LinearLayout? = null
     private var rowMyPersonas: LinearLayout? = null
     private var rowActivationPrompts: LinearLayout? = null
+    private var rowSystemPrompts: LinearLayout? = null
     // Lorebooks moved to the Memory Manager (owner ruling, July 8 2026): they
     // are memory notes, so they belong with the rest of the memory system.
 
@@ -74,6 +75,7 @@ class CharactersActivity : SettingsPageActivity() {
         rowPersonas = findViewById(R.id.row_personas)
         rowMyPersonas = findViewById(R.id.row_my_personas)
         rowActivationPrompts = findViewById(R.id.row_activation_prompts)
+        rowSystemPrompts = findViewById(R.id.row_system_prompts)
 
         ThemeManager.getThemeManager().applyTheme(this, isDarkThemeEnabled() && preferences!!.getAmoledPitchBlack())
 
@@ -119,6 +121,11 @@ class CharactersActivity : SettingsPageActivity() {
 
         rowActivationPrompts?.setOnClickListener {
             startActivity(Intent(this, ActivationPromptsListActivity::class.java))
+        }
+
+        // Plain row: never shows which system prompt is selected.
+        rowSystemPrompts?.setOnClickListener {
+            startActivity(Intent(this, SystemPromptsListActivity::class.java))
         }
     }
 

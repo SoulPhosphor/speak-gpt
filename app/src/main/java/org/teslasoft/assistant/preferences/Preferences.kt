@@ -78,6 +78,8 @@ class Preferences internal constructor(
         const val LOG_MAX_DAYS_LIMIT = 30
         const val LOG_DEFAULT_MAX_ENTRIES = 50
         const val LOG_DEFAULT_MAX_DAYS = 7
+        /** System Logs' own default "Maximum Logs Saved" (owner spec). */
+        const val SYSTEM_LOG_DEFAULT_MAX_ENTRIES = 10
         const val CONDENSED_KIND_SUMMARY = "summary"
         const val CONDENSED_KIND_COMPACTION = "compaction"
         private val COMPACTION_STATE_KEYS = listOf(
@@ -2360,6 +2362,36 @@ class Preferences internal constructor(
 
     fun setTtsLifecycleLogMaxDays(value: Int) {
         putGlobalInt("tts_lifecycle_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
+    }
+
+    /**
+     * System Logs (Alerts, Errors & Logs). Off by default — when on, each
+     * process exit reported on the next launch is written to the System Logs
+     * channel. The Error Log copy of an app-breaking exit does not depend on
+     * this toggle.
+     */
+    fun getSystemLogging() : Boolean {
+        return getGlobalBoolean("system_logging", false)
+    }
+
+    fun setSystemLogging(enabled: Boolean) {
+        putGlobalBoolean("system_logging", enabled, false)
+    }
+
+    fun getSystemLogMaxEntries() : Int {
+        return coerceLogMaxEntries(getGlobalInt("system_log_max_entries", SYSTEM_LOG_DEFAULT_MAX_ENTRIES))
+    }
+
+    fun setSystemLogMaxEntries(value: Int) {
+        putGlobalInt("system_log_max_entries", coerceLogMaxEntries(value), SYSTEM_LOG_DEFAULT_MAX_ENTRIES)
+    }
+
+    fun getSystemLogMaxDays() : Int {
+        return coerceLogMaxDays(getGlobalInt("system_log_max_days", LOG_DEFAULT_MAX_DAYS))
+    }
+
+    fun setSystemLogMaxDays(value: Int) {
+        putGlobalInt("system_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
     }
 
     // Provider Failure Log (owner ruling, July 31 2026): records the raw

@@ -3886,6 +3886,31 @@
         <item name="android:importantForAccessibility">no</item>
     </style>
 
+    <!-- Header search panel: a strip directly under Widget.App.ActionBar that
+         slides down from behind it when the header's search icon is tapped.
+         Its background is the header's own color (ScreenChrome.applyHeaderPanel)
+         so the two read as one surface. Holds a Widget.App.SearchPill.InPanel. -->
+    <style name="Widget.App.ActionBar.SearchPanel" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/colorSurfaceContainerHigh</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/header_search_panel_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/header_search_panel_padding_horizontal</item>
+        <item name="android:paddingBottom">@dimen/header_search_panel_padding_bottom</item>
+        <item name="android:visibility">gone</item>
+        <item name="layout_constraintEnd_toEndOf">parent</item>
+        <item name="layout_constraintStart_toStartOf">parent</item>
+    </style>
+
+    <!-- A search-only Widget.App.SearchPill inside the header search panel;
+         the panel's padding supplies the spacing, so no top margin. -->
+    <style name="Widget.App.SearchPill.InPanel" parent="Widget.App.SearchPill">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
     <style name="Widget.App.SearchPill.Field" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">match_parent</item>
