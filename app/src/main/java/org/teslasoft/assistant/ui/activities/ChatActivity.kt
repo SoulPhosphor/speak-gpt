@@ -3212,10 +3212,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Detach from the image job registry WITHOUT cancelling the job:
         // the generation deliberately survives leaving the chat and
         // recreation (§5); with no screen attached its result is written
-        // straight into the stored history.
-        if (!deletingChat) {
-            ImageGenerationJobRegistry.detach(chatId, this)
-        }
+        // straight into the stored history. Always detach, including after
+        // this chat was deleted, so the registry never keeps a destroyed
+        // screen alive; the registry itself discards a deleted chat's result.
+        ImageGenerationJobRegistry.detach(chatId, this)
 
         // Compacting continues without the screen; only its dialog closes.
         compactionDialog?.dismiss()
