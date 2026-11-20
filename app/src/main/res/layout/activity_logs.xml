@@ -45,7 +45,8 @@
                 android:hint="@string/hint_search"
                 android:imeOptions="actionSearch"
                 android:importantForAutofill="no"
-                android:inputType="text" />
+                android:inputType="text"
+                android:saveEnabled="false" />
         </LinearLayout>
     </LinearLayout>
 
