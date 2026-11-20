@@ -1386,6 +1386,21 @@ chat adapter colors every action icon with the bubble's foreground in one
 place, so the icons contrast with any bubble. The row sits in the bottom corner
 opposite the speaker's name.
 
+### Chat Jump to Top / Bottom
+
+`view_chat_jump_buttons.xml` lays a narrow rail (`Widget.App.Chat.JumpRail`)
+over the message list's end margin, from the top of the message area to its
+bottom, so it follows the message area when the keyboard opens. It holds two
+tiny arrows (Material Symbols `keyboard_double_arrow_up` / `_down`):
+`Widget.App.Chat.JumpButton.Top` at the top and `.Bottom` at the bottom. Each
+is exactly as wide as the narrowest bubble margin (`chat_jump_rail_width`), with
+a small centered icon (`chat_jump_icon_size`), so it touches neither a bubble nor
+the screen edge. The rail draws above message rows (portraits pass under it)
+and above the floating Includes strip (`chat_jump_rail_elevation`). The arrows
+use the chat icons' accent, `colorPrimary`, slightly subdued
+(`chat_jump_tint`, `chat_jump_icon_alpha`); there is no background, only the
+borderless ripple.
+
 ### Chat Selection Mode
 
 `Widget.App.Chat.SelectionBar.*` is the Selection Mode area beneath the chat

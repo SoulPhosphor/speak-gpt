@@ -316,6 +316,7 @@ import org.teslasoft.assistant.preferences.MessageVisibility
 import org.teslasoft.assistant.ui.util.UnhideAllMessagesDialog
 import org.teslasoft.assistant.ui.chat.BookmarkNavigation
 import org.teslasoft.assistant.ui.chat.BookmarkNavigationController
+import org.teslasoft.assistant.ui.chat.ChatJumpButtonsController
 import org.teslasoft.assistant.ui.chat.ChatExportMessage
 import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
@@ -683,6 +684,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     // Init chat
     private var bookmarkNavigation: BookmarkNavigationController? = null
+    private var jumpButtons: ChatJumpButtonsController? = null
     private var messages: ArrayList<HashMap<String, Any>> = arrayListOf()
 
     /** True when this chat's stored history is LOCKED or CORRUPT (Round 4):
@@ -3136,6 +3138,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.unregister(chatOutlineStarter)
         bookmarkNavigation?.dispose()
         bookmarkNavigation = null
+        jumpButtons?.dispose()
+        jumpButtons = null
         PortableRestoreOutcomeFlow.onActivityDestroyed(this)
         // Tombstone for the event log: when the OS (or a navigation flow)
         // destroys this screen while a voice conversation is live, everything
@@ -3400,6 +3404,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnSettings = findViewById(R.id.btn_settings)
         btnChatMenu = findViewById(R.id.btn_chat_menu)
         chat = findViewById(R.id.messages)
+        jumpButtons?.dispose()
+        jumpButtons = ChatJumpButtonsController(findViewById(R.id.chat_jump_rail), chat!!)
         bookmarkNavigation?.dispose()
         bookmarkNavigation = BookmarkNavigationController(
             findViewById(R.id.bookmark_navigation), chat!!, adapter!!

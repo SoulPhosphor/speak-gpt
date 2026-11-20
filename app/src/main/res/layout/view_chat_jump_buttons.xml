@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Jump to the start / end of the transcript. A narrow rail laid over the
+     message list's end margin; it does not take touches outside its buttons. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/chat_jump_rail"
+    style="@style/Widget.App.Chat.JumpRail">
+
+    <ImageButton android:id="@+id/chat_jump_top"
+        style="@style/Widget.App.Chat.JumpButton.Top"
+        android:src="@drawable/ic_chat_jump_top" />
+
+    <ImageButton android:id="@+id/chat_jump_bottom"
+        style="@style/Widget.App.Chat.JumpButton.Bottom"
+        android:src="@drawable/ic_chat_jump_bottom" />
+</FrameLayout>

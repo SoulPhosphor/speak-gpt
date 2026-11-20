@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Jump to Top / Bottom arrows: the chat icons' accent (colorPrimary),
+     slightly subdued so the arrows in the margin don't stand out. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="?attr/colorPrimary" android:alpha="@dimen/chat_jump_icon_alpha" />
+</selector>
