@@ -1862,7 +1862,12 @@ When this guide and current style definitions disagree, inspect `themes.xml`, ve
 
 `Widget.App.Bookmark.*` owns the fixed bookmark navigation strip, centered
 counter, borderless navigation controls, expandable search field, and
-speaker-marker spacing. The speaker marker spacing also
+speaker-marker spacing. The strip's row has Search toggle at the start and
+Close (`ic_close`) at the end. The counter is centered on the whole row, not
+on the space between those buttons, with Previous and Next (Material Symbols
+`keyboard_double_arrow_left` / `_right`) directly beside it. Previous and
+Next show only while there are at least two bookmarks or results to move
+between. The speaker marker spacing also
 places the hidden-from-AI marker (`ic_visibility_off`, sized by
 `bookmark_icon_size`) on the other side of the name; with names off, the same
 line keeps the markers in the name's place. `AppButton.Primary.Inline.BookmarkSearch`
