@@ -4330,6 +4330,8 @@
     <string name="bookmark_next">Next Bookmark</string>
     <string name="bookmark_clear_search">Clear Bookmark Search</string>
     <string name="bookmark_search_hint">Search Within Bookmarks</string>
+    <string name="chat_scroll_to_top">Scroll to Top</string>
+    <string name="chat_scroll_to_bottom">Scroll to Bottom</string>
     <string name="bookmark_count">%1$d of %2$d Bookmarks</string>
     <string name="bookmark_result_count">%1$d of %2$d Results</string>
     <string name="app_appearance_title">App Appearance</string>
