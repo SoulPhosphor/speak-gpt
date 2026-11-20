@@ -16,7 +16,10 @@
 
 package org.teslasoft.assistant.util
 
+import android.content.Context
 import android.os.Debug
+import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.Preferences
 import java.util.WeakHashMap
 
 /**
@@ -34,9 +37,41 @@ object ResourceDiagnostics {
     /** Open and closed chat screens, held weakly so tracking never keeps one alive. */
     private val chatScreens = ScreenLifetimeTracker()
 
-    fun chatScreenCreated(screen: Any) = chatScreens.created(screen)
+    /** Records a chat screen opening. [rebuilt] = Android rebuilt it from
+     *  saved state after closing it in the background. */
+    fun chatScreenCreated(context: Context, screen: Any, rebuilt: Boolean) {
+        chatScreens.created(screen)
+        systemLog(context, "ChatScreen", "info", "chat screen opened: rebuiltByAndroid=$rebuilt | ${state(context)}")
+    }
 
-    fun chatScreenDestroyed(screen: Any) = chatScreens.destroyed(screen)
+    /** Records a chat screen being destroyed, BEFORE its teardown, so the
+     *  line shows what was running at that moment. finishing=false with
+     *  changingConfig=false means Android destroyed it, not the user. */
+    fun chatScreenDestroyed(context: Context, screen: Any, finishing: Boolean, changingConfig: Boolean) {
+        chatScreens.destroyed(screen)
+        systemLog(
+            context, "ChatScreen", if (finishing || changingConfig) "info" else "warning",
+            "chat screen destroyed: finishing=$finishing changingConfig=$changingConfig " +
+                "closedBy=${if (finishing) "app-or-user" else if (changingConfig) "configuration-change" else "android"} | " +
+                state(context)
+        )
+    }
+
+    /** Records a running hands-free conversation ending and why. */
+    fun handsFreeEnded(context: Context, reason: String) {
+        systemLog(context, "HandsFree", "info", "hands-free ended: reason=$reason | ${state(context)}")
+    }
+
+    private fun state(context: Context): String = fields() + " | " + MemoryDiagnostics.snapshotCompact(context)
+
+    /** System Logs line, only while System Logs is on; never blocks the caller. */
+    private fun systemLog(context: Context, tag: String, level: String, message: String) {
+        try {
+            val app = context.applicationContext
+            if (!Preferences.getPreferences(app, "").getSystemLogging()) return
+            Logger.logAsync(app, Logger.SYSTEM_LOG_TYPE, tag, level, message)
+        } catch (_: Throwable) { /* diagnostics must never disturb the app */ }
+    }
 
     /** Native heap allocated right now, in MB (whisper.cpp, decoded images, SQLCipher). */
     fun nativeHeapMb(): Long = (Debug.getNativeHeapAllocatedSize() + 512L * 1024L) / (1024L * 1024L)

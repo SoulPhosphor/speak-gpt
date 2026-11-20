@@ -2737,7 +2737,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var heldWindowBackground: android.graphics.drawable.Drawable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        org.teslasoft.assistant.util.ResourceDiagnostics.chatScreenCreated(this)
+        org.teslasoft.assistant.util.ResourceDiagnostics.chatScreenCreated(this, this, savedInstanceState != null)
         if (Build.VERSION.SDK_INT >= 30) {
             enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
@@ -3129,7 +3129,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
-        org.teslasoft.assistant.util.ResourceDiagnostics.chatScreenDestroyed(this)
+        org.teslasoft.assistant.util.ResourceDiagnostics.chatScreenDestroyed(
+            this, this, isFinishing, isChangingConfigurations
+        )
         backgroundActivity?.release()
         org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.unregister(chatOutlineStarter)
         bookmarkNavigation?.dispose()
@@ -3223,7 +3225,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         compactionDialog?.dismiss()
         compactionDialog = null
         killAllProcesses()
-        stopHandsFreeService()
+        stopHandsFreeService("chat screen destroyed")
 
         // Fully release the microphone when the chat is destroyed (app closed).
         // The SpeechRecognizer holds a live binding to the system recognition
@@ -10524,7 +10526,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // conversation/send button from its red "live" look to resting.
         preferences?.setHandsFreeMode(false)
         refreshConversationButton()
-        stopHandsFreeService()
+        stopHandsFreeService("loop stopped: $reason")
     }
 
     /** A failed turn must not silently re-arm the hands-free loop. Otherwise a
@@ -11294,7 +11296,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // conversation/send button from its red "live" look to resting.
         preferences?.setHandsFreeMode(false)
         refreshConversationButton()
-        stopHandsFreeService()
+        stopHandsFreeService("stopped: $source")
     }
 
     /**
@@ -11408,7 +11410,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    private fun stopHandsFreeService() {
+    private fun stopHandsFreeService(reason: String) {
+        // System Logs records a running conversation ending, and why.
+        if (HandsFreeService.isRunning) {
+            org.teslasoft.assistant.util.ResourceDiagnostics.handsFreeEnded(this, reason)
+        }
         try {
             HandsFreeService.stop(this)
         } catch (_: Exception) { /* ignore */ }

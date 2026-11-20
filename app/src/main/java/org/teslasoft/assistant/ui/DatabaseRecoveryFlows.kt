@@ -27,7 +27,7 @@ import org.teslasoft.assistant.preferences.backup.BackupStatusFormatter
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
-import org.teslasoft.assistant.preferences.backup.DatabaseRevertManager
+import org.teslasoft.assistant.preferences.backup.DatabaseRestoreManager
 import org.teslasoft.assistant.ui.activities.LogsActivity
 
 /**
@@ -191,27 +191,50 @@ object DatabaseRecoveryFlows {
         if (activity.isFinishing) return
         val progress = progressDialog(activity, activity.getString(R.string.health_restore_progress, noun(type)))
         Thread {
-            val verified = DatabaseRevertManager.findUsableBackup(activity.applicationContext, type)
+            val source = findRevertSource(activity.applicationContext, type)
             activity.runOnUiThread {
                 try { progress.dismiss() } catch (_: Exception) { }
-                if (activity.isFinishing) return@runOnUiThread
-                if (verified == null) {
+                if (activity.isFinishing) {
+                    source?.discard()
+                    return@runOnUiThread
+                }
+                if (source == null) {
                     showNoUsableBackupDialog(activity, type, onStateChanged)
                 } else {
-                    showRestoreConfirmDialog(activity, type, verified, onStateChanged)
+                    showRestoreConfirmDialog(activity, type, source, onStateChanged)
                 }
             }
         }.start()
+    }
+
+    /**
+     * The newest backup that verifies, for restoring [type] alone. Memory
+     * walks every source the backup screen's restore does — the Automatic
+     * Recovery Backups (their memory database only) and the older internal
+     * memory backups — newest first. Every candidate is copied into its own
+     * private staging folder first, so nothing here can alter a backup.
+     * Other databases have no backup chain for this flow (as before), so they
+     * get the "no usable backup" choice.
+     */
+    private fun findRevertSource(context: android.content.Context, type: BackupType): DatabaseRestoreManager.Prepared? {
+        if (type != BackupType.MEMORY) return null
+        val result = DatabaseRestoreManager.prepareLastGood(context, type)
+        val prepared = (result as? DatabaseRestoreManager.PrepareResult.Ready)?.prepared ?: return null
+        if (prepared.type != BackupType.MEMORY) {
+            prepared.discard()
+            return null
+        }
+        return prepared
     }
 
     /** A5 — the deliberate secondary check before anything is overwritten. */
     private fun showRestoreConfirmDialog(
         activity: Activity,
         type: BackupType,
-        verified: DatabaseRevertManager.Verified,
+        source: DatabaseRestoreManager.Prepared,
         onStateChanged: (() -> Unit)?
     ) {
-        val date = BackupStatusFormatter.formatDate(verified.candidate.backupAtMillis)
+        val date = BackupStatusFormatter.formatDate(source.backupAtMillis)
         val body = when (type) {
             BackupType.LOREBOOK -> activity.getString(R.string.health_restore_body_lorebook, date)
             else -> activity.getString(R.string.health_restore_body_memory, date)
@@ -221,24 +244,30 @@ object DatabaseRecoveryFlows {
             .setMessage(body)
             .setCancelable(false)
             .setPositiveButton(R.string.health_btn_restore) { _, _ ->
-                executeRestore(activity, type, verified, onStateChanged)
+                executeRestore(activity, type, source, onStateChanged)
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> onStateChanged?.invoke() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                source.discard()
+                onStateChanged?.invoke()
+            }
             .show())
     }
 
     private fun executeRestore(
         activity: Activity,
         type: BackupType,
-        verified: DatabaseRevertManager.Verified,
+        source: DatabaseRestoreManager.Prepared,
         onStateChanged: (() -> Unit)?
     ) {
         val progress = progressDialog(activity, activity.getString(R.string.health_restore_progress, noun(type)))
         Thread {
-            // Only the memory database has an enumerable backup chain today
-            // (DatabaseRevertManager doc); findUsableBackup already returned
-            // null for the others, so this branch is effectively MEMORY-only.
-            val outcome = DatabaseRevertManager.restoreMemory(activity.applicationContext, verified)
+            // Restores only this database: a Recovery Backup's other contents
+            // (chats, settings, images, other databases) are never touched.
+            val outcome = try {
+                DatabaseRestoreManager.restore(activity.applicationContext, source)
+            } finally {
+                source.discard()
+            }
             activity.runOnUiThread {
                 try { progress.dismiss() } catch (_: Exception) { }
                 if (activity.isFinishing) return@runOnUiThread

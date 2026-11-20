@@ -124,20 +124,41 @@ object DatabaseRestoreManager {
             try { Uri.parse(it) } catch (_: Exception) { null }
         }
         val automatic = if (autoUri != null) listAutomaticEntries(context, autoUri, type) else emptyList()
+        // Memory also comes from the Automatic Recovery Backups in that folder,
+        // restoring only their memory database.
+        val packages = if (autoUri != null && type == BackupType.MEMORY) {
+            listAutomaticPackages(context, autoUri)
+        } else emptyList()
         val json = if (type == BackupType.MEMORY) {
             DatabaseRevertManager.listCandidates(context, type).map {
                 it.backupAtMillis to it.file
             }
         } else emptyList()
 
-        data class Candidate(val at: Long, val automatic: TreeEntry?, val json: File?)
+        data class Candidate(
+            val at: Long,
+            val automatic: TreeEntry?,
+            val json: File?,
+            val recoveryPackage: TreeEntry? = null
+        )
         val candidates = ArrayList<Candidate>()
         automatic.forEach { candidates.add(Candidate(it.atMillis, it, null)) }
         json.forEach { candidates.add(Candidate(it.first, null, it.second)) }
+        packages.forEach { candidates.add(Candidate(it.atMillis, null, null, it)) }
 
         var sawAutomaticKeyOrDamage = false
         for (candidate in candidates.sortedByDescending { it.at }) {
-            if (candidate.automatic != null) {
+            if (candidate.recoveryPackage != null) {
+                when (val result = prepareAutomaticPackage(context, type, candidate.recoveryPackage.uri)) {
+                    is PrepareResult.Ready -> return result
+                    is PrepareResult.Failed -> {
+                        if (result.reason == Failure.AUTOMATIC_KEY_OR_DAMAGE) {
+                            sawAutomaticKeyOrDamage = true
+                        }
+                    }
+                    else -> Unit
+                }
+            } else if (candidate.automatic != null) {
                 when (val result = prepareAutomaticUri(context, type, candidate.automatic.uri, candidate.at)) {
                     is PrepareResult.Ready -> return result
                     is PrepareResult.Failed -> {
@@ -626,6 +647,81 @@ object DatabaseRestoreManager {
     ): DatabaseRepairManager.Outcome {
         return DirectProfileImageRestoreRecovery.execute(context, artifacts)
     }
+
+    /** Finished Automatic Recovery Backups in the automatic folder (a backup
+     *  still being written keeps its `.incomplete` name and is not listed). */
+    private fun listAutomaticPackages(context: Context, treeUri: Uri): List<TreeEntry> =
+        listTreeEntries(context, treeUri).filter { isAutomaticRecoveryPackageName(it.name) }
+
+    /**
+     * One Automatic Recovery Backup prepared for restoring only the
+     * [type] database it contains; nothing else in the package is restored.
+     * A protected backup is opened with the recovery secret stored on this
+     * device — the same one automatic backups are written with — so no code
+     * is asked for. Anything that does not yield that one database is a
+     * failure, never a different database.
+     */
+    private fun prepareAutomaticPackage(context: Context, type: BackupType, uri: Uri): PrepareResult {
+        val root = PortableStaging.newRunDir(context)
+        val local = File(root, "automatic-recovery.zip")
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                local.outputStream().buffered().use { input.copyTo(it) }
+            } ?: throw IllegalStateException("unreadable source")
+        } catch (_: Exception) {
+            PortableStaging.delete(root)
+            return PrepareResult.Failed(Failure.SOURCE_UNAVAILABLE)
+        }
+        val header = PortablePackageFormat.readHeader(local)
+        if (header !is PortablePackageFormat.HeaderResult.Ok) {
+            PortableStaging.delete(root)
+            return PrepareResult.Failed(Failure.AUTOMATIC_KEY_OR_DAMAGE)
+        }
+        val at = parseIsoMillis(header.header.createdAtIso) ?: local.lastModified()
+        val secret = if (header.header.protection == PortablePackageFormat.PROTECTION_ENCRYPTED) {
+            when (val stored = org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyStore.getSecret(context)) {
+                is org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyStore.SecretResult.Ok -> stored.secret
+                else -> {
+                    PortableStaging.delete(root)
+                    return PrepareResult.Failed(Failure.AUTOMATIC_KEY_OR_DAMAGE)
+                }
+            }
+        } else ByteArray(0)
+        return try {
+            when (val result = preparePortableDecoded(context, type, local, root, secret, at)) {
+                is PrepareResult.Ready -> if (result.prepared.type == type) result else {
+                    result.prepared.discard()
+                    PrepareResult.Failed(Failure.NO_APPROPRIATE_DATABASE)
+                }
+                is PrepareResult.Mismatch -> {
+                    result.prepared.discard()
+                    PrepareResult.Failed(Failure.NO_APPROPRIATE_DATABASE)
+                }
+                is PrepareResult.NeedsRecoveryCode -> {
+                    result.pending.discard()
+                    PrepareResult.Failed(Failure.AUTOMATIC_KEY_OR_DAMAGE)
+                }
+                is PrepareResult.Failed -> {
+                    PortableStaging.delete(root)
+                    if (result.reason == Failure.WRONG_RECOVERY_KEY) {
+                        PrepareResult.Failed(Failure.AUTOMATIC_KEY_OR_DAMAGE)
+                    } else result
+                }
+            }
+        } catch (_: Exception) {
+            PortableStaging.delete(root)
+            PrepareResult.Failed(Failure.AUTOMATIC_KEY_OR_DAMAGE)
+        } finally {
+            PackageCrypto.wipe(secret)
+        }
+    }
+
+    /** The names Automatic Recovery Backups are published under
+     *  ([RecoveryFileNaming.automaticRecoveryPackage]), finished only. */
+    internal fun isAutomaticRecoveryPackageName(name: String): Boolean =
+        name.contains("-Automatic-Recovery-") &&
+            name.endsWith(RecoveryFileNaming.EXT) &&
+            !name.endsWith(RecoveryDocumentPublication.INCOMPLETE_SUFFIX)
 
     private fun listAutomaticEntries(
         context: Context,
