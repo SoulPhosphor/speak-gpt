@@ -120,6 +120,24 @@
                     style="@style/Widget.App.Row.Chevron"
                     android:contentDescription="@string/tile_activation_prompts_title" />
             </LinearLayout>
+
+            <!-- System Prompts: last row (owner instruction). Title only: it
+                 must never show the name of a system prompt. -->
+            <LinearLayout
+                android:id="@+id/row_system_prompts"
+                style="@style/Widget.App.Row.TitleOnly">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_system_prompts" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_system_prompts" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
