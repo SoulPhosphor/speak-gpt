@@ -80,7 +80,8 @@ class MainApplication : Application() {
             try {
                 if (Preferences.getPreferences(this@MainApplication, "").getMemoryUsageLogging()) {
                     Logger.log(this@MainApplication, "memory_usage", "MemSample", "info",
-                        MemoryDiagnostics.snapshotFull(this@MainApplication))
+                        MemoryDiagnostics.snapshotFull(this@MainApplication) + " | " +
+                            org.teslasoft.assistant.util.ResourceDiagnostics.fields())
                 }
             } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
             memSampleHandler?.postDelayed(this, MEM_SAMPLE_INTERVAL_MS)
@@ -394,7 +395,8 @@ class MainApplication : Application() {
         try {
             if (Preferences.getPreferences(this, "").getMemoryUsageLogging()) {
                 Logger.log(this, "memory_usage", "MemTrim", "warning",
-                    "onTrimMemory ${trimLevelName(level)} | ${MemoryDiagnostics.snapshotFull(this)}")
+                    "onTrimMemory ${trimLevelName(level)} | ${MemoryDiagnostics.snapshotFull(this)} | " +
+                        org.teslasoft.assistant.util.ResourceDiagnostics.fields())
             }
         } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
     }
@@ -405,7 +407,8 @@ class MainApplication : Application() {
         try {
             if (Preferences.getPreferences(this, "").getMemoryUsageLogging()) {
                 Logger.log(this, "memory_usage", "MemTrim", "warning",
-                    "onLowMemory | ${MemoryDiagnostics.snapshotFull(this)}")
+                    "onLowMemory | ${MemoryDiagnostics.snapshotFull(this)} | " +
+                        org.teslasoft.assistant.util.ResourceDiagnostics.fields())
             }
         } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
     }

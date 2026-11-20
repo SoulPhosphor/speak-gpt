@@ -198,8 +198,21 @@ object ImageGenerationJobRegistry {
     private val deletionGuard =
         ImageJobDeletionGuard<ActiveJob>(ChatPreferences.CHAT_LIST_LOCK) { it.chatId }
 
-    /** Number of chat screens currently attached. */
-    internal fun attachedScreenCount(): Int = listeners.size
+    // Sizes of the two maps above, published for the diagnostic logs, which
+    // read them from a background thread. Updated wherever the maps change.
+    @Volatile private var attachedScreens = 0
+    @Volatile private var runningJobs = 0
+
+    private fun publishCounts() {
+        attachedScreens = listeners.size
+        runningJobs = jobs.size
+    }
+
+    /** Number of chat screens currently attached. Any thread. */
+    fun attachedScreenCount(): Int = attachedScreens
+
+    /** Number of image generations currently running. Any thread. */
+    fun activeJobCount(): Int = runningJobs
 
     /** Every chat deletion path calls this once the deletion has committed
      *  (any thread). A running job for one of these chats still ends in its
@@ -214,12 +227,14 @@ object ImageGenerationJobRegistry {
 
     fun attach(chatId: String, listener: Listener) {
         listeners[chatId] = listener
+        publishCounts()
     }
 
     /** Identity-guarded so a destroyed screen can never detach its
      *  replacement. */
     fun detach(chatId: String, listener: Listener) {
         if (listeners[chatId] === listener) listeners.remove(chatId)
+        publishCounts()
     }
 
     /** The visible Cancel action (and the Stop control). Ends the job in
@@ -242,6 +257,7 @@ object ImageGenerationJobRegistry {
             }
         }
         listeners.remove(oldChatId)?.let { listeners[newChatId] = it }
+        publishCounts()
     }
 
     /** A successful title-only chat rename changes only the catalog label. */
@@ -308,6 +324,7 @@ object ImageGenerationJobRegistry {
         }
         record.job = job
         jobs[chatId] = record
+        publishCounts()
         deletionGuard.track(record)
         job.start()
         return record
@@ -504,6 +521,7 @@ object ImageGenerationJobRegistry {
 
     private suspend fun finish(app: Context, record: ActiveJob, terminal: Terminal) {
         jobs.remove(record.chatId)
+        publishCounts()
         val listener = listeners[record.chatId]
         try {
             val delivery = imageJobDelivery(deletionGuard.isChatDeleted(record), listener != null)

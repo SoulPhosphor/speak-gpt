@@ -2737,6 +2737,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var heldWindowBackground: android.graphics.drawable.Drawable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        org.teslasoft.assistant.util.ResourceDiagnostics.chatScreenCreated(this)
         if (Build.VERSION.SDK_INT >= 30) {
             enableEdgeToEdge(
                 statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
@@ -3128,6 +3129,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
+        org.teslasoft.assistant.util.ResourceDiagnostics.chatScreenDestroyed(this)
         backgroundActivity?.release()
         org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.unregister(chatOutlineStarter)
         bookmarkNavigation?.dispose()

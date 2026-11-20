@@ -308,7 +308,7 @@ class LocalWhisperModelsActivity : SettingsPageActivity() {
                     // installed model is always ready to use.
                     preferences?.setActiveLocalWhisperModel(
                         LocalWhisperStorage.installedModels(this).firstOrNull()?.id ?: "")
-                    LocalWhisperEngine.get().release()
+                    LocalWhisperEngine.get().release(reason = "uninstalled")
                 }
                 refreshAll()
             }
