@@ -691,6 +691,18 @@ that confirms the way Save does: `SaveIconFlash.flash` turns the icon itself
 green for the shared success time. Current user: Restore Default Settings
 (`ic_reset_settings`) to the left of Save on the Model Settings screen.
 
+### Header search panel
+
+A header search icon (`ic_search`, using the header icon styles above) opens
+`Widget.App.ActionBar.SearchPanel`: a strip directly beneath the header, in the
+header's own color (`ScreenChrome.applyHeaderPanel`), that slides down from
+behind it and back up (`header_search_panel_slide_duration`). Declare the panel
+before the header in the layout so the header draws over it, and constrain the
+page content below the panel. It holds a search-only
+`Widget.App.SearchPill.InPanel` (`SearchPill.Icon` and `SearchPill.Field`).
+Spacing lives in `header_search_panel_*`. Current user: every log viewer screen
+(`LogSearchBar`).
+
 ### Close-panel header
 
 Use:
