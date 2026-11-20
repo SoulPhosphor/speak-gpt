@@ -108,10 +108,10 @@ comments and tests cite its section numbers.
 
 The owner prioritized the scanner on November 18. The four stages below are the recommended delivery split. The numbered Steps in G.16 keep their original identities. Scanner work uses eligible transcript rows plus local memory records and existing embedding facilities. Stage 7’s conversation passage index serves later live recall. A broader Memory Browser redesign can proceed separately.
 
-1. **Stage 6A — reliable reading and resume.** Use the existing single-chat and batch entry points. Implement the short/long request paths, stable turn and fragment references, bounded excerpts, cache-friendly request order, and lossless retry of an oversized turn. Persist the validated working state and exact next unread position together. Preserve cancellation, progress reporting, and automatic-backup coordination from #216–217. Demonstrate that killing the process after a completed section resumes from its checkpoint and that split fragments cover the entire original turn. Existing screens are sufficient for this phase.
-2. **Stage 6B — draft corrections and memory matching.** Implement scan-local edits and bounded repair, model-sized overlapping lookup windows, scoped Active/Pending/Archived and working-draft comparisons, the keyword fallback, chronological reconciliation, ranked selection under the cap, and filing-time rechecks. Carry validated record IDs, statuses, match method, actual similarity when available, and unresolved alternatives through to the review layer. Use the existing Possible Match flow for cases it can represent. Deliver any behavior requiring a new human review action together with that action in Stage 6D. Verify that an early “waiting” draft becomes one accurate memory after a late reply, and that retelling it in another scan creates no extra card.
+1. **Stage 6A — reliable reading and resume.** Use the existing single-chat and batch entry points. Implement current-source verification by message ID before sections, retries, resume and publication, including hides on claimed rows and invalidation after edits, regeneration or deletion. Define a safe legacy-ID fallback. Implement the short/long request paths, stable turn and fragment references, bounded excerpts, cache-friendly request order, and lossless retry of an oversized turn. Use paragraph, line and word boundaries before Unicode-safe character splitting, as in G.5b. Persist the validated working state and exact next unread position together. Preserve cancellation, progress reporting, and automatic-backup coordination from #216–217. Demonstrate that killing the process after a completed section resumes from its checkpoint and that split fragments cover the entire original turn. Existing screens are sufficient for this phase.
+2. **Stage 6B — draft corrections and memory matching.** Implement scan-local edits and bounded repair, model-sized overlapping lookup windows, scoped Active/Pending/Archived and working-draft comparisons, the keyword fallback, chronological reconciliation, ranked selection under the cap, and filing-time rechecks. Use Step 1's embedding queue at background priority, reuse vectors by text fingerprint and model tag, and bound missing-vector preparation and comparisons per proposal. Include the proposed separate encrypted scanner comparison cache and its migration in the 6B design approval. Keep Pending and Archived comparisons outside active chat retrieval. Carry validated record IDs, statuses, match method, actual similarity when available, and unresolved alternatives through to the review layer. Use the existing Possible Match flow for cases it can represent. Deliver any behavior requiring a new human review action together with that action in Stage 6D. Verify that an early “waiting” draft becomes one accurate memory after a late reply, and that retelling it in another scan creates no extra card.
 3. **Stage 6C — Browser match cards and comparison.** Add the related-memory preview, status, match method and available similarity score to Pending cards. Open the exact pair by ID, show the full wording of both records, expose additional matches, and restore the user’s list position on return. Reuse the comparison screen and existing review actions where applicable. Cover changed or missing targets, and present keyword matches accurately when embeddings are unavailable. Keep the Stage 4 meter in the existing creating, editing and reading views.
-4. **Stage 6D — Browser review actions and end-to-end evaluation.** Add the decisions for two pending drafts and unresolved alternatives, including a linked pair that occupies one review choice at a cap of one. Keep both pending, edit or discard the redundant proposal, or apply an existing approval action according to the user's choice. Revalidate before applying a decision so reviewing a pair never activates or overwrites a memory accidentally. Exercise the complete scan-to-review path with and without embeddings and measure quality, token usage, conditional comparisons and phone review effort as specified in the scanner proposal. Resume at **Stage 7 (Steps 7 and 8)**.
+4. **Stage 6D — Browser review actions and end-to-end evaluation.** Add the decisions for two pending drafts and unresolved alternatives, including a linked pair that occupies one review choice at a cap of one. Keep both pending, edit or discard the redundant proposal, or apply an existing approval action according to the user's choice. Revalidate before applying a decision so reviewing a pair never activates or overwrites a memory accidentally. Exercise the complete scan-to-review path with and without embeddings and measure quality, token usage, conditional comparisons, total scan duration, battery consumption, embedding queue contention, cold/warm vector reuse and phone review effort as specified in the scanner proposal. Resume at **Stage 7 (Steps 7 and 8)**.
 
 Temporary scanner passage references support editing and recovery inside a scan. M.3 remains authoritative for permanent source information in the editor and backups. Archived memory comparison is scanner-only. The installed-model requirement in G.16 applies to Conversation Recall; the scanner also supports local keyword fallback. Stage 6’s frozen corpus remains the reference for recall, with scanner-specific expected results evaluated separately. Stage 15 still owns proposals for important dates.
 
@@ -929,8 +929,9 @@ They are never mixed into a passage.
 - The model-facing text of each message: what the AI would be sent (G.4).
 - Only finished replies. A reply that is still streaming, or that failed,
   is not indexed. A failed reply's error text is never indexed.
-- Only the reply version the AI is sent. Which stored field that is must be
-  confirmed in the code during Steps 7–13.
+- Only the canonical reply version used in AI requests. Browsing an
+  alternative reply changes neither index eligibility nor the canonical
+  version. Confirm the canonical field and promotion hooks in Steps 7–13.
 - Never a message hidden from the AI (G.5a rule 1).
 
 **Attached documents and images are not indexed in this work (Owner,
@@ -1321,10 +1322,10 @@ is not asked to choose them.
 - The user's latest message, on its own.
 - A message longer than one piece is also searched in overlapping pieces
   (G.10), up to a limit. Periods play no part.
-- Follow-ups are handled by the chosen context assistance (G.9b): what
-  it supplies is searched as well and counts for less than the newest
-  message. Earlier messages are never glued onto the search text. The
-  details for recall are part of G36.
+- Follow-ups use the mode-specific recall contract to be decided in G36
+  below. API AI can supply an additional validated query. Code-based
+  supplies saved-memory candidates, which are not a recall query.
+  Earlier messages are never glued onto the search text.
 - Each of these is a separate search. A passage qualifies when it passes
   for any one of them.
 
@@ -1348,7 +1349,13 @@ is not asked to choose them.
   vectors, in bounded batches, keeping only the best so far (G.5a rule 5).
 - A passage with no vector yet is not a candidate until its vector is
   made (G30).
-- Each way returns a bounded list. Starting value: the best 50 of each.
+- Each way keeps a bounded list of distinct exchanges while collecting
+  passages. Starting value: the best 50 exchanges per method. Keep the
+  strongest matching passage and bounded supporting passages for each
+  exchange. Apply that method's relevance gate to passage evidence.
+  A long exchange's many passages cannot consume the candidate list
+  before retrieval stage 6 groups the results. Do not first truncate to
+  50 raw passages. Measure keyword and semantic candidate coverage.
 
 **Retrieval stage 4: the relevance gate. Being the best match is not the same as being
 relevant.** A candidate passes only when one of these is true:
@@ -1471,10 +1478,18 @@ yet).**
   against the stored message at this moment (G.5a rule 1).
 - The current message itself.
 
-**Retrieval stage 8: avoid near-repeats.**
-- When two exchanges say nearly the same thing, the higher-scoring one is
-  kept and the other dropped, so the limit is not spent on repeats.
-- Two exchanges that **differ** on the same subject are both kept.
+**Retrieval stage 8: avoid repeated text conservatively.**
+- In the first build, collapse only exchanges whose complete text and
+  speaker order are identical after whitespace normalization. Retain the
+  later occurrence by chat position. Preserve wording, negation, numbers,
+  names and dates when comparing.
+- Semantic similarity and word overlap cannot establish that two claims
+  agree. Keep both eligible exchanges when their wording differs,
+  including an earlier wait and a later reply. Deliver selected exchanges
+  chronologically under G.8.
+- G36 may propose broader repeat detection only with its own calibrated
+  passage-to-passage criteria and the correction cases below. It must
+  never discard a later development in favor of an earlier account.
 
 **Retrieval stage 9 is not in the first build (2026-11-12).** No established system
 does it (G.18a), and review found two faults in it as written:
@@ -1525,8 +1540,8 @@ empty; search another chat (until that later work is built); read a hidden,
 deleted, or unfinished message; make a paid call; or delay sending beyond
 the time measured and accepted in Steps 14–15.
 
-**A time limit.** Retrieval has a fixed time allowance, set from the
-Steps 14–15 measurements. Recall is never skipped merely because searching
+**A time limit.** Retrieval has a fixed time allowance within G36's total
+pre-send budget, set from the Steps 14–15 phone measurements. Recall is never skipped merely because searching
 takes some time. Only if it has not finished within the allowance, the message is
 sent exactly as it is today, without recall, and the "what was sent" view
 shows that recall was skipped. A slow phone or a very long chat can
@@ -1775,8 +1790,10 @@ screen. Its label and explanation are shown to the owner before Step 16.
 screen that shows which memories were sent with a reply, as a second
 group.
 
-**Follow-ups.** A recalled exchange stays through follow-up messages
-under the same rule as saved memories (G.9).
+**Follow-ups.** The owner's intent is continuity through follow-ups.
+G36 must define recall behavior for each G.9b mode before Step 14.
+Saved-memory carry-over alone does not implement exchange continuity.
+Use the mode-specific contract below.
 
 **The recall test screen** is opened from a row beside Memory Search Test at
 the bottom of **RAG Active Memory Settings** (M.11; it was in Advanced
@@ -1842,8 +1859,9 @@ not used (Owner, 2026-11-16).
 They share the context assistance (G.9b) and the final size check (G.8),
 and nothing else. Each has its own size limit.
 
-A recalled exchange is carried over under the same rule (Owner,
-2026-11-11; G.8b).
+The owner requested equivalent follow-up continuity for recalled exchanges
+(2026-11-11; G.8b). Its mode-specific implementation remains part of G36.
+Saved-memory IDs and exchange IDs refer to different records.
 
 ## G.9a Searching with the previous messages (built in Step 3; not used, Owner 2026-11-16)
 
@@ -2169,7 +2187,7 @@ built in Step 4b. This worker stays Later.
 |---|---|
 | New message | Its entries are added in the background |
 | Message edited | Passages for that message are replaced. Unchanged search text keeps its vector |
-| Reply regenerated or another version chosen | Entries follow the version that is shown |
+| Reply regenerated or another version made canonical | Entries follow the canonical version used in requests. Browsing another version alone does nothing |
 | Message deleted | Its entries and any AI notes on them are removed, and any vector nothing else uses |
 | Message hidden from the AI, or made visible again | Takes effect on recall at once (G.5a rule 1) |
 | Chat deleted | All its entries are removed, and any vector nothing else uses |
@@ -2966,6 +2984,22 @@ no word-limit warnings are built.
 
 ### Step 6: the conversation test set (Routine with these instructions)
 
+**Review additions for upcoming work.** Stage 6 remains completed. Add
+invented cases alongside its frozen corpus before implementing the affected
+behavior. Keep the original expected answers fixed. Write each new
+expected answer before running retrieval or tuning it.
+
+| Additional case | Expected result | Due |
+|---|---|---|
+| Browse an alternative reply without making it canonical | Only the canonical reply supports the indexed exchange | Before Steps 7–10 index eligibility work |
+| Promote another reply, edit captured text, or delete/hide it while work is running | Only current eligible wording survives use-time checks | Scanner 6A and recall Steps 8–10 |
+| One long repetitive exchange and a short later correction | Candidate collection retains the later exchange despite the earlier exchange's many matching passages | Before Step 14 retrieval |
+| Similar exchanges with opposite outcomes, such as waiting and receiving a reply | Preserve both eligible accounts when relevant and deliver in chronological order | Before Step 14 retrieval |
+| Exact repeated exchanges with matching speaker order | Collapse identical text conservatively, retaining the later occurrence | Before Step 14 retrieval |
+| Follow-up with and without a confident saved-memory subject in each assistance mode | Follow the approved G36 contract and clear stale exchange continuity on a subject change | Before Step 14 retrieval |
+
+
+
 **Agent checklist for this step**
 - **Prerequisites and approval:** Step 0 complete (done); position in M.2; no additional approval. Build invented test samples and validation, not the recall engine.
 - **Change only:** Add `conversations.json` and a unit test that validates every situation and minimum below.
@@ -3179,6 +3213,13 @@ questions for each situation.
 
 ### Step 12: the progress icon and pop-up (Careful)
 
+**Existing background indicator.** Reusing the app's shared background-work
+indicator is an option to assess before Stage 9. G.16a's separate header
+icon is owner-approved. Show any proposed replacement to the owner before
+changing that design. This review does not authorize a replacement.
+
+
+
 **Agent checklist for this step**
 - **Prerequisite:** Step 11. The icon and pop-up's placement and wording are already specified in G.16a.
 - **Change:** Add the chat-header progress icon and shared-style pop-up in new files, with only the small header hookup needed; allow pause and resume.
@@ -3237,10 +3278,57 @@ questions for each situation.
   shows a real percentage; a stop by the system loses no finished work;
   and a test shows indexing picks up where it stopped.
 
+### G36 review requirements before retrieval implementation
+
+**One total pre-send allowance.** Define a shared deadline spanning optional
+context assistance, embedding queue waits and reads, saved-memory search,
+and conversation recall. Record the actual order of those operations from
+both send paths and avoid embedding the same query twice. Existing
+per-component limits remain upper bounds within the combined allowance.
+Set separate typed and hands-free voice budgets from phone measurements.
+Specify cancellation and which optional work gives way first, preserving
+the current message's primary search and the normal send behavior. Do not
+start optional work that cannot finish within the remaining allowance.
+Changes to already approved helper waits or degradation behavior belong
+in the combined G36 approval.
+
+Step 15 measures the existing pre-send path on the owner's phone alongside
+isolated recall time, including queue contention and the API-helper share
+where that mode is configured. It can model the combined budget before
+assembly exists. Step 16 verifies the actual combined deadline and total
+delay in both outgoing request paths. Report build-machine timing separately.
+
+**Recall follow-ups by context-assistance mode.** Define and test the
+following contract in G36 before coding. These are proposed implementation
+details for the owner's continuity requirement.
+
+- **Off.** Search the newest message and its bounded pieces. No automatic
+  carry-over from an earlier exchange.
+- **API AI.** Reuse the helper's validated additional query for recall,
+  with lower priority than the newest message. Do not make another helper
+  call or assume a saved-memory list is a query. Apply the helper's existing
+  failure fallback. Define explicitly whether any previously delivered
+  exchange is retained when the query is unavailable.
+- **Code-based.** Current code supplies saved-memory matches and a subject
+  signal. Specify a separate chat-local set of previously delivered recall
+  exchange IDs, its bounds, and the continuity signal that can retain it.
+  A saved-memory ID cannot stand in for an exchange ID. Set delivery state
+  only after successful request assembly/send, recheck source eligibility
+  each time, and clear it when the subject changes. Define the case where
+  recall found an exchange but saved-memory search established no confident
+  subject. A conservative proposal is newest-message retrieval only in that
+  case. Evaluate its effect on the owner's follow-up requirement before
+  approving it.
+- **Local AI.** Remains a later addition. Document its query contract when
+  it is built.
+
+This contract replaces the ambiguous instruction to copy saved-memory
+carry-over. It does not reactivate Step 3's previous-message search.
+
 ### Step 14: retrieval (Hard)
 
 **Agent checklist for this step**
-- **Prerequisites:** Step 6, Steps 1 and 7–10, and Step 3. **Approval gate:** G36 must approve the complete G.6/G.8 retrieval and delivery design before coding.
+- **Prerequisites:** Step 6 and its review additions, Steps 1 and 7–10, and the implemented G.9b context-assistance contract from Stages 2–3. **Approval gate:** G36 must approve the complete G.6/G.8 retrieval and delivery design, mode-specific follow-ups and total send-time budget before coding.
 - **Change:** The current-chat-only retrieval engine behind G.8a interfaces: implement G.6 retrieval stages **1–8** with G.9b/G.10 query handling, scoring, gates, eligibility, and measured time allowance.
 - **Preserve:** No cross-chat recall, no request assembly, no paid calls, no forced match when nothing qualifies. **G.6 retrieval stage 9 and the optional re-ranker are not in this build.**
 - **Verify and report:** Use Step 6's prewritten questions and the real embedding model. Score each question individually for relevant exchanges found and unrelated exchanges left out; record results as the work order requires.
@@ -3250,9 +3338,10 @@ questions for each situation.
 - **Read:** G.6, G.8a, G.9b, G.10; `LiveRetrieval.kt` and
   `KeywordText.kt`; Step 6's `conversations.json`.
 - **Build:** retrieval stages 1 through 8 of G.6 (retrieval stage 9 is not
-  in the first build), using the method from Step 3,
-  as plain Kotlin behind the G.8a interfaces. The time limit. Nothing is
-  added to any request.
+  in the first build), using the approved G36 mode-specific contract,
+  as plain Kotlin behind the G.8a interfaces. G.9a's previous-message
+  search remains retired from sending. Implement the approved time limit.
+  Nothing is added to any request.
 - **Done when:** Step 6's questions are scored with the real model's
   numbers, each sample checked on its own as in Step 0, and
   `conversation_recall_baseline.md` is created with every sample's
@@ -3379,7 +3468,7 @@ about to start. Each has a recommendation.
 | G7 | Do backups carry the index? | **Decided (owner, 2026-11-11):** no. It is rebuilt after a restore | Decided |
 | G8 | Which jobs does the live AI worker do, and how is it turned on? | Open. Start with marking what matters. The owner chose one app-wide setting for recall, not a per-conversation one | The live AI worker |
 | G9 | Across chats, which ordinary chats may see each other? | Same companion or same project only, at first | Recall from other chats |
-| G10 | Is a recalled exchange carried over like a saved memory? | **Decided (owner, 2026-11-11):** yes, under the same rule | Decided |
+| G10 | Is a recalled exchange carried over like a saved memory? | **Decided (owner, 2026-11-11):** continuity through follow-ups. G36 must specify how each current context-assistance mode implements it, including Off and the absence of a saved-memory subject | Intent decided; implementation in G36 |
 | G11 | What does the user see when recall adds something? | **Decided (owner, 2026-11-11):** listed on the existing screen that shows which memories were sent, as a second group. Its wording is shown to the owner before Step 16 | Decided |
 | G12 | Did the owner make the "seen and not objected to counts as approved" rule recorded in Part E of the memory plan? | **Decided (owner, 2026-11-11):** silence does not count as approval. Explicitly approved decisions are kept; everything else in the memory plan is relabelled as proposed | Decided |
 | G14 | Does background indexing of existing chats continue after the app is closed? | **Decided (owner, 2026-11-11):** yes. The notification this requires is part of G15 | Decided |
@@ -3404,7 +3493,7 @@ about to start. Each has a recommendation.
 | G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | **Decided:** Step 1 reads saved memories up to the model's full 2,048-token capacity. G34 uses the actual model capacity, not a word-count approximation. Speed and memory use on the phone are checked before it ships | Step 1 |
 | G34 | How is a saved memory limited to what the model can read, and how is its length shown? | **Decided (owner, 2026-11-17):** informational content count exactly "348 Words"; actual complete-input tokens against the selected embedding model's capacity, plus a filling bar at the top of creating/editing/reading views. Exact local token counting off the UI thread, including content, extra searchable text, tags, document prefix and special tokens; the same fresh calculation gates Save. No word-based saving cap or warnings. Overflow pop-up: **Memory Cannot Be Saved** / "This memory exceeds the embedding model's reading limit." / **Okay**, without advice; all entered and stored text preserved. The Memory Assistant splits oversized proposals without losing information; splitting is also enforced in code. No separate existing-overlength-memory design. See the corrected Step 5 work order | Decided |
 | G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before Step 7. No builder treats it as approved before then | Step 7 |
-| G36 | The design of retrieval and of what the AI is handed, as a whole (G.6, G.8) | Open. The agent explains it in plain terms and the owner approves it once, before Step 14 | Step 14 |
+| G36 | The design of retrieval and delivery (G.6, G.8), mode-specific follow-ups, conservative repeat handling and total pre-send time budget | Open. Resolve the review requirements before Step 14, explain the combined design in plain terms, and obtain one approval before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
 | G38 | The context helper's setting | **Decided (owner, 2026-11-16):** on Memory Context Helper Settings (M.11); optional, an on/off toggle that starts off; when on, a dropdown of Code-based or API AI, one at a time; Code-based selected when first turned on; Local AI not shown now; no placeholder screens. Labels and explanations are asked when Step 4a starts (M.10). How Code-based rebuilds the subject after a restart is an engineering choice for the builder | Decided |
 | G39 | The Memory Context Helper Tool API (M.4) | **Decided (owner, 2026-11-16):** the name and place, the user's own API model, every parameter, Memory Scanner Tool API's arrangement, and the ten defaults in M.4 (input, fixed instructions, 8 s / 3 s time allowance, failure fallback, cost, no separate privacy warning, its own model only, logging as "Memory Context Helper", starting state, testing). Corrected by the owner on 2026-11-16: no fixed token cap on the conversation input, and no privacy disclosure. Wording of the notices and labels, and the model and cost of the scored run, are asked when Step 4b starts (M.10) | Decided |
