@@ -86,6 +86,8 @@
     <dimen name="chat_jump_button_height">24dp</dimen>
     <dimen name="chat_jump_icon_size">13dp</dimen>
     <dimen name="chat_jump_edge_gap">4dp</dimen>
+    <!-- The bottom arrow sits closer to the message box than the top one sits to the header. -->
+    <dimen name="chat_jump_bottom_gap">0dp</dimen>
     <!-- Above the floating Includes strip (10dp) so the arrows always show. -->
     <dimen name="chat_jump_rail_elevation">12dp</dimen>
     <item name="chat_jump_icon_alpha" format="float" type="dimen">0.7</item>
