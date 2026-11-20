@@ -35,19 +35,16 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.SystemPromptsPreferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.activities.memory.ModelRulesActivity
 
 /**
  * "AI System Settings" (owner_approved_rules §11 Revision 6): a
  * plain chevron-row screen that groups the machine-level instructions the
- * app sends every turn — the chat's System prompt (moved here out of the
- * Characters identity hub) and Model rules. A top hint (owner-approved
+ * app sends every turn, such as Model rules. A top hint (owner-approved
  * words) reminds the user that longer prompts/rules cost context every turn.
+ * The System Prompts row now lives at the bottom of Characters.
  *
- * The System prompts row opens the user's system prompt library
- * (SystemPromptsListActivity) — multiple saved prompts, one chosen at a time.
  * The "Automatically Apply Model Rules" switch is the GLOBAL default; the
  * per-chat "Apply Model Rules" override lives in Quick Settings.
  */
@@ -61,8 +58,6 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
 
     private var rowApiProfiles: LinearLayout? = null
     private var textApiProfilesSubtitle: TextView? = null
-    private var rowSystemPrompt: LinearLayout? = null
-    private var textSystemPromptSubtitle: TextView? = null
     private var rowModelRules: LinearLayout? = null
     private var rowModelCleanup: LinearLayout? = null
     private var switchAutoApplyModelRules: MaterialSwitch? = null
@@ -71,7 +66,6 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
     private var rowEmbeddingModel: LinearLayout? = null
     private var rowMemoryContextHelperToolApi: LinearLayout? = null
 
-    private var systemPromptsPreferences: SystemPromptsPreferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
 
     // Opening the profiles list and picking a profile also makes it the active
@@ -91,7 +85,6 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         preferences = Preferences.getPreferences(this, chatId)
-        systemPromptsPreferences = SystemPromptsPreferences.getSystemPromptsPreferences(this)
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
 
         bindViews()
@@ -105,8 +98,6 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
         btnBack = findViewById(R.id.btn_back)
         rowApiProfiles = findViewById(R.id.row_api_profiles)
         textApiProfilesSubtitle = findViewById(R.id.text_api_profiles_subtitle)
-        rowSystemPrompt = findViewById(R.id.row_system_prompt)
-        textSystemPromptSubtitle = findViewById(R.id.text_system_prompt_subtitle)
         rowModelRules = findViewById(R.id.row_model_rules)
         rowModelCleanup = findViewById(R.id.row_model_cleanup)
         switchAutoApplyModelRules = findViewById(R.id.switch_auto_apply_model_rules)
@@ -141,15 +132,12 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
 
     private fun loadValues() {
         textApiProfilesSubtitle?.text = activeProfileLabel()
-        textSystemPromptSubtitle?.text = systemPromptPreview()
         switchAutoApplyModelRules?.isChecked = preferences?.getAutoApplyModelRules() ?: true
     }
 
     override fun onResume() {
         super.onResume()
-        // The library may have changed (selection/add/edit/delete) while away.
         textApiProfilesSubtitle?.text = activeProfileLabel()
-        textSystemPromptSubtitle?.text = systemPromptPreview()
     }
 
     private fun initLogic() {
@@ -171,10 +159,6 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
             startActivity(Intent(this, EmbeddingModelActivity::class.java))
         }
 
-        rowSystemPrompt?.setOnClickListener {
-            startActivity(Intent(this, SystemPromptsListActivity::class.java))
-        }
-
         rowModelRules?.setOnClickListener {
             startActivity(Intent(this, ModelRulesActivity::class.java).putExtra("chatId", chatId))
         }
@@ -190,11 +174,6 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
         rowSummarizerSettings?.setOnClickListener {
             startActivity(Intent(this, SummarizerSettingsActivity::class.java))
         }
-    }
-
-    private fun systemPromptPreview(): String {
-        val effective = systemPromptsPreferences?.getEffectivePrompt()
-        return effective?.title ?: getString(R.string.system_prompt_none)
     }
 
     /** Label of the profile currently in use, for the row subtitle. */

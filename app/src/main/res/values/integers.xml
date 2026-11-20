@@ -13,4 +13,6 @@
     <integer name="save_icon_error_duration_ms">5000</integer>
     <!-- One step of the progress pop-up's looping dots (Widget.App.ProgressDialog.Dots). -->
     <integer name="progress_dialog_dots_step_ms">450</integer>
+    <!-- Header search panel sliding down from / back up under the header. -->
+    <integer name="header_search_panel_slide_duration">200</integer>
 </resources>

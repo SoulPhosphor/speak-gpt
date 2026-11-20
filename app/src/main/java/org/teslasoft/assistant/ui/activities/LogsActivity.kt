@@ -43,6 +43,8 @@ import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.util.ErrorLogChatLinks
+import org.teslasoft.assistant.ui.util.LogSearch
+import org.teslasoft.assistant.ui.util.LogSearchBar
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
 class LogsActivity : SettingsPageActivity() {
@@ -147,23 +149,13 @@ class LogsActivity : SettingsPageActivity() {
     }
 
     /**
-     * Show the correct header for this log. The Voice Debug log has a trailing
-     * icon, so it uses the left-aligned icon-aware title; every other log uses
-     * the plain centered title. The unused title view is hidden so only one is
-     * ever laid out.
+     * Show this log's title. Every log's header carries the trailing Search
+     * icon, so all use the left-aligned icon-aware title.
      */
-    private fun setHeader(titleRes: Int, iconHeader: Boolean) {
+    private fun setHeader(titleRes: Int) {
         val text = getString(titleRes)
         this.title = text
-        if (iconHeader) {
-            activityLogsTitle?.text = text
-            activityLogsTitle?.visibility = android.view.View.VISIBLE
-            activityLogsTitleCentered?.visibility = android.view.View.GONE
-        } else {
-            activityLogsTitleCentered?.text = text
-            activityLogsTitleCentered?.visibility = android.view.View.VISIBLE
-            activityLogsTitle?.visibility = android.view.View.GONE
-        }
+        activityLogsTitle?.text = text
     }
 
     /** The current log's stored contents, before ordering/spacing. */
@@ -179,6 +171,7 @@ class LogsActivity : SettingsPageActivity() {
         "image_gen_errors" -> Logger.getImageGenErrorsLog(this)
         "image_gen" -> Logger.getImageGenLog(this)
         "tts_lifecycle" -> Logger.getTtsLifecycleLog(this)
+        Logger.SYSTEM_LOG_TYPE -> Logger.getSystemLog(this)
         else -> ""
     }
 
@@ -201,10 +194,13 @@ class LogsActivity : SettingsPageActivity() {
         displayedLog = entries.joinToString("\n\n")
         val showCopy = preferences?.getShowLogCopyButtons() ?: true
         // Each entry's Copy takes every entry of this log written in the same
-        // minute, so a burst of related lines is copied in one tap.
+        // minute, so a burst of related lines is copied in one tap. Worked
+        // out over the whole log, so a search never changes what Copy takes.
         val copyText = Logger.sameMinuteCopyText(entries)
         logEntries?.removeAllViews()
-        for ((index, entry) in entries.withIndex()) {
+        // While searching, only entries containing the text are shown.
+        for (index in LogSearch.matchingIndices(entries, searchBar?.query.orEmpty())) {
+            val entry = entries[index]
             val row = layoutInflater.inflate(R.layout.view_log_entry, logEntries, false)
             val text = row.findViewById<TextView>(R.id.log_entry_text)
             text.text = when (logType) {
@@ -321,7 +317,8 @@ class LogsActivity : SettingsPageActivity() {
     private var btnVoiceAdvanced: ImageButton? = null
     private var actionBar: ConstraintLayout? = null
     private var activityLogsTitle: TextView? = null
-    private var activityLogsTitleCentered: TextView? = null
+    private var btnLogSearch: ImageButton? = null
+    private var searchBar: LogSearchBar? = null
     private var switchNewestFirst: MaterialSwitch? = null
     private var logEntries: android.widget.LinearLayout? = null
     private var displayedLog = ""
@@ -353,10 +350,16 @@ class LogsActivity : SettingsPageActivity() {
         btnVoiceAdvanced = findViewById(R.id.btn_voice_advanced)
         actionBar = findViewById(R.id.action_bar)
         activityLogsTitle = findViewById(R.id.activity_logs_title)
-        activityLogsTitleCentered = findViewById(R.id.activity_logs_title_centered)
+        btnLogSearch = findViewById(R.id.btn_log_search)
         switchNewestFirst = findViewById(R.id.switch_newest_first)
         logEntries = findViewById(R.id.log_entries)
         root = findViewById(R.id.root)
+        searchBar = LogSearchBar(
+            findViewById(R.id.root),
+            findViewById(R.id.log_search_panel),
+            findViewById(R.id.log_search_field)
+        ) { renderLog() }
+        btnLogSearch?.setOnClickListener { searchBar?.toggle() }
 
         Thread {
             val extras = intent.extras
@@ -373,13 +376,12 @@ class LogsActivity : SettingsPageActivity() {
                     logType = intent.extras?.getString("type").toString()
 
                     when (logType) {
-                        // Only the Voice Debug log carries a trailing header icon
-                        // (the jump to Advanced Voice settings), so it uses the
-                        // icon-aware header; every other log uses the plain
-                        // centered header with no icon.
-                        "crash" -> setHeader(R.string.title_crash_log, iconHeader = false)
+                        // Every log's header has the Search icon; the Voice
+                        // Debug log also shows its jump to Advanced Voice
+                        // settings, chained before Search.
+                        "crash" -> setHeader(R.string.title_crash_log)
                         "event" -> {
-                            setHeader(R.string.title_event_log, iconHeader = true)
+                            setHeader(R.string.title_event_log)
                             // The voice pipeline writes its diagnostics here, so
                             // offer a direct hop to the screen that tunes it.
                             btnVoiceAdvanced?.visibility = android.view.View.VISIBLE
@@ -387,15 +389,16 @@ class LogsActivity : SettingsPageActivity() {
                                 startActivity(Intent(this, VoiceAdvancedSettingsActivity::class.java))
                             }
                         }
-                        "memory" -> setHeader(R.string.title_memory_log, iconHeader = false)
-                        "performance" -> setHeader(R.string.title_performance_log, iconHeader = false)
-                        "whisper_perf" -> setHeader(R.string.title_whisper_perf_log, iconHeader = false)
-                        "memory_usage" -> setHeader(R.string.title_memory_usage_log, iconHeader = false)
-                        "provider_fail" -> setHeader(R.string.title_provider_fail_log, iconHeader = false)
-                        "response_lifecycle" -> setHeader(R.string.title_response_lifecycle_log, iconHeader = false)
-                        "image_gen_errors" -> setHeader(R.string.title_image_gen_errors_log, iconHeader = false)
-                        "image_gen" -> setHeader(R.string.title_image_gen_log, iconHeader = false)
-                        "tts_lifecycle" -> setHeader(R.string.title_tts_lifecycle_log, iconHeader = false)
+                        "memory" -> setHeader(R.string.title_memory_log)
+                        "performance" -> setHeader(R.string.title_performance_log)
+                        "whisper_perf" -> setHeader(R.string.title_whisper_perf_log)
+                        "memory_usage" -> setHeader(R.string.title_memory_usage_log)
+                        "provider_fail" -> setHeader(R.string.title_provider_fail_log)
+                        "response_lifecycle" -> setHeader(R.string.title_response_lifecycle_log)
+                        "image_gen_errors" -> setHeader(R.string.title_image_gen_errors_log)
+                        "image_gen" -> setHeader(R.string.title_image_gen_log)
+                        "tts_lifecycle" -> setHeader(R.string.title_tts_lifecycle_log)
+                        Logger.SYSTEM_LOG_TYPE -> setHeader(R.string.system_logs_title)
                         else -> {
                             finish()
                             return@runOnUiThread
@@ -435,6 +438,7 @@ class LogsActivity : SettingsPageActivity() {
                                 "image_gen_errors" -> Logger.clearImageGenErrorsLog(this)
                                 "image_gen" -> Logger.clearImageGenLog(this)
                                 "tts_lifecycle" -> Logger.clearTtsLifecycleLog(this)
+                                Logger.SYSTEM_LOG_TYPE -> Logger.clearSystemLog(this)
                             }
                             renderLog()
                         }
@@ -473,13 +477,18 @@ class LogsActivity : SettingsPageActivity() {
                 val tint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
                 btnBack?.backgroundTintList = tint
                 btnVoiceAdvanced?.backgroundTintList = tint
+                btnLogSearch?.backgroundTintList = tint
+                findViewById<android.view.View>(R.id.log_search_panel)
+                    ?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
             } else {
                 root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
-                ScreenChrome.apply(this, actionBar, btnBack, btnVoiceAdvanced)
+                ScreenChrome.apply(this, actionBar, btnBack, btnVoiceAdvanced, btnLogSearch)
+                ScreenChrome.applyHeaderPanel(this, findViewById(R.id.log_search_panel))
             }
         } catch (_: Exception) {
             root?.setBackgroundColor(SurfaceColors.SURFACE_0.getColor(this))
-            ScreenChrome.apply(this, actionBar, btnBack, btnVoiceAdvanced)
+            ScreenChrome.apply(this, actionBar, btnBack, btnVoiceAdvanced, btnLogSearch)
+            ScreenChrome.applyHeaderPanel(this, findViewById(R.id.log_search_panel))
         }
     }
 

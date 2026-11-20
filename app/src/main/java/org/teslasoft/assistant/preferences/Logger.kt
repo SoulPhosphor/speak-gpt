@@ -300,6 +300,27 @@ class Logger {
         }
 
         /**
+         * System Logs — application-wide process lifecycle diagnostics, kept
+         * apart from the Voice Debug Log so frequent voice events can never
+         * evict them. Written only while "System Logs" is on in Alerts,
+         * Errors & Logs (off by default), with its own retention. Currently
+         * holds only the [ProcessExit] record; ProcessExit lines written to
+         * the Voice Debug Log before this channel existed stay there as
+         * historical records (no migration).
+         * */
+        fun getSystemLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "system")
+        }
+
+        private fun setSystemLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "system", log)
+        }
+
+        fun clearSystemLog(context: Context) {
+            setSystemLog(context, "")
+        }
+
+        /**
          * The persistent log channels [log] recognizes. A `type` outside this
          * set is silently dropped (see the unknown-channel `else` in [log]),
          * so a caller passing e.g. "error" instead of "crash" writes nowhere.
@@ -311,7 +332,8 @@ class Logger {
             type == "crash" || type == "event" || type == "memory" || type == "performance" ||
                 type == "whisper_perf" || type == "memory_usage" ||
                 type == "image_gen_errors" || type == "image_gen" ||
-                type == "response_lifecycle" || type == "tts_lifecycle"
+                type == "response_lifecycle" || type == "tts_lifecycle" ||
+                type == SYSTEM_LOG_TYPE
 
         /**
          * @param type - type of log (crash/event/memory/performance)
@@ -403,6 +425,15 @@ class Logger {
                         p.getTtsLifecycleLogMaxEntries(), p.getTtsLifecycleLogMaxDays().toLong()
                     )
                     setTtsLifecycleLog(context, log)
+                }
+
+                SYSTEM_LOG_TYPE -> {
+                    val p = Preferences.getPreferences(context, "")
+                    val log = trimByEntries(
+                        "${getSystemLog(context)}$logString",
+                        p.getSystemLogMaxEntries(), p.getSystemLogMaxDays().toLong()
+                    )
+                    setSystemLog(context, log)
                 }
 
                 // Response Lifecycle: the structured entries are written by
@@ -781,8 +812,8 @@ class Logger {
         }
 
         /**
-         * Surface *why the previous process died* into the Event (Voice Debug)
-         * log on the next start. A hard kill — low memory, force-stop — is a
+         * Surface *why the previous process died* into System Logs on the next
+         * start. A hard kill — low memory, force-stop — is a
          * SIGKILL: no app code runs as the process dies, so it can never write a
          * tombstone on the way out the way a normal onDestroy can. The only way to
          * make that visible is to ask the system after the fact, which
@@ -792,9 +823,9 @@ class Logger {
          *
          * Deduped by the exit timestamp (stored in the logs prefs) so the same
          * death is logged once, not on every cold start. Best-effort and fully
-         * guarded — diagnostics must never crash startup. Written unconditionally
-         * (not gated on the voice-diagnostics toggle): it's one line per process
-         * death and is the whole point of asking "was I killed?".
+         * guarded — diagnostics must never crash startup. The System Logs line
+         * is written only while "System Logs" is on; the dedup marker and the
+         * Error Log copy of an app-breaking exit do not depend on that toggle.
          */
         fun logLastExitReason(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
@@ -842,7 +873,7 @@ class Logger {
          * omits REASON_CRASH because CrashHandler already logs it there) —
          * corruption risk does not care whether CrashHandler ran, so an ordinary
          * JVM crash counts here. Matches the "warning"-level set used when the
-         * previous exit is described in the Event log below.
+         * previous exit is described in System Logs below.
          */
         @RequiresApi(Build.VERSION_CODES.R)
         private fun isAbnormalExitReason(reason: Int): Boolean = when (reason) {
@@ -856,6 +887,33 @@ class Logger {
         }
 
         private const val LAST_EXIT_TS_KEY = "last_exit_ts"
+
+        /** The System Logs channel's storage key and [log] type. */
+        const val SYSTEM_LOG_TYPE = "system"
+
+        /**
+         * The persistent channels one ProcessExit report is written to, in
+         * order. The lifecycle record goes to System Logs only while that log
+         * is on — never to the Voice Debug Log any more. An app-breaking exit
+         * ALSO goes to the Error Log regardless of the toggle, exactly as
+         * before. Pure so the routing is unit-tested.
+         */
+        internal fun processExitChannels(systemLogging: Boolean, appBreaking: Boolean): List<String> {
+            val channels = ArrayList<String>(2)
+            if (systemLogging) channels.add(SYSTEM_LOG_TYPE)
+            if (appBreaking) channels.add("crash")
+            return channels
+        }
+
+        /**
+         * One grouped System Logs record for a process exit: the exit and the
+         * app start that followed it, written as a single entry so they are
+         * displayed, copied and trimmed together. [exitMessage] is the same
+         * "previous app session ended at ..." text the Error Log copy uses.
+         * Pure so the shape is unit-tested.
+         */
+        internal fun systemProcessExitEntry(exitMessage: String, nextStart: String): String =
+            "Exit: $exitMessage\nNext: app session started at $nextStart"
 
         @RequiresApi(Build.VERSION_CODES.R)
         private fun collectAndLogLastExitReason(context: Context) {
@@ -882,12 +940,22 @@ class Logger {
             // exit in the log. Same set the integrity-check gate treats as
             // abnormal (see [isAbnormalExitReason]).
             val level = if (isAbnormalExitReason(info.reason)) "warning" else "info"
-            log(context, "event", "ProcessExit", level, message)
+            val appBreaking = isAppBreakingExit(info.reason)
+            val channels = processExitChannels(
+                Preferences.getPreferences(context, "").getSystemLogging(), appBreaking
+            )
+            if (SYSTEM_LOG_TYPE in channels) {
+                // This runs on the launch after the exit, so "now" is the
+                // next app start that pairs with it.
+                val nextStart = LocalDateTime.now().format(LOG_TIME_FORMAT)
+                log(context, SYSTEM_LOG_TYPE, "ProcessExit", level,
+                    systemProcessExitEntry(message, nextStart))
+            }
 
             // A crash or serious freeze that makes the app unusable must ALSO
             // leave a record in the Error Log (the "crash" channel) — where a
-            // user looks after "the app just died" — not only in the Voice
-            // Debug log above. A hard kill (an ANR = frozen main thread, a
+            // user looks after "the app just died" — whether or not System
+            // Logs is on. A hard kill (an ANR = frozen main thread, a
             // native crash, an out-of-memory kill) runs no app code on the way
             // out and throws no JVM exception, so CrashHandler never fires and
             // nothing reaches the Error Log at the time. This after-the-fact
@@ -896,7 +964,7 @@ class Logger {
             // deliberately NOT copied here — CrashHandler already writes those
             // with a full stack trace, so duplicating them would only bury the
             // Error Log.
-            if (isAppBreakingExit(info.reason)) {
+            if ("crash" in channels) {
                 val errorLevel = when (info.reason) {
                     // Memory / resource kills are environmental, not code
                     // faults, so they are warnings; a freeze or native crash

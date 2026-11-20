@@ -139,31 +139,6 @@
                     android:contentDescription="@string/title_embedding_model" />
             </LinearLayout>
 
-            <!-- System prompts: opens the user's library of saved system prompts
-                 (SystemPromptsListActivity). The subtitle mirrors whichever
-                 prompt is currently active for the chat, or "None". -->
-            <LinearLayout
-                android:id="@+id/row_system_prompt"
-                style="@style/Widget.App.Row.WithSubtitle"
-                android:layout_marginTop="8dp">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/title_system_prompts" />
-
-                    <TextView
-                        android:id="@+id/text_system_prompt_subtitle"
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:text="@string/system_prompt_none" />
-                </LinearLayout>
-
-                <ImageView
-                    style="@style/Widget.App.Row.Chevron"
-                    android:contentDescription="@string/title_system_prompts" />
-            </LinearLayout>
-
             <!-- Model Specific Rules: opens the rules browser (Stage 4 slice 4). -->
             <LinearLayout
                 android:id="@+id/row_model_rules"

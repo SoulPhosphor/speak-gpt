@@ -62,7 +62,6 @@ class SettingsActivity : SettingsPageActivity() {
     private var rowBackupRestore: LinearLayout? = null
     private var rowAboutApp: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
-    private var rowAlertDebugMenu: LinearLayout? = null
     private var rowLogCabin: LinearLayout? = null
     // private var threadLoading: LinearLayout? = null
     private var root: ScrollView? = null
@@ -110,7 +109,6 @@ class SettingsActivity : SettingsPageActivity() {
         transition.excludeTarget(R.id.tile_appearance, true)
         transition.excludeTarget(R.id.tile_about_app, true)
         transition.excludeTarget(R.id.tile_documentation, true)
-        transition.excludeTarget(R.id.tile_alert_debug_menu, true)
         transition.excludeTarget(R.id.tile_backup_restore, true)
         transition.excludeTarget(R.id.tile_log_cabin, true)
 
@@ -139,7 +137,6 @@ class SettingsActivity : SettingsPageActivity() {
         transition2.excludeTarget(R.id.tile_appearance, true)
         transition2.excludeTarget(R.id.tile_about_app, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
-        transition2.excludeTarget(R.id.tile_alert_debug_menu, true)
         transition2.excludeTarget(R.id.tile_backup_restore, true)
         transition2.excludeTarget(R.id.tile_log_cabin, true)
 
@@ -255,7 +252,6 @@ class SettingsActivity : SettingsPageActivity() {
         rowAppearance = findViewById(R.id.tile_appearance)
         rowBackupRestore = findViewById(R.id.tile_backup_restore)
         rowAboutApp = findViewById(R.id.tile_about_app)
-        rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
         rowLogCabin = findViewById(R.id.tile_log_cabin)
 
         rowCharacters?.setOnClickListener {
@@ -299,10 +295,6 @@ class SettingsActivity : SettingsPageActivity() {
 
         rowAboutApp?.setOnClickListener {
             startActivity(Intent(this, AboutActivity::class.java).putExtra("chatId", chatId))
-        }
-
-        rowAlertDebugMenu?.setOnClickListener {
-            startActivity(Intent(this, AlertDebugMenuActivity::class.java).putExtra("chatId", chatId))
         }
 
         rowLogCabin?.setOnClickListener {

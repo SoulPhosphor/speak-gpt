@@ -426,6 +426,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.AlertSoundsActivity"
+            android:exported="false"
+            android:label="@string/alert_sounds_title" />
+
+        <activity
             android:name=".ui.activities.LogCabinActivity"
             android:exported="false"
             android:label="@string/alert_debug_section_logs"

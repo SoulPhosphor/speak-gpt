@@ -51,6 +51,12 @@ object ScreenChrome {
         }
     }
 
+    /** Gives a panel that extends the header (Widget.App.ActionBar.SearchPanel)
+     *  the header's own color, so the two read as one surface. */
+    fun applyHeaderPanel(activity: Activity, panel: View?) {
+        panel?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(activity))
+    }
+
     /**
      * Keeps a full-screen page's Widget.App.ActionBar header joined to the top
      * edge of the screen. Android 15 and later draw the app behind the system

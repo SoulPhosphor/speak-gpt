@@ -372,6 +372,9 @@
     <dimen name="search_pill_icon_padding">12dp</dimen>
     <dimen name="search_pill_field_padding_end">16dp</dimen>
     <dimen name="search_pill_text_size">14sp</dimen>
+    <!-- Header search panel (Widget.App.ActionBar.SearchPanel). -->
+    <dimen name="header_search_panel_padding_horizontal">16dp</dimen>
+    <dimen name="header_search_panel_padding_bottom">12dp</dimen>
     <dimen name="model_picker_tab_gap">4dp</dimen>
     <dimen name="model_picker_search_padding_end">12dp</dimen>
     <dimen name="model_picker_card_radius">16dp</dimen>
