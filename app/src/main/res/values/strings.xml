@@ -937,7 +937,7 @@
     <string name="damaged_repair_partly_successful">Repair Partly Successful</string>
     <string name="damaged_repair_unsuccessful">Repair Unsuccessful</string>
     <string name="damaged_repair_from_backup_hint">You can attempt to repair remaining chat files from a backup.</string>
-    <string name="damaged_irreparable_section">Irreparable Chat Files</string>
+    <string name="damaged_irreparable_section">Chats Where Direct Repair Failed</string>
     <string name="damaged_replace_from_backup">Attempt Chat Replacement from Backup</string>
     <string name="damaged_replace_title">Replace Damaged Chats</string>
     <string name="damaged_replace_found">Found in this backup:</string>
