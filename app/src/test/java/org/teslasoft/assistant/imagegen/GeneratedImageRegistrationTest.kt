@@ -30,11 +30,12 @@ class GeneratedImageRegistrationTest {
     }
 
     @Test
-    fun oneJobAllocatesOneUuidAndMetadataReusesIt() {
+    fun oneJobUsesReservedUuidOrAllocatesOneAndMetadataReusesIt() {
         val source = File(
             "src/main/java/org/teslasoft/assistant/imagegen/ImageGenerationJobRegistry.kt"
         ).readText()
-        assertTrue(source.contains("imageId = UUID.randomUUID().toString()"))
+        assertTrue(source.contains("require(ownerKey == null || imageId != null)"))
+        assertTrue(source.contains("imageId = imageId ?: UUID.randomUUID().toString()"))
         assertTrue(source.contains("imageId = record.imageId"))
         assertTrue(source.contains("originMessageId = record.imageId"))
     }

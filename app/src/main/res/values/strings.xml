@@ -4661,4 +4661,6 @@
     <string name="mem_tokens_unavailable">— / — Tokens</string>
     <string name="mem_cannot_save_title">Memory Cannot Be Saved</string>
     <string name="mem_cannot_save_token_limit">This memory exceeds the embedding model\'s reading limit.</string>
+    <string name="parallel_allow_image_generation">Allow Image Generation</string>
+    <string name="parallel_allow_image_generation_description">When turned on, models will follow global image generation rules.</string>
 </resources>

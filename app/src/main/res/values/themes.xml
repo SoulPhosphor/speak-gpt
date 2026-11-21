@@ -4193,4 +4193,6 @@
         <item name="indicatorColor">?attr/colorPrimary</item>
         <item name="trackColor">?attr/colorSurfaceContainerHighest</item>
     </style>
+    <!-- Hidden parallel-model control; all appearance comes from the shared toggle row. -->
+    <style name="Widget.App.ParallelModels.AllowImages" parent="Widget.App.Row.Toggle" />
 </resources>

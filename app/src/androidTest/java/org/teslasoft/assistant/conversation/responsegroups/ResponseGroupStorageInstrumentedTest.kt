@@ -136,6 +136,40 @@ class ResponseGroupStorageInstrumentedTest {
     }
 
     @Test fun recoveryBackupAndRestoreAsCopyKeepAllSnapshotsAttachmentsSelectionsAndRequestIds() {
+        verifyBackupAndRestore(rows())
+    }
+
+    @Test fun toolContinuationIdentityAndImageEvidenceSurviveBackupAndRestoreAsCopy() {
+        val original = read()
+        val old = group(original[2])
+        val slot = old.slots[1]
+        val version = slot.versions.last()
+        val parent = version.attempts.last()
+        val toolMessage = """{"role":"assistant","content":"fixture tool text","tool_calls":[{"id":"fixture-call","type":"function","function":{"name":"create_image","arguments":"{}"}}],"reasoning_details":[{"type":"reasoning.encrypted","data":"fixture-signature"}]}"""
+        val fields = mapOf("message" to "fixture continuation", "state" to "done")
+        val requestId = UUID.randomUUID().toString()
+        val imageId = UUID.randomUUID().toString()
+        val receipt = org.teslasoft.assistant.usage.TokenUsageAccounting.encodeRecords(listOf(
+            org.teslasoft.assistant.usage.TurnUsageRecord(model = slot.assignment.modelId, provider = "fixture-provider",
+                requestId = requestId, inputTokens = 17, outputTokens = 3, totalTokens = 20, totalCost = 0.02)))
+        val continuation = ResponseAttempt(requestId, parent.startedAtMs + 100, "done", parent.startedAtMs + 101,
+            fields, receipt, parentRequestId = parent.requestId, withoutTools = false,
+            continuationMessages = listOf(toolMessage, """{"role":"tool","tool_call_id":"fixture-call","content":"fixture image result"}"""),
+            imageJobId = imageId, imageResult = """{"imageId":"$imageId","status":"failed","failureCode":"PROVIDER_ERROR"}""")
+        val after = old.copy(slots = old.slots.map { current -> if (current != slot) current else current.copy(
+            versions = current.versions.map { v -> if (v != version) v else v.copy(fields = fields,
+                attempts = v.attempts.dropLast(1) + parent.copy(toolAssistantMessage = toolMessage) + continuation) }) })
+        val result = ResponseGroupStore.replace(context, chatId, ResponseGroupTarget(chatId, old.assistantMessageId, old.groupId),
+            original[2]["responseGroup"] as String, after) { fail("Nonprimary continuation must not rewrite canonical sources") }
+        assertTrue(result is ResponseGroupStore.Result.Saved)
+        val expected = read()
+        assertEquals(requestId, group(expected[2]).slots[1].versions.last().attempts.last().requestId)
+        assertTrue(prefs.editChat(context, "Renamed tool fixture", "Synthetic groups", chatId))
+        assertEquals(expected, read())
+        verifyBackupAndRestore(expected)
+    }
+
+    private fun verifyBackupAndRestore(expected: List<HashMap<String, Any>>) {
         org.teslasoft.assistant.preferences.memory.MemoryStore.getInstance(context).readableDatabase
             .rawQuery("SELECT 1", null).use { it.moveToFirst() }
         org.teslasoft.assistant.preferences.profileimages.ProfileImageDb.getInstance(context).readableDatabase
@@ -151,11 +185,11 @@ class ResponseGroupStorageInstrumentedTest {
         assertTrue(PortableRecoverySemanticValidator.validate(context, verified.artifacts, verified.declaredCategories,
             verified.explicitlyEmptyCategories, verified.categoryRecordCounts) is PortableRecoverySemanticValidator.Result.Valid)
         val recoveryRows = (PortableChatRestorePlan.parse(verified.artifacts.single { it.type == PortablePackage.TYPE_CHATS_JSON }.stagedFile.readText()) as PortableChatRestorePlan.Result.Ok).plan
-        assertEquals(gson.toJson(rows()), gson.toJson(gson.fromJson<List<HashMap<String, Any>>>(recoveryRows.chats.single().messagesJson,
+        assertEquals(gson.toJson(expected), gson.toJson(gson.fromJson<List<HashMap<String, Any>>>(recoveryRows.chats.single().messagesJson,
             object : TypeToken<List<HashMap<String, Any>>>() {}.type)))
         val serialized = ChatLogicalSerializer.serializeV2(context) as ChatLogicalSerializer.Result.Ok
         val parsed = (PortableChatRestorePlan.parse(serialized.json) as PortableChatRestorePlan.Result.Ok).plan
-        assertEquals(rows(), read())
+        assertEquals(expected, read())
         val stagedChats = file("chats.json").apply { writeText(serialized.json) }
         val scanned = (ChatsArtifactScanner.scan(stagedChats.reader()) as ChatsArtifactScanner.Result.Ok).summary
         assertEquals(1, scanned.snapshotImageRefs.size)
@@ -165,18 +199,18 @@ class ResponseGroupStorageInstrumentedTest {
         assertEquals(1, pdfs.size)
         assertEquals(1, images.size)
         val logical = parsed.chats.single()
-        val incoming = parsed.copy(chats = listOf(logical.copy(messagesJson = gson.toJson(rows().take(3)), messageCount = 3)))
+        val incoming = parsed.copy(chats = listOf(logical.copy(messagesJson = gson.toJson(expected.take(3)), messageCount = 3)))
         val merged = ChatMergePlanner.plan(parsed, incoming, chatResolutions = mapOf(chatId to ChatMergePlanner.ChatResolution.KeepBoth)) as ChatMergePlanner.Result.Ready
         val copy = merged.plan.chats.single { it.chatId != chatId }
         ids.add(copy.chatId)
-        assertEquals(group(rows()[2]), group(gson.fromJson<List<HashMap<String, Any>>>(copy.messagesJson, object : TypeToken<List<HashMap<String, Any>>>() {}.type).let { it[2] }))
+        assertEquals(group(expected[2]), group(gson.fromJson<List<HashMap<String, Any>>>(copy.messagesJson, object : TypeToken<List<HashMap<String, Any>>>() {}.type).let { it[2] }))
         val prepared = PortableChatRestoreCoordinator.Prepared(merged.plan, PortableRestoreMode.MERGE, merged.report)
         val participant = ChatRestoreParticipant(context, prepared, parsed, file("restore"),
             pdfs.associate { it.file.nameWithoutExtension to it.file }, images.associate { it.file.name to it.file })
         assertTrue(participant.validate())
         assertTrue(participant.stage())
         assertTrue(participant.apply())
-        assertEquals(rows().take(3), read(copy.chatId))
+        assertEquals(expected.take(3), read(copy.chatId))
         assertEquals(ResponseGroupHistory.fingerprint(read(copy.chatId)),
             SecurePrefs.get(context, "chat_${copy.chatId}").getString("response_group_fingerprint", null))
         assertTrue(SecurePrefs.get(context, "settings.${copy.chatId}").getBoolean("experimental_mode", false))
@@ -185,7 +219,7 @@ class ResponseGroupStorageInstrumentedTest {
             assertTrue(ref.matches(File(dir, ref.fileName).readBytes()))
         }
         assertTrue(participant.rollback())
-        assertEquals(rows(), read())
+        assertEquals(expected, read())
         participant.cleanup()
     }
 

@@ -121,22 +121,25 @@ class ProviderUsageAttempt(
         if (observationExpected && !observationFinished.isCompleted) {
             withTimeoutOrNull(500L) { observationFinished.await() }
         }
-        return synchronized(this) {
-            ProviderUsageSnapshot(
-                attemptId = attemptId,
-                model = responseModel ?: requestedModel,
-                provider = responseProvider ?: fallbackProvider,
-                apiEndpoint = apiEndpoint,
-                counts = TokenCounts(
-                    promptTokens,
-                    outputIncludingReasoning(apiEndpoint, completionTokens, reasoningOutputTokens),
-                    totalTokens, cachedInputTokens, cacheWriteInputTokens
-                ),
-                providerCost = ProviderReportedCost(
-                    inputCost, outputCost, totalCost, cachedInputCost
-                )
+        return checkpointSnapshot()
+    }
+
+    /** Current evidence only: periodic persistence must not wait for the stream to drain. */
+    fun checkpointSnapshot(): ProviderUsageSnapshot = synchronized(this) {
+        ProviderUsageSnapshot(
+            attemptId = attemptId,
+            model = responseModel ?: requestedModel,
+            provider = responseProvider ?: fallbackProvider,
+            apiEndpoint = apiEndpoint,
+            counts = TokenCounts(
+                promptTokens,
+                outputIncludingReasoning(apiEndpoint, completionTokens, reasoningOutputTokens),
+                totalTokens, cachedInputTokens, cacheWriteInputTokens
+            ),
+            providerCost = ProviderReportedCost(
+                inputCost, outputCost, totalCost, cachedInputCost
             )
-        }
+        )
     }
 
     /** Same request-scoped evidence used by classifier, chat, and both logs. */

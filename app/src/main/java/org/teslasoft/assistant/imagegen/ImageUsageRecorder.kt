@@ -48,14 +48,19 @@ object ImageUsageRecorder {
     } catch (_: Exception) { ImageUsageSaveResult.RETRY }
 
     fun record(context: Context, chatId: String, imageId: String, endpoint: ApiEndpointObject, attempt: ImageUsageAttempt) {
-        if (chatId.isBlank()) return
+        recordChecked(context, chatId, imageId, endpoint, attempt)
+    }
+
+    internal fun recordChecked(context: Context, chatId: String, imageId: String, endpoint: ApiEndpointObject,
+        attempt: ImageUsageAttempt): ImageUsageSaveResult {
+        if (chatId.isBlank()) return ImageUsageSaveResult.REMOVED
         val app = context.applicationContext
         destinations[imageId] = chatId
         val entry = UsageLogEntry("$imageId:image-generation", UsageCategory.IMAGE_GENERATION,
             imageId, attempt.startedAtMs, attempt.record())
         // Commit received evidence before image decoding/download/save can fail or the app can close.
         val saved = save(app, imageId, entry, existingOnly = false)
-        if (!attempt.finalized) return
+        if (!attempt.finalized) return saved
         scope.launch {
             try {
                 if (saved == ImageUsageSaveResult.REMOVED) return@launch
@@ -95,5 +100,6 @@ object ImageUsageRecorder {
                 }
             } finally { destinations.remove(imageId) }
         }
+        return saved
     }
 }

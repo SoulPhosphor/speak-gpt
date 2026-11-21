@@ -215,3 +215,5 @@ styles (`Title.NearBack` / `SecondaryButton`). Glamour Studio alone opts into
 field. These four screens and app Search share `view_search_controls.xml`,
 preserving the existing search-field appearance and using existing toggle styles. No new visual
 style definitions were introduced. Other memory-list layouts are unchanged.
+
+Parallel-model Allow Image Generation control: `view_parallel_model_image_policy.xml` uses `Widget.App.ParallelModels.AllowImages` (shared Row.Toggle alias), Row.TextColumn/Title/Subtitle/Switch. Prepared, unexposed component only; no setup/settings page or device visual audit is claimed.

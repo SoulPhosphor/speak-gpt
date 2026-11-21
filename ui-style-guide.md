@@ -529,6 +529,8 @@ Use for a setting that changes a Boolean value directly instead of navigating to
 
 A toggle row has no chevron. The row container is not the tap target; the switch is.
 
+The parallel-model settings control uses `Widget.App.ParallelModels.AllowImages`, an appearance-preserving alias of `Widget.App.Row.Toggle`, with the normal TextColumn/Title/Subtitle/Switch children. Its reusable layout is `view_parallel_model_image_policy.xml`; the title is **Allow Image Generation**, the switch defaults on, and the subtitle is “When turned on, models will follow global image generation rules.” It is prepared for the later model-settings page and does not expose parallel mode.
+
 A toggle may exist on only one screen. Its use of shared row and switch styling does not require adding the toggle to other screens.
 
 ### Number row

@@ -93,7 +93,7 @@ class GenerationForegroundService : Service() {
          * notification with the reading title while the ref count keeps the
          * service alive across both phases.
          */
-        fun begin(context: Context, chatId: String?, chatName: String?, reading: Boolean = false) {
+        fun begin(context: Context, chatId: String?, chatName: String?, reading: Boolean = false): Boolean {
             activeGenerations.incrementAndGet()
             val intent = Intent(context, GenerationForegroundService::class.java).apply {
                 putExtra(EXTRA_CHAT_ID, chatId)
@@ -106,6 +106,7 @@ class GenerationForegroundService : Service() {
                 } else {
                     context.startService(intent)
                 }
+                return true
             } catch (e: Exception) {
                 lastKeepAliveFailure = "${e.javaClass.simpleName}: ${e.message}"
                 // Starting a foreground service can be refused (e.g. the app is
@@ -120,6 +121,7 @@ class GenerationForegroundService : Service() {
                                 "generation continues without screen-off protection")
                 } catch (_: Throwable) { /* logging must never break generation */ }
                 activeGenerations.decrementAndGet()
+                return false
             }
         }
 

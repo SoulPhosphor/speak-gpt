@@ -22,7 +22,6 @@ import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.ui.activities.ChatActivity
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Short-lived foreground keep-alive for image requests. The process-level
@@ -39,15 +38,17 @@ class ImageGenerationForegroundService : Service() {
         private const val WAKE_LOCK_TAG = "PhosphorShines:ImageGeneration"
         private const val EXTRA_CHAT_ID = "chatId"
 
-        private val activeGenerations = AtomicInteger(0)
+        private val lifecycleLock = Any()
+        private val starts = ImageGenerationServiceStarts()
+        private var readyService: ImageGenerationForegroundService? = null
 
         /** Starts one reference-counted keep-alive. False means Android
          * refused the service start and generation must continue without it. */
-        fun begin(context: Context, chatId: String?): Boolean {
-            activeGenerations.incrementAndGet()
+        fun begin(context: Context, chatId: String?): Boolean = synchronized(lifecycleLock) {
+            starts.requested()
             val intent = Intent(context, ImageGenerationForegroundService::class.java)
                 .putExtra(EXTRA_CHAT_ID, chatId)
-            return try {
+            try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
@@ -55,7 +56,7 @@ class ImageGenerationForegroundService : Service() {
                 }
                 true
             } catch (e: Exception) {
-                activeGenerations.decrementAndGet()
+                starts.refused()
                 try {
                     Logger.log(
                         context.applicationContext,
@@ -71,14 +72,15 @@ class ImageGenerationForegroundService : Service() {
             }
         }
 
-        fun end(context: Context) {
-            val remaining = activeGenerations.decrementAndGet()
-            if (remaining <= 0) {
-                activeGenerations.set(0)
+        @Suppress("UNUSED_PARAMETER")
+        fun end(context: Context): Unit = synchronized(lifecycleLock) {
+            starts.released()
+            // A pending startForegroundService must reach startForeground before it can be stopped.
+            if (starts.idle) {
+                val service = readyService
+                readyService = null
                 try {
-                    context.stopService(
-                        Intent(context, ImageGenerationForegroundService::class.java)
-                    )
+                    service?.stopSelf()
                 } catch (_: Exception) { /* already stopped */ }
             }
         }
@@ -103,6 +105,10 @@ class ImageGenerationForegroundService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (e: Exception) {
+            synchronized(lifecycleLock) {
+                starts.delivered()
+                if (readyService === this) readyService = null
+            }
             try {
                 Logger.log(
                     applicationContext,
@@ -113,9 +119,19 @@ class ImageGenerationForegroundService : Service() {
                         "image generation continues without screen-off protection"
                 )
             } catch (_: Throwable) { /* diagnostics must not crash the service */ }
-            stopSelf()
+            stopSelfResult(startId)
             return START_NOT_STICKY
         }
+        val finishedBeforeStartup = synchronized(lifecycleLock) {
+            starts.delivered()
+            readyService = this
+            if (starts.idle) {
+                readyService = null
+                stopSelfResult(startId)
+                true
+            } else false
+        }
+        if (finishedBeforeStartup) return START_NOT_STICKY
         acquireLocks()
         return START_NOT_STICKY
     }
@@ -196,6 +212,7 @@ class ImageGenerationForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        synchronized(lifecycleLock) { if (readyService === this) readyService = null }
         releaseLocks()
         super.onDestroy()
     }
