@@ -73,10 +73,10 @@ class ResponseGroupStorageInstrumentedTest {
         val dbName = "response-group-${UUID.randomUUID()}.db"
         val store = ChatStore.open(context, "fixture-key".toByteArray(), ChatStore.CloseOnCorruption, dbName)
         try {
-            store.putChat(ChatStore.StoredChat(chatId, 0, "{}", "{}", true, 0))
+            store.putChat(ChatStore.StoredChat(chatId, 0, JSONObject().put("id", chatId).put("name", "Synthetic groups").toString(), "{}", true, 0))
             original.forEach { row -> store.appendMessage(chatId, ChatStore.MessageRow(MessageIdentity.idOf(row), row["isBot"] == true, gson.toJson(row))) }
             val renamed = UUID.randomUUID().toString()
-            assertTrue(store.renameChatId(chatId, renamed, "{}"))
+            assertTrue(store.renameChatId(chatId, renamed, JSONObject().put("id", renamed).put("name", "Renamed groups").toString()))
             val loaded = store.readPage(renamed, 0, 10)
             assertEquals(original.map { gson.toJson(it) }, loaded.map { it.payloadJson })
             assertEquals(2, store.deleteAfter(renamed, loaded[2].seq))

@@ -127,6 +127,24 @@ class ResponseGroupTest {
         assertTrue(ResponseGroupCodec.read(original + (ResponseGroupCodec.KEY to null)) is ResponseGroupRead.Invalid)
     }
 
+    @Test fun unreadableGroupMetadataIsNotMisclassifiedAsMalformedChatJson() {
+        val rows = history().map { HashMap(it) }
+        rows[2]["responseGroup"] = "{unreadable envelope"
+        val id = UUID.randomUUID().toString()
+        // The streaming format requires its format marker before the chats array.
+        val raw = gson.toJson(linkedMapOf<String, Any>(
+            "format" to org.teslasoft.assistant.preferences.backup.portable.ChatLogicalSerializer.FORMAT_V2,
+            "complete" to true, "folders" to emptyList<Any>(),
+            "chats" to listOf(mapOf("name" to "Synthetic groups", "chat_id" to id, "list_id" to id,
+                "messages" to rows, "settings" to emptyList<Any>()))
+        ))
+        val result = org.teslasoft.assistant.preferences.backup.portable.ChatsArtifactScanner.scan(raw.reader())
+        assertTrue(result is org.teslasoft.assistant.preferences.backup.portable.ChatsArtifactScanner.Result.Unreadable)
+        assertEquals("a response group has unreadable snapshot metadata",
+            (result as org.teslasoft.assistant.preferences.backup.portable.ChatsArtifactScanner.Result.Unreadable).detail)
+        assertEquals("{unreadable envelope", rows[2]["responseGroup"])
+    }
+
     @Test fun permanentIdsAndAttemptOwnershipSurviveInterruptionAndNewRetries() {
         val g = group()
         val recovered = ResponseGroupEdits.interrupted(g)

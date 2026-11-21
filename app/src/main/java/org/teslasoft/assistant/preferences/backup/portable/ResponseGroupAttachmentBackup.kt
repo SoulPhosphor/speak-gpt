@@ -18,10 +18,12 @@ import java.security.MessageDigest
 
 /** Snapshot PDFs reuse the existing PDF asset contract; snapshot images use their existing image store. */
 object ResponseGroupAttachmentBackup {
+    internal class UnreadableMetadata : IllegalArgumentException()
+
     internal fun attachments(message: JSONObject): List<ResponseAttachment> {
         if (!message.has("responseGroup")) return emptyList()
         val row: Map<String, Any> = Gson().fromJson(message.toString(), object : TypeToken<Map<String, Any>>() {}.type)
-        require(ResponseGroupCodec.read(row) is ResponseGroupRead.Valid) { "unreadable_response_group_attachments" }
+        if (ResponseGroupCodec.read(row) !is ResponseGroupRead.Valid) throw UnreadableMetadata()
         return ResponseGroupAttachments.of(row)
     }
 

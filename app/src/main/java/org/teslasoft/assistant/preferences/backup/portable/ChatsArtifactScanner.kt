@@ -94,6 +94,8 @@ internal object ChatsArtifactScanner {
             scanRoot(reader)
         } catch (stop: Stop) {
             stop.result
+        } catch (_: ResponseGroupAttachmentBackup.UnreadableMetadata) {
+            Result.Unreadable("a response group has unreadable snapshot metadata")
         } catch (e: Exception) {
             // The reader's path (for example $.chats[12].messages[40]) says
             // where reading stopped without quoting any content.
