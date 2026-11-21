@@ -5282,6 +5282,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "UPDATE OR REPLACE scan_reports SET chat_id = ? WHERE chat_id = ?",
                 arrayOf(newChatId, oldChatId)
             )
+            // Run history keeps the ranges each run read, for Rerun.
+            val runRanges = ArrayList<Pair<String, String>>()
+            db.rawQuery(
+                "SELECT run_id, source_ranges_json FROM archivist_runs WHERE source_ranges_json IS NOT NULL",
+                emptyArray()
+            ).use { c ->
+                while (c.moveToNext()) {
+                    org.teslasoft.assistant.preferences.memory.scan.ScanSourceRanges
+                        .repoint(c.getString(1), oldChatId, newChatId)
+                        ?.let { runRanges.add(c.getString(0) to it) }
+                }
+            }
+            for ((runId, ranges) in runRanges) {
+                db.update("archivist_runs", ContentValues().apply { put("source_ranges_json", ranges) },
+                    "run_id = ?", arrayOf(runId))
+            }
             // The cooldown state and turn clock are keyed by chat id too — a
             // rename must carry them or every memory re-injects and the clock
             // restarts (OR REPLACE: a pre-existing row under the new id loses).

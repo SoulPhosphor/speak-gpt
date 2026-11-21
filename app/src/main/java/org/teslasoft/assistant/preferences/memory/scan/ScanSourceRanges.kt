@@ -37,6 +37,14 @@ object ScanSourceRanges {
 
     fun append(raw: String?, more: List<Range>): String = encode(decode(raw) + more)
 
+    /** [raw] with every range of [oldChatId] moved to [newChatId] (a chat
+     *  rename), or null when no range names [oldChatId]. */
+    fun repoint(raw: String?, oldChatId: String, newChatId: String): String? {
+        val ranges = decode(raw)
+        if (ranges.none { it.chatId == oldChatId }) return null
+        return encode(ranges.map { if (it.chatId == oldChatId) it.copy(chatId = newChatId) else it })
+    }
+
     private fun strings(a: JSONArray?): List<String> =
         if (a == null) emptyList() else (0 until a.length()).mapNotNull { a.optString(it).takeIf { s -> s.isNotBlank() } }
 }

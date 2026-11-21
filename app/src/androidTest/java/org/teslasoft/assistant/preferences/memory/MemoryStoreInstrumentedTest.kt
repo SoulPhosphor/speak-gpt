@@ -504,6 +504,20 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
+    fun renamingAChatKeepsItsRunHistoryRangesForRerun() {
+        val store = open(freshDbName())
+        val ranges = org.teslasoft.assistant.preferences.memory.scan.ScanSourceRanges.encode(listOf(
+            org.teslasoft.assistant.preferences.memory.scan.ScanSourceRanges.Range("chat-old", emptyList(), listOf("m2", "m1"))
+        ))
+        store.insertArchivistRun(runRecord("run-history").copy(sourceRangesJson = ranges))
+        store.repointChat("chat-old", "chat-new")
+        val moved = org.teslasoft.assistant.preferences.memory.scan.ScanSourceRanges
+            .decode(store.getArchivistRun("run-history")!!.sourceRangesJson)
+        assertEquals(listOf("chat-new"), moved.map { it.chatId })
+        assertEquals(listOf("m2", "m1"), moved.single().endAnchors)
+    }
+
+    @Test
     fun noScanTableHoldsConversationText() {
         val store = open(freshDbName())
         store.beginScanRun(runRecord("run-t"), listOf(scanRange("run-t", "chat-1")))
