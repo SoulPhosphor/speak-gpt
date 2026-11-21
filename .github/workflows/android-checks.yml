@@ -1,312 +1,36 @@
-name: Android Checks
-
+name: Inspect Stage 2 archived crash
 on:
   push:
-  pull_request:
     branches:
-      - main
-  workflow_dispatch:
-
+      - diagnostics/parallel-stage2-recovery-proof
+permissions:
+  actions: read
+  contents: read
 jobs:
-  test:
+  inspect:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Java 21 (Temurin)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: gradle
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-
-      - name: Install Android NDK r26d + CMake 3.22
-        run: |
-          set -e
-          sdkmanager --install "ndk;26.3.11579264" "cmake;3.22.1"
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
-
-      - name: Ensure Gradle wrapper is executable
-        run: chmod +x ./gradlew
-
-      - name: Run unit tests
-        # The three app variants have a large Android/PDF/OCR classpath. Keep
-        # their Kotlin compilation and JVM test workers inside runner memory.
-        run: ./gradlew --no-daemon --max-workers=1 test
-
-      - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
-
-      - name: Build and verify side-by-side Beta identity
-        run: |
-          ./gradlew --no-daemon assembleBeta
-          APK=app/build/outputs/apk/beta/app-beta.apk
-          AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt -print | sort -V | tail -n 1)"
-          test -x "$AAPT"
-          test "$(apkanalyzer manifest application-id "$APK")" = "com.soulphosphor.phosphorshines.beta"
-          test "$(apkanalyzer manifest debuggable "$APK")" = "false"
-          "$AAPT" dump badging "$APK" | grep -F "application-label:'Phosphor Shines Beta'"
-
-      - name: Compile instrumentation tests
-        # Compiles app/src/androidTest (the SQLCipher MemoryStore migration and
-        # deletion suite) so build breakage in the tests is caught in CI. The
-        # tests themselves require an arm64 device/emulator to RUN
-        # (connectedAndroidTest), which the app's arm64-only native code makes
-        # impractical on a standard x86_64 CI emulator; compiling them here still
-        # guards the suite against bit-rot.
-        run: ./gradlew --no-daemon assembleDebugAndroidTest
-
-      - name: Upload debug APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-
-      - name: Upload side-by-side Beta APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-beta-apk
-          path: app/build/outputs/apk/beta/app-beta.apk
-          if-no-files-found: error
-
-      - name: Archive JVM test evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jvm-test-results
-          path: app/build/test-results/test*/**/*.xml
-          if-no-files-found: error
-
-  recovery-instrumentation:
-    name: Recovery instrumentation and fault matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Java 21 (Temurin)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: gradle
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-
-      - name: Install emulator and build dependencies
-        run: |
-          set -euo pipefail
-          packages=(
-            "platform-tools"
-            "emulator"
-            "system-images;android-35;google_apis;x86_64"
-            "ndk;26.3.11579264"
-            "cmake;3.22.1"
-          )
-          # A broken download (for example a truncated emulator zip) fails
-          # this step before any test runs. Retry only the download, clearing
-          # partial files first. Test steps below are never retried.
-          attempts=3
-          for attempt in $(seq 1 "$attempts"); do
-            if sdkmanager --install "${packages[@]}"; then
-              break
-            fi
-            if [ "$attempt" -eq "$attempts" ]; then
-              echo "SDK package download failed after $attempts attempts." >&2
-              exit 1
-            fi
-            echo "SDK package download failed (attempt $attempt of $attempts); clearing partial files and retrying." >&2
-            rm -rf \
-              "$ANDROID_HOME/.temp" \
-              "$ANDROID_HOME/.downloadIntermediates" \
-              "$ANDROID_HOME/emulator" \
-              "$ANDROID_HOME/system-images/android-35/google_apis/x86_64"
-            sleep $((attempt * 15))
-          done
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
-          chmod +x ./gradlew
-
-      - name: Start disposable x86_64 emulator
-        run: |
-          set -euo pipefail
-          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
-          mkdir -p "$ANDROID_AVD_HOME"
-          echo no | avdmanager create avd \
-            --force \
-            --name recovery-matrix \
-            --package "system-images;android-35;google_apis;x86_64" \
-            --device pixel_6 \
-            --path "$ANDROID_AVD_HOME/recovery-matrix.avd"
-          sudo chmod 666 /dev/kvm
-          nohup "$ANDROID_HOME/emulator/emulator" @recovery-matrix \
-            -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
-            -camera-back none -camera-front none -wipe-data \
-            > "$RUNNER_TEMP/recovery-emulator.log" 2>&1 &
-          emulator_pid=$!
-          for attempt in $(seq 1 90); do
-            if ! kill -0 "$emulator_pid" 2>/dev/null; then
-              tail -n 200 "$RUNNER_TEMP/recovery-emulator.log"
-              exit 1
-            fi
-            if adb devices | grep -q '^emulator-' && \
-              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
-              adb shell settings put global window_animation_scale 0
-              adb shell settings put global transition_animation_scale 0
-              adb shell settings put global animator_duration_scale 0
-              exit 0
-            fi
-            sleep 5
-          done
-          tail -n 200 "$RUNNER_TEMP/recovery-emulator.log"
-          exit 1
-
-      - name: Build x86_64 recovery test APKs
-        run: >-
-          ./gradlew --no-daemon
-          -PrecoveryInstrumentationAbi=x86_64
-          assembleDebug assembleDebugAndroidTest
-
-      - name: Install recovery test APKs
-        run: |
-          set -euo pipefail
-          test "$(apkanalyzer manifest debuggable app/build/outputs/apk/debug/app-debug.apk)" = "true"
-          adb install -t app/build/outputs/apk/debug/app-debug.apk
-          adb install -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-
-      - name: Prepare q4 Android validation
-        run: |
-          set -euo pipefail
-          model_dir="$RUNNER_TEMP/step2-model"
-          mkdir -p "$model_dir"
-          base=https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/5090578d9565bb06545b4552f76e6bc2c93e4a66
-          curl --fail --location --retry 3 "$base/onnx/model_q4.onnx" -o "$model_dir/model.onnx"
-          curl --fail --location --retry 3 "$base/onnx/model_q4.onnx_data" -o "$model_dir/model_q4.onnx_data"
-          curl --fail --location --retry 3 "$base/tokenizer.json" -o "$model_dir/tokenizer.json"
-          (cd "$model_dir" && sha256sum --check <<'HASHES'
-          ad1dfee81a70f7944b9b9d1cc6e48075b832881cf33fab2f2b248be78f3f0043  model.onnx
-          599962c3143b040de2dd05e5975be3e9091dd067cacc6a8f7186e3203bab9e02  model_q4.onnx_data
-          4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47  tokenizer.json
-          HASHES
-          )
-          # Shared external storage can present empty/unreadable files across
-          # shell and app UIDs. Stream into app-private storage as the app UID.
-          package=com.soulphosphor.phosphorshines
-          adb shell run-as "$package" mkdir -p files/step2-model
-          for name in model.onnx model_q4.onnx_data tokenizer.json; do
-            adb shell -T "run-as $package sh -c 'cat > files/step2-model/$name'" < "$model_dir/$name"
-          done
-          adb shell "run-as $package sh -c 'cd files/step2-model && sha256sum model.onnx model_q4.onnx_data tokenizer.json'" \
-            | tr -d '\r' > "$model_dir/device-hashes.txt"
-          (cd "$model_dir" && sha256sum model.onnx model_q4.onnx_data tokenizer.json) \
-            > "$model_dir/host-hashes.txt"
-          diff -u "$model_dir/host-hashes.txt" "$model_dir/device-hashes.txt"
-
-      - name: Run recovery instrumentation and fault suite
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/recovery-results"
-          classes=(
-            org.teslasoft.assistant.preferences.memory.Step2RecallInstrumentedTest
-            org.teslasoft.assistant.preferences.memory.MemoryLengthInstrumentedTest
-            org.teslasoft.assistant.ui.widgets.MemoryTokenMeterTest
-            org.teslasoft.assistant.ui.util.PromptLibrarySearchInstrumentedTest
-            org.teslasoft.assistant.preferences.backup.PortableRecoveryMatrixInstrumentedTest
-            org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreInstrumentedTest
-            org.teslasoft.assistant.preferences.memory.MemorySharedRestoreInstrumentedTest
-            org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporterImageValidationInstrumentedTest
-            org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecoveryInstrumentedTest
-            org.teslasoft.assistant.preferences.includes.PdfAttachmentStoreInstrumentedTest
-            org.teslasoft.assistant.preferences.includes.PdfFallbackExtractorInstrumentedTest
-            org.teslasoft.assistant.conversation.responsegroups.ResponseGroupStorageInstrumentedTest
-            org.teslasoft.assistant.conversation.parallel.ParallelUsageScreenInstrumentedTest
-            org.teslasoft.assistant.preferences.chatstore.ChatStoreInstrumentedTest
-            org.teslasoft.assistant.preferences.chatstore.ChatStorageFoundationsInstrumentedTest
-            org.teslasoft.assistant.preferences.backup.LargeChatBackupInstrumentedTest
-          )
-          failed=0
-          for class_name in "${classes[@]}"; do
-            result_name="${class_name##*.}"
-            adb logcat -c
-            if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
-              wifi_before=$(adb shell settings get global wifi_on | tr -d '\r')
-              data_before=$(adb shell settings get global mobile_data | tr -d '\r')
-              adb shell svc wifi disable
-              adb shell svc data disable
-            fi
-            set +e
-            adb shell am instrument -w -r \
-              -e class "$class_name" \
-              com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner \
-              | tee "$RUNNER_TEMP/recovery-results/$result_name.txt"
-            instrument_status=${PIPESTATUS[0]}
-            set -e
-            if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
-              if [ "$wifi_before" = 1 ]; then adb shell svc wifi enable; fi
-              if [ "$data_before" = 1 ]; then adb shell svc data enable; fi
-              adb shell run-as com.soulphosphor.phosphorshines rm -rf files/step2-model
-            fi
-            adb logcat -d -v threadtime \
-              > "$RUNNER_TEMP/recovery-results/$result_name-logcat.txt"
-            if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
-              adb pull /sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-match.png \
-                "$RUNNER_TEMP/recovery-results/step2-match.png" || true
-              for folder in recall_test_set recall_independent_set; do
-                adb pull "/sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-$folder-parity.json" \
-                  "$RUNNER_TEMP/recovery-results/step2-$folder-parity.json" || true
-              done
-              for folder in recall_carryover_set recall_carryover_holdout; do
-                adb pull "/sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-$folder-similarities.json" \
-                  "$RUNNER_TEMP/recovery-results/step2-$folder-similarities.json" || true
-              done
-            fi
-            if [ "$instrument_status" -ne 0 ] || \
-              ! grep -Fq "OK (" "$RUNNER_TEMP/recovery-results/$result_name.txt"; then
-              failed=1
-            fi
-          done
-          exit "$failed"
-
-      - name: Record recovery proof metadata
-        if: always()
-        run: |
-          {
-            echo "## Phase 12.9 automated recovery matrix"
-            echo "- Candidate commit: $GITHUB_SHA"
-            echo "- Emulator ABI: $(adb shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')"
-            echo "- Android: $(adb shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')"
-            echo "- JVM results: archived by the test job"
-            echo "- Instrumentation output: archived by this job"
-            echo "- Recovery assertions: logical content, reference closure, integrity, journal cleanup"
-          } >> "$GITHUB_STEP_SUMMARY"
-          # Measured similarities for the carry-over evaluation set, printed
-          # so they can be recorded as a fixture. Measurement only.
-          for folder in recall_carryover_set recall_carryover_holdout; do
-            similarities="$RUNNER_TEMP/recovery-results/step2-$folder-similarities.json"
-            if [ -s "$similarities" ]; then
-              echo "ANDROID_SIMILARITIES_BEGIN $folder"
-              cat "$similarities"
-              echo
-              echo "ANDROID_SIMILARITIES_END $folder"
-            fi
-          done
-
-      - name: Archive instrumentation and fault evidence
-        if: always()
-        uses: actions/upload-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: recovery-instrumentation-results
-          path: |
-            ${{ runner.temp }}/recovery-results
-            ${{ runner.temp }}/recovery-emulator.log
-          if-no-files-found: error
+          repository: SoulPhosphor/speak-gpt
+          run-id: 44948531475
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: evidence
+      - name: Read existing crash evidence
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          files = list(Path("evidence").rglob("ParallelUsageScreenInstrumentedTest-logcat.txt"))
+          if len(files) != 1:
+              raise SystemExit("Expected one archived logcat: " + repr(files))
+          lines = files[0].read_text(errors="replace").splitlines()
+          selected = set()
+          for index, line in enumerate(lines):
+              if any(token in line for token in ("FATAL EXCEPTION", "AndroidRuntime", "am_crash", "ANR in", "Fatal signal")):
+                  selected.update(range(max(0, index - 4), min(len(lines), index + 45)))
+          if not selected:
+              selected.update(range(max(0, len(lines) - 160), len(lines)))
+          for index in sorted(selected):
+              print(lines[index])
+          PY
