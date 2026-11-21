@@ -16,7 +16,7 @@ internal class ParallelRegisteredImages(context: Context, private val chat: Para
         val job = withContext(Dispatchers.Main.immediate) {
             ImageGenerationJobRegistry.start(app, chat.currentId, null, request, ImageGenerationJobRegistry.Origin.TOOL,
                 ownerKey = key, imageId = imageId, ownedTerminal = { terminal ->
-                    record(imageId, terminal.metadata.toJson())
+                    withContext(Dispatchers.IO) { record(imageId, terminal.metadata.toJson()) }
                 })
         }
         val terminal = try { job.await() }

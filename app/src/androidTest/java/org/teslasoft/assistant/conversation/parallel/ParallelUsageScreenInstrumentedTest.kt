@@ -58,6 +58,31 @@ class ParallelUsageScreenInstrumentedTest {
     @Test fun fourOwnedRequestsIncludingFailedAndStoppedChargesRenderOnce() = verify(unknownLast = false)
     @Test fun unknownSiblingChargeRendersNotReportedRatherThanKnownSubset() = verify(unknownLast = true)
 
+    @Test fun registeredImageBridgeDeliversOwnedEvidenceOffTheUiThread() = runBlocking {
+        withTimeout(60_000) {
+            val imageId = UUID.randomUUID().toString()
+            val assignment = ResponseModelAssignment("fixture-model", "Fixture", "fixture-endpoint",
+                "https://fixture.invalid/v1/", "chat_completions", emptyMap(), emptyMap(), emptyMap(), emptyMap())
+            val requestId = UUID.randomUUID().toString()
+            val owner = ParallelRequest(ResponseGroupTarget(chatId, assistantId, UUID.randomUUID().toString()),
+                UUID.randomUUID().toString(), UUID.randomUUID().toString(), requestId, assignment,
+                emptyList(), emptyMap(), ProviderUsageAttempt(assignment.modelId, "fixture-provider", assignment.endpoint, requestId))
+            val images = ParallelRegisteredImages(context, ParallelChatScope(chatId))
+            var delivered = false
+            withContext(Dispatchers.Main.immediate) {
+                images.generate(owner, imageId, org.teslasoft.assistant.imagegen.ImageGenerationRequest("fixture image",
+                    org.teslasoft.assistant.imagegen.ImageShape.AUTOMATIC,
+                    org.teslasoft.assistant.imagegen.ImageQuality.AUTOMATIC, "", "", "fixture description")) { id, raw ->
+                    assertEquals(imageId, id)
+                    assertEquals(imageId, JSONObject(raw).getString("imageId"))
+                    assertNotSame(android.os.Looper.getMainLooper(), android.os.Looper.myLooper())
+                    delivered = true
+                }
+            }
+            assertTrue(delivered)
+        }
+    }
+
     @Test fun ownedImageRegistryFailuresKeepFourDistinctJobsAndDoNotAppendSiblingRows() = runBlocking {
         withTimeout(60_000) {
             val before = ChatPreferences.getChatPreferences().getChatByIdResult(context, chatId,
