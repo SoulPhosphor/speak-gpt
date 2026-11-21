@@ -114,6 +114,7 @@ object PdfAttachmentPortableBackup {
         for (index in 0 until messages.length()) {
             val message = messages.optJSONObject(index) ?: continue
             addAll(ChatInclude.listFromJson(message.optString("includes")))
+            addAll(ResponseGroupAttachmentBackup.pdfIncludes(message))
         }
         chat.settings.firstOrNull { it.key == "pending_includes" }
             ?.value?.toString()?.let { addAll(ChatInclude.listFromJson(it)) }
@@ -124,6 +125,7 @@ object PdfAttachmentPortableBackup {
         for (index in 0 until messages.length()) {
             val message = messages.optJSONObject(index) ?: continue
             addAll(ChatInclude.listFromJson(message.optString("includes")))
+            addAll(ResponseGroupAttachmentBackup.pdfIncludes(message))
         }
         val settings = chat.optJSONArray("settings") ?: return@buildList
         for (index in 0 until settings.length()) {

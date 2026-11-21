@@ -1,6 +1,6 @@
 # Parallel Experimental Mode — Staged Implementation Plan
 
-**Status:** Stage 0 integration audit and contract merged in [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234); Stage 1 is next. Production implementation has not started.
+**Status:** Stage 0 merged in [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234). Stage 1 storage foundation is in progress; parallel setup, dispatch and tabs remain unavailable.
 **Source of truth for implementation:** Current `origin/main` and its tests.  
 **Integration target:** `main`, which builds the **Beta** client (not the retired pre-release client).  
 **Purpose:** Deliver independent, simultaneous responses from 2–4 preselected AI models in a familiar, tabbed chat UI, without corrupting conversation history or disrupting existing single-response chat.
@@ -281,12 +281,24 @@ For each code-changing stage run `testDebugUnitTest`, `assembleBeta`, `assembleD
 
 **Stage 0 exit evidence:** lifecycle/persistence/picker/consumer mapping, additive data and usage ownership contract, exact legacy-setting mapping, prompt isolation, compatibility checkpoints and staged test obligations are documented above. Stage 1 is next after this audit is merged; it must remain unexposed and satisfy §4's storage exit criteria. Product decisions listed in §6 remain for their dependent stages.
 
+### 8.6 Stage 1 implementation handoff
+
+`conversation/responsegroups/` contains the durable values, strict codec, owned-history mutations, guarded live-store adapter, recovery and detached projections. `responseGroup` remains an additive JSON string on one assistant row. No new setup preference, dispatcher, picker or tabs are enabled. Ordinary messages and their regeneration lists are not migrated.
+
+- `ResponseGroupCodec.read` distinguishes absent, valid, unsupported and invalid metadata without rewriting the raw envelope or canonical mirror. Known-schema parsing rejects unknown fields, duplicate properties/IDs, invalid state/selection/ownership and unresolved snapshot parts. Store mutations compare the exact prior envelope and conversation/message/group target, preserve all old slot/version/request ownership, and reject branch-changing promotion without explicit descendant-discard permission. Generic guarded saves also reject dropping a surviving group's metadata or replacing its request IDs.
+- `ResponseGroupEdits.install` writes the envelope and canonical compatibility mirror together on a detached copy. Only the primary slot's regeneration history appears in legacy `variants`. Browse selections never promote. `ResponseGroupStore.replace` requires a canonical-source reconciliation callback: later promotion UI must use the existing summary cancellation/branch/compaction workflow and persist the canonical transcript reconciliation before presenting promotion as settled. `ResponseGroupSourceProjection` supplies canonical summary/transcript source transformations; no new transcript capture or promotion controls are wired in Stage 1.
+- Request IDs and start identities are permanent. New retry/tool-continuation attempts append new UUIDs; interruption retains all existing IDs, partials and receipts without resending. All attempts participate in usage by request ID, including unknown receipts; late durable receipts reconcile the same log entry. The compatibility mirror is excluded. Legacy records retain multiset handling. Ordinary usage snapshots now carry their already-minted attempt ID into frozen records.
+- Input parts contain frozen text or content-addressed PDF/image descriptors. Prompt/context/current-turn references resolve within the group; attachment bytes must match saved size and SHA-256 before exact reuse. Cleanup retains referenced original bytes, and preserves files when group ownership is unreadable. Logical capture preserves unreadable envelopes verbatim; complete Recovery Backup refuses unreadable attachment ownership instead of silently omitting possible dependencies. PDFs reuse the existing portable asset path; snapshot images add a chat-category asset in the existing image store. Streaming backup scans collect these dependencies without reading the complete chats artifact into memory. Restore-as-copy preserves embedded IDs and copies dependencies to the copied conversation's scope. Existing ordinary backups do not acquire new snapshot assets.
+- Group-only changes advance merge modification evidence and use synchronous guarded commits with rollback, even when searchable canonical text did not change. SQLCipher ChatStore remains staged; its production authority is unchanged. No new diagnostic logging or Beta build identity changes are introduced.
+
+Stage 2 still owns provider orchestration, dispatch-before-network durability, request callback isolation, original-input retry preparation, cancellation, tool consent and actual parallel accounting-screen validation. Stage 4 owns wiring canonical-source reconciliation into the approved promotion/branch UI. The Stage 1 storage APIs alone do not expose those later stages.
+
 ### Implementation progress ledger
 
 | Stage | Status | PR / commit | Verification / notes |
 | --- | --- | --- | --- |
 | 0. Integration audit and contract | Merged | [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234) · [`1e4c0ef7`](https://github.com/SoulPhosphor/speak-gpt/commit/1e4c0ef7ddd6e23ba6687fd55ab84d29e289609a) | §8 audit/contract merged to `main`. Full documentation diff and source/test anchors inspected; no local tests/builds or Codex review run (documentation only). Automatic GitHub Android jobs were triggered, but are not claimed as validation of this audit. Beta/data/code unchanged. Next: Stage 1, unexposed storage foundation. |
-| 1. Durable response-group foundation | Not started | | |
+| 1. Durable response-group foundation | In progress | | Additive storage/model, recovery, canonical projections, request accounting and snapshot attachment backup integration; merge/review and verification evidence will be recorded after the code gates. No parallel UI or dispatch. |
 | 2. Parallel request coordinator | Not started | | |
 | 3. Setup and model picker | Not started | | |
 | 4. Tabs, primary, regeneration UI | Not started | | |

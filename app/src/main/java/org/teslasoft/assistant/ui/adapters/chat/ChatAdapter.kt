@@ -389,7 +389,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // stored variant snapshot. The visible reply text plus its own
         // provider metadata and completion state, so browsing to a version
         // restores exactly what that regeneration produced.
-        private val VARIANT_FIELDS = listOf(
+        internal val VARIANT_FIELDS = listOf(
             "message",
             KEY_MESSAGE_MODEL,
             KEY_MESSAGE_PROVIDER,

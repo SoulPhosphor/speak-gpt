@@ -20,7 +20,8 @@ class ChatRestoreParticipant internal constructor(
     private val stagingRoot: File,
     private val precomputed: PortableChatRestoreCoordinator.Prepared? = null,
     private val precomputedCurrent: PortableChatRestorePlan.Plan? = null,
-    private val incomingPdfAssets: Map<String, File> = emptyMap()
+    private val incomingPdfAssets: Map<String, File> = emptyMap(),
+    private val incomingSnapshotImages: Map<String, File> = emptyMap()
 ) : SelectedCategoryRestoreTransaction.Participant {
     private val app = context.applicationContext
     private var prepared: PortableChatRestoreCoordinator.Prepared? = null
@@ -53,7 +54,8 @@ class ChatRestoreParticipant internal constructor(
         prepared: PortableChatRestoreCoordinator.Prepared,
         current: PortableChatRestorePlan.Plan,
         stagingRoot: File,
-        incomingPdfAssets: Map<String, File> = emptyMap()
+        incomingPdfAssets: Map<String, File> = emptyMap(),
+        incomingSnapshotImages: Map<String, File> = emptyMap()
     ) : this(
         context,
         null,
@@ -62,7 +64,8 @@ class ChatRestoreParticipant internal constructor(
         stagingRoot,
         prepared,
         current,
-        incomingPdfAssets
+        incomingPdfAssets,
+        incomingSnapshotImages
     ) {
         this.prepared = prepared
         mergeReport = prepared.mergeReport
@@ -135,6 +138,8 @@ class ChatRestoreParticipant internal constructor(
             if (!stagePdfTree(current, File(stagingRoot, CURRENT_PDFS), emptyMap())) {
                 return note.fail("staged_write_failed: $CURRENT_PDFS")
             }
+            if (!ResponseGroupAttachmentBackup.stageImages(app, desired.plan, current, incomingSnapshotImages,
+                    File(stagingRoot, "snapshot_images"))) return note.fail("snapshot_image_staging_failed")
             val available = incomingPdfAssets + localPdfAssets(current)
             if (!stagePdfTree(desired.plan, File(stagingRoot, DESIRED_PDFS), available)) {
                 return note.fail("staged_write_failed: $DESIRED_PDFS")
@@ -148,6 +153,9 @@ class ChatRestoreParticipant internal constructor(
 
     override fun apply(): Boolean {
         note.reset()
+        if (!ResponseGroupAttachmentBackup.installImages(app, File(stagingRoot, "snapshot_images"))) {
+            return note.fail("snapshot_image_install_failed")
+        }
         return restore(File(stagingRoot, DESIRED_ARCHIVE), File(stagingRoot, DESIRED_PDFS))
     }
 

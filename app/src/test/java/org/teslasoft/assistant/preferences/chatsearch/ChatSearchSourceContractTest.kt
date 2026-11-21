@@ -20,7 +20,7 @@ class ChatSearchSourceContractTest {
         assertTrue(save.indexOf("journal?.record(chatId, revision) != true") < save.indexOf("prefs.edit()"))
         assertTrue(save.indexOf(".putString(\"chat\"") < save.indexOf("SEARCH_REVISION_KEY"))
         assertTrue(save.contains("if (synchronous || searchableChanged) editor.commit()"))
-        assertTrue(save.contains("if (bookmarkChanged) PreferenceCommitRollback.commit("))
+        assertTrue(save.contains("if (bookmarkChanged || groupChanged) PreferenceCommitRollback.commit("))
         assertTrue(preferences.contains("saveChatHistory(context, chatId, list, synchronous = true)"))
         assertTrue(preferences.contains("fun importChatHistoryJson"))
         assertFalse(preferences.substringAfter("fun importChatHistoryJson").substringBefore("/**").contains(

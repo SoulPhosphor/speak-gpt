@@ -699,7 +699,7 @@ object PortablePackage {
         val name = item.optString("name", "")
         when (category) {
             PortableRestoreCategory.CHATS -> item.optString("type") in setOf(
-                TYPE_CHATS_JSON, TYPE_CHAT_PDF_ASSET
+                TYPE_CHATS_JSON, TYPE_CHAT_PDF_ASSET, ResponseGroupAttachmentBackup.TYPE_IMAGE
             )
             PortableRestoreCategory.GENERATED_IMAGES -> item.optString("type") in setOf(
                 TYPE_GENERATED_IMAGES_CATALOG, TYPE_GENERATED_IMAGE_ASSET
@@ -757,6 +757,9 @@ object PortablePackage {
             name.startsWith("profile_images/assets/") &&
                 Regex("^profile_[0-9a-f]{64}\\.jpg$").matches(fileName)
         }
+        ResponseGroupAttachmentBackup.TYPE_IMAGE -> Regex(
+            "^response_group_images/[A-Za-z0-9_-]+/[0-9a-f]{64}\\.(jpg|png)$"
+        ).matches(name)
         TYPE_CHAT_PDF_ASSET -> Regex(
             "^chat_pdfs/[A-Za-z0-9_-]+/[0-9a-f]{64}\\.pdf$"
         ).matches(name)

@@ -112,9 +112,13 @@ data class UsageLogState(
      * never removed because they may belong to a deleted message or version. */
     fun seed(messages: List<Map<String, Any>>, nowMs: Long): UsageLogState {
         val initial = if (seeded) this else {
+            val existingRequestOwners = entries.filter { it.category == UsageCategory.CHAT }
+                .mapNotNullTo(HashSet()) { entry -> entry.record.requestId?.let { entry.messageId to it } }
             val fromMessages = messages.flatMap { message ->
                 val messageId = MessageIdentity.idOf(message).ifBlank { null }
-                TokenUsageAccounting.durableRecordsOf(message).map { record ->
+                TokenUsageAccounting.durableRecordsOf(message).filter { record ->
+                    record.requestId.isNullOrBlank() || (messageId to record.requestId) !in existingRequestOwners
+                }.map { record ->
                     UsageLog.entry(UsageCategory.CHAT, messageId, record, nowMs)
                 }
             }
@@ -126,10 +130,16 @@ data class UsageLogState(
             .mapValues { (_, value) -> value.toMutableList() }
             .toMutableMap()
         val missing = mutableListOf<UsageLogEntry>()
+        val refreshedGroupRecords = HashMap<String, TurnUsageRecord>()
         messages.forEach { message ->
             val messageId = MessageIdentity.idOf(message).takeIf { it.isNotBlank() }
                 ?: return@forEach
             val available = availableByMessage.getOrPut(messageId) { mutableListOf() }
+            val group = (org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.read(message)
+                as? org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Valid)?.group
+            val unknownReceipts = group?.slots.orEmpty().flatMap { slot -> slot.versions.flatMap { version ->
+                version.attempts.filter { it.usageRecord == null }.map { it.requestId }
+            } }.toSet()
             TokenUsageAccounting.durableRecordsOf(message).forEach { record ->
                 val requestId = record.requestId?.takeIf { it.isNotBlank() }
                 val match = available.indexOfFirst { entry ->
@@ -140,13 +150,25 @@ data class UsageLogState(
                     }
                 }
                 if (match >= 0) {
-                    available.removeAt(match)
+                    val entry = available.removeAt(match)
+                    if (group != null && requestId != null && requestId !in unknownReceipts && entry.record != record) {
+                        val json = Gson()
+                        val enriched = json.toJsonTree(record).asJsonObject
+                        json.toJsonTree(entry.record).asJsonObject.entrySet().forEach { (key, value) ->
+                            if (!enriched.has(key) || enriched.get(key).isJsonNull) enriched.add(key, value)
+                        }
+                        refreshedGroupRecords[entry.id] = json.fromJson(enriched, TurnUsageRecord::class.java)
+                    }
                 } else {
                     missing += UsageLog.entry(UsageCategory.CHAT, messageId, record, nowMs)
                 }
             }
         }
-        return if (missing.isEmpty()) initial else initial.copy(entries = initial.entries + missing)
+        return if (missing.isEmpty() && refreshedGroupRecords.isEmpty()) initial else initial.copy(
+            entries = initial.entries.map { entry ->
+                refreshedGroupRecords[entry.id]?.let { entry.copy(record = it) } ?: entry
+            } + missing
+        )
     }
 
     /**

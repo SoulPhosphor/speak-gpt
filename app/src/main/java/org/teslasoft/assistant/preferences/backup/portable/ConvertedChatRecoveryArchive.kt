@@ -128,11 +128,13 @@ object ConvertedChatRecoveryArchive {
                 if (chat.historySaved) {
                     val historyName = "enc.chat_${chat.chatId}"
                     val historyPreferences = encrypted(historyName)
-                    check(
-                        historyPreferences.edit()
-                            .putString("chat", chat.messagesJson)
-                            .commit()
-                    ) { "chat history write failed" }
+                    val historyEditor = historyPreferences.edit().putString("chat", chat.messagesJson)
+                    val historyType = object : com.google.gson.reflect.TypeToken<List<HashMap<String, Any>>>() {}.type
+                    val historyRows: List<HashMap<String, Any>> = Gson().fromJson(chat.messagesJson, historyType)
+                    org.teslasoft.assistant.conversation.responsegroups.ResponseGroupHistory.fingerprint(historyRows)?.let {
+                        historyEditor.putString("response_group_fingerprint", it)
+                    }
+                    check(historyEditor.commit()) { "chat history write failed" }
                     check(historyPreferences.getString("chat", null) == chat.messagesJson) {
                         "chat history verification failed"
                     }

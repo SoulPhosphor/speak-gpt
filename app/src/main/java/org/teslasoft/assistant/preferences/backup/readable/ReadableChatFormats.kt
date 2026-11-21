@@ -108,7 +108,8 @@ object ReadableChatFormats {
         ChatAdapter.KEY_MESSAGE_TOKENS,
         ChatAdapter.KEY_MESSAGE_TOKEN_ESTIMATE,
         ChatAdapter.KEY_TOKEN_USAGE_RECORDS,
-        ChatAdapter.KEY_MESSAGE_REASONING_TOKENS
+        ChatAdapter.KEY_MESSAGE_REASONING_TOKENS,
+        "usageRecord"
     )
 
     /** Thinking data, removed everywhere when Include Thinking is off. */
@@ -240,7 +241,7 @@ object ReadableChatFormats {
                 if (key in removed) continue
                 // Regenerated versions are stored as a JSON string, not a
                 // nested list: sanitize them too, keeping the string form.
-                out[key] = if (key == ChatAdapter.KEY_VARIANTS && v is String) stripJsonText(v, removed) else strip(v, removed)
+                out[key] = if (key in setOf(ChatAdapter.KEY_VARIANTS, "responseGroup", "partialFields") && v is String) stripJsonText(v, removed) else strip(v, removed)
             }
             out
         }
