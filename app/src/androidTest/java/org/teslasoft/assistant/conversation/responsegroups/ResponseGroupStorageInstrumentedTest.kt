@@ -33,7 +33,14 @@ class ResponseGroupStorageInstrumentedTest {
     private val ids = ArrayList<String>()
     private val tempFiles = ArrayList<File>()
     private fun asset(name: String) = InstrumentationRegistry.getInstrumentation().context.assets.open("response-groups/$name").use { it.readBytes() }
-    private fun rows(): List<HashMap<String, Any>> = gson.fromJson(asset("history.json").toString(Charsets.UTF_8), object : TypeToken<List<HashMap<String, Any>>>() {}.type)
+    private val rowsType = object : TypeToken<List<HashMap<String, Any>>>() {}.type
+    /** The fixture as saving stores it: every message carries its permanent
+     *  number (MessageNumbers), so later saves keep the rows unchanged. */
+    private fun rows(): List<HashMap<String, Any>> {
+        val fixture: List<HashMap<String, Any>> = gson.fromJson(asset("history.json").toString(Charsets.UTF_8), rowsType)
+        MessageNumbers.ensure(fixture, 0)
+        return gson.fromJson(gson.toJson(fixture), rowsType)
+    }
     private fun read(id: String = chatId) = prefs.getChatByIdResult(context, id, DamagedChatOperation.OPENING_A_CHAT).messages
     private fun group(row: Map<String, Any>) = (ResponseGroupCodec.read(row) as ResponseGroupRead.Valid).group
     private fun file(name: String): File = File(context.cacheDir, "response-groups-${UUID.randomUUID()}-$name").also(tempFiles::add)
