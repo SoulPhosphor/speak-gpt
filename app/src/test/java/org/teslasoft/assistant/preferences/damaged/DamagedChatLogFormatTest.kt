@@ -57,4 +57,23 @@ class DamagedChatLogFormatTest {
         val unknown = """[{"operation":"CHAT_LIST","detected_at":1,"chats":[{"chat_id":"x","cause":"NEW_KIND"}]}]"""
         assertNull(DamagedChatLog.decode(unknown).single().chats.single().cause)
     }
+
+    @Test
+    fun aResolvedRepairRoundTripsAsHistoryAndOlderEntriesAreOpen() {
+        val history = listOf(
+            DamagedChatLog.Detection(
+                DamagedChatOperation.MEMORY, 1L,
+                listOf(
+                    DamagedChatLog.DamagedChat("fixed", "Kept", null, null, null, null, repairedAt = 99L),
+                    DamagedChatLog.DamagedChat("open", null, null, null, null, null)
+                )
+            )
+        )
+        val decoded = DamagedChatLog.decode(DamagedChatLog.encode(history))
+        assertEquals(history, decoded)
+        assertTrue(decoded.single().chats[0].resolved)
+        assertEquals(false, decoded.single().chats[1].resolved)
+        val older = """[{"operation":"MEMORY","detected_at":1,"chats":[{"chat_id":"x"}]}]"""
+        assertEquals(false, DamagedChatLog.decode(older).single().chats.single().resolved)
+    }
 }

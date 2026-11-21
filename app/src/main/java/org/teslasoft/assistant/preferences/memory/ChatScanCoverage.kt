@@ -16,15 +16,15 @@
 
 package org.teslasoft.assistant.preferences.memory
 
-import org.json.JSONArray
-
 /**
  * How much of one chat has been scanned for memories, for the Create Outline
  * screen's Memory Scan Progress line (owner design, Nov 18 2026): 100% when
  * nothing is left to scan, Unscanned when nothing has been scanned, otherwise
  * the first and last scanned message numbers. Message numbers count every
  * message in the chat from 1, the same numbering as each message's own
- * Message number.
+ * Message number. Computed by
+ * [org.teslasoft.assistant.preferences.memory.scan.ScanChatStatus.coverage]
+ * from the chat's bookmark and its current messages.
  */
 object ChatScanCoverage {
 
@@ -32,55 +32,5 @@ object ChatScanCoverage {
         data object Unscanned : Status
         data object Complete : Status
         data class Range(val first: Int, val last: Int) : Status
-    }
-
-    /** One chat message as the scanner sees it. */
-    data class Message(val id: String, val role: String, val text: String)
-
-    /**
-     * [messages] is the chat in order; [scannedContents] the content of each
-     * scanned transcript row (a JSON list of turns); [hasUnscanned] whether any
-     * row still waits to be scanned. Null when part of the chat was scanned but
-     * none of it can be matched to a current message (for example, every
-     * scanned message has since been edited or deleted).
-     */
-    fun describe(
-        messages: List<Message>,
-        scannedContents: List<String>,
-        hasUnscanned: Boolean
-    ): Status? {
-        if (scannedContents.isEmpty()) return Status.Unscanned
-        if (!hasUnscanned) return Status.Complete
-        val numberById = HashMap<String, Int>()
-        messages.forEachIndexed { i, m -> if (m.id.isNotBlank()) numberById.putIfAbsent(m.id, i + 1) }
-        val used = HashSet<Int>()
-        var first = Int.MAX_VALUE
-        var last = Int.MIN_VALUE
-        for (content in scannedContents) {
-            val turns = try {
-                JSONArray(content)
-            } catch (_: Exception) {
-                continue
-            }
-            for (t in 0 until turns.length()) {
-                val turn = turns.optJSONObject(t) ?: continue
-                val id = turn.optString(TranscriptTurnVisibility.MESSAGE_ID)
-                val number = if (id.isNotBlank()) {
-                    numberById[id]
-                } else {
-                    // A turn captured before message IDs were recorded: the
-                    // first unused message with the same role and text.
-                    val role = turn.optString("role")
-                    val text = turn.optString("content")
-                    messages.indices.firstOrNull { i ->
-                        (i + 1) !in used && messages[i].role == role && messages[i].text == text
-                    }?.plus(1)
-                } ?: continue
-                used.add(number)
-                if (number < first) first = number
-                if (number > last) last = number
-            }
-        }
-        return if (used.isEmpty()) null else Status.Range(first, last)
     }
 }

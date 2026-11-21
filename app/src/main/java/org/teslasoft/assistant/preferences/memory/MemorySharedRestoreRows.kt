@@ -59,8 +59,7 @@ object MemorySharedRestoreRowFormat {
         Spec("archivist_settings", listOf("id")),
         Spec("memory_handling_preferences", listOf("id")),
         Spec("proposals", listOf("proposal_id")),
-        Spec("transcripts", listOf("transcript_id")),
-        Spec("analysis_chat_bookmarks", listOf("chat_id")),
+        Spec("scan_chat_progress", listOf("chat_id")),
         Spec("rp_tag_links", listOf("tag_id", "target_type", "target_id")),
         Spec("model_rules", listOf("rule_id")),
         Spec("model_rule_tags", listOf("tag_id")),
@@ -133,7 +132,9 @@ object MemorySharedRestoreRowFormat {
     /** Why [data] is not a valid row set, naming only tables, key columns and
      * value types; null when it is valid. Restore diagnostics only. */
     fun invalidReason(data: MemorySharedRestoreRows): String? {
-        if (data.tables.keys != tableNames) return "table set differs from this app's tables"
+        if (data.tables.keys - MemoryPortableRowFormat.legacyTables != tableNames) {
+            return "table set differs from this app's tables"
+        }
         for (spec in specs) {
             val seen = HashSet<String>()
             for (row in data.tables[spec.table].orEmpty()) {
@@ -160,9 +161,10 @@ object MemorySharedRestoreRowFormat {
         return JSONObject()
             .put("version", 1)
             .put("tables", JSONObject().apply {
-                specs.forEach { spec ->
-                    put(spec.table, JSONArray().apply {
-                        data.tables.getValue(spec.table).forEach { row ->
+                val legacy = MemoryPortableRowFormat.legacyTables.filter { data.tables[it].orEmpty().isNotEmpty() }
+                (specs.map { it.table } + legacy).forEach { table ->
+                    put(table, JSONArray().apply {
+                        data.tables.getValue(table).forEach { row ->
                             put(JSONObject().apply {
                                 row.forEach { (key, value) ->
                                     put(key, when (value) {
@@ -192,7 +194,10 @@ object MemorySharedRestoreRowFormat {
             val tablesJson = root.getJSONObject("tables")
             // Rows staged by a build before a later table existed carry no
             // entry for it; they read as holding none of its rows.
-            val stagedTables = tablesJson.keys().asSequence().toSet() +
+            // Rows staged before Stage 6A may also name the legacy transcript
+            // tables; those are read below for the scanner migration only.
+            val stagedTables = tablesJson.keys().asSequence().toSet() -
+                MemoryPortableRowFormat.legacyTables +
                 MemoryPortableRowFormat.tablesAddedLater.filter { it in tableNames }
             if (stagedTables != tableNames) {
                 reject?.invoke("staged rows have a different table set")
@@ -242,6 +247,24 @@ object MemorySharedRestoreRowFormat {
                     rows.add(row)
                 }
                 tables[spec.table] = rows
+            }
+            for (legacy in MemoryPortableRowFormat.legacyTables) {
+                val array = tablesJson.optJSONArray(legacy) ?: continue
+                val rows = ArrayList<Map<String, Any?>>(array.length())
+                repeat(array.length()) { index ->
+                    val item = array.getJSONObject(index)
+                    val row = LinkedHashMap<String, Any?>()
+                    item.keys().forEach { key ->
+                        row[key] = when (val value = item.get(key)) {
+                            JSONObject.NULL -> null
+                            is Int -> value.toLong()
+                            is String, is Long, is Double, is Boolean -> value
+                            else -> null
+                        }
+                    }
+                    rows.add(row)
+                }
+                if (rows.isNotEmpty()) tables[legacy] = rows
             }
             val parsed = MemorySharedRestoreRows(tables)
             invalidReason(parsed)?.let {
@@ -304,6 +327,15 @@ object MemorySharedRestoreRowFormat {
                 currentTable = spec.table
                 val liveColumns = columns(db, spec.table)
                 for (row in rows) insert(db, spec.table, liveColumns, row)
+            }
+            if ("scan_chat_progress" in affectedTables) {
+                stage = "insert"
+                currentTable = "transcripts"
+                MemoryPortableRowFormat.stageLegacyScanRows(
+                    db, MemoryPortableRows(data.tables.filterKeys { it in MemoryPortableRowFormat.legacyTables })
+                )
+                currentTable = "scan_ranges"
+                MemoryPortableRowFormat.endScansAfterRestore(db)
             }
             stage = "foreign key check"
             currentTable = ""

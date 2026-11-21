@@ -589,7 +589,19 @@ data class ArchivistRunRecord(
      *  completion, failure, and process-death reconciliation so the Recent
      *  Memory Analysis list and Rerun use the run's OWN type, never whatever
      *  the picker currently shows. Legacy rows default to 'associative'. */
-    val analysisType: String = "associative"
+    val analysisType: String = "associative",
+    /** Stage 6A: null while live or finished; "paused" (waits for the
+     *  user's Resume) or "interrupted" (resumes after the next chat reply)
+     *  while the run is suspended with its progress kept. */
+    val suspended: String? = null,
+    /** analyze | chat | rerun | rescan: how the run was started. */
+    val runKind: String = "analyze",
+    /** The last completed percentage, shown while the run is suspended. */
+    val progressPercent: Int? = null,
+    /** JSON array of the message ranges this run finished reading, each
+     *  {"chat": id, "start": [anchors], "end": [anchors]}: what a Rerun
+     *  reads again. Message UUIDs only, never text. */
+    val sourceRangesJson: String = "[]"
 )
 
 /**
@@ -614,13 +626,11 @@ data class LorebookSuggestionRecord(
 )
 
 /**
- * Transcripts are storage-level (not part of the JSON schema's record types)
- * but travel in exports per app_adaptation_notes 11c — they are the raw
- * material the whole store can be re-derived from. chat_id and user_persona_id
- * are app-side additions to the table plan: chat_id ties the row back to the
- * app's persistent chat (the watermark model in the integration plan), and the
- * Archivist prompt expects persona_id among its inputs even though the table
- * plan omitted a column for it.
+ * A transcript row as it appears in a memory backup made before Stage 6A.
+ * New backups never contain transcripts: the original chat is the only
+ * source of conversation text. Rows read from an older backup are used only
+ * by ScanSourceMigration to map earlier scan progress and message scope onto
+ * the restored chats, then their text is deleted.
  */
 data class TranscriptRecord(
     val transcriptId: String,
@@ -668,14 +678,66 @@ data class AnalysisChatBookmark(
     val updatedAt: String
 )
 
-/** One independently frozen chat range inside a possibly multi-chat run. */
-data class FrozenChatRange(
+/**
+ * Stage 6A scan progress for one chat (memory development plan M.2): the
+ * bookmark (high-water mark) as message UUID anchors, empty when nothing has
+ * been scanned. [needsFullRescan] marks a chat whose earlier progress could
+ * not be migrated; it is rescanned in full automatically (owner decision,
+ * Stage 6A question 1). [claimRunId] is the run holding the chat.
+ */
+data class ScanChatProgress(
+    val chatId: String,
+    val bookmarkAnchors: List<String>,
+    val needsFullRescan: Boolean = false,
+    val claimRunId: String? = null,
+    val updatedAt: String = ""
+)
+
+/** One frozen chat range inside a run: the messages after [startAnchors]
+ *  up to and including [endAnchors], and the validated reading position
+ *  ([org.teslasoft.assistant.preferences.memory.scan.ScanCheckpoint]). */
+data class ScanRangeRecord(
     val rangeId: String,
     val runId: String,
     val chatId: String,
-    val transcripts: List<TranscriptRecord>,
-    val frozenEndStartedAt: String?,
-    val frozenEndTranscriptId: String
+    val ordinal: Int,
+    val kind: String,
+    val startAnchors: List<String>,
+    val endAnchors: List<String>,
+    val checkpointJson: String? = null
+) {
+    companion object {
+        const val KIND_SCAN = "scan"
+        const val KIND_RERUN = "rerun"
+    }
+}
+
+/** A chat the Memory Scanner Tool screen reports on. */
+data class ScanReport(val chatId: String, val kind: String, val createdAt: String) {
+    companion object {
+        const val DAMAGE_REPAIRED = "damage_repaired"
+        const val DAMAGE_NOT_REPAIRED = "damage_not_repaired"
+        const val FULL_RESCAN_COMPLETED = "full_rescan_completed"
+        const val FULL_RESCAN_FAILED = "full_rescan_failed"
+    }
+}
+
+/** A row of the legacy transcript store, read only by the Stage 6A
+ *  migration before its text is deleted. */
+data class LegacyTranscript(
+    val transcriptId: String,
+    val chatId: String,
+    val companionId: String?,
+    val worldId: String?,
+    val roleplayCharacterId: String?,
+    val userPersonaId: String?,
+    val campaignId: String?,
+    val projectId: String?,
+    val source: String,
+    val startedAt: String?,
+    val content: String,
+    val claimRunId: String?,
+    val reviewStatus: String = "pending"
 )
 
 /** One validated, encrypted, temporary output from an in-flight chat range.
@@ -730,7 +792,12 @@ data class MemoryStoreData(
     // Stage-B bookmarks travel with transcript backups. Claims and frozen
     // ranges remain device-local, but the permanent reviewed boundary must
     // survive restore or already-terminal history would become eligible again.
+    /** Legacy bookmarks from a backup made before Stage 6A: read only to
+     *  migrate them, never written. */
     val analysisBookmarks: List<AnalysisChatBookmark> = emptyList(),
+    /** Stage 6A bookmarks (message UUID anchors, no text). Temporary scan
+     *  state (claims, ranges, working drafts) is never exported. */
+    val scanProgress: List<ScanChatProgress> = emptyList(),
     // Memory Handling Preferences (memory plan Phase 2). Null when the store
     // has never saved them, or the backup predates them: the defaults apply.
     val memoryHandlingPreferences: MemoryHandlingPreferences? = null

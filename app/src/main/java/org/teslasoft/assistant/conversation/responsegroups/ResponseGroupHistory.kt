@@ -76,7 +76,7 @@ object ResponseGroupHistory {
             val user = messages.take(index).lastOrNull { it["isBot"] != true && it["isBot"]?.toString() != "true" }
             require(user?.let(MessageIdentity::idOf) == group.userMessageId) { "user_identity" }
             val ids = listOf(group.groupId) + group.input.parts.map { it.partId } + group.slots.flatMap { slot ->
-                listOf(slot.slotId) + slot.versions.flatMap { version -> listOf(version.versionId) + version.attempts.map { it.requestId } }
+                listOf(slot.slotId) + slot.versions.flatMap { version -> listOf(version.versionId) + version.attempts.flatMap { listOfNotNull(it.requestId, it.imageJobId) } }
             }
             require(ids.all { ownedIds.add(it) && it !in rowIds }) { "duplicate_group_identity" }
         }

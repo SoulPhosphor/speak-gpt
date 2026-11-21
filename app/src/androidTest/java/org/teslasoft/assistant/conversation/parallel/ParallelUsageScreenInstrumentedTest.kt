@@ -58,6 +58,37 @@ class ParallelUsageScreenInstrumentedTest {
     @Test fun fourOwnedRequestsIncludingFailedAndStoppedChargesRenderOnce() = verify(unknownLast = false)
     @Test fun unknownSiblingChargeRendersNotReportedRatherThanKnownSubset() = verify(unknownLast = true)
 
+    @Test fun ownedImageRegistryFailuresKeepFourDistinctJobsAndDoNotAppendSiblingRows() = runBlocking {
+        withTimeout(60_000) {
+            val before = ChatPreferences.getChatPreferences().getChatByIdResult(context, chatId,
+                DamagedChatOperation.OPENING_A_CHAT).messages
+            val received = java.util.concurrent.ConcurrentHashMap<String, String>()
+            val jobs = withContext(Dispatchers.Main.immediate) {
+                (0 until 4).map { index ->
+                    val imageId = UUID.randomUUID().toString()
+                    val ownerKey = "fixture-owned-$index-$chatId"
+                    val request = org.teslasoft.assistant.imagegen.ImageGenerationRequest("fixture image",
+                        org.teslasoft.assistant.imagegen.ImageShape.AUTOMATIC,
+                        org.teslasoft.assistant.imagegen.ImageQuality.AUTOMATIC, "", "", "fixture description")
+                    val job = org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.start(context, chatId, null,
+                        request, org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.Origin.TOOL,
+                        ownerKey = ownerKey, imageId = imageId, ownedTerminal = { terminal ->
+                            received[imageId] = terminal.metadata.toJson()
+                        })
+                    assertSame(job, org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.start(context, chatId, null,
+                        request, org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.Origin.TOOL,
+                        ownerKey = ownerKey, imageId = imageId, ownedTerminal = { fail("Duplicate delivery") }))
+                    job
+                }
+            }
+            assertEquals(4, jobs.map { it.imageId }.distinct().size)
+            jobs.forEach { assertTrue(it.await() is org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.Terminal.Failed) }
+            assertEquals(4, received.size)
+            assertEquals(before, ChatPreferences.getChatPreferences().getChatByIdResult(context, chatId,
+                DamagedChatOperation.OPENING_A_CHAT).messages)
+        }
+    }
+
     private fun verify(unknownLast: Boolean) = runBlocking {
         withTimeout(60_000) {
             val input = ParallelInputPart.Text("fixture input")
@@ -69,7 +100,7 @@ class ParallelUsageScreenInstrumentedTest {
             val arrived = Channel<Int>(Channel.UNLIMITED)
             val owner = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             try {
-                val engine = ParallelRequestCoordinator(owner, StoredParallelGroups(context) {
+                val engine = ParallelRequestCoordinator(owner, StoredParallelGroups(context, ParallelChatScope(chatId)) {
                     // This fresh synthetic chat has no transcript/summary sources to invalidate.
                     assertEquals(assistantId, it.after["message_id"])
                 }, { _, _ -> error("This fixture has no binary Includes") }, { request -> ParallelTransport { r, out ->
@@ -87,7 +118,7 @@ class ParallelUsageScreenInstrumentedTest {
                     gates[index].await()
                     if (index == 1) throw ParallelTransportFailure("fixture_failure")
                 } }, { TokenPricingCatalog(it.assignment.modelId) })
-                val run = engine.dispatch(chatId, group)
+                val run = engine.dispatch(chatId, group) {}
                 repeat(4) { arrived.receive() }
                 engine.cancel(run.requestIds[2])
                 for (index in listOf(3, 1, 0)) gates[index].complete(Unit)

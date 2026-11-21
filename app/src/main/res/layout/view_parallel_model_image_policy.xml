@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.ParallelModels.AllowImages">
+    <LinearLayout style="@style/Widget.App.Row.TextColumn">
+        <TextView style="@style/Widget.App.Row.Title"
+            android:text="@string/parallel_allow_image_generation" />
+        <TextView style="@style/Widget.App.Row.Subtitle"
+            android:text="@string/parallel_allow_image_generation_description" />
+    </LinearLayout>
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/parallel_allow_image_generation"
+        style="@style/Widget.App.Row.Switch"
+        android:checked="true"
+        android:contentDescription="@string/parallel_allow_image_generation" />
+</LinearLayout>

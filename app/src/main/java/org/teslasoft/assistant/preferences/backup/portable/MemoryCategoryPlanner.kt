@@ -109,13 +109,25 @@ object MemoryCategoryPlanner {
                     (row["old_memory_id"] as? String) in memoryIds
             }
             cleared += supersessions.size - tables.getValue("memory_supersessions").size
-            tables["transcripts"] = tables.getValue("transcripts").map { row -> LinkedHashMap(row).apply {
+            // Only an older backup carries transcripts and scan bookmarks;
+            // they wait for the scanner migration to map them onto the
+            // restored chats, then their text is deleted. A chat that already
+            // has current scan progress keeps it.
+            val progressChats = tables.getValue("scan_chat_progress")
+                .mapNotNullTo(HashSet()) { it["chat_id"] as? String }
+            for (legacy in MemoryPortableRowFormat.legacyTables) {
+                val rows = backup.tables[legacy].orEmpty()
+                    .filter { (it["chat_id"] as? String) !in progressChats }
+                    .map { LinkedHashMap(it) }
+                if (rows.isNotEmpty()) tables[legacy] = rows
+            }
+            tables["transcripts"]?.let { legacy -> tables["transcripts"] = legacy.map { row -> LinkedHashMap(row).apply {
                 clearMissing("companion_id", references.companions) { cleared++ }
                 clearMissing("world_id", references.worlds) { cleared++ }
                 clearMissing("roleplay_character_id", references.roleplayCharacters) { cleared++ }
                 clearMissing("user_persona_id", references.userPersonas) { cleared++ }
                 clearMissing("project_id", projectIds) { cleared++ }
-            } }
+            } } }
             val tagLinks = tables.getValue("rp_tag_links")
             tables["rp_tag_links"] = tagLinks.filter { row ->
                 (row["tag_id"] as? String) in references.roleplayTags &&

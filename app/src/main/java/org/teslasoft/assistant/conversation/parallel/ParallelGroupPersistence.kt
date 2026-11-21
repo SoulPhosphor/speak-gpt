@@ -21,20 +21,23 @@ internal class ParallelPersistenceException(val category: String) : Exception(ca
  */
 internal class StoredParallelGroups(
     context: Context,
+    val scope: ParallelChatScope,
     private val canonicalSourcesChanged: (ResponseGroupHistory.Change) -> Unit
 ) : ParallelGroupPersistence {
     private val appContext = context.applicationContext
 
     override fun read(target: ResponseGroupTarget): ResponseGroup = synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-        val (_, group) = load(target)
+        val (_, group) = load(scope.target(target))
         group ?: throw ParallelPersistenceException("group_missing")
     }
 
     override fun update(target: ResponseGroupTarget, transform: (ResponseGroup?) -> ResponseGroup): ResponseGroup =
         synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-            val (envelope, before) = load(target)
+            val actualTarget = scope.target(target)
+            val (envelope, before) = load(actualTarget)
             val after = transform(before)
-            when (ResponseGroupStore.replace(appContext, target.chatId, target, envelope, after,
+            if (after == before) return@synchronized after
+            when (ResponseGroupStore.replace(appContext, actualTarget.chatId, actualTarget, envelope, after,
                 canonicalSourcesChanged = canonicalSourcesChanged)) {
                 is ResponseGroupStore.Result.Saved -> after
                 is ResponseGroupStore.Result.Unavailable -> throw ParallelPersistenceException("storage_unavailable")

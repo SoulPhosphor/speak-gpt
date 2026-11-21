@@ -43,8 +43,14 @@ object DamagedChatLog {
         /** Direct repair was tried and failed (Irreparable Chat Files). */
         val irreparable: Boolean = false,
         /** Why the chat was recorded; null for records saved before causes were. */
-        val cause: DamagedChatCause? = null
-    )
+        val cause: DamagedChatCause? = null,
+        /** When a verified repair resolved this incident; null while the chat
+         *  is still damaged. A resolved incident stays in the log as repair
+         *  history (owner decision, Stage 6A) but no longer counts as damage. */
+        val repairedAt: Long? = null
+    ) {
+        val resolved: Boolean get() = repairedAt != null
+    }
 
     data class Detection(
         val operation: DamagedChatOperation,
@@ -69,6 +75,8 @@ object DamagedChatLog {
     ): Boolean {
         if (chatIds.isEmpty()) return true
         return try {
+            // Only an unresolved incident counts: a chat repaired before and
+            // damaged again is recorded as a new incident.
             val alreadyKnown = chatIds(context)
             if (chatIds.all { it.isBlank() || it in alreadyKnown }) return unsaved == null
             // Chat list details are read BEFORE taking this log's lock, so a
@@ -76,7 +84,7 @@ object DamagedChatLog {
             val rows = chatListRows(context)
             synchronized(lock) {
                 val detections = read(context).toMutableList()
-                val known = detections.flatMap { d -> d.chats.map { it.chatId } }.toSet()
+                val known = detections.flatMap { d -> d.chats.filter { !it.resolved }.map { it.chatId } }.toSet()
                 val fresh = chatIds.filter { it.isNotBlank() && it !in known }.distinct()
                 if (fresh.isEmpty()) return unsaved == null
                 val chats = fresh.map { id ->
@@ -101,9 +109,9 @@ object DamagedChatLog {
         }
     }
 
-    /** The chat ids currently in the log. */
+    /** The chat ids currently damaged (unresolved incidents). */
     fun chatIds(context: Context): Set<String> = try {
-        synchronized(lock) { read(context).flatMap { d -> d.chats.map { it.chatId } }.toSet() }
+        synchronized(lock) { read(context).flatMap { d -> d.chats.filter { !it.resolved }.map { it.chatId } }.toSet() }
     } catch (_: Exception) {
         emptySet()
     }
@@ -115,15 +123,48 @@ object DamagedChatLog {
         try {
             synchronized(lock) {
                 write(context, read(context).map { d ->
-                    d.copy(chats = d.chats.map { if (it.chatId in chatIds) it.copy(irreparable = true) else it })
+                    d.copy(chats = d.chats.map {
+                        if (it.chatId in chatIds && !it.resolved) it.copy(irreparable = true) else it
+                    })
                 })
             }
         } catch (_: Exception) { }
     }
 
+    /**
+     * Records that a verified repair resolved [chatIds]' open incidents. The
+     * incidents stay in the log, with the time of the repair, as resolved
+     * repair history; the chats no longer count as damaged.
+     */
+    fun markRepaired(context: Context, chatIds: Set<String>) {
+        if (chatIds.isEmpty()) return
+        val now = System.currentTimeMillis()
+        try {
+            synchronized(lock) {
+                write(context, read(context).map { d ->
+                    d.copy(chats = d.chats.map {
+                        if (it.chatId in chatIds && !it.resolved) it.copy(irreparable = false, repairedAt = now) else it
+                    })
+                })
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** The open incidents only: chats that are damaged now. */
+    fun activeDetections(context: Context): List<Detection> = detections(context).mapNotNull { d ->
+        d.chats.filter { !it.resolved }.takeIf { it.isNotEmpty() }?.let { d.copy(chats = it) }
+    }
+
+    /** Resolved incidents: the repair history. */
+    fun repairedDetections(context: Context): List<Detection> = detections(context).mapNotNull { d ->
+        d.chats.filter { it.resolved }.takeIf { it.isNotEmpty() }?.let { d.copy(chats = it) }
+    }
+
     /** The operation that first found [chatId] damaged, when it is logged. */
     fun operationFor(context: Context, chatId: String): DamagedChatOperation? = try {
-        synchronized(lock) { read(context).firstOrNull { d -> d.chats.any { it.chatId == chatId } }?.operation }
+        synchronized(lock) {
+            read(context).firstOrNull { d -> d.chats.any { it.chatId == chatId && !it.resolved } }?.operation
+        }
     } catch (_: Exception) {
         null
     }
@@ -224,6 +265,7 @@ object DamagedChatLog {
                             c.mostUsedModel?.let { put("most_used_model", it) }
                             if (c.irreparable) put("irreparable", true)
                             c.cause?.let { put("cause", it.name) }
+                            c.repairedAt?.let { put("repaired_at", it) }
                         })
                     }
                 })
@@ -259,7 +301,8 @@ object DamagedChatLog {
                             irreparable = c.optBoolean("irreparable", false),
                             // An unknown cause shows as not recorded rather
                             // than making the whole log unreadable.
-                            cause = DamagedChatCause.entries.firstOrNull { it.name == c.optString("cause") }
+                            cause = DamagedChatCause.entries.firstOrNull { it.name == c.optString("cause") },
+                            repairedAt = c.optLong("repaired_at").takeIf { c.has("repaired_at") }
                         )
                     }
                 )

@@ -77,12 +77,14 @@ object ImageGeneratorCoordinator {
     }
 
     suspend fun generate(context: Context, request: ImageGenerationRequest,
+        requireUsagePersistence: Boolean = false,
         onUsage: (ApiEndpointObject, ImageUsageAttempt) -> Unit = { _, _ -> }): Outcome =
-        withContext(Dispatchers.IO) { generateInternal(context, request, onUsage) }
+        withContext(Dispatchers.IO) { generateInternal(context, request, requireUsagePersistence, onUsage) }
 
     private suspend fun generateInternal(
         context: Context,
         request: ImageGenerationRequest,
+        requireUsagePersistence: Boolean,
         onUsage: (ApiEndpointObject, ImageUsageAttempt) -> Unit
     ): Outcome {
         val startedAt = System.currentTimeMillis()
@@ -148,7 +150,8 @@ object ImageGeneratorCoordinator {
 
             // Persist the dispatched attempt before waiting for the paid response. Later
             // evidence replaces this same entry; process death cannot erase the attempt.
-            runCatching { onUsage(billingEndpoint!!, usageAttempt!!) }
+            if (requireUsagePersistence) onUsage(billingEndpoint!!, usageAttempt!!)
+            else runCatching { onUsage(billingEndpoint!!, usageAttempt!!) }
             val generationStart = System.currentTimeMillis()
             val parsed: AdapterImageResponse =
                 executeCall(client, httpRequest).use { response ->

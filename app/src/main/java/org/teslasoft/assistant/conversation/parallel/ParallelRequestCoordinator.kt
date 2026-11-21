@@ -18,7 +18,9 @@ internal data class ParallelRequest(
     val assignment: ResponseModelAssignment,
     val prompt: List<ResponseSnapshotPart>,
     val attachmentBytes: Map<String, ByteArray>,
-    val usage: ProviderUsageAttempt
+    val usage: ProviderUsageAttempt,
+    val continuationMessages: List<String> = emptyList(),
+    val omitTools: Boolean = false
 )
 
 /** The transport must return only after its request-scoped usage/reasoning observers have drained.
@@ -33,6 +35,7 @@ internal interface ParallelOutput {
     suspend fun reasoning(delta: String)
     /** Sanitized provider evidence, separate from the generated answer; never written to a new log. */
     suspend fun warning(value: String)
+    suspend fun tools(assistantMessage: String)
 }
 
 internal class ParallelTransportFailure(val category: String) : Exception() {
@@ -50,9 +53,14 @@ internal class ParallelRequestCoordinator(
     private val pricing: suspend (ParallelRequest) -> TokenPricingCatalog,
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val elapsedMs: () -> Long = { System.nanoTime() / 1_000_000 },
-    private val worker: CoroutineDispatcher = Dispatchers.IO
+    private val worker: CoroutineDispatcher = Dispatchers.IO,
+    private val tools: ParallelToolExecutor? = null,
+    private val keepAlive: (ResponseGroupTarget) -> AutoCloseable = { AutoCloseable {} }
 ) {
     private val requests = ConcurrentHashMap<String, Running>()
+    private val checkpointLock = Mutex()
+    private val checkpointTimes = ConcurrentHashMap<ResponseGroupTarget, Long>()
+    private data class Checkpoint(val running: Running, val change: (ResponseGroup?) -> ResponseGroup)
 
     internal class Run internal constructor(
         val requestIds: List<String>,
@@ -61,7 +69,6 @@ internal class ParallelRequestCoordinator(
         suspend fun await() { jobs.joinAll() }
     }
 
-    private class UserStop : CancellationException()
     private class Running(
         var request: ParallelRequest,
         val initialFields: Map<String, String>,
@@ -72,6 +79,9 @@ internal class ParallelRequestCoordinator(
         val text = StringBuilder()
         val reasoning = StringBuilder()
         var warning: String? = null
+        var toolMessage: String? = null
+        var imageJobId: String? = null
+        var imageResult: String? = null
         var catalog: TokenPricingCatalog? = null
         var state = MessageCompletionState.STREAMING
         var detail: String? = null
@@ -84,7 +94,7 @@ internal class ParallelRequestCoordinator(
     /** The entire group (all IDs/assignments/input) commits before any pricing/client/network work.
      * Calling this twice is rejected; a loaded pending group is never permission to resend it.
      */
-    suspend fun dispatch(chatId: String, input: ResponseGroup): Run = withContext(worker) {
+    suspend fun dispatch(chatId: String, input: ResponseGroup, commitTurnContext: () -> Unit): Run = withContext(worker) {
         val group = detach(input)
         val target = ResponseGroupTarget(chatId, group.assistantMessageId, group.groupId)
         val prepared = prepare(target, group, group.slots)
@@ -92,6 +102,7 @@ internal class ParallelRequestCoordinator(
             require(old == null) { "group_already_dispatched" }
             group
         }
+        commitTurnContext()
         launch(prepared)
     }
 
@@ -123,7 +134,7 @@ internal class ParallelRequestCoordinator(
     suspend fun cancel(requestId: String) {
         val running = requests[requestId] ?: return
         val job = running.registered.await()
-        job.cancel(UserStop())
+        job.cancel(ParallelUserStop())
         job.join()
     }
 
@@ -174,57 +185,106 @@ internal class ParallelRequestCoordinator(
     private fun launch(prepared: List<Running>): Run {
         // One supervisor prevents either a transport failure or save failure from cancelling siblings.
         val parent = SupervisorJob(scope.coroutineContext[Job])
+        val lease = keepAlive(prepared.first().request.target)
+        parent.invokeOnCompletion {
+            lease.close()
+            prepared.map { it.request.target }.distinct().forEach { target ->
+                if (requests.values.none { it.request.target == target && it.state == MessageCompletionState.STREAMING })
+                    checkpointTimes.remove(target)
+            }
+        }
         val ownedScope = CoroutineScope(scope.coroutineContext + parent + worker)
         prepared.forEach { require(requests.putIfAbsent(it.request.requestId, it) == null) }
-        val jobs = prepared.map { running ->
-            // UNDISPATCHED enters the try/finally before callers can cancel a not-yet-scheduled job.
+        val jobs = prepared.map { first ->
+            val owned = java.util.concurrent.ConcurrentLinkedQueue<Running>().also { it.add(first) }
             ownedScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                var running = first
                 try {
                     yield()
                     coroutineScope {
-                        val priceJob = launch {
-                            val catalog = try { pricing(running.request) }
-                            catch (e: CancellationException) { throw e }
-                            catch (_: Exception) { null }
-                            running.lock.withLock {
-                                running.catalog = catalog
-                                if (running.state != MessageCompletionState.STREAMING) save(running)
+                        while (true) {
+                            val attempt = running
+                            launch {
+                                val catalog = try { pricing(attempt.request) }
+                                catch (e: CancellationException) { throw e }
+                                catch (_: Exception) { null }
+                                attempt.lock.withLock {
+                                    attempt.catalog = catalog
+                                    if (attempt.state != MessageCompletionState.STREAMING) save(attempt)
+                                }
+                            }
+                            var retryWithoutTools = false
+                            try {
+                                transport(attempt.request).execute(attempt.request, output(attempt))
+                                if (attempt.toolMessage != null && (tools == null || attempt.request.omitTools))
+                                    throw ParallelTransportFailure("unexpected_tool_call")
+                                attempt.lock.withLock { settle(attempt, MessageCompletionState.DONE) }
+                            } catch (e: CancellationException) { throw e }
+                            catch (e: Exception) {
+                                retryWithoutTools = (e as? ParallelTransportFailure)?.category == "tools_not_supported" &&
+                                    !attempt.request.omitTools
+                                attempt.lock.withLock { settle(attempt, MessageCompletionState.FAILED,
+                                    (e as? ParallelTransportFailure)?.category ?: "transport_failure") }
+                            }
+                            if (attempt.unsaved || (!retryWithoutTools &&
+                                    (attempt.state != MessageCompletionState.DONE || attempt.toolMessage == null))) break
+                            val continuation = ParallelContinuations(persistence)
+                            val (version, reserved) = continuation.begin(attempt.request, nowMs(), retryWithoutTools)
+                            val request = attempt.request.copy(requestId = reserved.requestId,
+                                usage = ProviderUsageAttempt(attempt.request.assignment.modelId,
+                                    TokenUsageAccounting.PROVIDER_NOT_REPORTED, attempt.request.assignment.endpoint, reserved.requestId),
+                                omitTools = true)
+                            val next = Running(request, version.fields, reserved.startedAtMs, elapsedMs())
+                            next.job = first.registered.await()
+                            next.registered.complete(next.job!!)
+                            require(requests.putIfAbsent(request.requestId, next) == null)
+                            owned.add(next)
+                            running = next
+                            if (!retryWithoutTools) {
+                                val extra = tools!!.execute(request, attempt.toolMessage!!,
+                                    reserveImage = {
+                                        continuation.reserveImage(request).also { next.imageJobId = it }
+                                    }, recordImage = { imageId, result ->
+                                        next.lock.withLock {
+                                            next.imageJobId = imageId; next.imageResult = result
+                                            try { continuation.recordImage(request, imageId, result) }
+                                            catch (_: Exception) {
+                                                next.unsaved = true
+                                                requests.putIfAbsent(request.requestId, next)
+                                            }
+                                        }
+                                    })
+                                val frames = listOf(attempt.toolMessage!!) + extra
+                                continuation.freezeMessages(request, frames)
+                                next.request = request.copy(continuationMessages = frames)
                             }
                         }
-                        try {
-                            transport(running.request).execute(running.request, output(running))
-                            running.lock.withLock { settle(running, MessageCompletionState.DONE) }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            running.lock.withLock {
-                                settle(running, MessageCompletionState.FAILED,
-                                    (e as? ParallelTransportFailure)?.category ?: "transport_failure")
-                            }
-                        }
-                        // A result is already durable while a slow pricing lookup finishes.
-                        priceJob.join()
                     }
                 } catch (e: CancellationException) {
                     withContext(NonCancellable) { running.lock.withLock {
-                        if (running.state == MessageCompletionState.STREAMING) {
-                            settle(running, if (e is UserStop) MessageCompletionState.STOPPED else MessageCompletionState.INTERRUPTED,
-                                if (e is UserStop) MessageCompletionState.DETAIL_USER_STOP else MessageCompletionState.DETAIL_SCREEN_CLOSED)
-                        }
+                        if (running.state == MessageCompletionState.STREAMING) settle(running,
+                            if (e is ParallelUserStop) MessageCompletionState.STOPPED else MessageCompletionState.INTERRUPTED,
+                            if (e is ParallelUserStop) MessageCompletionState.DETAIL_USER_STOP else MessageCompletionState.DETAIL_SCREEN_CLOSED)
                     } }
+                } catch (e: Exception) {
+                    running.lock.withLock {
+                        if (running.state == MessageCompletionState.STREAMING)
+                            settle(running, MessageCompletionState.FAILED, "continuation_failed")
+                    }
                 } finally {
                     withContext(NonCancellable) { running.lock.withLock {
-                        if (running.state == MessageCompletionState.STREAMING) {
+                        if (running.state == MessageCompletionState.STREAMING)
                             settle(running, MessageCompletionState.INTERRUPTED, MessageCompletionState.DETAIL_SCREEN_CLOSED)
-                        }
                     } }
                 }
             }.also { job ->
-                running.job = job
-                running.registered.complete(job)
+                first.job = job
+                first.registered.complete(job)
                 job.invokeOnCompletion {
-                    if (!running.unsaved) requests.remove(running.request.requestId, running)
-                    else running.request = running.request.copy(prompt = emptyList(), attachmentBytes = emptyMap())
+                    owned.forEach { running ->
+                        if (!running.unsaved) requests.remove(running.request.requestId, running)
+                        else running.request = running.request.copy(prompt = emptyList(), attachmentBytes = emptyMap())
+                    }
                 }
             }
         }
@@ -236,15 +296,45 @@ internal class ParallelRequestCoordinator(
         override suspend fun text(delta: String) = update { running.text.append(delta); Unit }
         override suspend fun reasoning(delta: String) = update { running.reasoning.append(delta); Unit }
         override suspend fun warning(value: String) = update { running.warning = value }
-        private suspend fun update(change: () -> Unit) = running.lock.withLock {
-            if (running.state != MessageCompletionState.STREAMING) return@withLock
-            currentCoroutineContext().ensureActive()
-            change()
-            val elapsed = elapsedMs()
-            if (elapsed - running.lastCheckpoint >= 2_000) {
-                save(running)
-                running.lastCheckpoint = elapsed
+        override suspend fun tools(assistantMessage: String) = update {
+            check(running.toolMessage == null); running.toolMessage = assistantMessage
+        }
+        private suspend fun update(change: () -> Unit) {
+            val changed = running.lock.withLock {
+                if (running.state != MessageCompletionState.STREAMING) false else {
+                    currentCoroutineContext().ensureActive()
+                    change()
+                    true
+                }
             }
+            if (changed) checkpointGroup(running)
+        }
+    }
+
+    /** Whole-history encryption is shared across a group's streams, never repeated per chunk/slot. */
+    private suspend fun checkpointGroup(owner: Running) = checkpointLock.withLock {
+        val target = owner.request.target
+        val now = elapsedMs()
+        val last = checkpointTimes.putIfAbsent(target, owner.lastCheckpoint) ?: owner.lastCheckpoint
+        if (now - last < 2_000) return@withLock
+        checkpointTimes[target] = now
+        val changes = ArrayList<Checkpoint>()
+        requests.values.filter { it.request.target == target }.forEach { running ->
+            running.lock.withLock {
+                if (running.state == MessageCompletionState.STREAMING) save(running, changes)
+            }
+        }
+        if (changes.isEmpty()) return@withLock
+        try {
+            persistence.update(target) { group -> changes.fold(requireNotNull(group)) { current, entry -> entry.change(current) } }
+            changes.forEach { entry -> entry.running.lock.withLock {
+                if (entry.running.state == MessageCompletionState.STREAMING) entry.running.unsaved = false
+            } }
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) {
+            changes.forEach { entry -> entry.running.lock.withLock {
+                if (entry.running.state == MessageCompletionState.STREAMING) entry.running.unsaved = true
+            } }
         }
     }
 
@@ -255,27 +345,28 @@ internal class ParallelRequestCoordinator(
         save(running)
     }
 
-    private suspend fun save(running: Running) {
+    private suspend fun save(running: Running, batch: MutableList<Checkpoint>? = null) {
         val request = running.request
         try {
             val usage = if (running.state == MessageCompletionState.STREAMING) request.usage.checkpointSnapshot()
                 else request.usage.snapshot()
             val record = TokenUsageAccounting.createRecord(usage.model, usage.provider, usage.apiEndpoint,
-                usage.counts, if (usage.counts.hasAnyValue()) TokenCountSource.PROVIDER_REPORTED else TokenCountSource.ESTIMATED_CL100K,
-                running.catalog?.pricingFor(usage.provider) ?: TokenPricingSnapshot(), usage.providerCost)
+                usage.counts.withDerivedTotal(), if (usage.counts.hasAnyValue()) TokenCountSource.PROVIDER_REPORTED else TokenCountSource.ESTIMATED_CL100K,
+                running.catalog?.takeIf { it.model.equals(usage.model, ignoreCase = true) }?.pricingFor(usage.provider) ?: TokenPricingSnapshot(), usage.providerCost)
                 .copy(requestId = request.requestId, requestedModel = request.assignment.modelId,
                     requestStartedAtMs = running.startedAtMs)
-            val fields = running.initialFields + mapOf("message" to running.text.toString(), "state" to running.state,
+            val fields = running.initialFields + mapOf("message" to joinOutput(running.initialFields["message"], running.text.toString()), "state" to running.state,
                 "responseModel" to usage.model, "responseProvider" to usage.provider,
                 "messageTime" to (running.endedAtMs ?: running.startedAtMs).toString()) +
-                (if (running.reasoning.isEmpty()) emptyMap() else mapOf("reasoningText" to running.reasoning.toString())) +
+                (if (running.reasoning.isEmpty()) emptyMap() else mapOf("reasoningText" to joinOutput(running.initialFields["reasoningText"], running.reasoning.toString()))) +
                 (running.detail?.let { mapOf("stateDetail" to it) } ?: emptyMap()) +
                 (running.warning?.let { mapOf("providerWarningText" to it) } ?: emptyMap())
             val encodedReceipt = TokenUsageAccounting.encodeRecords(listOf(record))
             val attempt = ResponseAttempt(request.requestId, running.startedAtMs, running.state, running.endedAtMs,
                 fields + (TokenUsageAccounting.KEY_USAGE_RECORDS to encodedReceipt), encodedReceipt,
-                running.detail.takeIf { running.state == MessageCompletionState.FAILED }, running.warning)
-            persistence.update(request.target) { group ->
+                running.detail.takeIf { running.state == MessageCompletionState.FAILED }, running.warning,
+                toolAssistantMessage = running.toolMessage)
+            val change: (ResponseGroup?) -> ResponseGroup = { group ->
                 val current = requireNotNull(group)
                 val ownedSlot = current.slots.single { it.slotId == request.slotId }
                 val ownedVersion = ownedSlot.versions.single { it.versionId == request.versionId }
@@ -286,14 +377,24 @@ internal class ParallelRequestCoordinator(
                             val old = version.attempts.single { it.requestId == request.requestId }
                             // A reopened/recovered terminal request owns its checkpoint. A late callback
                             // may enrich accounting but cannot turn it into a success or overwrite text.
-                            val saved = if (old.state == MessageCompletionState.STREAMING) attempt else old.copy(
-                                usageRecord = mergeReceipt(old.usageRecord, attempt.usageRecord!!))
+                            val saved = if (batch != null && old.state != MessageCompletionState.STREAMING) old
+                            else if (old.state == MessageCompletionState.STREAMING) attempt.copy(
+                                parentRequestId = old.parentRequestId, withoutTools = old.withoutTools,
+                                continuationMessages = old.continuationMessages, imageJobId = old.imageJobId ?: running.imageJobId,
+                                imageResult = old.imageResult ?: running.imageResult) else old.copy(
+                                usageRecord = mergeReceipt(old.usageRecord, attempt.usageRecord!!),
+                                imageResult = old.imageResult ?: running.imageResult)
                             version.copy(fields = if (old.state == MessageCompletionState.STREAMING) fields else version.fields,
                                 attempts = version.attempts.map { if (it.requestId == request.requestId) saved else it })
                         }
                     })
                 })
             }
+            if (batch != null) {
+                batch.add(Checkpoint(running, change))
+                return
+            }
+            persistence.update(request.target, change)
             running.unsaved = false
         } catch (e: CancellationException) {
             running.unsaved = true
@@ -303,6 +404,9 @@ internal class ParallelRequestCoordinator(
             running.unsaved = true
         }
     }
+
+    private fun joinOutput(prefix: String?, response: String): String =
+        if (prefix.isNullOrEmpty()) response else if (response.isEmpty()) prefix else prefix + "\n" + response
 
     private fun detach(group: ResponseGroup): ResponseGroup {
         val row = ResponseGroupEdits.install(mapOf("message_id" to group.assistantMessageId, "isBot" to true), group)

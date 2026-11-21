@@ -6,16 +6,20 @@ Use the original eligible messages as the source for extraction, with the editab
 
 ## Implementation order
 
-The [memory roadmap, M.2](conversation_recall_plan.md#m2-the-build-order) schedules this proposal after completed Stage 6 and before Stage 7. Assign one lettered stage at a time.
+The [memory roadmap, M.2](conversation_recall_plan.md#m2-the-build-order) schedules this proposal after completed Stage 6 and before Stage 7. Assign exactly one stage or numbered substage per coding session and PR; 6B.1, 6B.2 and 6B.3 are separate deliveries, not one large 6B PR.
 
 | Stage | Deliverable |
 |---|---|
 | **6A — Reliable reading and resume** | Reading the original chat directly and removing the duplicate transcript store with its migration, current-source and visibility checks, short and long request paths, excerpts, turn references, oversized-turn retry, and interruption recovery through existing scan controls. |
-| **6B — Draft corrections and memory matching** | Working-draft edits, local lookup, linked candidates and conflicts, conditional review, cap handling, and revalidation at filing. |
+| **6B.1 — Working-draft corrections and bounded context** | Validated draft edits, merges and withdrawals; bounded repair; checkpointed draft IDs; approved earlier-messages token setting and AI-facing instructions. |
+| **6B.2 — Scoped matching and comparison cache** | Active/Pending/Archived and draft lookup, scope filters, embedding/keyword paths, bounded comparison work, cached vectors and validated match data. Approve encrypted-cache design before migration. |
+| **6B.3 — Reconciliation and safe filing** | Validated already-covered evidence, retelling suppression vs genuine updates, changed-record rechecks, ranked cap handling, linked unresolved alternatives and atomic filing. |
 | **6C — Browser match cards and comparison** | Show matches and their status, open the exact pair, read both records, and return to the same list position. |
 | **6D — Browser review actions and end-to-end evaluation** | Resolve Pending pairs and conflicts safely, then evaluate the complete scan-to-review experience. |
 
-6A can start with the current Browser. 6B defines the data the Browser consumes. Ship workflows needing new human decisions with their corresponding actions in 6D. Wider Browser redesign work can be scoped separately.
+6A uses the current Browser. 6B.1 supplies safe working-draft operations; 6B.2 supplies scoped match evidence without silently changing filed memories; 6B.3 makes validated filing decisions and exposes the match/conflict data used by 6C and 6D. Finish and test each substage before starting the next, and keep existing scanning usable between deliveries. Ship workflows needing new human decisions with their corresponding actions in 6D. Wider Browser redesign work can be scoped separately.
+
+**Stage boundaries and verification:** Stage 6B.1 owns the "How the AI edits drafts" work and repeated-context budget, including the owner-approved settings and AI instructions. Verify delayed corrections, invalid edits, checkpoint recovery and complete unread-source coverage. Stage 6B.2 owns "Where embeddings fit after the change" and "Bound embedding work and reuse vectors"; verify scope and status boundaries, cache invalidation, priority, missing-vector fallback and long-turn coverage. Stage 6B.3 owns "When to spend another scanner request", validated "already covered" evidence, duplicate/update decisions, changed-memory rechecks and safe publication; verify retellings vs updates, paused scans with edited memories, linked alternatives, and suggestion-cap behavior. The end-to-end measurements and new Browser decisions remain in 6D. These are ownership divisions only; the detailed behavior and original acceptance cases below are preserved.
 
 ## What happens today
 
@@ -74,7 +78,7 @@ Only temporary drafts participate in these automatic edits. Genuine updates invo
 
 Route every scanner query window and record embedding through Step 1's single embedding queue at background priority. Live sends go ahead of waiting scanner work and can interrupt a running background read where the model supports cancellation. Checkpoints must distinguish a deferred comparison from a completed one.
 
-Reuse active vectors and reuse Pending, Archived and temporary-draft comparison vectors by record identity, represented-text fingerprint and embedding model tag. Keep scan-local reuse across sections and recovery. The proposed durable design is a separate scanner comparison cache in the encrypted database for filed records, with deletion tied to the memory, invalidation on text or model changes, and bounded eviction so the cache can be rebuilt. Keep it outside the active chat retrieval index. This storage change must be included in the Stage 6B design approval before its migration is implemented. Avoid requiring a full archive embedding pass before the first useful scan result.
+Reuse active vectors and reuse Pending, Archived and temporary-draft comparison vectors by record identity, represented-text fingerprint and embedding model tag. Keep scan-local reuse across sections and recovery. **Stage 6B.2 owns this cache and its approval gate, not 6B.1.** The proposed durable design is a separate scanner comparison cache in the encrypted database for filed records, with deletion tied to the memory, invalidation on text or model changes, and bounded eviction so the cache can be rebuilt. Keep it outside the active chat retrieval index. This storage change must be approved as part of Stage 6B.2 before its migration is implemented. Avoid requiring a full archive embedding pass before the first useful scan result.
 
 Filter scope and target eligibility first. Bound query windows per processing batch, missing-vector generation and comparisons per proposal, then cap the prompt's returned matches. Process longer source coverage in subsequent batches instead of dropping the end of a turn. Calibrate and record explicit starting limits in 6B from measurements, with incremental vector preparation and bounded keyword fallback while vectors are missing. Track unexamined records so fallback never claims an exhaustive semantic duplicate check. Archived remains eligible in both lookup stages. A result cap alone does not bound the cost of generating every missing vector.
 

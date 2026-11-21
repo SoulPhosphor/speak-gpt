@@ -122,8 +122,27 @@ object ResponseGroupCodec {
                 require(version.attempts.isNotEmpty()) { "attempts" }
                 require(version.fields["state"] == version.attempts.last().state &&
                     version.attempts.dropLast(1).none { it.state == MessageCompletionState.STREAMING }) { "attempt_state" }
-                version.attempts.forEach { attempt ->
+                version.attempts.forEachIndexed { attemptIndex, attempt ->
                     identity(attempt.requestId)
+                    attempt.parentRequestId?.let { parent ->
+                        require(attemptIndex > 0 && version.attempts[attemptIndex - 1].requestId == parent) { "attempt_state" }
+                    }
+                    attempt.continuationMessages?.let { extra ->
+                        require(attempt.parentRequestId != null && extra.isNotEmpty()) { "attempt_state" }
+                        extra.forEach { raw ->
+                            val frame = com.google.gson.JsonParser.parseString(raw).asJsonObject
+                            require(frame.get("role")?.asString in setOf("assistant", "tool")) { "attempt_state" }
+                        }
+                    }
+                    attempt.toolAssistantMessage?.let { raw ->
+                        val frame = com.google.gson.JsonParser.parseString(raw).asJsonObject
+                        require(frame.get("role")?.asString == "assistant" && (frame.getAsJsonArray("tool_calls")?.size() ?: 0) > 0) { "attempt_state" }
+                    }
+                    attempt.imageJobId?.let { identity(it) }
+                    attempt.imageResult?.let { raw ->
+                        require(attempt.imageJobId != null && com.google.gson.JsonParser.parseString(raw).asJsonObject
+                            .get("imageId")?.asString == attempt.imageJobId) { "attempt_state" }
+                    }
                     require(attempt.startedAtMs > 0 && attempt.state in states &&
                         (attempt.endedAtMs == null || attempt.endedAtMs >= attempt.startedAtMs) &&
                         (attempt.state != MessageCompletionState.STREAMING || attempt.endedAtMs == null)) { "attempt_state" }

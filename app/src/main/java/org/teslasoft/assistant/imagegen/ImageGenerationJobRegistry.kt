@@ -161,7 +161,9 @@ object ImageGenerationJobRegistry {
         val imageId: String,
         val request: ImageGenerationRequest,
         val origin: Origin,
-        internal val terminal: CompletableDeferred<Terminal>
+        internal val terminal: CompletableDeferred<Terminal>,
+        internal val ownerKey: String? = null,
+        internal val ownedTerminal: (suspend (Terminal) -> Unit)? = null
     ) {
         /** Mutable because a placeholder chat can be auto-renamed (and
          *  re-keyed) while its first turn is still generating. */
@@ -243,6 +245,11 @@ object ImageGenerationJobRegistry {
         jobs[chatId]?.job?.cancel()
     }
 
+    /** A parallel slot may cancel only the exact image it owns. Main thread, like start(). */
+    fun cancelOwned(ownerKey: String, imageId: String) {
+        jobs[ownerKey]?.takeIf { it.imageId == imageId }?.job?.cancel()
+    }
+
     /** The chat auto-name flow re-keys a placeholder chat in place; any
      *  running generation (and the attached screen) must follow, or its
      *  terminal state would land in the deleted placeholder id. */
@@ -250,6 +257,10 @@ object ImageGenerationJobRegistry {
         if (oldChatId == newChatId) return
         synchronized(ChatPreferences.CHAT_LIST_LOCK) {
             ImageUsageRecorder.rename(oldChatId, newChatId)
+            jobs.values.filter { it.ownerKey != null && it.chatId == oldChatId }.forEach { record ->
+                record.chatId = newChatId
+                if (record.originChatId == oldChatId) record.originChatId = newChatId
+            }
             jobs.remove(oldChatId)?.let { record ->
                 record.chatId = newChatId
                 if (record.originChatId == oldChatId) record.originChatId = newChatId
@@ -273,18 +284,24 @@ object ImageGenerationJobRegistry {
         chatId: String,
         originChatName: String?,
         request: ImageGenerationRequest,
-        origin: Origin
+        origin: Origin,
+        ownerKey: String? = null,
+        imageId: String? = null,
+        ownedTerminal: (suspend (Terminal) -> Unit)? = null
     ): ActiveJob {
-        jobs[chatId]?.let { return it }
+        require((ownerKey == null) == (ownedTerminal == null))
+        require(ownerKey == null || imageId != null)
+        val jobKey = ownerKey ?: chatId
+        jobs[jobKey]?.let { return it }
         val app = context.applicationContext
         val record = ActiveJob(
             chatId = chatId,
             originChatId = chatId,
             originChatName = originChatName,
-            imageId = UUID.randomUUID().toString(),
+            imageId = imageId ?: UUID.randomUUID().toString(),
             request = request,
             origin = origin,
-            terminal = CompletableDeferred()
+            terminal = CompletableDeferred(), ownerKey = ownerKey, ownedTerminal = ownedTerminal
         )
         // LAZY so the record is registered before the first suspension can run.
         val job = scope.launch(start = CoroutineStart.LAZY) {
@@ -323,7 +340,7 @@ object ImageGenerationJobRegistry {
             }
         }
         record.job = job
-        jobs[chatId] = record
+        jobs[jobKey] = record
         publishCounts()
         deletionGuard.track(record)
         job.start()
@@ -334,9 +351,10 @@ object ImageGenerationJobRegistry {
         app: Context,
         record: ActiveJob
     ): Terminal {
-        return when (val outcome = ImageGeneratorCoordinator.generate(app, record.request) { endpoint, attempt ->
+        return when (val outcome = ImageGeneratorCoordinator.generate(app, record.request, requireUsagePersistence = record.ownerKey != null) { endpoint, attempt ->
             synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-                ImageUsageRecorder.record(app, record.chatId, record.imageId, endpoint, attempt)
+                val saved = ImageUsageRecorder.recordChecked(app, record.chatId, record.imageId, endpoint, attempt)
+                if (record.ownerKey != null && !attempt.finalized) check(saved == ImageUsageSaveResult.SAVED)
             }
         }) {
         is ImageGeneratorCoordinator.Outcome.Success -> {
@@ -520,10 +538,14 @@ object ImageGenerationJobRegistry {
     )
 
     private suspend fun finish(app: Context, record: ActiveJob, terminal: Terminal) {
-        jobs.remove(record.chatId)
+        jobs.remove(record.ownerKey ?: record.chatId)
         publishCounts()
         val listener = listeners[record.chatId]
         try {
+            if (record.ownedTerminal != null) {
+                if (!deletionGuard.isChatDeleted(record)) record.ownedTerminal.invoke(terminal)
+                return
+            }
             val delivery = imageJobDelivery(deletionGuard.isChatDeleted(record), listener != null)
             if (delivery == ImageJobDelivery.SCREEN && listener != null) {
                 try {

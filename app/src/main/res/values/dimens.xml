@@ -299,6 +299,10 @@
     <dimen name="chat_activity_popover_corner_radius">16dp</dimen>
     <dimen name="chat_activity_popover_elevation">4dp</dimen>
     <dimen name="chat_activity_popover_text_size">15sp</dimen>
+    <dimen name="chat_activity_popover_row_gap">12dp</dimen>
+    <dimen name="result_notice_holder_gap">12dp</dimen>
+    <dimen name="result_notice_padding_vertical">6dp</dimen>
+    <dimen name="result_notice_text_size">14sp</dimen>
     <dimen name="chat_selection_bar_margin_horizontal">12dp</dimen>
     <dimen name="chat_selection_bar_margin_top">8dp</dimen>
     <dimen name="chat_selection_bar_padding_start">16dp</dimen>

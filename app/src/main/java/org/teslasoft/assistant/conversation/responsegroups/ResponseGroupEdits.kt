@@ -69,6 +69,11 @@ object ResponseGroupEdits {
                     oldVersion.attempts.map { it.requestId }) { "immutable_request_ids" }
                 oldVersion.attempts.zip(newVersion.attempts).forEach { (old, new) ->
                     require(old.startedAtMs == new.startedAtMs) { "immutable_request_start" }
+                    require(old.parentRequestId == new.parentRequestId && old.withoutTools == new.withoutTools &&
+                        (old.continuationMessages == null || old.continuationMessages == new.continuationMessages) &&
+                        (old.toolAssistantMessage == null || old.toolAssistantMessage == new.toolAssistantMessage) &&
+                        (old.imageJobId == null || old.imageJobId == new.imageJobId) &&
+                        (old.imageResult == null || old.imageResult == new.imageResult)) { "immutable_request_evidence" }
                     // A terminal receipt may be enriched with late provider usage, but not restarted or erased.
                     if (old.state != MessageCompletionState.STREAMING) {
                         require(old.state == new.state && old.endedAtMs == new.endedAtMs &&

@@ -95,7 +95,7 @@ class ParallelRequestCoordinatorTest {
         fun saved() = store.read(target)
         fun version(index: Int) = saved().slots[index].versions.last()
         fun completePricing() { prices.forEach { (_, gate) -> gate.complete(TokenPricingCatalog("same-model")) } }
-        suspend fun start(): ParallelRequestCoordinator.Run = engine.dispatch("chat", g).also {
+        suspend fun start(): ParallelRequestCoordinator.Run = engine.dispatch("chat", g) {}.also {
             lanes.values.forEach { lane -> lane.started.await() }
         }
     }
@@ -174,7 +174,7 @@ class ParallelRequestCoordinatorTest {
     @Test fun failedInitialCommitNeverStartsTransportOrPricing() = runBlocking {
         val f = Fixture(group(), this)
         f.store.failAll = true
-        try { f.engine.dispatch("chat", f.g); fail() } catch (_: ParallelPersistenceException) { }
+        try { f.engine.dispatch("chat", f.g) {}; fail() } catch (_: ParallelPersistenceException) { }
         assertEquals(0, f.calls)
         assertTrue(f.lanes.values.none { it.started.isCompleted })
     }
@@ -254,7 +254,7 @@ class ParallelRequestCoordinatorTest {
         val sha = ResponseAttachment.digest(bytes)
         val attachment = ResponseAttachment("image", "$sha.png", "image/png", bytes.size.toLong(), sha)
         val f = Fixture(group(extra = listOf(ParallelInputPart.Attachment(attachment))), this)
-        try { f.engine.dispatch("chat", f.g); fail() } catch (_: IllegalArgumentException) { }
+        try { f.engine.dispatch("chat", f.g) {}; fail() } catch (_: IllegalArgumentException) { }
         assertEquals(0, f.store.writes)
         f.attachmentRead = { bytes }
         val run = f.start()
@@ -325,7 +325,7 @@ class ParallelRequestCoordinatorTest {
         withTimeout(10_000) {
             val f = Fixture(group(), this)
             val run = f.start()
-            try { f.engine.dispatch("chat", f.g); fail() } catch (_: IllegalArgumentException) { }
+            try { f.engine.dispatch("chat", f.g) {}; fail() } catch (_: IllegalArgumentException) { }
             assertEquals(4, f.calls)
             f.completePricing()
             f.lanes.values.forEach { it.done() }
@@ -348,6 +348,22 @@ class ParallelRequestCoordinatorTest {
             }
             run.await()
             assertTrue(f.saved().slots.all { it.assignment.parameters["temperature"] == "0.4" })
+        }
+    }
+
+    @Test fun fourStreamsShareOnePeriodicHistoryCheckpoint() = runBlocking {
+        withTimeout(10_000) {
+            val f = Fixture(group(), this)
+            val run = f.start()
+            assertEquals(1, f.store.writes)
+            f.elapsed = 2_001
+            f.lanes.values.forEachIndexed { i, lane -> lane.text("partial-$i") }
+            assertEquals(2, f.store.writes)
+            f.completePricing()
+            f.lanes.values.forEach { it.done() }
+            run.await()
+            assertEquals(listOf("partial-0", "partial-1", "partial-2", "partial-3"),
+                f.saved().slots.map { it.versions.single().fields["message"] })
         }
     }
 

@@ -123,8 +123,9 @@ class ChatListIndexWiringContractTest {
         val bind = body(source("ui/drawer/FlatChatIdentityBinder.kt"), "fun bind(chatId: String")
         assertTrue(bind.contains("AnalysisBookmark.chatListState(index.memoryExcluded, index.memoryState)"))
         val store = source("preferences/memory/MemoryStore.kt")
-        listOf("fun appendTranscriptTurn(", "fun beginAnalysisRun(", "fun releaseAnalysisClaims(",
-            "fun commitFrozenChatRange(", "fun insertBackfillTranscript(", "fun repointChat(").forEach {
+        // Stage 6A: the scan-progress writes that change a chat's status.
+        listOf("fun beginScanRun(", "fun releaseScanRun(", "fun releaseScanRange(",
+            "fun commitScanRange(", "fun recordChatMigration(", "fun repointChat(").forEach {
             assertTrue("$it must report to the chat list", body(store, it).contains("chatListMemoryChanged("))
         }
         listOf("fun importData(", "fun reconcileInterruptedAnalysisRuns(", "fun resetAllMemoryData(").forEach {

@@ -33,7 +33,7 @@ import org.teslasoft.assistant.preferences.memory.PendingMemoryRecordFactory
 import org.teslasoft.assistant.preferences.memory.PossibleMatchFinder
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
 import org.teslasoft.assistant.preferences.memory.ScoredMemory
-import org.teslasoft.assistant.preferences.memory.TranscriptRecord
+import org.teslasoft.assistant.preferences.memory.scan.ScanSourceRow
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 
 /**
@@ -183,8 +183,8 @@ class ArchivistRequestExecutorTest {
             frozenRange, ArchivistRequestBudget.LARGE_TOKENS
         )
         assertEquals(2, chunks.size)
-        val projectScene = ArchivistSceneContext.from(chunks[0].transcripts.single())
-        val roleplayScene = ArchivistSceneContext.from(chunks[1].transcripts.single())
+        val projectScene = ArchivistSceneContext.from(chunks[0].rows.single())
+        val roleplayScene = ArchivistSceneContext.from(chunks[1].rows.single())
         assertEquals(
             ArchivistSceneContext("comp-a", null, null, null, "project-a"),
             projectScene
@@ -221,7 +221,7 @@ class ArchivistRequestExecutorTest {
         val projectDraft = execute(
             projectProtocol,
             ArchivistPrompt.userMessage(
-                "one chat", "Ash", chunks[0].transcripts
+                "one chat", "Ash", chunks[0].rows
             ).text
         ) { request ->
             assertTrue(request.systemPrompt.contains("Memory Repair"))
@@ -231,7 +231,7 @@ class ArchivistRequestExecutorTest {
         val campaignDraft = execute(
             roleplayProtocol,
             ArchivistPrompt.userMessage(
-                "one chat", "Slate", chunks[1].transcripts
+                "one chat", "Slate", chunks[1].rows
             ).text
         ) { request ->
             assertTrue(request.systemPrompt.contains("North Road"))
@@ -536,25 +536,21 @@ class ArchivistRequestExecutorTest {
         roleplayCharacterId: String? = null,
         projectId: String? = null,
         message: String
-    ): TranscriptRecord = TranscriptRecord(
-        transcriptId = transcriptId,
+    ): ScanSourceRow = ScanSourceRow(
         chatId = "one-chat",
+        messageId = transcriptId,
+        messageNumber = 1,
+        role = "user",
+        start = 0,
+        end = message.length,
+        text = message,
+        startedAt = "2026-08-10T00:00:00Z",
+        modelTag = "fake-model",
         companionId = companionId,
         worldId = worldId,
-        roleplayCharacterId = roleplayCharacterId,
-        userPersonaId = null,
         campaignId = campaignId,
-        projectId = projectId,
-        source = "live",
-        startedAt = "2026-08-10T00:00:00Z",
-        endedAt = "2026-08-10T00:01:00Z",
-        content = JSONArray().put(
-            JSONObject().put("role", "user").put("content", message)
-        ).toString(),
-        modelTag = "fake-model",
-        quickSettingsJson = null,
-        reviewStatus = "pending",
-        processedAt = null
+        roleplayCharacterId = roleplayCharacterId,
+        projectId = projectId
     )
 
     private fun retrievable(id: String, content: String) = RetrievableMemory(

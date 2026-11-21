@@ -529,6 +529,8 @@ Use for a setting that changes a Boolean value directly instead of navigating to
 
 A toggle row has no chevron. The row container is not the tap target; the switch is.
 
+The parallel-model settings control uses `Widget.App.ParallelModels.AllowImages`, an appearance-preserving alias of `Widget.App.Row.Toggle`, with the normal TextColumn/Title/Subtitle/Switch children. Its reusable layout is `view_parallel_model_image_policy.xml`; the title is **Allow Image Generation**, the switch defaults on, and the subtitle is “When turned on, models will follow global image generation rules.” It is prepared for the later model-settings page and does not expose parallel mode.
+
 A toggle may exist on only one screen. Its use of shared row and switch styling does not require adding the toggle to other screens.
 
 ### Number row
@@ -1355,8 +1357,9 @@ Their shared runtime blur radius is `@dimen/chat_action_menu_blur_radius`; keep 
 
 `Widget.App.Chat.HeaderAction.Activity` is the Material Symbols
 `manufacturing` icon (`ic_manufacturing`) on the chat header's left, directly
-after the drawer icon (owner design, Nov 18 2026). It shows only while a
-memory scan or summarizing runs. It is the glyph alone on a clear background
+after the drawer icon (owner design, Nov 18 2026). It shows while a memory
+scan or summarizing runs, and in every open chat while a memory scan is
+paused (Stage 6A). It is the glyph alone on a clear background
 (borderless ripple only), tinted with the chat title's color
 (`?attr/appTitleTextColor`) instead of the header actions' `colorPrimary`
 (owner ruling, Nov 18 2026). The right-side actions keep their places.
@@ -1366,11 +1369,15 @@ Tapping it opens the popover, `layout/view_chat_activity_popover.xml`: a
 (transparent, full width) and `Widget.App.Chat.ActivityPopover` (the rounded
 `bg_chat_activity_popover` surface across the message bubbles' area, from
 `chat_message_speaker_inset` to `chat_message_ai_right_inset`). Each activity
-is one centered `Widget.App.Chat.ActivityPopover.Line`; the gap between lines
-is `divider_chat_activity_popover`, so it appears only between lines that
-show. It has no buttons, closes on a tap elsewhere, follows progress while
-open, and closes with the icon when the work ends. Sizes live in
-`chat_activity_popover_*` dimensions. Owner: `ui.chat.ChatBackgroundActivity`.
+is one centered `Widget.App.Chat.ActivityPopover.Line`, except the memory
+scan's line, which is a `Widget.App.Chat.ActivityPopover.Row`: its
+`Widget.App.Chat.ActivityPopover.Row.Text` on the left and its Pause or Resume
+button (`Widget.App.Chat.ActivityPopover.Row.Action`, a label-sized
+`AppButton.Primary.Inline` with `chat_activity_popover_row_gap` before it) on
+the right. The gap between lines is `divider_chat_activity_popover`, so it
+appears only between lines that show. It closes on a tap elsewhere, follows
+progress while open, and closes with the icon when the work ends. Sizes live
+in `chat_activity_popover_*` dimensions. Owner: `ui.chat.ChatBackgroundActivity`.
 
 ### Error log chat links
 
@@ -1444,6 +1451,17 @@ Nothing about its appearance is set in code.
 ### Manual compaction marker
 
 `Widget.App.Chat.CompactionMarker` is the centered **Compacted** title between message units. It inherits the shared section-title typography and owns its spacing and alignment. Both user and assistant row layouts carry the same normally hidden marker slot; the adapter shows exactly one slot at the persisted manual boundary without inserting a synthetic conversation message.
+
+### Result notices
+
+`Widget.App.ResultNotice.Holder` holds a group of
+`Widget.App.ResultNotice` lines: one sentence each about what happened to a
+named item in the last run, in the screen's title text color, as a tappable
+line that opens where the details are. Sizes live in `result_notice_*`
+dimensions. First user: the Memory Scanner Tool's damaged-chat results
+(Stage 6A), each opening the Damaged Chat Log.
+`Widget.App.ResultNotice.Static` is the same line when it opens nothing
+(the Memory Scanner Tool's rescan notices).
 
 ### Failure detail text
 

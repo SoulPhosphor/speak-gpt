@@ -61,7 +61,14 @@ data class ResponseAttempt(
     /** Existing frozen TurnUsageRecord codec, including this exact requestId. Never repriced on load. */
     val usageRecord: String? = null,
     val failure: String? = null,
-    val warning: String? = null
+    val warning: String? = null,
+    /** Optional additive Stage 2 evidence. Old envelopes omit these fields unchanged. */
+    val parentRequestId: String? = null,
+    val withoutTools: Boolean? = null,
+    val continuationMessages: List<String>? = null,
+    val toolAssistantMessage: String? = null,
+    val imageJobId: String? = null,
+    val imageResult: String? = null
 ) {
     companion object {
         fun pending(startedAtMs: Long) = ResponseAttempt(

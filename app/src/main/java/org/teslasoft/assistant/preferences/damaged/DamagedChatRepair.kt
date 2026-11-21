@@ -52,9 +52,15 @@ object DamagedChatRepair {
 
     /** Try Repair: every damaged chat in the log. */
     fun repairAll(context: Context): Result {
-        val targets = DamagedChatLog.detections(context).flatMap { d -> d.chats.map { it.chatId } }.distinct()
+        val targets = DamagedChatLog.activeDetections(context).flatMap { d -> d.chats.map { it.chatId } }.distinct()
         return finish(context, targets.associateWith { repairOne(context, it) })
     }
+
+    /** The same direct repair as Try Repair, for [chatIds] only: used when
+     *  the Memory Scanner finds a damaged chat (owner decision, Stage 6A
+     *  question 9). The log records the result exactly as Try Repair does. */
+    fun repairChats(context: Context, chatIds: Collection<String>): Result =
+        finish(context, chatIds.distinct().associateWith { repairOne(context, it) })
 
     /** A replacement from a backup for [replacements] (chat id to the backup
      *  copy's messages); other damaged chats are not touched. */
@@ -64,7 +70,8 @@ object DamagedChatRepair {
     private fun finish(context: Context, outcomes: Map<String, Outcome>): Result {
         val repaired = outcomes.filterValues { it == Outcome.REPAIRED }.keys
         DamagedChatLog.markIrreparable(context, outcomes.filterValues { it == Outcome.FAILED }.keys)
-        repaired.forEach { DamagedChatLog.remove(context, it) }
+        // A verified repair stays in the log as resolved repair history.
+        DamagedChatLog.markRepaired(context, repaired)
         return Result(repaired, outcomes.keys - repaired)
     }
 

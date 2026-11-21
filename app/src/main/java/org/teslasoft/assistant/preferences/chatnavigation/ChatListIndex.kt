@@ -383,7 +383,10 @@ object ChatListIndex {
     }
 
     /** The chat's history or recorded usage changed. */
-    fun contentChanged(context: Context, chatId: String) = request(context, chatId, setOf(Part.CONTENT))
+    /** New or changed messages can change the chat's memory status too
+     *  (Stage 6A: it is read from the chat itself). */
+    fun contentChanged(context: Context, chatId: String) =
+        request(context, chatId, setOf(Part.CONTENT, Part.MEMORY))
 
     /** A chat setting shown in the list (model, companion, memory exclusion) changed. */
     fun settingsChanged(context: Context, chatId: String) = request(context, chatId, setOf(Part.SETTINGS))
@@ -514,10 +517,15 @@ object ChatListIndex {
             return Update(content, settings, memory)
         }
 
-        /** null when memory cannot be read right now. */
+        /** null when memory cannot be read right now. The status comes from
+         *  the chat's scan bookmark and its current messages (Stage 6A). */
         private fun readMemory(chatId: String): MemoryValues? = runCatching {
             if (!MemoryStore.isProvisioned(context)) MemoryValues(null)
-            else MemoryValues(MemoryStore.getInstance(context).chatMemoryState(chatId))
+            else {
+                val messages = org.teslasoft.assistant.preferences.memory.scan.ChatScanSource
+                    .peek(context, chatId) ?: return@runCatching null
+                MemoryValues(MemoryStore.getInstance(context).chatMemoryState(chatId, messages))
+            }
         }.getOrNull()
     }
 

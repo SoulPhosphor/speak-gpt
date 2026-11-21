@@ -116,7 +116,8 @@ object ReadableChatFormats {
     private val THINKING_KEYS = setOf(
         ChatAdapter.KEY_MESSAGE_REASONING,
         ChatAdapter.KEY_MESSAGE_REASONING_FORMAT,
-        ChatAdapter.KEY_MESSAGE_REASONING_SUMMARY
+        ChatAdapter.KEY_MESSAGE_REASONING_SUMMARY,
+        "reasoning", "reasoning_content", "reasoning_details"
     )
 
     private fun isCompanion(message: Map<String, Any?>): Boolean =
@@ -241,7 +242,11 @@ object ReadableChatFormats {
                 if (key in removed) continue
                 // Regenerated versions are stored as a JSON string, not a
                 // nested list: sanitize them too, keeping the string form.
-                out[key] = if (key in setOf(ChatAdapter.KEY_VARIANTS, "responseGroup", "partialFields") && v is String) stripJsonText(v, removed) else strip(v, removed)
+                out[key] = when {
+                    key in setOf(ChatAdapter.KEY_VARIANTS, "responseGroup", "partialFields", "toolAssistantMessage") && v is String -> stripJsonText(v, removed)
+                    key == "continuationMessages" && v is List<*> -> v.mapNotNull { (it as? String)?.let { raw -> stripJsonText(raw, removed) } }
+                    else -> strip(v, removed)
+                }
             }
             out
         }

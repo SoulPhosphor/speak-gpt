@@ -199,6 +199,9 @@ class CompanionRoleplayRestoreInstrumentedTest {
         val db = device.writableDatabase
         seedFullStructure(db, "old")
         seedMemoryWith(db, "m-1", "old")
+        // Legacy transcript rows exist only while the Stage 6A migration has
+        // not yet moved a chat; their references are still cleaned on restore.
+        MemoryStore.createLegacyScanTables(db)
         db.execSQL(
             "INSERT INTO transcripts (transcript_id, chat_id, companion_id, world_id, " +
                 "roleplay_character_id, user_persona_id, content) VALUES " +

@@ -29,7 +29,7 @@ object UsernameFillNoticeDialog {
         Thread {
             val pending = UsernameFillState.peekPending(app) ?: return@Thread
             val damagedTitles = if (UsernameFillState.Notice.DAMAGED in pending.notices) {
-                val titles = DamagedChatLog.detections(app)
+                val titles = DamagedChatLog.activeDetections(app)
                     .flatMap { it.chats }
                     .associate { it.chatId to it.title }
                 // A chat deleted since is no longer in the log, so it is left out.
