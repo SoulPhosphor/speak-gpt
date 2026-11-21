@@ -37,6 +37,15 @@ object ScanSourceRanges {
 
     fun append(raw: String?, more: List<Range>): String = encode(decode(raw) + more)
 
+    /** [live] with the chat id of each range taken from [stored] where the
+     *  same range (same message anchors) was moved to a renamed chat since
+     *  [live] was read, so a running scan never writes the old id back. */
+    fun adoptRenames(live: List<Range>, stored: List<Range>): List<Range> = live.map { range ->
+        stored.firstOrNull {
+            it.chatId != range.chatId && it.startAnchors == range.startAnchors && it.endAnchors == range.endAnchors
+        }?.let { range.copy(chatId = it.chatId) } ?: range
+    }
+
     /** [raw] with every range of [oldChatId] moved to [newChatId] (a chat
      *  rename), or null when no range names [oldChatId]. */
     fun repoint(raw: String?, oldChatId: String, newChatId: String): String? {

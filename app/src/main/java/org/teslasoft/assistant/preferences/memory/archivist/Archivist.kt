@@ -870,7 +870,16 @@ object Archivist {
         val stoppedChatScans = ArrayList<String>()
         val alreadyDone = analyzedChatIds.size + failedChats.size
 
-        fun progressRow(): ArchivistRunRecord = runRow.copy(
+        // A chat renamed while this run is going has its ranges repointed in
+        // the stored history; take that over before writing the history back.
+        fun adoptRenames() {
+            val stored = store.getArchivistRun(runRow.runId)?.sourceRangesJson ?: return
+            val adopted = ScanSourceRanges.adoptRenames(sourceRanges, ScanSourceRanges.decode(stored))
+            sourceRanges.clear()
+            sourceRanges.addAll(adopted)
+        }
+
+        fun progressRow(): ArchivistRunRecord = adoptRenames().let { runRow.copy(
             chatIdsJson = listToJson(analyzedChatIds),
             memoryIdsJson = listToJson(memoryIds),
             ruleIdsJson = listToJson(ruleIds),
@@ -878,12 +887,12 @@ object Archivist {
             failedChatIdsJson = listToJson(failedChats),
             sourceRangesJson = ScanSourceRanges.encode(sourceRanges),
             progressPercent = lastPercent
-        )
+        ) }
 
         /** The run record as it stands once [pending] is filed: saved in the
          *  same transaction as that chat's outputs and bookmark, so history
          *  never misses a chat that was committed. */
-        fun progressRowWith(pending: ChatCommit): ArchivistRunRecord = runRow.copy(
+        fun progressRowWith(pending: ChatCommit): ArchivistRunRecord = adoptRenames().let { runRow.copy(
             chatIdsJson = listToJson(analyzedChatIds + pending.chatId),
             memoryIdsJson = listToJson(memoryIds + pending.memoryIds),
             ruleIdsJson = listToJson(ruleIds + pending.ruleIds),
@@ -891,7 +900,7 @@ object Archivist {
             failedChatIdsJson = listToJson(failedChats),
             sourceRangesJson = ScanSourceRanges.encode(sourceRanges + listOfNotNull(pending.sourceRange)),
             progressPercent = lastPercent
-        )
+        ) }
 
         val queue = initialRanges.toMutableList()
         var chatScansDone = 0

@@ -26,4 +26,13 @@ class ScanSourceRangesTest {
         assertNull(ScanSourceRanges.repoint(raw, "absent", "new"))
         assertNull(ScanSourceRanges.repoint(null, "old", "new"))
     }
+
+    @Test fun aRunningScanTakesOverARenameAlreadyStored() {
+        val live = ScanSourceRanges.decode(raw)
+        val stored = ScanSourceRanges.decode(ScanSourceRanges.repoint(raw, "old", "new"))
+        val adopted = ScanSourceRanges.adoptRenames(live, stored)
+        assertEquals(listOf("new", "other"), adopted.map { it.chatId })
+        // Nothing renamed: unchanged.
+        assertEquals(live, ScanSourceRanges.adoptRenames(live, live))
+    }
 }
