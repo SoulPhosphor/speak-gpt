@@ -11514,6 +11514,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         map[org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection.MESSAGE_ID_KEY] =
             (if (isBot) pendingRetryMessageId else null) ?: java.util.UUID.randomUUID().toString()
+        // Every regenerated version keeps its slot's permanent number.
+        if (isBot) {
+            pendingRetryOriginal?.original
+                ?.let(org.teslasoft.assistant.preferences.MessageNumbers::numberOf)
+                ?.let { map[org.teslasoft.assistant.preferences.MessageNumbers.KEY] = it }
+        }
 
         // When this message was created, for the Message Details popup. Stored
         // as a string so it round-trips through the generic Gson history map

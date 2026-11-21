@@ -268,12 +268,12 @@ object Archivist {
     fun eligibleConversations(context: Context): List<Conversation> {
         if (!MemoryStore.isProvisioned(context)) return emptyList()
         val store = MemoryStore.getInstance(context)
-        if (!store.scanSourceMigrationComplete()) return emptyList()
+        val unmigrated = unmigratedChats(store)
         val progress = store.allScanProgress()
         val out = ArrayList<Pair<Conversation, Long>>()
         for ((chatId, name) in liveChatNamesById(context)) {
             val p = progress[chatId]
-            if (p?.claimRunId != null) continue
+            if (p?.claimRunId != null || chatId in unmigrated) continue
             val paused = try {
                 Preferences.getPreferences(context, chatId).isChatExcludedFromMemory()
             } catch (_: Exception) {
@@ -287,6 +287,12 @@ object Archivist {
         }
         return out.sortedBy { it.second }.map { it.first }
     }
+
+    /** Chats whose earlier progress still waits in the legacy store because
+     *  the migration could not read them yet; they are never scanned until
+     *  they migrate, so their earlier progress is never lost. */
+    private fun unmigratedChats(store: MemoryStore): Set<String> =
+        if (store.scanSourceMigrationComplete()) emptySet() else store.legacyTranscriptChatIds()
 
     /** The Memory Assistant facts line "Total conversations since last run" —
      *  by owner decision this is the currently-eligible set (what the button
@@ -365,7 +371,9 @@ object Archivist {
      *  Memories has nothing new to do for this chat. */
     fun chatHasUnscannedMessages(context: Context, chatId: String): Boolean {
         if (!MemoryStore.isProvisioned(context)) return false
-        val progress = MemoryStore.getInstance(context).scanProgress(chatId)
+        val store = MemoryStore.getInstance(context)
+        if (chatId in unmigratedChats(store)) return false
+        val progress = store.scanProgress(chatId)
         if (progress?.claimRunId != null) return true
         val messages = ChatScanSource.peek(context, chatId) ?: return false
         return ScanChatStatus.hasUnscanned(progress, messages)
@@ -627,15 +635,10 @@ object Archivist {
             return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "already_running", analysisType = analysisType)
         }
         try {
-            // The scanner never runs on the legacy transcript store: the
-            // migration finishes first (it is a no-op once complete).
-            if (!ScanSourceMigration.runIfNeeded(context)) {
-                return RunOutcome(
-                    null, 0, 0, 0, 0, emptyList(),
-                    outcome = "full_failed", failureReason = ArchivistFailure.UNKNOWN,
-                    error = "scanner source migration is not complete", analysisType = analysisType
-                )
-            }
+            // The migration runs first (a no-op once complete). A chat it
+            // could not read yet keeps its legacy rows and stays out of every
+            // scan until it migrates; other chats scan normally.
+            ScanSourceMigration.runIfNeeded(context)
             return body(ready)
         } finally {
             liveRun.set(false)
@@ -664,8 +667,10 @@ object Archivist {
         val ranges = ArrayList<ScanRangeRecord>()
         val transferred = ArrayList<ScanRangeRecord>()
         val held = if (kind == RUN_CHAT) store.chatsHeldBySuspendedRuns() else emptyMap()
+        val unmigrated = unmigratedChats(store)
         for ((ordinal, pair) in select().withIndex()) {
             val conversation = pair.first
+            if (conversation.chatId in unmigrated) continue
             held[conversation.chatId]?.let { suspendedRunId ->
                 val suspended = store.getArchivistRun(suspendedRunId)
                 val range = store.scanRangesForRun(suspendedRunId).firstOrNull { it.chatId == conversation.chatId }
@@ -1236,6 +1241,12 @@ object Archivist {
             val earlierFor: (ScanSourceRow) -> List<ScanSourceRow> = { first ->
                 ScanContext.earlierExcerpts(chatNow, first, resolveScope)
             }
+            // Every message the section traverses, sent or not (hidden,
+            // unfinished, a companion not taking part), as it was before the
+            // request: a change to any of them while the request is in flight
+            // means the section must be read again.
+            val traversedEnd = inRange.indexOfFirst { it.id == chunk.rows.last().messageId }
+            val traversedBefore = inRange.subList(next.first, traversedEnd + 1).map { it.id to it.fingerprint }
             val retried = ArchivistBoundedShrinkExecutor.execute<ArchivistRequestChunk, ParsedChunk>(
                 initial = chunk,
                 analyze = { requestChunk, successfulSubChunks ->
@@ -1279,7 +1290,12 @@ object Archivist {
                     m.eligible && row.end <= m.text.length && m.text.substring(row.start, row.end) == row.text
                 } == true
             }
-            if (!checkpoint.stillValid(inRange) || endIndex < 0 || !sectionMessagesUnchanged) {
+            val traversedStart = inRange.indexOfFirst { it.id == traversedBefore.first().first }
+            val traversedAfter = if (traversedStart < 0 || endIndex < traversedStart) emptyList()
+                else inRange.subList(traversedStart, endIndex + 1).map { it.id to it.fingerprint }
+            if (!checkpoint.stillValid(inRange) || endIndex < 0 || !sectionMessagesUnchanged ||
+                traversedAfter != traversedBefore
+            ) {
                 restart()
                 continue
             }
