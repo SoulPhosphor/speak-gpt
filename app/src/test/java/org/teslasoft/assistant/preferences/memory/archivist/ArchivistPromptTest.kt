@@ -165,6 +165,43 @@ class ArchivistPromptTest {
     }
 
     @Test
+    fun aSplitMessageKeepsItsNumberWithAPartMarker() {
+        val rendered = ArchivistPrompt.userMessage(
+            "Chat", null,
+            listOf(
+                row("uuid-12", "user", "first piece").copy(messageNumber = 12, partIndex = 1, partCount = 3),
+                row("uuid-12", "user", "second piece").copy(messageNumber = 12, partIndex = 2, partCount = 3)
+            )
+        ).text
+        assertTrue(rendered.contains("Message 12 (part 1 of 3) — User: first piece\n"))
+        assertTrue(rendered.contains("Message 12 (part 2 of 3) — User: second piece\n"))
+    }
+
+    @Test
+    fun earlierContextComesFirstUnderItsHeadingWithTheInstruction() {
+        val rendered = ArchivistPrompt.userMessage(
+            "Chat", null,
+            listOf(row("uuid-6", "user", "They responded yesterday.").copy(messageNumber = 6)),
+            earlier = listOf(row("uuid-4", "user", "I'm waiting for their response.").copy(messageNumber = 4))
+        ).text
+        val earlier = rendered.indexOf("Earlier messages (context):\n")
+        val new = rendered.indexOf("New messages (analyze for memories):\n")
+        assertTrue(earlier >= 0 && new > earlier)
+        assertTrue(rendered.indexOf("Message 4 — User") in (earlier + 1) until new)
+        assertTrue(rendered.indexOf("Message 6 — User") > new)
+        assertTrue(rendered.contains(ArchivistPrompt.SECTIONS_INSTRUCTION))
+        assertTrue(rendered.indexOf(ArchivistPrompt.SECTIONS_INSTRUCTION) < rendered.indexOf("<conversation_data>"))
+    }
+
+    @Test
+    fun aRequestWithoutEarlierContextHasNoHeadings() {
+        val rendered = ArchivistPrompt.userMessage("Chat", null, listOf(row("u", "user", "hi"))).text
+        assertFalse(rendered.contains("Earlier messages (context):"))
+        assertFalse(rendered.contains("New messages (analyze for memories):"))
+        assertFalse(rendered.contains(ArchivistPrompt.SECTIONS_INSTRUCTION))
+    }
+
+    @Test
     fun noCompanionLineWhenTheScopeIsUnknown() {
         val rendered = ArchivistPrompt.userMessage("Chat B", null, listOf(row("m1", "user", "x"))).text
         assertFalse(rendered.contains("AI companion in this conversation"))

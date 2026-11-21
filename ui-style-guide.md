@@ -1458,6 +1458,8 @@ named item in the last run, in the screen's title text color, as a tappable
 line that opens where the details are. Sizes live in `result_notice_*`
 dimensions. First user: the Memory Scanner Tool's damaged-chat results
 (Stage 6A), each opening the Damaged Chat Log.
+`Widget.App.ResultNotice.Static` is the same line when it opens nothing
+(the Memory Scanner Tool's rescan notices).
 
 ### Failure detail text
 

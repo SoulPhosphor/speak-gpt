@@ -81,7 +81,8 @@ class DamagedChatLogActivity : SettingsPageActivity() {
     private fun refresh() {
         val app = applicationContext
         Thread {
-            val detections = DamagedChatLog.detections(app)
+            // Open incidents only; resolved repairs are kept as history.
+            val detections = DamagedChatLog.activeDetections(app)
             runOnUiThread { if (!isFinishing && !isDestroyed) render(detections) }
         }.start()
     }

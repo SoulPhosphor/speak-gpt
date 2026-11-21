@@ -58,6 +58,8 @@ import org.teslasoft.assistant.preferences.memory.ScanRangeRecord
 import org.teslasoft.assistant.preferences.memory.ScanReport
 import org.teslasoft.assistant.preferences.memory.scan.ChatScanSource
 import org.teslasoft.assistant.preferences.memory.scan.ScanChatStatus
+import org.teslasoft.assistant.preferences.memory.scan.ScanContext
+import org.teslasoft.assistant.preferences.memory.scan.ScanSourceRow
 import org.teslasoft.assistant.preferences.memory.scan.ScanCheckpoint
 import org.teslasoft.assistant.preferences.memory.scan.ScanMessage
 import org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope
@@ -928,6 +930,10 @@ object Archivist {
                 }
                 emit(0, 0)
                 val chatName = chatNames[range.chatId] ?: range.chatId
+                // A chat whose earlier progress could not be migrated reports
+                // its complete rescan only once it has actually been scanned.
+                val fullRescan = range.kind == ScanRangeRecord.KIND_SCAN &&
+                    store.scanProgress(range.chatId)?.needsFullRescan == true
                 try {
                     scanRange(
                         context, store, range, chatName, lorebookMode, basePrompt, memoryTypes,
@@ -942,7 +948,7 @@ object Archivist {
                             commit.sourceRange?.let { sourceRanges.add(it) }
                         }
                     )
-                    if (runRow.runKind == RUN_RESCAN) {
+                    if (fullRescan) {
                         store.removeScanReports(range.chatId, listOf(ScanReport.FULL_RESCAN_FAILED))
                         store.addScanReport(range.chatId, ScanReport.FULL_RESCAN_COMPLETED)
                     }
@@ -964,7 +970,7 @@ object Archivist {
                     failedReasons.add(reason)
                     genResults.add(classifyGenerationFailure(e, capturedErrorBody))
                     capturedErrorBody?.let { failureBody = it }
-                    if (runRow.runKind == RUN_RESCAN) {
+                    if (fullRescan) {
                         store.addScanReport(range.chatId, ScanReport.FULL_RESCAN_FAILED)
                     }
                     MemoryLog.logAlways(context, "Archivist", "error",
@@ -1220,15 +1226,23 @@ object Archivist {
                 rows, initialTranscriptTarget, scannerMaximumTokens, initialAllowance
             )
             emit(checkpoint.sectionsDone, checkpoint.sectionsDone + chunks.size)
-            val chunk = chunks.first()
+            // Pieces of a split message carry "part k of n" of that message.
+            val labelAt: (List<ScanSourceRow>, Int) -> List<ScanSourceRow> = { list, maximum ->
+                ScanContext.labelParts(list, { id -> inRange.firstOrNull { it.id == id }?.text }, maximum)
+            }
+            val chunk = chunks.first().let { it.copy(rows = labelAt(it.rows, scannerMaximumTokens)) }
             val earlier = staged.toList()
+            val chatNow = messages
+            val earlierFor: (ScanSourceRow) -> List<ScanSourceRow> = { first ->
+                ScanContext.earlierExcerpts(chatNow, first, resolveScope)
+            }
             val retried = ArchivistBoundedShrinkExecutor.execute<ArchivistRequestChunk, ParsedChunk>(
                 initial = chunk,
                 analyze = { requestChunk, successfulSubChunks ->
                     analyzeChunk(
                         context, store, prefs, chatName, lorebookMode, conversationBasePrompt,
                         memoryTypes, requestChunk, earlier + successfulSubChunks, modelTransport,
-                        model, temperature, verifiedContextTokens
+                        model, temperature, verifiedContextTokens, earlierFor
                     )
                 },
                 shouldShrink = { error ->
@@ -1246,7 +1260,7 @@ object Archivist {
                     // message is split too (lossless, Stage 6A).
                     ArchivistConversationChunker.split(
                         failedChunk.rows, nextTarget, nextTarget, allowanceTokens = 0
-                    )
+                    ).map { it.copy(rows = labelAt(it.rows, nextTarget)) }
                 }
             )
             val parsed = ParsedChunk(
@@ -1373,13 +1387,14 @@ object Archivist {
         modelTransport: ArchivistModelTransport,
         model: String,
         temperature: Double,
-        verifiedContextTokens: Int?
+        verifiedContextTokens: Int?,
+        earlierFor: (ScanSourceRow) -> List<ScanSourceRow>
     ): ParsedChunk {
         val rows = requestChunk.rows
         val chatId = rows.first().chatId
         val scene = ArchivistSceneContext.from(rows.first())
         val companionName = scene.companionId?.let { store.getCompanion(it)?.currentName }
-        val rendered = ArchivistPrompt.userMessage(chatName, companionName, rows)
+        var rendered = ArchivistPrompt.userMessage(chatName, companionName, rows, earlierFor(rows.first()))
 
         val protocol: ArchivistRequestProtocol?
         val requestSystemPrompt: String
@@ -1433,12 +1448,16 @@ object Archivist {
                 earlierCandidates = earlierMemoryCandidates + earlierRuleCandidates
             )
             protocol = builtProtocol
-            requestSystemPrompt = ArchivistPrompt.withRuntimeProtocol(
-                conversationBasePrompt, memoryTypes, builtProtocol
-            )
+            // Request order for provider caching (Stage 6A): the fixed
+            // instructions, Types and Analysis Note form the system prompt,
+            // which stays the same for every request of this conversation;
+            // the changing protocol (retrieved memories, working drafts,
+            // targets) follows the conversation in the user message.
+            requestSystemPrompt = ArchivistPrompt.withCurrentTypes(conversationBasePrompt, memoryTypes)
         }
+        val protocolText = protocol?.let { "\n" + ArchivistRuntimeProtocol.render(it) }.orEmpty()
 
-        val requestHeadroom = ArchivistRequestBudget.headroomTokens(requestSystemPrompt)
+        val requestHeadroom = ArchivistRequestBudget.headroomTokens(requestSystemPrompt + protocolText)
         val safeTranscriptTarget = ArchivistRequestBudget.effectiveMaximumTokens(
             // The user maximum is a preference; this check enforces actual
             // model capacity only.
@@ -1446,7 +1465,13 @@ object Archivist {
             verifiedContextTokens = verifiedContextTokens,
             requestHeadroomTokens = requestHeadroom
         )
-        val renderedTranscriptTokens = IncludeTextPolicy.estimateTokens(rendered.text)
+        var renderedTranscriptTokens = IncludeTextPolicy.estimateTokens(rendered.text)
+        if (verifiedContextTokens != null && renderedTranscriptTokens > safeTranscriptTarget) {
+            // A tight request gives up the earlier context first; the new
+            // section is always sent whole.
+            rendered = ArchivistPrompt.userMessage(chatName, companionName, rows)
+            renderedTranscriptTokens = IncludeTextPolicy.estimateTokens(rendered.text)
+        }
         if (verifiedContextTokens != null && renderedTranscriptTokens > safeTranscriptTarget) {
             throw ArchivistShrinkRequiredException(
                 nextTargetTokens = safeTranscriptTarget,
@@ -1479,7 +1504,7 @@ object Archivist {
                 val parsed = ArchivistRequestExecutor.associativePrepared(
                     systemPrompt = requestSystemPrompt,
                     protocol = checkNotNull(protocol),
-                    conversationData = rendered.text,
+                    conversationData = rendered.text + protocolText,
                     model = model,
                     temperature = temperature,
                     transport = modelTransport

@@ -167,20 +167,11 @@ object ArchivistConversationChunker {
         return out
     }
 
-    private fun splitRow(row: ScanSourceRow, maximum: Int): List<RowFragment> {
-        val pieces = ScanTextSplitter.split(row.text, maximum)
-        return pieces.mapIndexed { index, piece ->
-            val part = row.slice(piece.start, piece.end).let {
-                if (pieces.size > 1 || row.partCount > 1) {
-                    it.copy(
-                        partIndex = (row.partIndex - 1) * pieces.size + index + 1,
-                        partCount = row.partCount * pieces.size
-                    )
-                } else it
-            }
+    private fun splitRow(row: ScanSourceRow, maximum: Int): List<RowFragment> =
+        ScanTextSplitter.split(row.text, maximum).map { piece ->
+            val part = row.slice(piece.start, piece.end)
             RowFragment(part, if (part.text.isBlank()) 0 else IncludeTextPolicy.estimateTokens(part.text))
         }
-    }
 }
 
 class ArchivistShrinkRequiredException(

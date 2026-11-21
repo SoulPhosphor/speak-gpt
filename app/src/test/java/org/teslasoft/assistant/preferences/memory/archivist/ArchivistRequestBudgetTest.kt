@@ -194,13 +194,11 @@ class ArchivistRequestBudgetTest {
         val parts = chunks.flatMap { it.rows }
         assertEquals(original, parts.joinToString("") { it.text })
         var expectedStart = 0
-        parts.forEachIndexed { i, part ->
+        parts.forEach { part ->
             assertEquals("m7", part.messageId)
             assertEquals(7L, part.messageNumber)
             assertEquals(expectedStart, part.start)
             assertEquals(original.substring(part.start, part.end), part.text)
-            assertEquals(i + 1, part.partIndex)
-            assertEquals(parts.size, part.partCount)
             expectedStart = part.end
         }
         assertEquals(original.length, expectedStart)

@@ -4024,6 +4024,11 @@
     <!-- Stage 6A: scan results on the Memory Scanner Tool screen (owner wording, question 9) -->
     <string name="memory_scan_report_damage_repaired">A problem was found with %1$s. The conversation was repaired, and scanning resumed. See the Damaged Chat Log for details.</string>
     <string name="memory_scan_report_damage_not_repaired">A problem was found with %1$s. The conversation could not be repaired, and its scan is incomplete. See the Damaged Chat Log for details.</string>
+    <!-- Stage 6A: automatic complete rescans after the upgrade (owner wording) -->
+    <string name="memory_scan_rescan_scheduled">Rescan scheduled after upgrade: %1$s. Previous scan progress couldn\'t be recovered. These conversations will be rescanned automatically.</string>
+    <string name="memory_scan_rescan_running">Rescanning after upgrade: %1$s.</string>
+    <string name="memory_scan_rescan_completed">Rescan completed after upgrade: %1$s.</string>
+    <string name="memory_scan_rescan_incomplete">Rescan incomplete after upgrade: %1$s. See scan results for details.</string>
     <string name="chat_activity_memory_scan">Memory Scanner %1$d%%</string>
     <string name="chat_activity_memory_scan_paused">Memory Scanner</string>
     <string name="chat_activity_summarizing">Message Summarizing in Progress %1$d%%</string>

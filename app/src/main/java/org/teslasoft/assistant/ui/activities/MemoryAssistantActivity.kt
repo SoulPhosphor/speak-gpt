@@ -248,7 +248,9 @@ class MemoryAssistantActivity : SettingsPageActivity() {
             val pendingChats = eligible
             val reports = if (storeUsable)
                 MemoryStore.getInstance(this@MemoryAssistantActivity).scanReports() else emptyList()
-            val chatNames = if (reports.isEmpty()) emptyMap() else try {
+            val rescan = if (storeUsable)
+                rescanState(MemoryStore.getInstance(this@MemoryAssistantActivity), reports) else RescanState()
+            val chatNames = if (reports.isEmpty() && rescan == RescanState()) emptyMap() else try {
                 org.teslasoft.assistant.preferences.ChatPreferences.getChatPreferences()
                     .getChatList(this@MemoryAssistantActivity)
                     .associate { org.teslasoft.assistant.preferences.ChatPreferences.storedChatId(it) to (it["name"] ?: "") }
@@ -302,7 +304,7 @@ class MemoryAssistantActivity : SettingsPageActivity() {
                     if (configured || anyDegraded) View.GONE else View.VISIBLE
                 if (!running && suspendedScan == null) btnAnalyze?.isEnabled = configured && !anyDegraded
                 renderRuns(runs, deletedLater)
-                renderScanResults(reports, chatNames)
+                renderScanResults(reports, chatNames, rescan)
             }
         }
     }
@@ -1066,10 +1068,25 @@ class MemoryAssistantActivity : SettingsPageActivity() {
      *  question 9). A line opens the Damaged Chat Log. */
     private fun renderScanResults(
         reports: List<org.teslasoft.assistant.preferences.memory.ScanReport>,
-        names: Map<String, String>
+        names: Map<String, String>,
+        rescan: RescanState
     ) {
         val container = scanResultsContainer ?: return
         container.removeAllViews()
+        // Automatic complete rescans after the upgrade (owner wording, Stage
+        // 6A): waiting, running, finished, and not finished.
+        fun joined(ids: Collection<String>) = ids.mapNotNull { names[it] }.joinToString(", ")
+        val notices = listOf(
+            R.string.memory_scan_rescan_scheduled to joined(rescan.scheduled),
+            R.string.memory_scan_rescan_running to joined(rescan.running),
+            R.string.memory_scan_rescan_incomplete to joined(rescan.incomplete),
+            R.string.memory_scan_rescan_completed to joined(rescan.completed)
+        ).filter { it.second.isNotEmpty() }
+        for ((res, chats) in notices) {
+            val view = TextView(this, null, 0, R.style.Widget_App_ResultNotice_Static)
+            view.text = getString(res, chats)
+            container.addView(view)
+        }
         val lines = reports.mapNotNull { report ->
             val name = names[report.chatId] ?: return@mapNotNull null
             when (report.kind) {
@@ -1088,7 +1105,35 @@ class MemoryAssistantActivity : SettingsPageActivity() {
             }
             container.addView(view)
         }
-        container.visibility = if (lines.isEmpty()) View.GONE else View.VISIBLE
+        container.visibility = if (lines.isEmpty() && notices.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** Which conversations are waiting for, running, or finished their
+     *  automatic complete rescan. Completed only after a successful scan. */
+    private data class RescanState(
+        val scheduled: List<String> = emptyList(),
+        val running: List<String> = emptyList(),
+        val incomplete: List<String> = emptyList(),
+        val completed: List<String> = emptyList()
+    )
+
+    private fun rescanState(
+        store: MemoryStore,
+        reports: List<org.teslasoft.assistant.preferences.memory.ScanReport>
+    ): RescanState {
+        val needing = store.chatsNeedingFullRescan()
+        val progress = store.allScanProgress()
+        val failed = reports.filter {
+            it.kind == org.teslasoft.assistant.preferences.memory.ScanReport.FULL_RESCAN_FAILED
+        }.map { it.chatId }.toSet()
+        val running = needing.filter { progress[it]?.claimRunId != null }
+        val incomplete = needing.filter { it !in running && it in failed }
+        val scheduled = needing.filter { it !in running && it !in incomplete }
+        val completed = reports.filter {
+            it.kind == org.teslasoft.assistant.preferences.memory.ScanReport.FULL_RESCAN_COMPLETED &&
+                it.chatId !in needing
+        }.map { it.chatId }
+        return RescanState(scheduled, running, incomplete, completed)
     }
 
     /* ---------------- navigation ---------------- */

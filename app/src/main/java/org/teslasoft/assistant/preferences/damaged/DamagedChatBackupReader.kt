@@ -85,7 +85,7 @@ object DamagedChatBackupReader {
 
     /** The damaged chats in the log that [backup] holds, and those it does not. */
     fun match(context: Context, backup: Map<String, BackupChat>): Matches {
-        val damaged = DamagedChatLog.detections(context).flatMap { it.chats }.distinctBy { it.chatId }
+        val damaged = DamagedChatLog.activeDetections(context).flatMap { it.chats }.distinctBy { it.chatId }
         val listed = ChatPreferences.getChatPreferences().getChatListResult(context, includeFirstMessage = false)
         val rows = if (ChatStorageHealth.isAuthoritative(listed.state)) listed.chats else emptyList()
         val found = ArrayList<Match>()
