@@ -124,6 +124,10 @@ class ResponseGroupStorageInstrumentedTest {
         assertTrue(failed is ResponseGroupStore.Result.WriteFailed)
         assertEquals(previous, read())
         PortableRestoreProcessGate.clear(context)
+        // Earlier saves queued search-index refreshes that read this chat; a
+        // successful read clears a recorded read failure. Let them finish
+        // first so the simulated failure stays in place for the save below.
+        org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager.get(context).awaitIdleForTest()
         ChatStorageHealth.recordReadFailure(context, "chat_$chatId", IllegalStateException("synthetic failure"))
         assertEquals(ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT,
             prefs.saveChatHistory(context, chatId, original, synchronous = true, responseGroupChanged = true))
