@@ -9,6 +9,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope
+import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 
 /**
  * What the memory system does when a chat turn finishes (Stage 6A). It
@@ -43,11 +44,23 @@ object ChatTurnMemoryScope {
         val last = messages.lastOrNull() ?: return false
         if (last["isBot"] != true) return false
         var changed = ScanMessageScope.write(last, scope)
+        if (changed) stampCanonicalVersion(last, scope)
         val user = messages.subList(0, messages.size - 1).lastOrNull { it["isBot"] != true }
         if (user != null && !ScanMessageScope.has(user)) {
             changed = ScanMessageScope.write(user, scope) || changed
         }
         return changed
+    }
+
+    /** A regenerated reply keeps its versions; the one just finished (the
+     *  canonical version) records the same scope as the reply itself. */
+    private fun stampCanonicalVersion(reply: HashMap<String, Any>, scope: ScanMessageScope) {
+        val versions = ChatAdapter.parseVariants(reply[ChatAdapter.KEY_VARIANTS]?.toString())
+        if (versions.isEmpty()) return
+        val canonical = reply[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull() ?: return
+        val version = versions.getOrNull(canonical) ?: return
+        version[ScanMessageScope.KEY] = scope.encode()
+        reply[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(versions)
     }
 
     /** The memory record of a companion chatted with for the first time

@@ -53,6 +53,7 @@ import org.teslasoft.assistant.preferences.memory.SCOPE_COMPANION
 import org.teslasoft.assistant.preferences.memory.StagedAnalysisCandidate
 import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
+import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import org.teslasoft.assistant.preferences.damaged.DamagedChatRepair
 import org.teslasoft.assistant.preferences.memory.ScanRangeRecord
 import org.teslasoft.assistant.preferences.memory.ScanReport
@@ -269,6 +270,7 @@ object Archivist {
         if (!MemoryStore.isProvisioned(context)) return emptyList()
         val store = MemoryStore.getInstance(context)
         val unmigrated = unmigratedChats(store)
+        val damaged = DamagedChatLog.chatIds(context)
         val progress = store.allScanProgress()
         val out = ArrayList<Pair<Conversation, Long>>()
         for ((chatId, name) in liveChatNamesById(context)) {
@@ -280,7 +282,13 @@ object Archivist {
                 true
             }
             if (paused) continue
-            val messages = ChatScanSource.peek(context, chatId) ?: continue
+            val messages = ChatScanSource.peek(context, chatId)
+            if (messages == null) {
+                // A damaged chat is still offered to the scan, which runs the
+                // existing repair on it and reports the result.
+                if (chatId in damaged) out.add(Conversation(chatId, name) to Long.MAX_VALUE)
+                continue
+            }
             val index = ScanChatStatus.bookmarkIndex(p, messages)
             val first = (index + 1 until messages.size).firstOrNull { messages[it].eligible } ?: continue
             out.add(Conversation(chatId, name) to (messages[first].timeMillis ?: Long.MAX_VALUE))
@@ -375,7 +383,9 @@ object Archivist {
         if (chatId in unmigratedChats(store)) return false
         val progress = store.scanProgress(chatId)
         if (progress?.claimRunId != null) return true
-        val messages = ChatScanSource.peek(context, chatId) ?: return false
+        // A damaged chat is offered too: the scan runs the existing repair.
+        val messages = ChatScanSource.peek(context, chatId)
+            ?: return chatId in DamagedChatLog.chatIds(context)
         return ScanChatStatus.hasUnscanned(progress, messages)
     }
 
@@ -667,6 +677,7 @@ object Archivist {
         val ranges = ArrayList<ScanRangeRecord>()
         val transferred = ArrayList<ScanRangeRecord>()
         val held = if (kind == RUN_CHAT) store.chatsHeldBySuspendedRuns() else emptyMap()
+        val touchedSuspended = LinkedHashSet<String>()
         val unmigrated = unmigratedChats(store)
         for ((ordinal, pair) in select().withIndex()) {
             val conversation = pair.first
@@ -680,12 +691,18 @@ object Archivist {
                     } else {
                         store.releaseScanRange(range.rangeId)
                     }
-                    finishEmptySuspendedRun(store, suspendedRunId)
+                    touchedSuspended.add(suspendedRunId)
                 }
             }
             if (transferred.any { it.chatId == conversation.chatId }) continue
-            val load = ChatScanSource.load(context, conversation.chatId)
-            val messages = (load as? ChatScanSource.Load.Readable)?.messages ?: continue
+            // A chat already damaged when the scan starts goes through the
+            // existing repair first; an unrepaired chat is reported and left
+            // out, and its earlier progress is kept.
+            val messages = try {
+                readRangeSource(context, store, conversation.chatId)
+            } catch (_: ChatSourceUnavailableException) {
+                continue
+            }
             val progress = store.scanProgress(conversation.chatId)
             if (progress?.claimRunId != null) continue
             val index = ScanChatStatus.bookmarkIndex(progress, messages)
@@ -708,6 +725,9 @@ object Archivist {
         for (range in transferred) {
             store.transferScanRange(range.rangeId, runRow.runId, range.ordinal)?.let { opened.add(it) }
         }
+        // Only now, after the transfer, can a batch that gave up its last
+        // chat be seen as empty and finished.
+        touchedSuspended.forEach { finishEmptySuspendedRun(store, it) }
         opened.sortBy { it.ordinal }
         executeRun(context, ready, runRow, opened, names, onProgress, stopKind, takeChatScanRequests = kind != RUN_CHAT)
     }

@@ -403,6 +403,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             KEY_MESSAGE_REASONING_TOKENS,
             KEY_MESSAGE_REASONING_LEVEL,
             KEY_ACTIVE_MEMORY_ATTRIBUTION,
+            // Each version keeps the memory scope it was generated under
+            // (Stage 6A), so making an older version current never pairs
+            // its text with a newer version's companion or project.
+            org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY,
             MessageCompletionState.KEY_STATE,
             MessageCompletionState.KEY_STATE_DETAIL,
             MessageCompletionState.KEY_ERROR_TEXT,
