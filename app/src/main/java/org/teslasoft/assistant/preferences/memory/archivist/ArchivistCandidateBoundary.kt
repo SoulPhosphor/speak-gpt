@@ -66,6 +66,18 @@ object ArchivistCandidateBoundary {
         return Collected(byIdentity.values.toList(), duplicates)
     }
 
+    /** A staged memory proposed again by a later section: the stored
+     *  payload with the repeat's tags and relationship hints merged in, as
+     *  [collectFlat] merges them in an uninterrupted scan. Null for other
+     *  streams or unreadable payloads (the stored payload is kept). */
+    fun mergeRepeatPayload(stream: String, stored: String, repeat: String): String? {
+        if (stream != "memory") return null
+        val first = memoryFromPayload(stored) ?: return null
+        val second = memoryFromPayload(repeat) ?: return null
+        val merged = collectFlat(listOf(first, second)).memories.singleOrNull() ?: return null
+        return payload(merged)
+    }
+
     /** Exact content + supplied placement + proposed Type. Scene target is a
      * fallback only for the request's implicit Companion target. */
     fun identityKey(draft: ArchivistResponseParser.DraftMemory): String {

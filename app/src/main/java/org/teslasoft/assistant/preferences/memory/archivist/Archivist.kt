@@ -1335,7 +1335,8 @@ object Archivist {
             }
             checkpoint = checkpoint.advancedTo(inRange, endIndex, readThrough.end)
             store.saveScanSection(
-                range.rangeId, checkpoint.sectionsDone, stagedCandidates(parsed), checkpoint.encode()
+                range.rangeId, checkpoint.sectionsDone, stagedCandidates(parsed), checkpoint.encode(),
+                ArchivistCandidateBoundary::mergeRepeatPayload
             )
             staged.add(parsed)
             emit(checkpoint.sectionsDone, checkpoint.sectionsDone + chunks.size - 1)

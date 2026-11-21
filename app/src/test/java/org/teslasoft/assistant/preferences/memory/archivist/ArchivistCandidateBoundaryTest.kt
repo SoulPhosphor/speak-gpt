@@ -176,4 +176,19 @@ class ArchivistCandidateBoundaryTest {
         assertTrue(rendered.contains("\"stream\":\"model_rule\""))
         assertTrue(rendered.contains("Answer in complete sentences."))
     }
+
+    @Test
+    fun aRepeatSavedAfterAPauseKeepsTheSameTagsAndHintsAsAnUninterruptedScan() {
+        val first = draft("Likes tea", related = listOf("m-1"), tags = listOf("drinks"))
+        val repeat = draft("Likes tea", related = listOf("m-2"), tags = listOf("morning"))
+        val stored = ArchivistCandidateBoundary.payload(first)
+        val merged = ArchivistCandidateBoundary.mergeRepeatPayload(
+            "memory", stored, ArchivistCandidateBoundary.payload(repeat)
+        )!!
+        val resumed = ArchivistCandidateBoundary.memoryFromPayload(merged)!!
+        val uninterrupted = ArchivistCandidateBoundary.collectFlat(listOf(first, repeat)).memories.single()
+        assertEquals(uninterrupted.tags, resumed.tags)
+        assertEquals(uninterrupted.relatedExistingMemoryIds, resumed.relatedExistingMemoryIds)
+        assertEquals(null, ArchivistCandidateBoundary.mergeRepeatPayload("model_rule", stored, stored))
+    }
 }

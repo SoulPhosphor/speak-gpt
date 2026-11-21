@@ -3634,7 +3634,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         rangeId: String,
         chunkOrdinal: Int,
         candidates: List<StagedAnalysisCandidate>,
-        checkpointJson: String
+        checkpointJson: String,
+        /** A repeat of an already staged candidate: the combined payload to
+         *  keep (for example, the repeat's extra tags), or null to keep the
+         *  stored one, so a resumed scan files what an uninterrupted one would. */
+        mergeRepeat: (stream: String, stored: String, repeat: String) -> String? = { _, _, _ -> null }
     ) {
         val db = writableDatabase
         db.beginTransaction()
@@ -3644,12 +3648,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "Candidate collection is not active"
             }
             for ((candidateOrdinal, candidate) in candidates.withIndex()) {
-                val exists = db.rawQuery(
-                    "SELECT 1 FROM analysis_candidates " +
+                val stored = db.rawQuery(
+                    "SELECT candidate_id, payload_json FROM analysis_candidates " +
                         "WHERE run_id = ? AND stream = ? AND candidate_hash = ? LIMIT 1",
                     arrayOf(rangeId, candidate.stream, candidate.candidateHash)
-                ).use { it.moveToFirst() }
-                if (exists) continue
+                ).use { if (it.moveToFirst()) it.getString(0) to it.getString(1) else null }
+                if (stored != null) {
+                    val merged = mergeRepeat(candidate.stream, stored.second, candidate.payloadJson)
+                    if (merged != null && merged != stored.second) {
+                        db.update("analysis_candidates", ContentValues().apply { put("payload_json", merged) },
+                            "candidate_id = ?", arrayOf(stored.first))
+                    }
+                    continue
+                }
                 db.insertOrThrow("analysis_candidates", null, ContentValues().apply {
                     put("candidate_id", newId("cand-"))
                     put("run_id", rangeId)

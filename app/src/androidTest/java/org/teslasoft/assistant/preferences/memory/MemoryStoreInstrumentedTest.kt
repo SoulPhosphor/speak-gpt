@@ -378,6 +378,21 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
+    fun aRepeatedDraftInALaterSectionIsMergedIntoTheSavedOne() {
+        val store = open(freshDbName())
+        store.beginScanRun(runRecord("run-m"), listOf(scanRange("run-m", "chat-1")))
+        store.saveScanSection("range-run-m-chat-1", 1, listOf(candidate("same")), "{}")
+        val repeat = candidate("same").copy(payloadJson = """{"content":"same","tags":["later"]}""")
+        store.saveScanSection("range-run-m-chat-1", 2, listOf(repeat), "{}") { stream, stored, again ->
+            assertEquals("memory", stream)
+            assertEquals(candidate("same").payloadJson, stored)
+            again
+        }
+        val staged = store.stagedScanCandidates("range-run-m-chat-1").single()
+        assertEquals(repeat.payloadJson, staged.payloadJson)
+    }
+
+    @Test
     fun aKilledRunKeepsItsCheckpointAndWorkingDraftsAndResumesThem() {
         val store = open(freshDbName())
         store.beginScanRun(runRecord("run-k"), listOf(scanRange("run-k", "chat-1")))
