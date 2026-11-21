@@ -35,7 +35,10 @@ object ScanSourceMigrationPlan {
         /** The first and last message index each legacy row covers. */
         val spans: Map<String, IntRange>,
         /** The last message index named by rows claimed by each run. */
-        val claimedEnds: Map<String, Int>
+        val claimedEnds: Map<String, Int>,
+        /** For a regenerated reply, each capture's wording and scope, oldest
+         *  first, so its stored versions can record their own scope. */
+        val replyCaptures: Map<String, List<Pair<String?, ScanMessageScope>>> = emptyMap()
     )
 
     private data class Turn(
@@ -154,7 +157,9 @@ object ScanSourceMigrationPlan {
                 (captures.lastOrNull { current != null && it.first.content == current } ?: captures.last()).second
             }
         }
-        return Result(bookmark, fullRescan, scopes, spans, claimedEnds)
+        val replyCaptures = candidates.filterValues { captures -> captures.any { it.first.role == "assistant" } }
+            .mapValues { (_, captures) -> captures.map { it.first.content to it.second } }
+        return Result(bookmark, fullRescan, scopes, spans, claimedEnds, replyCaptures)
     }
 
     /**
@@ -197,4 +202,19 @@ object ScanSourceMigrationPlan {
 
     /** The key legacy transcript turns used for their message UUID. */
     const val LEGACY_MESSAGE_ID = "messageId"
+
+    /**
+     * The scope a stored version of a regenerated reply records: the newest
+     * capture with the same wording; else, for the version shown now, the
+     * reply's own scope. Null when no capture matches (unknown scope reads
+     * as general).
+     */
+    fun versionScope(
+        captures: List<Pair<String?, ScanMessageScope>>,
+        versionText: String?,
+        shownText: String?,
+        replyScope: ScanMessageScope?
+    ): ScanMessageScope? =
+        captures.lastOrNull { versionText != null && it.first == versionText }?.second
+            ?: replyScope?.takeIf { versionText != null && versionText == shownText }
 }

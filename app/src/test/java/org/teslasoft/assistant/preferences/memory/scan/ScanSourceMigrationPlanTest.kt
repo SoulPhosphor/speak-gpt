@@ -132,6 +132,28 @@ class ScanSourceMigrationPlanTest {
         assertEquals("p1", plan(shown("second answer"), rows, null).scopes["m1"]!!.projectId)
     }
 
+    @Test fun eachStoredReplyVersionRecordsTheScopeOfItsOwnCapture() {
+        val rows = listOf(
+            row("t1", "1", listOf(turn("m1"), reply("m2", "first answer")), project = "p1"),
+            row("t2", "2", listOf(turn("m1"), reply("m2", "second answer")), project = "p2")
+        )
+        val shown = listOf(
+            ScanSourceMigrationPlan.Message("m1", null, false, "question"),
+            ScanSourceMigrationPlan.Message("m2", null, false, "second answer")
+        )
+        val result = plan(shown, rows, null)
+        val captures = result.replyCaptures.getValue("m2")
+        val replyScope = result.scopes["m2"]
+        fun versionProject(text: String) =
+            ScanSourceMigrationPlan.versionScope(captures, text, "second answer", replyScope)?.projectId
+        assertEquals("p1", versionProject("first answer"))
+        assertEquals("p2", versionProject("second answer"))
+        // A version no capture matches stays unknown (general).
+        assertEquals(null, versionProject("never captured"))
+        // User messages have no stored versions to fill.
+        assertTrue("m1" !in result.replyCaptures)
+    }
+
     @Test fun anAlreadyRecordedScopeIsNotOverwritten() {
         val rows = listOf(row("t1", "1", listOf(turn("m1"))))
         val stamped = listOf(ScanSourceMigrationPlan.Message("m1", null, hasScope = true))

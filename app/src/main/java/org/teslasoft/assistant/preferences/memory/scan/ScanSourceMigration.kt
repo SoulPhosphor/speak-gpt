@@ -14,6 +14,7 @@ import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ScanChatProgress
 import org.teslasoft.assistant.preferences.memory.ScanRangeRecord
+import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 
 /**
  * Moves the Memory Scanner off the legacy transcript store (memory
@@ -184,8 +185,27 @@ object ScanSourceMigration {
         }
         val result = plan(messages)
         for (m in maps) {
-            val scope = result.scopes[MessageIdentity.idOf(m)] ?: continue
+            val id = MessageIdentity.idOf(m)
+            val scope = result.scopes[id] ?: continue
             if (ScanMessageScope.write(m, scope)) changed = true
+            // A regenerated reply's stored versions record their own scope,
+            // so making another version current keeps the right one.
+            val captures = result.replyCaptures[id] ?: continue
+            val versions = ChatAdapter.parseVariants(m[ChatAdapter.KEY_VARIANTS]?.toString())
+            if (versions.isEmpty()) continue
+            var versionsChanged = false
+            for (version in versions) {
+                if (version.containsKey(ScanMessageScope.KEY)) continue
+                val versionScope = ScanSourceMigrationPlan.versionScope(
+                    captures, version["message"], m["message"]?.toString(), scope
+                ) ?: continue
+                version[ScanMessageScope.KEY] = versionScope.encode()
+                versionsChanged = true
+            }
+            if (versionsChanged) {
+                m[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(versions)
+                changed = true
+            }
         }
         if (changed && chats.saveChatHistory(context, chatId, maps, synchronous = true) !=
             ChatStorageHealth.WriteOutcome.OK
