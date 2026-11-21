@@ -836,7 +836,7 @@
          Memory System/plan_one_page.md): indeterminate before the run's fixed
          total is known, then a determinate bar with "X% complete". -->
     <string name="memory_analysis_channel_name">Memory analysis</string>
-    <string name="memory_analysis_channel_desc">Shown while Memory Assistant reviews conversations so analysis survives the screen turning off or switching to another app.</string>
+    <string name="memory_analysis_channel_desc">Shown while the memory scanner tool reviews conversations so analysis survives the screen turning off or switching to another app.</string>
     <string name="memory_analysis_notification_title">Analyzing Conversations</string>
     <string name="memory_analysis_notification_progress">%1$d%% complete</string>
     <string name="tile_text_model_title">Text generation model</string>
@@ -1447,7 +1447,7 @@
     <string name="restore_category_model_settings_desc">Endpoint and model definitions, favorites, model settings, and preferred provider routing. Credentials are not included.</string>
     <string name="restore_model_credentials_note">Credentials are not restored or removed. Existing credentials stay on this device. Newly restored endpoints need credentials before use.</string>
     <string name="restore_category_settings">Settings and Preferences</string>
-    <string name="restore_category_settings_desc">Includes all settings and preferences for chat behavior, memory assistant, diagnostics, and other detailed saved preferences. Credentials and device-specific data, such as your API key, are not included.</string>
+    <string name="restore_category_settings_desc">Includes all settings and preferences for chat behavior, memory scanner tool, diagnostics, and other detailed saved preferences. Credentials and device-specific data, such as your API key, are not included.</string>
     <string name="restore_category_model_rules">Model Rules</string>
     <string name="restore_category_model_rules_desc">Model Rules, their tags, and their stable endpoint and model links.</string>
     <string name="restore_category_memories">Memories</string>
@@ -1580,7 +1580,7 @@
          July 8 2026 evening answers in phase6_owner_answers_2026-07-08.md).
          Failure wording is deliberately ABSENT — the owner supplies it after
          seeing the real failure cases; do not invent any. -->
-    <string name="title_memory_assistant">Memory Assistant</string>
+    <string name="title_memory_assistant">Memory Scanner Tool</string>
     <string name="memory_assistant_hint">Use AI to analyze conversations for possible memories. Found memories will be set to pending in the memory browser.</string>
     <string name="memory_assistant_fact_since_run">Total conversations since last run: %1$d</string>
     <string name="memory_assistant_fact_pending">Conversations pending review: %1$d</string>
@@ -1669,7 +1669,7 @@
     <string name="mem_arch_fail_model_unavailable_title">Model Unavailable</string>
     <string name="mem_arch_fail_model_unavailable_msg">The selected model is currently unavailable or could not be found. Choose another model or check the endpoint’s model list.</string>
     <string name="mem_arch_fail_config_title">Invalid Configuration</string>
-    <string name="mem_arch_fail_config_msg">The selected model or endpoint is not configured correctly. Check the Memory Assistant settings, then try again.</string>
+    <string name="mem_arch_fail_config_msg">The selected model or endpoint is not configured correctly. Check the Memory Scanner Tool Settings, then try again.</string>
     <string name="mem_arch_fail_unreadable_title">Response Could Not Be Read</string>
     <string name="mem_arch_fail_unreadable_msg">The provider returned a response the app could not understand. No Lorebook suggestions were saved.</string>
     <string name="mem_arch_fail_invalid_result_title">Invalid Analysis Result</string>
@@ -2342,10 +2342,10 @@
     <string name="memory_controls_importance_ratings">Use Importance Ratings</string>
     <string name="memory_controls_importance_ratings_hint">Rate memories from -2 to +3. 0 is neutral. +3 is always included when relevant, even beyond the normal memory-count limit. Turning this off keeps saved ratings but ignores them.</string>
     <string name="memory_controls_chat_list_status_hint">Show whether each chat is waiting for memory review, partially archived, archived, or excluded. This does not show backup status.</string>
-    <string name="memory_controls_row_assistant">Memory Assistant</string>
+    <string name="memory_controls_row_assistant">Memory Scanner Tool</string>
     <string name="memory_controls_row_assistant_hint">Find possible memories in finished conversations, then review them in Pending before saving.</string>
     <string name="memory_controls_max_suggestions">Maximum Suggestions Per Conversation</string>
-    <string name="memory_controls_max_suggestions_hint">Limit how many memory drafts Memory Assistant can create from each conversation.</string>
+    <string name="memory_controls_max_suggestions_hint">Limit how many memory drafts the memory scanner tool can create from each conversation.</string>
     <string name="memory_scanner_average_tokens">Memory Scanner Average Token Amount</string>
     <string name="memory_scanner_average_tokens_hint">Average tokens sent together to the memory scanner AI at one time to be scanned. No partial messages will be sent unless the response exceeds the maximum token count.</string>
     <string name="memory_scanner_maximum_tokens">Maximum Memory Scanner Token Amount</string>
@@ -2366,11 +2366,11 @@
     <string name="memory_controls_engine_lorebooks">Lorebooks Only</string>
     <string name="memory_controls_engine_associative">RAG Active Search Only</string>
     <string name="memory_controls_engine_both">Both Memory Systems</string>
-    <string name="memory_controls_section_assistant_model">Memory Assistant Model</string>
-    <string name="memory_controls_row_assistant_endpoint">Memory Assistant Endpoint</string>
+    <string name="memory_controls_section_assistant_model">Memory Scanner Tool Model</string>
+    <string name="memory_controls_row_assistant_endpoint">Memory Scanner Tool Endpoint</string>
     <string name="memory_controls_row_assistant_endpoint_hint">Choose which saved AI endpoint analyzes history and drafts memory items.</string>
-    <string name="memory_controls_row_assistant_model">Memory Assistant Model</string>
-    <string name="memory_controls_row_assistant_model_hint">Model name used by Memory Assistant.</string>
+    <string name="memory_controls_row_assistant_model">Memory Scanner Tool Model</string>
+    <string name="memory_controls_row_assistant_model_hint">Model name used by the memory scanner tool.</string>
     <string name="memory_assistant_edit_endpoint_desc">Edit selected endpoint</string>
     <string name="memory_assistant_routing_title">Select Preferred Routing Type</string>
     <string name="memory_assistant_routing_hint">Provider routing remains Automatic unless the selected model is a favorite with routing already set up. Preferred and Only use the provider settings saved with that favorite.</string>

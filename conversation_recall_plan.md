@@ -106,14 +106,53 @@ comments and tests cite its section numbers.
 
 ### Scanner work between Stages 6 and 7
 
-The owner prioritized the scanner on November 18. The four stages below are the recommended delivery split. The numbered Steps in G.16 keep their original identities. Scanner work uses eligible transcript rows plus local memory records and existing embedding facilities. Stage 7’s conversation passage index serves later live recall. A broader Memory Browser redesign can proceed separately.
+The owner prioritized the scanner on November 18. The four stages below are the recommended delivery split. The numbered Steps in G.16 keep their original identities. Scanner work reads the original chat storage (**The chat is the source**, below) plus local memory records and existing embedding facilities. Stage 7’s conversation passage index serves later live recall. A broader Memory Browser redesign can proceed separately.
 
-1. **Stage 6A — reliable reading and resume.** Use the existing single-chat and batch entry points. Implement current-source verification by message ID before sections, retries, resume and publication, including hides on claimed rows and invalidation after edits, regeneration or deletion. Define a safe legacy-ID fallback. Implement the short/long request paths, stable turn and fragment references, bounded excerpts, cache-friendly request order, and lossless retry of an oversized turn. Use paragraph, line and word boundaries before Unicode-safe character splitting, as in G.5b. Persist the validated working state and exact next unread position together. Preserve cancellation, progress reporting, and automatic-backup coordination from #216–217. Demonstrate that killing the process after a completed section resumes from its checkpoint and that split fragments cover the entire original turn. Existing screens are sufficient for this phase.
+1. **Stage 6A — the chat as the source, reliable reading and resume.** Use the existing single-chat and batch entry points. Replace the duplicated transcript store with direct reading of the original chat storage, and migrate existing data, as decided in **The chat is the source** and **Removing the duplicate transcript store** below. Assign missing message UUIDs with `MessageIdentity.ensure()` in the original chat storage before scanning. Verify current message content by UUID and fingerprint before sections, retries, resume and publication, and invalidate after edits, regeneration, hiding or deletion. Implement the short/long request paths, stable message and fragment references, bounded excerpts reread from the chat, cache-friendly request order, and lossless retry of an oversized message. Use paragraph, line and word boundaries before Unicode-safe character splitting, as in G.5b. Persist the validated working state and exact next unread position (message UUID and offset) together. Preserve cancellation, progress reporting, and automatic-backup coordination from #216–217. Add the Pause and Resume controls below. Demonstrate that killing the process after a completed section resumes from its checkpoint, that split fragments cover the entire original message, and that the migration and regression tests below pass.
 2. **Stage 6B — draft corrections and memory matching.** Implement scan-local edits and bounded repair, model-sized overlapping lookup windows, scoped Active/Pending/Archived and working-draft comparisons, the keyword fallback, chronological reconciliation, ranked selection under the cap, and filing-time rechecks. Use Step 1's embedding queue at background priority, reuse vectors by text fingerprint and model tag, and bound missing-vector preparation and comparisons per proposal. Include the proposed separate encrypted scanner comparison cache and its migration in the 6B design approval. Keep Pending and Archived comparisons outside active chat retrieval. Carry validated record IDs, statuses, match method, actual similarity when available, and unresolved alternatives through to the review layer. Use the existing Possible Match flow for cases it can represent. Deliver any behavior requiring a new human review action together with that action in Stage 6D. Verify that an early “waiting” draft becomes one accurate memory after a late reply, and that retelling it in another scan creates no extra card.
 3. **Stage 6C — Browser match cards and comparison.** Add the related-memory preview, status, match method and available similarity score to Pending cards. Open the exact pair by ID, show the full wording of both records, expose additional matches, and restore the user’s list position on return. Reuse the comparison screen and existing review actions where applicable. Cover changed or missing targets, and present keyword matches accurately when embeddings are unavailable. Keep the Stage 4 meter in the existing creating, editing and reading views.
 4. **Stage 6D — Browser review actions and end-to-end evaluation.** Add the decisions for two pending drafts and unresolved alternatives, including a linked pair that occupies one review choice at a cap of one. Keep both pending, edit or discard the redundant proposal, or apply an existing approval action according to the user's choice. Revalidate before applying a decision so reviewing a pair never activates or overwrites a memory accidentally. Exercise the complete scan-to-review path with and without embeddings and measure quality, token usage, conditional comparisons, total scan duration, battery consumption, embedding queue contention, cold/warm vector reuse and phone review effort as specified in the scanner proposal. Resume at **Stage 7 (Steps 7 and 8)**.
 
-Temporary scanner passage references support editing and recovery inside a scan. M.3 remains authoritative for permanent source information in the editor and backups. Archived memory comparison is scanner-only. The installed-model requirement in G.16 applies to Conversation Recall; the scanner also supports local keyword fallback. Stage 6’s frozen corpus remains the reference for recall, with scanner-specific expected results evaluated separately. Stage 15 still owns proposals for important dates.
+**The chat is the source (Owner decision, 2026-11-21; final).**
+- **Rule.** The original chat is the single source of truth. The scanner reads directly from the original chat storage: the same current messages the user sees when opening that chat. No second persistent copy of conversation text exists for scanning, pausing, resuming, indexing or recovery, and an outdated saved copy is never used in place of the chat. Text may be held in working memory while an AI request is built; it is never saved. This decision is made. Builders implement around it and do not reopen it.
+- **What is read.** Message UUIDs (`MessageIdentity.kt`) are permanent; an edit changes a message's content, not its identity. The scanner reads the latest content of each UUID. A deleted message is absent from the chat, is not scanned, and is never recovered from an old copy. A hidden message is excluded by the existing visibility rules. For an assistant reply, only the selected, completed version the AI is sent is eligible. Messages are read in the chat's own order. Messages without a UUID get one from `MessageIdentity.ensure()`, saved in the original chat storage, before scanning. No text matching is used to identify messages.
+- **What the scanner may save.** Chat IDs and message UUID references; its position, including an offset inside a long message; a bookmark (high-water mark) per chat; scan status, settings and progress; validated working drafts and their IDs; fingerprints and other metadata that show when source content changed. It never saves conversation text or supporting excerpts. Memories, Pending suggestions, working drafts and Lorebook suggestions are memory records, not transcripts. The Memory Browser stores memories, suggestions and source-conversation references (M.3), never chat histories. On resume, the scanner rebuilds its context by rereading the messages by UUID.
+- **Checking before use.** UUIDs identify messages; fingerprints show whether their content changed. The scanner rechecks before each section, retry, resume and publication, including changes made while an AI request was in flight. When an already-read message changes while a scan runs or is paused, the affected temporary results are discarded and that chat's unfinished scan restarts from its bookmark.
+- **When chat storage cannot be read.** If the original chat storage is temporarily unavailable or damaged, the scan reports that the conversation could not be fully scanned, keeps valid progress, and retries when the chat can be read again. It never invents missing text, never reports false completion, and never stops other conversations from being scanned. The existing incomplete-scan outcome is used; any new wording is approved first.
+- **Scope of each message.** Today the only record of the companion, world, campaign, character, persona and project in effect for each turn is the copied transcript row (`TranscriptRecorder.recordTurn` → `MemoryStore.appendTranscriptTurn`). The chat's own messages store the companion's display name, model, provider and time, but not these IDs. Stage 6A records these IDs as metadata on each message in the original chat storage when its turn finishes, whether or not the memory database is set up. The scanner, and later the conversation index (G.7), read scope from there. For older messages, scope comes from the migration where a transcript turn names that message's UUID; otherwise it is "unknown". Scope is never guessed from the chat's present settings.
+- **Archive and companion settings.** The chat's Archive (pause) setting and a companion whose memory participation is "none" keep their current effect. They are applied when the scanner reads the chat instead of when a turn is copied.
+
+**Removing the duplicate transcript store (Stage 6A).** Today `TranscriptRecorder.recordTurn` copies every finished turn into the `transcripts` table of the memory database, and `TranscriptRecorder.backfillExistingChats` once copied each existing chat as an "imported" transcript. Bookmarks (`analysis_chat_bookmarks`), frozen scan ranges (`analysis_chat_ranges`), claims (`transcripts.claim_run_id`) and run history (`archivist_runs.transcript_ids_json`) point at transcript rows. Memory backups export and restore a `transcripts` array (`MemorySeedCodec.kt`; `MemoryCategoryPlanner.kt` and `CompanionMemoryRestorePlanner.kt` in `backup/portable/`). Stage 6A removes all of this, in this order:
+1. **Stop making copies.** Remove the capture and backfill writes. The per-message scope recording above replaces the capture hook. `TranscriptRecorder` is also one of the places that creates a memory-system companion the first time it is chatted with (M.6); that creation is kept.
+2. **Migrate, keeping legacy data until each result is recorded.**
+   - Assign missing UUIDs in the original chats with `MessageIdentity.ensure()`.
+   - For each transcript turn that names a message UUID still present in its chat, record that turn's scope on the message, and convert completed, skipped and excluded progress to a per-chat UUID bookmark.
+   - Where no UUID mapping exists, progress may be mapped by stored message times only when every message involved has a time and the result is unambiguous. Otherwise the chat is listed as needing a rescan. Its completed state is not reset or silently discarded, and nothing is rescanned automatically. The report's wording is asked when Stage 6A starts (M.10).
+   - Text of a message that is no longer in its chat is never copied back into the chat or anywhere else.
+   - Archive settings, run history, claims and frozen ranges convert to chat IDs and message UUID references.
+   - Scans running or staged at upgrade time are treated as interrupted: they resume from the original chat where their checkpoint maps to UUIDs, and otherwise restart that chat from its bookmark. Staged drafts are kept where they map.
+   - Saved memories, Pending suggestions, Lorebooks and Lorebook suggestions, and source-conversation references (M.3) are not changed.
+   - Only after these results are recorded is the transcript text deleted and the table removed. No compatibility copy of the text is kept.
+3. **Backups.** Exports stop including transcripts. Restoring an older backup that contains transcripts uses them only for the mapping above against the restored chats, then discards the text. A restore never recreates a transcript store.
+4. **Tests.** Migration tests cover: a turn with a UUID; a turn without one; a deleted message; an edited message; a hidden message; a different selected reply; an Archive-paused chat; a companion with participation "none"; scope that changed partway through a chat; a scan interrupted at upgrade; and restoring an older backup. Regression tests show that no code path writes conversation text into the memory database and that a deleted message is never resurrected.
+
+**Stage 6A requirements (Owner, 2026-11-21).**
+- **Four ways a scan ends.** Today `reconcileInterruptedAnalysisRuns()` and `releaseAnalysisClaims()` in `MemoryStore.kt` delete the temporary candidates and run state whenever a run stops, so checkpoints alone cannot resume anything. Stage 6A must treat the endings separately: **interrupted** (app killed, phone off) keeps the checkpoint and resumes; **paused** keeps the checkpoint and waits for the user; **cancelled** and **finished** clear it. When already-read source changes, restart that conversation's unfinished scan from its bookmark. Do not keep a history of earlier checkpoints.
+- **Pause and resume.**
+  - The scanner notification gets a **Pause** button. While the scan is paused, it shows **Resume** instead.
+  - On the Memory Scanner Tool screen, **Analyze Conversations** becomes **Pause Conversations** while a scan runs and **Resume Conversations** while it is paused.
+  - The chat header's background-work icon (`ChatBackgroundActivity.kt`) gets the same controls. While a scan runs, its pop-up line reads **Memory Scanner 85%** (the current percentage) with a **Pause** button. While a scan is paused, the icon shows in every open chat, new or old, and the same line reads **Memory Scanner** with a **Resume** button, so a paused scan is not forgotten. The text sits on the left and the button on the right. The summarizing line is unchanged. Appearance comes from `ui-style-guide.md`.
+  - A paused scan stays paused until the user taps Resume, including after the app is closed or the phone restarts.
+  - An interrupted scan resumes automatically, but only after the user's first chat message since the app started has been sent and its reply has finished. Resuming must never delay or block starting a chat.
+
+**Stage 6B requirements (Owner, 2026-11-21).**
+- **Already-covered entries.** When the scanner leaves out a retelling because an existing memory already covers it, the same extraction response names the source passage reference and the existing memory ID in a compact "already covered" entry. Kotlin validates it and saves it with the checkpoint, so the filing-time recheck knows what was left out and why. Its exact format is part of the AI-facing instruction approval for 6B. Before filing, also check memories created or changed while the scan ran, not only matches found earlier.
+- **Memories the chat already used are clues.** Each AI reply records the memories that reached its request (`activeMemoryAttribution`, shown by the reply's Active Memories icon). When the scanner reads a section, it adds those recorded memories to the memories it compares against, alongside the normal search results. Each one still passes the current scope, eligibility and status checks, and a memory that has since been deleted is skipped. Replies saved before this record existed have none; the normal search covers them.
+- **A limit on repeated earlier chat text.** Earlier chat text, reread from the original chat and repeated for context, gets a bounded token allowance per request. The new section and the working drafts come first. Preceding dialogue and selected excerpts share what remains. The user chooses this allowance with a setting on **Memory Scanner Tool Settings**. The builder measures token use and caching savings to propose the choices and default. Every unread section is still processed.
+
+The screen formerly called Memory Assistant is named **Memory Scanner Tool** (Owner, 2026-11-21). In sentences it is written in lower case: "the memory scanner tool".
+
+Temporary scanner passage references are message UUIDs and offsets, never text, and support editing and recovery inside a scan. M.3 remains authoritative for permanent source information in the editor and backups. Archived memory comparison is scanner-only. The installed-model requirement in G.16 applies to Conversation Recall; the scanner also supports local keyword fallback. Stage 6’s frozen corpus remains the reference for recall, with scanner-specific expected results evaluated separately. Stage 15 still owns proposals for important dates.
 
 **Original order rationale (G42, November 16; scanner priority added November 18)**
 - **Provenance first.** The owner wants to build a memory collection now.
@@ -513,6 +552,8 @@ finds something missed adds it here rather than guessing.
 | Stage 2, Step 4a | Answered by the owner on 2026-11-16: G45 and G44 are decided; the Memory Context Helper Settings wording is in `strings.xml`; the debug view marks carried memories `[carried from earlier subject]` and top-match memories `[+3 top match]` |
 | Stage 3, Step 4b | Answered by the owner on 2026-11-16: the error pop-up and its wording, the no-model message, the API AI choice and its explanation, the Memory Context Helper Tool API labels, the model picker title, the model cleanup line and the usage section are in `strings.xml`; no privacy disclosure (M.4 item 6). Still to ask: the model and cost for the one scored run on the frozen sets, and the exact content of any helper log lines (M.4 item 8) |
 | Stage 5, data control | Answered by the owner on 2026-11-17: D44 is on by default; Retired and archived are one state, named Archived everywhere (the view, the setting and the toast); Delete moves an in-use memory to Archived with no pop-up and shows a toast; permanent deletes and Discard keep a confirmation pop-up; superseded memories stay behind the Superseded filter (owner ruling, August 3 2026); Pending suggestions are never archived; the wording is in `strings.xml` |
+| Stage 6A, scanner reading and resume | The wording that reports a chat whose earlier scan progress could not be mapped during migration, if any are found; how to place memory suggestions found in older messages whose scope is "unknown", with the measured count of such messages; replacement wording for the Memory Scanner Tool Settings note that says not to close the app completely, which stops being accurate once scans resume |
+| Stage 6B, scanner draft corrections and matching | The label, explanation, choices and default for the earlier-messages allowance setting on Memory Scanner Tool Settings (M.2 Stage 6B requirements), with the measured token costs; the AI-facing wording, including the "already covered" entry |
 | Later stages | The approvals listed in M.2's "Approve first" column |
 
 ## M.11 Where settings go (Owner, 2026-11-16)
@@ -849,14 +890,17 @@ Its keyword word rules are for English.
 **Scope.**
 - Saved memories are filtered by scope inside the database query
   (`RetrievalScope`, `MemoryStore.activeMemoriesForScope`).
-- When a turn finishes, the chat's companion, world, campaign, character,
-  and project at that moment are recorded with the turn, together with
-  the message IDs, for the Memory Assistant (`TranscriptRecorder.recordTurn`,
-  called from one place in `ChatActivity.kt`). This happens only when the
-  memory system is set up, and the record groups several turns in one row.
-- **Consequence:** the index stamps scope itself, at that same point, from
-  the same values (G.7). The turn record is a source for older messages
-  only where it exists.
+- Today, when a turn finishes, the chat's companion, world, campaign,
+  character, and project at that moment are recorded only in a copied
+  transcript row, together with the message IDs
+  (`TranscriptRecorder.recordTurn`, called from one place in
+  `ChatActivity.kt`). This happens only when the memory system is set up,
+  and the row groups several turns.
+- **Consequence:** Stage 6A removes that copy (M.2, **The chat is the
+  source**) and records the scope as metadata on each message in the
+  original chat storage when its turn finishes. The index reads scope from
+  there (G.7). The migration fills in older messages only where a
+  transcript turn names the message's UUID.
 
 **An exchange already has a definition.** A finished turn is one user
 message and the reply to it. The Summarizer also never separates a message
@@ -959,10 +1003,15 @@ phone, separate from the stored chats and from the saved-memory database:
 
 - The stored chat stays the only home of the conversation. A passage holds
   positions, not a copy of the message.
-- The keyword store does have to hold the passage's words to be searchable,
-  as the chat search index already does. It is encrypted, derived, and
-  removed with its passage. Where the database allows it, only the word
-  index is kept, not a readable copy of the text.
+- The keyword store keeps only the word index needed to search, never a
+  readable copy of the message text (for example, a full-text index
+  without stored content). It is encrypted, derived, and removed with its
+  passage. Search text built for the embedding model is held in working
+  memory only; just its fingerprint and vector are saved. Retrieval reads
+  the current eligible text from the original chat storage
+  (M.2, **The chat is the source**). If the database cannot keep a word
+  index without a readable copy, the builder documents that in this plan
+  and asks before storing text.
 - A vector is keyed by the search text's fingerprint, not by the passage
   row. Making a vector is the slow step, so the same search text is never
   embedded twice, including after passages are rebuilt.
@@ -1349,6 +1398,11 @@ is not asked to choose them.
   vectors, in bounded batches, keeping only the best so far (G.5a rule 5).
 - A passage with no vector yet is not a candidate until its vector is
   made (G30).
+- A passage from a message that is no longer eligible (hidden, deleted,
+  unfinished, or not the version the AI is sent; G.5a rule 1) is excluded
+  here, before it can take a candidate place or count toward a chat's
+  typical similarity in retrieval stage 4. Retrieval stage 7 still checks
+  again before delivery.
 - Each way keeps a bounded list of distinct exchanges while collecting
   passages. Starting value: the best 50 exchanges per method. Keep the
   strongest matching passage and bounded supporting passages for each
@@ -1363,7 +1417,7 @@ relevant.** A candidate passes only when one of these is true:
   above this chat's typical similarity for this message. A chat about one
   project has a high typical similarity, so only a passage that is closer
   than the general run of the chat passes.
-  - "Typical" is worked out over **every passage of the chat** as its
+  - "Typical" is worked out over **every eligible passage of the chat** as its
     vectors are read, never over the 50 best. Measuring it over the best
     matches would raise the bar and reject good ones.
   - **A certain match always passes.** When a chat is about one subject
@@ -1572,15 +1626,12 @@ reach companion-only material.
 - **Where a passage's scope comes from.** A chat's companion, project, or
   roleplay settings can change during its life, so the chat's settings
   today are not a safe label for its older messages.
-  - **New messages:** scope is stamped when the turn finishes, at the one
-    place in `ChatActivity.kt` that already passes the chat's companion,
-    world, campaign, character, and project to
-    `TranscriptRecorder.recordTurn`, using those same values. The index
-    does this itself, so it works whether or not the memory system is set
-    up.
-  - **Older messages:** scope is taken from the stored turn record where
-    one names that message. That record exists only for turns captured
-    while the memory system was set up.
+  - **New messages:** scope is the metadata Stage 6A records on each
+    message in the original chat storage when its turn finishes, whether
+    or not the memory system is set up (M.2, **The chat is the source**).
+  - **Older messages:** scope is what the Stage 6A migration recorded on
+    the message, which exists only where a copied transcript turn named
+    that message's UUID.
   - **Everything else:** scope is "unknown".
 - **Unknown scope is private to its own chat.** Such a passage can be
   recalled inside its own chat and is never offered to another chat.
@@ -1681,8 +1732,10 @@ shown to the owner before Step 16 is built. What the text must do:
   misread;
 - mark an excerpt as an excerpt;
 - give the messages in their original words, unchanged;
-- list the exchanges in **date order**, oldest first, so a later change of
-  mind is read after the earlier decision. Published tests of placing the
+- list the exchanges in **conversation order**, by their stored position
+  in the chat, earliest first, so a later change of mind is read after the
+  earlier decision. Some older messages have no date, so dates are shown
+  as labels where available and never decide the order. Published tests of placing the
   "most relevant" passage in a particular position found no reliable gain
   over other orders (G.18), so order is chosen for meaning, not for
   position.
@@ -2992,7 +3045,7 @@ expected answer before running retrieval or tuning it.
 | Additional case | Expected result | Due |
 |---|---|---|
 | Browse an alternative reply without making it canonical | Only the canonical reply supports the indexed exchange | Before Steps 7–10 index eligibility work |
-| Promote another reply, edit captured text, or delete/hide it while work is running | Only current eligible wording survives use-time checks | Scanner 6A and recall Steps 8–10 |
+| Promote another reply, edit a message, or delete/hide it while work is running | Only current eligible wording survives use-time checks | Scanner 6A and recall Steps 8–10 |
 | One long repetitive exchange and a short later correction | Candidate collection retains the later exchange despite the earlier exchange's many matching passages | Before Step 14 retrieval |
 | Similar exchanges with opposite outcomes, such as waiting and receiving a reply | Preserve both eligible accounts when relevant and deliver in chronological order | Before Step 14 retrieval |
 | Exact repeated exchanges with matching speaker order | Collapse identical text conservatively, retaining the later occurrence | Before Step 14 retrieval |
@@ -3152,7 +3205,7 @@ questions for each situation.
 
 **Agent checklist for this step**
 - **Prerequisites:** Steps 8–9. Read every event in G.12 before adding hookups.
-- **Change:** Minimal background-index connections for save, completed reply, hide/show, delete, rename, restore/merge, and model change; index eligible existing chats newest first. Record scope at turn completion **even when the saved-memory database is not provisioned**, without depending on the early-returning `recordTranscriptTurn()` hookup.
+- **Change:** Minimal background-index connections for save, completed reply, hide/show, delete, rename, restore/merge, and model change; index eligible existing chats newest first. Read message scope from the metadata Stage 6A records on each message; do not add another scope record.
 - **Preserve:** Existing behavior and responsiveness of each affected flow; no synchronous indexing in a chat operation. Confirm and record how much older conversation has stored scope.
 - **Verify:** A test for each G.12 upkeep event, including both-phone history merges, old-chat renames, and turns with an unprovisioned saved-memory database.
 
@@ -3161,19 +3214,14 @@ questions for each situation.
   `chatsearch/ChatSearchIndexManager.kt` and where it is called from
   `ChatPreferences.kt`; `ChatRenameTransaction.kt`; `chatdeletion/`;
   `backup/portable/ChatMergePlanner.kt`; `ChatSetSourceGeneration`;
-  `TranscriptRecorder.kt` and its one call in `ChatActivity.kt`.
+  the Stage 6A per-message scope recording.
 - **Build:** the hookups, each as small as possible and each calling code
   in the new files: after a chat is saved; when a reply finishes; when a
   message is hidden or shown; when a chat is deleted or renamed; after a
-  restore or merge; when the embedding model changes. Scope is stamped
-  where the finished turn is already recorded, but not inside
-  `recordTranscriptTurn()` in `ChatActivity.kt`: that function returns at
-  once when the saved-memory database is not set up
-  (`MemoryStore.isProvisioned()` is false), so a hookup there would miss
-  the companion, project, and roleplay scope of every turn in that case.
-  The scope is recorded whether or not the saved-memory database is set
-  up, and a test shows it. Indexing existing chats,
-  newest first.
+  restore or merge; when the embedding model changes. Scope comes from the
+  metadata Stage 6A records on each message in the original chat storage,
+  which is recorded whether or not the saved-memory database is set up.
+  Indexing existing chats, newest first.
 - **Confirm in the code and record in this plan:** how much existing
   conversation has a recorded scope.
 - **Must not change:** how any of those flows behave or how long they
