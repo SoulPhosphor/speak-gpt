@@ -646,7 +646,9 @@ class ChatPreferences private constructor() {
      * failed history save can only leave a gap, never a reused number.
      */
     private fun assignMessageNumbers(context: Context, chatId: String, messages: List<HashMap<String, Any>>) {
-        if (!MessageNumbers.needsNumbers(messages)) return
+        // Already-numbered messages (an imported or restored chat) still
+        // raise the counter, so a number is never reused after a deletion.
+        if (messages.isEmpty()) return
         val settings = try {
             SecurePrefs.get(context, "settings.$chatId")
         } catch (_: Exception) {
@@ -657,7 +659,7 @@ class ChatPreferences private constructor() {
         } catch (_: Exception) {
             0L
         }
-        val highest = MessageNumbers.ensure(messages, stored)
+        val highest = MessageNumbers.syncCounter(messages, stored)
         if (highest > stored && settings != null && !SecurePrefs.isLockedName("settings.$chatId")) {
             try {
                 settings.edit().putLong(MessageNumbers.COUNTER_KEY, highest).apply()

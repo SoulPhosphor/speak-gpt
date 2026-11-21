@@ -32,6 +32,20 @@ class MessageNumbersTest {
         assertEquals(listOf(1L, 2L, 3L, 4L, 11L), numbers(chat))
     }
 
+    @Test fun anImportedNumberedChatNeverReusesItsLastNumber() {
+        // Imported messages 1-10 into a chat with no counter yet.
+        val chat = msgs(*(1L..10L).map { it as Long? }.toTypedArray())
+        val afterImport = MessageNumbers.syncCounter(chat, 0)
+        assertEquals(10L, afterImport)
+        // Message 10 is deleted; the counter stays.
+        val afterDelete = MessageNumbers.syncCounter(chat.dropLast(1), afterImport)
+        assertEquals(10L, afterDelete)
+        // The next message is 11, never 10 again.
+        val next = chat.dropLast(1) + msgs(null)
+        assertEquals(11L, MessageNumbers.syncCounter(next, afterDelete))
+        assertEquals(11L, MessageNumbers.numberOf(next.last()))
+    }
+
     @Test fun anExistingHigherNumberKeepsItsNumber() {
         val chat = msgs(1, 11, null)
         assertEquals(12L, MessageNumbers.ensure(chat, 10))

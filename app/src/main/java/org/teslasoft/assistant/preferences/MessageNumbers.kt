@@ -59,4 +59,14 @@ object MessageNumbers {
         }
         return highest
     }
+
+    /**
+     * What a save does to the counter: numbers any message that needs one
+     * ([ensure]) and returns the highest number ever assigned. Messages that
+     * already carry numbers (an imported or restored chat) still raise the
+     * counter, so deleting the last one never frees its number for reuse.
+     */
+    fun syncCounter(messages: List<MutableMap<String, Any>>, storedCounter: Long): Long =
+        if (needsNumbers(messages)) ensure(messages, storedCounter)
+        else maxOf(storedCounter.coerceAtLeast(0), messages.maxOfOrNull { numberOf(it) ?: 0L } ?: 0L)
 }
