@@ -211,6 +211,26 @@ class CompanionMemoryRestorePlannerTest {
         assertFalse(second.report.conflicts.isNotEmpty())
     }
 
+    @Test
+    fun `an older backup's scan rows survive planning and staging`() {
+        val transcript = linkedMapOf<String, Any?>(
+            "transcript_id" to "t-1", "chat_id" to "chat-1", "companion_id" to null, "content" to "Hello"
+        )
+        val memories = MemoryPortableRows(memoryRows().tables + mapOf("transcripts" to listOf(transcript)))
+        val plan = CompanionMemoryRestorePlanner.plan(
+            CompanionMemoryRestorePlanner.Input(
+                current = state(),
+                identitiesSelected = false,
+                memoriesSelected = true,
+                modelRulesSelected = false,
+                finalMemories = memories
+            )
+        )!!
+        assertEquals(listOf(transcript), plan.desired.tables["transcripts"])
+        val staged = MemorySharedRestoreRowFormat.parse(MemorySharedRestoreRowFormat.toJson(plan.desired))
+        assertEquals(plan.desired, staged)
+    }
+
     private fun state(
         replacements: Map<String, List<Map<String, Any?>>> = emptyMap()
     ): MemorySharedRestoreRows {

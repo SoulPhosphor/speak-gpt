@@ -75,34 +75,50 @@ object MemoryPortableRowFormat {
         MemoryPortableGroup.MODEL_RULES -> modelRuleSpecs
     }
 
-    fun read(db: SQLiteDatabase, group: MemoryPortableGroup): MemoryPortableRows {
+    /**
+     * [includeLegacy] reads the [legacyTables] too, when they exist and hold
+     * rows: only for a backup's memory database made before Stage 6A, so
+     * its scan progress and message scope reach the scanner migration.
+     */
+    fun read(db: SQLiteDatabase, group: MemoryPortableGroup, includeLegacy: Boolean = false): MemoryPortableRows {
         val out = LinkedHashMap<String, List<Map<String, Any?>>>()
         for (spec in specs(group)) {
-            val rows = ArrayList<Map<String, Any?>>()
             if (spec.table in tablesAddedLater && !tableExists(db, spec.table)) {
-                out[spec.table] = rows
+                out[spec.table] = ArrayList()
                 continue
             }
-            db.query(spec.table, null, spec.where, null, null, null, null).use { cursor ->
-                while (cursor.moveToNext()) {
-                    val row = LinkedHashMap<String, Any?>()
-                    repeat(cursor.columnCount) { index ->
-                        val column = cursor.getColumnName(index)
-                        if (spec.table == "change_log" && column == "id") return@repeat
-                        row[column] = when (cursor.getType(index)) {
-                            Cursor.FIELD_TYPE_NULL -> null
-                            Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(index)
-                            Cursor.FIELD_TYPE_FLOAT -> cursor.getDouble(index)
-                            Cursor.FIELD_TYPE_STRING -> cursor.getString(index)
-                            else -> throw IllegalStateException("unsupported portable column")
-                        }
-                    }
-                    rows.add(row)
-                }
+            out[spec.table] = readRows(db, spec.table, spec.where)
+        }
+        if (includeLegacy && group == MemoryPortableGroup.MEMORIES) {
+            for (legacy in legacyTables) {
+                if (!tableExists(db, legacy)) continue
+                val rows = readRows(db, legacy, null)
+                if (rows.isNotEmpty()) out[legacy] = rows
             }
-            out[spec.table] = rows
         }
         return MemoryPortableRows(out)
+    }
+
+    private fun readRows(db: SQLiteDatabase, table: String, where: String?): List<Map<String, Any?>> {
+        val rows = ArrayList<Map<String, Any?>>()
+        db.query(table, null, where, null, null, null, null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val row = LinkedHashMap<String, Any?>()
+                repeat(cursor.columnCount) { index ->
+                    val column = cursor.getColumnName(index)
+                    if (table == "change_log" && column == "id") return@repeat
+                    row[column] = when (cursor.getType(index)) {
+                        Cursor.FIELD_TYPE_NULL -> null
+                        Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(index)
+                        Cursor.FIELD_TYPE_FLOAT -> cursor.getDouble(index)
+                        Cursor.FIELD_TYPE_STRING -> cursor.getString(index)
+                        else -> throw IllegalStateException("unsupported portable column")
+                    }
+                }
+                rows.add(row)
+            }
+        }
+        return rows
     }
 
     fun replace(db: SQLiteDatabase, group: MemoryPortableGroup, data: MemoryPortableRows): Boolean {

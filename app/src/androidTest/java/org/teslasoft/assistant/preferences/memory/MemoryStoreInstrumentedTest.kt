@@ -483,6 +483,27 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
+    fun anOlderBackupDatabaseCarriesItsScanRowsOnlyWhenAskedTo() {
+        val store = open(freshDbName())
+        val db = store.writableDatabase
+        MemoryStore.createLegacyScanTables(db)
+        db.insertOrThrow("transcripts", null, ContentValues().apply {
+            put("transcript_id", "t1"); put("chat_id", "chat-1"); put("companion_id", "c-1"); put("content", "[]")
+        })
+        db.insertOrThrow("analysis_chat_bookmarks", null, ContentValues().apply {
+            put("chat_id", "chat-1"); put("last_transcript_id", "t1"); put("updated_at", "2026-11-01T00:00:00Z")
+        })
+        val plain = MemoryPortableRowFormat.read(store.readableDatabase, MemoryPortableGroup.MEMORIES)
+        assertFalse(plain.tables.containsKey("transcripts"))
+        val fromBackup = MemoryPortableRowFormat.read(
+            store.readableDatabase, MemoryPortableGroup.MEMORIES, includeLegacy = true
+        )
+        assertEquals("c-1", fromBackup.tables.getValue("transcripts").single()["companion_id"])
+        assertEquals("t1", fromBackup.tables.getValue("analysis_chat_bookmarks").single()["last_transcript_id"])
+        assertTrue(MemoryPortableRowFormat.valid(MemoryPortableGroup.MEMORIES, fromBackup))
+    }
+
+    @Test
     fun noScanTableHoldsConversationText() {
         val store = open(freshDbName())
         store.beginScanRun(runRecord("run-t"), listOf(scanRange("run-t", "chat-1")))

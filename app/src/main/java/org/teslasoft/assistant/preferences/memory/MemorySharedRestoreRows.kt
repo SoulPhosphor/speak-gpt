@@ -161,9 +161,10 @@ object MemorySharedRestoreRowFormat {
         return JSONObject()
             .put("version", 1)
             .put("tables", JSONObject().apply {
-                specs.forEach { spec ->
-                    put(spec.table, JSONArray().apply {
-                        data.tables.getValue(spec.table).forEach { row ->
+                val legacy = MemoryPortableRowFormat.legacyTables.filter { data.tables[it].orEmpty().isNotEmpty() }
+                (specs.map { it.table } + legacy).forEach { table ->
+                    put(table, JSONArray().apply {
+                        data.tables.getValue(table).forEach { row ->
                             put(JSONObject().apply {
                                 row.forEach { (key, value) ->
                                     put(key, when (value) {

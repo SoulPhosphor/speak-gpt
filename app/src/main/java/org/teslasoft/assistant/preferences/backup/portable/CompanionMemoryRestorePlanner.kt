@@ -220,6 +220,12 @@ object CompanionMemoryRestorePlanner {
                 else -> tables[spec.table] = memories.tables.getValue(spec.table).map(::copyRow)
             }
         }
+        // An older backup's scan rows travel with its memories to the
+        // scanner migration (MemoryPortableRowFormat.legacyTables).
+        for (legacy in MemoryPortableRowFormat.legacyTables) {
+            val rows = memories.tables[legacy].orEmpty()
+            if (rows.isEmpty()) tables.remove(legacy) else tables[legacy] = rows.map(::copyRow)
+        }
     }
 
     private fun replaceGroup(
