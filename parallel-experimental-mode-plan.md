@@ -1,6 +1,6 @@
 # Parallel Experimental Mode — Staged Implementation Plan
 
-**Status:** Stage 0 integration audit and contract prepared below; production implementation has not started.
+**Status:** Stage 0 integration audit and contract merged in [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234); Stage 1 is next. Production implementation has not started.
 **Source of truth for implementation:** Current `origin/main` and its tests.  
 **Integration target:** `main`, which builds the **Beta** client (not the retired pre-release client).  
 **Purpose:** Deliver independent, simultaneous responses from 2–4 preselected AI models in a familiar, tabbed chat UI, without corrupting conversation history or disrupting existing single-response chat.
@@ -285,7 +285,7 @@ For each code-changing stage run `testDebugUnitTest`, `assembleBeta`, `assembleD
 
 | Stage | Status | PR / commit | Verification / notes |
 | --- | --- | --- | --- |
-| 0. Integration audit and contract | In progress | Audit base: [`eab77ae6`](https://github.com/SoulPhosphor/speak-gpt/commit/eab77ae6f28ca8b456c6575284169dc0a84009f1) | §8 deliverable prepared; documentation review only, no tests/builds run. No production behavior changes. Awaiting PR/merge; next: Stage 1. |
+| 0. Integration audit and contract | Merged | [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234) · [`1e4c0ef7`](https://github.com/SoulPhosphor/speak-gpt/commit/1e4c0ef7ddd6e23ba6687fd55ab84d29e289609a) | §8 audit/contract merged to `main`. Full documentation diff and source/test anchors inspected; no local tests/builds or Codex review run (documentation only). Automatic GitHub Android jobs were triggered, but are not claimed as validation of this audit. Beta/data/code unchanged. Next: Stage 1, unexposed storage foundation. |
 | 1. Durable response-group foundation | Not started | | |
 | 2. Parallel request coordinator | Not started | | |
 | 3. Setup and model picker | Not started | | |
