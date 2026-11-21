@@ -742,8 +742,11 @@ class Logger {
             entries.forEachIndexed { i, entry ->
                 keys[i]?.let { byMinute.getOrPut(it) { ArrayList() }.add(entry) }
             }
+            // One shared string per minute: joining again for each button
+            // would retain N copies of the same N-entry text in a busy minute.
+            val joinedByMinute = byMinute.mapValues { (_, group) -> group.joinToString("\n\n") }
             return entries.mapIndexed { i, entry ->
-                keys[i]?.let { byMinute.getValue(it).joinToString("\n\n") } ?: entry
+                keys[i]?.let { joinedByMinute.getValue(it) } ?: entry
             }
         }
 

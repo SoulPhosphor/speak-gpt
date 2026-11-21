@@ -9,6 +9,7 @@ package org.teslasoft.assistant.preferences
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class LoggerSameMinuteCopyTest {
@@ -30,6 +31,16 @@ class LoggerSameMinuteCopyTest {
         val copies = Logger.sameMinuteCopyText(listOf(c, b, a))
         assertEquals(c, copies[0])
         assertEquals("$b\n\n$a", copies[1])
+    }
+
+    @Test
+    fun busyMinuteSharesOneCopyAcrossEveryButton() {
+        val entries = (0 until 1000).map {
+            "[2026-11-19 2:04 AM] [VoiceLoop] [INFO] $it ${"x".repeat(1024)}"
+        }
+        val copies = Logger.sameMinuteCopyText(entries)
+        assertEquals(entries.joinToString("\n\n"), copies.first())
+        copies.forEach { assertSame("Each button must share the minute's text", copies.first(), it) }
     }
 
     @Test
