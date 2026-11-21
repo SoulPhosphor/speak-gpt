@@ -113,6 +113,22 @@ The owner prioritized the scanner on November 18. The four stages below are the 
 3. **Stage 6C — Browser match cards and comparison.** Add the related-memory preview, status, match method and available similarity score to Pending cards. Open the exact pair by ID, show the full wording of both records, expose additional matches, and restore the user’s list position on return. Reuse the comparison screen and existing review actions where applicable. Cover changed or missing targets, and present keyword matches accurately when embeddings are unavailable. Keep the Stage 4 meter in the existing creating, editing and reading views.
 4. **Stage 6D — Browser review actions and end-to-end evaluation.** Add the decisions for two pending drafts and unresolved alternatives, including a linked pair that occupies one review choice at a cap of one. Keep both pending, edit or discard the redundant proposal, or apply an existing approval action according to the user's choice. Revalidate before applying a decision so reviewing a pair never activates or overwrites a memory accidentally. Exercise the complete scan-to-review path with and without embeddings and measure quality, token usage, conditional comparisons, total scan duration, battery consumption, embedding queue contention, cold/warm vector reuse and phone review effort as specified in the scanner proposal. Resume at **Stage 7 (Steps 7 and 8)**.
 
+**Stage 6A requirements (Owner, 2026-11-21).**
+- **Four ways a scan ends.** Today `reconcileInterruptedAnalysisRuns()` and `releaseAnalysisClaims()` in `MemoryStore.kt` delete the temporary candidates and run state whenever a run stops, so checkpoints alone cannot resume anything. Stage 6A must treat the endings separately: **interrupted** (app killed, phone off) keeps the checkpoint and resumes; **paused** keeps the checkpoint and waits for the user; **cancelled** and **finished** clear it. When already-read source changes, restart that conversation's unfinished scan from its bookmark. Do not keep a history of earlier checkpoints.
+- **An unresolved legacy turn must not block a chat forever.** Skipping it and holding the bookmark, with nothing that ever resolves it, makes every later scan of that chat stop at the same place. Automatically retrying the same unresolved source is not a resolution. The user-facing outcome is asked when Stage 6A starts (M.10).
+- **Pause and resume.**
+  - The scanner notification gets a **Pause** button. While the scan is paused, it shows **Resume** instead.
+  - On the Memory Scanner Tool screen, **Analyze Conversations** becomes **Pause Conversations** while a scan runs and **Resume Conversations** while it is paused.
+  - The chat header's background-work icon (`ChatBackgroundActivity.kt`) gets the same controls. While a scan runs, its pop-up keeps the existing progress line with a **Pause** button. While a scan is paused, the icon shows in every open chat, new or old, and its pop-up shows **Memory Scanner** with a **Resume** button, so a paused scan is not forgotten. Appearance comes from `ui-style-guide.md`.
+  - A paused scan stays paused until the user taps Resume, including after the app is closed or the phone restarts.
+  - An interrupted scan resumes automatically, but only after the user's first chat message since the app started has been sent and its reply has finished. Resuming must never delay or block starting a chat.
+
+**Stage 6B requirements (Owner, 2026-11-21).**
+- **Already-covered entries.** When the scanner leaves out a retelling because an existing memory already covers it, the same extraction response names the source passage reference and the existing memory ID in a compact "already covered" entry. Kotlin validates it and saves it with the checkpoint, so the filing-time recheck knows what was left out and why. Its exact format is part of the AI-facing instruction approval for 6B. Before filing, also check memories created or changed while the scan ran, not only matches found earlier.
+- **A limit on repeated transcript text.** Earlier transcript text repeated for context gets a bounded token allowance per request. The new section and the working drafts come first. Preceding dialogue and selected excerpts share what remains. The builder sets the starting allowance from measurement and raises it only after measured caching savings justify it. Every unread section is still processed.
+
+The screen formerly called Memory Assistant is named **Memory Scanner Tool** (Owner, 2026-11-21). In sentences it is written in lower case: "the memory scanner tool".
+
 Temporary scanner passage references support editing and recovery inside a scan. M.3 remains authoritative for permanent source information in the editor and backups. Archived memory comparison is scanner-only. The installed-model requirement in G.16 applies to Conversation Recall; the scanner also supports local keyword fallback. Stage 6’s frozen corpus remains the reference for recall, with scanner-specific expected results evaluated separately. Stage 15 still owns proposals for important dates.
 
 **Original order rationale (G42, November 16; scanner priority added November 18)**
@@ -513,6 +529,7 @@ finds something missed adds it here rather than guessing.
 | Stage 2, Step 4a | Answered by the owner on 2026-11-16: G45 and G44 are decided; the Memory Context Helper Settings wording is in `strings.xml`; the debug view marks carried memories `[carried from earlier subject]` and top-match memories `[+3 top match]` |
 | Stage 3, Step 4b | Answered by the owner on 2026-11-16: the error pop-up and its wording, the no-model message, the API AI choice and its explanation, the Memory Context Helper Tool API labels, the model picker title, the model cleanup line and the usage section are in `strings.xml`; no privacy disclosure (M.4 item 6). Still to ask: the model and cost for the one scored run on the frozen sets, and the exact content of any helper log lines (M.4 item 8) |
 | Stage 5, data control | Answered by the owner on 2026-11-17: D44 is on by default; Retired and archived are one state, named Archived everywhere (the view, the setting and the toast); Delete moves an in-use memory to Archived with no pop-up and shows a toast; permanent deletes and Discard keep a confirmation pop-up; superseded memories stay behind the Superseded filter (owner ruling, August 3 2026); Pending suggestions are never archived; the wording is in `strings.xml` |
+| Stage 6A, scanner reading and resume | What the user sees when a legacy message cannot be matched to a current message (M.2 Stage 6A requirements); replacement wording for the Memory Scanner Tool Settings note that says not to close the app completely, which stops being accurate once scans resume |
 | Later stages | The approvals listed in M.2's "Approve first" column |
 
 ## M.11 Where settings go (Owner, 2026-11-16)
@@ -1349,6 +1366,11 @@ is not asked to choose them.
   vectors, in bounded batches, keeping only the best so far (G.5a rule 5).
 - A passage with no vector yet is not a candidate until its vector is
   made (G30).
+- A passage from a message that is no longer eligible (hidden, deleted,
+  unfinished, or not the version the AI is sent; G.5a rule 1) is excluded
+  here, before it can take a candidate place or count toward a chat's
+  typical similarity in retrieval stage 4. Retrieval stage 7 still checks
+  again before delivery.
 - Each way keeps a bounded list of distinct exchanges while collecting
   passages. Starting value: the best 50 exchanges per method. Keep the
   strongest matching passage and bounded supporting passages for each
@@ -1363,7 +1385,7 @@ relevant.** A candidate passes only when one of these is true:
   above this chat's typical similarity for this message. A chat about one
   project has a high typical similarity, so only a passage that is closer
   than the general run of the chat passes.
-  - "Typical" is worked out over **every passage of the chat** as its
+  - "Typical" is worked out over **every eligible passage of the chat** as its
     vectors are read, never over the 50 best. Measuring it over the best
     matches would raise the bar and reject good ones.
   - **A certain match always passes.** When a chat is about one subject
@@ -1681,8 +1703,10 @@ shown to the owner before Step 16 is built. What the text must do:
   misread;
 - mark an excerpt as an excerpt;
 - give the messages in their original words, unchanged;
-- list the exchanges in **date order**, oldest first, so a later change of
-  mind is read after the earlier decision. Published tests of placing the
+- list the exchanges in **conversation order**, by their stored position
+  in the chat, earliest first, so a later change of mind is read after the
+  earlier decision. Some older messages have no date, so dates are shown
+  as labels where available and never decide the order. Published tests of placing the
   "most relevant" passage in a particular position found no reliable gain
   over other orders (G.18), so order is chosen for meaning, not for
   position.
