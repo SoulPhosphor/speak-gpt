@@ -2025,6 +2025,36 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- Result notices (Stage 6A): sentences reporting what happened to
+         named items in the last run, for example the Memory Scanner Tool's
+         damaged-chat results. The holder spaces the group from what is above
+         it; each notice is a tappable line in the screen's text color. -->
+    <style name="Widget.App.ResultNotice.Holder" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">@dimen/result_notice_holder_gap</item>
+    </style>
+
+    <style name="Widget.App.ResultNotice" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingTop">@dimen/result_notice_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/result_notice_padding_vertical</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
+        <item name="android:textSize">@dimen/result_notice_text_size</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <!-- A result notice that opens nothing: the same text, not tappable. -->
+    <style name="Widget.App.ResultNotice.Static">
+        <item name="android:background">@null</item>
+        <item name="android:clickable">false</item>
+        <item name="android:focusable">false</item>
+    </style>
+
     <!-- Screen.Intro as the first item of a Widget.App.Page.Content body,
          which has no top padding of its own: the gap below the header. -->
     <style name="Widget.App.Screen.Intro.PageTop">
@@ -2132,6 +2162,29 @@
         <item name="android:textAlignment">center</item>
         <item name="android:textColor">?attr/colorOnSurface</item>
         <item name="android:textSize">@dimen/chat_activity_popover_text_size</item>
+    </style>
+
+    <!-- A popover line with an action (Stage 6A: the memory scan's Pause or
+         Resume): the text on the left, the label-sized button on the right. -->
+    <style name="Widget.App.Chat.ActivityPopover.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActivityPopover.Row.Text" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:textAlignment">viewStart</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textSize">@dimen/chat_activity_popover_text_size</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActivityPopover.Row.Action" parent="AppButton.Primary.Inline">
+        <item name="android:layout_marginStart">@dimen/chat_activity_popover_row_gap</item>
     </style>
 
     <!-- Selection Mode area beneath the chat header: the header's own color

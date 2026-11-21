@@ -18,14 +18,15 @@ package org.teslasoft.assistant.preferences.memory.archivist
 
 import org.json.JSONArray
 import org.json.JSONObject
-import org.teslasoft.assistant.preferences.memory.TranscriptRecord
+import org.teslasoft.assistant.preferences.memory.scan.ScanSourceRow
 
 /**
- * The scene identity stamped on one transcript row at capture time. Stage C
- * keeps this identity attached to retrieval, target selection, parsing, and
- * the normalized proposal so a later row can never inherit the first row's
- * companion/project/world/campaign/character merely because both rows belong
- * to the same chat.
+ * The scene identity recorded on one chat message when its turn finished
+ * (memory development plan M.2, "Scope of each message"). Stage C keeps this
+ * identity attached to retrieval, target selection, parsing, and the
+ * normalized proposal so a later message can never inherit an earlier one's
+ * companion/project/world/campaign/character merely because both belong to
+ * the same chat. A message with unknown scope has no scene ids.
  */
 data class ArchivistSceneContext(
     val companionId: String?,
@@ -47,7 +48,7 @@ data class ArchivistSceneContext(
     }
 
     companion object {
-        fun from(row: TranscriptRecord): ArchivistSceneContext = ArchivistSceneContext(
+        fun from(row: ScanSourceRow): ArchivistSceneContext = ArchivistSceneContext(
             companionId = row.companionId?.takeIf { it.isNotBlank() },
             worldId = row.worldId?.takeIf { it.isNotBlank() },
             campaignId = row.campaignId?.takeIf { it.isNotBlank() },

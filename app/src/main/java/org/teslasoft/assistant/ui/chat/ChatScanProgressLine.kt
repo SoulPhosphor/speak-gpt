@@ -25,18 +25,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.ChatPreferences
-import org.teslasoft.assistant.preferences.MessageIdentity
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.preferences.memory.ChatScanCoverage
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.scan.ChatScanSource
+import org.teslasoft.assistant.preferences.memory.scan.ScanChatStatus
 
 /**
  * The Create Outline screen's "Memory Scan Progress: …" line (owner design,
  * Nov 18 2026), shown while App Appearance's Show Chat Memory Scan Status is
- * on. Hidden when the memory store does not exist or the chat's scanned part
- * cannot be matched to its current messages.
+ * on. Hidden when the memory store does not exist or the chat cannot be
+ * read. Read from the chat's bookmark and its current messages (Stage 6A).
  */
 object ChatScanProgressLine {
 
@@ -73,23 +72,8 @@ object ChatScanProgressLine {
 
     private fun status(context: Context, chatId: String): ChatScanCoverage.Status? {
         if (!MemoryStore.isProvisioned(context)) return null
-        val rows = MemoryStore.getInstance(context).chatScanRows(chatId)
-        val scanned = rows.scanned.map { it.content }
-        val hasUnscanned = rows.hasPending
-        // The chat itself is read only when a message range is needed.
-        val messages = if (scanned.isNotEmpty() && hasUnscanned) {
-            ChatPreferences.getChatPreferences()
-                .getChatById(context, chatId, DamagedChatOperation.MEMORY)
-                .map { m ->
-                    ChatScanCoverage.Message(
-                        id = MessageIdentity.idOf(m),
-                        role = if (m["isBot"] == true) "assistant" else "user",
-                        text = m["message"]?.toString().orEmpty()
-                    )
-                }
-        } else {
-            emptyList()
-        }
-        return ChatScanCoverage.describe(messages, scanned, hasUnscanned)
+        val progress = MemoryStore.getInstance(context).scanProgress(chatId)
+        val messages = ChatScanSource.peek(context, chatId) ?: return null
+        return ScanChatStatus.coverage(progress, messages)
     }
 }

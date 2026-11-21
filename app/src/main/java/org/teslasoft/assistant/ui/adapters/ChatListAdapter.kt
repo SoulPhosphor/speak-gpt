@@ -114,11 +114,18 @@ class ChatListAdapter(
     private fun loadMemoryStatuses() {
         if (!showMemoryStatus || disposed.get()) return
         val generation = memoryStatusGeneration.incrementAndGet()
+        val chatIds = dataArray.map { ChatPreferences.storedChatId(it) }
         memoryStatusFuture = memoryStatusLoader.submit {
             try {
                 val appContext = mContext.context?.applicationContext ?: return@submit
                 if (!MemoryStore.isProvisioned(appContext)) return@submit
-                val states = MemoryStore.getInstance(appContext).chatReviewStates()
+                // The chat list's details index keeps each chat's memory
+                // status, read from the chat itself (Stage 6A).
+                val states = HashMap<String, String>()
+                for (chatId in chatIds) {
+                    org.teslasoft.assistant.preferences.chatnavigation.ChatListIndex
+                        .entryFor(appContext, chatId)?.memoryState?.let { states[chatId] = it }
+                }
                 mContext.activity?.runOnUiThread {
                     if (disposed.get() || !showMemoryStatus ||
                         generation != memoryStatusGeneration.get()

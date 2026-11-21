@@ -58,7 +58,34 @@ class MemoryLengthInstrumentedTest {
         val method = Archivist::class.java.declaredMethods.single { it.name == "prepareMemoryDrafts" }
         method.isAccessible = true
         return method.invoke(Archivist, context, store,
-            Archivist.Conversation("source-chat", "Example conversation", emptyList()), drafts, cap)!!
+            Archivist.Conversation("source-chat", "Example conversation"), drafts, cap)!!
+    }
+
+    /** Files outputs the way a Memory Scanner rerun range does. */
+    private fun fileLikeTheScanner(
+        store: MemoryStore,
+        memories: List<MemoryRecord>,
+        relationshipHintsByMemoryId: Map<String, List<String>> = emptyMap(),
+        sourcesByMemoryId: Map<String, List<MemorySource>> = emptyMap()
+    ) {
+        val runId = MemoryStore.newId("run-")
+        val range = ScanRangeRecord(
+            MemoryStore.newId("range-"), runId, "source-chat", 0, ScanRangeRecord.KIND_RERUN,
+            emptyList(), emptyList()
+        )
+        store.beginScanRun(
+            ArchivistRunRecord(
+                runId = runId, startedAt = MemoryStore.nowIso(), finishedAt = null, status = "running",
+                chatIdsJson = "[]", transcriptIdsJson = "[]", memoryIdsJson = "[]", ruleIdsJson = "[]",
+                foundCount = 0, failedChatIdsJson = "[]", error = null
+            ),
+            listOf(range)
+        )
+        store.commitScanRange(
+            range, emptyList(), memories, emptyList(), emptyList(),
+            relationshipHintsByMemoryId = relationshipHintsByMemoryId,
+            sourcesByMemoryId = sourcesByMemoryId
+        )
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -97,8 +124,7 @@ class MemoryLengthInstrumentedTest {
             assertEquals("source-chat", sources.getValue(record.memoryId).single().chatId)
             assertEquals(listOf(old.memoryId), hints[record.memoryId])
         }
-        store.commitRerunChatOutputs(records, emptyList(), emptyList(),
-            relationshipHintsByMemoryId = hints, sourcesByMemoryId = sources)
+        fileLikeTheScanner(store, records, hints, sources)
         assertEquals(text, records.joinToString("") { store.getMemory(it.memoryId)!!.content })
         // Re-running must not create the same parts again.
         val rerun = prepare(listOf(draft), 1)

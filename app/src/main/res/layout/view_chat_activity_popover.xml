@@ -1,17 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Chat header background-work popover (owner design, Nov 18 2026): no buttons,
-  one centered line per piece of work in progress. Structure only; every
-  appearance value comes from the Widget.App.Chat.ActivityPopover styles.
+  Chat header background-work popover (owner design, Nov 18 2026; Pause and
+  Resume added in Stage 6A). The memory scan's line has its text on the left
+  and its Pause or Resume button on the right; the summarizing line is one
+  centered line. Structure only; every appearance value comes from the
+  Widget.App.Chat.ActivityPopover styles.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     style="@style/Widget.App.Chat.ActivityPopover.Holder">
 
     <LinearLayout style="@style/Widget.App.Chat.ActivityPopover">
 
-        <TextView
-            android:id="@+id/activity_line_memory_scan"
-            style="@style/Widget.App.Chat.ActivityPopover.Line" />
+        <LinearLayout
+            android:id="@+id/activity_row_memory_scan"
+            style="@style/Widget.App.Chat.ActivityPopover.Row">
+
+            <TextView
+                android:id="@+id/activity_line_memory_scan"
+                style="@style/Widget.App.Chat.ActivityPopover.Row.Text" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/activity_action_memory_scan"
+                style="@style/Widget.App.Chat.ActivityPopover.Row.Action" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/activity_line_summarizing"

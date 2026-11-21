@@ -81,12 +81,20 @@ class DamagedChatLogActivity : SettingsPageActivity() {
     private fun refresh() {
         val app = applicationContext
         Thread {
-            val detections = DamagedChatLog.detections(app)
-            runOnUiThread { if (!isFinishing && !isDestroyed) render(detections) }
+            // Open incidents, and resolved repairs kept as history.
+            val detections = DamagedChatLog.activeDetections(app)
+            val repaired = DamagedChatLog.repairedDetections(app)
+            runOnUiThread { if (!isFinishing && !isDestroyed) render(detections, repaired) }
         }.start()
     }
 
-    private fun render(detections: List<DamagedChatLog.Detection>) {
+    private fun render(
+        detections: List<DamagedChatLog.Detection>,
+        repaired: List<DamagedChatLog.Detection> = emptyList()
+    ) {
+        renderInto(findViewById(R.id.damaged_repaired_detections), repaired)
+        findViewById<View>(R.id.damaged_repaired_section)?.visibility =
+            if (repaired.isEmpty()) View.GONE else View.VISIBLE
         val damaged = detections.mapNotNull { d ->
             d.chats.filter { !it.irreparable }.takeIf { it.isNotEmpty() }?.let { d.copy(chats = it) }
         }
@@ -136,6 +144,8 @@ class DamagedChatLogActivity : SettingsPageActivity() {
                     getString(R.string.damaged_first_companion_name, chat.firstCompanionName ?: unavailable)
                 entry.findViewById<TextView>(R.id.damaged_chat_model).text =
                     getString(R.string.damaged_most_used_model, chat.mostUsedModel ?: unavailable)
+                entry.findViewById<TextView>(R.id.damaged_chat_repair_result).visibility =
+                    if (chat.resolved) View.VISIBLE else View.GONE
                 chats.addView(entry)
             }
             container.addView(block)

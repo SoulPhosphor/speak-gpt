@@ -75,7 +75,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 36
+        private const val DATABASE_VERSION = 37
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -104,6 +104,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
          *  to read eligibility only after this marker and every initial
          *  bookmark were committed in the same migration transaction. */
         const val META_ASSOCIATIVE_BOOKMARK_CUTOVER = "associative_bookmark_cutover_v1"
+        /** "pending" from the v37 upgrade (or an older backup's restore)
+         *  until ScanSourceMigration has moved every chat off the legacy
+         *  transcript store; "complete" afterwards and on fresh installs. */
+        const val META_SCAN_SOURCE_MIGRATION = "scan_source_migration_v1"
+        const val SUSPENDED_PAUSED = "paused"
+        const val SUSPENDED_INTERRUPTED = "interrupted"
 
         // A scoped vector load passes the eligible memory ids as bound
         // parameters; chunk them so the IN(...) list stays well under
@@ -205,6 +211,32 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             context.getDatabasePath(DATABASE_NAME).exists()
 
         fun nowIso(): String = Instant.now().toString()
+
+        /** The legacy transcript tables, recreated only to hold an older
+         *  backup's rows until ScanSourceMigration maps and deletes them. */
+        fun createLegacyScanTables(db: SQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS transcripts (" +
+                    "transcript_id TEXT PRIMARY KEY, chat_id TEXT, companion_id TEXT, world_id TEXT, " +
+                    "roleplay_character_id TEXT, user_persona_id TEXT, campaign_id TEXT, project_id TEXT, " +
+                    "source TEXT NOT NULL DEFAULT 'live', started_at TEXT, ended_at TEXT, " +
+                    "content TEXT NOT NULL, model_tag TEXT, quick_settings_json TEXT, " +
+                    "review_status TEXT NOT NULL DEFAULT 'pending', processed_at TEXT, claim_run_id TEXT)"
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS analysis_chat_bookmarks (" +
+                    "chat_id TEXT PRIMARY KEY, last_started_at TEXT, last_transcript_id TEXT, " +
+                    "skipped_transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "archive_paused INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)"
+            )
+        }
+
+        fun markScanSourceMigrationPending(db: SQLiteDatabase) {
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_SCAN_SOURCE_MIGRATION, "pending")
+            )
+        }
 
         fun newId(prefix: String): String = prefix + UUID.randomUUID().toString()
 
@@ -613,60 +645,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "resolved_at TEXT)"
         )
 
-        // campaign_id/project_id complete the typed scene context (DB v17,
-        // counterplan §4(e)); claim_run_id is the analysis claim seal (DB
-        // v17, §4(a)) — deliberately FK-less like the ids stamped at capture:
-        // a deleted card or finished run must never block transcript writes.
-        db.execSQL(
-            "CREATE TABLE transcripts (" +
-                "transcript_id TEXT PRIMARY KEY, " +
-                "chat_id TEXT, " +
-                "companion_id TEXT REFERENCES companions(companion_id), " +
-                "world_id TEXT REFERENCES worlds(world_id), " +
-                "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
-                "user_persona_id TEXT REFERENCES user_personas(persona_id), " +
-                "campaign_id TEXT, " +
-                "project_id TEXT, " +
-                "source TEXT NOT NULL DEFAULT 'live' CHECK (source IN ('live','imported')), " +
-                "started_at TEXT, " +
-                "ended_at TEXT, " +
-                "content TEXT NOT NULL, " +
-                "model_tag TEXT, " +
-                "quick_settings_json TEXT, " +
-                "review_status TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending','processed','excluded')), " +
-                "processed_at TEXT, " +
-                "claim_run_id TEXT)"
-        )
-
-        // Stage B (DB v27): the sole permanent eligibility authority after
-        // cutover. The nullable boundary means the chat has no terminal prefix
-        // yet. skipped_transcript_ids_json is a cutover/exclusion snapshot,
-        // never a second read of mutable review_status state.
-        db.execSQL(
-            "CREATE TABLE analysis_chat_bookmarks (" +
-                "chat_id TEXT PRIMARY KEY, " +
-                "last_started_at TEXT, " +
-                "last_transcript_id TEXT, " +
-                "skipped_transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
-                "archive_paused INTEGER NOT NULL DEFAULT 0 CHECK (archive_paused IN (0,1)), " +
-                "updated_at TEXT NOT NULL)"
-        )
-
-        // One row per independently frozen chat range. A multi-chat run owns
-        // several rows and may commit each one separately. Rows are short-lived
-        // recovery/concurrency state and are never exported.
-        db.execSQL(
-            "CREATE TABLE analysis_chat_ranges (" +
-                "range_id TEXT PRIMARY KEY, " +
-                "run_id TEXT NOT NULL, " +
-                "chat_id TEXT NOT NULL, " +
-                "frozen_end_started_at TEXT, " +
-                "frozen_end_transcript_id TEXT NOT NULL, " +
-                "status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','committed')), " +
-                "created_at TEXT NOT NULL, " +
-                "updated_at TEXT, " +
-                "UNIQUE(run_id, chat_id))"
-        )
+        createScanTables(db)
 
         // Rejected drafts (Phase 6, DB v14; rekeyed DB v17; chat_key dropped
         // DB v26): deleting a Memory Assistant draft rejects it — a rerun must
@@ -704,7 +683,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "outcome TEXT, " +
                 "failure_reason TEXT, " +
                 "transport TEXT NOT NULL DEFAULT 'api', " +
-                "analysis_type TEXT NOT NULL DEFAULT 'associative')"
+                "analysis_type TEXT NOT NULL DEFAULT 'associative', " +
+                "suspended TEXT, " +
+                "run_kind TEXT NOT NULL DEFAULT 'analyze', " +
+                "progress_percent INTEGER, " +
+                "source_ranges_json TEXT NOT NULL DEFAULT '[]')"
         )
 
         // Minimal temporary analysis-run storage (canonical recovery plan
@@ -1019,10 +1002,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
         createMemorySourcesTable(db)
         createMemoryHandlingPreferencesTable(db)
-        db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
-        db.execSQL("CREATE INDEX idx_transcripts_chat ON transcripts(chat_id)")
-        db.execSQL("CREATE INDEX idx_transcripts_chat_order ON transcripts(chat_id, started_at, transcript_id)")
-        db.execSQL("CREATE INDEX idx_analysis_chat_ranges_run ON analysis_chat_ranges(run_id)")
         db.execSQL("CREATE INDEX idx_proposals_pending ON proposals(status) WHERE status = 'pending'")
         db.execSQL("CREATE INDEX idx_card_entries_card ON card_entries(card_type, card_id)")
         db.execSQL("CREATE INDEX idx_cpm_member ON campaign_party_members(party_member_id)")
@@ -1037,7 +1016,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.execSQL("INSERT INTO meta (key, value) VALUES (?, ?)", arrayOf(META_DB_MIGRATION, DATABASE_VERSION.toString()))
         db.execSQL(
             "INSERT INTO meta (key, value) VALUES (?, ?)",
-            arrayOf(META_ASSOCIATIVE_BOOKMARK_CUTOVER, "complete")
+            arrayOf(META_SCAN_SOURCE_MIGRATION, "complete")
         )
         db.execSQL("INSERT INTO app_state (id) VALUES (1)")
         // Archivist defaults mirror the public template: memory work automatic,
@@ -2219,6 +2198,70 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "36")
             )
         }
+        if (oldVersion < 37) {
+            // Stage 6A: the chat is the scanner's only source. The new
+            // progress tables hold message UUID references only. The legacy
+            // transcript tables stay until the startup migration
+            // (ScanSourceMigration) has recorded each chat's result; it then
+            // drops them. Until it completes no scan runs.
+            createScanTables(db)
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN suspended TEXT")
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN run_kind TEXT NOT NULL DEFAULT 'analyze'")
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN progress_percent INTEGER")
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN source_ranges_json TEXT NOT NULL DEFAULT '[]'")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_SCAN_SOURCE_MIGRATION, "pending")
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "37")
+            )
+        }
+    }
+
+    /**
+     * Memory Scanner progress (Stage 6A). [scan_chat_progress] is one row
+     * per scanned chat: its bookmark as message UUID anchors (empty = nothing
+     * scanned yet), whether its earlier progress could not be migrated and a
+     * complete rescan is due, and the run holding it. [scan_ranges] is one
+     * frozen range per chat inside a run, with its validated reading
+     * position. [scan_reports] lists chats the Memory Scanner Tool reports
+     * on. None of these hold conversation text, and none are exported.
+     */
+    private fun createScanTables(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS scan_chat_progress (" +
+                "chat_id TEXT PRIMARY KEY, " +
+                "bookmark_anchor_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "needs_full_rescan INTEGER NOT NULL DEFAULT 0 CHECK (needs_full_rescan IN (0,1)), " +
+                "claim_run_id TEXT, " +
+                "updated_at TEXT NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS scan_ranges (" +
+                "range_id TEXT PRIMARY KEY, " +
+                "run_id TEXT NOT NULL, " +
+                "chat_id TEXT NOT NULL, " +
+                "ordinal INTEGER NOT NULL DEFAULT 0, " +
+                "kind TEXT NOT NULL DEFAULT 'scan' CHECK (kind IN ('scan','rerun')), " +
+                "start_anchor_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "end_anchor_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "checkpoint_json TEXT, " +
+                "created_at TEXT NOT NULL, " +
+                "updated_at TEXT, " +
+                "UNIQUE(run_id, chat_id))"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_scan_ranges_run ON scan_ranges(run_id)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS scan_reports (" +
+                "chat_id TEXT NOT NULL, " +
+                "kind TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL, " +
+                "PRIMARY KEY (chat_id, kind))"
+        )
     }
 
     /**
@@ -2338,41 +2381,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         )
     }
 
-    private fun requireBookmarkCutover(db: SQLiteDatabase) {
-        val complete = db.rawQuery(
-            "SELECT value FROM meta WHERE key = ?", arrayOf(META_ASSOCIATIVE_BOOKMARK_CUTOVER)
-        ).use { it.moveToFirst() && it.getString(0) == "complete" }
-        check(complete) { "Associative bookmark migration is incomplete" }
-    }
-
-    /** Instrumentation seam for the real encrypted cutover transaction. */
-    @androidx.annotation.VisibleForTesting
-    fun rebuildBookmarkCutoverForTest(interruptBeforeMarker: Boolean = false) {
-        reconcileInterruptedAnalysisRuns()
-        val db = writableDatabase
-        // Establish the same pre-v27 state (no bookmark rows and no marker) in
-        // its own committed transaction. The migration transaction below must
-        // either install both or leave both absent.
-        db.beginTransaction()
-        try {
-            db.delete("analysis_chat_bookmarks", null, null)
-            db.delete("meta", "key = ?", arrayOf(META_ASSOCIATIVE_BOOKMARK_CUTOVER))
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-        db.beginTransaction()
-        try {
-            initializeBookmarkCutoverTx(
-                db, replaceExisting = true,
-                interruptBeforeMarkerForTest = interruptBeforeMarker
-            )
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-    }
-
     /* ---------------------------------------------------------------------- */
     /* meta + health                                                          */
     /* ---------------------------------------------------------------------- */
@@ -2420,8 +2428,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             "user_personas" to "user_personas",
             "roleplay_characters" to "roleplay_characters",
             "campaigns" to "campaigns",
-            "proposals" to "proposals",
-            "transcripts" to "transcripts"
+            "proposals" to "proposals"
         )
         val out = LinkedHashMap<String, Int>()
         val db = readableDatabase
@@ -2430,7 +2437,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 out[label] = if (it.moveToFirst()) it.getInt(0) else 0
             }
         }
-        out["pending_transcripts"] = bookmarkEligibleTranscripts().size
         return out
     }
 
@@ -2451,26 +2457,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             )
         } catch (_: Exception) { null }
     }
-
-    /** Distinct chats with captured memory activity since the last backup
-     *  (all captured chats if no backup has run yet). */
-    fun chatsSinceLastBackup(): Int {
-        val last = getMeta(META_LAST_AUTO_EXPORT_AT)
-        val db = readableDatabase
-        val cursor = if (last.isNullOrBlank()) {
-            db.rawQuery("SELECT COUNT(DISTINCT chat_id) FROM transcripts WHERE chat_id IS NOT NULL", emptyArray<String>())
-        } else {
-            db.rawQuery(
-                "SELECT COUNT(DISTINCT chat_id) FROM transcripts WHERE chat_id IS NOT NULL AND ended_at > ?",
-                arrayOf(last)
-            )
-        }
-        cursor.use { return if (it.moveToFirst()) it.getInt(0) else 0 }
-    }
-
-    /** Distinct chats with a transcript still awaiting Archivist review. */
-    fun pendingReviewCount(): Int =
-        bookmarkEligibleTranscripts().mapNotNull { it.chatId }.toSet().size
 
     fun recordDeletion(recordType: String, recordId: String, createdAt: String? = null) {
         writableDatabase.execSQL(
@@ -3042,66 +3028,26 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 report.addAdded("proposals")
             }
 
-            for (t in data.transcripts) {
-                if (rowExists(db, "transcripts", "transcript_id", t.transcriptId)) {
-                    report.addSkipped("transcripts"); continue
-                }
-                db.insert("transcripts", null, ContentValues().apply {
-                    put("transcript_id", t.transcriptId)
-                    put("chat_id", t.chatId)
-                    put("companion_id", t.companionId)
-                    put("world_id", t.worldId)
-                    put("roleplay_character_id", t.roleplayCharacterId)
-                    put("user_persona_id", t.userPersonaId)
-                    put("source", t.source)
-                    put("started_at", t.startedAt)
-                    put("ended_at", t.endedAt)
-                    put("content", t.content)
-                    put("model_tag", t.modelTag)
-                    put("quick_settings_json", t.quickSettingsJson)
-                    put("review_status", t.reviewStatus)
-                    put("processed_at", t.processedAt)
-                })
-                report.addAdded("transcripts")
+            // An older backup's transcripts and bookmarks are used only to
+            // carry scan progress and message scope over to the restored
+            // chats (memory development plan M.2, "Removing the duplicate
+            // transcript store", step 3). They wait in the legacy tables
+            // until ScanSourceMigration maps them, then their text is
+            // deleted. A restore never recreates a transcript store.
+            stageLegacyTranscriptsTx(db, data.transcripts)
+            stageLegacyBookmarksTx(db, data.analysisBookmarks)
+            for (p in data.scanProgress) {
+                if (!overwriteSingletons && rowExists(db, "scan_chat_progress", "chat_id", p.chatId)) continue
+                // A chat a scan currently holds keeps its live progress.
+                if (scanProgressTx(db, p.chatId)?.claimRunId != null) continue
+                db.insertWithOnConflict("scan_chat_progress", null, ContentValues().apply {
+                    put("chat_id", p.chatId)
+                    put("bookmark_anchor_ids_json", stringsToJson(p.bookmarkAnchors))
+                    put("needs_full_rescan", if (p.needsFullRescan) 1 else 0)
+                    putNull("claim_run_id")
+                    put("updated_at", nowIso())
+                }, SQLiteDatabase.CONFLICT_REPLACE)
             }
-
-            // The permanent bookmark travels with transcripts. A pre-Stage-B
-            // backup has no bookmark array, so missing chats are derived once
-            // from their imported legacy states using the same contiguous-
-            // prefix rule as the v27 migration. Existing device bookmarks are
-            // never overwritten by a merge import.
-            for (bookmark in data.analysisBookmarks) {
-                if (!rowExists(db, "transcripts", "chat_id", bookmark.chatId)) continue
-                val boundaryIsValid = bookmark.lastTranscriptId == null || db.rawQuery(
-                    "SELECT 1 FROM transcripts WHERE chat_id = ? AND transcript_id = ? LIMIT 1",
-                    arrayOf(bookmark.chatId, bookmark.lastTranscriptId)
-                ).use { it.moveToFirst() }
-                if (!boundaryIsValid) continue
-                val validSkips = bookmark.skippedTranscriptIds.filter { id ->
-                    db.rawQuery(
-                        "SELECT 1 FROM transcripts WHERE chat_id = ? AND transcript_id = ? LIMIT 1",
-                        arrayOf(bookmark.chatId, id)
-                    ).use { it.moveToFirst() }
-                }
-                val values = ContentValues().apply {
-                    put("chat_id", bookmark.chatId)
-                    put("last_started_at", bookmark.lastStartedAt)
-                    put("last_transcript_id", bookmark.lastTranscriptId)
-                    put("skipped_transcript_ids_json", stringsToJson(validSkips))
-                    put("archive_paused", if (bookmark.archivePaused) 1 else 0)
-                    put("updated_at", bookmark.updatedAt.ifBlank { nowIso() })
-                }
-                if (overwriteSingletons) {
-                    db.insertWithOnConflict(
-                        "analysis_chat_bookmarks", null, values, SQLiteDatabase.CONFLICT_REPLACE
-                    )
-                } else {
-                    db.insertWithOnConflict(
-                        "analysis_chat_bookmarks", null, values, SQLiteDatabase.CONFLICT_IGNORE
-                    )
-                }
-            }
-            initializeBookmarkCutoverTx(db, replaceExisting = false)
 
             // Roleplay card entries (3.6a). Their card/parent references are
             // soft by design, so entries import cleanly in any order.
@@ -3430,32 +3376,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             if (it.moveToFirst()) retrievalPolicy = it.getString(it.getColumnIndexOrThrow("policy_json"))
         }
 
-        val transcripts = ArrayList<TranscriptRecord>()
-        db.query("transcripts", null, null, null, null, null, "started_at ASC").use {
-            while (it.moveToNext()) {
-                transcripts.add(
-                    TranscriptRecord(
-                        transcriptId = it.getString(it.getColumnIndexOrThrow("transcript_id")),
-                        chatId = it.getStringOrNull("chat_id"),
-                        companionId = it.getStringOrNull("companion_id"),
-                        worldId = it.getStringOrNull("world_id"),
-                        roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
-                        userPersonaId = it.getStringOrNull("user_persona_id"),
-                        campaignId = it.getStringOrNull("campaign_id"),
-                        projectId = it.getStringOrNull("project_id"),
-                        source = it.getString(it.getColumnIndexOrThrow("source")),
-                        startedAt = it.getStringOrNull("started_at"),
-                        endedAt = it.getStringOrNull("ended_at"),
-                        content = it.getString(it.getColumnIndexOrThrow("content")),
-                        modelTag = it.getStringOrNull("model_tag"),
-                        quickSettingsJson = it.getStringOrNull("quick_settings_json"),
-                        reviewStatus = it.getString(it.getColumnIndexOrThrow("review_status")),
-                        processedAt = it.getStringOrNull("processed_at")
-                    )
-                )
-            }
-        }
-
         val campaigns = readCampaigns(null, null)
         val projects = readProjects(null, null)
 
@@ -3498,7 +3418,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             archivistSettings = archivist,
             proposals = proposals,
             retrievalPolicyJson = retrievalPolicy,
-            transcripts = transcripts,
+            // Conversation text is never exported (Stage 6A).
+            transcripts = emptyList(),
             campaigns = campaigns,
             projects = projects,
             partyMembers = partyMembers,
@@ -3508,7 +3429,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             modelRuleTags = modelRuleTags,
             modelRuleTagLinks = modelRuleTagLinks,
             memoryTypes = getMemoryTypes(),
-            analysisBookmarks = getAnalysisBookmarks(),
+            scanProgress = allScanProgress().values.sortedBy { it.chatId }
+                .map { it.copy(claimRunId = null) },
             memoryHandlingPreferences = storedMemoryHandlingPreferences(db)
         )
     }
@@ -3540,548 +3462,143 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     }
 
     /* ---------------------------------------------------------------------- */
-    /* transcripts (Phase 2: capture queue for the Archivist)                 */
+    /* Memory Scanner progress (Stage 6A: the chat is the source)             */
+    /*                                                                        */
+    /* The scanner reads the original chat storage. This database keeps only */
+    /* chat ids, message UUID references, fingerprints, scan state and the    */
+    /* validated working drafts: never conversation text (memory development  */
+    /* plan M.2, "The chat is the source").                                   */
     /* ---------------------------------------------------------------------- */
 
-    /** One chat message's hidden-from-AI state, with the role and text that
-     *  identify its turns captured before turns carried a message ID. */
-    data class TranscriptMessageMark(
-        val messageId: String,
-        val role: String,
-        val text: String,
-        val hidden: Boolean
-    )
-
-    /**
-     * Marks every captured turn of one chat message as hidden from (or visible
-     * to) the Memory Assistant. Only rows not yet analyzed and not claimed by
-     * a running analysis change; the turn text is kept, so making the message
-     * visible again restores it. Returns how many rows changed.
-     */
-    fun setTranscriptMessageHidden(chatId: String, mark: TranscriptMessageMark): Int {
-        if (chatId.isBlank() || (mark.messageId.isBlank() && mark.text.isBlank())) return 0
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            val rows = ArrayList<Pair<String, String>>()
-            db.query(
-                "transcripts", arrayOf("transcript_id", "content"),
-                "chat_id = ? AND processed_at IS NULL AND claim_run_id IS NULL", arrayOf(chatId),
-                null, null, null
-            ).use {
-                while (it.moveToNext()) rows.add(it.getString(0) to it.getString(1))
-            }
-            // Older turns without a message ID are matched by text only when
-            // exactly one turn matches, so a repeated short message never
-            // hides another message's turn.
-            val allowTextMatch = rows.sumOf { (_, content) ->
-                TranscriptTurnVisibility.textMatchCount(content, mark)
-            } == 1
-            val updates = rows.mapNotNull { (id, content) ->
-                TranscriptTurnVisibility.withMessageHidden(content, mark, allowTextMatch)?.let { id to it }
-            }
-            for ((id, content) in updates) {
-                db.update("transcripts", ContentValues().apply { put("content", content) },
-                    "transcript_id = ?", arrayOf(id))
-            }
-            db.setTransactionSuccessful()
-            return updates.size
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /**
-     * Appends one completed turn to the chat's open transcript row (creating
-     * one when needed). "Open" = the chat's newest unprocessed row, still
-     * served by the same model, companion, and scene, unclaimed, and under
-     * the size cap — a change of model, companion, or scene context, an
-     * oversized row, or an analysis claim on the row starts a new row so
-     * each transcript's model_tag/companion_id/scene columns stay truthful
-     * for the Archivist. A CLAIMED row is sealed (counterplan §4(a)): a turn
-     * arriving mid-analysis can never slip into a row a run has selected and
-     * be marked processed without ever being read — it starts a fresh
-     * pending row instead. Scene context (§4(e)) is stamped in the typed
-     * columns at capture time, never inferred later.
-     * [markExcluded] is reserved for a permanent policy exclusion such as a
-     * companion whose memory participation is `none`. [archivePaused] is the
-     * reversible per-chat Archive toggle: content is captured as pending while
-     * the bookmark keeps it ineligible, ready to be reviewed after resume.
-     */
-    /** Returns a short outcome string for the Event Log (capture is otherwise
-     *  invisible): "inserted <id>", "appended <id>", or "insert failed (rc)". */
-    fun appendTranscriptTurn(
-        chatId: String,
-        companionId: String?,
-        userMessage: String,
-        assistantMessage: String,
-        modelTag: String,
-        quickSettingsJson: String?,
-        markExcluded: Boolean,
-        archivePaused: Boolean = false,
-        assistantComplete: Boolean = true,
-        worldId: String? = null,
-        campaignId: String? = null,
-        roleplayCharacterId: String? = null,
-        userPersonaId: String? = null,
-        projectId: String? = null,
-        userMessageId: String = "",
-        assistantMessageId: String = "",
-        userHidden: Boolean = false,
-        assistantHidden: Boolean = false
-    ): String {
-        val now = nowIso()
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            requireBookmarkCutover(db)
-            ensureAnalysisBookmarkTx(db, chatId)
-            db.update("analysis_chat_bookmarks", ContentValues().apply {
-                put("archive_paused", if (archivePaused) 1 else 0)
-                put("updated_at", now)
-            }, "chat_id = ?", arrayOf(chatId))
-            val bookmark = analysisBookmarkTx(db, chatId)
-            var rowId: String? = null
-            var content = "[]"
-            db.query(
-                "transcripts",
-                arrayOf(
-                    "transcript_id", "content", "model_tag", "companion_id", "review_status",
-                    "claim_run_id", "world_id", "campaign_id", "roleplay_character_id",
-                    "user_persona_id", "project_id", "started_at"
-                ),
-                "chat_id = ? AND processed_at IS NULL", arrayOf(chatId),
-                null, null, "COALESCE(started_at, '') DESC, transcript_id DESC", "1"
-            ).use {
-                if (it.moveToFirst()) {
-                    val sameModel = it.getStringOrNull("model_tag") == modelTag
-                    val sameCompanion = it.getStringOrNull("companion_id") == companionId
-                    // Sealed: the newest unprocessed row is claimed by a run
-                    // (or a future review package) — never append into it.
-                    val unclaimed = it.getStringOrNull("claim_run_id") == null
-                    val afterBookmark = AnalysisBookmark.isAfter(
-                        AnalysisBookmark.Boundary(
-                            it.getStringOrNull("started_at"), it.getString(0)
-                        ),
-                        bookmarkBoundary(bookmark)
-                    )
-                    val sameExclusion =
-                        (it.getString(it.getColumnIndexOrThrow("review_status")) == "excluded") == markExcluded
-                    // Scene identity is part of the row's truth: a scene
-                    // change closes the row like a model change does.
-                    val sameScene = it.getStringOrNull("world_id") == worldId &&
-                        it.getStringOrNull("campaign_id") == campaignId &&
-                        it.getStringOrNull("roleplay_character_id") == roleplayCharacterId &&
-                        it.getStringOrNull("user_persona_id") == userPersonaId &&
-                        it.getStringOrNull("project_id") == projectId
-                    val existing = it.getString(it.getColumnIndexOrThrow("content"))
-                    if (sameModel && sameCompanion && unclaimed && afterBookmark && sameExclusion && sameScene &&
-                        existing.length < MAX_TRANSCRIPT_CHARS
-                    ) {
-                        rowId = it.getString(0)
-                        content = existing
-                    }
-                }
-            }
-
-            val turns = org.json.JSONArray(content)
-            val userTurn = org.json.JSONObject().put("role", "user").put("content", userMessage).put("at", now)
-            TranscriptTurnVisibility.stamp(userTurn, userMessageId, userHidden)
-            turns.put(userTurn)
-            // "complete": false marks an assistant reply that did not finish
-            // streaming, so the Archivist never mines a truncated fragment as a
-            // reliable fact. Absent (the common case) means complete — backward
-            // compatible with every already-stored transcript.
-            val assistantTurn = org.json.JSONObject()
-                .put("role", "assistant").put("content", assistantMessage).put("at", now)
-            if (!assistantComplete) assistantTurn.put("complete", false)
-            TranscriptTurnVisibility.stamp(assistantTurn, assistantMessageId, assistantHidden)
-            turns.put(assistantTurn)
-
-            val outcome: String
-            if (rowId == null) {
-                val newRowId = newId("t-")
-                // insertOrThrow so a constraint failure surfaces as an exception
-                // (and rolls back) instead of silently returning -1 — a silent
-                // failed insert is exactly what "0 transcripts" would look like.
-                db.insertOrThrow("transcripts", null, ContentValues().apply {
-                    put("transcript_id", newRowId)
-                    put("chat_id", chatId)
-                    put("companion_id", companionId)
-                    put("world_id", worldId)
-                    put("campaign_id", campaignId)
-                    put("roleplay_character_id", roleplayCharacterId)
-                    put("user_persona_id", userPersonaId)
-                    put("project_id", projectId)
-                    put("source", "live")
-                    put("started_at", now)
-                    put("ended_at", now)
-                    put("content", turns.toString())
-                    put("model_tag", modelTag)
-                    put("quick_settings_json", quickSettingsJson)
-                    put("review_status", if (markExcluded) "excluded" else "pending")
-                })
-                rowId = newRowId
-                outcome = "inserted $newRowId (${if (markExcluded) "excluded" else "pending"})"
-            } else {
-                db.update("transcripts", ContentValues().apply {
-                    put("content", turns.toString())
-                    put("ended_at", now)
-                    put("quick_settings_json", quickSettingsJson)
-                    if (markExcluded) put("review_status", "excluded")
-                }, "transcript_id = ?", arrayOf(rowId))
-                outcome = "appended $rowId"
-            }
-            if (markExcluded) excludeTranscriptIdsTx(db, chatId, listOfNotNull(rowId))
-            db.setTransactionSuccessful()
-            return outcome
-        } finally {
-            db.endTransaction()
-            chatListMemoryChanged(chatId)
-        }
-    }
-
-    /** User Archive toggle. This is a reversible eligibility pause, never a
-     * terminal exclusion: the completed boundary and waiting transcript rows
-     * are left untouched so resume exposes the whole post-bookmark range. */
-    fun setChatTranscriptsExcluded(chatId: String, excluded: Boolean) {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            requireBookmarkCutover(db)
-            ensureAnalysisBookmarkTx(db, chatId)
-            db.update("analysis_chat_bookmarks", ContentValues().apply {
-                put("archive_paused", if (excluded) 1 else 0)
-                put("updated_at", nowIso())
-            }, "chat_id = ?", arrayOf(chatId))
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /* ---------------------------------------------------------------------- */
-    /* Archivist (Phase 6): eligibility readers, draft filing, run history     */
-    /*                                                                         */
-    /* The Archivist only ever files DRAFTS (owner rules: it proposes, the     */
-    /* user decides). Memory drafts are memories.status='draft' rows — their   */
-    /* ONE home (§14); the dormant proposals table is never used for them.     */
-    /* Stage B eligibility is the durable per-chat bookmark plus temporary     */
-    /* claims. Deleted chats are filtered by the caller against app chat state,*/
-    /* which this store cannot see.                                             */
-    /* ---------------------------------------------------------------------- */
-
-    private fun readTranscript(it: Cursor): TranscriptRecord = TranscriptRecord(
-        transcriptId = it.getString(it.getColumnIndexOrThrow("transcript_id")),
-        chatId = it.getStringOrNull("chat_id"),
-        companionId = it.getStringOrNull("companion_id"),
-        worldId = it.getStringOrNull("world_id"),
-        roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
-        userPersonaId = it.getStringOrNull("user_persona_id"),
-        campaignId = it.getStringOrNull("campaign_id"),
-        projectId = it.getStringOrNull("project_id"),
-        source = it.getString(it.getColumnIndexOrThrow("source")),
-        startedAt = it.getStringOrNull("started_at"),
-        endedAt = it.getStringOrNull("ended_at"),
-        content = it.getString(it.getColumnIndexOrThrow("content")),
-        modelTag = it.getStringOrNull("model_tag"),
-        quickSettingsJson = it.getStringOrNull("quick_settings_json"),
-        reviewStatus = it.getString(it.getColumnIndexOrThrow("review_status")),
-        processedAt = it.getStringOrNull("processed_at"),
-        claimRunId = it.getStringOrNull("claim_run_id")
-    )
-
-    private fun readAnalysisBookmark(c: Cursor) = AnalysisChatBookmark(
+    private fun readScanProgress(c: Cursor) = ScanChatProgress(
         chatId = c.getString(c.getColumnIndexOrThrow("chat_id")),
-        lastStartedAt = c.getStringOrNull("last_started_at"),
-        lastTranscriptId = c.getStringOrNull("last_transcript_id"),
-        skippedTranscriptIds = jsonToStrings(c.getStringOrNull("skipped_transcript_ids_json")),
-        archivePaused = c.getInt(c.getColumnIndexOrThrow("archive_paused")) != 0,
+        bookmarkAnchors = jsonToStrings(c.getStringOrNull("bookmark_anchor_ids_json")),
+        needsFullRescan = c.getInt(c.getColumnIndexOrThrow("needs_full_rescan")) != 0,
+        claimRunId = c.getStringOrNull("claim_run_id"),
         updatedAt = c.getString(c.getColumnIndexOrThrow("updated_at"))
     )
 
-    private fun ensureAnalysisBookmarkTx(db: SQLiteDatabase, chatId: String) {
+    private fun ensureScanProgressTx(db: SQLiteDatabase, chatId: String) {
         db.execSQL(
-            "INSERT OR IGNORE INTO analysis_chat_bookmarks " +
-                "(chat_id, last_started_at, last_transcript_id, skipped_transcript_ids_json, archive_paused, updated_at) " +
-                "VALUES (?, NULL, NULL, '[]', 0, ?)",
+            "INSERT OR IGNORE INTO scan_chat_progress " +
+                "(chat_id, bookmark_anchor_ids_json, needs_full_rescan, claim_run_id, updated_at) " +
+                "VALUES (?, '[]', 0, NULL, ?)",
             arrayOf(chatId, nowIso())
         )
     }
 
-    private fun analysisBookmarkTx(db: SQLiteDatabase, chatId: String): AnalysisChatBookmark {
-        ensureAnalysisBookmarkTx(db, chatId)
-        db.query(
-            "analysis_chat_bookmarks", null, "chat_id = ?", arrayOf(chatId),
-            null, null, null
-        ).use {
-            check(it.moveToFirst()) { "Missing analysis bookmark for $chatId" }
-            return readAnalysisBookmark(it)
-        }
-    }
+    private fun scanProgressTx(db: SQLiteDatabase, chatId: String): ScanChatProgress? =
+        db.query("scan_chat_progress", null, "chat_id = ?", arrayOf(chatId), null, null, null)
+            .use { if (it.moveToFirst()) readScanProgress(it) else null }
 
-    /** Add intentionally excluded rows to the bookmark-owned skip snapshot and
-     *  immediately advance through any that are now contiguous. */
-    private fun excludeTranscriptIdsTx(db: SQLiteDatabase, chatId: String, ids: Collection<String>) {
-        val bookmark = analysisBookmarkTx(db, chatId)
-        val skipped = (bookmark.skippedTranscriptIds + ids).toSet()
-        val rows = transcriptsForChatTx(db, chatId)
-        var boundary = bookmarkBoundary(bookmark)
-        val remaining = skipped.toMutableSet()
-        for (row in rows) {
-            val rowBoundary = transcriptBoundary(row)
-            if (!AnalysisBookmark.isAfter(rowBoundary, boundary)) continue
-            if (row.claimRunId != null) break
-            if (row.transcriptId !in remaining) break
-            remaining.remove(row.transcriptId)
-            boundary = rowBoundary
-        }
-        db.update("analysis_chat_bookmarks", ContentValues().apply {
-            put("last_started_at", boundary?.startedAt)
-            put("last_transcript_id", boundary?.transcriptId)
-            put("skipped_transcript_ids_json", stringsToJson(remaining.sorted()))
-            put("updated_at", nowIso())
-        }, "chat_id = ?", arrayOf(chatId))
-    }
+    /** The chat's scan progress, or null when it was never scanned. */
+    fun scanProgress(chatId: String): ScanChatProgress? = scanProgressTx(readableDatabase, chatId)
 
-    fun getAnalysisBookmark(chatId: String): AnalysisChatBookmark? {
-        readableDatabase.query(
-            "analysis_chat_bookmarks", null, "chat_id = ?", arrayOf(chatId),
-            null, null, null
-        ).use { return if (it.moveToFirst()) readAnalysisBookmark(it) else null }
-    }
-
-    fun getAnalysisBookmarks(): List<AnalysisChatBookmark> {
-        val out = ArrayList<AnalysisChatBookmark>()
-        readableDatabase.query(
-            "analysis_chat_bookmarks", null, null, null, null, null, "chat_id ASC"
-        ).use { while (it.moveToNext()) out.add(readAnalysisBookmark(it)) }
+    fun allScanProgress(): Map<String, ScanChatProgress> {
+        val out = HashMap<String, ScanChatProgress>()
+        readableDatabase.query("scan_chat_progress", null, null, null, null, null, null)
+            .use { while (it.moveToNext()) readScanProgress(it).let { p -> out[p.chatId] = p } }
         return out
     }
 
-    private fun bookmarkBoundary(bookmark: AnalysisChatBookmark): AnalysisBookmark.Boundary? =
-        bookmark.lastTranscriptId?.let { AnalysisBookmark.Boundary(bookmark.lastStartedAt, it) }
+    /** Chats whose earlier progress could not be carried over and that are
+     *  waiting for their automatic complete rescan (owner decision, Stage 6A
+     *  question 1). */
+    fun chatsNeedingFullRescan(): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery(
+            "SELECT chat_id FROM scan_chat_progress WHERE needs_full_rescan = 1 ORDER BY chat_id",
+            emptyArray<String>()
+        ).use { while (it.moveToNext()) out.add(it.getString(0)) }
+        return out
+    }
 
-    private fun transcriptBoundary(row: TranscriptRecord) =
-        AnalysisBookmark.Boundary(row.startedAt, row.transcriptId)
+    private fun readScanRange(c: Cursor) = ScanRangeRecord(
+        rangeId = c.getString(c.getColumnIndexOrThrow("range_id")),
+        runId = c.getString(c.getColumnIndexOrThrow("run_id")),
+        chatId = c.getString(c.getColumnIndexOrThrow("chat_id")),
+        ordinal = c.getInt(c.getColumnIndexOrThrow("ordinal")),
+        kind = c.getString(c.getColumnIndexOrThrow("kind")),
+        startAnchors = jsonToStrings(c.getStringOrNull("start_anchor_ids_json")),
+        endAnchors = jsonToStrings(c.getStringOrNull("end_anchor_ids_json")),
+        checkpointJson = c.getStringOrNull("checkpoint_json")
+    )
 
-    private fun transcriptsForChatTx(db: SQLiteDatabase, chatId: String): List<TranscriptRecord> {
-        val out = ArrayList<TranscriptRecord>()
-        db.query(
-            "transcripts", null, "chat_id = ?", arrayOf(chatId), null, null,
-            "COALESCE(started_at, '') ASC, transcript_id ASC"
-        ).use { while (it.moveToNext()) out.add(readTranscript(it)) }
+    fun scanRangesForRun(runId: String): List<ScanRangeRecord> {
+        val out = ArrayList<ScanRangeRecord>()
+        readableDatabase.query(
+            "scan_ranges", null, "run_id = ?", arrayOf(runId), null, null, "ordinal ASC, range_id ASC"
+        ).use { while (it.moveToNext()) out.add(readScanRange(it)) }
+        return out
+    }
+
+    fun scanRange(rangeId: String): ScanRangeRecord? =
+        readableDatabase.query("scan_ranges", null, "range_id = ?", arrayOf(rangeId), null, null, null)
+            .use { if (it.moveToFirst()) readScanRange(it) else null }
+
+    /** Chat ids held by suspended (paused or interrupted) runs. */
+    fun chatsHeldBySuspendedRuns(): Map<String, String> {
+        val out = HashMap<String, String>()
+        readableDatabase.rawQuery(
+            "SELECT r.chat_id, r.run_id FROM scan_ranges r JOIN archivist_runs a ON a.run_id = r.run_id " +
+                "WHERE a.status = 'running' AND a.suspended IS NOT NULL",
+            emptyArray<String>()
+        ).use { while (it.moveToNext()) out[it.getString(0)] = it.getString(1) }
         return out
     }
 
     /**
-     * The one post-cutover eligibility reader. It deliberately does not inspect
-     * review_status or processed_at. Bookmark position, snapshotted skips, and
-     * temporary claims/ranges are the complete authority.
+     * Opens a durable run and freezes each requested chat range in one
+     * transaction. A scan range claims its chat; the claim is refused (and
+     * the range left out) when another run holds the chat or the chat's
+     * bookmark moved since the caller read it. A rerun range claims nothing
+     * and never moves a bookmark. Returns the ranges actually opened.
      */
-    /** [ignoreArchivePause] is true only for the user's own Scan for Memories
-     *  request on one chat: that request scans the chat even while its memory
-     *  Archive switch is off. Ordinary runs always respect the pause. */
-    private fun eligibleTranscriptsForChatTx(
-        db: SQLiteDatabase,
-        chatId: String,
-        ignoreArchivePause: Boolean = false
-    ): List<TranscriptRecord> =
-        // A claim is a temporary concurrency seal. Stop at it; never jump over
-        // an in-flight range and claim later history out of order.
-        unscannedTranscriptsForChatTx(db, chatId, ignoreArchivePause)
-            .takeWhile { it.claimRunId == null }
-
-    /** Every row after the chat's bookmark that is not skipped, claimed or not. */
-    private fun unscannedTranscriptsForChatTx(
-        db: SQLiteDatabase,
-        chatId: String,
-        ignoreArchivePause: Boolean
-    ): List<TranscriptRecord> {
-        val bookmark = analysisBookmarkTx(db, chatId)
-        if (bookmark.archivePaused && !ignoreArchivePause) return emptyList()
-        val ordered = transcriptsForChatTx(db, chatId)
-        return AnalysisBookmark.eligibleRange(
-            rows = ordered,
-            boundary = bookmarkBoundary(bookmark),
-            skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
-            idOf = { it.transcriptId },
-            boundaryOf = { transcriptBoundary(it) }
-        )
-    }
-
-    /** Scan for Memories on one chat: the part of [chatId] a scan could
-     *  freeze now, including while the chat's Archive switch is off. */
-    fun chatScanEligibleTranscripts(chatId: String): List<TranscriptRecord> {
+    fun beginScanRun(run: ArchivistRunRecord, ranges: List<ScanRangeRecord>): List<ScanRangeRecord> {
         val db = writableDatabase
+        val opened = ArrayList<ScanRangeRecord>()
         db.beginTransaction()
         try {
-            requireBookmarkCutover(db)
-            val rows = eligibleTranscriptsForChatTx(db, chatId, ignoreArchivePause = true)
-            db.setTransactionSuccessful()
-            return rows
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /** [chatId]'s rows split by the chat's bookmark, for its scan progress:
-     *  [scanned] are the rows at or before the bookmark, and [pendingIds] the
-     *  rows after it that still wait. Skipped rows count as neither. */
-    data class ChatScanRows(val scanned: List<TranscriptRecord>, val pendingIds: List<String>) {
-        val hasPending: Boolean get() = pendingIds.isNotEmpty()
-    }
-
-    fun chatScanRows(chatId: String): ChatScanRows {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            requireBookmarkCutover(db)
-            val bookmark = analysisBookmarkTx(db, chatId)
-            val boundary = bookmarkBoundary(bookmark)
-            val skipped = bookmark.skippedTranscriptIds.toHashSet()
-            val rows = transcriptsForChatTx(db, chatId).filter { it.transcriptId !in skipped }
-            val (pending, scanned) = rows.partition {
-                AnalysisBookmark.isAfter(transcriptBoundary(it), boundary)
-            }
-            db.setTransactionSuccessful()
-            return ChatScanRows(scanned, pending.map { it.transcriptId })
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /** True when [chatId] has messages not yet scanned for memories, including
-     *  rows a running scan has already claimed but not finished. False means
-     *  Scan for Memories has nothing new to do for this chat. */
-    fun chatHasUnscannedTranscripts(chatId: String): Boolean {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            requireBookmarkCutover(db)
-            val any = unscannedTranscriptsForChatTx(db, chatId, ignoreArchivePause = true).isNotEmpty()
-            db.setTransactionSuccessful()
-            return any
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /** Everything the next API run may freeze, chronological and bookmark-led. */
-    fun bookmarkEligibleTranscripts(): List<TranscriptRecord> {
-        val db = writableDatabase
-        val out = ArrayList<TranscriptRecord>()
-        db.beginTransaction()
-        try {
-            requireBookmarkCutover(db)
-            val chatIds = ArrayList<String>()
-            db.rawQuery(
-                "SELECT DISTINCT chat_id FROM transcripts WHERE chat_id IS NOT NULL ORDER BY chat_id",
-                emptyArray<String>()
-            ).use { while (it.moveToNext()) chatIds.add(it.getString(0)) }
-            for (chatId in chatIds) out.addAll(eligibleTranscriptsForChatTx(db, chatId))
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-        out.sortWith(compareBy({ it.startedAt ?: "" }, { it.transcriptId }))
-        return out
-    }
-
-    /** Compatibility name for existing callers; no legacy state is read. */
-    fun pendingUnprocessedTranscripts(): List<TranscriptRecord> = bookmarkEligibleTranscripts()
-
-    /** Rerun support: re-fetch exactly the rows a past run fed, regardless of
-     *  their current review state. Rows deleted since simply drop out. */
-    fun transcriptsByIds(ids: List<String>): List<TranscriptRecord> {
-        if (ids.isEmpty()) return emptyList()
-        val out = ArrayList<TranscriptRecord>()
-        val db = readableDatabase
-        for (id in ids) {
-            db.query(
-                "transcripts", null, "transcript_id = ?", arrayOf(id),
-                null, null, null
-            ).use { if (it.moveToNext()) out.add(readTranscript(it)) }
-        }
-        out.sortWith(compareBy({ it.startedAt ?: "" }, { it.transcriptId }))
-        return out
-    }
-
-    /**
-     * Open a durable multi-chat run and freeze each selected chat independently.
-     * The supplied ids are the eligibility snapshot the caller displayed; rows
-     * appended after that snapshot are deliberately not claimed and belong to
-     * the next run. All claims and frozen-range records are sealed beside the
-     * running history row in one transaction. [ignoreArchivePause] is set
-     * only by a single-chat Scan for Memories run.
-     */
-    fun beginAnalysisRun(
-        run: ArchivistRunRecord,
-        transcriptIdsByChat: Map<String, List<String>>,
-        ignoreArchivePause: Boolean = false
-    ): Map<String, FrozenChatRange> {
-        val db = writableDatabase
-        val frozen = linkedMapOf<String, FrozenChatRange>()
-        db.beginTransaction()
-        try {
-            requireBookmarkCutover(db)
             db.insertWithOnConflict(
                 "archivist_runs", null, archivistRunValues(run), SQLiteDatabase.CONFLICT_REPLACE
             )
-            for ((chatId, requestedIds) in transcriptIdsByChat) {
-                if (requestedIds.isEmpty()) continue
-                val requested = requestedIds.toHashSet()
-                val eligible = eligibleTranscriptsForChatTx(db, chatId, ignoreArchivePause)
-                val selected = ArrayList<TranscriptRecord>()
-                // Freeze only the requested contiguous prefix. A late row is
-                // the first non-requested row and stays unclaimed for next time.
-                for (row in eligible) {
-                    if (row.transcriptId !in requested) break
-                    val claimed = db.update(
-                        "transcripts",
-                        ContentValues().apply { put("claim_run_id", run.runId) },
-                        "transcript_id = ? AND chat_id = ? AND claim_run_id IS NULL",
-                        arrayOf(row.transcriptId, chatId)
-                    )
-                    if (claimed != 1) break
-                    selected.add(row.copy(claimRunId = run.runId))
+            for (range in ranges) {
+                if (range.kind == ScanRangeRecord.KIND_SCAN) {
+                    ensureScanProgressTx(db, range.chatId)
+                    val progress = scanProgressTx(db, range.chatId) ?: continue
+                    if (progress.claimRunId != null) continue
+                    val expectedStart =
+                        if (progress.needsFullRescan) emptyList() else progress.bookmarkAnchors
+                    if (expectedStart != range.startAnchors) continue
+                    db.update("scan_chat_progress", ContentValues().apply {
+                        put("claim_run_id", run.runId)
+                        put("updated_at", nowIso())
+                    }, "chat_id = ? AND claim_run_id IS NULL", arrayOf(range.chatId))
                 }
-                if (selected.isEmpty()) continue
-
-                val end = selected.last()
-                val range = FrozenChatRange(
-                    rangeId = newId("range-"),
-                    runId = run.runId,
-                    chatId = chatId,
-                    transcripts = selected,
-                    frozenEndStartedAt = end.startedAt,
-                    frozenEndTranscriptId = end.transcriptId
-                )
-                db.insertOrThrow("analysis_chat_ranges", null, ContentValues().apply {
-                    put("range_id", range.rangeId)
-                    put("run_id", range.runId)
-                    put("chat_id", range.chatId)
-                    put("frozen_end_started_at", range.frozenEndStartedAt)
-                    put("frozen_end_transcript_id", range.frozenEndTranscriptId)
-                    put("status", "running")
-                    put("created_at", nowIso())
-                })
-                insertCandidateCollectionTx(
-                    db = db,
-                    collectionId = range.rangeId,
-                    chatId = range.chatId,
-                    frozenEndMarker = listOfNotNull(
-                        range.frozenEndStartedAt, range.frozenEndTranscriptId
-                    ).joinToString("\u0000")
-                )
-                frozen[chatId] = range
+                insertScanRangeTx(db, range)
+                opened.add(range)
             }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
-            chatListMemoryChanged(*transcriptIdsByChat.keys.toTypedArray())
+            chatListMemoryChanged(*ranges.map { it.chatId }.toTypedArray())
         }
-        return frozen
+        return opened
+    }
+
+    private fun insertScanRangeTx(db: SQLiteDatabase, range: ScanRangeRecord) {
+        db.insertOrThrow("scan_ranges", null, ContentValues().apply {
+            put("range_id", range.rangeId)
+            put("run_id", range.runId)
+            put("chat_id", range.chatId)
+            put("ordinal", range.ordinal)
+            put("kind", range.kind)
+            put("start_anchor_ids_json", stringsToJson(range.startAnchors))
+            put("end_anchor_ids_json", stringsToJson(range.endAnchors))
+            put("checkpoint_json", range.checkpointJson)
+            put("created_at", nowIso())
+        })
+        insertCandidateCollectionTx(db, range.rangeId, range.chatId, null)
     }
 
     private fun insertCandidateCollectionTx(
@@ -4103,46 +3620,50 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 put("created_at", nowIso())
                 put("updated_at", nowIso())
             },
-            SQLiteDatabase.CONFLICT_REPLACE
+            SQLiteDatabase.CONFLICT_IGNORE
         )
     }
 
-    /** Reruns do not own a bookmark range, but still use the same encrypted
-     * temporary candidate boundary until their complete chat output commits. */
-    fun beginCandidateCollection(collectionId: String, chatId: String) {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            insertCandidateCollectionTx(db, collectionId, chatId, null)
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /** Persist one successfully parsed chunk's validated memory/rule outputs.
-     * Exact identities already staged for this chat range are not duplicated. */
-    fun stageAnalysisCandidates(
-        collectionId: String,
+    /**
+     * Saves one completed section: its validated outputs and the new reading
+     * position, together in one transaction, so a resume never repeats a
+     * saved section and never skips an unsaved one. Exact identities already
+     * staged for this range are not duplicated.
+     */
+    fun saveScanSection(
+        rangeId: String,
         chunkOrdinal: Int,
-        candidates: List<StagedAnalysisCandidate>
+        candidates: List<StagedAnalysisCandidate>,
+        checkpointJson: String,
+        /** A repeat of an already staged candidate: the combined payload to
+         *  keep (for example, the repeat's extra tags), or null to keep the
+         *  stored one, so a resumed scan files what an uninterrupted one would. */
+        mergeRepeat: (stream: String, stored: String, repeat: String) -> String? = { _, _, _ -> null }
     ) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            check(rowExists(db, "analysis_run_state", "run_id", collectionId)) {
+            check(rowExists(db, "scan_ranges", "range_id", rangeId)) { "Scan range is not active" }
+            check(rowExists(db, "analysis_run_state", "run_id", rangeId)) {
                 "Candidate collection is not active"
             }
             for ((candidateOrdinal, candidate) in candidates.withIndex()) {
-                val exists = db.rawQuery(
-                    "SELECT 1 FROM analysis_candidates " +
+                val stored = db.rawQuery(
+                    "SELECT candidate_id, payload_json FROM analysis_candidates " +
                         "WHERE run_id = ? AND stream = ? AND candidate_hash = ? LIMIT 1",
-                    arrayOf(collectionId, candidate.stream, candidate.candidateHash)
-                ).use { it.moveToFirst() }
-                if (exists) continue
+                    arrayOf(rangeId, candidate.stream, candidate.candidateHash)
+                ).use { if (it.moveToFirst()) it.getString(0) to it.getString(1) else null }
+                if (stored != null) {
+                    val merged = mergeRepeat(candidate.stream, stored.second, candidate.payloadJson)
+                    if (merged != null && merged != stored.second) {
+                        db.update("analysis_candidates", ContentValues().apply { put("payload_json", merged) },
+                            "candidate_id = ?", arrayOf(stored.first))
+                    }
+                    continue
+                }
                 db.insertOrThrow("analysis_candidates", null, ContentValues().apply {
                     put("candidate_id", newId("cand-"))
-                    put("run_id", collectionId)
+                    put("run_id", rangeId)
                     put("stream", candidate.stream)
                     put("target_type", candidate.targetType)
                     put("target_id", candidate.targetId)
@@ -4153,103 +3674,136 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("created_at", nowIso())
                 })
             }
-            val completed = db.rawQuery(
-                "SELECT chunk_success_json FROM analysis_run_state WHERE run_id = ?",
-                arrayOf(collectionId)
-            ).use { c -> if (c.moveToFirst()) jsonToStrings(c.getString(0)) else emptyList() }
-                .plus(chunkOrdinal.toString()).distinct()
             db.update("analysis_run_state", ContentValues().apply {
                 put("chunk_ordinal", chunkOrdinal)
-                put("chunk_success_json", stringsToJson(completed))
                 put("updated_at", nowIso())
-            }, "run_id = ?", arrayOf(collectionId))
+            }, "run_id = ?", arrayOf(rangeId))
+            db.update("scan_ranges", ContentValues().apply {
+                put("checkpoint_json", checkpointJson)
+                put("updated_at", nowIso())
+            }, "range_id = ?", arrayOf(rangeId))
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
     }
 
-    fun discardCandidateCollection(collectionId: String) {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            db.delete("analysis_candidates", "run_id = ?", arrayOf(collectionId))
-            db.delete("analysis_run_state", "run_id = ?", arrayOf(collectionId))
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /** Release every claim a run still holds (terminal cleanup: completion,
-     *  failure, or interruption). Processed rows already dropped theirs. */
-    fun releaseAnalysisClaims(runId: String) {
-        val db = writableDatabase
-        val affectedChats = ArrayList<String>()
-        db.beginTransaction()
-        try {
-            val candidateCollections = ArrayList<String>()
-            db.rawQuery(
-                "SELECT DISTINCT chat_id FROM transcripts WHERE claim_run_id = ? AND chat_id IS NOT NULL",
-                arrayOf(runId)
-            ).use { while (it.moveToNext()) affectedChats.add(it.getString(0)) }
-            db.rawQuery(
-                "SELECT range_id FROM analysis_chat_ranges WHERE run_id = ?",
-                arrayOf(runId)
-            ).use { while (it.moveToNext()) candidateCollections.add(it.getString(0)) }
-            db.execSQL(
-                "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ?",
-                arrayOf(runId)
-            )
-            db.delete("analysis_chat_ranges", "run_id = ? AND status = 'running'", arrayOf(runId))
-            for (collectionId in candidateCollections) {
-                db.delete("analysis_candidates", "run_id = ?", arrayOf(collectionId))
-                db.delete("analysis_run_state", "run_id = ?", arrayOf(collectionId))
+    /** The staged outputs of a range, in the order they were saved. */
+    fun stagedScanCandidates(rangeId: String): List<StagedAnalysisCandidate> {
+        val out = ArrayList<StagedAnalysisCandidate>()
+        readableDatabase.query(
+            "analysis_candidates",
+            arrayOf("stream", "target_type", "target_id", "candidate_hash", "payload_json"),
+            "run_id = ?", arrayOf(rangeId), null, null,
+            "chunk_ordinal ASC, candidate_ordinal ASC, created_at ASC"
+        ).use {
+            while (it.moveToNext()) {
+                out.add(
+                    StagedAnalysisCandidate(
+                        stream = it.getString(0),
+                        targetType = it.getStringOrNull("target_type"),
+                        targetId = it.getStringOrNull("target_id"),
+                        candidateHash = it.getStringOrNull("candidate_hash") ?: "",
+                        payloadJson = it.getString(4)
+                    )
+                )
             }
-            // A rerun has no analysis_chat_ranges row. Its temporary candidate
-            // collection deliberately uses the parent run id, so terminal
-            // cleanup owns it directly as well as the startup reaper's
-            // unconditional temporary-state sweep after a hard process kill.
-            db.delete("analysis_candidates", "run_id = ?", arrayOf(runId))
-            db.delete("analysis_run_state", "run_id = ?", arrayOf(runId))
-            for (chatId in affectedChats) excludeTranscriptIdsTx(db, chatId, emptyList())
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-            chatListMemoryChanged(*affectedChats.toTypedArray())
         }
+        return out
     }
 
-    /** Hands one chat back out of a live run before the run reaches it, so a
-     *  Scan for Memories request of a different type can scan it instead.
-     *  Releases only that chat's claims, frozen range and temporary
-     *  candidates; the run keeps everything else. */
-    fun releaseChatAnalysisClaim(runId: String, chatId: String) {
+    /**
+     * Already-read source changed: the range's working drafts and reading
+     * position are discarded and the range starts again from its bookmark.
+     * The range itself (its frozen membership) and the claim are kept.
+     */
+    fun restartScanRange(rangeId: String) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            val ranges = ArrayList<String>()
-            db.rawQuery(
-                "SELECT range_id FROM analysis_chat_ranges WHERE run_id = ? AND chat_id = ?",
-                arrayOf(runId, chatId)
-            ).use { while (it.moveToNext()) ranges.add(it.getString(0)) }
-            db.execSQL(
-                "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ? AND chat_id = ?",
-                arrayOf(runId, chatId)
-            )
-            db.delete(
-                "analysis_chat_ranges", "run_id = ? AND chat_id = ? AND status = 'running'",
-                arrayOf(runId, chatId)
-            )
-            for (rangeId in ranges) {
-                db.delete("analysis_candidates", "run_id = ?", arrayOf(rangeId))
-                db.delete("analysis_run_state", "run_id = ?", arrayOf(rangeId))
-            }
-            excludeTranscriptIdsTx(db, chatId, emptyList())
+            db.delete("analysis_candidates", "run_id = ?", arrayOf(rangeId))
+            db.update("analysis_run_state", ContentValues().apply {
+                put("chunk_ordinal", 0)
+                put("updated_at", nowIso())
+            }, "run_id = ?", arrayOf(rangeId))
+            db.update("scan_ranges", ContentValues().apply {
+                putNull("checkpoint_json")
+                put("updated_at", nowIso())
+            }, "range_id = ?", arrayOf(rangeId))
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
-            chatListMemoryChanged(chatId)
+        }
+    }
+
+    private fun deleteScanRangeTx(db: SQLiteDatabase, range: ScanRangeRecord) {
+        db.delete("analysis_candidates", "run_id = ?", arrayOf(range.rangeId))
+        db.delete("analysis_run_state", "run_id = ?", arrayOf(range.rangeId))
+        db.delete("scan_ranges", "range_id = ?", arrayOf(range.rangeId))
+        db.update("scan_chat_progress", ContentValues().apply {
+            putNull("claim_run_id")
+            put("updated_at", nowIso())
+        }, "chat_id = ? AND claim_run_id = ?", arrayOf(range.chatId, range.runId))
+    }
+
+    /** Gives one range up: its working drafts are discarded, its claim is
+     *  released, and the chat's bookmark stays where it was. */
+    fun releaseScanRange(rangeId: String) {
+        val range = scanRange(rangeId) ?: return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            deleteScanRangeTx(db, range)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+            chatListMemoryChanged(range.chatId)
+        }
+    }
+
+    /**
+     * Moves one range of a suspended run to another run, keeping its working
+     * drafts and reading position. Used when the user scans one chat of a
+     * paused batch on its own (owner decision, Stage 6A question 7): that
+     * chat continues from its checkpoint and the paused batch keeps the rest.
+     */
+    fun transferScanRange(rangeId: String, toRunId: String, ordinal: Int): ScanRangeRecord? {
+        val range = scanRange(rangeId) ?: return null
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.update("scan_ranges", ContentValues().apply {
+                put("run_id", toRunId)
+                put("ordinal", ordinal)
+                put("updated_at", nowIso())
+            }, "range_id = ?", arrayOf(rangeId))
+            db.update("scan_chat_progress", ContentValues().apply {
+                put("claim_run_id", toRunId)
+                put("updated_at", nowIso())
+            }, "chat_id = ? AND claim_run_id = ?", arrayOf(range.chatId, range.runId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return scanRange(rangeId)
+    }
+
+    /** Ends a run for good (finished or cancelled): every range it still
+     *  holds is discarded and every claim released. */
+    fun releaseScanRun(runId: String) {
+        val ranges = scanRangesForRun(runId)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (range in ranges) deleteScanRangeTx(db, range)
+            db.update("scan_chat_progress", ContentValues().apply {
+                putNull("claim_run_id")
+                put("updated_at", nowIso())
+            }, "claim_run_id = ?", arrayOf(runId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+            chatListMemoryChanged(*ranges.map { it.chatId }.toTypedArray())
         }
     }
 
@@ -4295,13 +3849,16 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     }
 
     /**
-     * Atomically expose every staged output from one frozen chat and advance
-     * only that chat's bookmark. A failure at any insert or verification point
-     * rolls back Memory drafts, Model Rule drafts, Lorebook suggestions, legacy
-     * compatibility stamps, and the bookmark together.
+     * Atomically files every output of one finished range and, for a scan
+     * range, moves the chat's bookmark to [newBookmarkAnchors] (the range's
+     * last message). A failure at any point rolls back the drafts, rule
+     * drafts, Lorebook suggestions and the bookmark together. The caller has
+     * already verified the chat's current content against the range's
+     * checkpoint; the range must still be held by its run here.
      */
-    fun commitFrozenChatRange(
-        range: FrozenChatRange,
+    fun commitScanRange(
+        range: ScanRangeRecord,
+        newBookmarkAnchors: List<String>,
         memories: List<MemoryRecord>,
         rules: List<ModelRuleRecord>,
         lorebookSuggestions: List<LorebookSuggestionRecord>,
@@ -4312,85 +3869,21 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val db = writableDatabase
         db.beginTransaction()
         try {
-            requireBookmarkCutover(db)
-            val storedRange = db.query(
-                "analysis_chat_ranges", null,
-                "range_id = ? AND run_id = ? AND chat_id = ? AND status = 'running'",
-                arrayOf(range.rangeId, range.runId, range.chatId), null, null, null
-            ).use { c ->
-                check(c.moveToFirst()) { "Frozen chat range is no longer active" }
-                Pair(c.getStringOrNull("frozen_end_started_at"), c.getString(c.getColumnIndexOrThrow("frozen_end_transcript_id")))
-            }
-            check(storedRange.first == range.frozenEndStartedAt &&
-                storedRange.second == range.frozenEndTranscriptId) {
-                "Frozen chat range boundary changed"
-            }
-
-            val claimed = ArrayList<TranscriptRecord>()
-            db.query(
-                "transcripts", null, "chat_id = ? AND claim_run_id = ?",
-                arrayOf(range.chatId, range.runId), null, null,
-                "COALESCE(started_at, '') ASC, transcript_id ASC"
-            ).use { while (it.moveToNext()) claimed.add(readTranscript(it)) }
-            check(claimed.map { it.transcriptId } == range.transcripts.map { it.transcriptId }) {
-                "Frozen chat range claim set changed"
-            }
-            check(claimed.lastOrNull()?.transcriptId == range.frozenEndTranscriptId) {
-                "Frozen chat range is incomplete"
-            }
-
-            val bookmark = analysisBookmarkTx(db, range.chatId)
-            val allRows = transcriptsForChatTx(db, range.chatId)
-            val expectedPrefix = AnalysisBookmark.eligibleRange(
-                rows = allRows,
-                boundary = bookmarkBoundary(bookmark),
-                skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
-                idOf = { it.transcriptId },
-                boundaryOf = { transcriptBoundary(it) }
-            ).take(claimed.size)
-            check(expectedPrefix.map { it.transcriptId } == claimed.map { it.transcriptId }) {
-                "Frozen chat range no longer begins at the bookmark"
-            }
-
+            val stored = scanProgressAndRangeCheckTx(db, range)
             insertPreparedOutputsTx(
                 db, memories, rules, lorebookSuggestions, relationshipHintsByMemoryId,
                 sourcesByMemoryId
             )
-
-            val frozenEnd = AnalysisBookmark.Boundary(
-                range.frozenEndStartedAt, range.frozenEndTranscriptId
-            )
-            val (advanced, remainingSkips) = AnalysisBookmark.advanceAfterCommit(
-                rows = allRows,
-                frozenEnd = frozenEnd,
-                skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
-                idOf = { it.transcriptId },
-                boundaryOf = { transcriptBoundary(it) }
-            )
-            val now = nowIso()
-            db.update("analysis_chat_bookmarks", ContentValues().apply {
-                put("last_started_at", advanced.startedAt)
-                put("last_transcript_id", advanced.transcriptId)
-                put("skipped_transcript_ids_json", stringsToJson(remainingSkips.sorted()))
-                put("updated_at", now)
-            }, "chat_id = ?", arrayOf(range.chatId))
-
-            // Compatibility/history only. Runtime eligibility no longer reads
-            // either column after cutover.
-            for (row in claimed) {
-                db.update("transcripts", ContentValues().apply {
-                    put("review_status", "processed")
-                    put("processed_at", now)
+            if (range.kind == ScanRangeRecord.KIND_SCAN) {
+                check(stored?.claimRunId == range.runId) { "Scan range claim changed" }
+                db.update("scan_chat_progress", ContentValues().apply {
+                    put("bookmark_anchor_ids_json", stringsToJson(newBookmarkAnchors))
+                    put("needs_full_rescan", 0)
                     putNull("claim_run_id")
-                }, "transcript_id = ? AND claim_run_id = ?", arrayOf(row.transcriptId, range.runId))
+                    put("updated_at", nowIso())
+                }, "chat_id = ?", arrayOf(range.chatId))
             }
-            db.delete("analysis_chat_ranges", "range_id = ?", arrayOf(range.rangeId))
-            db.update("analysis_run_state", ContentValues().apply {
-                put("filed", 1)
-                put("updated_at", now)
-            }, "run_id = ?", arrayOf(range.rangeId))
-            db.delete("analysis_candidates", "run_id = ?", arrayOf(range.rangeId))
-            db.delete("analysis_run_state", "run_id = ?", arrayOf(range.rangeId))
+            deleteScanRangeTx(db, range)
             runProgress?.let {
                 db.insertWithOnConflict(
                     "archivist_runs", null, archivistRunValues(it), SQLiteDatabase.CONFLICT_REPLACE
@@ -4408,59 +3901,24 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         )
     }
 
-    /** Rerun rows are deliberately outside permanent eligibility. Their staged
-     *  outputs still commit as one chat transaction, but no bookmark moves. */
-    fun commitRerunChatOutputs(
-        memories: List<MemoryRecord>,
-        rules: List<ModelRuleRecord>,
-        lorebookSuggestions: List<LorebookSuggestionRecord>,
-        relationshipHintsByMemoryId: Map<String, List<String>> = emptyMap(),
-        candidateCollectionId: String? = null,
-        runProgress: ArchivistRunRecord? = null,
-        sourcesByMemoryId: Map<String, List<MemorySource>> = emptyMap()
-    ): CommittedChatOutputs {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            insertPreparedOutputsTx(
-                db, memories, rules, lorebookSuggestions, relationshipHintsByMemoryId,
-                sourcesByMemoryId
-            )
-            candidateCollectionId?.let { collectionId ->
-                db.update("analysis_run_state", ContentValues().apply {
-                    put("filed", 1)
-                    put("updated_at", nowIso())
-                }, "run_id = ?", arrayOf(collectionId))
-                db.delete("analysis_candidates", "run_id = ?", arrayOf(collectionId))
-                db.delete("analysis_run_state", "run_id = ?", arrayOf(collectionId))
-            }
-            runProgress?.let {
-                db.insertWithOnConflict(
-                    "archivist_runs", null, archivistRunValues(it), SQLiteDatabase.CONFLICT_REPLACE
-                )
-            }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-        return CommittedChatOutputs(
-            memoryIds = memories.map { it.memoryId },
-            ruleIds = rules.map { it.ruleId },
-            lorebookSuggestionIds = lorebookSuggestions.map { it.suggestionId }
-        )
+    private fun scanProgressAndRangeCheckTx(db: SQLiteDatabase, range: ScanRangeRecord): ScanChatProgress? {
+        val current = db.query(
+            "scan_ranges", null, "range_id = ? AND run_id = ? AND chat_id = ?",
+            arrayOf(range.rangeId, range.runId, range.chatId), null, null, null
+        ).use { if (it.moveToFirst()) readScanRange(it) else null }
+        checkNotNull(current) { "Scan range is no longer active" }
+        check(current.endAnchors == range.endAnchors) { "Scan range boundary changed" }
+        return scanProgressTx(db, range.chatId)
     }
 
     /**
-     * Startup/next-run recovery (counterplan §4(a), the RenameJournal
-     * pattern): a killed process runs no cleanup code, so any 'running' API
-     * run found here is dead. Its unfinished claims are released (the rows
-     * stay pending and are picked up by the next run — unseen text is never
-     * marked processed) and the run row is finalized as interrupted, with
-     * whatever per-conversation progress was durably recorded before death.
-     * Deliberately scoped to transport='api': a future computer review
-     * package's claims wait for import, cancel, or replacement — they are
-     * the one kind never auto-released. Returns how many dead runs were
-     * recovered.
+     * Startup recovery (counterplan §4(a)). A killed process runs no cleanup
+     * code, so a run still marked live here is dead. Unlike before Stage 6A,
+     * an interrupted scan keeps its frozen ranges, claims, working drafts and
+     * reading positions: it is marked interrupted and resumes after the
+     * user's next chat reply finishes, or when the user taps Resume. Claims
+     * whose run no longer exists, or has ended, are released. Returns how
+     * many runs were found interrupted.
      */
     fun reconcileInterruptedAnalysisRuns(): Int {
         val db = writableDatabase
@@ -4469,57 +3927,48 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         try {
             db.query(
                 "archivist_runs", arrayOf("run_id"),
-                "status = 'running' AND transport = 'api'", null, null, null, null
+                "status = 'running' AND transport = 'api' AND suspended IS NULL", null, null, null, null
             ).use { while (it.moveToNext()) deadRunIds.add(it.getString(0)) }
             val now = nowIso()
             for (runId in deadRunIds) {
-                db.execSQL(
-                    "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ?",
-                    arrayOf(runId)
-                )
-                db.delete("analysis_chat_ranges", "run_id = ?", arrayOf(runId))
+                val holdsRanges = db.rawQuery(
+                    "SELECT 1 FROM scan_ranges WHERE run_id = ? LIMIT 1", arrayOf(runId)
+                ).use { it.moveToFirst() }
                 db.update("archivist_runs", ContentValues().apply {
-                    put("status", "failed")
+                    if (holdsRanges) {
+                        put("suspended", SUSPENDED_INTERRUPTED)
+                    } else {
+                        // Nothing left to resume: the run ends as interrupted,
+                        // as it did before Stage 6A.
+                        put("status", "failed")
+                        put("finished_at", now)
+                    }
                     put("outcome", "interrupted")
                     put("failure_reason", "interrupted")
-                    put("finished_at", now)
                     put("error", "process ended before the run finished")
                 }, "run_id = ?", arrayOf(runId))
             }
-            // Belt: an API claim whose run row is gone entirely (e.g. the
-            // record write itself died) is unrecoverable operational state —
-            // release it so the rows return to the queue. Scoped to the API
-            // run id prefix so future non-API claims are never touched.
+            val liveRuns = "SELECT run_id FROM archivist_runs WHERE status = 'running'"
             db.execSQL(
-                "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id LIKE 'run-%' " +
-                    "AND claim_run_id NOT IN (SELECT run_id FROM archivist_runs)"
+                "UPDATE scan_chat_progress SET claim_run_id = NULL " +
+                    "WHERE claim_run_id IS NOT NULL AND claim_run_id NOT IN ($liveRuns)"
             )
             db.execSQL(
-                "DELETE FROM analysis_chat_ranges WHERE run_id NOT IN (" +
-                    "SELECT run_id FROM archivist_runs WHERE status = 'running')"
+                "DELETE FROM analysis_candidates WHERE run_id IN (" +
+                    "SELECT range_id FROM scan_ranges WHERE run_id NOT IN ($liveRuns))"
             )
-            // Minimal temporary analysis-run recovery (§8.10): an unfiled run
-            // is interrupted — discard its temporary candidates and state so
-            // nothing half-analysed is left behind and the frozen range is
-            // reanalysed cleanly. A filed run's temporary rows are also cleared
-            // (finished bookkeeping). The decision is the pure
-            // AnalysisRunReconciler so it is unit-tested off-device.
-            val tempRuns = ArrayList<AnalysisRunReconciler.RunState>()
-            db.query(
-                "analysis_run_state", arrayOf("run_id", "filed"), null, null, null, null, null
-            ).use {
-                while (it.moveToNext()) {
-                    tempRuns.add(AnalysisRunReconciler.RunState(it.getString(0), it.getInt(1) != 0))
-                }
-            }
-            // Both interrupted and completed temporary runs are removed here;
-            // candidates cascade with their run_state row (ON DELETE CASCADE),
-            // and are deleted explicitly as a belt in case enforcement is off.
-            for (runId in AnalysisRunReconciler.interruptedRunIds(tempRuns) +
-                AnalysisRunReconciler.completedRunIds(tempRuns)) {
-                db.delete("analysis_candidates", "run_id = ?", arrayOf(runId))
-                db.delete("analysis_run_state", "run_id = ?", arrayOf(runId))
-            }
+            db.execSQL(
+                "DELETE FROM analysis_run_state WHERE run_id IN (" +
+                    "SELECT range_id FROM scan_ranges WHERE run_id NOT IN ($liveRuns))"
+            )
+            db.execSQL("DELETE FROM scan_ranges WHERE run_id NOT IN ($liveRuns)")
+            // Temporary collections without a range belong to nothing.
+            db.execSQL(
+                "DELETE FROM analysis_candidates WHERE run_id NOT IN (SELECT range_id FROM scan_ranges)"
+            )
+            db.execSQL(
+                "DELETE FROM analysis_run_state WHERE run_id NOT IN (SELECT range_id FROM scan_ranges)"
+            )
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -4527,6 +3976,288 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
         return deadRunIds.size
     }
+
+    /** Marks a live run as paused or interrupted, keeping everything it
+     *  holds. [run] carries its counts so far. */
+    fun suspendScanRun(run: ArchivistRunRecord, suspended: String, progressPercent: Int?) {
+        writableDatabase.insertWithOnConflict(
+            "archivist_runs", null,
+            archivistRunValues(run.copy(suspended = suspended, progressPercent = progressPercent)),
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    /** Runs waiting to be resumed, newest first. */
+    fun suspendedScanRuns(): List<ArchivistRunRecord> =
+        readArchivistRuns("status = 'running' AND suspended IS NOT NULL", Int.MAX_VALUE)
+
+    /* -------- results shown on the Memory Scanner Tool screen -------- */
+
+    fun addScanReport(chatId: String, kind: String) {
+        writableDatabase.insertWithOnConflict("scan_reports", null, ContentValues().apply {
+            put("chat_id", chatId)
+            put("kind", kind)
+            put("created_at", nowIso())
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun removeScanReports(chatId: String, kinds: Collection<String>) {
+        for (kind in kinds) {
+            writableDatabase.delete("scan_reports", "chat_id = ? AND kind = ?", arrayOf(chatId, kind))
+        }
+    }
+
+    fun scanReports(): List<ScanReport> {
+        val out = ArrayList<ScanReport>()
+        readableDatabase.query(
+            "scan_reports", arrayOf("chat_id", "kind", "created_at"), null, null, null, null,
+            "created_at ASC, chat_id ASC"
+        ).use { while (it.moveToNext()) out.add(ScanReport(it.getString(0), it.getString(1), it.getString(2))) }
+        return out
+    }
+
+    fun clearScanReports(kinds: Collection<String>) {
+        for (kind in kinds) writableDatabase.delete("scan_reports", "kind = ?", arrayOf(kind))
+    }
+
+    /* -------- the transcript-store migration (Stage 6A) -------- */
+
+    fun scanSourceMigrationComplete(): Boolean =
+        getMeta(META_SCAN_SOURCE_MIGRATION) == "complete"
+
+    fun hasLegacyTranscriptTables(): Boolean = tableExists(readableDatabase, "transcripts")
+
+    private fun tableExists(db: SQLiteDatabase, table: String): Boolean =
+        db.rawQuery(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", arrayOf(table)
+        ).use { it.moveToFirst() }
+
+    /** Legacy transcript rows of one chat, oldest first. Migration only. */
+    fun legacyTranscriptsForChat(chatId: String): List<LegacyTranscript> {
+        val db = readableDatabase
+        if (!tableExists(db, "transcripts")) return emptyList()
+        val out = ArrayList<LegacyTranscript>()
+        db.query(
+            "transcripts", null, "chat_id = ?", arrayOf(chatId), null, null,
+            "COALESCE(started_at, '') ASC, transcript_id ASC"
+        ).use {
+            while (it.moveToNext()) {
+                out.add(
+                    LegacyTranscript(
+                        transcriptId = it.getString(it.getColumnIndexOrThrow("transcript_id")),
+                        chatId = chatId,
+                        companionId = it.getStringOrNull("companion_id"),
+                        worldId = it.getStringOrNull("world_id"),
+                        roleplayCharacterId = it.getStringOrNull("roleplay_character_id"),
+                        userPersonaId = it.getStringOrNull("user_persona_id"),
+                        campaignId = it.getStringOrNull("campaign_id"),
+                        projectId = it.getStringOrNull("project_id"),
+                        source = it.getStringOrNull("source") ?: "live",
+                        startedAt = it.getStringOrNull("started_at"),
+                        content = it.getString(it.getColumnIndexOrThrow("content")),
+                        claimRunId = it.getStringOrNull("claim_run_id"),
+                        reviewStatus = it.getStringOrNull("review_status") ?: "pending"
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    /** Every chat id the legacy tables mention. Migration only. */
+    fun legacyTranscriptChatIds(): Set<String> {
+        val db = readableDatabase
+        val out = LinkedHashSet<String>()
+        if (tableExists(db, "transcripts")) {
+            db.rawQuery(
+                "SELECT DISTINCT chat_id FROM transcripts WHERE chat_id IS NOT NULL ORDER BY chat_id",
+                emptyArray<String>()
+            ).use { while (it.moveToNext()) out.add(it.getString(0)) }
+        }
+        if (tableExists(db, "analysis_chat_bookmarks")) {
+            db.rawQuery("SELECT chat_id FROM analysis_chat_bookmarks", emptyArray<String>())
+                .use { while (it.moveToNext()) out.add(it.getString(0)) }
+        }
+        return out
+    }
+
+    /** The legacy bookmark of one chat. Migration only. */
+    fun legacyBookmark(chatId: String): AnalysisChatBookmark? {
+        val db = readableDatabase
+        if (!tableExists(db, "analysis_chat_bookmarks")) return null
+        return db.query(
+            "analysis_chat_bookmarks", null, "chat_id = ?", arrayOf(chatId), null, null, null
+        ).use {
+            if (!it.moveToFirst()) null else AnalysisChatBookmark(
+                chatId = it.getString(it.getColumnIndexOrThrow("chat_id")),
+                lastStartedAt = it.getStringOrNull("last_started_at"),
+                lastTranscriptId = it.getStringOrNull("last_transcript_id"),
+                skippedTranscriptIds = jsonToStrings(it.getStringOrNull("skipped_transcript_ids_json")),
+                archivePaused = it.getInt(it.getColumnIndexOrThrow("archive_paused")) != 0,
+                updatedAt = it.getString(it.getColumnIndexOrThrow("updated_at"))
+            )
+        }
+    }
+
+    /** Legacy run history and live ranges that still name transcript rows. */
+    fun legacyRunTranscriptIds(): Map<String, List<String>> {
+        val out = LinkedHashMap<String, List<String>>()
+        readableDatabase.rawQuery(
+            "SELECT run_id, transcript_ids_json FROM archivist_runs WHERE transcript_ids_json != '[]'",
+            emptyArray<String>()
+        ).use { while (it.moveToNext()) out[it.getString(0)] = jsonToStrings(it.getString(1)) }
+        return out
+    }
+
+    /** Legacy ranges of runs still marked live: (run id, chat id). */
+    fun legacyLiveRanges(): List<Pair<String, String>> {
+        val db = readableDatabase
+        if (!tableExists(db, "analysis_chat_ranges")) return emptyList()
+        val out = ArrayList<Pair<String, String>>()
+        db.rawQuery(
+            "SELECT r.run_id, r.chat_id FROM analysis_chat_ranges r JOIN archivist_runs a " +
+                "ON a.run_id = r.run_id WHERE a.status = 'running' ORDER BY r.created_at, r.range_id",
+            emptyArray<String>()
+        ).use { while (it.moveToNext()) out.add(it.getString(0) to it.getString(1)) }
+        return out
+    }
+
+    /**
+     * Records one chat's migration result and only then deletes that chat's
+     * transcript text (memory development plan M.2, "Removing the duplicate
+     * transcript store", step 2), all in one transaction: the converted
+     * bookmark ([progress], null when the chat no longer exists), run history
+     * converted to message ranges, and resumable ranges for runs that were
+     * live at upgrade time.
+     */
+    fun recordChatMigration(
+        chatId: String,
+        progress: ScanChatProgress?,
+        remainingRunTranscriptIds: Map<String, List<String>>,
+        runSourceRanges: Map<String, List<org.teslasoft.assistant.preferences.memory.scan.ScanSourceRanges.Range>>,
+        adoptedRanges: List<ScanRangeRecord>
+    ) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (progress != null) {
+                db.insertWithOnConflict("scan_chat_progress", null, ContentValues().apply {
+                    put("chat_id", chatId)
+                    put("bookmark_anchor_ids_json", stringsToJson(progress.bookmarkAnchors))
+                    put("needs_full_rescan", if (progress.needsFullRescan) 1 else 0)
+                    putNull("claim_run_id")
+                    put("updated_at", nowIso())
+                }, SQLiteDatabase.CONFLICT_REPLACE)
+            }
+            for ((runId, remaining) in remainingRunTranscriptIds) {
+                val existing = db.rawQuery(
+                    "SELECT source_ranges_json FROM archivist_runs WHERE run_id = ?", arrayOf(runId)
+                ).use { if (it.moveToFirst()) it.getString(0) else null }
+                db.update("archivist_runs", ContentValues().apply {
+                    put("transcript_ids_json", stringsToJson(remaining))
+                    put(
+                        "source_ranges_json",
+                        org.teslasoft.assistant.preferences.memory.scan.ScanSourceRanges.append(
+                            existing, runSourceRanges[runId].orEmpty()
+                        )
+                    )
+                }, "run_id = ?", arrayOf(runId))
+            }
+            for (range in adoptedRanges) {
+                db.update("scan_chat_progress", ContentValues().apply {
+                    put("claim_run_id", range.runId)
+                }, "chat_id = ? AND claim_run_id IS NULL", arrayOf(chatId))
+                insertScanRangeTx(db, range)
+            }
+            if (tableExists(db, "transcripts")) {
+                db.delete("transcripts", "chat_id = ?", arrayOf(chatId))
+            }
+            if (tableExists(db, "analysis_chat_bookmarks")) {
+                db.delete("analysis_chat_bookmarks", "chat_id = ?", arrayOf(chatId))
+            }
+            if (tableExists(db, "analysis_chat_ranges")) {
+                db.delete("analysis_chat_ranges", "chat_id = ?", arrayOf(chatId))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+            chatListMemoryChanged(chatId)
+        }
+    }
+
+    /**
+     * The last migration step: every chat's result is recorded, so the
+     * legacy tables are dropped and no compatibility copy of conversation
+     * text remains. Runs that were live at upgrade time are resumable
+     * interrupted runs by now (see [reconcileInterruptedAnalysisRuns]).
+     */
+    fun finishScanSourceMigration() {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL("DROP TABLE IF EXISTS analysis_chat_ranges")
+            db.execSQL("DROP TABLE IF EXISTS analysis_chat_bookmarks")
+            db.execSQL("DROP TABLE IF EXISTS transcripts")
+            db.update("archivist_runs", ContentValues().apply { put("transcript_ids_json", "[]") }, null, null)
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_SCAN_SOURCE_MIGRATION, "complete")
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        chatListMemoryChangedForAll()
+    }
+
+    /**
+     * An older backup's transcripts are held only until the migration has
+     * mapped them against the restored chats (plan M.2 step 3). They return
+     * to the legacy table the migration reads, and the migration is marked
+     * pending again; nothing else reads them.
+     */
+    private fun stageLegacyTranscriptsTx(db: SQLiteDatabase, transcripts: List<TranscriptRecord>) {
+        if (transcripts.isEmpty()) return
+        createLegacyTranscriptTableTx(db)
+        for (t in transcripts) {
+            db.insertWithOnConflict("transcripts", null, ContentValues().apply {
+                put("transcript_id", t.transcriptId)
+                put("chat_id", t.chatId)
+                put("companion_id", t.companionId)
+                put("world_id", t.worldId)
+                put("roleplay_character_id", t.roleplayCharacterId)
+                put("user_persona_id", t.userPersonaId)
+                put("campaign_id", t.campaignId)
+                put("project_id", t.projectId)
+                put("source", t.source)
+                put("started_at", t.startedAt)
+                put("ended_at", t.endedAt)
+                put("content", t.content)
+                put("model_tag", t.modelTag)
+                put("review_status", t.reviewStatus)
+                put("processed_at", t.processedAt)
+            }, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+        markScanSourceMigrationPending(db)
+    }
+
+    private fun stageLegacyBookmarksTx(db: SQLiteDatabase, bookmarks: List<AnalysisChatBookmark>) {
+        if (bookmarks.isEmpty()) return
+        createLegacyTranscriptTableTx(db)
+        for (b in bookmarks) {
+            if (rowExists(db, "scan_chat_progress", "chat_id", b.chatId)) continue
+            db.insertWithOnConflict("analysis_chat_bookmarks", null, ContentValues().apply {
+                put("chat_id", b.chatId)
+                put("last_started_at", b.lastStartedAt)
+                put("last_transcript_id", b.lastTranscriptId)
+                put("skipped_transcript_ids_json", stringsToJson(b.skippedTranscriptIds))
+                put("archive_paused", if (b.archivePaused) 1 else 0)
+                put("updated_at", b.updatedAt.ifBlank { nowIso() })
+            }, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+    }
+
+    private fun createLegacyTranscriptTableTx(db: SQLiteDatabase) = createLegacyScanTables(db)
 
     /**
      * "Add to Card" (owner ruling, July 8 2026 evening): linking MOVES the
@@ -4728,6 +4459,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         put("failure_reason", run.failureReason)
         put("transport", run.transport)
         put("analysis_type", run.analysisType)
+        put("suspended", run.suspended)
+        put("run_kind", run.runKind)
+        put("progress_percent", run.progressPercent)
+        put("source_ranges_json", run.sourceRangesJson)
     }
 
     /** Insert-or-replace one run row. Since v17 this is also the incremental
@@ -4758,13 +4493,23 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         )
     }
 
-    /** Newest first, for the "Recent Memory Analysis" list. A live 'running'
-     *  row is the durable active-run record, not history — excluded. */
-    fun getArchivistRuns(limit: Int): List<ArchivistRunRecord> {
+    /** Newest first, for the "Recent Memory Analysis" list. A live run is
+     *  the durable active-run record, not history, and a paused run is
+     *  neither finished nor cancelled (owner decision, Stage 6A question 8):
+     *  both are left out. An interrupted run keeps its entry, which the same
+     *  run continues when it resumes. */
+    fun getArchivistRuns(limit: Int): List<ArchivistRunRecord> =
+        readArchivistRuns("status != 'running' OR suspended = '$SUSPENDED_INTERRUPTED'", limit)
+
+    private fun readArchivistRuns(
+        where: String?,
+        limit: Int,
+        args: Array<String>? = null
+    ): List<ArchivistRunRecord> {
         val out = ArrayList<ArchivistRunRecord>()
         readableDatabase.query(
-            "archivist_runs", null, "status != 'running'", null, null, null,
-            "started_at DESC, run_id DESC", limit.toString()
+            "archivist_runs", null, where, args, null, null,
+            "started_at DESC, run_id DESC", if (limit == Int.MAX_VALUE) null else limit.toString()
         ).use {
             while (it.moveToNext()) {
                 out.add(
@@ -4783,7 +4528,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         outcome = it.getStringOrNull("outcome"),
                         failureReason = it.getStringOrNull("failure_reason"),
                         transport = it.getStringOrNull("transport") ?: "api",
-                        analysisType = it.getStringOrNull("analysis_type") ?: "associative"
+                        analysisType = it.getStringOrNull("analysis_type") ?: "associative",
+                        suspended = it.getStringOrNull("suspended"),
+                        runKind = it.getStringOrNull("run_kind") ?: "analyze",
+                        progressPercent = it.getColumnIndex("progress_percent").takeIf { i -> i >= 0 && !it.isNull(i) }
+                            ?.let { i -> it.getInt(i) },
+                        sourceRangesJson = it.getStringOrNull("source_ranges_json") ?: "[]"
                     )
                 )
             }
@@ -4791,8 +4541,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         return out
     }
 
+    /** Any run row, live, suspended or finished. */
     fun getArchivistRun(runId: String): ArchivistRunRecord? =
-        getArchivistRuns(Int.MAX_VALUE).firstOrNull { it.runId == runId }
+        readArchivistRuns("run_id = ?", 1, arrayOf(runId)).firstOrNull()
 
     /** Which of these memory ids still exist — the complement is "deleted
      *  since that run" for the Recent Memory Analysis rows. */
@@ -5505,74 +5256,59 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         return out
     }
 
-    fun hasAnyTranscriptForChat(chatId: String): Boolean {
-        readableDatabase.rawQuery("SELECT 1 FROM transcripts WHERE chat_id = ? LIMIT 1", arrayOf(chatId)).use {
-            return it.moveToFirst()
-        }
-    }
-
-    /** Insert a pre-existing chat's history as one imported transcript (the
-     *  backfill path). source='imported' per the spec's old-conversation rule.
-     *  Returns true on success. */
-    fun insertBackfillTranscript(
-        chatId: String,
-        companionId: String?,
-        contentJson: String,
-        modelTag: String?,
-        markExcluded: Boolean,
-        archivePaused: Boolean = false
-    ): Boolean {
-        val db = writableDatabase
-        db.beginTransaction()
-        return try {
-            requireBookmarkCutover(db)
-            ensureAnalysisBookmarkTx(db, chatId)
-            val now = nowIso()
-            db.update("analysis_chat_bookmarks", ContentValues().apply {
-                put("archive_paused", if (archivePaused) 1 else 0)
-                put("updated_at", now)
-            }, "chat_id = ?", arrayOf(chatId))
-            val transcriptId = newId("t-")
-            db.insertOrThrow("transcripts", null, ContentValues().apply {
-                put("transcript_id", transcriptId)
-                put("chat_id", chatId)
-                put("companion_id", companionId)
-                put("source", "imported")
-                put("started_at", now)
-                put("ended_at", now)
-                put("content", contentJson)
-                put("model_tag", modelTag)
-                put("review_status", if (markExcluded) "excluded" else "pending")
-            })
-            if (markExcluded) excludeTranscriptIdsTx(db, chatId, listOf(transcriptId))
-            db.setTransactionSuccessful()
-            true
-        } catch (_: Exception) {
-            false
-        } finally {
-            db.endTransaction()
-            chatListMemoryChanged(chatId)
-        }
-    }
-
-    /** Chats survive renames but transcripts are keyed by chat_id — re-point
-     *  them whenever a chat id changes (auto-naming, manual rename). */
+    /** Chat ids follow chat names, so everything the memory database keys
+     *  by chat id is re-pointed whenever a chat id changes (auto-naming,
+     *  manual rename). */
     fun repointChat(oldChatId: String, newChatId: String) {
         if (oldChatId == newChatId || oldChatId.isBlank() || newChatId.isBlank()) return
         val db = writableDatabase
         db.beginTransaction()
         try {
-            db.execSQL(
+            // Legacy transcript rows still waiting for the Stage 6A
+            // migration follow the chat too.
+            if (tableExists(db, "transcripts")) db.execSQL(
                 "UPDATE transcripts SET chat_id = ? WHERE chat_id = ?", arrayOf(newChatId, oldChatId)
             )
-            db.execSQL(
+            if (tableExists(db, "analysis_chat_bookmarks")) db.execSQL(
                 "UPDATE OR REPLACE analysis_chat_bookmarks SET chat_id = ? WHERE chat_id = ?",
                 arrayOf(newChatId, oldChatId)
             )
-            db.execSQL(
+            if (tableExists(db, "analysis_chat_ranges")) db.execSQL(
                 "UPDATE OR REPLACE analysis_chat_ranges SET chat_id = ? WHERE chat_id = ?",
                 arrayOf(newChatId, oldChatId)
             )
+            db.execSQL(
+                "UPDATE OR REPLACE scan_chat_progress SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.execSQL(
+                "UPDATE OR REPLACE scan_ranges SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.execSQL(
+                "UPDATE analysis_run_state SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.execSQL(
+                "UPDATE OR REPLACE scan_reports SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            // Run history keeps the ranges each run read, for Rerun.
+            val runRanges = ArrayList<Pair<String, String>>()
+            db.rawQuery(
+                "SELECT run_id, source_ranges_json FROM archivist_runs WHERE source_ranges_json IS NOT NULL",
+                emptyArray()
+            ).use { c ->
+                while (c.moveToNext()) {
+                    org.teslasoft.assistant.preferences.memory.scan.ScanSourceRanges
+                        .repoint(c.getString(1), oldChatId, newChatId)
+                        ?.let { runRanges.add(c.getString(0) to it) }
+                }
+            }
+            for ((runId, ranges) in runRanges) {
+                db.update("archivist_runs", ContentValues().apply { put("source_ranges_json", ranges) },
+                    "run_id = ?", arrayOf(runId))
+            }
             // The cooldown state and turn clock are keyed by chat id too — a
             // rename must carry them or every memory re-injects and the clock
             // restarts (OR REPLACE: a pre-existing row under the new id loses).
@@ -5610,57 +5346,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
-    /** Review-state summary derived from the Stage-B bookmark authority. */
-    fun chatReviewStates(): HashMap<String, String> {
-        val out = HashMap<String, String>()
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            requireBookmarkCutover(db)
-            val chatIds = ArrayList<String>()
-            db.rawQuery(
-                "SELECT DISTINCT chat_id FROM transcripts WHERE chat_id IS NOT NULL ORDER BY chat_id",
-                emptyArray<String>()
-            ).use { while (it.moveToNext()) chatIds.add(it.getString(0)) }
-            for (chatId in chatIds) chatReviewStateTx(db, chatId)?.let { out[chatId] = it }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-        return out
-    }
-
-    /** The memory status of one chat, or null when memory holds nothing from it. */
-    fun chatMemoryState(chatId: String): String? {
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            requireBookmarkCutover(db)
-            val state = chatReviewStateTx(db, chatId)
-            db.setTransactionSuccessful()
-            return state
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    private fun chatReviewStateTx(db: SQLiteDatabase, chatId: String): String? {
-        val ordered = transcriptsForChatTx(db, chatId)
-        if (ordered.isEmpty()) return null
-        val bookmark = analysisBookmarkTx(db, chatId)
-        val unscanned = AnalysisBookmark.eligibleRange(
-            rows = ordered,
-            boundary = bookmarkBoundary(bookmark),
-            skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
-            idOf = { it.transcriptId },
-            boundaryOf = { transcriptBoundary(it) }
-        )
-        return AnalysisBookmark.chatReviewState(
-            hasClaimedRows = ordered.any { it.claimRunId != null },
-            hasUnscannedRows = unscanned.isNotEmpty(),
-            hasScannedPrefix = bookmark.lastTranscriptId != null
-        )
-    }
+    /**
+     * The chat-list memory status of one chat, from its scan progress and
+     * its current messages (read by the caller from the original chat
+     * storage). Null when the chat has nothing the scanner would read.
+     */
+    fun chatMemoryState(chatId: String, messages: List<org.teslasoft.assistant.preferences.memory.scan.ScanMessage>): String? =
+        org.teslasoft.assistant.preferences.memory.scan.ScanChatStatus.reviewState(scanProgress(chatId), messages)
 
     /** Only the app's own store reports to the chat list; test stores never do. */
     @Volatile private var reportsToChatList = false
@@ -7282,9 +6974,16 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.beginTransaction()
         try {
             db.delete("memories", null, null) // cascades memory_* joins, change_log, embeddings
-            db.delete("analysis_chat_ranges", null, null)
-            db.delete("analysis_chat_bookmarks", null, null)
-            db.delete("transcripts", null, null)
+            // Scanner progress names memory runs that no longer exist after
+            // a reset; the chats are read again from the start.
+            db.delete("analysis_candidates", null, null)
+            db.delete("analysis_run_state", null, null)
+            db.delete("scan_ranges", null, null)
+            db.delete("scan_chat_progress", null, null)
+            db.delete("scan_reports", null, null)
+            for (legacy in listOf("analysis_chat_ranges", "analysis_chat_bookmarks", "transcripts")) {
+                if (tableExists(db, legacy)) db.delete(legacy, null, null)
+            }
             db.delete("proposals", null, null)
             // Roleplay cards + tags (3.6a): links and entries before the
             // tables they reference; rp_tags cascades rp_tag_links.
@@ -8480,11 +8179,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.execSQL("UPDATE memories SET campaign_id = NULL WHERE campaign_id IS NOT NULL AND campaign_id NOT IN (SELECT campaign_id FROM campaigns)")
             db.execSQL("UPDATE memories SET roleplay_character_id = NULL WHERE roleplay_character_id IS NOT NULL AND roleplay_character_id NOT IN (SELECT roleplay_character_id FROM roleplay_characters)")
 
-            // Transcript context ids are nullable context; content untouched.
-            db.execSQL("UPDATE transcripts SET companion_id = NULL WHERE companion_id IS NOT NULL AND companion_id NOT IN (SELECT companion_id FROM companions)")
-            db.execSQL("UPDATE transcripts SET world_id = NULL WHERE world_id IS NOT NULL AND world_id NOT IN (SELECT world_id FROM worlds)")
-            db.execSQL("UPDATE transcripts SET roleplay_character_id = NULL WHERE roleplay_character_id IS NOT NULL AND roleplay_character_id NOT IN (SELECT roleplay_character_id FROM roleplay_characters)")
-            db.execSQL("UPDATE transcripts SET user_persona_id = NULL WHERE user_persona_id IS NOT NULL AND user_persona_id NOT IN (SELECT persona_id FROM user_personas)")
+            // Legacy transcript context ids (rows still waiting for the
+            // Stage 6A migration) are nullable context; content untouched.
+            if (tableExists(db, "transcripts")) {
+                db.execSQL("UPDATE transcripts SET companion_id = NULL WHERE companion_id IS NOT NULL AND companion_id NOT IN (SELECT companion_id FROM companions)")
+                db.execSQL("UPDATE transcripts SET world_id = NULL WHERE world_id IS NOT NULL AND world_id NOT IN (SELECT world_id FROM worlds)")
+                db.execSQL("UPDATE transcripts SET roleplay_character_id = NULL WHERE roleplay_character_id IS NOT NULL AND roleplay_character_id NOT IN (SELECT roleplay_character_id FROM roleplay_characters)")
+                db.execSQL("UPDATE transcripts SET user_persona_id = NULL WHERE user_persona_id IS NOT NULL AND user_persona_id NOT IN (SELECT persona_id FROM user_personas)")
+            }
 
             // Active selections: kept when they resolve, cleared otherwise.
             db.execSQL("UPDATE app_state SET active_companion_id = NULL WHERE active_companion_id IS NOT NULL AND active_companion_id NOT IN (SELECT companion_id FROM companions)")

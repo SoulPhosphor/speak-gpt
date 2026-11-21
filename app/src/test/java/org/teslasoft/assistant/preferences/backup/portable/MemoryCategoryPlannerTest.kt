@@ -155,6 +155,47 @@ class MemoryCategoryPlannerTest {
         assertEquals(1, parsed.tables.getValue("memories").size)
     }
 
+    @Test
+    fun `an older backup's scan rows reach the scanner migration`() {
+        val transcript = linkedMapOf<String, Any?>(
+            "transcript_id" to "t-1", "chat_id" to "chat-1", "companion_id" to "c-1",
+            "project_id" to null, "content" to "Hello"
+        )
+        val bookmark = linkedMapOf<String, Any?>(
+            "chat_id" to "chat-1", "last_transcript_id" to "t-1", "updated_at" to "2026-11-01T00:00:00Z"
+        )
+        val backup = MemoryPortableRows(
+            rows(MemoryPortableGroup.MEMORIES).tables +
+                mapOf("transcripts" to listOf(transcript), "analysis_chat_bookmarks" to listOf(bookmark))
+        )
+        val ready = MemoryCategoryPlanner.plan(
+            MemoryPortableGroup.MEMORIES, rows(MemoryPortableGroup.MEMORIES), backup,
+            PortableRestoreMode.REPLACE, MemoryReferenceIds(companions = setOf("c-1"))
+        ) as MemoryCategoryPlanner.Result.Ready
+        assertEquals(listOf(transcript), ready.rows.tables["transcripts"])
+        assertEquals(listOf(bookmark), ready.rows.tables["analysis_chat_bookmarks"])
+    }
+
+    @Test
+    fun `a merge keeps a chat's current scan progress over an older backup's`() {
+        val progress = linkedMapOf<String, Any?>(
+            "chat_id" to "chat-1", "bookmark_anchor_ids_json" to "[\"m-9\"]", "needs_full_rescan" to 0L
+        )
+        fun transcript(id: String, chat: String) = linkedMapOf<String, Any?>(
+            "transcript_id" to id, "chat_id" to chat, "content" to "Text"
+        )
+        val current = rows(MemoryPortableGroup.MEMORIES, mapOf("scan_chat_progress" to listOf(progress)))
+        val backup = MemoryPortableRows(
+            rows(MemoryPortableGroup.MEMORIES).tables +
+                mapOf("transcripts" to listOf(transcript("t-1", "chat-1"), transcript("t-2", "chat-2")))
+        )
+        val ready = MemoryCategoryPlanner.plan(
+            MemoryPortableGroup.MEMORIES, current, backup, PortableRestoreMode.MERGE
+        ) as MemoryCategoryPlanner.Result.Ready
+        assertEquals(listOf("t-2"), ready.rows.tables["transcripts"]?.map { it["transcript_id"] })
+        assertEquals(listOf(progress), ready.rows.tables.getValue("scan_chat_progress"))
+    }
+
     private fun rows(
         group: MemoryPortableGroup,
         replacements: Map<String, List<Map<String, Any?>>> = emptyMap()

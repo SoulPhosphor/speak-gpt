@@ -839,6 +839,10 @@
     <string name="memory_analysis_channel_desc">Shown while the memory scanner tool reviews conversations so analysis survives the screen turning off or switching to another app.</string>
     <string name="memory_analysis_notification_title">Analyzing Conversations</string>
     <string name="memory_analysis_notification_progress">%1$d%% complete</string>
+    <!-- Stage 6A: Pause and Resume (owner wording, conversation_recall_plan.md M.2 and Stage 6A decisions) -->
+    <string name="memory_analysis_notification_paused_title">Memory Scanner Paused</string>
+    <string name="memory_scan_pause">Pause</string>
+    <string name="memory_scan_resume">Resume</string>
     <string name="tile_text_model_title">Text generation model</string>
     <string name="tile_text_generation_model_desc">This feature allows you to set text generation model as well as model\'s params.</string>
     <string name="tile_activation_prompt_title">Activation prompt</string>
@@ -933,7 +937,8 @@
     <string name="damaged_repair_partly_successful">Repair Partly Successful</string>
     <string name="damaged_repair_unsuccessful">Repair Unsuccessful</string>
     <string name="damaged_repair_from_backup_hint">You can attempt to repair remaining chat files from a backup.</string>
-    <string name="damaged_irreparable_section">Irreparable Chat Files</string>
+    <string name="damaged_irreparable_section">Chats Where Direct Repair Failed</string>
+    <string name="damaged_repaired_section">Repaired Chats</string>
     <string name="damaged_replace_from_backup">Attempt Chat Replacement from Backup</string>
     <string name="damaged_replace_title">Replace Damaged Chats</string>
     <string name="damaged_replace_found">Found in this backup:</string>
@@ -1588,6 +1593,8 @@
     <string name="memory_assistant_btn_idle">Analyze Conversations</string>
     <string name="memory_assistant_btn_running">Analyzing History…</string>
     <string name="memory_assistant_btn_done">Complete!</string>
+    <string name="memory_assistant_btn_pause">Pause Conversations</string>
+    <string name="memory_assistant_btn_resume">Resume Conversations</string>
     <string name="memory_assistant_analyzing">Analyzing Conversations</string>
     <string name="memory_assistant_analyzing_percent">%1$d%%</string>
     <string name="memory_assistant_done_found">%1$d memories found.</string>
@@ -2864,7 +2871,7 @@
     <string name="memory_controls_row_advanced_subtitle">Memory system status and index repair.</string>
 
     <!-- Memory Assistant Advanced Settings (spec §2) -->
-    <string name="memory_assistant_adv_intro">Analyze conversations to suggest memories that the embedding model can hand to your AI to remember who you are.\n\nMemory suggestions are sent to the memory browser as pending so you can approve them.\n\nYou may continue chatting while this process runs, but do not close the app completely. Messages that are added to scanned conversations will be marked for review on next analysis.</string>
+    <string name="memory_assistant_adv_intro">Analyze conversations to suggest memories that the embedding model can hand to your AI to remember who you are.\n\nMemory suggestions are sent to the memory browser as pending so you can approve them.\n\nYou may continue chatting while the scan runs. If the app closes, your progress is saved. Scanning resumes after your next chat reply finishes. A scan you paused stays paused until you choose Resume. Messages that are added to scanned conversations will be marked for review on next analysis.</string>
     <string name="memory_assistant_adv_temperature">Temperature</string>
     <string name="memory_assistant_adv_temperature_hint">Controls how literal or creative the AI is when analyzing conversations. Lower values are stricter; higher values may find more but can be less reliable.</string>
     <string name="memory_assistant_adv_temperature_recommended">Recommended: 0.3</string>
@@ -4015,7 +4022,16 @@
     <string name="chat_scan_in_progress_msg">Conversation will be scanned shortly. Another scan is in process and must finish its current conversation before working on this one. It will then proceed to finish the previously started scanning work.</string>
     <string name="chat_scan_nothing_new_title">Nothing New to Scan</string>
     <string name="chat_scan_nothing_new_msg">Every message in this conversation has already been scanned for memories.</string>
-    <string name="chat_activity_memory_scan">Memory Scan in Progress %1$d%%</string>
+    <!-- Stage 6A: scan results on the Memory Scanner Tool screen (owner wording, question 9) -->
+    <string name="memory_scan_report_damage_repaired">A problem was found with %1$s. The conversation was repaired, and scanning resumed. See the Damaged Chat Log for details.</string>
+    <string name="memory_scan_report_damage_not_repaired">A problem was found with %1$s. The conversation could not be repaired, and its scan is incomplete. See the Damaged Chat Log for details.</string>
+    <!-- Stage 6A: automatic complete rescans after the upgrade (owner wording) -->
+    <string name="memory_scan_rescan_scheduled">Rescan scheduled after upgrade: %1$s. Previous scan progress couldn\'t be recovered. These conversations will be rescanned automatically.</string>
+    <string name="memory_scan_rescan_running">Rescanning after upgrade: %1$s.</string>
+    <string name="memory_scan_rescan_completed">Rescan completed after upgrade: %1$s.</string>
+    <string name="memory_scan_rescan_incomplete">Rescan incomplete after upgrade: %1$s. See scan results for details.</string>
+    <string name="chat_activity_memory_scan">Memory Scanner %1$d%%</string>
+    <string name="chat_activity_memory_scan_paused">Memory Scanner</string>
     <string name="chat_activity_summarizing">Message Summarizing in Progress %1$d%%</string>
     <!-- Create Outline screen's Memory Scan Progress line and its App
          Appearance switch, and Show Message Number. Owner wording, Nov 18 2026. -->

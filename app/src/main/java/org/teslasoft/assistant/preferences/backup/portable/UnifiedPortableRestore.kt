@@ -1714,7 +1714,8 @@ object UnifiedPortableRestore {
             )
             database = opened
             if (!opened.isDatabaseIntegrityOk) return refuse("backup memory database failed its integrity check")
-            MemoryPortableRowFormat.read(opened, group)
+            // A backup made before Stage 6A may carry legacy scan rows.
+            MemoryPortableRowFormat.read(opened, group, includeLegacy = true)
         } catch (e: Exception) {
             refuse("backup memory database could not be read: ${PortableRestoreDiagnostics.unexpected(e)}")
         } finally {

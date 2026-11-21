@@ -365,6 +365,13 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
+            <!-- Stage 6A scan results: one Widget.App.ResultNotice per
+                 conversation, added by the screen. -->
+            <LinearLayout
+                android:id="@+id/scan_results_container"
+                style="@style/Widget.App.ResultNotice.Holder"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/recent_header"
                 android:layout_width="match_parent"

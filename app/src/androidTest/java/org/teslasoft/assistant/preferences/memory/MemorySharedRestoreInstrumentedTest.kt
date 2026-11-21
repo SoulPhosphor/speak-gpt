@@ -79,9 +79,11 @@ class MemorySharedRestoreInstrumentedTest {
         store.writableDatabase.execSQL(
             "INSERT INTO memory_companions (memory_id, companion_id) VALUES ('memory', 'old')"
         )
+        // Stage 6A: the scanner's bookmark (message UUIDs only) replaces the
+        // transcript store and must survive an identity restore unchanged.
         store.writableDatabase.execSQL(
-            "INSERT INTO transcripts (transcript_id, companion_id, content) " +
-                "VALUES ('transcript', 'old', 'kept transcript')"
+            "INSERT INTO scan_chat_progress (chat_id, bookmark_anchor_ids_json, needs_full_rescan, updated_at) " +
+                "VALUES ('chat', '[\"m2\",\"m1\"]', 0, 'now')"
         )
         store.writableDatabase.execSQL(
             "UPDATE app_state SET active_companion_id = 'old' WHERE id = 1"
@@ -120,7 +122,10 @@ class MemorySharedRestoreInstrumentedTest {
 
         assertTrue(store.replaceSharedRestoreRows(plan.desired, plan.affectedTables))
         assertTrue(store.exportSharedRestoreRows().tables.getValue("memory_companions").isEmpty())
-        assertNull(store.exportSharedRestoreRows().tables.getValue("transcripts").single()["companion_id"])
+        assertEquals(
+            original.tables.getValue("scan_chat_progress"),
+            store.exportSharedRestoreRows().tables.getValue("scan_chat_progress")
+        )
         assertHealthy(store)
 
         assertTrue(store.replaceSharedRestoreRows(original, plan.affectedTables))
