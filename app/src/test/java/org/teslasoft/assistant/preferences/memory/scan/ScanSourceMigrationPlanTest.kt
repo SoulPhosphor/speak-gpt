@@ -109,6 +109,29 @@ class ScanSourceMigrationPlanTest {
         assertEquals("p2", result.scopes["m2"]!!.projectId)
     }
 
+    private fun reply(id: String, text: String) = JSONObject().apply {
+        put("role", "assistant"); put("content", text); put(ScanSourceMigrationPlan.LEGACY_MESSAGE_ID, id)
+    }
+
+    @Test fun aRegeneratedReplyTakesTheScopeOfTheVersionNowShown() {
+        // m1 was asked under project p1; its reply m2 was regenerated under
+        // p2, then the first version was chosen again.
+        val rows = listOf(
+            row("t1", "1", listOf(turn("m1"), reply("m2", "first answer")), project = "p1"),
+            row("t2", "2", listOf(turn("m1"), reply("m2", "second answer")), project = "p2")
+        )
+        fun shown(text: String) = listOf(
+            ScanSourceMigrationPlan.Message("m1", null, false, "question"),
+            ScanSourceMigrationPlan.Message("m2", null, false, text)
+        )
+        assertEquals("p1", plan(shown("first answer"), rows, null).scopes["m2"]!!.projectId)
+        assertEquals("p2", plan(shown("second answer"), rows, null).scopes["m2"]!!.projectId)
+        // Wording that matches no capture: the newest capture.
+        assertEquals("p2", plan(shown("edited answer"), rows, null).scopes["m2"]!!.projectId)
+        // The user message keeps the scope it was sent under.
+        assertEquals("p1", plan(shown("second answer"), rows, null).scopes["m1"]!!.projectId)
+    }
+
     @Test fun anAlreadyRecordedScopeIsNotOverwritten() {
         val rows = listOf(row("t1", "1", listOf(turn("m1"))))
         val stamped = listOf(ScanSourceMigrationPlan.Message("m1", null, hasScope = true))

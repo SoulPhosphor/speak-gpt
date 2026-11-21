@@ -178,7 +178,8 @@ object ScanSourceMigration {
             ScanSourceMigrationPlan.Message(
                 id = MessageIdentity.idOf(m),
                 timeMillis = m["messageTime"]?.toString()?.toDoubleOrNull()?.toLong(),
-                hasScope = ScanMessageScope.has(m)
+                hasScope = ScanMessageScope.has(m),
+                text = m["message"]?.toString()
             )
         }
         val result = plan(messages)

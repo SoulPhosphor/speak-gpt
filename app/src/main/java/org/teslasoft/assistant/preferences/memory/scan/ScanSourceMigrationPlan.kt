@@ -19,8 +19,10 @@ import org.teslasoft.assistant.preferences.memory.LegacyTranscript
  */
 object ScanSourceMigrationPlan {
 
-    /** One chat message as the migration needs it. */
-    data class Message(val id: String, val timeMillis: Long?, val hasScope: Boolean)
+    /** One chat message as the migration needs it. [text] is the message's
+     *  current wording, used only to tell which capture of a regenerated
+     *  reply is the version now shown. */
+    data class Message(val id: String, val timeMillis: Long?, val hasScope: Boolean, val text: String? = null)
 
     data class Result(
         /** Index of the last scanned message, or -1 for nothing scanned. */
@@ -36,7 +38,12 @@ object ScanSourceMigrationPlan {
         val claimedEnds: Map<String, Int>
     )
 
-    private data class Turn(val messageId: String?, val atMillis: Long?)
+    private data class Turn(
+        val messageId: String?,
+        val atMillis: Long?,
+        val role: String? = null,
+        val content: String? = null
+    )
 
     fun plan(
         messages: List<Message>,
@@ -114,8 +121,13 @@ object ScanSourceMigrationPlan {
         // Recorded scope comes only from rows captured live with the turn;
         // an imported row's companion was the chat's setting at import time
         // and is not trusted for each message (owner decision, question 2).
-        val scopes = HashMap<String, ScanMessageScope>()
-        for (row in rows) {
+        // A regenerated reply was captured again under the same message id,
+        // with the scope in effect for that generation: the capture of the
+        // version now shown wins (by its wording, else the newest capture).
+        // A user message keeps the scope it was first sent under.
+        val candidates = LinkedHashMap<String, MutableList<Pair<Turn, ScanMessageScope>>>()
+        val ordered = rows.sortedWith(compareBy<LegacyTranscript>({ it.startedAt.orEmpty() }, { it.transcriptId }))
+        for (row in ordered) {
             if (row.source != "live") continue
             val companionId = row.companionId?.takeIf { it.isNotBlank() }
             val scope = ScanMessageScope(
@@ -131,7 +143,15 @@ object ScanSourceMigrationPlan {
                 val id = turn.messageId ?: continue
                 val index = indexById[id] ?: continue
                 if (messages[index].hasScope) continue
-                scopes.putIfAbsent(id, scope)
+                candidates.getOrPut(id) { ArrayList() }.add(turn to scope)
+            }
+        }
+        val scopes = HashMap<String, ScanMessageScope>()
+        for ((id, captures) in candidates) {
+            val reply = captures.any { it.first.role == "assistant" }
+            scopes[id] = if (!reply) captures.first().second else {
+                val current = messages[indexById.getValue(id)].text
+                (captures.lastOrNull { current != null && it.first.content == current } ?: captures.last()).second
             }
         }
         return Result(bookmark, fullRescan, scopes, spans, claimedEnds)
@@ -162,6 +182,8 @@ object ScanSourceMigrationPlan {
             val t = a.optJSONObject(i) ?: return@mapNotNull null
             Turn(
                 messageId = t.optString(LEGACY_MESSAGE_ID, "").takeIf { it.isNotBlank() },
+                role = t.optString("role", "").takeIf { it.isNotBlank() },
+                content = if (t.has("content")) t.optString("content") else null,
                 atMillis = t.optString("at", "").takeIf { it.isNotBlank() }?.let {
                     runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
                 }
