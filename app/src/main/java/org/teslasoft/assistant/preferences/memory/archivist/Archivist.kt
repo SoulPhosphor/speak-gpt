@@ -1351,9 +1351,10 @@ object Archivist {
         break@reading
         }
         val ids = messages.map { it.id }
-        val endIndexInChat = if (inRange.isEmpty()) {
+        val bookmarkEnd = ScanChatStatus.lastSettled(inRange)
+        val endIndexInChat = if (bookmarkEnd == null) {
             if (range.startAnchors.isEmpty()) -1 else ScanPosition.resolve(ids, range.startAnchors) ?: -1
-        } else ids.indexOf(inRange.last().id)
+        } else ids.indexOf(bookmarkEnd.id)
         val newBookmark = ScanPosition.anchors(ids, endIndexInChat)
         val sourceRange = ScanSourceRanges.Range(chatId, range.startAnchors, newBookmark)
         val conversation = Conversation(chatId, chatName)

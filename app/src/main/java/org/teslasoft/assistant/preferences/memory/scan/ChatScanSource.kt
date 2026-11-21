@@ -31,8 +31,11 @@ data class ScanMessage(
     val timeMillis: Long?,
     val model: String?,
     /** Changes whenever what the scanner would read from this message
-     *  changes: its text, role, visibility or completion. */
-    val fingerprint: String
+     *  changes: its text, role, visibility, completion or recorded scope. */
+    val fingerprint: String,
+    /** An assistant reply that has not finished (still being written, or
+     *  ended early and may yet be regenerated). */
+    val unfinishedReply: Boolean = false
 ) {
     val startedAt: String?
         get() = timeMillis?.let { runCatching { Instant.ofEpochMilli(it).toString() }.getOrNull() }
@@ -127,16 +130,19 @@ object ChatScanSource {
             val assistant = m["isBot"] == true
             val text = m["message"]?.toString().orEmpty()
             val eligible = isEligible(m)
+            val scope = ScanMessageScope.read(m)
             ScanMessage(
                 id = id,
                 number = MessageNumbers.numberOf(m),
                 role = if (assistant) "assistant" else "user",
                 text = text,
                 eligible = eligible,
-                scope = ScanMessageScope.read(m),
+                scope = scope,
                 timeMillis = m[TIME_KEY]?.toString()?.toDoubleOrNull()?.toLong(),
                 model = m[MODEL_KEY]?.toString()?.takeIf { it.isNotBlank() },
-                fingerprint = fingerprint(assistant, text, eligible)
+                fingerprint = fingerprint(assistant, text, eligible, scope?.encode()),
+                unfinishedReply = assistant &&
+                    !MessageCompletionState.isComplete(m[MessageCompletionState.KEY_STATE]?.toString())
             )
         }
 
@@ -152,8 +158,14 @@ object ChatScanSource {
         return true
     }
 
-    fun fingerprint(assistant: Boolean, text: String, eligible: Boolean): String =
-        Hash.hash((if (assistant) "a" else "u") + (if (eligible) "1" else "0") + "\u0000" + text)
+    /** [scope] is the encoded recorded scope, so a version change that only
+     *  moves the message to another companion, world or project still counts
+     *  as a change to what was read. */
+    fun fingerprint(assistant: Boolean, text: String, eligible: Boolean, scope: String? = null): String =
+        Hash.hash(
+            (if (assistant) "a" else "u") + (if (eligible) "1" else "0") + "\u0000" + text +
+                (scope?.let { "\u0000" + it } ?: "")
+        )
 
     private const val TIME_KEY = "messageTime"
     private const val MODEL_KEY = "responseModel"

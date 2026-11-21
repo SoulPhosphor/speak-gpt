@@ -62,6 +62,28 @@ class ChatScanSourceTest {
         assertNotEquals(base, ChatScanSource.fingerprint(true, "text", true))
     }
 
+    @Test fun aVersionChangeThatOnlyMovesTheScopeChangesTheFingerprint() {
+        val companionA = ScanMessageScope(companionPersonaId = "a").encode()
+        val companionB = ScanMessageScope(companionPersonaId = "b").encode()
+        val first = ChatScanSource.fromMessages(listOf(
+            message("r", "same words", bot = true, extra = mapOf(ScanMessageScope.KEY to companionA))
+        )).single()
+        val second = ChatScanSource.fromMessages(listOf(
+            message("r", "same words", bot = true, extra = mapOf(ScanMessageScope.KEY to companionB))
+        )).single()
+        assertNotEquals(first.fingerprint, second.fingerprint)
+    }
+
+    @Test fun onlyAssistantRepliesThatHaveNotFinishedAreUnfinished() {
+        val messages = ChatScanSource.fromMessages(listOf(
+            message("u", "question"),
+            message("s", "partial", bot = true, extra = mapOf(MessageCompletionState.KEY_STATE to MessageCompletionState.STREAMING)),
+            message("d", "done", bot = true, extra = mapOf(MessageCompletionState.KEY_STATE to MessageCompletionState.DONE)),
+            message("l", "legacy", bot = true)
+        ))
+        assertEquals(listOf(false, true, false, false), messages.map { it.unfinishedReply })
+    }
+
     @Test fun regeneratingAReplyKeepsItsIdentityAndChangesOnlyItsFingerprint() {
         val before = ChatScanSource.fromMessages(listOf(message("r", "old reply", bot = true))).single()
         val after = ChatScanSource.fromMessages(listOf(message("r", "new reply", bot = true))).single()

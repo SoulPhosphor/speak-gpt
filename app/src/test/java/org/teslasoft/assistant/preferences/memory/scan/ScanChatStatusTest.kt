@@ -59,6 +59,22 @@ class ScanChatStatusTest {
         assertEquals(ChatScanCoverage.Status.Range(2, 10), ScanChatStatus.coverage(progress, numbered))
     }
 
+    @Test fun aReplyStillBeingWrittenAtTheEndStaysAfterTheBookmark() {
+        val streaming = msg("m5", eligible = false).copy(role = "assistant", unfinishedReply = true)
+        val range = chat + streaming
+        assertEquals("m4", ScanChatStatus.lastSettled(range)?.id)
+        // Once it finishes it lies after the bookmark and is still unscanned.
+        val bookmark = ScanChatProgress("c", ScanPosition.anchors(range.map { it.id }, 3))
+        val finished = chat + msg("m5").copy(role = "assistant")
+        assertTrue(ScanChatStatus.hasUnscanned(bookmark, finished))
+    }
+
+    @Test fun anUnfinishedReplyBeforeLaterMessagesDoesNotHoldTheBookmarkBack() {
+        val stopped = msg("m2", eligible = false).copy(role = "assistant", unfinishedReply = true)
+        assertEquals("m3", ScanChatStatus.lastSettled(listOf(msg("m1"), stopped, msg("m3")))?.id)
+        assertNull(ScanChatStatus.lastSettled(listOf(stopped)))
+    }
+
     @Test fun aLostBookmarkReadsMoreRatherThanLess() {
         val lost = ScanChatProgress("c", listOf("gone"))
         assertEquals(-1, ScanChatStatus.bookmarkIndex(lost, chat))

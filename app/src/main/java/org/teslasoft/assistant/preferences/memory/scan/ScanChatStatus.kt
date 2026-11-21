@@ -26,6 +26,15 @@ object ScanChatStatus {
         return ScanPosition.resolve(messages.map { it.id }, progress.bookmarkAnchors) ?: -1
     }
 
+    /**
+     * The last message a scan of [range] may put its bookmark on. A reply
+     * still being written (or one that ended early and may be regenerated)
+     * at the end of the range stays after the bookmark, so it is read once
+     * it finishes. Null when no message qualifies.
+     */
+    fun lastSettled(range: List<ScanMessage>): ScanMessage? =
+        range.dropLastWhile { it.unfinishedReply }.lastOrNull()
+
     /** True when an eligible message lies after the bookmark. */
     fun hasUnscanned(progress: ScanChatProgress?, messages: List<ScanMessage>): Boolean {
         val index = bookmarkIndex(progress, messages)
