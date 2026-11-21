@@ -1,6 +1,6 @@
 # Parallel Experimental Mode — Staged Implementation Plan
 
-**Status:** Stage 0 merged in [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234). Stage 1 storage foundation is in progress; parallel setup, dispatch and tabs remain unavailable.
+**Status:** Stage 0 merged in [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234). Stage 1 storage foundation merged in [PR #236](https://github.com/SoulPhosphor/speak-gpt/pull/236). Stage 2 is next and not started; parallel setup, dispatch and tabs remain unavailable.
 **Source of truth for implementation:** Current `origin/main` and its tests.  
 **Integration target:** `main`, which builds the **Beta** client (not the retired pre-release client).  
 **Purpose:** Deliver independent, simultaneous responses from 2–4 preselected AI models in a familiar, tabbed chat UI, without corrupting conversation history or disrupting existing single-response chat.
@@ -185,6 +185,7 @@ These are narrow checkpoints, **not** a reason to repeatedly seek owner decision
 - Preserve **Beta** build/package identity throughout development.
 - Follow established shared design styles and theme roles. Avoid a parallel UI that invents a separate color system.
 - No destructive migration, logging expansion, or unrelated refactor without its required approval. Preserve existing chat safety, backups, summary behavior, model attribution, and hands-free.
+- **Keep the large chat files small (all later stages):** Put the request coordinator, snapshot/slot mutations, setup integration, tab rendering and per-model primary/regeneration controls in focused helper, controller or view files. `ChatActivity.kt` and `ChatAdapter.kt` receive only the small delegation/binding connections they need. Before each PR, inspect their diff specifically for new logic that can live independently; do not put a feature into an already-large file merely because related code is there. Preserve existing behavior, and do not use this rule as permission for an unrelated extraction or refactor.
 - Do not reinterpret an existing canonical response's variants as competing models without an explicit durable identity mapping.
 - This specification is the desired destination and staged order; **current code and verified tests** establish what is already implemented.
 
@@ -279,7 +280,7 @@ For each code-changing stage run `testDebugUnitTest`, `assembleBeta`, `assembleD
 
 **Beta identity verified in source:** `app/build.gradle` uses base application ID `com.soulphosphor.phosphorshines` and Beta suffix `.beta`; `app/src/beta/res/values/strings.xml` supplies the Beta label. `.github/workflows/beta-release.yml` publishes from `main`, builds `assembleBeta` and checks its identity. `.github/workflows/release.yml` is manual and restricted to `archive/old-main`. This audit changes none of them and performs no app-data migration or builds.
 
-**Stage 0 exit evidence:** lifecycle/persistence/picker/consumer mapping, additive data and usage ownership contract, exact legacy-setting mapping, prompt isolation, compatibility checkpoints and staged test obligations are documented above. Stage 1 is next after this audit is merged; it must remain unexposed and satisfy §4's storage exit criteria. Product decisions listed in §6 remain for their dependent stages.
+**Stage 0 exit evidence:** lifecycle/persistence/picker/consumer mapping, additive data and usage ownership contract, exact legacy-setting mapping, prompt isolation, compatibility checkpoints and staged test obligations are documented above. Stage 1 subsequently satisfied §4's storage exit criteria and merged as recorded below; the parallel mode remains unexposed. Product decisions listed in §6 remain for their dependent stages.
 
 ### 8.6 Stage 1 implementation handoff
 
@@ -291,6 +292,8 @@ For each code-changing stage run `testDebugUnitTest`, `assembleBeta`, `assembleD
 - Input parts contain frozen text or content-addressed PDF/image descriptors. Prompt/context/current-turn references resolve within the group; attachment bytes must match saved size and SHA-256 before exact reuse. Cleanup retains referenced original bytes, and preserves files when group ownership is unreadable. Logical capture preserves unreadable envelopes verbatim; complete Recovery Backup refuses unreadable attachment ownership instead of silently omitting possible dependencies. PDFs reuse the existing portable asset path; snapshot images add a chat-category asset in the existing image store. Streaming backup scans collect these dependencies without reading the complete chats artifact into memory. Restore-as-copy preserves embedded IDs and copies dependencies to the copied conversation's scope. Existing ordinary backups do not acquire new snapshot assets.
 - Group-only changes advance merge modification evidence and use synchronous guarded commits with rollback, even when searchable canonical text did not change. SQLCipher ChatStore remains staged; its production authority is unchanged. No new diagnostic logging or Beta build identity changes are introduced.
 
+**Stage 1 validation and handoff:** Final code commit `572e6ac3832127da3d86818147cf8e1460907676` passed both jobs of [Android Checks #3494](https://github.com/SoulPhosphor/speak-gpt/actions/runs/44890968805), including actual emulator execution of `ResponseGroupStorageInstrumentedTest` (four cases), and its fresh Codex review completed with no findings. The initial emulator run caught unreadable-group classification and an invalid rename fixture; both were corrected, preserving the data-fidelity assertions and adding a classification regression. Local baseline unit validation passed 3,951 tests before those corrections; local APK packaging was constrained by the execution environment, so the complete final APK/instrumentation gates were fulfilled in CI under `CLAUDE.md`'s environment exception. Merge receipt: [PR #236](https://github.com/SoulPhosphor/speak-gpt/pull/236), `d96e55f0103b20ebbd063acc86211628a450050a`. This post-merge tracker/guardrail update is documentation only and requires no tests or Codex review.
+
 Stage 2 still owns provider orchestration, dispatch-before-network durability, request callback isolation, original-input retry preparation, cancellation, tool consent and actual parallel accounting-screen validation. Stage 4 owns wiring canonical-source reconciliation into the approved promotion/branch UI. The Stage 1 storage APIs alone do not expose those later stages.
 
 ### Implementation progress ledger
@@ -298,7 +301,7 @@ Stage 2 still owns provider orchestration, dispatch-before-network durability, r
 | Stage | Status | PR / commit | Verification / notes |
 | --- | --- | --- | --- |
 | 0. Integration audit and contract | Merged | [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234) · [`1e4c0ef7`](https://github.com/SoulPhosphor/speak-gpt/commit/1e4c0ef7ddd6e23ba6687fd55ab84d29e289609a) | §8 audit/contract merged to `main`. Full documentation diff and source/test anchors inspected; no local tests/builds or Codex review run (documentation only). Automatic GitHub Android jobs were triggered, but are not claimed as validation of this audit. Beta/data/code unchanged. Next: Stage 1, unexposed storage foundation. |
-| 1. Durable response-group foundation | In progress | | Additive storage/model, recovery, canonical projections, request accounting and snapshot attachment backup integration; merge/review and verification evidence will be recorded after the code gates. No parallel UI or dispatch. |
+| 1. Durable response-group foundation | Merged | [PR #236](https://github.com/SoulPhosphor/speak-gpt/pull/236) · [`d96e55f0`](https://github.com/SoulPhosphor/speak-gpt/commit/d96e55f0103b20ebbd063acc86211628a450050a) | Additive storage/model, guarded recovery, canonical projections, permanent request accounting and snapshot attachments merged. Final code `572e6ac` passed [Android Checks #3494](https://github.com/SoulPhosphor/speak-gpt/actions/runs/44890968805): unit suites, debug/Beta APKs, actual Beta identity, instrumentation compilation and emulator recovery/fault suite including all four response-group storage/restore cases. Codex re-review of that same commit completed with no findings. No parallel UI or dispatch. Next: Stage 2, not started. |
 | 2. Parallel request coordinator | Not started | | |
 | 3. Setup and model picker | Not started | | |
 | 4. Tabs, primary, regeneration UI | Not started | | |
