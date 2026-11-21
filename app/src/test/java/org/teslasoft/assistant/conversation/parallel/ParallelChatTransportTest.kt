@@ -285,4 +285,37 @@ class ParallelChatTransportTest {
         }
     }
 
+    @Test fun doneEventFinishesWithoutEofAndKeepsUsageAfterTheFinishReason() = runBlocking {
+        withTimeout(10_000) {
+            val servers = List(2) { MockWebServer().apply { start() } }
+            try {
+                val frame = """{"choices":[{"delta":{"content":"finished before EOF"},"finish_reason":"stop"}]}"""
+                val usage = """{"usage":{"prompt_tokens":11,"completion_tokens":2,"total_tokens":13,"cost":0.04}}"""
+                val payload = "data: " + frame + "\n\ndata: " + usage + "\n\ndata: [DONE]\n\n"
+                // An open body with no further bytes: completion must use the SSE marker, not EOF.
+                servers[0].enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
+                    .setBody(payload).setHeader("Content-Length", payload.toByteArray(Charsets.UTF_8).size + 1024)
+                    .setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.KEEP_OPEN))
+                servers[1].enqueue(response(1, false))
+                val current = ParallelChatSnapshot.text("user", "same frozen input")
+                val group = ParallelInput.freeze(id(), id(), "full_history", emptyList(), listOf(current),
+                    servers.mapIndexed { i, server -> ParallelSlotInput(assignment(server, i, i == 0), listOf(current)) }, 0, 100)
+                val store = Store(group)
+                val http = ParallelChatTransport { "fixture-only" }
+                val engine = ParallelRequestCoordinator(this, store, { _, _ -> null }, { http }, { TokenPricingCatalog(it.assignment.modelId) })
+                engine.dispatch("chat", group) {}.await()
+                val saved = store.read(ResponseGroupTarget("chat", group.assistantMessageId, group.groupId))
+                assertEquals("done", saved.slots[0].versions.single().fields["state"])
+                assertEquals("finished before EOF", saved.slots[0].versions.single().fields["message"])
+                val receipt = TokenUsageAccounting.decodeRecords(saved.slots[0].versions.single().attempts.single().usageRecord).single()
+                assertEquals(11, receipt.inputTokens)
+                assertEquals(0.04, receipt.totalCost!!, 0.00001)
+                assertEquals("done", saved.slots[1].versions.single().fields["state"])
+                assertEquals(0.06, TokenUsageAccounting.aggregate(ResponseGroupEdits.usage(saved)).totalCost, 0.00001)
+                assertEquals(listOf(1, 1), servers.map { it.requestCount })
+                assertTrue(engine.unsavedRequestIds().isEmpty())
+            } finally { servers.forEach { it.shutdown() } }
+        }
+    }
+
 }

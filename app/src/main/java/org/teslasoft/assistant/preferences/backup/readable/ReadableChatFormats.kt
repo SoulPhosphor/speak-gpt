@@ -243,7 +243,8 @@ object ReadableChatFormats {
                 // Regenerated versions are stored as a JSON string, not a
                 // nested list: sanitize them too, keeping the string form.
                 out[key] = when {
-                    key in setOf(ChatAdapter.KEY_VARIANTS, "responseGroup", "partialFields", "toolAssistantMessage") && v is String -> stripJsonText(v, removed)
+                    key == "responseGroup" && v is String -> stripResponseGroupText(v, removed)
+                    key in setOf(ChatAdapter.KEY_VARIANTS, "partialFields", "toolAssistantMessage") && v is String -> stripJsonText(v, removed)
                     key == "continuationMessages" && v is List<*> -> v.mapNotNull { (it as? String)?.let { raw -> stripJsonText(raw, removed) } }
                     else -> strip(v, removed)
                 }
@@ -252,6 +253,37 @@ object ReadableChatFormats {
         }
         is List<*> -> value.map { strip(it, removed) }
         else -> value
+    }
+
+    /** Only prepared provider-message parts are JSON metadata. Historical plain snapshot text and
+     * user-authored content inside a provider message must remain literal text. Recovery is unchanged. */
+    private fun stripResponseGroupText(text: String, removed: Set<String>): String? = try {
+        val root = com.google.gson.JsonParser.parseString(text)
+        if (root.isJsonObject) {
+            val group = root.asJsonObject
+            val providerPartIds = HashSet<String>()
+            group.getAsJsonArray("slots")?.forEach { slotElement ->
+                val slot = slotElement.asJsonObject
+                val parameters = slot.getAsJsonObject("assignment")?.getAsJsonObject("parameters")
+                if (parameters?.has("parallel_wire_options") == true) {
+                    slot.getAsJsonArray("promptPartIds")?.forEach { providerPartIds.add(it.asString) }
+                }
+            }
+            group.getAsJsonObject("input")?.getAsJsonArray("parts")?.forEach { partElement ->
+                val part = partElement.asJsonObject
+                val value = part.get("text")
+                val partId = part.get("partId")?.asString
+                if (partId != null && partId in providerPartIds && value?.isJsonPrimitive == true &&
+                    value.asJsonPrimitive.isString) {
+                    part.addProperty("text", stripJsonText(value.asString, removed))
+                }
+            }
+        }
+        val gson = com.google.gson.GsonBuilder()
+            .setObjectToNumberStrategy(com.google.gson.ToNumberPolicy.LAZILY_PARSED_NUMBER).create()
+        gson.toJson(strip(gson.fromJson(root, Any::class.java), removed))
+    } catch (_: Exception) {
+        null
     }
 
     /** [text] parsed, sanitized and written back as JSON; text that does not

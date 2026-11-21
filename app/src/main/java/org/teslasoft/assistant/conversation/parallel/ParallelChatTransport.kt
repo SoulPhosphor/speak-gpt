@@ -58,6 +58,7 @@ internal class ParallelChatTransport(
         var inspectingStream = false
         var failure: Throwable? = null
         var terminal = false
+        var doneEvent = false
         var sawChoice = false
         suspend fun frame(json: JsonObject, streaming: Boolean) {
             reasoning.acceptObject(json)
@@ -113,12 +114,12 @@ internal class ParallelChatTransport(
                         if (event.isEmpty()) return
                         val payload = event.toString(); event.setLength(0)
                         inspector.acceptLine("data: $payload")
-                        if (payload == "[DONE]") { terminal = true; return }
+                        if (payload == "[DONE]") { terminal = true; doneEvent = true; return }
                         val root = try { JsonParser.parseString(payload).asJsonObject }
                         catch (_: Exception) { throw ParallelTransportFailure("malformed_response") }
                         frame(root, true)
                     }
-                    while (!source.exhausted()) {
+                    while (!doneEvent && !source.exhausted()) {
                         currentCoroutineContext().ensureActive()
                         val line = source.readUtf8Line() ?: break
                         if (line.isEmpty()) consume()
