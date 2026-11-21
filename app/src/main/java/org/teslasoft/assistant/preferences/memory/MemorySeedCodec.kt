@@ -529,6 +529,14 @@ object MemorySeedCodec {
             )
         }
 
+        val scanProgress = each(root, "scan_progress").map { p ->
+            ScanChatProgress(
+                chatId = p.reqStr("chat_id"),
+                bookmarkAnchors = p.strList("bookmark_anchor_ids"),
+                needsFullRescan = p.optBoolean("needs_full_rescan", false)
+            )
+        }
+
         // User-owned Memory Types (§5). Absent in pre-Phase-1 backups → empty;
         // the store keeps its seeded starter Types and legacy memories map by
         // kind. A Type's created_at is optional (defaults blank; the store
@@ -566,6 +574,7 @@ object MemorySeedCodec {
             modelRuleTagLinks = modelRuleTagLinks,
             memoryTypes = memoryTypes,
             analysisBookmarks = analysisBookmarks,
+            scanProgress = scanProgress,
             memoryHandlingPreferences = memoryHandling
         )
     }
@@ -996,39 +1005,13 @@ object MemorySeedCodec {
             })
         }
 
-        if (data.transcripts.isNotEmpty()) {
-            root.put("transcripts", JSONArray().apply {
-                data.transcripts.forEach { t ->
+        if (data.scanProgress.isNotEmpty()) {
+            root.put("scan_progress", JSONArray().apply {
+                data.scanProgress.forEach { p ->
                     put(JSONObject().apply {
-                        put("transcript_id", t.transcriptId)
-                        putIfNotNull("chat_id", t.chatId)
-                        putIfNotNull("companion_id", t.companionId)
-                        putIfNotNull("world_id", t.worldId)
-                        putIfNotNull("roleplay_character_id", t.roleplayCharacterId)
-                        putIfNotNull("user_persona_id", t.userPersonaId)
-                        put("source", t.source)
-                        putIfNotNull("started_at", t.startedAt)
-                        putIfNotNull("ended_at", t.endedAt)
-                        put("content", t.content)
-                        putIfNotNull("model_tag", t.modelTag)
-                        t.quickSettingsJson?.let { putJsonText("quick_settings", it) }
-                        put("review_status", t.reviewStatus)
-                        putIfNotNull("processed_at", t.processedAt)
-                    })
-                }
-            })
-        }
-
-        if (data.analysisBookmarks.isNotEmpty()) {
-            root.put("analysis_bookmarks", JSONArray().apply {
-                data.analysisBookmarks.forEach { b ->
-                    put(JSONObject().apply {
-                        put("chat_id", b.chatId)
-                        putIfNotNull("last_started_at", b.lastStartedAt)
-                        putIfNotNull("last_transcript_id", b.lastTranscriptId)
-                        put("skipped_transcript_ids", JSONArray(b.skippedTranscriptIds))
-                        put("archive_paused", b.archivePaused)
-                        put("updated_at", b.updatedAt)
+                        put("chat_id", p.chatId)
+                        put("bookmark_anchor_ids", JSONArray(p.bookmarkAnchors))
+                        put("needs_full_rescan", p.needsFullRescan)
                     })
                 }
             })

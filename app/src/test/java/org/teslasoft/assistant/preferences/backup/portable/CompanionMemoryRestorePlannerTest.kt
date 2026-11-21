@@ -82,13 +82,11 @@ class CompanionMemoryRestorePlannerTest {
             "memory_projects" to listOf(linkedMapOf(
                 "memory_id" to "memory", "project_id" to "project"
             )),
-            "transcripts" to listOf(linkedMapOf(
-                "transcript_id" to "transcript",
-                "content" to "kept transcript",
-                "companion_id" to "old-companion",
-                "world_id" to "old-world",
-                "roleplay_character_id" to "old-character",
-                "user_persona_id" to "old-persona"
+            // Stage 6A: the scanner's bookmarks (message UUIDs only) replace
+            // the transcript store and pass through untouched.
+            "scan_chat_progress" to listOf(linkedMapOf(
+                "chat_id" to "chat",
+                "bookmark_anchor_ids_json" to "[\"m2\",\"m1\"]"
             )),
             "rp_tag_links" to listOf(linkedMapOf(
                 "tag_id" to "old-tag", "target_type" to "memory", "target_id" to "memory"
@@ -125,8 +123,8 @@ class CompanionMemoryRestorePlannerTest {
         assertTrue(desired.getValue("memory_roleplay_characters").isEmpty())
         assertEquals(current.tables.getValue("memory_entities"), desired.getValue("memory_entities"))
         assertEquals(current.tables.getValue("memory_projects"), desired.getValue("memory_projects"))
-        assertEquals("kept transcript", desired.getValue("transcripts").single()["content"])
-        assertNull(desired.getValue("transcripts").single()["companion_id"])
+        assertEquals(current.tables.getValue("scan_chat_progress"), desired.getValue("scan_chat_progress"))
+        assertFalse(desired.containsKey("transcripts"))
         assertTrue(desired.getValue("rp_tag_links").isEmpty())
         assertTrue(desired.getValue("app_state").single().values.drop(1).all { it == null })
         assertEquals(current.tables.getValue("generated_pending_drafts"), desired.getValue("generated_pending_drafts"))

@@ -265,7 +265,6 @@ import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.memory.ActiveMemoryAttribution
 import org.teslasoft.assistant.preferences.memory.ActiveMemoryReference
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
 import org.teslasoft.assistant.preferences.lorebook.LoreBookBudget
 import org.teslasoft.assistant.preferences.lorebook.LorebookLimits
 import org.teslasoft.assistant.preferences.memory.context.EarlierUserMessages
@@ -452,9 +451,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // if the notice ever fires off more than one thread.
         private val memoryDegradedNotified = java.util.concurrent.atomic.AtomicBoolean(false)
 
-        /** Transcript capture and memory visibility updates run one at a time
-         *  in the order they happened, so a quick hide-then-show never lands
-         *  reversed and a hide never runs before its turn is captured. */
+        /** Memory work after a finished turn runs one task at a time, off
+         *  the chat's own threads. */
         private val memoryWriteQueue = java.util.concurrent.Executors.newSingleThreadExecutor()
 
         /**
@@ -2875,6 +2873,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
             (LegacyReasoningRepair.repairHistory(historyResult.messages) or
                 org.teslasoft.assistant.preferences.MessageIdentity.ensure(historyResult.messages) or
+                // Messages saved before permanent numbers existed receive
+                // theirs in their current order when this save runs.
+                org.teslasoft.assistant.preferences.MessageNumbers.needsNumbers(historyResult.messages) or
                 (fillName != null && DefaultUsernameFill.fillNameless(historyResult.messages, fillName)))
         ) {
             // This method already runs on the startup storage worker. Update
@@ -12911,7 +12912,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // every turn (typed or voice, success or failure) passes exactly
             // once with the user's message still in scope — the same
             // single-funnel property the lorebook relies on.
-            recordTranscriptTurn(request)
+            recordTurnMemoryScope()
             calculateCost()
             runOnUiThread {
                 restoreUIState()
@@ -12919,15 +12920,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /**
-     * Queue this completed turn for the memory system's Archivist (Phase 2 of
-     * memory-system-integration-plan.md). Reads the assistant's reply from the
-     * live message list, snapshots the sampling settings (quick settings are
-     * gospel — the Archivist wants to know which knobs served the turn), and
-     * hands off to TranscriptRecorder on a worker thread. Best-effort in every
-     * direction: no store, memory off, or any failure must never disturb the
-     * conversation or the voice loop.
-     */
     // One soft notification per process when the full memory system degrades
     // mid-conversation (enforcer spec: "user notified once, softly") — the
     // Event/Memory log carries the details, the toast just says it happened.
@@ -12980,82 +12972,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } catch (_: Exception) { "" }
     }
 
-    private fun recordTranscriptTurn(request: String) {
+    /**
+     * Records the scope in effect on this finished turn's messages in the
+     * chat itself (ChatTurnMemoryScope), keeps the companion's memory record
+     * (M.6), and lets an interrupted memory scan resume now that a reply has
+     * finished (Stage 6A). Best-effort: a failure never disturbs the chat.
+     */
+    private fun recordTurnMemoryScope() {
         try {
-            if (!MemoryStore.isProvisioned(this)) return
-            val last = messages.lastOrNull() ?: return
-            if (last["isBot"] != true) return
-            val reply = last["message"].toString()
-            if (reply.isBlank() || request.isBlank()) return
-            // Each captured turn names the chat message it came from, so
-            // hiding that message later can keep it out of memory analysis.
-            // IDs were assigned by the save that ends every turn.
-            val userMessage = messages.subList(0, messages.size - 1).lastOrNull { it["isBot"] != true }
-            val userMessageId = userMessage?.let {
-                org.teslasoft.assistant.preferences.MessageIdentity.idOf(it)
-            }.orEmpty()
-            val userHidden = userMessage?.let(MessageVisibility::isHidden) == true
-            val assistantMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(last)
-            val assistantHidden = MessageVisibility.isHidden(last)
-
-            // The reply is captured either way (nothing successfully received is
-            // silently dropped), but a reply that did not finish streaming is
-            // marked incomplete so the Archivist never treats a truncated
-            // fragment as a reliable fact. Legacy/done -> complete.
-            val replyComplete = MessageCompletionState.isComplete(
-                last[MessageCompletionState.KEY_STATE]?.toString()
-            )
-
+            val scope = org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.current(preferences)
+            if (org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.stamp(messages, scope)) saveSettings()
             val appContext = applicationContext
-            val turnChatId = chatId
-            val turnPersonaId = preferences?.getPersonaId().orEmpty()
-            val turnModel = model
-            // The Archive pause is passed into capture so the turn and the
-            // bookmark's durable pause bit are reconciled atomically. The
-            // memory injection switch is independent and is not read here.
-            val excluded = preferences?.isChatExcludedFromMemory() ?: false
-            val quickSettings = try {
-                org.json.JSONObject()
-                    .put("model", turnModel)
-                    .put("temperature", preferences?.getTemperature()?.toDouble())
-                    .put("top_p", preferences?.getTopP()?.toDouble())
-                    .put("frequency_penalty", preferences?.getFrequencyPenalty()?.toDouble())
-                    .put("presence_penalty", preferences?.getPresencePenalty()?.toDouble())
-                    .put("max_tokens", preferences?.getMaxTokens())
-                    .toString()
-            } catch (_: Exception) { null }
-            // Typed scene context (counterplan §4(e)): the chat's current
-            // selections, stamped on the transcript row at capture — scene
-            // identity is not muddled into the sampling-settings JSON.
-            val turnWorldId = preferences?.getChatWorldId()?.takeIf { it.isNotBlank() }
-            val turnCampaignId = preferences?.getChatCampaignId()?.takeIf { it.isNotBlank() }
-            val turnRpCharacterId = preferences?.getChatRoleplayCharacterId()?.takeIf { it.isNotBlank() }
-            val turnUserPersonaId = preferences?.getChatUserPersonaId()?.takeIf { it.isNotBlank() }
-            val turnProjectId = preferences?.getChatProjectId()?.takeIf { it.isNotBlank() }
-
+            val personaId = scope.companionPersonaId
             memoryWriteQueue.execute {
-                TranscriptRecorder.recordTurn(
-                    appContext, turnChatId, turnPersonaId, request, reply,
-                    turnModel, quickSettings, excluded, replyComplete,
-                    worldId = turnWorldId,
-                    campaignId = turnCampaignId,
-                    roleplayCharacterId = turnRpCharacterId,
-                    userPersonaId = turnUserPersonaId,
-                    projectId = turnProjectId,
-                    userMessageId = userMessageId,
-                    assistantMessageId = assistantMessageId,
-                    userHidden = userHidden,
-                    assistantHidden = assistantHidden
-                )
+                org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.ensureCompanion(appContext, personaId)
+                org.teslasoft.assistant.service.MemoryScanAutoResume.onChatReplyFinished(appContext)
             }
-        } catch (e: Exception) {
-            // Capture must never break a turn — but a silently swallowed error
-            // here is why a capture failure was invisible. Log it (best effort).
-            try {
-                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
-                    this, "Transcript", "error", "recordTranscriptTurn threw: ${e.message}"
-                )
-            } catch (_: Exception) { /* logging is best effort */ }
+        } catch (_: Exception) {
+            // Memory is best-effort and must never disturb the conversation.
         }
     }
 
@@ -15210,38 +15144,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
             return
         }
-        syncMemoryVisibility(listOf(message))
         // What the AI reads changed: the same path as an edit, so a summary
         // in progress is cancelled and the request projection is rebuilt.
         onMessageEdited()
-    }
-
-    /**
-     * Carries each message's hidden mark onto its captured memory turns, so
-     * the Memory Assistant skips hidden messages that it has not analyzed
-     * yet and reads them again once they are visible.
-     */
-    private fun syncMemoryVisibility(changed: List<HashMap<String, Any>>) {
-        val turnChatId = chatId
-        val appContext = applicationContext
-        val marks = changed.map { message ->
-            MemoryStore.TranscriptMessageMark(
-                messageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
-                role = if (message["isBot"] == true) "assistant" else "user",
-                text = message["message"]?.toString().orEmpty(),
-                hidden = MessageVisibility.isHidden(message)
-            )
-        }
-        if (turnChatId.isBlank() || marks.isEmpty()) return
-        memoryWriteQueue.execute {
-            try {
-                if (!MemoryStore.isProvisioned(appContext)) return@execute
-                val store = MemoryStore.getInstance(appContext)
-                marks.forEach { store.setTranscriptMessageHidden(turnChatId, it) }
-            } catch (_: Exception) {
-                // Memory is best-effort and must never disturb the chat.
-            }
-        }
     }
 
     /**
@@ -15269,7 +15174,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 Toast.makeText(this, R.string.message_save_failed, Toast.LENGTH_LONG).show()
                 return@show
             }
-            syncMemoryVisibility(targets)
             onMessageEdited()
         }
     }

@@ -53,6 +53,11 @@ sealed interface MemoryAnalysisState {
     data class Finished(val outcome: Archivist.RunOutcome) : MemoryAnalysisState
 }
 
+/** A scan waiting with its progress kept (Stage 6A): [paused] by the user,
+ *  or interrupted (app closed, phone off, a system stop) and resuming after
+ *  the next chat reply. [percent] is the last completed percentage. */
+data class SuspendedMemoryScan(val runId: String, val percent: Int, val paused: Boolean)
+
 /**
  * Foreground service that OWNS the Memory Assistant analysis run (external-
  * memory counterplan §4(a), Step 1.3): the run must survive Activity
@@ -82,8 +87,25 @@ class MemoryAnalysisForegroundService : Service() {
         private const val EXTRA_ANALYSIS_TYPE = "analysisType"
         private const val EXTRA_CHAT_ID = "chatId"
         private const val ACTION_CANCEL = "org.teslasoft.assistant.action.CANCEL_ANALYSIS"
+        private const val ACTION_PAUSE = "org.teslasoft.assistant.action.PAUSE_ANALYSIS"
+        private const val ACTION_RESUME = "org.teslasoft.assistant.action.RESUME_ANALYSIS"
+        private const val EXTRA_RESUME_RUN_ID = "resumeRunId"
+        private const val EXTRA_RESCAN = "rescanUnmigrated"
+        /** The paused scan's own notification (Stage 6A question 4). It is
+         *  an ordinary notification: dismissing it does not cancel the scan,
+         *  which stays available from the Memory Scanner Tool and the chat
+         *  header. */
+        private const val PAUSED_NOTIFICATION_ID = 9924
 
         val state = MutableStateFlow<MemoryAnalysisState?>(null)
+
+        /** The newest paused or interrupted scan, or null. Kept separately
+         *  from [state] so it outlives a consumed outcome. */
+        val suspended = MutableStateFlow<SuspendedMemoryScan?>(null)
+
+        /** True while a pause came from the user (the Pause buttons). */
+        @Volatile
+        private var pauseRequested = false
 
         /** True while a cancel came from the user (the Cancel button), false for
          *  a system-driven stop (the Android 15+ dataSync timeout). It lets the
@@ -115,6 +137,114 @@ class MemoryAnalysisForegroundService : Service() {
                 }
             } catch (_: Exception) { /* nothing running to cancel */ }
         }
+
+        /** Pause the live scan at once (owner decision, Stage 6A question
+         *  5): completed sections and checkpoints are kept; the section in
+         *  progress is sent again after Resume. A no-op when nothing runs. */
+        fun requestPause(context: Context) {
+            startCommand(context, Intent(context, MemoryAnalysisForegroundService::class.java)
+                .setAction(ACTION_PAUSE))
+        }
+
+        /** Resume [runId] (or the newest suspended scan) from its checkpoint. */
+        fun requestResume(context: Context, runId: String? = null): Boolean =
+            startCommand(context, Intent(context, MemoryAnalysisForegroundService::class.java)
+                .setAction(ACTION_RESUME)
+                .putExtra(EXTRA_RESUME_RUN_ID, runId))
+
+        /** The automatic complete rescan of conversations whose earlier
+         *  progress could not be migrated (Stage 6A question 1). */
+        fun startUnmigratedRescan(context: Context): Boolean =
+            startCommand(context, Intent(context, MemoryAnalysisForegroundService::class.java)
+                .putExtra(EXTRA_RESCAN, true)
+                .putExtra(EXTRA_ANALYSIS_TYPE, "associative"))
+
+        /**
+         * Reads which scan is suspended and shows or clears the paused
+         * notification to match. Called when the app opens (so a paused
+         * scan's notification returns after a restart, without any boot
+         * permission), and whenever a run ends. Worker thread only.
+         */
+        fun restoreSuspendedNotification(context: Context) {
+            val app = context.applicationContext
+            val run = try {
+                Archivist.suspendedRun(app)
+            } catch (_: Exception) {
+                null
+            }
+            val current = run?.let {
+                SuspendedMemoryScan(
+                    it.runId, it.progressPercent ?: 0,
+                    it.suspended == org.teslasoft.assistant.preferences.memory.MemoryStore.SUSPENDED_PAUSED
+                )
+            }
+            suspended.value = current
+            try {
+                val nm = app.getSystemService(NotificationManager::class.java) ?: return
+                if (current?.paused == true) {
+                    createChannel(app)
+                    nm.notify(PAUSED_NOTIFICATION_ID, pausedNotification(app, current))
+                } else {
+                    nm.cancel(PAUSED_NOTIFICATION_ID)
+                }
+            } catch (_: Exception) { /* the scan's state matters more than its notice */ }
+        }
+
+        private fun createChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val nm = context.getSystemService(NotificationManager::class.java) ?: return
+            if (nm.getNotificationChannel(CHANNEL_ID) != null) return
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                context.getString(R.string.memory_analysis_channel_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                setShowBadge(false)
+                setSound(null, null)
+                description = context.getString(R.string.memory_analysis_channel_desc)
+            }
+            nm.createNotificationChannel(channel)
+        }
+
+        private fun openToolIntent(context: Context): PendingIntent {
+            val openIntent = Intent(context, MemoryAssistantActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            return PendingIntent.getActivity(
+                context, 0, openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        private fun serviceAction(context: Context, action: String, requestCode: Int): PendingIntent {
+            val intent = Intent(context, MemoryAnalysisForegroundService::class.java).setAction(action)
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(
+                    context, requestCode, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            } else {
+                PendingIntent.getService(
+                    context, requestCode, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            }
+        }
+
+        /** "Memory Scanner Paused", the last percentage, and Resume. */
+        private fun pausedNotification(context: Context, scan: SuspendedMemoryScan): Notification =
+            NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_chat)
+                .setContentTitle(context.getString(R.string.memory_analysis_notification_paused_title))
+                .setContentText(context.getString(R.string.memory_analysis_notification_progress, scan.percent))
+                .setOngoing(false)
+                .setOnlyAlertOnce(true)
+                .setSilent(true)
+                .setContentIntent(openToolIntent(context))
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+                .addAction(0, context.getString(R.string.memory_scan_resume), serviceAction(context, ACTION_RESUME, 2))
+                .build()
 
         /**
          * Launch an analysis run inside the service. [analysisType] is the
@@ -200,27 +330,53 @@ class MemoryAnalysisForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        // Cancel command (the Memory Assistant's Cancel button): mark the stop
-        // as user-driven and cancel the live run. The run's own cancellation
-        // path keeps any filed drafts and releases claims; its completion tail
-        // delivers the finished state and stops the service. If nothing is
-        // running, stop now (startForeground above must be matched by a stop).
+        // Cancel (the Memory Scanner Tool's Cancel button). A live run is
+        // stopped; its own stop path discards the unfinished progress and
+        // delivers the finished state. A paused or interrupted scan is
+        // cancelled the same way without starting it again (owner decision,
+        // Stage 6A question 6).
         if (intent?.action == ACTION_CANCEL) {
-            // The run's own stop must still be able to stop the service after
-            // this newer command.
             synchronized(runLock) { lastStartId = startId }
             userCancelRequested = true
             val job = runJob
-            if (job != null && job.isActive) job.cancel() else stopSelf()
+            if (job != null && job.isActive) {
+                job.cancel()
+            } else {
+                val waiting = suspended.value?.runId
+                scope.launch {
+                    if (waiting != null && Archivist.cancelSuspended(applicationContext, waiting)) {
+                        state.value = MemoryAnalysisState.Finished(
+                            Archivist.RunOutcome(
+                                waiting, 0, 0, 0, 0, emptyList(), outcome = "cancelled_user"
+                            )
+                        )
+                    }
+                    restoreSuspendedNotification(applicationContext)
+                    stopSelf(startId)
+                }
+            }
+            return START_NOT_STICKY
+        }
+
+        // Pause (the notification, the Memory Scanner Tool and the chat
+        // header): the live run stops at once and keeps everything.
+        if (intent?.action == ACTION_PAUSE) {
+            synchronized(runLock) { lastStartId = startId }
+            val job = runJob
+            if (job != null && job.isActive) {
+                pauseRequested = true
+                job.cancel()
+            } else {
+                stopSelf(startId)
+            }
             return START_NOT_STICKY
         }
 
         // One run per service lifetime: a second start command while a run is
         // live is ignored here (the screen's guard and the Archivist's
-        // durable one-run gate both already prevent it — this keeps a
-        // redundant command from ever spawning a second coroutine or
-        // stopping the live one's foreground state).
+        // durable one-run gate both already prevent it).
         val chatId = intent?.getStringExtra(EXTRA_CHAT_ID)
+        val resuming = intent?.action == ACTION_RESUME
         val startsRun = synchronized(runLock) {
             lastStartId = startId
             if (runActive) {
@@ -228,7 +384,7 @@ class MemoryAnalysisForegroundService : Service() {
                 // to reach its next conversation.
                 if (chatId != null) {
                     Archivist.requestChatScan(Archivist.ChatScanRequest(
-                        chatId, intent?.getStringExtra(EXTRA_ANALYSIS_TYPE) ?: "associative"
+                        chatId, intent.getStringExtra(EXTRA_ANALYSIS_TYPE) ?: "associative"
                     ))
                 }
                 false
@@ -240,21 +396,45 @@ class MemoryAnalysisForegroundService : Service() {
         if (startsRun) {
             acquireWakeLock()
             userCancelRequested = false
+            pauseRequested = false
             timeLimitReached = false
             val rerunOfRunId = intent?.getStringExtra(EXTRA_RERUN_ID)
             val analysisType = intent?.getStringExtra(EXTRA_ANALYSIS_TYPE) ?: "associative"
+            val resumeRunId = intent?.getStringExtra(EXTRA_RESUME_RUN_ID)
+            val rescan = intent?.getBooleanExtra(EXTRA_RESCAN, false) == true
             state.value = MemoryAnalysisState.Running(null)
+            try {
+                getSystemService(NotificationManager::class.java)?.cancel(PAUSED_NOTIFICATION_ID)
+            } catch (_: Exception) { /* best effort */ }
             runJob = scope.launch {
                 val onProgress: (Archivist.Progress) -> Unit = { p ->
                     state.value = MemoryAnalysisState.Running(p)
                     updateNotification(p)
                 }
+                val stopKind: () -> Archivist.StopKind = {
+                    when {
+                        userCancelRequested -> Archivist.StopKind.CANCEL
+                        pauseRequested -> Archivist.StopKind.PAUSE
+                        // Android's time limit and other system stops keep
+                        // the scan's progress (Stage 6A question 8).
+                        else -> Archivist.StopKind.INTERRUPT
+                    }
+                }
                 val appContext = applicationContext
                 var outcome = try {
                     when {
-                        chatId != null -> Archivist.analyzeChat(appContext, chatId, analysisType, onProgress)
-                        rerunOfRunId == null -> Archivist.analyze(appContext, analysisType, onProgress)
-                        else -> Archivist.rerun(appContext, rerunOfRunId, analysisType, onProgress)
+                        resuming -> {
+                            val runId = resumeRunId ?: Archivist.suspendedRun(appContext)?.runId
+                            if (runId == null) {
+                                Archivist.RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "nothing")
+                            } else {
+                                Archivist.resume(appContext, runId, onProgress, stopKind)
+                            }
+                        }
+                        rescan -> Archivist.rescanUnmigratedChats(appContext, onProgress, stopKind)
+                        chatId != null -> Archivist.analyzeChat(appContext, chatId, analysisType, onProgress, stopKind)
+                        rerunOfRunId == null -> Archivist.analyze(appContext, analysisType, onProgress, stopKind)
+                        else -> Archivist.rerun(appContext, rerunOfRunId, analysisType, onProgress, stopKind)
                     }
                 } catch (e: Exception) {
                     Archivist.RunOutcome(
@@ -268,15 +448,13 @@ class MemoryAnalysisForegroundService : Service() {
                         analysisType = analysisType
                     )
                 }
-                // The Archivist reports any in-process stop as the generic
+                // The Archivist reports an in-process stop as the generic
                 // "cancelled". Refine it (owner rulings, Aug 1 2026): the user's
-                // Cancel is a neutral stop, the Android 15+ dataSync runtime limit
-                // is its own state, and anything else stays the generic system
-                // stop. The refined value is persisted back onto the durable run
-                // record (Fix #6) so the Recent Memory Analysis history keeps the
-                // distinction instead of the engine's generic "cancelled" — a
-                // runtime-limit or system stop must never read as if the user
-                // pressed Cancel.
+                // Cancel is a neutral stop, the Android 15+ dataSync runtime
+                // limit is its own state, and anything else stays the generic
+                // system stop. The refined value is persisted back onto the
+                // durable run record so the Recent Memory Analysis history keeps
+                // the distinction.
                 if (outcome.outcome == "cancelled") {
                     val refined = when {
                         userCancelRequested -> "cancelled_user"
@@ -304,19 +482,21 @@ class MemoryAnalysisForegroundService : Service() {
                 // Chat scans the run took between its conversations get the
                 // same stop refinement on their own records.
                 refineStoppedChatScans(appContext, outcome.stoppedChatScanRunIds)
-                // "already_running" should be unreachable from here (the
-                // gates above), but if it ever happens the LIVE run owns the
-                // state — don't clobber it with a losing start's outcome.
-                if (outcome.outcome != "already_running") {
-                    state.value = MemoryAnalysisState.Finished(outcome)
+                // "already_running" should be unreachable from here; if it ever
+                // happens the LIVE run owns the state. A paused run has no
+                // outcome to show: the screens read the suspended scan instead.
+                when (outcome.outcome) {
+                    "already_running" -> Unit
+                    "paused" -> state.value = null
+                    else -> state.value = MemoryAnalysisState.Finished(outcome)
                 }
                 // Chat scans that arrived too late for the run to take them
                 // between its conversations run now, one after another. A
-                // Cancel or system stop drops them along with the run.
+                // Cancel, Pause or system stop drops them along with the run.
                 var stopId = 0
                 while (true) {
                     val next = synchronized(runLock) {
-                        val request = if (isActive && !userCancelRequested && !timeLimitReached) {
+                        val request = if (isActive && !userCancelRequested && !pauseRequested && !timeLimitReached) {
                             Archivist.pollChatScanRequest()
                         } else {
                             Archivist.clearChatScanRequests()
@@ -330,7 +510,7 @@ class MemoryAnalysisForegroundService : Service() {
                     } ?: break
                     state.value = MemoryAnalysisState.Running(null)
                     val chatOutcome = try {
-                        Archivist.analyzeChat(appContext, next.chatId, next.analysisType, onProgress)
+                        Archivist.analyzeChat(appContext, next.chatId, next.analysisType, onProgress, stopKind)
                     } catch (e: Exception) {
                         Archivist.RunOutcome(
                             null, 0, 0, 0, 0, emptyList(),
@@ -342,12 +522,15 @@ class MemoryAnalysisForegroundService : Service() {
                     }
                     refineStoppedChatScans(appContext, chatOutcome.stoppedChatScanRunIds)
                     val refinedChatOutcome = refineHandedOverStop(appContext, chatOutcome)
-                    if (refinedChatOutcome.outcome != "already_running") {
-                        state.value = MemoryAnalysisState.Finished(refinedChatOutcome)
+                    when (refinedChatOutcome.outcome) {
+                        "already_running" -> Unit
+                        "paused" -> state.value = null
+                        else -> state.value = MemoryAnalysisState.Finished(refinedChatOutcome)
                     }
                 }
+                restoreSuspendedNotification(appContext)
                 // An automatic backup that came due during the scan waited for
-                // it; let it run now that the scan is over.
+                // it; let it run now that the scan is over or paused.
                 org.teslasoft.assistant.preferences.backup.AutoBackupScheduling
                     .runAfterMemoryScan(appContext)
                 // Only the latest start may stop the service, so a start that
@@ -440,32 +623,12 @@ class MemoryAnalysisForegroundService : Service() {
         wakeLock = null
     }
 
-    private fun createChannelIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val nm = getSystemService(NotificationManager::class.java) ?: return
-        if (nm.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(R.string.memory_analysis_channel_name),
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            setShowBadge(false)
-            setSound(null, null)
-            description = getString(R.string.memory_analysis_channel_desc)
-        }
-        nm.createNotificationChannel(channel)
-    }
+    private fun createChannelIfNeeded() = createChannel(this)
 
     /** Progress counts and status only — never chat text or proposed-memory
      *  content (§10 1g). */
     private fun buildNotification(progress: Archivist.Progress?): Notification {
-        val openIntent = Intent(this, MemoryAssistantActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val pi = PendingIntent.getActivity(
-            this, 0, openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val pi = openToolIntent(this)
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_chat)
             .setContentTitle(getString(R.string.memory_analysis_notification_title))
@@ -475,6 +638,8 @@ class MemoryAnalysisForegroundService : Service() {
             .setContentIntent(pi)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        // Pause (Stage 6A): stops the scan at once and keeps its progress.
+        builder.addAction(0, getString(R.string.memory_scan_pause), serviceAction(this, ACTION_PAUSE, 1))
         if (progress == null || progress.overallCount <= 0) {
             // Fixed total not yet known: indeterminate bar, no percentage
             // (owner rule: never invent a percentage before the total exists).

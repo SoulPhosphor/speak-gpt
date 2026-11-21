@@ -295,174 +295,6 @@ class MemoryStoreInstrumentedTest {
     /* ---------------- Stage B bookmark + frozen range -------------------- */
 
     @Test
-    fun bookmarkMigrationUsesContiguousTerminalPrefixAndStopsAtPendingGap() {
-        val store = open(freshDbName())
-        insertTranscript(store, "t1", "chat-a", "1", "processed", "1")
-        insertTranscript(store, "t2", "chat-a", "2", "excluded", null)
-        insertTranscript(store, "t3", "chat-a", "3", "pending", null)
-        insertTranscript(store, "t4", "chat-a", "4", "processed", "4")
-        insertTranscript(store, "t5", "chat-a", "5", "excluded", null)
-        store.insertArchivistRun(runRecord("run-stale"))
-        store.writableDatabase.execSQL(
-            "UPDATE transcripts SET claim_run_id = 'run-stale' WHERE transcript_id = 't3'"
-        )
-
-        store.rebuildBookmarkCutoverForTest()
-
-        val bookmark = store.getAnalysisBookmark("chat-a")!!
-        assertEquals("t2", bookmark.lastTranscriptId)
-        assertEquals(listOf("t4", "t5"), bookmark.skippedTranscriptIds)
-        assertEquals(listOf("t3"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
-        assertNull(store.transcriptsByIds(listOf("t3")).single().claimRunId)
-        assertEquals("interrupted", store.getArchivistRun("run-stale")!!.outcome)
-    }
-
-    @Test
-    fun migrationPreservesLegacyExcludedRowsForAChatThatIsStillPaused() {
-        val store = open(freshDbName())
-        val chatId = "chat-paused-migration-${System.nanoTime()}"
-        Preferences.getPreferences(ctx, chatId).setChatExcludedFromMemory(true)
-        try {
-            insertTranscript(store, "through-40", chatId, "1", "processed", "1")
-            insertTranscript(store, "waiting-41", chatId, "2", "excluded", null)
-
-            store.rebuildBookmarkCutoverForTest()
-
-            val paused = store.getAnalysisBookmark(chatId)!!
-            assertEquals("through-40", paused.lastTranscriptId)
-            assertTrue(paused.archivePaused)
-            assertTrue(store.bookmarkEligibleTranscripts().none { it.chatId == chatId })
-            store.setChatTranscriptsExcluded(chatId, false)
-            assertEquals(
-                listOf("waiting-41"),
-                store.bookmarkEligibleTranscripts().filter { it.chatId == chatId }.map { it.transcriptId }
-            )
-        } finally {
-            Preferences.getPreferences(ctx, chatId).setChatExcludedFromMemory(false)
-        }
-    }
-
-    @Test
-    fun postCutoverLegacyReviewColumnsCannotChangeEligibility() {
-        val store = open(freshDbName())
-        insertTranscript(store, "old", "chat-a", "1", "processed", "1")
-        insertTranscript(store, "new", "chat-a", "2", "pending", null)
-        store.rebuildBookmarkCutoverForTest()
-
-        assertEquals(listOf("new"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
-        store.writableDatabase.execSQL(
-            "UPDATE transcripts SET review_status = 'excluded', processed_at = 'changed' WHERE transcript_id = 'new'"
-        )
-        store.writableDatabase.execSQL(
-            "UPDATE transcripts SET review_status = 'pending', processed_at = NULL WHERE transcript_id = 'old'"
-        )
-        assertEquals(listOf("new"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
-    }
-
-    @Test
-    fun archivePauseCapturesWholeWaitingSpanAndResumeStartsAfterLastSuccess() {
-        val store = open(freshDbName())
-        insertTranscript(store, "through-40", "chat-paused", "1", "processed", "1")
-        store.rebuildBookmarkCutoverForTest()
-
-        store.setChatTranscriptsExcluded("chat-paused", true)
-        for (messageNumber in 41..60) {
-            store.appendTranscriptTurn(
-                chatId = "chat-paused",
-                companionId = null,
-                userMessage = "user-$messageNumber",
-                assistantMessage = "assistant-$messageNumber",
-                modelTag = "model",
-                quickSettingsJson = null,
-                markExcluded = false,
-                archivePaused = true
-            )
-        }
-
-        val paused = store.getAnalysisBookmark("chat-paused")!!
-        assertEquals("through-40", paused.lastTranscriptId)
-        assertTrue(paused.archivePaused)
-        assertTrue(store.bookmarkEligibleTranscripts().none { it.chatId == "chat-paused" })
-
-        store.setChatTranscriptsExcluded("chat-paused", false)
-        val waiting = store.bookmarkEligibleTranscripts().filter { it.chatId == "chat-paused" }
-        assertTrue(waiting.isNotEmpty())
-        val userMessages = waiting.sumOf { row ->
-            val turns = org.json.JSONArray(row.content)
-            (0 until turns.length()).count { index ->
-                turns.getJSONObject(index).optString("role") == "user"
-            }
-        }
-        assertEquals(20, userMessages)
-        assertEquals("through-40", store.getAnalysisBookmark("chat-paused")!!.lastTranscriptId)
-        assertFalse(store.getAnalysisBookmark("chat-paused")!!.archivePaused)
-    }
-
-    @Test
-    fun chatScanIncludesAPausedChatOnlyWhenTheUserAsksForIt() {
-        val store = open(freshDbName())
-        insertTranscript(store, "s1", "chat-scan", "1", "processed", "1")
-        insertTranscript(store, "s2", "chat-scan", "2", "pending", null)
-        store.rebuildBookmarkCutoverForTest()
-        store.setChatTranscriptsExcluded("chat-scan", true)
-
-        // Ordinary runs respect the pause; the chat's own scan does not.
-        assertTrue(store.bookmarkEligibleTranscripts().none { it.chatId == "chat-scan" })
-        assertEquals(listOf("s2"), store.chatScanEligibleTranscripts("chat-scan").map { it.transcriptId })
-        assertTrue(store.chatHasUnscannedTranscripts("chat-scan"))
-        assertEquals(listOf("s1"), store.chatScanRows("chat-scan").scanned.map { it.transcriptId })
-        assertTrue(store.chatScanRows("chat-scan").hasPending)
-
-        assertTrue(store.beginAnalysisRun(runRecord("run-paused"), mapOf("chat-scan" to listOf("s2"))).isEmpty())
-        val frozen = store.beginAnalysisRun(
-            runRecord("run-chat-scan"), mapOf("chat-scan" to listOf("s2")), ignoreArchivePause = true
-        ).getValue("chat-scan")
-        // A claimed row still counts as unscanned, but cannot be claimed twice.
-        assertTrue(store.chatHasUnscannedTranscripts("chat-scan"))
-        assertTrue(store.chatScanEligibleTranscripts("chat-scan").isEmpty())
-
-        store.commitFrozenChatRange(frozen, emptyList(), emptyList(), emptyList())
-        assertFalse(store.chatHasUnscannedTranscripts("chat-scan"))
-        assertEquals(listOf("s1", "s2"), store.chatScanRows("chat-scan").scanned.map { it.transcriptId })
-        assertFalse(store.chatScanRows("chat-scan").hasPending)
-        assertTrue(store.getAnalysisBookmark("chat-scan")!!.archivePaused)
-    }
-
-    @Test
-    fun frozenRangeCommitAdvancesBookmarkAndLeavesLateMessageForNextRun() {
-        val store = open(freshDbName())
-        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
-        insertTranscript(store, "t2", "chat-a", "2", "pending", null)
-        val run = runRecord("run-stage-b")
-        val frozen = store.beginAnalysisRun(
-            run, mapOf("chat-a" to listOf("t1", "t2"))
-        ).getValue("chat-a")
-
-        // The newest row is claimed, so capture seals it and creates a new row.
-        val lateOutcome = store.appendTranscriptTurn(
-            chatId = "chat-a", companionId = null,
-            userMessage = "late user", assistantMessage = "late assistant",
-            modelTag = "model", quickSettingsJson = null, markExcluded = false
-        )
-        assertTrue(lateOutcome.startsWith("inserted "))
-
-        val memory = mem("stage-b-memory", scope = "global", status = "draft")
-        val rule = ModelRuleRecord(
-            ruleId = "stage-b-rule", text = "Use complete sentences.",
-            modelStringsJson = "[]", status = "draft", sourceModelString = "model",
-            createdAt = "2026-08-08T00:00:00Z"
-        )
-        store.commitFrozenChatRange(frozen, listOf(memory), listOf(rule), emptyList())
-
-        assertEquals("t2", store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
-        assertNotNull(store.getMemory("stage-b-memory"))
-        assertNotNull(store.getModelRule("stage-b-rule"))
-        val next = store.bookmarkEligibleTranscripts().filter { it.chatId == "chat-a" }
-        assertEquals(1, next.size)
-        assertTrue(next.single().transcriptId != "t1" && next.single().transcriptId != "t2")
-    }
-
-    @Test
     fun cleanupRemovesOnlyUnavailableTargetsAndKeepsMultiModelRule() {
         val store = open(freshDbName())
         val unavailable = ModelIdentity("openrouter", "openai/gpt-5.1")
@@ -515,244 +347,153 @@ class MemoryStoreInstrumentedTest {
         assertNull(store.getModelRule("obsolete-fuzzy-target"))
     }
 
+    /* ------------- Stage 6A: scan progress, checkpoints, resume ------------ */
+
+    private fun scanRange(run: String, chat: String, ordinal: Int = 0, start: List<String> = emptyList()) =
+        ScanRangeRecord(
+            rangeId = "range-$run-$chat", runId = run, chatId = chat, ordinal = ordinal,
+            kind = ScanRangeRecord.KIND_SCAN, startAnchors = start, endAnchors = listOf("m3", "m2", "m1")
+        )
+
+    private fun candidate(text: String) = StagedAnalysisCandidate(
+        stream = "memory", targetType = null, targetId = null, candidateHash = "h-$text",
+        payloadJson = org.json.JSONObject().put("content", text).put("scope", "global").toString()
+    )
+
     @Test
-    fun stageDCandidateBoundaryCommitsRelationshipHintAndCleansTemporaryState() {
+    fun freshDatabaseHasNoTranscriptStore() {
         val store = open(freshDbName())
-        store.insertMemory(
-            mem("old-green", scope = "real_life", typeId = "mtype-fact")
-                .copy(content = "The user's favorite color is green.")
-        )
-        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
-        val frozen = store.beginAnalysisRun(
-            runRecord("run-stage-d"), mapOf("chat-a" to listOf("t1"))
-        ).getValue("chat-a")
-        store.stageAnalysisCandidates(
-            collectionId = frozen.rangeId,
-            chunkOrdinal = 1,
-            candidates = listOf(
-                StagedAnalysisCandidate(
-                    stream = "memory",
-                    targetType = null,
-                    targetId = null,
-                    candidateHash = "purple-hash",
-                    payloadJson = "{\"content\":\"purple\"}"
-                ),
-                StagedAnalysisCandidate(
-                    stream = "model_rule",
-                    targetType = null,
-                    targetId = null,
-                    candidateHash = "rule-hash",
-                    payloadJson = "{\"text\":\"be concise\"}"
-                )
-            )
-        )
-        assertTrue(rowExists(store, "analysis_run_state", "run_id", frozen.rangeId))
-        assertEquals(
-            2,
-            store.readableDatabase.rawQuery(
-                "SELECT COUNT(*) FROM analysis_candidates WHERE run_id = ?",
-                arrayOf(frozen.rangeId)
-            ).use { it.moveToFirst(); it.getInt(0) }
-        )
-
-        val changed = mem(
-            "new-purple", scope = "real_life", typeId = "mtype-fact", status = "draft"
-        ).copy(content = "The user's favorite color is purple now.")
-        store.commitFrozenChatRange(
-            frozen,
-            memories = listOf(changed),
-            rules = emptyList(),
-            lorebookSuggestions = emptyList(),
-            relationshipHintsByMemoryId = mapOf("new-purple" to listOf("old-green"))
-        )
-
-        assertEquals(
-            listOf(MemoryMatch.Match("old-green", MemoryMatch.Relation.AI_RELATED)),
-            store.relationshipHintsForDraft("new-purple")
-        )
-        assertFalse(rowExists(store, "analysis_run_state", "run_id", frozen.rangeId))
-        assertFalse(rowExists(store, "analysis_candidates", "run_id", frozen.rangeId))
-        assertEquals("t1", store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
-
-        val result = store.resolveSupersede("new-purple", listOf("old-green"))
-        assertTrue(result is MemoryStore.ResolutionResult.Applied)
-        assertTrue(store.relationshipHintsForDraft("new-purple").isEmpty())
-        assertNotNull(store.supersededAt("old-green"))
-        assertEquals("superseded", store.getMemory("old-green")!!.status)
+        assertFalse(store.hasLegacyTranscriptTables())
+        assertTrue(store.scanSourceMigrationComplete())
     }
 
     @Test
-    fun stageDFilingFailureRollsBackHintsAndBookmarkThenDiscardsCandidates() {
+    fun aRunClaimsItsChatsAndASecondRunCannotTakeThem() {
         val store = open(freshDbName())
-        store.insertMemory(mem("existing", scope = "global"))
-        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
-        val frozen = store.beginAnalysisRun(
-            runRecord("run-stage-d-rollback"), mapOf("chat-a" to listOf("t1"))
-        ).getValue("chat-a")
-        store.stageAnalysisCandidates(
-            frozen.rangeId, 1,
-            listOf(
-                StagedAnalysisCandidate(
-                    "memory", null, null, "hash", "{\"content\":\"candidate\"}"
-                )
-            )
-        )
-        val invalidRule = ModelRuleRecord(
-            "invalid-rule", "bad", "[]", "invalid", null,
-            "2026-08-08T00:00:00Z"
-        )
-
-        var failed = false
-        try {
-            store.commitFrozenChatRange(
-                frozen,
-                memories = listOf(mem("candidate", scope = "global", status = "draft")),
-                rules = listOf(invalidRule),
-                lorebookSuggestions = emptyList(),
-                relationshipHintsByMemoryId = mapOf("candidate" to listOf("existing"))
-            )
-        } catch (_: Exception) {
-            failed = true
-        }
-
-        assertTrue(failed)
-        assertNull(store.getMemory("candidate"))
-        assertNull(store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
-        assertTrue(rowExists(store, "analysis_run_state", "run_id", frozen.rangeId))
-        store.discardCandidateCollection(frozen.rangeId)
-        assertFalse(rowExists(store, "analysis_run_state", "run_id", frozen.rangeId))
-        assertFalse(rowExists(store, "analysis_candidates", "run_id", frozen.rangeId))
+        val opened = store.beginScanRun(runRecord("run-a"), listOf(scanRange("run-a", "chat-1")))
+        assertEquals(1, opened.size)
+        assertEquals("run-a", store.scanProgress("chat-1")!!.claimRunId)
+        val second = store.beginScanRun(runRecord("run-b"), listOf(scanRange("run-b", "chat-1")))
+        assertTrue(second.isEmpty())
     }
 
     @Test
-    fun stageDRerunTemporaryStateIsOwnedByRunCleanup() {
+    fun aKilledRunKeepsItsCheckpointAndWorkingDraftsAndResumesThem() {
         val store = open(freshDbName())
-        val runId = "run-stage-d-rerun"
-        store.beginCandidateCollection(runId, "chat-rerun")
-        store.stageAnalysisCandidates(
-            runId, 1,
-            listOf(
-                StagedAnalysisCandidate(
-                    "memory", null, null, "rerun-hash", "{\"content\":\"candidate\"}"
-                )
-            )
-        )
+        store.beginScanRun(runRecord("run-k"), listOf(scanRange("run-k", "chat-1")))
+        val checkpoint = """{"read":[["m1","fp1"]],"partial":"m2","offset":40,"partialFingerprint":"fp2","sections":1}"""
+        store.saveScanSection("range-run-k-chat-1", 1, listOf(candidate("kept draft")), checkpoint)
 
-        assertTrue(rowExists(store, "analysis_run_state", "run_id", runId))
-        assertTrue(rowExists(store, "analysis_candidates", "run_id", runId))
-
-        store.releaseAnalysisClaims(runId)
-
-        assertFalse(rowExists(store, "analysis_run_state", "run_id", runId))
-        assertFalse(rowExists(store, "analysis_candidates", "run_id", runId))
-    }
-
-    @Test
-    fun failedChatCommitRollsBackMemoryRuleAndBookmarkTogether() {
-        val store = open(freshDbName())
-        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
-        val frozen = store.beginAnalysisRun(
-            runRecord("run-rollback"), mapOf("chat-a" to listOf("t1"))
-        ).getValue("chat-a")
-        val memory = mem("must-not-leak", scope = "global", status = "draft")
-        val invalidRule = ModelRuleRecord(
-            ruleId = "must-not-leak-rule", text = "draft",
-            modelStringsJson = "[]", status = "invalid", sourceModelString = null,
-            createdAt = "2026-08-08T00:00:00Z"
-        )
-
-        var failed = false
-        try {
-            store.commitFrozenChatRange(frozen, listOf(memory), listOf(invalidRule), emptyList())
-        } catch (_: Exception) {
-            failed = true
-        }
-        assertTrue(failed)
-        assertNull(store.getMemory("must-not-leak"))
-        assertNull(store.getModelRule("must-not-leak-rule"))
-        assertNull(store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
-        store.releaseAnalysisClaims("run-rollback")
-        assertEquals(listOf("t1"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
-    }
-
-    @Test
-    fun interruptedFrozenRangeReleasesClaimWithoutSkippingMaterial() {
-        val store = open(freshDbName())
-        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
-        store.beginAnalysisRun(
-            runRecord("run-interrupted"), mapOf("chat-a" to listOf("t1"))
-        )
-
+        // The process dies: nothing ran a stop path. The next start reconciles.
         assertEquals(1, store.reconcileInterruptedAnalysisRuns())
-        assertNull(store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
-        assertEquals(listOf("t1"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
-        assertNull(store.transcriptsByIds(listOf("t1")).single().claimRunId)
+        val run = store.getArchivistRun("run-k")!!
+        assertEquals("running", run.status)
+        assertEquals(MemoryStore.SUSPENDED_INTERRUPTED, run.suspended)
+        val range = store.scanRangesForRun("run-k").single()
+        assertEquals(checkpoint, range.checkpointJson)
+        assertEquals(listOf("h-kept draft"), store.stagedScanCandidates(range.rangeId).map { it.candidateHash })
+        assertEquals("run-k", store.scanProgress("chat-1")!!.claimRunId)
+        // The interrupted entry stays in Recent Memory Analysis.
+        assertTrue(store.getArchivistRuns(10).any { it.runId == "run-k" })
     }
 
     @Test
-    fun multiChatRunCommitsSuccessfulChatWhileFailedChatKeepsBookmark() {
+    fun aPausedRunIsKeptAndIsNotListedAsFinished() {
         val store = open(freshDbName())
-        insertTranscript(store, "a1", "chat-a", "1", "pending", null)
-        insertTranscript(store, "b1", "chat-b", "1", "pending", null)
-        val ranges = store.beginAnalysisRun(
-            runRecord("run-multi"),
-            mapOf("chat-a" to listOf("a1"), "chat-b" to listOf("b1"))
-        )
-
-        store.commitFrozenChatRange(
-            ranges.getValue("chat-a"),
-            listOf(mem("visible-a", scope = "global", status = "draft")),
-            emptyList(), emptyList()
-        )
-        try {
-            store.commitFrozenChatRange(
-                ranges.getValue("chat-b"),
-                listOf(mem("hidden-b", scope = "global", status = "draft")),
-                listOf(
-                    ModelRuleRecord(
-                        "invalid-b", "bad", "[]", "invalid", null,
-                        "2026-08-08T00:00:00Z"
-                    )
-                ),
-                emptyList()
-            )
-        } catch (_: Exception) {
-            // Deterministic save failure for chat B.
-        }
-
-        assertEquals("a1", store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
-        assertNotNull(store.getMemory("visible-a"))
-        assertNull(store.getAnalysisBookmark("chat-b")!!.lastTranscriptId)
-        assertNull(store.getMemory("hidden-b"))
-        store.releaseAnalysisClaims("run-multi")
-        assertEquals(listOf("b1"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
+        store.beginScanRun(runRecord("run-p"), listOf(scanRange("run-p", "chat-1")))
+        store.suspendScanRun(runRecord("run-p"), MemoryStore.SUSPENDED_PAUSED, 42)
+        assertEquals(0, store.reconcileInterruptedAnalysisRuns())
+        assertEquals(42, store.suspendedScanRuns().single().progressPercent)
+        assertTrue(store.getArchivistRuns(10).none { it.runId == "run-p" })
+        assertEquals(1, store.scanRangesForRun("run-p").size)
     }
 
     @Test
-    fun interruptedBookmarkMigrationInstallsNeitherRowsNorCutoverMarker() {
+    fun cancelAndFinishClearEverythingTheRunHeld() {
         val store = open(freshDbName())
-        insertTranscript(store, "t1", "chat-a", "1", "processed", "1")
+        store.beginScanRun(runRecord("run-c"), listOf(scanRange("run-c", "chat-1")))
+        store.saveScanSection("range-run-c-chat-1", 1, listOf(candidate("x")), "{}")
+        store.releaseScanRun("run-c")
+        assertTrue(store.scanRangesForRun("run-c").isEmpty())
+        assertNull(store.scanProgress("chat-1")!!.claimRunId)
+        assertFalse(rowExists(store, "analysis_candidates", "run_id", "range-run-c-chat-1"))
+    }
 
-        var interrupted = false
-        try {
-            store.rebuildBookmarkCutoverForTest(interruptBeforeMarker = true)
-        } catch (_: IllegalStateException) {
-            interrupted = true
-        }
-        assertTrue(interrupted)
-        assertNull(store.getMeta(MemoryStore.META_ASSOCIATIVE_BOOKMARK_CUTOVER))
-        assertTrue(store.getAnalysisBookmarks().isEmpty())
-        var eligibilityGuarded = false
-        try {
-            store.bookmarkEligibleTranscripts()
-        } catch (_: IllegalStateException) {
-            eligibilityGuarded = true
-        }
-        assertTrue(eligibilityGuarded)
+    @Test
+    fun changedSourceRestartsOnlyThatRangeFromItsBookmark() {
+        val store = open(freshDbName())
+        store.beginScanRun(runRecord("run-r"), listOf(scanRange("run-r", "chat-1")))
+        store.saveScanSection("range-run-r-chat-1", 1, listOf(candidate("stale")), """{"sections":1}""")
+        store.restartScanRange("range-run-r-chat-1")
+        val range = store.scanRange("range-run-r-chat-1")!!
+        assertNull(range.checkpointJson)
+        assertTrue(store.stagedScanCandidates(range.rangeId).isEmpty())
+        assertEquals("run-r", store.scanProgress("chat-1")!!.claimRunId)
+    }
 
-        store.rebuildBookmarkCutoverForTest()
-        assertEquals("complete", store.getMeta(MemoryStore.META_ASSOCIATIVE_BOOKMARK_CUTOVER))
-        assertEquals("t1", store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
+    @Test
+    fun commitFilesDraftsAndMovesTheBookmarkTogether() {
+        val store = open(freshDbName())
+        val range = store.beginScanRun(runRecord("run-f"), listOf(scanRange("run-f", "chat-1"))).single()
+        val draft = mem(MemoryId.generate(MemoryId.Type.ASSOCIATIVE), scope = "global", status = "draft")
+        store.commitScanRange(range, listOf("m3", "m2", "m1"), listOf(draft), emptyList(), emptyList())
+        assertNotNull(store.getMemory(draft.memoryId))
+        val progress = store.scanProgress("chat-1")!!
+        assertEquals(listOf("m3", "m2", "m1"), progress.bookmarkAnchors)
+        assertNull(progress.claimRunId)
+        assertTrue(store.scanRangesForRun("run-f").isEmpty())
+    }
+
+    @Test
+    fun oneChatOfAPausedBatchCanBeTakenWithItsCheckpoint() {
+        val store = open(freshDbName())
+        store.beginScanRun(
+            runRecord("run-batch"),
+            listOf(scanRange("run-batch", "chat-1", 0), scanRange("run-batch", "chat-2", 1))
+        )
+        store.saveScanSection("range-run-batch-chat-2", 1, listOf(candidate("y")), """{"sections":1}""")
+        store.suspendScanRun(runRecord("run-batch"), MemoryStore.SUSPENDED_PAUSED, 10)
+        store.insertArchivistRun(runRecord("run-chat"))
+        val moved = store.transferScanRange("range-run-batch-chat-2", "run-chat", 0)!!
+        assertEquals("run-chat", moved.runId)
+        assertEquals("""{"sections":1}""", moved.checkpointJson)
+        assertEquals("run-chat", store.scanProgress("chat-2")!!.claimRunId)
+        // The paused batch keeps its other chat and stays paused.
+        assertEquals(listOf("chat-1"), store.scanRangesForRun("run-batch").map { it.chatId })
+        assertEquals(MemoryStore.SUSPENDED_PAUSED, store.getArchivistRun("run-batch")!!.suspended)
+    }
+
+    @Test
+    fun migrationRecordsResultsBeforeDeletingTranscriptText() {
+        val store = open(freshDbName())
+        val db = store.writableDatabase
+        MemoryStore.createLegacyScanTables(db)
+        MemoryStore.markScanSourceMigrationPending(db)
+        db.insertOrThrow("transcripts", null, ContentValues().apply {
+            put("transcript_id", "t1"); put("chat_id", "chat-1"); put("source", "live")
+            put("content", "[{\"role\":\"user\",\"content\":\"private words\",\"messageId\":\"m1\"}]")
+        })
+        assertEquals(listOf("t1"), store.legacyTranscriptsForChat("chat-1").map { it.transcriptId })
+        store.recordChatMigration("chat-1", ScanChatProgress("chat-1", listOf("m1")), emptyMap(), emptyMap(), emptyList())
+        assertTrue(store.legacyTranscriptsForChat("chat-1").isEmpty())
+        assertEquals(listOf("m1"), store.scanProgress("chat-1")!!.bookmarkAnchors)
+        store.finishScanSourceMigration()
+        assertFalse(store.hasLegacyTranscriptTables())
+        assertTrue(store.scanSourceMigrationComplete())
+    }
+
+    @Test
+    fun noScanTableHoldsConversationText() {
+        val store = open(freshDbName())
+        store.beginScanRun(runRecord("run-t"), listOf(scanRange("run-t", "chat-1")))
+        store.saveScanSection("range-run-t-chat-1", 1, emptyList(), """{"read":[["m1","fp"]],"sections":1}""")
+        for (table in listOf("scan_chat_progress", "scan_ranges", "scan_reports")) {
+            val columns = HashSet<String>()
+            store.readableDatabase.rawQuery("PRAGMA table_info($table)", emptyArray()).use {
+                while (it.moveToNext()) columns.add(it.getString(it.getColumnIndexOrThrow("name")))
+            }
+            assertFalse(columns.any { it.contains("content") || it.contains("text") || it.contains("message") && !it.contains("_ids") })
+        }
     }
 
     /* --------------------------- backup / restore -------------------------- */
@@ -765,11 +506,13 @@ class MemoryStoreInstrumentedTest {
         val untypedId = MemoryId.generate(MemoryId.Type.ASSOCIATIVE)
         src.insertMemory(mem(typedId, scope = "global", typeId = "mtype-fact", importance = 4))
         src.insertMemory(mem(untypedId, scope = "global", typeId = null, importance = 0))
-        insertTranscript(src, "reviewed", "chat-backup", "1", "processed", "1")
-        insertTranscript(src, "waiting", "chat-backup", "2", "pending", null)
-        src.rebuildBookmarkCutoverForTest()
-        src.setChatTranscriptsExcluded("chat-backup", true)
+        src.recordChatMigration(
+            "chat-backup", ScanChatProgress("chat-backup", listOf("msg-2", "msg-1")),
+            emptyMap(), emptyMap(), emptyList()
+        )
         val exported = MemorySeedCodec.serialize(src.exportData())
+        // Conversation text never travels in a backup (Stage 6A).
+        assertFalse(org.json.JSONObject(exported).has("transcripts"))
 
         // Restore into a fresh store via the first-seed (overwrite) path.
         val dest = open(freshDbName())
@@ -779,11 +522,9 @@ class MemoryStoreInstrumentedTest {
         assertEquals(4, dest.getMemory(typedId)!!.importance)
         assertNull(dest.getMemory(untypedId)!!.typeId)
         assertEquals(0, dest.getMemory(untypedId)!!.importance)
-        assertEquals("reviewed", dest.getAnalysisBookmark("chat-backup")!!.lastTranscriptId)
-        assertTrue(dest.getAnalysisBookmark("chat-backup")!!.archivePaused)
-        assertTrue(dest.bookmarkEligibleTranscripts().none { it.chatId == "chat-backup" })
-        dest.setChatTranscriptsExcluded("chat-backup", false)
-        assertEquals(listOf("waiting"), dest.bookmarkEligibleTranscripts().map { it.transcriptId })
+        // The bookmark (message UUIDs only) travels with the backup.
+        assertEquals(listOf("msg-2", "msg-1"), dest.scanProgress("chat-backup")!!.bookmarkAnchors)
+        assertTrue(dest.scanSourceMigrationComplete())
     }
 
     @Test
@@ -1476,27 +1217,6 @@ class MemoryStoreInstrumentedTest {
     }
 
     /* ------------------------------ helpers ------------------------------- */
-
-    private fun insertTranscript(
-        store: MemoryStore,
-        id: String,
-        chatId: String,
-        startedAt: String,
-        reviewStatus: String,
-        processedAt: String?
-    ) {
-        store.writableDatabase.insertOrThrow("transcripts", null, ContentValues().apply {
-            put("transcript_id", id)
-            put("chat_id", chatId)
-            put("source", "live")
-            put("started_at", startedAt)
-            put("ended_at", startedAt)
-            put("content", "[]")
-            put("model_tag", "model")
-            put("review_status", reviewStatus)
-            put("processed_at", processedAt)
-        })
-    }
 
     private fun runRecord(id: String) = ArchivistRunRecord(
         runId = id,

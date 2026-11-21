@@ -106,8 +106,11 @@ class MemoryAssistantActivity : SettingsPageActivity() {
     private var btnStatusAction: MaterialButton? = null
     private var linkViewPending: TextView? = null
     private var runsContainer: LinearLayout? = null
+    private var scanResultsContainer: LinearLayout? = null
 
     private var running = false
+    /** A paused or interrupted scan waiting with its progress (Stage 6A). */
+    private var suspendedScan: org.teslasoft.assistant.service.SuspendedMemoryScan? = null
     /** True after a run finished during THIS visit — Complete! is not sticky
      *  across a fresh visit (owner behavior rule). */
     private var completedThisVisit = false
@@ -139,6 +142,7 @@ class MemoryAssistantActivity : SettingsPageActivity() {
         btnStatusAction = findViewById(R.id.btn_status_action)
         linkViewPending = findViewById(R.id.link_view_pending)
         runsContainer = findViewById(R.id.runs_container)
+        scanResultsContainer = findViewById(R.id.scan_results_container)
 
         degradedContainer = findViewById(R.id.degraded_container)
         btnDegradedRepair = findViewById(R.id.btn_degraded_repair)
@@ -146,10 +150,29 @@ class MemoryAssistantActivity : SettingsPageActivity() {
 
         applyTheme()
         btnBack?.setOnClickListener { finish() }
-        btnAnalyze?.setOnClickListener { if (!running) startRun(null) }
+        // Stage 6A: while a scan runs this button is Pause Conversations;
+        // while one is paused or interrupted it is Resume Conversations.
+        btnAnalyze?.setOnClickListener {
+            val waiting = suspendedScan
+            when {
+                running -> {
+                    btnAnalyze?.isEnabled = false
+                    MemoryAnalysisForegroundService.requestPause(this)
+                }
+                waiting != null -> {
+                    btnAnalyze?.isEnabled = false
+                    if (!MemoryAnalysisForegroundService.requestResume(this, waiting.runId)) {
+                        btnAnalyze?.isEnabled = true
+                    }
+                }
+                else -> startRun(null)
+            }
+        }
         // Cancel is the user asking to stop the live run (owner ruling, Aug 1
-        // 2026): a clean stop, not an error. It is only visible while a run is
-        // active. Disable it on tap so a second press can't double-fire.
+        // 2026): a clean stop, not an error. It is visible while a run is
+        // active, and while a scan is paused or interrupted (it then discards
+        // the unfinished progress). Disable it on tap so a second press can't
+        // double-fire.
         btnCancel?.setOnClickListener {
             btnCancel?.isEnabled = false
             MemoryAnalysisForegroundService.requestCancel(this)
@@ -191,8 +214,11 @@ class MemoryAssistantActivity : SettingsPageActivity() {
             btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
             clearStatusBlock()
         }
-        // Cancel only belongs on screen while a run is live.
-        if (!running) btnCancel?.visibility = View.GONE
+        // Cancel only belongs on screen while a run is live or suspended.
+        if (!running && suspendedScan == null) btnCancel?.visibility = View.GONE
+        lifecycleScope.launch(Dispatchers.IO) {
+            MemoryAnalysisForegroundService.restoreSuspendedNotification(this@MemoryAssistantActivity)
+        }
         refreshFactsAndRuns()
     }
 
@@ -217,8 +243,18 @@ class MemoryAssistantActivity : SettingsPageActivity() {
             val storeUsable = MemoryStore.isProvisioned(this@MemoryAssistantActivity) &&
                 !DatabaseHealthState.isDegraded(this@MemoryAssistantActivity, BackupType.MEMORY)
             val eligible = if (storeUsable) Archivist.eligibleConversationCount(this@MemoryAssistantActivity) else 0
-            val pendingChats = if (storeUsable)
-                MemoryStore.getInstance(this@MemoryAssistantActivity).pendingReviewCount() else 0
+            // Both facts read the original chats (Stage 6A): the chats with
+            // messages waiting to be scanned.
+            val pendingChats = eligible
+            val reports = if (storeUsable)
+                MemoryStore.getInstance(this@MemoryAssistantActivity).scanReports() else emptyList()
+            val chatNames = if (reports.isEmpty()) emptyMap() else try {
+                org.teslasoft.assistant.preferences.ChatPreferences.getChatPreferences()
+                    .getChatList(this@MemoryAssistantActivity)
+                    .associate { org.teslasoft.assistant.preferences.ChatPreferences.storedChatId(it) to (it["name"] ?: "") }
+            } catch (_: Exception) {
+                emptyMap()
+            }
             val runs = if (storeUsable)
                 MemoryStore.getInstance(this@MemoryAssistantActivity).getArchivistRuns(RECENT_RUNS) else emptyList()
             // "Some Memories Deleted Later" badge: which runs reference memory
@@ -264,8 +300,9 @@ class MemoryAssistantActivity : SettingsPageActivity() {
                 // button visibly disabled; Set Up opens the settings screen.
                 notReadyContainer?.visibility =
                     if (configured || anyDegraded) View.GONE else View.VISIBLE
-                if (!running) btnAnalyze?.isEnabled = configured && !anyDegraded
+                if (!running && suspendedScan == null) btnAnalyze?.isEnabled = configured && !anyDegraded
                 renderRuns(runs, deletedLater)
+                renderScanResults(reports, chatNames)
             }
         }
     }
@@ -323,7 +360,7 @@ class MemoryAssistantActivity : SettingsPageActivity() {
             row.findViewById<MaterialButton>(R.id.btn_rerun)?.setOnClickListener {
                 // A Rerun re-runs the original run's OWN analysis type (Fix #2),
                 // not whatever the picker currently shows.
-                if (!running) startRun(run.runId, run.analysisType)
+                if (!running && suspendedScan == null) startRun(run.runId, run.analysisType)
             }
             container.addView(row)
         }
@@ -408,7 +445,7 @@ class MemoryAssistantActivity : SettingsPageActivity() {
             return
         }
         running = true
-        btnAnalyze?.setText(R.string.memory_assistant_btn_running)
+        btnAnalyze?.setText(R.string.memory_assistant_btn_pause)
         btnAnalyze?.isEnabled = false
         btnCancel?.isEnabled = true
         btnCancel?.visibility = View.VISIBLE
@@ -443,8 +480,8 @@ class MemoryAssistantActivity : SettingsPageActivity() {
                 when (s) {
                     is MemoryAnalysisState.Running -> {
                         running = true
-                        btnAnalyze?.setText(R.string.memory_assistant_btn_running)
-                        btnAnalyze?.isEnabled = false
+                        btnAnalyze?.setText(R.string.memory_assistant_btn_pause)
+                        btnAnalyze?.isEnabled = true
                         btnCancel?.isEnabled = true
                         btnCancel?.visibility = View.VISIBLE
                         showAnalyzing(s.progress)
@@ -456,9 +493,24 @@ class MemoryAssistantActivity : SettingsPageActivity() {
                         showOutcome(s.outcome)
                         refreshFactsAndRuns()
                         MemoryAnalysisForegroundService.state.value = null
+                        showSuspended()
                     }
-                    null -> { /* idle */ }
+                    null -> {
+                        if (running) {
+                            // Paused: no outcome to show; the suspended scan
+                            // below takes over the button.
+                            running = false
+                            refreshFactsAndRuns()
+                        }
+                        showSuspended()
+                    }
                 }
+            }
+        }
+        lifecycleScope.launch {
+            MemoryAnalysisForegroundService.suspended.collect {
+                suspendedScan = it
+                showSuspended()
             }
         }
     }
@@ -955,6 +1007,8 @@ class MemoryAssistantActivity : SettingsPageActivity() {
     private fun showAnalyzing(p: Archivist.Progress?) {
         clearStatusBlock()
         analysisProgressContainer?.visibility = View.VISIBLE
+        findViewById<View>(R.id.analysis_spinner)?.visibility = View.VISIBLE
+        findViewById<View>(R.id.analysis_heading)?.visibility = View.VISIBLE
         if (p != null && p.overallCount > 0) {
             val percent = p.percent()
             analysisBar?.visibility = View.VISIBLE
@@ -967,6 +1021,74 @@ class MemoryAssistantActivity : SettingsPageActivity() {
             analysisBar?.visibility = View.GONE
             analysisPercent?.visibility = View.GONE
         }
+    }
+
+    /**
+     * A paused or interrupted scan (Stage 6A question 6): the button reads
+     * Resume Conversations, Cancel stays available, and the progress bar
+     * stays at the last completed percentage.
+     */
+    private fun showSuspended() {
+        if (running) return
+        val waiting = suspendedScan
+        if (waiting == null) {
+            if (btnAnalyze?.text == getString(R.string.memory_assistant_btn_resume)) {
+                btnAnalyze?.setText(R.string.memory_assistant_btn_idle)
+                analysisProgressContainer?.visibility = View.GONE
+            }
+            btnCancel?.visibility = View.GONE
+            return
+        }
+        btnAnalyze?.setText(R.string.memory_assistant_btn_resume)
+        btnAnalyze?.isEnabled = !DatabaseHealthState.anyDegraded(this)
+        btnCancel?.isEnabled = true
+        btnCancel?.visibility = View.VISIBLE
+        if (statusLabel?.visibility != View.VISIBLE) showPausedProgress(waiting.percent)
+    }
+
+    /** The progress bar held at the last completed percentage, without the
+     *  running spinner and heading. */
+    private fun showPausedProgress(percent: Int) {
+        clearStatusBlock()
+        analysisProgressContainer?.visibility = View.VISIBLE
+        findViewById<View>(R.id.analysis_spinner)?.visibility = View.GONE
+        findViewById<View>(R.id.analysis_heading)?.visibility = View.GONE
+        analysisBar?.visibility = View.VISIBLE
+        analysisBar?.isIndeterminate = false
+        analysisBar?.max = 100
+        analysisBar?.setProgressCompat(percent.coerceIn(0, 100), false)
+        analysisPercent?.visibility = View.VISIBLE
+        analysisPercent?.text = getString(R.string.memory_assistant_analyzing_percent, percent.coerceIn(0, 100))
+    }
+
+    /** The scan results area: each conversation the scanner found damaged,
+     *  and whether the existing repair fixed it (owner decision, Stage 6A
+     *  question 9). A line opens the Damaged Chat Log. */
+    private fun renderScanResults(
+        reports: List<org.teslasoft.assistant.preferences.memory.ScanReport>,
+        names: Map<String, String>
+    ) {
+        val container = scanResultsContainer ?: return
+        container.removeAllViews()
+        val lines = reports.mapNotNull { report ->
+            val name = names[report.chatId] ?: return@mapNotNull null
+            when (report.kind) {
+                org.teslasoft.assistant.preferences.memory.ScanReport.DAMAGE_REPAIRED ->
+                    getString(R.string.memory_scan_report_damage_repaired, name)
+                org.teslasoft.assistant.preferences.memory.ScanReport.DAMAGE_NOT_REPAIRED ->
+                    getString(R.string.memory_scan_report_damage_not_repaired, name)
+                else -> null
+            }
+        }
+        for (line in lines) {
+            val view = TextView(this, null, 0, R.style.Widget_App_ResultNotice)
+            view.text = line
+            view.setOnClickListener {
+                startActivity(Intent(this, DamagedChatLogActivity::class.java))
+            }
+            container.addView(view)
+        }
+        container.visibility = if (lines.isEmpty()) View.GONE else View.VISIBLE
     }
 
     /* ---------------- navigation ---------------- */

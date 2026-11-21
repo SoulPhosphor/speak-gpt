@@ -567,6 +567,7 @@ class ChatPreferences private constructor() {
         var rollbackJournal: (() -> Unit)? = null
         return try {
             val prefs = SecurePrefs.get(context, name)
+            assignMessageNumbers(context, chatId, messages)
             val fingerprint = SearchableMessageProjection.projectionFingerprint(messages)
             val previousFingerprint = prefs.getString(
                 ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, null
@@ -616,6 +617,33 @@ class ChatPreferences private constructor() {
         } catch (_: Exception) {
             if (bookmarkChanged) runCatching { rollbackJournal?.invoke() }
             ChatStorageHealth.WriteOutcome.FAILED
+        }
+    }
+
+    /**
+     * Gives new message slots their permanent number ([MessageNumbers]) as
+     * they are first saved. The highest number ever assigned is kept in the
+     * chat's settings, which travel with its backups. It is updated (in
+     * memory at once, on disk without waiting) only when it moves, so a
+     * failed history save can only leave a gap, never a reused number.
+     */
+    private fun assignMessageNumbers(context: Context, chatId: String, messages: List<HashMap<String, Any>>) {
+        if (!MessageNumbers.needsNumbers(messages)) return
+        val settings = try {
+            SecurePrefs.get(context, "settings.$chatId")
+        } catch (_: Exception) {
+            null
+        }
+        val stored = try {
+            settings?.getLong(MessageNumbers.COUNTER_KEY, 0L) ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
+        val highest = MessageNumbers.ensure(messages, stored)
+        if (highest > stored && settings != null && !SecurePrefs.isLockedName("settings.$chatId")) {
+            try {
+                settings.edit().putLong(MessageNumbers.COUNTER_KEY, highest).apply()
+            } catch (_: Exception) { /* the numbers in the history still hold */ }
         }
     }
 

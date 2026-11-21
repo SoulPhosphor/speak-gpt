@@ -1,0 +1,42 @@
+/**************************************************************************
+ * Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+ * Licensed under the Apache License, Version 2.0.
+ **************************************************************************/
+package org.teslasoft.assistant.preferences.memory.scan
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * The message ranges a run finished reading, kept on its history row so a
+ * Rerun can read the same part of each chat again. Message UUID anchors
+ * only ([ScanPosition]); an empty start means the chat's beginning.
+ */
+object ScanSourceRanges {
+
+    data class Range(val chatId: String, val startAnchors: List<String>, val endAnchors: List<String>)
+
+    fun encode(ranges: List<Range>): String = JSONArray().apply {
+        for (r in ranges) put(JSONObject().apply {
+            put("chat", r.chatId)
+            put("start", JSONArray(r.startAnchors))
+            put("end", JSONArray(r.endAnchors))
+        })
+    }.toString()
+
+    fun decode(raw: String?): List<Range> = try {
+        val a = JSONArray(raw ?: "[]")
+        (0 until a.length()).mapNotNull { i ->
+            val o = a.optJSONObject(i) ?: return@mapNotNull null
+            val chat = o.optString("chat", "").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            Range(chat, strings(o.optJSONArray("start")), strings(o.optJSONArray("end")))
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    fun append(raw: String?, more: List<Range>): String = encode(decode(raw) + more)
+
+    private fun strings(a: JSONArray?): List<String> =
+        if (a == null) emptyList() else (0 until a.length()).mapNotNull { a.optString(it).takeIf { s -> s.isNotBlank() } }
+}

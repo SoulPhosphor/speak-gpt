@@ -56,6 +56,12 @@ object DamagedChatRepair {
         return finish(context, targets.associateWith { repairOne(context, it) })
     }
 
+    /** The same direct repair as Try Repair, for [chatIds] only: used when
+     *  the Memory Scanner finds a damaged chat (owner decision, Stage 6A
+     *  question 9). The log records the result exactly as Try Repair does. */
+    fun repairChats(context: Context, chatIds: Collection<String>): Result =
+        finish(context, chatIds.distinct().associateWith { repairOne(context, it) })
+
     /** A replacement from a backup for [replacements] (chat id to the backup
      *  copy's messages); other damaged chats are not touched. */
     fun replaceFromBackup(context: Context, replacements: Map<String, List<HashMap<String, Any>>>): Result =

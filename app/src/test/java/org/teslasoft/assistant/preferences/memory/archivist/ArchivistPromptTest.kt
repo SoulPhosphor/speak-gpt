@@ -20,14 +20,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.teslasoft.assistant.preferences.memory.TranscriptRecord
+import org.teslasoft.assistant.preferences.memory.scan.ScanSourceRow
 
 /**
- * Round 5, change 3: ArchivistPrompt.userMessage must (a) exclude assistant
- * turns Round 3 marked `complete:false` from what the model sees, (b) keep the
- * user turn beside an excluded fragment, and (c) report an accurate count of
- * the excluded assistant fragments (the in-memory RunOutcome diagnostic). It
- * must not change the legacy "absent = complete" or malformed-JSON behavior.
+ * The analyzer prompt contract and the rendering of a section's message rows
+ * for the model. Which messages are read at all (hidden, unfinished, blank) is
+ * decided before rendering, by ChatScanSource (see ChatScanSourceTest).
  */
 class ArchivistPromptTest {
 
@@ -116,110 +114,80 @@ class ArchivistPromptTest {
         assertFalse(prompt.contains("1,250"))
     }
 
-    private fun transcript(content: String, startedAt: String? = "2026-07-12T10:00:00Z"): TranscriptRecord =
-        TranscriptRecord(
-            transcriptId = "t-1",
-            chatId = "chat-1",
-            companionId = null,
-            worldId = null,
-            roleplayCharacterId = null,
-            userPersonaId = null,
-            source = "live",
-            startedAt = startedAt,
-            endedAt = startedAt,
-            content = content,
-            modelTag = "glm-5",
-            quickSettingsJson = null,
-            reviewStatus = "pending",
-            processedAt = null
-        )
+    private fun row(
+        id: String,
+        role: String,
+        text: String,
+        model: String? = "glm-5",
+        projectId: String? = null
+    ) = ScanSourceRow(
+        chatId = "chat",
+        messageId = id,
+        messageNumber = 1,
+        role = role,
+        start = 0,
+        end = text.length,
+        text = text,
+        startedAt = "2026-07-12T10:00:00Z",
+        modelTag = model,
+        projectId = projectId
+    )
 
     @Test
-    fun completeConversationDropsNothing() {
-        val json = """
-            [{"role":"user","content":"Hi there"},
-             {"role":"assistant","content":"Hello, how can I help?"}]
-        """.trimIndent()
-        val rendered = ArchivistPrompt.userMessage("Chat A", "Ada", listOf(transcript(json)))
-        assertTrue(rendered.text.contains("<conversation_data>"))
-        assertTrue(rendered.text.contains("</conversation_data>"))
-
-        assertEquals(0, rendered.incompleteAssistantTurnsDropped)
-        assertTrue(rendered.text.contains("User: Hi there"))
-        assertTrue(rendered.text.contains("Assistant: Hello, how can I help?"))
-    }
-
-    @Test
-    fun incompleteAssistantTurnIsExcludedButUserTurnKept() {
-        val json = """
-            [{"role":"user","content":"What is the capital of France?"},
-             {"role":"assistant","content":"The capital of Fra","complete":false}]
-        """.trimIndent()
-        val rendered = ArchivistPrompt.userMessage("Chat B", null, listOf(transcript(json)))
-
-        assertEquals(1, rendered.incompleteAssistantTurnsDropped)
-        // The user's own turn beside the fragment is preserved...
-        assertTrue(rendered.text.contains("User: What is the capital of France?"))
-        // ...but the truncated assistant fragment never reaches the model.
-        assertFalse(rendered.text.contains("The capital of Fra"))
-        assertFalse(rendered.text.contains("Assistant:"))
-    }
-
-    @Test
-    fun countSumsAcrossTranscriptsAndTurns() {
-        val a = """
-            [{"role":"user","content":"one"},
-             {"role":"assistant","content":"frag1","complete":false},
-             {"role":"assistant","content":"good reply"}]
-        """.trimIndent()
-        val b = """
-            [{"role":"user","content":"two"},
-             {"role":"assistant","content":"frag2","complete":false}]
-        """.trimIndent()
+    fun rendersTheSectionInChatOrderInsideTheDataBlock() {
         val rendered = ArchivistPrompt.userMessage(
-            "Chat C", "Ada", listOf(transcript(a), transcript(b))
-        )
-
-        assertEquals(2, rendered.incompleteAssistantTurnsDropped)
-        assertTrue(rendered.text.contains("Assistant: good reply"))
-        assertFalse(rendered.text.contains("frag1"))
-        assertFalse(rendered.text.contains("frag2"))
-        assertTrue(rendered.text.contains("User: one"))
-        assertTrue(rendered.text.contains("User: two"))
+            "Chat A", "Ada",
+            listOf(row("m1", "user", "Hi there"), row("m2", "assistant", "Hello, how can I help?"))
+        ).text
+        assertTrue(rendered.contains("<conversation_data>"))
+        assertTrue(rendered.contains("</conversation_data>"))
+        assertTrue(rendered.contains("Conversation: Chat A"))
+        assertTrue(rendered.contains("AI companion in this conversation: Ada"))
+        assertTrue(rendered.indexOf("Hi there") < rendered.indexOf("Hello, how can I help?"))
     }
 
     @Test
-    fun legacyTurnWithoutCompleteKeyIsTreatedAsComplete() {
-        // Absent "complete" (every legacy row) means complete — not dropped.
-        val json = """
-            [{"role":"assistant","content":"a finished legacy reply"}]
-        """.trimIndent()
-        val rendered = ArchivistPrompt.userMessage("Chat D", null, listOf(transcript(json)))
-
-        assertEquals(0, rendered.incompleteAssistantTurnsDropped)
-        assertTrue(rendered.text.contains("Assistant: a finished legacy reply"))
-    }
-
-    @Test
-    fun explicitCompleteTrueIsKept() {
-        val json = """
-            [{"role":"assistant","content":"explicitly done","complete":true}]
-        """.trimIndent()
-        val rendered = ArchivistPrompt.userMessage("Chat E", null, listOf(transcript(json)))
-
-        assertEquals(0, rendered.incompleteAssistantTurnsDropped)
-        assertTrue(rendered.text.contains("Assistant: explicitly done"))
-    }
-
-    @Test
-    fun malformedContentFallsBackToRawTextAndCountsNoDrops() {
-        // Unchanged fallback behavior: unparseable capture is passed through
-        // rather than losing the conversation, and reports zero drops.
+    fun eachLineStartsWithThePermanentMessageNumberAndNeverTheUuid() {
         val rendered = ArchivistPrompt.userMessage(
-            "Chat F", null, listOf(transcript("this is not json"))
-        )
+            "Chat", null,
+            listOf(
+                row("uuid-4", "user", "I'm waiting for their response.").copy(messageNumber = 4),
+                // Message 5 was deleted: the gap is normal.
+                row("uuid-6", "user", "They responded yesterday.").copy(messageNumber = 6),
+                row("uuid-7", "assistant", "What did they say?").copy(messageNumber = 7)
+            )
+        ).text
+        assertTrue(rendered.contains("Message 4 — User: I'm waiting for their response.\n"))
+        assertTrue(rendered.contains("Message 6 — User: They responded yesterday.\n"))
+        assertTrue(rendered.contains("Message 7 — Assistant: What did they say?\n"))
+        assertFalse(rendered.contains("Message 5"))
+        assertFalse(rendered.contains("uuid-"))
+    }
 
-        assertEquals(0, rendered.incompleteAssistantTurnsDropped)
-        assertTrue(rendered.text.contains("this is not json"))
+    @Test
+    fun noCompanionLineWhenTheScopeIsUnknown() {
+        val rendered = ArchivistPrompt.userMessage("Chat B", null, listOf(row("m1", "user", "x"))).text
+        assertFalse(rendered.contains("AI companion in this conversation"))
+    }
+
+    @Test
+    fun blankFragmentsAreNotSent() {
+        val rendered = ArchivistPrompt.userMessage(
+            "Chat C", null, listOf(row("m1", "user", "   "), row("m2", "user", "kept"))
+        ).text
+        assertTrue(rendered.contains("kept"))
+        assertFalse(rendered.contains("User:    \n"))
+    }
+
+    @Test
+    fun retrievalWindowsAreTheWholeSectionPlusEachSceneGroup() {
+        val rows = listOf(
+            row("m1", "user", "first topic"),
+            row("m2", "user", "second topic", projectId = "p1")
+        )
+        val windows = ArchivistPrompt.retrievalWindows(rows)
+        assertEquals(3, windows.size)
+        assertTrue(windows[0].contains("first topic") && windows[0].contains("second topic"))
+        assertTrue(windows[1].contains("first topic") && !windows[1].contains("second topic"))
     }
 }

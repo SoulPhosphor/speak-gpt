@@ -87,7 +87,9 @@ object ArchivistCandidateBoundary {
     fun ruleHash(rule: ArchivistResponseParser.DraftRule): String =
         sha256(MemoryMatch.normalizeContent(rule.text))
 
-    /** Minimal restart/discard payload for encrypted temporary candidate state. */
+    /** The encrypted temporary payload of a validated working draft. It
+     *  carries everything filing needs, including the stamped scene, so a
+     *  resumed scan files exactly what an uninterrupted one would. */
     fun payload(draft: ArchivistResponseParser.DraftMemory): String = JSONObject().apply {
         put("content", draft.content)
         put("scope", draft.scope)
@@ -96,10 +98,63 @@ object ArchivistCandidateBoundary {
         put("target_ids", JSONArray(draft.targetIds))
         put("related_existing_memory_ids", JSONArray(draft.relatedExistingMemoryIds))
         put("unresolved_target", draft.unresolvedTargetReference)
+        draft.targetName?.let { put("target_name", it) }
+        draft.scene?.let { scene ->
+            put("scene", JSONObject().apply {
+                scene.companionId?.let { put("companion", it) }
+                scene.worldId?.let { put("world", it) }
+                scene.campaignId?.let { put("campaign", it) }
+                scene.roleplayCharacterId?.let { put("character", it) }
+                scene.projectId?.let { put("project", it) }
+            })
+        }
     }.toString()
 
     fun payload(rule: ArchivistResponseParser.DraftRule): String =
         JSONObject().put("text", rule.text).toString()
+
+    fun payload(entry: ArchivistResponseParser.DraftLoreEntry): String =
+        JSONObject().put("content", entry.content).put("triggers", JSONArray(entry.triggers)).toString()
+
+    fun loreHash(entry: ArchivistResponseParser.DraftLoreEntry): String =
+        sha256(entry.content.trim())
+
+    fun memoryFromPayload(json: String): ArchivistResponseParser.DraftMemory? = try {
+        val o = JSONObject(json)
+        val scene = o.optJSONObject("scene")?.let { s ->
+            fun text(key: String) = s.optString(key, "").takeIf { it.isNotBlank() }
+            ArchivistSceneContext(text("companion"), text("world"), text("campaign"), text("character"), text("project"))
+        }
+        ArchivistResponseParser.DraftMemory(
+            content = o.getString("content"),
+            scope = o.getString("scope"),
+            typeIdSuggestion = o.optString("type_id", "").takeIf { it.isNotBlank() && it != "null" },
+            tags = strings(o.optJSONArray("tags")),
+            targetName = o.optString("target_name", "").takeIf { it.isNotBlank() },
+            targetIds = strings(o.optJSONArray("target_ids")),
+            relatedExistingMemoryIds = strings(o.optJSONArray("related_existing_memory_ids")),
+            unresolvedTargetReference = o.optBoolean("unresolved_target", false),
+            scene = scene
+        )
+    } catch (_: Exception) {
+        null
+    }
+
+    fun ruleFromPayload(json: String): ArchivistResponseParser.DraftRule? = try {
+        ArchivistResponseParser.DraftRule(JSONObject(json).getString("text"))
+    } catch (_: Exception) {
+        null
+    }
+
+    fun loreFromPayload(json: String): ArchivistResponseParser.DraftLoreEntry? = try {
+        val o = JSONObject(json)
+        ArchivistResponseParser.DraftLoreEntry(o.getString("content"), strings(o.optJSONArray("triggers")))
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun strings(a: JSONArray?): List<String> =
+        if (a == null) emptyList() else (0 until a.length()).mapNotNull { a.optString(it).takeIf { s -> s.isNotBlank() } }
 
     private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))

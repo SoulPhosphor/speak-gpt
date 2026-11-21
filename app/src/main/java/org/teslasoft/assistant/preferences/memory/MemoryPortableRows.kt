@@ -39,8 +39,9 @@ object MemoryPortableRowFormat {
         Spec("archivist_settings", listOf("id")),
         Spec("memory_handling_preferences", listOf("id")),
         Spec("proposals", listOf("proposal_id")),
-        Spec("transcripts", listOf("transcript_id")),
-        Spec("analysis_chat_bookmarks", listOf("chat_id")),
+        // Stage 6A: the scanner's bookmarks (message UUID references, no
+        // conversation text). The transcript store is no longer exported.
+        Spec("scan_chat_progress", listOf("chat_id")),
         Spec("rp_tag_links", listOf("tag_id", "target_type", "target_id"), "target_type = 'memory'"),
         Spec("deleted_ids", listOf("record_type", "record_id"), "record_type IN ('memory','entity','project')")
     )
@@ -56,7 +57,18 @@ object MemoryPortableRowFormat {
      * before one existed (an older database file, or older readable JSON)
      * reads as having none of its rows, never as an error.
      */
-    val tablesAddedLater: Set<String> = setOf("memory_sources", "memory_handling_preferences")
+    val tablesAddedLater: Set<String> = setOf(
+        "memory_sources", "memory_handling_preferences", "scan_chat_progress"
+    )
+
+    /**
+     * Tables a backup made before Stage 6A may carry. Their rows are used
+     * only by the scanner migration to map earlier scan progress and message
+     * scope onto the restored chats, then their text is deleted (memory
+     * development plan M.2, "Removing the duplicate transcript store",
+     * step 3). New backups never contain them.
+     */
+    val legacyTables: Set<String> = setOf("transcripts", "analysis_chat_bookmarks")
 
     fun specs(group: MemoryPortableGroup): List<Spec> = when (group) {
         MemoryPortableGroup.MEMORIES -> memorySpecs
@@ -135,6 +147,10 @@ object MemoryPortableRowFormat {
                     db.insertOrThrow(spec.table, null, values)
                 }
             }
+            if (group == MemoryPortableGroup.MEMORIES) {
+                stageLegacyScanRows(db, data)
+                endScansAfterRestore(db)
+            }
             db.setTransactionSuccessful()
             true
         } catch (_: Exception) {
@@ -146,7 +162,7 @@ object MemoryPortableRowFormat {
 
     fun valid(group: MemoryPortableGroup, data: MemoryPortableRows): Boolean {
         val specs = specs(group)
-        if (data.tables.keys != specs.mapTo(LinkedHashSet(), Spec::table)) return false
+        if (data.tables.keys - legacyTables != specs.mapTo(LinkedHashSet(), Spec::table)) return false
         for (spec in specs) {
             val seen = HashSet<String>()
             for (row in data.tables[spec.table].orEmpty()) {
@@ -200,10 +216,78 @@ object MemoryPortableRowFormat {
                 }
                 tables[spec.table] = rows
             }
+            if (expected == MemoryPortableGroup.MEMORIES) {
+                for (legacy in legacyTables) {
+                    val array = tablesJson.optJSONArray(legacy) ?: continue
+                    val rows = ArrayList<Map<String, Any?>>(array.length())
+                    repeat(array.length()) { index ->
+                        val item = array.getJSONObject(index)
+                        val row = LinkedHashMap<String, Any?>()
+                        item.keys().forEach { key -> row[key] = when (val value = item.get(key)) {
+                            JSONObject.NULL -> null
+                            is Int -> value.toLong()
+                            is String, is Long, is Double, is Boolean -> value
+                            else -> return null
+                        } }
+                        rows.add(row)
+                    }
+                    if (rows.isNotEmpty()) tables[legacy] = rows
+                }
+            }
             MemoryPortableRows(tables).takeIf { valid(expected, it) }
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * An older backup's transcript rows wait in the legacy tables for the
+     * scanner migration, which maps them against the restored chats and then
+     * deletes them. Nothing else reads them.
+     */
+    fun stageLegacyScanRows(db: SQLiteDatabase, data: MemoryPortableRows) {
+        val legacy = legacyTables.filter { data.tables[it].orEmpty().isNotEmpty() }
+        if (legacy.isEmpty()) return
+        MemoryStore.createLegacyScanTables(db)
+        for (table in legacy) {
+            val liveColumns = columns(db, table)
+            for (row in data.tables[table].orEmpty()) {
+                val values = ContentValues()
+                for ((column, value) in row) {
+                    if (column !in liveColumns) continue
+                    when (value) {
+                        null -> values.putNull(column)
+                        is Long -> values.put(column, value)
+                        is Int -> values.put(column, value.toLong())
+                        is Double -> values.put(column, value)
+                        is Boolean -> values.put(column, if (value) 1L else 0L)
+                        else -> values.put(column, value.toString())
+                    }
+                }
+                db.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_IGNORE)
+            }
+        }
+        MemoryStore.markScanSourceMigrationPending(db)
+    }
+
+    /**
+     * The restored bookmarks replace the device's, so a scan that was paused
+     * or interrupted before the restore cannot continue against them: its
+     * temporary ranges and working drafts are discarded, its run ends as
+     * stopped, and no claim survives. Restoring never brings back a paused
+     * scan (owner decision, Stage 6A question 12).
+     */
+    fun endScansAfterRestore(db: SQLiteDatabase) {
+        db.delete("analysis_candidates", null, null)
+        db.delete("analysis_run_state", null, null)
+        db.delete("scan_ranges", null, null)
+        db.execSQL("UPDATE scan_chat_progress SET claim_run_id = NULL")
+        db.execSQL(
+            "UPDATE archivist_runs SET status = 'failed', suspended = NULL, " +
+                "finished_at = COALESCE(finished_at, ?), outcome = COALESCE(outcome, 'cancelled') " +
+                "WHERE status = 'running' AND suspended IS NOT NULL",
+            arrayOf(java.time.Instant.now().toString())
+        )
     }
 
     fun tableExists(db: SQLiteDatabase, table: String): Boolean =

@@ -109,13 +109,15 @@ object MemoryCategoryPlanner {
                     (row["old_memory_id"] as? String) in memoryIds
             }
             cleared += supersessions.size - tables.getValue("memory_supersessions").size
-            tables["transcripts"] = tables.getValue("transcripts").map { row -> LinkedHashMap(row).apply {
+            // Only an older backup carries transcripts; they wait for the
+            // scanner migration to map them, then their text is deleted.
+            tables["transcripts"]?.let { legacy -> tables["transcripts"] = legacy.map { row -> LinkedHashMap(row).apply {
                 clearMissing("companion_id", references.companions) { cleared++ }
                 clearMissing("world_id", references.worlds) { cleared++ }
                 clearMissing("roleplay_character_id", references.roleplayCharacters) { cleared++ }
                 clearMissing("user_persona_id", references.userPersonas) { cleared++ }
                 clearMissing("project_id", projectIds) { cleared++ }
-            } }
+            } } }
             val tagLinks = tables.getValue("rp_tag_links")
             tables["rp_tag_links"] = tagLinks.filter { row ->
                 (row["tag_id"] as? String) in references.roleplayTags &&
