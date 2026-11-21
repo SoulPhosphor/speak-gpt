@@ -1,4 +1,4 @@
-name: Inspect Stage 2 archived crash
+name: Inspect Stage 2 test proof
 on:
   push:
     branches:
@@ -12,25 +12,26 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: recovery-instrumentation-results
+          name: jvm-test-results
           repository: SoulPhosphor/speak-gpt
-          run-id: 44948531475
+          run-id: 44950607150
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: evidence
-      - name: Read existing crash evidence
+      - name: Read existing unit-test reports
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          files = list(Path("evidence").rglob("ParallelUsageScreenInstrumentedTest-logcat.txt"))
-          if len(files) != 1:
-              raise SystemExit("Expected one archived logcat: " + repr(files))
-          lines = files[0].read_text(errors="replace").splitlines()
-          selected = set()
-          for index, line in enumerate(lines):
-              if any(token in line for token in ("FATAL EXCEPTION", "AndroidRuntime", "am_crash", "ANR in", "Fatal signal")):
-                  selected.update(range(max(0, index - 4), min(len(lines), index + 45)))
-          if not selected:
-              selected.update(range(max(0, len(lines) - 160), len(lines)))
-          for index in sorted(selected):
-              print(lines[index])
+          import json
+          import xml.etree.ElementTree as ET
+          variants = {}
+          for path in Path("evidence").rglob("TEST-*.xml"):
+              root = ET.parse(path).getroot()
+              totals = variants.setdefault(path.parent.name, dict(tests=0, failures=0, errors=0, skipped=0))
+              for key in totals:
+                  totals[key] += int(root.get(key, "0"))
+          if not variants:
+              raise SystemExit("No JVM result XML was found")
+          print("Final source commit: 6fde4c50f0b74de3eba3d12e7b27319b60e82782")
+          print(json.dumps(variants, sort_keys=True))
+          assert all(v["failures"] == 0 and v["errors"] == 0 for v in variants.values())
           PY
