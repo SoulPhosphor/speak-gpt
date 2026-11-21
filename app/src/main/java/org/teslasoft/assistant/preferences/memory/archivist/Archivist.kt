@@ -1349,6 +1349,12 @@ object Archivist {
             restart()
             continue@reading
         }
+        // A reply that finished since the last read is read before the
+        // bookmark can move past it.
+        val unread = checkpoint.nextUnread(inRange)
+        if (unread != null &&
+            ScanSourceRows.build(chatId, inRange, unread.first, unread.second, resolveScope).isNotEmpty()
+        ) continue@reading
         break@reading
         }
         val ids = messages.map { it.id }
