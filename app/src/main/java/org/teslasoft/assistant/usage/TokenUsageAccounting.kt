@@ -624,6 +624,10 @@ object TokenUsageAccounting {
     /** A message's frozen request records: its version list when that holds
      * durable records, otherwise its own records. */
     fun durableRecordsOf(message: Map<String, Any>): List<TurnUsageRecord> {
+        val group = org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.read(message)
+        if (group is org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Valid) {
+            return org.teslasoft.assistant.conversation.responsegroups.ResponseGroupEdits.usage(group.group)
+        }
         val variantRecords = decodeVariantRecords(message[KEY_VARIANTS]?.toString())
         return variantRecords.ifEmpty { decodeRecords(message[KEY_USAGE_RECORDS]?.toString()) }
     }
@@ -635,6 +639,7 @@ object TokenUsageAccounting {
         index: Int,
         legacyEstimate: (assistantIndex: Int) -> TokenCounts
     ): TurnUsageRecord? {
+        if (message.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY)) return null
         if (durableRecordsOf(message).isNotEmpty()) return null
         if (message["isBot"] != true && message["isBot"]?.toString() != "true") return null
         if (!MessageCompletionState.isComplete(

@@ -549,74 +549,92 @@ class ChatPreferences private constructor() {
         chatId: String,
         messages: List<HashMap<String, Any>>,
         synchronous: Boolean = false,
-        bookmarkChanged: Boolean = false
+        bookmarkChanged: Boolean = false,
+        responseGroupChanged: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
-        if (PortableRestoreProcessGate.blocksCurrentProcess(context)) {
-            return ChatStorageHealth.WriteOutcome.FAILED
-        }
-        val name = "chat_$chatId"
-        SecurePrefs.get(context, name)
-        if (SecurePrefs.isLockedName(name)) {
-            chatWriteBlocked(context, name, "save chat history")
-            return ChatStorageHealth.WriteOutcome.LOCKED
-        }
-        if (name in ChatStorageHealth.readFailureNames(context)) {
-            chatWriteBlocked(context, name, "save chat history")
-            return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
-        }
-        var rollbackJournal: (() -> Unit)? = null
-        return try {
-            val prefs = SecurePrefs.get(context, name)
-            assignMessageNumbers(context, chatId, messages)
-            val fingerprint = SearchableMessageProjection.projectionFingerprint(messages)
-            val previousFingerprint = prefs.getString(
-                ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, null
-            )
-            val searchableChanged = fingerprint != previousFingerprint
-            val revision = if (searchableChanged) ChatSearchIndexManager.newRevision() else null
-            val journal = revision?.let { ChatSearchIndexJournal.get(context) }
-            val previousJournalRevision = if (bookmarkChanged) journal?.revision(chatId) else null
-            rollbackJournal = {
-                if (revision != null) {
-                    if (bookmarkChanged && previousJournalRevision != null) journal?.record(chatId, previousJournalRevision)
-                    else journal?.clearExact(chatId, revision)
-                }
-            }
-            if (revision != null && journal?.record(chatId, revision) != true) {
-                if (bookmarkChanged) rollbackJournal.invoke()
+        synchronized(CHAT_LIST_LOCK) {
+            if (PortableRestoreProcessGate.blocksCurrentProcess(context)) {
                 return ChatStorageHealth.WriteOutcome.FAILED
             }
-            val editor = prefs.edit().putString("chat", Gson().toJson(messages))
-            if (revision != null) editor
-                .putString(ChatSearchIndexManager.SEARCH_REVISION_KEY, revision)
-                .putString(ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, fingerprint)
-                .putLong(CHAT_CONTENT_MODIFIED_AT_KEY, System.currentTimeMillis())
-            if (bookmarkChanged) editor.putLong(CHAT_CONTENT_MODIFIED_AT_KEY, System.currentTimeMillis())
-            val committed = if (bookmarkChanged) PreferenceCommitRollback.commit(
-                prefs, editor, setOf(
-                    "chat", ChatSearchIndexManager.SEARCH_REVISION_KEY,
-                    ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, CHAT_CONTENT_MODIFIED_AT_KEY
-                )
-            ) else if (synchronous || searchableChanged) editor.commit() else {
-                editor.apply()
-                true
+            val name = "chat_$chatId"
+            SecurePrefs.get(context, name)
+            if (SecurePrefs.isLockedName(name)) {
+                chatWriteBlocked(context, name, "save chat history")
+                return ChatStorageHealth.WriteOutcome.LOCKED
             }
-            if (!committed) {
-                rollbackJournal.invoke()
-                ChatStorageHealth.WriteOutcome.FAILED
-            } else {
-                if (revision != null) {
-                    if (bookmarkChanged) {
-                        // The durable bookmark is saved; derived-index work can retry from its journal.
-                        runCatching { ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision) }
-                    } else ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision)
+            if (name in ChatStorageHealth.readFailureNames(context)) {
+                chatWriteBlocked(context, name, "save chat history")
+                return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
+            }
+            var rollbackJournal: (() -> Unit)? = null
+            return try {
+                val prefs = SecurePrefs.get(context, name)
+                assignMessageNumbers(context, chatId, messages)
+                val groupFingerprint = org.teslasoft.assistant.conversation.responsegroups.ResponseGroupHistory.fingerprint(messages)
+                val previousGroupFingerprint = prefs.getString("response_group_fingerprint", null)
+                val groupChanged = responseGroupChanged || groupFingerprint != previousGroupFingerprint
+                if (groupChanged) {
+                    val previousType = object : TypeToken<List<HashMap<String, Any>>>() {}.type
+                    val previous: List<HashMap<String, Any>> = Gson().fromJson(prefs.getString("chat", "[]"), previousType)
+                        ?: emptyList()
+                    org.teslasoft.assistant.conversation.responsegroups.ResponseGroupHistory.validateSavedTransition(previous, messages)
                 }
-                ChatListIndex.contentChanged(context, chatId)
-                ChatStorageHealth.WriteOutcome.OK
+                val fingerprint = SearchableMessageProjection.projectionFingerprint(messages)
+                val previousFingerprint = prefs.getString(
+                    ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, null
+                )
+                val searchableChanged = fingerprint != previousFingerprint
+                val revision = if (searchableChanged) ChatSearchIndexManager.newRevision() else null
+                val journal = revision?.let { ChatSearchIndexJournal.get(context) }
+                val previousJournalRevision = if (bookmarkChanged || groupChanged) journal?.revision(chatId) else null
+                rollbackJournal = {
+                    if (revision != null) {
+                        if ((bookmarkChanged || groupChanged) && previousJournalRevision != null) journal?.record(chatId, previousJournalRevision)
+                        else journal?.clearExact(chatId, revision)
+                    }
+                }
+                if (revision != null && journal?.record(chatId, revision) != true) {
+                    if (bookmarkChanged || groupChanged) rollbackJournal.invoke()
+                    return ChatStorageHealth.WriteOutcome.FAILED
+                }
+                val now = System.currentTimeMillis()
+                val modifiedAt = if (groupChanged) maxOf(now, Math.addExact(prefs.getLong(CHAT_CONTENT_MODIFIED_AT_KEY, 0L), 1L)) else now
+                val editor = prefs.edit().putString("chat", Gson().toJson(messages))
+                if (groupChanged) {
+                    if (groupFingerprint == null) editor.remove("response_group_fingerprint")
+                    else editor.putString("response_group_fingerprint", groupFingerprint)
+                }
+                if (revision != null) editor
+                    .putString(ChatSearchIndexManager.SEARCH_REVISION_KEY, revision)
+                    .putString(ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, fingerprint)
+                    .putLong(CHAT_CONTENT_MODIFIED_AT_KEY, modifiedAt)
+                if (bookmarkChanged || groupChanged) editor.putLong(CHAT_CONTENT_MODIFIED_AT_KEY, modifiedAt)
+                val committed = if (bookmarkChanged || groupChanged) PreferenceCommitRollback.commit(
+                    prefs, editor, setOf(
+                        "chat", "response_group_fingerprint", ChatSearchIndexManager.SEARCH_REVISION_KEY,
+                        ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, CHAT_CONTENT_MODIFIED_AT_KEY
+                    )
+                ) else if (synchronous || searchableChanged) editor.commit() else {
+                    editor.apply()
+                    true
+                }
+                if (!committed) {
+                    rollbackJournal.invoke()
+                    ChatStorageHealth.WriteOutcome.FAILED
+                } else {
+                    if (revision != null) {
+                        if (bookmarkChanged || groupChanged) {
+                            // The durable bookmark is saved; derived-index work can retry from its journal.
+                            runCatching { ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision) }
+                        } else ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision)
+                    }
+                    ChatListIndex.contentChanged(context, chatId)
+                    ChatStorageHealth.WriteOutcome.OK
+                }
+            } catch (_: Exception) {
+                runCatching { rollbackJournal?.invoke() }
+                ChatStorageHealth.WriteOutcome.FAILED
             }
-        } catch (_: Exception) {
-            if (bookmarkChanged) runCatching { rollbackJournal?.invoke() }
-            ChatStorageHealth.WriteOutcome.FAILED
         }
     }
 

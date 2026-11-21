@@ -3333,6 +3333,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // and persist. Idempotent; the partial text is untouched.
             var reconciledStreaming = false
             for (message: HashMap<String, Any> in messages) {
+                if (message.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY)) {
+                    if (org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRecovery.reconcile(message)) reconciledStreaming = true
+                    continue
+                }
                 val reconciled = MessageCompletionState.reconcileOnLoad(
                     message[MessageCompletionState.KEY_STATE]?.toString()
                 )
@@ -4464,7 +4468,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             deferredRequestImageDeletes.putIfAbsent(hash, include)
             return
         }
-        val referenced = imageBytesStillReferenced(hash, excludingId = include.id)
+        val retained = org.teslasoft.assistant.conversation.responsegroups.ResponseGroupAttachments.retainedHashes(messages, "image")
+        val referenced = retained == null || hash in retained || imageBytesStillReferenced(hash, excludingId = include.id)
         val chat = chatId
         CoroutineScope(Dispatchers.IO).launch {
             ImageImporter.deleteImageFileIfUnreferenced(
@@ -4520,7 +4525,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             deferredRequestPdfDeletes.putIfAbsent(hash, include)
             return
         }
-        val referenced = pdfBytesStillReferenced(hash, include.id)
+        val retained = org.teslasoft.assistant.conversation.responsegroups.ResponseGroupAttachments.retainedHashes(messages, "pdf")
+        val referenced = retained == null || hash in retained || pdfBytesStillReferenced(hash, include.id)
         val cid = chatId
         val appContext = applicationContext
         CoroutineScope(Dispatchers.IO).launch {
@@ -4549,7 +4555,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun reconcileChatPdfs() {
+        val retained = org.teslasoft.assistant.conversation.responsegroups.ResponseGroupAttachments.retainedHashes(messages, "pdf") ?: return
         val referenced = buildSet {
+            addAll(retained)
             pendingIncludes.filter { it.hasLivePdfBytes() }.mapNotNullTo(this) { it.pdfFileHash }
             messages.flatMap(::includesOf).filter { it.hasLivePdfBytes() }
                 .mapNotNullTo(this) { it.pdfFileHash }
@@ -4567,7 +4575,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * the gap) and any bytes a prior rename move could not carry over.
      */
     private fun reconcileChatImages() {
-        val referenced = HashSet<String>()
+        val retained = org.teslasoft.assistant.conversation.responsegroups.ResponseGroupAttachments.retainedHashes(messages, "image") ?: return
+        val referenced = HashSet<String>(retained)
         for (include in pendingIncludes) {
             if (include.hasLiveImageBytes()) include.imageFileHash?.let(referenced::add)
         }
@@ -10321,7 +10330,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             source = org.teslasoft.assistant.usage.TokenCountSource.PROVIDER_REPORTED,
             pricing = pricing,
             providerCost = snapshot.providerCost
-        )
+        ).copy(requestId = snapshot.attemptId)
     }
 
     /** Surface non-fatal provider warnings without contaminating model text. */
@@ -12021,7 +12030,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             source = source,
             pricing = pricing,
             providerCost = snapshot.providerCost
-        )
+        ).copy(requestId = snapshot.attemptId)
     }
 
     private suspend fun estimateLastAssistantUsageCl100k(

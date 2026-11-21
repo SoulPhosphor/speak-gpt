@@ -171,6 +171,14 @@ object PortableRecoverySemanticValidator {
             )
         }
 
+        val snapshotImages = ResponseGroupAttachmentBackup.prepareImages(artifacts)
+            ?: return Result.Invalid("snapshot images failed identity validation")
+        val snapshotRefs = chats?.snapshotImageRefs.orEmpty()
+        if (snapshotImages.keys != snapshotRefs.mapTo(HashSet()) { it.attachment.fileName } ||
+            snapshotRefs.any { !ResponseGroupAttachmentBackup.matches(snapshotImages.getValue(it.attachment.fileName), it.attachment) }) {
+            return Result.Invalid("snapshot image assets do not match chat references")
+        }
+
         val generated = when (val prepared = GeneratedImagePortableRestoreManager.prepare(artifacts)) {
             is GeneratedImagePortableRestoreManager.PrepareResult.Ready -> prepared.prepared
             GeneratedImagePortableRestoreManager.PrepareResult.Absent -> null
@@ -413,7 +421,7 @@ object PortableRecoverySemanticValidator {
     ): Set<String> = artifacts.filter { artifact ->
         when (category) {
             PortableRestoreCategory.CHATS -> artifact.type in setOf(
-                PortablePackage.TYPE_CHATS_JSON, PortablePackage.TYPE_CHAT_PDF_ASSET
+                PortablePackage.TYPE_CHATS_JSON, PortablePackage.TYPE_CHAT_PDF_ASSET, ResponseGroupAttachmentBackup.TYPE_IMAGE
             )
             PortableRestoreCategory.GENERATED_IMAGES -> artifact.type in setOf(
                 PortablePackage.TYPE_GENERATED_IMAGES_CATALOG,

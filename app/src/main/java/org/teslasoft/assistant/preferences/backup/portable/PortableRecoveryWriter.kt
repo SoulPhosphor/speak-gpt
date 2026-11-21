@@ -406,6 +406,11 @@ object PortableRecoveryWriter {
                         is PdfAttachmentPortableBackup.Result.Failed ->
                             return failed(context, Reason.SNAPSHOT_FAILED, "PDF attachments", pdfs.detail)
                     }
+                    try {
+                        artifacts.addAll(ResponseGroupAttachmentBackup.imageArtifacts(context, summary.snapshotImageRefs))
+                    } catch (_: Exception) {
+                        return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    }
                     includedTypes.add(BackupType.CHATS)
                     val afterTokens = PortableBackupMutationTokens.read(context)
                     when (PortableBackupCaptureStability.decide(beforeTokens, afterTokens, captureAttempt)) {

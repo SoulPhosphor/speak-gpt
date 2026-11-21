@@ -41,6 +41,7 @@ object PortableRecoveryLimits {
 
     fun maxDecodedBytes(entryName: String, type: String): Long? = when (type) {
         PortablePackage.TYPE_CHATS_JSON -> CHATS_JSON_BYTES
+        ResponseGroupAttachmentBackup.TYPE_IMAGE -> IMAGE_ASSET_BYTES
         PortablePackage.TYPE_CHAT_PDF_ASSET -> PortablePackage.MAX_ENTRY_BYTES
         PortablePackage.TYPE_GENERATED_IMAGES_CATALOG -> GENERATED_IMAGE_CATALOG_BYTES
         PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS -> MODEL_ENDPOINT_SETTINGS_BYTES

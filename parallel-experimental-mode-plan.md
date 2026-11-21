@@ -1,0 +1,310 @@
+# Parallel Experimental Mode — Staged Implementation Plan
+
+**Status:** Stage 0 merged in [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234). Stage 1 storage foundation merged in [PR #236](https://github.com/SoulPhosphor/speak-gpt/pull/236). Stage 2 is next and not started; parallel setup, dispatch and tabs remain unavailable.
+**Source of truth for implementation:** Current `origin/main` and its tests.  
+**Integration target:** `main`, which builds the **Beta** client (not the retired pre-release client).  
+**Purpose:** Deliver independent, simultaneous responses from 2–4 preselected AI models in a familiar, tabbed chat UI, without corrupting conversation history or disrupting existing single-response chat.
+
+This is a staged roadmap, **not** permission to silently change undecided product behavior. Implement only the assigned stage and necessary dependencies. Record what was actually completed, tested, and merged. Refer to `CLAUDE.md` for repository rules.
+
+## 1. Finished-product definition
+
+A finished implementation lets someone enter **Experimental Mode Setup**, choose **Single Response** or **Parallel Responses**, select **2–4 models** for parallel mode using the existing model picker in multi-select mode, designate a **primary model**, and optionally turn **Last Message Only** on or off.
+
+In a parallel turn, all selected models independently answer the **same user message** using their own model/provider settings and the same eligible starting context. One visible assistant response group appears, with tabs across the top. Tapping a tab brings that model's response to the foreground. The **starred model** identifies which answer is canonical for continued conversation; browsing another tab by itself does not silently change that canonical response. A clear, explicit **Make Primary** action can change it under the existing conversation-branch safety rules. Each model can be regenerated without regenerating the other models.
+
+The responses, model identities, primary selection, per-model regeneration history, completion/failure state, usage evidence, and conversation branch survive navigating away, reopening the chat, app restart, and supported backup/restore. Later turns never accidentally include competing models' responses in the context sent to another AI.
+
+**Not finished:** Merely drawing tabs, returning four responses in memory, or displaying a success while responses disappear on process death. No partially built mode should be exposed as working.
+
+## 2. Product contract agreed so far
+
+### Experimental Mode / Quick Settings
+
+- Experimental Mode is **per chat**; new chats start with it off. Existing chats retain their existing setting after upgrade.
+- Replace the present standalone Experimental Mode toggle in Quick Settings with an **Experimental Mode** row and **Setup** button (or equivalent clear entry point), plus concise active-mode status.
+- Setup controls whether Experimental Mode is **Off**, **Single Response**, or **Parallel Responses**. The underlying choices are **response count** and **conversation context**, not separate incompatible engines.
+- **Last Message Only** is an independent toggle shown when Experimental Mode is enabled. With it **on**, retain today's experimental behavior: send the latest user message plus the same fresh-chat instructions, persona, memories, lorebooks, model rules, and current-turn attachments as before, without prior conversation turns or summaries. With it **off**, send the appropriate existing conversation history.
+- Switching Experimental Mode off restores ordinary full-history behavior, just as the current toggle does. Do not permanently erase earlier messages or summaries when changing context mode.
+- **Single Response** keeps the normal one-model picker and familiar existing chat UI. **Parallel Responses** replaces/hides that picker in Quick Settings with a compact selected-model count/summary and a route back to Setup. Do not cram four independent pickers into Quick Settings.
+- Per-chat setup persists. Users **do not** reselect the models on every message or every visit. They can reopen Setup to swap models for subsequent turns; older response groups retain their original model lists.
+- Multiple selection is built from the **existing advanced model picker**: preserve search, providers, favorites, recents, and model-specific configuration. Choose **2–4** distinct model assignments; the UI cap is four, but avoid hardcoding four through unrelated storage/generation layers. No send if a required model/primary assignment is missing.
+- Parallel Responses is **not compatible with hands-free mode** in this initial release. Normal hands-free and single-response behavior must not regress.
+
+### Response groups, tabs, and branching
+
+- A parallel response group belongs to **one user turn** and contains one independently stored response slot for each assigned model. Historical groups are immutable with respect to later Setup changes.
+- Tabs show recognizable short model names; full identifiers remain available in message details/accessibility. Use an accessible selected-tab indication and show individual pending, completed, canceled, and failed states.
+- A **star next to the primary model name** denotes the canonical response. Use the existing subtitle color role `?attr/appRowSubtitleColor` (the `Widget.App.Row.Subtitle` role); do not invent a hardcoded gold/yellow. Active/selected tab styling follows existing shared styles.
+- Tapping a tab **only changes the foreground answer**. The initial foreground answer is the primary; subsequent browsing does not change the canonical history by accident.
+- Provide an explicit **Make Primary** affordance for choosing a different answer. On the latest turn, promote without deleting anything. On an earlier turn with descendants, respect the existing confirmation/truncation and summary-invalidating rules; never silently rewrite the branch or lose the old answers. Final wording/placement should be previewed before its UI stage.
+- In full-history mode, the next request sees only the chosen canonical response from each previous turn, not its sibling alternatives. In Last Message Only mode, prior replies and summaries are excluded regardless of which model was starred; primary selection remains durable so turning the toggle off later is coherent.
+- Regeneration is **per model slot**: regenerate only that model with the original turn's correct prompt/context and its model settings, preserve its prior versions and charges, leave siblings untouched, and preserve canonical branch semantics. Reuse the existing version mechanism where safe, but do not flatten independent models and per-model regenerations into an ambiguous one-dimensional version list.
+- Existing ordinary one-model regeneration, version navigation, copy, bookmarking, search, manual branch changes, attachments, and chat behavior continue to work.
+
+### Isolation and request ownership
+
+- Snapshot the input and relevant context at turn dispatch. Each model gets that same eligible turn context plus its own model-specific request configuration; no response, reasoning, error, or partial stream from a sibling enters another's prompt.
+- Request streams, response buffers, tool/diagnostic callbacks, pricing/usage capture, stop/failure state, and persistence ownership are **per request**, not shared mutable “current model/current assistant” fields.
+- A slow, throttled, canceled, or failed model cannot overwrite, cancel, hide, or prevent persistence of successful sibling results.
+- One model's response may arrive before others; show its progress independently. Re-entry/restart must reconcile unfinished attempts honestly without treating blank/unfinished responses as successful.
+- Parallel calls may cost up to four separate billable requests. Do not make hidden extra model calls for comparison, ranking, synthesis, or voting.
+
+### Usage & Cost
+
+- **Reuse** existing request-level accounting and Usage & Cost screens where correct; a new usage dashboard is **out of scope** for the first release.
+- Capture and retain any provider usage/cost evidence **for each request**, even when display support is deferred. Include reported usage on failed/canceled requests when provided, and do not estimate unknown charges as zero.
+- Existing `UsageLogStore` serializes log updates, and `TokenUsageAccounting` groups by model/provider, but this **does not prove** current chat generation's shared pending usage/pricing fields are parallel-safe.
+- Validate the actual persisted request identity/deduplication path. `ProviderUsageAttempt.attemptId` exists, but do not assume ordinary chat `TurnUsageRecord.requestId` is populated: inspect the record construction path.
+- Show parallel usage in the existing screen only if tested accurate. Otherwise label **parallel-response usage statistics unavailable** in that UI while preserving individual durable records and leaving normal usage unaffected. No broad usage rewrite solely for this feature.
+- Any new persistent diagnostic/logging lines require owner approval under `CLAUDE.md`; recording already-approved usage evidence is not a license to expand logging.
+
+## 3. Current-code anchors to inspect
+
+These are starting points on `main`, **not** blanket instructions to reuse their representations unchanged:
+
+- `app/src/main/java/org/teslasoft/assistant/conversation/ExperimentalMode.kt`: current last-user-only projection, with fresh-chat content preserved.
+- `app/src/main/res/layout/view_quick_settings_experimental_block.xml` and Quick Settings integration in `ChatActivity.kt`: current per-chat toggle, to replace with Setup entry.
+- `app/src/main/java/org/teslasoft/assistant/ui/fragments/dialogs/AdvancedModelSelectorDialogFragment.kt` and picker adapters: current single-model picker.
+- `app/src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt`: `variants`, `canonicalVariant`, `displayVariant`, snapshot/apply behavior and version UI. Display and canonical are already **separate** today.
+- `app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt`: dispatch, send/regenerate, lifecycle, request context, canonical projections, summaries, branch promotions, pending usages, hands-free guards, and storage integration. This is large: build new cohesive helpers in separate files with minimal glue.
+- `app/src/main/java/org/teslasoft/assistant/ui/chat/RegenerationRecovery.kt`: interrupted retry reconciliation.
+- `app/src/main/java/org/teslasoft/assistant/preferences/chatstore/ChatStore.kt`: encrypted per-message persistence; understand rename, replace, truncation, and restore implications.
+- `app/src/main/java/org/teslasoft/assistant/preferences/PerChatSettingKeys.kt`: register any new per-chat settings.
+- `app/src/main/java/org/teslasoft/assistant/usage/{ProviderUsageAttempt,TokenUsageAccounting,UsageLog}.kt`: request evidence, record aggregation, persisted log.
+- `chat-storage-and-backup-plan.md`, `usage-and-cost.md`, and current tests: integration/compatibility constraints. Inspect current code before relying on older documents.
+
+**Observed architecture hazard:** `ChatActivity.kt` already carries a coroutine-propagated `GenerationRequestContext`, but several code paths still rely on mutable activity-wide fields such as `currentProviderUsageAttempt`, pending provider usage/pricing snapshots, the last assistant message, and pending regeneration. These cannot simply be run four times concurrently. Build and test isolation first.
+
+## 4. Implementation milestones
+
+Each stage has its own acceptance criteria. A stage is complete only when its required implementation and tests are merged to `main`. Do not expose a half-working Parallel Responses option in the beta UI.
+
+### Stage 0 — Read-only integration audit and concrete design contract
+
+**Deliverable:** Short technical mapping in this file or the assigned PR/issue of the exact turn lifecycle, chat persistence schema, picker APIs, and affected tests. No product UI changes.
+
+1. Trace request dispatch through streaming/finalization, generation service/background survival, usage, save/reload, and per-message/version projection.
+2. Trace canonical vs displayed versions, earlier-turn branch promotion, regeneration recovery, summarizer/compaction, attachment handling, search/index, and backup/import/export.
+3. Choose a backward-compatible response-group representation with stable IDs: group/turn ID, ordered model slots, model/provider/endpoint configuration snapshot, primary slot ID, foreground slot ID, per-slot request attempts/version history, completion/error state, and accounting ownership. Document which fields are persistent and which are transient.
+4. Prove exactly how preexisting Experimental Mode booleans map to the new setup without changing existing conversations: **off → Off**; **on → Single Response with Last Message Only enabled**. New chats default Off.
+5. Identify which interactive completion/tool/image paths are in scope on day one versus needing an explicitly approved compatibility rule. **Never silently drop a previously supported current-turn attachment**.
+6. Identify any necessary owner decisions in §6 before work that depends on them.
+
+**Exit:** Data contract, migration/backward compatibility, prompt isolation contract, and test plan are reviewable. No unanswered design choice is hidden inside production defaults.
+
+### Stage 1 — Durable response-group foundation (not user-visible)
+
+**Deliverable:** Backward-compatible storage and model code, plus tests; parallel UI remains unavailable.
+
+1. Implement response-group/slot identity, immutable per-turn model assignments, canonical-vs-displayed selection, per-model regeneration version history, serialization/deserialization, and invalid/corrupted metadata recovery.
+2. Preserve legacy ordinary messages and existing regenerated variants byte-for-byte in behavior; migrate lazily or additively only if shown safe. Do not mutate unrelated conversations.
+3. Persist and load response groups safely through chat rename, encrypted storage, export/restore, backups, message deletion, branching/truncation, and settings copy.
+4. Ensure model-facing conversation projections read only the canonical answer. Hidden alternatives are stored but never inadvertently inserted as sequential assistant messages. Verify downstream context consumers including summarizer, memory recall/indexing, and export semantics.
+5. Add unit/instrumentation tests covering old chat migration, multi-group round trip, partial slots, primary changes, restart/recovery, history truncation, and backup fidelity.
+
+**Exit:** Can store/reload/restore a complete synthetic four-model turn with its alternatives and per-slot versions, without any new UI or network dispatch.
+
+### Stage 2 — Parallel request coordinator (hidden until usable)
+
+**Deliverable:** Independently owned 2–4 request orchestration and reliable persistence, exercised by deterministic fakes.
+
+1. Capture eligible prompt and attachment snapshot once, then dispatch each selected model concurrently with its own endpoint/routing/parameters, stream, cancellation, usage attempt, pricing lookup, diagnostic state, and completion outcome.
+2. Avoid shared `current...` state: per-slot finalization must attach to the **correct response slot**, never “last assistant message.”
+3. Persist each result as it settles. Define interruption/process-death recovery before enabling the mode.
+4. Implement individual regeneration without resending siblings, and preserve usage for all attempts including provider-reported charges on failures.
+5. Test out-of-order completion, different provider endpoints, identical names with different identities, one failure, all failures, cancellation, retry, slow request, process death/reopen, storage failure, malformed responses, pricing/usage race, and no cross-model prompt leakage.
+6. Verify the current Usage & Cost display with several simultaneous requests. If it cannot represent them correctly, retain raw records and mark parallel totals unavailable only where necessary.
+
+**Exit:** Fake and controlled live/provider integration tests demonstrate four independent requests with correct identity, saved results, usable recoverability, and no sibling contamination. Do not expose the mode until this passes.
+
+### Stage 3 — Experimental Mode Setup and model selection
+
+**Deliverable:** New setup UX based on existing picker, wired to tested configuration state.
+
+1. Replace the current Quick Settings Experimental toggle with **Experimental Mode / Setup** and active status, while preserving the old setting's meaning for existing chats.
+2. Provide Off / Single / Parallel choice; show **Last Message Only** when experiment mode is on.
+3. Add multi-select picker behavior (2–4 assignments) to the existing picker without altering ordinary single-select behavior. Persist model order, full model/endpoint identities, and primary choice per chat.
+4. In parallel mode, replace the standard single-model Quick Settings control with a compact model summary and setup access. On returning to single/off, restore the usual picker.
+5. Changing model assignments affects future turns only; never relabel historical tabs. Handle invalid/deleted models and switching active provider gracefully without quietly changing the selected primary.
+6. Prevent hands-free engagement while Parallel Responses is active; changing modes must leave existing recorded messages safe.
+
+**Exit:** Configuration survives navigating away/restart, normal picker still works, old Experiment chats keep their old behavior, and selected models are correct before dispatch.
+
+### Stage 4 — Tabbed chat UI, starring, and per-model controls
+
+**Deliverable:** Complete user-facing response group.
+
+1. Render one assistant group per user message with up to four tabs above it. Tabs show model names, loading/completion/failure, and a **star on the primary** using `?attr/appRowSubtitleColor`.
+2. Tapping tabs brings the chosen response to the foreground, with the same normal message rendering and appropriate controls. Preserve tab choice while navigating within the chat.
+3. Provide explicit Make Primary, with existing latest-turn vs earlier-branch protections. Browsing a tab must not promote it.
+4. Per-tab regeneration applies only to that model and exposes that model's prior regenerations without mixing it up with other models' tabs.
+5. Ensure accessibility, readable labels, safe truncation, dynamic themes, horizontal space on narrow phones, loading states, errors, copy/share, and ordinary response action controls. Do not use Snackbars as the only way to disclose significant response failures.
+6. Integrate state restoration and update animations without jumping scroll position or displaying another model's partial text.
+
+**Exit:** A complete real-world text conversation can compare four replies, regenerate one, designate a primary, continue, reopen, and still see the same results.
+
+### Stage 5 — System-wide verification and beta release
+
+**Deliverable:** End-to-end validated beta with no known critical data-loss or cross-request isolation bugs.
+
+1. Validate all four context/response combinations: single + full history, single + last-message-only, parallel + full history, parallel + last-message-only, plus normal mode with Experimental Mode Off.
+2. Verify switching Experimental Mode off after an experimental conversation restores full prior history; turning it back on preserves the stored setup and former response groups.
+3. Test older chats, very long replies, model swaps between turns, provider configuration changes, alternate responses with reasoning, failed/canceled attempts, backgrounding, rotation, crash/process death, low memory, and constrained network.
+4. Exercise response promotion on old turns, summarizer/compaction state, history deletion, search, chat exports, recovery backups, restore/merge, and usage/accounting under concurrent traffic.
+5. Confirm only the chosen canonical branch is sent on subsequent full-history turns; no sibling model content can enter another request or memory capture by accident.
+6. Confirm single-response hands-free remains functional and parallel mode cannot enter it. Verify cost display is accurate or explicitly unavailable for parallel requests, never understated by omission.
+7. Follow repository checks and code review gates on the final commit. Build **`assembleBeta`** and confirm beta application identity; do not ship the retired pre-release variant.
+
+**Exit / Definition of Done:** The mode is usable rather than merely visible, existing behavior is intact, chat/backup data is preserved, usage truthfulness is tested, code-changing PRs have cleared Codex and Android Checks, and `main` contains the completed feature. Device-specific polish remains an explicit final acceptance step, not a substitute for tests.
+
+## 5. Suggested PR boundaries and reporting
+
+Prefer **small coherent PRs** aligned to milestones instead of one enormous risky PR. The storage and request engine stages can land unexposed behind existing behavior; combine stages only if dependencies make a coherent reviewable unit. Do not merge a PR that makes a broken or unreachable user-visible mode appear complete. Follow `CLAUDE.md`'s one-PR-per-session and validation workflow.
+
+For each assigned stage, record: **status (not started / in progress / merged)**, actual commit/PR link, behavior added, tests run and results, known limitations, and next stage. Never mark a stage complete from an intention or a passing unit test alone. Codex review is for PRs containing real application/test code, **not documentation-only PRs**.
+
+**Recommended start:** Stage 0, then Stage 1. Store a durable schema before parallelizing `ChatActivity`, then make requests safe before exposing the setup and tabs.
+
+## 6. Explicit product decisions to settle at the relevant stage
+
+These details are **not permission for an implementer to invent user-visible behavior**. They do not block starting Stage 0/1; bring a short concrete recommendation when the specific stage needs them:
+
+1. **Primary selection control:** Star marks the primary; tapping a tab is browse-only. Decide final placement/gesture for “Make Primary” on the tab/response UI (must be discoverable and accessible).
+2. **Send/Stop while a response group is still running:** Should Send wait until all model slots settle, and does Stop cancel one slot or the whole group? Make this explicit before implementing network-state UI.
+3. **Model unavailability after setup:** Exact visible handling when a saved selection is removed or provider/endpoint credentials change. No silent model substitution or automatic changing of the primary.
+4. **Non-text feature compatibility:** Current-turn attachments and existing request preparation must be preserved. Review tool use, image generation, and other special response paths against concurrent execution. If any supported functionality cannot safely run in parallel in v1, seek explicit owner approval for its precise behavior and user-facing message.
+5. **Parallel-mode entrance while hands-free is active:** Choose a safe, clear user-facing transition that does not discard an ongoing recorded or transcribed message.
+6. **Usage presentation fallback:** Only if existing usage aggregation is incorrect for parallel activity, decide the minimal accurate wording/placement; never hide known paid consumption without explanation.
+
+These are narrow checkpoints, **not** a reason to repeatedly seek owner decisions about Kotlin helpers, internal test organization, or other reversible engineering details.
+
+## 7. Guardrails
+
+- All work based on **`origin/main`**, targeted to **`main`**. Do not use `beta/new-client`; it is not the current integration source even if repository metadata still names it the default.
+- Preserve **Beta** build/package identity throughout development.
+- Follow established shared design styles and theme roles. Avoid a parallel UI that invents a separate color system.
+- No destructive migration, logging expansion, or unrelated refactor without its required approval. Preserve existing chat safety, backups, summary behavior, model attribution, and hands-free.
+- **Keep the large chat files small (all later stages):** Put the request coordinator, snapshot/slot mutations, setup integration, tab rendering and per-model primary/regeneration controls in focused helper, controller or view files. `ChatActivity.kt` and `ChatAdapter.kt` receive only the small delegation/binding connections they need. Before each PR, inspect their diff specifically for new logic that can live independently; do not put a feature into an already-large file merely because related code is there. Preserve existing behavior, and do not use this rule as permission for an unrelated extraction or refactor.
+- Do not reinterpret an existing canonical response's variants as competing models without an explicit durable identity mapping.
+- This specification is the desired destination and staged order; **current code and verified tests** establish what is already implemented.
+
+---
+
+## 8. Stage 0 integration audit and implementation contract
+
+Audited `origin/main` at [`eab77ae6`](https://github.com/SoulPhosphor/speak-gpt/commit/eab77ae6f28ca8b456c6575284169dc0a84009f1). This section is the Stage 0 deliverable for subsequent stages, not a claim that its proposed storage or coordinator already exists. No application, test, UI, logging, encryption, or build configuration changes are part of this stage. Recheck these anchors against current `main` before implementation, particularly if the separate chat-storage project advances.
+
+### 8.1 Current integration map
+
+Paths below are relative to `app/src/main/java/org/teslasoft/assistant/` unless specified otherwise. “Canonical” means the answer used to continue the conversation; “foreground” means the answer currently being viewed.
+
+| Area | Verified implementation and consequence for parallel work |
+| --- | --- |
+| Typed dispatch | `ui/activities/ChatActivity.kt`: typed preparation snapshots pending Includes, manual memory IDs, model, endpoint ID and canonical history; applies `ExperimentalMode.requestConversation`; then calls `freezeConversationProjection` and `buildFrozenRegularRequest` off the main thread. Capacity/vision checks precede `commitPreparedTurn` → `parseMessage` → `generateResponse` → `generateResponseUnsettled` → `regularGPTResponse`. `parseMessage` rechecks the prepared composer/model/endpoint before committing. Voice and retries also reach the generation funnel, but can use its legacy request-building path. Parallel dispatch must not bypass these guards or commit the user turn once per model. |
+| Streaming and finalization | `regularGPTResponse` supports streamed and completed Chat Completions. Streaming has a local response buffer and `StreamedToolCallAssembler`, but writes text, warnings, reasoning and final state through activity fields and `messages[messages.size - 1]`. Midstream saves are throttled to 2 seconds; `markLastAssistantDone`, `syncChatProjection`, `saveSettings`, `calculateCost`, readback and summarizer work follow completion. Merely launching this method concurrently is unsafe. |
+| Transport ownership | `GenerationRequestContext` propagates usage attempt, lifecycle recorder, pricing and native PDFs through a coroutine context into request hooks. It does **not** snapshot all mutable `model`, endpoint/client, routing, reasoning, network diagnostics, regeneration or result-target fields. `startLifecycle`, `finalizeLifecycleSuccess`, `finalizeLifecycleTerminal`, `applyProviderWarnings` and `completePendingUsageRecord` still use activity-wide owners. New coordinator code must own all of these per attempt. |
+| Background and destruction | `service/GenerationForegroundService.kt` explicitly keeps the process/CPU/Wi-Fi alive; it is reference-counted and **does not own the network coroutine**. Generation remains in `ChatActivity`'s `parseMessageScope`; `onDestroy` calls `killAllProcesses`. Reopen reconciles saved streaming rows to interrupted via `MessageCompletionState.reconcileOnLoad`. In contrast, image jobs use `ImageGenerationJobRegistry`, and summaries use `SummarizerControllerRegistry`, which detach without cancelling their work. Parallel recovery must not promise that the keep-alive service resumes killed requests. |
+| Live persistence | `saveSettings` filters transient image UI rows, ensures permanent `message_id`s and calls `preferences/ChatPreferences.saveChatHistory`. This saves the generic message maps as a Gson JSON array in encrypted `SecurePrefs`, file `chat_<id>`, key `chat`; it guards locked/corrupt storage and the restore process gate. Search projection changes advance a journaled revision and force a committed save. Normal saves still serialize the **whole conversation**; avoid multiplying them by model count or stream chunks. |
+| Database foundation | `preferences/chatstore/ChatStore.kt` is SQLCipher schema v1: `chats`, `messages` (chat/sequence/message ID/role/JSON), split `message_parts`, `include_text_parts`, `list_state`, and `meta`. It preserves unknown message JSON fields and supports transactional replace/update/truncate and cascading rename/delete. However, `ChatSources.authoritative` currently selects `LegacyChatSource`; DATABASE/UNREADABLE yield unavailable, and `ChatStorageAuthority` has no production activation writer. Do not activate this foundation or assume the live screen saves one message at a time. |
+| Versions and browsing | `ui/adapters/chat/ChatAdapter.kt`: `variants` is a JSON **string** of per-version string maps; `canonicalVariant` and `displayVariant` are independent indices. `snapshotVariant`/`applyVariant` handle text, model/provider, usage, timestamp, reasoning, active-memory attribution and completion state. Top-level fields mirror the canonical version. `displayVariantMap` applies a browsed version to a **copy**. Existing variants are regenerations, not model slots; their model labels alone cannot establish slot identity. |
+| Regeneration and branching | `onRetryClick` plus `ui/chat/RegenerationRecovery.kt` persist an original reply and preceding message ID before retry removes/replaces the row. Recovery restores the original or folds an unfinished new reply into its versions. `onMakeVersionCurrent`/`changeCanonicalVersion`/`promoteVersionAt` keep browsing separate from promotion. Earlier-turn promotion/regeneration confirms descendant truncation; `truncateAfter` preserves attachment/image files, reconciles usage and realigns condensed boundaries. Parallel retries must keep sibling slots in place instead of removing the whole group. |
+| Summaries and compaction | `canonicalMessage` and `summarizerSnapshot` preserve message positions/IDs; hidden rows contribute no words or attachments. `SummarizerSafeIncludeProjectionBuilder` and frozen summarizer state handle folded attachments and summary injection. Promotion cancels pending summarization, reconciles source changes and marks compaction stale as applicable. One group must remain one assistant position, so tab browsing never changes summary sources or compaction counts. |
+| Memory and search | `recordTranscriptTurn` captures a completed turn from live fields into `preferences/memory/TranscriptRecorder`; its backfill reads top-level `message`. `preferences/chatsearch/SearchableMessageProjection.kt` indexes top-level text and IDs, excluding streaming/transient image rows. Neither traverses alternative versions. Both must receive the group's canonical projection; no per-slot completion may independently capture a sibling as another conversational turn. Primary changes need explicit transcript reconciliation, not only a search refresh. |
+| Attachments | `freezeConversationProjection` → `SummarizerSafeIncludeProjectionBuilder` → `IncludeRenderer` → `buildUserMessage` preserves ordered text/image/native-PDF parts and folded Includes. Native PDFs have request-bound transport injection; `protectRequestImagePayloads` protects image backing data during preparation. Memory recall uses `StableAttachmentReference` markers instead of document contents. Current-turn attachments remain eligible in Last Message Only; capabilities and wire encoding are resolved for the selected model/endpoint. |
+| Backup and import | `preferences/backup/portable/ChatsArtifactWriter.kt` copies each entire message payload through `ChatSource`, and `ChatLogicalSerializer` copies settings except the credential key. `ChatLogicalImportPlan`/`PortableChatRestorePlan`, restore staging and `ChatMergePlanner` handle restore/merge; the latter compares whole messages/settings and modification timestamps. Keep group IDs internal to their message, and advance content-modified evidence even when only a nonprimary slot changes. Recovery backup fidelity is distinct from readable export: `backup/readable/ReadableChatFormats.kt` emits top-level text, and JSON export recursively strips usage/thinking fields, including JSON strings. New nested metadata must respect those export choices. |
+| Picker | `AdvancedModelSelectorDialogFragment.newChatModelPickerInstance(name, chatId)` returns `CHAT_SELECTION_RESULT` with `SELECTED_MODEL` (`modelId`) and `SELECTED_ENDPOINT` (`endpointId`); the old listener returns only a model string. `finishModelSelection` applies chat routing and dismisses after one selection. Saved rows use `preferences/models/ModelIdentity(endpointId, modelId)`, favorites/recents, catalog browsing and routing/parameter editors. A multi-select session must collect full identities/settings without repeatedly invoking single-select commit/dismiss or rewriting the active chat endpoint. |
+
+### 8.2 Additive response-group data contract
+
+Use **one assistant message map with an additive `responseGroup` JSON string**. The enclosing permanent `message_id` remains the assistant row identity. Ordinary messages without this key keep their current parser, version history and behavior; do not rewrite them on opening a chat or reinterpret their existing versions. This fits the live encrypted-preference payload, the staged database's opaque JSON payload, and full-message Recovery Backups without a new SQL schema or a sidecar that backups could omit.
+
+| Persistent field | Contract |
+| --- | --- |
+| `schemaVersion`, `groupId`, `userMessageId`, `assistantMessageId` | Versioned envelope, independently minted stable group UUID, and links to the existing turn's permanent message IDs. Never use list position, title, model name or the diagnostic lifecycle turn counter as identity. IDs are scoped by the owning conversation when locating work; restore-as-copy cannot redirect a live callback into another chat. |
+| `slots[]` | Ordered slots with stable slot UUIDs and immutable model assignments for this turn. The storage layer accepts a list; only setup validation imposes the 2–4 UI limit. |
+| Slot `assignment` | Exact model ID and label-at-dispatch, endpoint profile ID, nonsecret endpoint/protocol identity, provider routing (including Only/Preferred/fallback choices), effective sampling/reasoning/model-rule settings and capability evidence used to prepare the request. Separate requested configuration from provider-reported serving model/provider. Never store API keys or authentication headers in this envelope; credentials remain in their existing protected endpoint store. |
+| `primarySlotId`, `foregroundSlotId` | Primary determines canonical history. Foreground is saved browsing state and starts at primary; changing it never promotes an answer. Subsequent Setup changes never relabel historical slots or these IDs. |
+| Slot `versions[]`, `canonicalVersionId`, `foregroundVersionId` | Stable version UUIDs and independent canonical/browsed selection within each model. Each version contains its own reply text, reasoning, model/provider evidence, timestamp, active-memory attribution, completion/error fields and attempt references. Reuse the existing version **field contract**, not its one-dimensional index list as a cross-model list. |
+| Version `attempts[]` | Unique, **permanent and immutable** request UUID per actual provider request, start/terminal state, available partial response, returned usage/pricing/cost evidence, and sanitized provider failure/warning evidence. Mint and durably save the ID once before dispatch; never change, recycle or replace it during streaming, completion, cancellation, failure, reopening, recovery, regeneration, rename, export, backup, restore or restore-as-copy. A retry or tool continuation is a new request with a new permanent ID; retain the prior request's ID and evidence under the same slot/version ownership. Restored copies preserve IDs and use conversation scope to distinguish ownership. Failure of one attempt does not erase earlier versions or siblings. |
+| Original input snapshot | Preserve the eligible turn context once per group, context mode and current-turn attachment descriptors; preserve each slot's effective prepared prompt layers/configuration as ordered references to immutable snapshot parts. Share identical text parts rather than copying an entire conversation four times. References must resolve to frozen content, not mutable current settings, a current summary, or a source row whose text may later be edited. Keep binary content in the existing backed-up attachment stores, validate its identity, and verify snapshot references in backup/restore tests. Exact regeneration must not silently rebuild from later history/settings or drop unavailable attachment parts. |
+
+Transient state comprises coroutine jobs, clients/credentials, stream collectors/buffers not yet checkpointed, pricing deferreds, cancellation handles, capability lookup jobs, tool-confirmation continuations, UI views and scroll positions. These are reconstructed or detached on reopening; pending requests reconcile to interrupted rather than being treated as successful or automatically resent at additional cost. Completed/failed/cancelled versions, partial checkpoints, primary/foreground selections and usage evidence are persistent, not transient.
+
+**Canonical compatibility mirror:** after every committed group mutation, top-level assistant text and versioned fields mirror the primary slot's canonical version. Top-level `variants`/indices mirror **only that slot's regeneration history**, never sibling models. Preserve outer identity/bookmark/visibility fields. All model-facing history, summaries, memory capture/backfill and search see this one canonical answer. Render other slots using a detached display projection. Switching tabs must not call `applyVariant` on the stored canonical row.
+
+**Accounting ownership:** `ProviderUsageAttempt.attemptId` already exists, but both ordinary `completePendingUsageRecord` and terminal accounting call `TokenUsageAccounting.createRecord` without carrying it into `TurnUsageRecord.requestId`; that field defaults null. `UsageLogState.seed` then falls back to multiset equality within a message. Existing `TokenUsageAccounting.durableRecordsOf` knows only legacy variants/top-level records, so it would omit sibling consumption. For valid groups, enumerate **all slot/version attempts exactly once** by request ID, exclude the compatibility mirror from that enumeration, and carry that ID into durable usage/log reconciliation. Preserve legacy multiset handling for older records. Keep reported failure/cancellation charges and unknown costs; never recompute from today's prices. A serial log writer alone cannot fix shared capture ownership.
+
+**Mutation and damage rules:** group changes use the existing guarded save boundary, serialize mutations to one owned chat snapshot, and update mirror/group/content-modified evidence together. Rename carries the embedded envelope with its row; deletion/truncation removes owned rows while preserving independent files and usage-log charges. Restore-as-copy keeps intra-turn references coherent within the copied chat. Validate duplicate IDs, primary/version references, schema version, completion states and snapshot references. Missing/malformed/unknown group metadata must preserve the raw envelope and canonical mirror, return an explicit unsupported/invalid result, and never substitute another primary, erase alternatives, reset the chat or fabricate a finished answer. Recovery presentation remains subject to the existing approval rules; Stage 1 can test these typed outcomes without introducing UI or new logs.
+
+### 8.3 Existing setting mapping and prompt isolation
+
+`Preferences.getChatExperimentalMode()` reads `experimental_mode` with default `false`; `PerChatSettingKeys` registers it. `ExperimentalMode.requestEntries` returns the original list when off and just its newest user entry when on. `experimentalSummarizerState(true)` suppresses summary injection with `FrozenSummarizerState(false, 0, null)`; saved conversation history is untouched. `ExperimentalModeTest` directly covers off/full-history, on/latest-user, generic entry projection and no-user behavior.
+
+| Stored state when no new setup exists | Effective setup on upgrade | Required preservation |
+| --- | --- | --- |
+| Missing key / new chat | Off | No setup write, model change or history rewrite merely to open the chat. |
+| `experimental_mode = false` | Off | Ordinary full-history context and summaries. |
+| `experimental_mode = true` | Single Response; Last Message Only on | Same fresh-chat instructions/persona/memories/lore/model rules and current-turn Includes, without earlier turns or summaries. |
+
+Interpret absence of the new configuration through this mapping; persist the new per-chat setup only when changed. Register new settings with `PerChatSettingKeys` for settings copy/restore. In Stage 1 ordinary sending still uses the current boolean and remains unchanged. Stage 3 connects the new configuration, preserving the saved setup when Off without discarding historical groups.
+
+At dispatch, freeze the visible/eligible canonical starting context and current input before **any** sibling runs. Resolve per-slot model rules, limits, routing, capability/attachment encoding and request parameters from that snapshot plus that slot's configuration. Do not reuse the activity's mutable client or reread history after an early response arrives. Full-history requests include one canonical answer per earlier group; Last Message Only excludes earlier answers and summaries while retaining fresh-chat layers and current attachments. Memory/context-helper preparation and its commit side effects must have explicit turn ownership; a sibling finishing cannot mutate another slot's frozen input or trigger extra comparison/ranking requests.
+
+### 8.4 Compatibility boundaries and later approval gates
+
+| Path | Day-one engineering scope / checkpoint |
+| --- | --- |
+| Chat Completions, streamed or completed; text and reasoning | Required parallel coordinator path. Both transports must preserve per-request ownership and independent failures, including reasoning observations and pricing. |
+| Current-turn text/document/image/PDF Includes and manual memories | Required preservation through existing preparation and model-specific capability checks. Different capabilities do not authorize silently stripping a part. If a selected model cannot accept an existing attachment, settle exact visible handling under §6.4 before enabling that combination. |
+| `:ft` / `ft:` legacy Completions | `generateResponseUnsettled` uses a separate `CompletionRequest` path. Ordinary support must remain. Parallel support or a visible restriction requires a §6.4 decision before exposure; do not silently route these models through Chat Completions. |
+| `/imagine`, `create_image` tools and tool continuation | `handleAssistantToolCalls` can remove an empty assistant row, execute an image tool, wait for shared inline confirmation and issue a follow-up request; `ImageGenerationJobRegistry` owns separately durable image jobs. These paths are not concurrent-safe merely because text streams are. Need a concrete §6.4 decision on parallel compatibility and consent/cost behavior; no automatic duplicate image executions or silent disabling. Tools-rejection retry accounting must remain distinct per request. |
+| Hands-free, readback and in-progress dictation | Single-response behavior remains. Parallel hands-free is excluded by the product contract. The entrance transition and preservation of recorded/transcribed input need the §6.5 decision before setup is wired; do not allow each slot to start a voice loop. |
+| Readable text/JSON export and alternative search visibility | Recovery export must retain all slots, versions and snapshots. Existing readable text/search use canonical top-level content; JSON sanitization must also reach new nested metadata and respect Thinking/usage omissions. Any new alternative-inclusive readable layout or search behavior needs its own approval rather than being invented during storage work. |
+
+No UI decision is required to finish Stage 0. §6.2 Send/Stop semantics must be settled before coordinator cancellation controls/network UI; §6.3 missing models/credentials and §6.5 hands-free transition before Stage 3; §6.1 Make Primary placement/wording before Stage 4. §6.6 usage fallback is conditional on measured aggregation failure, not permission to hide costs preemptively. These checkpoints remain open and are not encoded as production defaults by this audit.
+
+### 8.5 Verification contract for subsequent stages
+
+Existing tests below identify regression anchors; selected test bodies were inspected, and **no tests were executed** during this documentation-only audit. New tests below are obligations for the implementing stage, not existing coverage or passing results. Test paths are under `app/src/test/java/org/teslasoft/assistant/` unless marked instrumentation.
+
+| Stage / area | Existing anchors to retain | New proof required |
+| --- | --- | --- |
+| 1: legacy and group storage | `ui/chat/RegenerationRecoveryTest.kt`, `preferences/MessageCompletionStateTest.kt`; instrumentation `preferences/chatstore/ChatStoreInstrumentedTest.kt` | Unchanged legacy messages/variants; synthetic four-slot, multiple-group round trips through live guarded preferences **and** staged ChatStore; distinct endpoints with identical model labels; partial/failed slots, primary/foreground/version selection, missing/unknown/malformed metadata and duplicate IDs. No network/UI exposure. |
+| 1: backup and mutation | `preferences/backup/portable/ChatLogicalSerializerCompatTest.kt`, `SummaryStateBackupContractTest.kt`, `ChatMergePlannerTest.kt`; instrumentation `preferences/backup/LargeChatBackupInstrumentedTest.kt` | Recovery export/restore and restore-as-copy retain every slot/version/snapshot/attachment and selection; rename, deletion, truncation and settings copy preserve scope; sibling-only changes participate in merge modification detection; corrupt/locked or failed writes preserve previous readable data. |
+| 1: projections | `preferences/chatsearch/SearchableMessageProjectionTest.kt`, `preferences/MessageVisibilityTest.kt`, `preferences/includes/SummarizerSafeIncludeProjectionTest.kt`, `preferences/memory/TranscriptTurnVisibilityTest.kt`, `preferences/backup/readable/ReadableChatFormatsTest.kt` | Exactly one canonical assistant projection; foreground changes leave context, summaries, search and transcript sources untouched; primary promotion reconciles transcript and summary sources; no sibling in memory recall or readable canonical text; nested readable-JSON privacy filtering. Usage enumerates all attempts without counting mirrors. |
+| 2: dispatch and recovery | `ui/activities/StreamingRequestPathTest.kt`, `ChatRequestOrderingSourceTest.kt`, `usage/ProviderUsageAttemptTest.kt`, `TokenUsageAccountingTest.kt`, `UsageLogTest.kt`, `ToolRetryUsageTest.kt` | Deterministic fake transports complete out of order, fail/cancel independently, overlap usage/pricing and share model names across endpoints; exact target IDs, no cross-stream text/reasoning/diagnostics, identical eligible base context, per-slot retry with original input, durable interruption/reopen, save failure and idempotent charge reconciliation. Assert request IDs remain permanent and immutable through every lifecycle and persistence operation listed in §8.2, with distinct new IDs for retries/continuations. Validate all-slot aggregation in the existing screen before claiming accuracy; controlled live/provider tests require approved access/costs. |
+| 3–5: setup and end-to-end | `conversation/ExperimentalModeTest.kt`, `preferences/models/ModelIdentityCodecTest.kt`, `preferences/FavoriteModelSamplingParametersTest.kt`, `preferences/includes/{IncludeMessageProjectionTest,PdfRequestSerializerTest}.kt` | Old-boolean mapping and mode switching preserve history; picker multi-select retains normal single-select and exact endpoint/routing settings; all context/response combinations, attachments, primary changes with descendants, per-slot regenerations, background/destruction/process death, backups and hands-free guards. Narrow-phone/device acceptance belongs to the exposed UI stages. |
+
+For each code-changing stage run `testDebugUnitTest`, `assembleBeta`, `assembleDebugAndroidTest`, required instrumentation/targeted integration coverage, then the final-commit Codex/Android Checks gates in `CLAUDE.md`. Do not infer runtime/recovery correctness from a compile-only instrumentation build. Add helpers in separate files with minimal chat-screen glue; no unrelated storage activation or logging changes.
+
+**Beta identity verified in source:** `app/build.gradle` uses base application ID `com.soulphosphor.phosphorshines` and Beta suffix `.beta`; `app/src/beta/res/values/strings.xml` supplies the Beta label. `.github/workflows/beta-release.yml` publishes from `main`, builds `assembleBeta` and checks its identity. `.github/workflows/release.yml` is manual and restricted to `archive/old-main`. This audit changes none of them and performs no app-data migration or builds.
+
+**Stage 0 exit evidence:** lifecycle/persistence/picker/consumer mapping, additive data and usage ownership contract, exact legacy-setting mapping, prompt isolation, compatibility checkpoints and staged test obligations are documented above. Stage 1 subsequently satisfied §4's storage exit criteria and merged as recorded below; the parallel mode remains unexposed. Product decisions listed in §6 remain for their dependent stages.
+
+### 8.6 Stage 1 implementation handoff
+
+`conversation/responsegroups/` contains the durable values, strict codec, owned-history mutations, guarded live-store adapter, recovery and detached projections. `responseGroup` remains an additive JSON string on one assistant row. No new setup preference, dispatcher, picker or tabs are enabled. Ordinary messages and their regeneration lists are not migrated.
+
+- `ResponseGroupCodec.read` distinguishes absent, valid, unsupported and invalid metadata without rewriting the raw envelope or canonical mirror. Known-schema parsing rejects unknown fields, duplicate properties/IDs, invalid state/selection/ownership and unresolved snapshot parts. Store mutations compare the exact prior envelope and conversation/message/group target, preserve all old slot/version/request ownership, and reject branch-changing promotion without explicit descendant-discard permission. Generic guarded saves also reject dropping a surviving group's metadata or replacing its request IDs.
+- `ResponseGroupEdits.install` writes the envelope and canonical compatibility mirror together on a detached copy. Only the primary slot's regeneration history appears in legacy `variants`. Browse selections never promote. `ResponseGroupStore.replace` requires a canonical-source reconciliation callback: later promotion UI must use the existing summary cancellation/branch/compaction workflow and persist the canonical transcript reconciliation before presenting promotion as settled. `ResponseGroupSourceProjection` supplies canonical summary/transcript source transformations; no new transcript capture or promotion controls are wired in Stage 1.
+- Request IDs and start identities are permanent. New retry/tool-continuation attempts append new UUIDs; interruption retains all existing IDs, partials and receipts without resending. All attempts participate in usage by request ID, including unknown receipts; late durable receipts reconcile the same log entry. The compatibility mirror is excluded. Legacy records retain multiset handling. Ordinary usage snapshots now carry their already-minted attempt ID into frozen records.
+- Input parts contain frozen text or content-addressed PDF/image descriptors. Prompt/context/current-turn references resolve within the group; attachment bytes must match saved size and SHA-256 before exact reuse. Cleanup retains referenced original bytes, and preserves files when group ownership is unreadable. Logical capture preserves unreadable envelopes verbatim; complete Recovery Backup refuses unreadable attachment ownership instead of silently omitting possible dependencies. PDFs reuse the existing portable asset path; snapshot images add a chat-category asset in the existing image store. Streaming backup scans collect these dependencies without reading the complete chats artifact into memory. Restore-as-copy preserves embedded IDs and copies dependencies to the copied conversation's scope. Existing ordinary backups do not acquire new snapshot assets.
+- Group-only changes advance merge modification evidence and use synchronous guarded commits with rollback, even when searchable canonical text did not change. SQLCipher ChatStore remains staged; its production authority is unchanged. No new diagnostic logging or Beta build identity changes are introduced.
+
+**Stage 1 validation and handoff:** Final code commit `572e6ac3832127da3d86818147cf8e1460907676` passed both jobs of [Android Checks #3494](https://github.com/SoulPhosphor/speak-gpt/actions/runs/44890968805), including actual emulator execution of `ResponseGroupStorageInstrumentedTest` (four cases), and its fresh Codex review completed with no findings. The initial emulator run caught unreadable-group classification and an invalid rename fixture; both were corrected, preserving the data-fidelity assertions and adding a classification regression. Local baseline unit validation passed 3,951 tests before those corrections; local APK packaging was constrained by the execution environment, so the complete final APK/instrumentation gates were fulfilled in CI under `CLAUDE.md`'s environment exception. Merge receipt: [PR #236](https://github.com/SoulPhosphor/speak-gpt/pull/236), `d96e55f0103b20ebbd063acc86211628a450050a`. This post-merge tracker/guardrail update is documentation only and requires no tests or Codex review.
+
+Stage 2 still owns provider orchestration, dispatch-before-network durability, request callback isolation, original-input retry preparation, cancellation, tool consent and actual parallel accounting-screen validation. Stage 4 owns wiring canonical-source reconciliation into the approved promotion/branch UI. The Stage 1 storage APIs alone do not expose those later stages.
+
+### Implementation progress ledger
+
+| Stage | Status | PR / commit | Verification / notes |
+| --- | --- | --- | --- |
+| 0. Integration audit and contract | Merged | [PR #234](https://github.com/SoulPhosphor/speak-gpt/pull/234) · [`1e4c0ef7`](https://github.com/SoulPhosphor/speak-gpt/commit/1e4c0ef7ddd6e23ba6687fd55ab84d29e289609a) | §8 audit/contract merged to `main`. Full documentation diff and source/test anchors inspected; no local tests/builds or Codex review run (documentation only). Automatic GitHub Android jobs were triggered, but are not claimed as validation of this audit. Beta/data/code unchanged. Next: Stage 1, unexposed storage foundation. |
+| 1. Durable response-group foundation | Merged | [PR #236](https://github.com/SoulPhosphor/speak-gpt/pull/236) · [`d96e55f0`](https://github.com/SoulPhosphor/speak-gpt/commit/d96e55f0103b20ebbd063acc86211628a450050a) | Additive storage/model, guarded recovery, canonical projections, permanent request accounting and snapshot attachments merged. Final code `572e6ac` passed [Android Checks #3494](https://github.com/SoulPhosphor/speak-gpt/actions/runs/44890968805): unit suites, debug/Beta APKs, actual Beta identity, instrumentation compilation and emulator recovery/fault suite including all four response-group storage/restore cases. Codex re-review of that same commit completed with no findings. No parallel UI or dispatch. Next: Stage 2, not started. |
+| 2. Parallel request coordinator | Not started | | |
+| 3. Setup and model picker | Not started | | |
+| 4. Tabs, primary, regeneration UI | Not started | | |
+| 5. System verification and beta release | Not started | | |
+
+**When handing this to Work or another coding agent:** Read `CLAUDE.md`, this file, the code on current `main`, and relevant tests. Work on the **assigned stage only**, do not treat future-stage proposals as implemented, and keep this ledger accurate after each merged stage.

@@ -123,6 +123,7 @@ class ProviderUsageAttempt(
         }
         return synchronized(this) {
             ProviderUsageSnapshot(
+                attemptId = attemptId,
                 model = responseModel ?: requestedModel,
                 provider = responseProvider ?: fallbackProvider,
                 apiEndpoint = apiEndpoint,
@@ -175,7 +176,8 @@ data class ProviderUsageSnapshot(
     val provider: String,
     val apiEndpoint: String,
     val counts: TokenCounts,
-    val providerCost: ProviderReportedCost
+    val providerCost: ProviderReportedCost,
+    val attemptId: String? = null
 )
 
 /** Reasoning is billed output. Whether a provider's completion count already
