@@ -49,6 +49,8 @@ internal object ChatsArtifactScanner {
     /** A live PDF attachment of one chat: where its bytes are and their size. */
     data class PdfRef(val chatId: String, val hash: String, val byteSize: Long)
 
+    data class SnapshotImageRef(val chatId: String, val attachment: org.teslasoft.assistant.conversation.responsegroups.ResponseAttachment)
+
     class Summary(
         val format: String,
         val chatCount: Int,
@@ -59,7 +61,8 @@ internal object ChatsArtifactScanner {
         val imageIdsRequired: Set<String>,
         /** Each chat's required generated-image ids, so a missing image can be
          *  traced back to the chats that point to it. */
-        val requiredImageIdsByChat: Map<String, Set<String>> = emptyMap()
+        val requiredImageIdsByChat: Map<String, Set<String>> = emptyMap(),
+        val snapshotImageRefs: List<SnapshotImageRef> = emptyList()
     )
 
     sealed class Result {
@@ -79,7 +82,8 @@ internal object ChatsArtifactScanner {
         val messageCount: Int,
         val pdfRefs: List<PdfRef>,
         val imageIdsAll: Set<String>,
-        val imageIdsRequired: Set<String>
+        val imageIdsRequired: Set<String>,
+        val snapshotImageRefs: List<SnapshotImageRef>
     )
 
     private class Stop(val result: Result) : Exception(null, null, false, false)
@@ -90,6 +94,8 @@ internal object ChatsArtifactScanner {
             scanRoot(reader)
         } catch (stop: Stop) {
             stop.result
+        } catch (_: ResponseGroupAttachmentBackup.UnreadableMetadata) {
+            Result.Unreadable("a response group has unreadable snapshot metadata")
         } catch (e: Exception) {
             // The reader's path (for example $.chats[12].messages[40]) says
             // where reading stopped without quoting any content.
@@ -165,7 +171,8 @@ internal object ChatsArtifactScanner {
                 imageIdsAll = chats.flatMapTo(LinkedHashSet()) { it.imageIdsAll },
                 imageIdsRequired = chats.flatMapTo(LinkedHashSet()) { it.imageIdsRequired },
                 requiredImageIdsByChat = byId.filterValues { it.imageIdsRequired.isNotEmpty() }
-                    .mapValues { it.value.imageIdsRequired }
+                    .mapValues { it.value.imageIdsRequired },
+                snapshotImageRefs = chats.flatMap { it.snapshotImageRefs }.distinct()
             )
         )
     }
@@ -201,6 +208,7 @@ internal object ChatsArtifactScanner {
         val messageIds = HashSet<String>()
         val digest = MessageDigest.getInstance("SHA-256")
         val pdfRefs = ArrayList<Pair<String, Long>>()
+        val snapshotImages = ArrayList<org.teslasoft.assistant.conversation.responsegroups.ResponseAttachment>()
         val imageIdsAll = LinkedHashSet<String>()
         val imageIdsRequired = LinkedHashSet<String>()
         var imageProblem: String? = null
@@ -247,6 +255,10 @@ internal object ChatsArtifactScanner {
                         ChatMergePlanner.timestamp(message.opt("messageTime")) ?: 0L
                     )
                     livePdfs(message.optString("includes")).forEach(pdfRefs::add)
+                    ResponseGroupAttachmentBackup.attachments(message).filter { it.store == "image" }.forEach(snapshotImages::add)
+                    ResponseGroupAttachmentBackup.pdfIncludes(message).forEach { include ->
+                        include.pdfFileHash?.let { pdfRefs.add(it to include.pdfByteSize) }
+                    }
                     if (imageProblem == null) {
                         imageProblem = collectImage(message, imageIdsAll, imageIdsRequired)
                     }
@@ -291,7 +303,8 @@ internal object ChatsArtifactScanner {
             messageCount = messageCount,
             pdfRefs = pdfRefs.distinct().map { (hash, size) -> PdfRef(chatId, hash, size) },
             imageIdsAll = imageIdsAll,
-            imageIdsRequired = imageIdsRequired
+            imageIdsRequired = imageIdsRequired,
+            snapshotImageRefs = snapshotImages.distinct().map { SnapshotImageRef(chatId, it) }
         )
         val previous = byId[chatId]
         if (previous == null) {

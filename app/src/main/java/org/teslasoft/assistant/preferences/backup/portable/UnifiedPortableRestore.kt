@@ -241,7 +241,7 @@ object UnifiedPortableRestore {
             var chatParticipant: ChatRestoreParticipant? = null
             planned.chat?.let {
                 chatParticipant = ChatRestoreParticipant(
-                    app, it.desired, it.current, File(stagingRoot, "chats"), it.incomingPdfAssets
+                    app, it.desired, it.current, File(stagingRoot, "chats"), it.incomingPdfAssets, it.incomingSnapshotImages
                 )
                 participants.add(chatParticipant!!)
             }
@@ -284,6 +284,7 @@ object UnifiedPortableRestore {
     private data class ParsedBackup(
         val chats: PortableChatRestorePlan.Plan? = null,
         val chatPdfAssets: Map<String, File> = emptyMap(),
+        val snapshotImages: Map<String, File> = emptyMap(),
         val generatedImages: GeneratedImagePortableRestoreManager.Prepared? = null,
         val identities: CompanionBackupManifest? = null,
         val identityArchive: File? = null,
@@ -314,7 +315,8 @@ object UnifiedPortableRestore {
     private data class PlannedChat(
         val current: PortableChatRestorePlan.Plan,
         val desired: PortableChatRestoreCoordinator.Prepared,
-        val incomingPdfAssets: Map<String, File>
+        val incomingPdfAssets: Map<String, File>,
+        val incomingSnapshotImages: Map<String, File>
     )
 
     private data class PlannedGenerated(
@@ -405,6 +407,15 @@ object UnifiedPortableRestore {
                 }
             }
         } else null
+        val snapshotImages = ResponseGroupAttachmentBackup.prepareImages(artifacts)
+        if (chats != null) {
+            val refs = ResponseGroupAttachmentBackup.imageRefs(chats)
+            if (snapshotImages == null || snapshotImages.keys != refs.mapTo(HashSet()) { it.second.fileName } ||
+                refs.any { !ResponseGroupAttachmentBackup.matches(snapshotImages.getValue(it.second.fileName), it.second) }) {
+                fail(PortableRestoreCategory.CHATS, CategoryFailureReason.INVALID_DATA,
+                    detail = "snapshot image assets do not match chat references")
+            }
+        }
         val parsedPdfAssets = PdfAttachmentPortableBackup.prepareRestore(artifacts)
         if (chats != null &&
             (parsedPdfAssets == null || PdfAttachmentPortableBackup.requiredHashes(chats) != parsedPdfAssets.keys)
@@ -637,6 +648,7 @@ object UnifiedPortableRestore {
         return ParsedBackup(
             chats = chats.takeIf { PortableRestoreCategory.CHATS !in failures },
             chatPdfAssets = chatPdfAssets,
+            snapshotImages = snapshotImages.orEmpty(),
             generatedImages = generated,
             identities = identities.takeIf { identitySelections.none(failures::containsKey) },
             identityArchive = identityArtifact?.stagedFile,
@@ -985,7 +997,7 @@ object UnifiedPortableRestore {
                     )
                 }
             }
-            plannedChat = PlannedChat(current, prepared, backup.chatPdfAssets)
+            plannedChat = PlannedChat(current, prepared, backup.chatPdfAssets, backup.snapshotImages)
             prepared.plan
         } else live.chats
 

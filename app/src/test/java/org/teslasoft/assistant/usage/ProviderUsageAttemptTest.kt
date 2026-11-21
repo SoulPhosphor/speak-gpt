@@ -8,6 +8,17 @@ import org.junit.Test
 import org.teslasoft.assistant.preferences.RawStreamObservation
 
 class ProviderUsageAttemptTest {
+    @Test fun snapshotsKeepTheOriginalRequestIdAndNewRequestsGetDistinctIds() = runBlocking {
+        val first = ProviderUsageAttempt("fixture", "fixture", "https://endpoint.invalid")
+        val retry = ProviderUsageAttempt("fixture", "fixture", "https://endpoint.invalid")
+        val continuation = ProviderUsageAttempt("fixture", "fixture", "https://endpoint.invalid")
+        assertEquals(first.attemptId, first.snapshot().attemptId)
+        first.noteTypedUsage(3, 2, 5)
+        first.finishObservation()
+        assertEquals(first.attemptId, first.snapshot().attemptId)
+        assertEquals(3, setOf(first.attemptId, retry.attemptId, continuation.attemptId).size)
+    }
+
     @Test fun prearmedSnapshotWaitsForRawOnlyCostAndCacheFields() = runBlocking {
         val attempt = ProviderUsageAttempt(
             "model", "Provider", "https://openrouter.ai/api/v1/"
