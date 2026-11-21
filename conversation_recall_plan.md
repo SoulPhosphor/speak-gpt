@@ -119,7 +119,7 @@ The owner prioritized the scanner on November 18. The four stages below are the 
 - **Pause and resume.**
   - The scanner notification gets a **Pause** button. While the scan is paused, it shows **Resume** instead.
   - On the Memory Scanner Tool screen, **Analyze Conversations** becomes **Pause Conversations** while a scan runs and **Resume Conversations** while it is paused.
-  - The chat header's background-work icon (`ChatBackgroundActivity.kt`) gets the same controls. While a scan runs, its pop-up keeps the existing progress line with a **Pause** button. While a scan is paused, the icon shows in every open chat, new or old, and its pop-up shows **Memory Scanner** with a **Resume** button, so a paused scan is not forgotten. Appearance comes from `ui-style-guide.md`.
+  - The chat header's background-work icon (`ChatBackgroundActivity.kt`) gets the same controls. While a scan runs, its pop-up line reads **Memory Scanner 85%** (the current percentage) with a **Pause** button. While a scan is paused, the icon shows in every open chat, new or old, and the same line reads **Memory Scanner** with a **Resume** button, so a paused scan is not forgotten. The summarizing line is unchanged. Appearance comes from `ui-style-guide.md`.
   - A paused scan stays paused until the user taps Resume, including after the app is closed or the phone restarts.
   - An interrupted scan resumes automatically, but only after the user's first chat message since the app started has been sent and its reply has finished. Resuming must never delay or block starting a chat.
 
