@@ -220,6 +220,12 @@ object CompanionMemoryRestorePlanner {
                 else -> tables[spec.table] = memories.tables.getValue(spec.table).map(::copyRow)
             }
         }
+        // An older backup's scan rows travel with its memories to the
+        // scanner migration (MemoryPortableRowFormat.legacyTables).
+        for (legacy in MemoryPortableRowFormat.legacyTables) {
+            val rows = memories.tables[legacy].orEmpty()
+            if (rows.isEmpty()) tables.remove(legacy) else tables[legacy] = rows.map(::copyRow)
+        }
     }
 
     private fun replaceGroup(
@@ -257,12 +263,16 @@ object CompanionMemoryRestorePlanner {
                 clearMissing("roleplay_character_id", references.roleplayCharacters)
             }
         }
-        tables["transcripts"] = tables.getValue("transcripts").map { sourceRow ->
-            copyRow(sourceRow).apply {
-                clearMissing("companion_id", references.companions)
-                clearMissing("world_id", references.worlds)
-                clearMissing("roleplay_character_id", references.roleplayCharacters)
-                clearMissing("user_persona_id", references.userPersonas)
+        // Only an older backup carries transcripts; they wait for the
+        // scanner migration to map them, then their text is deleted.
+        tables["transcripts"]?.let { legacy ->
+            tables["transcripts"] = legacy.map { sourceRow ->
+                copyRow(sourceRow).apply {
+                    clearMissing("companion_id", references.companions)
+                    clearMissing("world_id", references.worlds)
+                    clearMissing("roleplay_character_id", references.roleplayCharacters)
+                    clearMissing("user_persona_id", references.userPersonas)
+                }
             }
         }
         tables["rp_tag_links"] = tables.getValue("rp_tag_links")

@@ -16,11 +16,9 @@
 
 package org.teslasoft.assistant.preferences.memory.archivist
 
-import org.json.JSONArray
-import org.json.JSONObject
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
-import org.teslasoft.assistant.preferences.memory.TranscriptRecord
-import org.teslasoft.assistant.util.ConversationTokenChunks
+import org.teslasoft.assistant.preferences.memory.scan.ScanSourceRow
+import org.teslasoft.assistant.preferences.memory.scan.ScanTextSplitter
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.util.ProviderLimitKind
 
@@ -96,55 +94,57 @@ object ArchivistRequestBudget {
 }
 
 data class ArchivistRequestChunk(
-    val transcripts: List<TranscriptRecord>,
+    val rows: List<ScanSourceRow>,
     val estimatedTranscriptTokens: Int
 )
 
 /**
  * Memory Scanner source chunks. The average can stretch by a flat allowance
  * to finish an exchange. Only an individual message above the maximum splits,
- * always between sentences; a single oversized sentence is kept whole.
- * Captured scene changes always close the chunk. Source rows are never edited.
+ * losslessly, at the last paragraph, line or word boundary that fits and only
+ * then between whole characters ([ScanTextSplitter]); each fragment keeps its
+ * message UUID and offsets. A change of scene always closes the chunk. The
+ * chat's messages are never edited.
  */
 object ArchivistConversationChunker {
-    private data class RowFragment(val transcript: TranscriptRecord, val tokens: Int, val isBot: Boolean)
+    private data class RowFragment(val row: ScanSourceRow, val tokens: Int)
 
     fun split(
-        transcripts: List<TranscriptRecord>,
+        rows: List<ScanSourceRow>,
         targetTokens: Int,
         maximumTokens: Int = targetTokens,
         allowanceTokens: Int = 0
     ): List<ArchivistRequestChunk> {
-        if (transcripts.isEmpty()) return emptyList()
+        if (rows.isEmpty()) return emptyList()
         val budget = targetTokens.coerceAtLeast(1)
         val maximum = maximumTokens.coerceAtLeast(1)
         val requestLimit = minOf(maximum.toLong(), budget.toLong() + allowanceTokens.coerceAtLeast(0))
-        val fragments = transcripts.flatMap { splitRow(it, maximum) }
+        val fragments = rows.flatMap { splitRow(it, maximum) }
         val out = ArrayList<ArchivistRequestChunk>()
-        var current = ArrayList<TranscriptRecord>()
+        var current = ArrayList<ScanSourceRow>()
         var currentTokens = 0L
         var currentScene: ArchivistSceneContext? = null
 
         fun flush() {
             if (current.isEmpty()) return
-            out.add(ArchivistRequestChunk(coalesceRows(current), currentTokens.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
+            out.add(ArchivistRequestChunk(current, currentTokens.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
             current = ArrayList()
             currentTokens = 0
             currentScene = null
         }
 
         fun append(fragment: RowFragment) {
-            current.add(fragment.transcript)
+            current.add(fragment.row)
             currentTokens += fragment.tokens
-            currentScene = ArchivistSceneContext.from(fragment.transcript)
+            currentScene = ArchivistSceneContext.from(fragment.row)
         }
 
         var from = 0
         while (from < fragments.size) {
-            val scene = ArchivistSceneContext.from(fragments[from].transcript)
+            val scene = ArchivistSceneContext.from(fragments[from].row)
             var end = from + 1
-            while (end < fragments.size && fragments[end].isBot &&
-                ArchivistSceneContext.from(fragments[end].transcript) == scene) end++
+            while (end < fragments.size && fragments[end].row.isAssistant &&
+                ArchivistSceneContext.from(fragments[end].row) == scene) end++
             val exchangeTokens = (from until end).sumOf { fragments[it].tokens.toLong() }
             if (exchangeTokens <= requestLimit) {
                 if (current.isNotEmpty() && (currentScene != scene || currentTokens >= budget ||
@@ -167,59 +167,11 @@ object ArchivistConversationChunker {
         return out
     }
 
-    /** Merge adjacent fragments of the same source row in one pass. */
-    private fun coalesceRows(rows: List<TranscriptRecord>): List<TranscriptRecord> {
-        val result = ArrayList<TranscriptRecord>()
-        var base: TranscriptRecord? = null
-        var pending: JSONArray? = null
-        fun flush() {
-            val row = base
-            val turns = pending
-            if (row != null && turns != null) result.add(row.copy(content = turns.toString()))
-            base = null
-            pending = null
+    private fun splitRow(row: ScanSourceRow, maximum: Int): List<RowFragment> =
+        ScanTextSplitter.split(row.text, maximum).map { piece ->
+            val part = row.slice(piece.start, piece.end)
+            RowFragment(part, if (part.text.isBlank()) 0 else IncludeTextPolicy.estimateTokens(part.text))
         }
-        for (row in rows) {
-            val turns = runCatching { JSONArray(row.content) }.getOrNull()
-            if (turns == null) {
-                flush()
-                result.add(row)
-                continue
-            }
-            if (base?.copy(content = row.content) != row) flush()
-            if (base == null) {
-                base = row
-                pending = JSONArray()
-            }
-            for (i in 0 until turns.length()) pending!!.put(turns.get(i))
-        }
-        flush()
-        return result
-    }
-
-    private fun splitRow(row: TranscriptRecord, maximum: Int): List<RowFragment> {
-        val turns = runCatching { JSONArray(row.content) }.getOrNull()
-        if (turns == null) {
-            return ConversationTokenChunks.splitSentences(row.content, maximum).map { part ->
-                RowFragment(row.copy(content = part), IncludeTextPolicy.estimateTokens(part), false)
-            }
-        }
-        val pieces = ArrayList<RowFragment>()
-        for (index in 0 until turns.length()) {
-            val turn = turns.optJSONObject(index) ?: continue
-            val content = turn.optString("content")
-            for (part in ConversationTokenChunks.splitSentences(content, maximum)) {
-                val splitTurn = JSONObject(turn.toString()).put("content", part)
-                pieces.add(RowFragment(
-                    row.copy(content = JSONArray().put(splitTurn).toString()),
-                    if (part.isBlank()) 0 else IncludeTextPolicy.estimateTokens(part),
-                    turn.optString("role") == "assistant"
-                ))
-            }
-        }
-        if (pieces.isEmpty()) pieces.add(RowFragment(row.copy(content = "[]"), 0, false))
-        return pieces
-    }
 }
 
 class ArchivistShrinkRequiredException(

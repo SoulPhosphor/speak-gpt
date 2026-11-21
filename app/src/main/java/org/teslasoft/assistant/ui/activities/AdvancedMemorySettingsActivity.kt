@@ -124,6 +124,33 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
 
     /* ------------------------------ status ------------------------------ */
 
+    /**
+     * Chats whose messages changed since the last automatic backup (all chats
+     * when none ran yet). Read from each chat's own change time now that the
+     * memory database keeps no copy of conversations (Stage 6A).
+     */
+    private fun chatsChangedSince(lastBackupIso: String?): Int {
+        val since = lastBackupIso?.let {
+            runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+        }
+        return try {
+            org.teslasoft.assistant.preferences.ChatPreferences.getChatPreferences().getChatList(this)
+                .count { chat ->
+                    if (since == null) return@count true
+                    val chatId = org.teslasoft.assistant.preferences.ChatPreferences.storedChatId(chat)
+                    val changed = try {
+                        org.teslasoft.assistant.preferences.SecurePrefs.get(this, "chat_$chatId")
+                            .getLong(org.teslasoft.assistant.preferences.ChatPreferences.CHAT_CONTENT_MODIFIED_AT_KEY, 0L)
+                    } catch (_: Exception) {
+                        0L
+                    }
+                    changed > since
+                }
+        } catch (_: Exception) {
+            0
+        }
+    }
+
     private fun refreshStatus() {
         runOffThread {
             val status: String
@@ -154,10 +181,17 @@ class AdvancedMemorySettingsActivity : SettingsPageActivity() {
                         )
                     )
                     appendLine(
-                        getString(R.string.memory_status_chats_since_backup, store.chatsSinceLastBackup())
+                        getString(
+                            R.string.memory_status_chats_since_backup,
+                            chatsChangedSince(lastBackup)
+                        )
                     )
                     appendLine(
-                        getString(R.string.memory_status_pending_review, store.pendingReviewCount())
+                        getString(
+                            R.string.memory_status_pending_review,
+                            org.teslasoft.assistant.preferences.memory.archivist.Archivist
+                                .eligibleConversationCount(this@AdvancedMemorySettingsActivity)
+                        )
                     )
                     appendLine(
                         if (store.getMeta(MemoryStore.META_SEED_IMPORTED_AT) != null)

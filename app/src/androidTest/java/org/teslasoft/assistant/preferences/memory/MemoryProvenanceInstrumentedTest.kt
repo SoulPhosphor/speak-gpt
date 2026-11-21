@@ -58,11 +58,36 @@ class MemoryProvenanceInstrumentedTest {
 
     /** Files [draft] the way the Memory Scanner does, with its sources. */
     private fun fileDraft(store: MemoryStore, draft: MemoryRecord, sources: List<MemorySource>) {
-        store.commitRerunChatOutputs(
-            memories = listOf(draft), rules = emptyList(), lorebookSuggestions = emptyList(),
-            sourcesByMemoryId = mapOf(draft.memoryId to sources)
+        fileLikeTheScanner(store, listOf(draft), sourcesByMemoryId = mapOf(draft.memoryId to sources))
+    }
+
+    /** Files outputs the way a Memory Scanner rerun range does. */
+    private fun fileLikeTheScanner(
+        store: MemoryStore,
+        memories: List<MemoryRecord>,
+        relationshipHintsByMemoryId: Map<String, List<String>> = emptyMap(),
+        sourcesByMemoryId: Map<String, List<MemorySource>> = emptyMap()
+    ) {
+        val runId = MemoryStore.newId("run-")
+        val range = ScanRangeRecord(
+            MemoryStore.newId("range-"), runId, "source-chat", 0, ScanRangeRecord.KIND_RERUN,
+            emptyList(), emptyList()
+        )
+        store.beginScanRun(
+            ArchivistRunRecord(
+                runId = runId, startedAt = MemoryStore.nowIso(), finishedAt = null, status = "running",
+                chatIdsJson = "[]", transcriptIdsJson = "[]", memoryIdsJson = "[]", ruleIdsJson = "[]",
+                foundCount = 0, failedChatIdsJson = "[]", error = null
+            ),
+            listOf(range)
+        )
+        store.commitScanRange(
+            range, emptyList(), memories, emptyList(), emptyList(),
+            relationshipHintsByMemoryId = relationshipHintsByMemoryId,
+            sourcesByMemoryId = sourcesByMemoryId
         )
     }
+
 
     private fun sourceRowCount(store: MemoryStore): Int =
         store.readableDatabase.rawQuery("SELECT COUNT(*) FROM memory_sources", null)

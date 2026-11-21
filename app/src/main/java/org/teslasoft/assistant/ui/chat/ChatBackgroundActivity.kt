@@ -22,11 +22,13 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.PopupWindow
 import android.widget.TextView
+import com.google.android.material.button.MaterialButton
 import androidx.fragment.app.FragmentActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.archivist.Archivist
@@ -35,11 +37,15 @@ import org.teslasoft.assistant.service.MemoryAnalysisState
 
 /**
  * The chat header's background-work icon and its popover (owner design,
- * Nov 18 2026). The icon shows only while a memory scan or summarizing runs;
- * tapping it shows one centered line per activity with its percentage, for
- * example "Memory Scan in Progress 75%". The popover has no buttons, closes on
- * a tap elsewhere, follows progress while open, and closes with the icon once
- * the work is done.
+ * Nov 18 2026; Pause and Resume added in Stage 6A). The icon shows while a
+ * memory scan or summarizing runs, and in every open chat while a memory scan
+ * is paused, so a paused scan is not forgotten. Tapping it shows one line per
+ * activity. A running scan reads "Memory Scanner 85%" with a Pause button; a
+ * paused scan reads "Memory Scanner" with a Resume button; the text is on the
+ * left and the button on the right. The summarizing line is unchanged. The
+ * popover closes on a tap elsewhere, follows progress while open, and closes
+ * with the icon once the work is done. An interrupted scan shows nothing here
+ * until it resumes.
  */
 class ChatBackgroundActivity(
     private val activity: FragmentActivity,
@@ -48,19 +54,25 @@ class ChatBackgroundActivity(
     private val header: View
 ) {
     private var memoryScanPercent: Int? = null
+    private var memoryScanPaused = false
     private var summarizingPercent: Int? = null
     private var popover: PopupWindow? = null
+    private var memoryRow: View? = null
     private var memoryLine: TextView? = null
+    private var memoryAction: MaterialButton? = null
     private var summarizingLine: TextView? = null
 
     fun attach() {
         icon.setOnClickListener { togglePopover() }
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                MemoryAnalysisForegroundService.state.collect { s ->
+                MemoryAnalysisForegroundService.state.combine(
+                    MemoryAnalysisForegroundService.suspended
+                ) { s, waiting -> s to waiting }.collect { (s, waiting) ->
                     memoryScanPercent = (s as? MemoryAnalysisState.Running)?.let {
                         BackgroundActivityPercent.memoryScan(it.progress)
                     }
+                    memoryScanPaused = memoryScanPercent == null && waiting?.paused == true
                     refresh()
                 }
             }
@@ -79,7 +91,8 @@ class ChatBackgroundActivity(
     }
 
     private fun lines(): Pair<String?, String?> = Pair(
-        memoryScanPercent?.let { activity.getString(R.string.chat_activity_memory_scan, it) },
+        memoryScanPercent?.let { activity.getString(R.string.chat_activity_memory_scan, it) }
+            ?: if (memoryScanPaused) activity.getString(R.string.chat_activity_memory_scan_paused) else null,
         summarizingPercent?.let { activity.getString(R.string.chat_activity_summarizing, it) }
     )
 
@@ -97,9 +110,15 @@ class ChatBackgroundActivity(
     }
 
     private fun bindLines(memory: String?, summarizing: String?) {
-        memoryLine?.let {
-            it.text = memory
-            it.visibility = if (memory != null) View.VISIBLE else View.GONE
+        memoryRow?.visibility = if (memory != null) View.VISIBLE else View.GONE
+        memoryLine?.text = memory
+        memoryAction?.let { button ->
+            val running = memoryScanPercent != null
+            button.setText(if (running) R.string.memory_scan_pause else R.string.memory_scan_resume)
+            button.setOnClickListener {
+                if (running) MemoryAnalysisForegroundService.requestPause(activity)
+                else MemoryAnalysisForegroundService.requestResume(activity)
+            }
         }
         summarizingLine?.let {
             it.text = summarizing
@@ -114,7 +133,9 @@ class ChatBackgroundActivity(
         }
         if (activity.isFinishing || activity.isDestroyed || !header.isAttachedToWindow) return
         val content = LayoutInflater.from(activity).inflate(R.layout.view_chat_activity_popover, null)
+        memoryRow = content.findViewById(R.id.activity_row_memory_scan)
         memoryLine = content.findViewById(R.id.activity_line_memory_scan)
+        memoryAction = content.findViewById(R.id.activity_action_memory_scan)
         summarizingLine = content.findViewById(R.id.activity_line_summarizing)
         val window = PopupWindow(
             content,
@@ -128,7 +149,9 @@ class ChatBackgroundActivity(
             setOnDismissListener {
                 if (popover === this) {
                     popover = null
+                    memoryRow = null
                     memoryLine = null
+                    memoryAction = null
                     summarizingLine = null
                 }
             }

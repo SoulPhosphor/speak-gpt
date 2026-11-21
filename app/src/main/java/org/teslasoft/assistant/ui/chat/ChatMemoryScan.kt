@@ -54,7 +54,8 @@ object ChatMemoryScan {
         activity.lifecycleScope.launch {
             val hasUnscanned = withContext(Dispatchers.IO) {
                 try {
-                    MemoryStore.getInstance(activity).chatHasUnscannedTranscripts(chatId)
+                    org.teslasoft.assistant.preferences.memory.archivist.Archivist
+                        .chatHasUnscannedMessages(activity, chatId)
                 } catch (_: Exception) {
                     false
                 }

@@ -29,4 +29,11 @@
     <TextView
         android:id="@+id/damaged_chat_model"
         style="@style/Widget.App.Row.Subtitle" />
+
+    <!-- Shown only for a resolved incident under Repaired Chats. -->
+    <TextView
+        android:id="@+id/damaged_chat_repair_result"
+        style="@style/Widget.App.Row.Subtitle"
+        android:text="@string/damaged_repair_fully_successful"
+        android:visibility="gone" />
 </LinearLayout>

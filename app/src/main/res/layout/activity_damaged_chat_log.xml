@@ -83,6 +83,26 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical" />
             </LinearLayout>
+
+            <!-- Resolved incidents: chats a verified repair fixed, kept as
+                 repair history (Stage 6A). -->
+            <LinearLayout
+                android:id="@+id/damaged_repaired_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.Section.Title"
+                    android:text="@string/damaged_repaired_section" />
+
+                <LinearLayout
+                    android:id="@+id/damaged_repaired_detections"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -124,6 +124,9 @@ object RegenerationRecovery {
             MessageIdentity.idOf(last) != originalId
         }
         return if (answersSameMessage && !isOriginal && unversioned && isRegeneratedReply) {
+            // The regenerated reply keeps the slot's permanent number.
+            org.teslasoft.assistant.preferences.MessageNumbers.numberOf(pending.original)
+                ?.let { last[org.teslasoft.assistant.preferences.MessageNumbers.KEY] = it }
             Outcome.Fold(last)
         } else {
             Outcome.Unchanged

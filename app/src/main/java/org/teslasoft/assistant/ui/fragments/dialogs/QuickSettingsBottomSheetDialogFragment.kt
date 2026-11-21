@@ -1224,16 +1224,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
         btnAddLoreBook?.setOnClickListener { openAddLoreBooksPicker() }
         switchChatExcluded?.setOnCheckedChangeListener { _, archive ->
-            val excluded = !archive
+            // The Memory Scanner reads this setting from the chat itself when
+            // it selects chats (Stage 6A); nothing else needs updating.
             preferences?.setChatArchiveEnabled(archive)
-            val appContext = context?.applicationContext ?: return@setOnCheckedChangeListener
-            Thread {
-                try {
-                    if (MemoryStore.isProvisioned(appContext)) {
-                        MemoryStore.getInstance(appContext).setChatTranscriptsExcluded(chatId, excluded)
-                    }
-                } catch (_: Exception) { /* capture also reconciles the durable pause bit on the next turn */ }
-            }.start()
         }
         setupMemorySceneRows()
         saveParametersLink = ModelParametersSaveLink(view.findViewById(R.id.btn_save_model_parameters)) { preferences }

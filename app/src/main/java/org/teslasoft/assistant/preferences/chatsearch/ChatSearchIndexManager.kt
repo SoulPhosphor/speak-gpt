@@ -43,6 +43,14 @@ class ChatSearchIndexManager private constructor(context: Context) {
         }
     }
 
+    /** Test-only: waits until every task already queued on the index
+     *  worker (refreshes scheduled by earlier saves) has finished, so a test
+     *  can set up state no background chat read will change. */
+    @androidx.annotation.VisibleForTesting
+    fun awaitIdleForTest(timeoutMillis: Long = 30_000) {
+        executor.submit {}.get(timeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
+
     fun scheduleChatRefresh(chatId: String, expectedRevision: String? = null) {
         if (chatId.isBlank()) return
         executor.execute { refreshChatBlocking(chatId, expectedRevision) }

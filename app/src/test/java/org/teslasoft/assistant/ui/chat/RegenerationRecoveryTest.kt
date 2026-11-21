@@ -73,6 +73,19 @@ class RegenerationRecoveryTest {
         assertEquals("r1", MessageIdentity.idOf(partial))
     }
 
+    @Test fun `a recovered regenerated reply keeps the slot's permanent number`() {
+        val original = reply("r1", "first answer", "100").apply {
+            put(org.teslasoft.assistant.preferences.MessageNumbers.KEY, 7.0)
+        }
+        val pending = RegenerationRecovery.decode(RegenerationRecovery.encode(pendingOver(user("u1"), original)))!!
+        // The interrupted regeneration was saved with a newer number.
+        val partial = reply("r1", "second, cut off", "200").apply {
+            put(org.teslasoft.assistant.preferences.MessageNumbers.KEY, 12.0)
+        }
+        val outcome = RegenerationRecovery.resolve(listOf(user("u1"), partial), pending) as Outcome.Fold
+        assertEquals(7L, org.teslasoft.assistant.preferences.MessageNumbers.numberOf(outcome.reply))
+    }
+
     @Test fun `earlier versions are kept when the original already had several`() {
         val original = reply("r1", "v2", "100")
         RegenerationRecovery.foldInto(original, mutableListOf(ChatAdapter.snapshotVariant(reply("r1", "v1", "50"))), "r1")

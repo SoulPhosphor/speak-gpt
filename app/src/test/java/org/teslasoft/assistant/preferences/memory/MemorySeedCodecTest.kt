@@ -506,26 +506,30 @@ class MemorySeedCodecTest {
     }
 
     @Test
-    fun archivePauseRoundTripsWithDurableBookmark() {
-        val data = MemorySeedCodec.parse(fixtureJson()).copy(
-            analysisBookmarks = listOf(
-                AnalysisChatBookmark(
-                    chatId = "chat-paused",
-                    lastStartedAt = "40",
-                    lastTranscriptId = "t40",
-                    skippedTranscriptIds = emptyList(),
-                    archivePaused = true,
-                    updatedAt = "2026-08-08T00:00:00Z"
-                )
+    fun olderBackupBookmarksAreReadButNewBackupsCarryOnlyMessageUuidBookmarks() {
+        // Stage 6A: a backup made before the chat became the scanner's source
+        // still parses its bookmarks (the migration maps them) ...
+        val older = JSONObject(fixtureJson()).put(
+            "analysis_bookmarks",
+            org.json.JSONArray().put(
+                JSONObject().put("chat_id", "chat-paused").put("last_transcript_id", "t40")
+                    .put("last_started_at", "40").put("archive_paused", true)
             )
-        )
+        ).toString()
+        assertTrue(MemorySeedCodec.parse(older).analysisBookmarks.single().archivePaused)
 
-        val encoded = MemorySeedCodec.serialize(data)
-        assertTrue(
-            JSONObject(encoded).getJSONArray("analysis_bookmarks")
-                .getJSONObject(0).getBoolean("archive_paused")
+        // ... but new backups write neither transcripts nor legacy bookmarks,
+        // only the message-UUID bookmarks.
+        val data = MemorySeedCodec.parse(fixtureJson()).copy(
+            scanProgress = listOf(ScanChatProgress("chat-1", listOf("m9", "m8")))
         )
-        assertTrue(MemorySeedCodec.parse(encoded).analysisBookmarks.single().archivePaused)
+        val encoded = JSONObject(MemorySeedCodec.serialize(data))
+        assertFalse(encoded.has("analysis_bookmarks"))
+        assertFalse(encoded.has("transcripts"))
+        assertEquals(
+            listOf("m9", "m8"),
+            MemorySeedCodec.parse(encoded.toString()).scanProgress.single().bookmarkAnchors
+        )
     }
 
     /* --------------------- Phase 1: Types / importance --------------------- */
