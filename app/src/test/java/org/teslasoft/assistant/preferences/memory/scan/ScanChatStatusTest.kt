@@ -50,6 +50,15 @@ class ScanChatStatusTest {
         assertEquals(ChatScanCoverage.Status.Range(1, 2), ScanChatStatus.coverage(at(1), chat))
     }
 
+    @Test fun coverageShowsPermanentNumbersAfterADeletion() {
+        // Message 1 was deleted; the chat was scanned through message 10.
+        val numbered = (2..12).map { n ->
+            ScanMessage("m$n", n.toLong(), "user", "t$n", true, null, null, null, "t$n")
+        }
+        val progress = ScanChatProgress("c", ScanPosition.anchors(numbered.map { it.id }, 8))
+        assertEquals(ChatScanCoverage.Status.Range(2, 10), ScanChatStatus.coverage(progress, numbered))
+    }
+
     @Test fun aLostBookmarkReadsMoreRatherThanLess() {
         val lost = ScanChatProgress("c", listOf("gone"))
         assertEquals(-1, ScanChatStatus.bookmarkIndex(lost, chat))

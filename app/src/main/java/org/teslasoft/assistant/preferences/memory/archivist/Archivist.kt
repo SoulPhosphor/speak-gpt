@@ -153,6 +153,7 @@ object Archivist {
     )
 
     private data class ChatCommit(
+        val chatId: String,
         val memoryIds: List<String>,
         val ruleIds: List<String>,
         val duplicatesSkipped: Int,
@@ -879,6 +880,19 @@ object Archivist {
             progressPercent = lastPercent
         )
 
+        /** The run record as it stands once [pending] is filed: saved in the
+         *  same transaction as that chat's outputs and bookmark, so history
+         *  never misses a chat that was committed. */
+        fun progressRowWith(pending: ChatCommit): ArchivistRunRecord = runRow.copy(
+            chatIdsJson = listToJson(analyzedChatIds + pending.chatId),
+            memoryIdsJson = listToJson(memoryIds + pending.memoryIds),
+            ruleIdsJson = listToJson(ruleIds + pending.ruleIds),
+            foundCount = memoryIds.size + pending.memoryIds.size,
+            failedChatIdsJson = listToJson(failedChats),
+            sourceRangesJson = ScanSourceRanges.encode(sourceRanges + listOfNotNull(pending.sourceRange)),
+            progressPercent = lastPercent
+        )
+
         val queue = initialRanges.toMutableList()
         var chatScansDone = 0
         var chatScansTotal = 0
@@ -964,7 +978,7 @@ object Archivist {
                         context, store, range, chatName, lorebookMode, basePrompt, memoryTypes,
                         modelTransport, model, temperature, maxSuggestions,
                         scannerAverageTokens, scannerMaximumTokens, verifiedContextTokens,
-                        runRow.runId, prefs, emit, ::progressRow,
+                        runRow.runId, prefs, emit, ::progressRowWith,
                         onCommitted = { commit ->
                             memoryIds.addAll(commit.memoryIds)
                             ruleIds.addAll(commit.ruleIds)
@@ -1202,7 +1216,7 @@ object Archivist {
         runId: String,
         prefs: Preferences,
         emit: (Int, Int) -> Unit,
-        progressRow: () -> ArchivistRunRecord,
+        progressRowWith: (ChatCommit) -> ArchivistRunRecord,
         onCommitted: (ChatCommit) -> Unit
     ): ChatCommit {
         val chatId = range.chatId
@@ -1351,9 +1365,11 @@ object Archivist {
                 )
                 val stored = store.commitScanRange(
                     range, newBookmark, emptyList(), emptyList(), prepared.records,
-                    runProgress = progressRow()
+                    runProgress = progressRowWith(
+                        ChatCommit(chatId, prepared.records.map { it.suggestionId }, emptyList(), 0, sourceRange)
+                    )
                 )
-                ChatCommit(stored.lorebookSuggestionIds, emptyList(), prepared.duplicatesSkipped, sourceRange)
+                ChatCommit(chatId, stored.lorebookSuggestionIds, emptyList(), prepared.duplicatesSkipped, sourceRange)
             } else {
                 val preparedMemories = prepareMemoryDrafts(
                     context, store, conversation, staged.flatMap { it.memories }, maxSuggestions
@@ -1362,10 +1378,15 @@ object Archivist {
                 val stored = store.commitScanRange(
                     range, newBookmark, preparedMemories.records, preparedRules, emptyList(),
                     relationshipHintsByMemoryId = preparedMemories.relationshipHintsByMemoryId,
-                    runProgress = progressRow(),
+                    runProgress = progressRowWith(
+                        ChatCommit(
+                            chatId, preparedMemories.records.map { it.memoryId },
+                            preparedRules.map { it.ruleId }, 0, sourceRange
+                        )
+                    ),
                     sourcesByMemoryId = preparedMemories.sourcesByMemoryId
                 )
-                ChatCommit(stored.memoryIds, stored.ruleIds, preparedMemories.duplicatesSkipped, sourceRange)
+                ChatCommit(chatId, stored.memoryIds, stored.ruleIds, preparedMemories.duplicatesSkipped, sourceRange)
             }
         } catch (e: Exception) {
             throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)

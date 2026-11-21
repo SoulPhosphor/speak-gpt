@@ -45,13 +45,15 @@ object ScanChatStatus {
         )
     }
 
-    /** The Create Outline screen's coverage: message numbers count every
-     *  message from 1, the numbering each message shows. */
+    /** The Create Outline screen's coverage, in permanent message numbers
+     *  (the numbers Message Details shows), which deleting a message never
+     *  changes. A message saved before it had a number counts by position. */
     fun coverage(progress: ScanChatProgress?, messages: List<ScanMessage>): ChatScanCoverage.Status? {
         val index = bookmarkIndex(progress, messages)
         val scanned = (0..index).filter { messages[it].eligible }
         if (scanned.isEmpty()) return ChatScanCoverage.Status.Unscanned
         if (!hasUnscanned(progress, messages)) return ChatScanCoverage.Status.Complete
-        return ChatScanCoverage.Status.Range(scanned.first() + 1, scanned.last() + 1)
+        fun numberAt(index: Int): Int = messages[index].number?.toInt() ?: (index + 1)
+        return ChatScanCoverage.Status.Range(numberAt(scanned.first()), numberAt(scanned.last()))
     }
 }
