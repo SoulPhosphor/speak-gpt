@@ -32,10 +32,14 @@ object ChatOutlineRunner {
 
     fun interface Starter {
         /** Starts a run; false when one could not be started. */
-        fun start(mode: SummarizerController.OutlineMode, redoIndex: Int): Boolean
+        fun start(mode: SummarizerController.OutlineMode, redoIndex: Int, promptId: String?): Boolean
     }
 
-    data class Request(val mode: SummarizerController.OutlineMode, val redoIndex: Int)
+    data class Request(
+        val mode: SummarizerController.OutlineMode,
+        val redoIndex: Int,
+        val promptId: String?
+    )
 
     private val starters = HashMap<String, Starter>()
     private val pending = HashMap<String, Request>()
@@ -52,16 +56,25 @@ object ChatOutlineRunner {
     }
 
     @Synchronized
-    fun start(chatId: String, mode: SummarizerController.OutlineMode, redoIndex: Int = -1): Boolean =
-        starters[chatId]?.start(mode, redoIndex) ?: false
+    fun start(
+        chatId: String,
+        mode: SummarizerController.OutlineMode,
+        redoIndex: Int = -1,
+        promptId: String? = null
+    ): Boolean = starters[chatId]?.start(mode, redoIndex, promptId) ?: false
 
     @Synchronized
     fun hasStarter(chatId: String): Boolean = starters.containsKey(chatId)
 
     /** Leaves a run for the chat screen to start when it is rebuilt. */
     @Synchronized
-    fun request(chatId: String, mode: SummarizerController.OutlineMode, redoIndex: Int = -1) {
-        if (chatId.isNotBlank()) pending[chatId] = Request(mode, redoIndex)
+    fun request(
+        chatId: String,
+        mode: SummarizerController.OutlineMode,
+        redoIndex: Int = -1,
+        promptId: String? = null
+    ) {
+        if (chatId.isNotBlank()) pending[chatId] = Request(mode, redoIndex, promptId)
     }
 
     @Synchronized

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Chat Outline screen (owner design, Nov 13 2026). Header: Back, "Chat
-     Outline", Delete Outlines, Save. Content: the chat's full title, Generate
-     New Outline, Replace All Outlines With New, the run status, the Tags
-     line, then one tab per outline above a frame showing it as markdown (or
+     Outline", Delete Outlines, Save. Content: the chat's full title, the
+     Outline Prompt dropdown and gear, Generate New Outline, the run status,
+     the Tags line, then one tab per outline above a frame showing it as markdown (or
      its raw text while Edit is on). Every appearance comes from shared
      styles; this layout holds structure only. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -63,15 +63,30 @@
                 style="@style/Widget.App.ChatOutline.ScanProgress"
                 android:visibility="gone" />
 
+            <!-- Outline Prompt: which prompt Generate New Outline uses (or
+                 New Prompt), and a gear that opens it in Summarizer Prompts. -->
+            <LinearLayout style="@style/Widget.App.Page.ControlRow">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:labelFor="@+id/text_outline_prompt"
+                    android:text="@string/chat_outline_prompt_label" />
+
+                <TextView
+                    android:id="@+id/text_outline_prompt"
+                    style="@style/Widget.App.Dropdown.CanonicalValue.Trailing.Fill" />
+
+                <ImageButton
+                    android:id="@+id/btn_outline_prompt_gear"
+                    style="@style/Widget.App.Dropdown.TrailingGear"
+                    android:contentDescription="@string/image_gen_action_edit_prompt"
+                    android:tooltipText="@string/image_gen_action_edit_prompt" />
+            </LinearLayout>
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_generate_new_outline"
                 style="@style/AppButton.Primary.Inline.Centered.BelowIntro"
                 android:text="@string/chat_outline_generate_new" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_replace_all_outlines"
-                style="@style/AppButton.Primary.Inline.Centered.BelowIntro"
-                android:text="@string/chat_outline_replace_all" />
 
             <LinearLayout
                 android:id="@+id/row_outline_status"

@@ -3761,17 +3761,22 @@
     <string name="chat_outline_tab_numbered">Outline %1$d</string>
     <string name="chat_outline_tags_label">Tags:</string>
     <string name="chat_outline_generate_new">Generate New Outline</string>
-    <string name="chat_outline_replace_all">Replace All Outlines With New</string>
+    <!-- Outline prompt choice and limit (owner-approved wording, Nov 22 2026). -->
+    <string name="chat_outline_prompt_label">Outline Prompt</string>
+    <string name="chat_outline_new_prompt">New Prompt</string>
+    <string name="chat_outline_new_prompt_toast">Using a new prompt requires creating one</string>
+    <string name="chat_outline_limit_title">Outline Number Reached</string>
+    <string name="chat_outline_limit_body">Please delete one outline or use the ⋮ menu to replace one of the existing outlines.</string>
+    <string name="chat_outline_redo_title">Redo This Outline?</string>
+    <string name="chat_outline_redo_body">This outline will be replaced using the prompt selected below.</string>
     <string name="chat_outline_creating">Creating outline…</string>
     <string name="chat_outline_menu_edit">Edit</string>
     <string name="chat_outline_menu_redo">Redo This Outline</string>
     <string name="chat_outline_menu_delete">Delete</string>
     <string name="chat_outline_delete_all_desc">Delete Outlines</string>
-    <string name="chat_outline_replace_all_title">Replace All Outlines?</string>
-    <string name="chat_outline_replace_all_body">This will delete all previously existing outlines and replace them with a single new one. This cannot be undone.</string>
     <string name="chat_outline_delete_all_title">Delete Outlines?</string>
     <string name="chat_outline_delete_all_body">This will delete all tags and current outlines. You will still be allowed to create new outlines in the future.</string>
-    <string name="chat_outline_delete_one_title">Delete Outline?</string>
+    <string name="chat_outline_delete_one_title">Delete This Outline?</string>
     <string name="chat_outline_delete_one_body">This outline will be permanently deleted. This cannot be undone.</string>
     <string name="outline_dialog_title">Creating Outline</string>
     <string name="outline_dialog_complete">Outline complete!</string>

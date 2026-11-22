@@ -909,7 +909,7 @@ The shown tab uses `Widget.App.PromptTab.Active`; other tabs use `Widget.App.Pro
 
 ### Chat Outline screen
 
-The Chat Outline screen (`activity_chat_outline.xml`, owner design Nov 13 2026) is laid out like the Compaction Summary screen from shared families: the header (`ActionBar`, `BackButton`, `Title.NearBack`, a `ChainedButton` trash can, `SaveButton`), `Widget.App.Page.Content`, the chat's title centered as `Widget.App.ChatOutline.ChatTitle` (a centered `Widget.App.Section.Title`, owner ruling Nov 18 2026), Generate New Outline and Replace All Outlines With New as `AppButton.Primary.Inline.Centered.BelowIntro`, and the outline tabs on the `VersionTabs` family with `PromptTab` / `PromptTab.Active`. It adds only:
+The Chat Outline screen (`activity_chat_outline.xml`, owner design Nov 13 2026) is laid out like the Compaction Summary screen from shared families: the header (`ActionBar`, `BackButton`, `Title.NearBack`, a `ChainedButton` trash can, `SaveButton`), `Widget.App.Page.Content`, the chat's title centered as `Widget.App.ChatOutline.ChatTitle` (a centered `Widget.App.Section.Title`, owner ruling Nov 18 2026), the Outline Prompt line (a `Widget.App.Page.ControlRow` holding `Widget.App.Dropdown.CanonicalLabel`, `Widget.App.Dropdown.CanonicalValue.Trailing.Fill` and `Widget.App.Dropdown.TrailingGear`), Generate New Outline as `AppButton.Primary.Inline.Centered.BelowIntro`, and the outline tabs on the `VersionTabs` family with `PromptTab` / `PromptTab.Active`. It adds only:
 
 - `Widget.App.ChatOutline.Text` — a tab's outline shown as formatted markdown inside `VersionTabs.Frame` (`version_tab_field_padding`, `chat_outline_text_size`).
 - `Widget.App.ChatOutline.Field` — the same tab's raw markdown while Edit is on (`VersionTabs.Field` with the outline text size and color).
@@ -919,6 +919,8 @@ The Chat Outline screen (`activity_chat_outline.xml`, owner design Nov 13 2026) 
 Its Tags box is the standard label-above-box field (`Widget.App.Field.Label.AfterRow`, then `Widget.App.Field.Box`) in the bounded, internally-scrolling form: one line tall, growing with the tags up to ten lines, then scrolling inside the box (`BoundedFieldScroll` lets it scroll inside the page).
 
 Its run progress uses the shared progress pop-up (`dialog_compaction_progress.xml`) with the outline's title and completion text.
+
+Its pop-ups use shared families: Outline Number Reached is a standard dialog with `dialog_single_action.xml`; Rename is the name-entry dialog (`dialog_name_entry.xml`); Redo This Outline (`dialog_outline_redo.xml`) is a standard dialog whose custom view holds a `Widget.App.Dialog.DropdownLine` (a `Widget.App.Dropdown.CanonicalValue.Fill` and a `Widget.App.Dropdown.TrailingGear`) above `dialog_two_actions_cancel_first.xml`; Delete This Outline uses the same cancel-first confirmation as the header trash can.
 
 ### Prompt tab row
 
@@ -1106,6 +1108,19 @@ semantic theme roles. Every base theme and every palette overlay must define
 them. Dropdown drawables and styles resolve only those roles; layouts and Kotlin
 must not supply local dropdown colors. This is what allows a palette to restyle
 every closed dropdown and open menu without editing individual screens.
+
+#### Dropdown with a trailing gear
+
+When a dropdown chooses an item that can also be opened to read or edit, a
+gear may follow it on the same line: `Widget.App.Dropdown.TrailingGear` (a
+borderless `ic_settings` icon, `dropdown_trailing_gear_gap` after the
+dropdown, flush with the line's end). The dropdown only selects; the gear
+alone opens the selected item. In a page row the dropdown is
+`Widget.App.Dropdown.CanonicalValue.Trailing.Fill` after its label; inside a
+pop-up the line is `Widget.App.Dialog.DropdownLine` (inset like the pop-up's
+message, `dialog_dropdown_line_gap` above it) holding
+`Widget.App.Dropdown.CanonicalValue.Fill`. Current users: Chat Outline's
+Outline Prompt line and its Redo This Outline pop-up.
 
 #### Compact provider dropdown in a model picker card
 
