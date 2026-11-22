@@ -482,6 +482,20 @@ class ScanReconciliationTest {
         assertNull(CoveredEntries.fromPayload("not json"))
     }
 
+    @Test fun everyPassageLeftOutBecauseOfACoveringMemoryIsKept() {
+        val dependency = MemoryDependency("m1", "fp", "h")
+        val sections = (1..50).map { n ->
+            CoveredEntry(dependency, listOf(PassageRef("u$n", 0, 10)))
+        }
+        val merged = CoveredEntries.merge(sections).single()
+        assertEquals(50, merged.passages.size)
+        val rows = (1..40L).map { row(it, "u$it") }
+        val validated = CoveredEntries.validate(
+            listOf(ArchivistResponseParser.RawCovered((1..40L).toList(), "M1")), mapOf("M1" to "m1"), rows
+        ) { dependency }
+        assertEquals(40, validated.single().passages.size)
+    }
+
     @Test fun theParserReadsAlreadyCoveredEntriesAndSkipsMalformedOnes() {
         val parsed = ArchivistResponseParser.parse(
             """{"memories":[],"already_covered":[

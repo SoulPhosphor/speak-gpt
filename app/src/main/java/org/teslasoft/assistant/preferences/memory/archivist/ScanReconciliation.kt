@@ -112,7 +112,9 @@ object CoveredEntries {
             byMemory.getOrPut(memoryId) { dependency to LinkedHashSet() }.second.addAll(passages)
         }
         return byMemory.values.map { (dependency, passages) ->
-            CoveredEntry(dependency, WorkingDrafts.boundedSources(passages.toList()))
+            // Every passage is kept: these are the only record of what was
+            // left out, and are read again if the memory changes.
+            CoveredEntry(dependency, passages.toList())
         }
     }
 
@@ -159,7 +161,7 @@ object CoveredEntries {
             val key = e.dependency.memoryId + "\u0000" + e.dependency.fingerprint
             val prior = out[key]
             out[key] = if (prior == null) e
-                else prior.copy(passages = WorkingDrafts.boundedSources(prior.passages + e.passages))
+                else prior.copy(passages = (prior.passages + e.passages).distinct())
         }
         return out.values.toList()
     }
