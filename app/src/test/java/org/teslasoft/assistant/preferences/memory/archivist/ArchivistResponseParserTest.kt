@@ -323,7 +323,7 @@ class ArchivistResponseParserTest {
         val parsed = ArchivistResponseParser.parse(
             """{"memories":[],"draft_edits":[
                 {"replaces":["D4"," d2 "],"content":"  Combined prose  ","tags":["a","A","b"]},
-                {"replaces":["D9"],"content":"Cleared type","type_id":null},
+                {"replaces":["D9"],"content":"Copied example","type_id":"","tags":[]},
                 {"replaces":["D1"],"content":"Same type"}
               ],"withdrawn_drafts":["D3","D3",""]}"""
         )
@@ -332,9 +332,10 @@ class ArchivistResponseParserTest {
         assertEquals(listOf("D4", "d2"), combined.refs)
         assertEquals("Combined prose", combined.content)
         assertEquals(listOf("a", "b"), combined.tags)
-        assertFalse(combined.typeGiven)
-        assertTrue(parsed.draftEdits[1].typeGiven)
+        assertNull(combined.typeId)
+        // A blank Type or empty tags copied from the example keep the draft's own.
         assertNull(parsed.draftEdits[1].typeId)
+        assertNull(parsed.draftEdits[1].tags)
         assertNull(parsed.draftEdits[2].tags)
         assertEquals(listOf("D3"), parsed.withdrawnDrafts)
     }

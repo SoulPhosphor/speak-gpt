@@ -1640,7 +1640,8 @@ object Archivist {
                         "chat=$chatId: ${parsed.dropped} proposal(s) failed validation and were dropped")
                 }
                 val (operations, unresolved) = WorkingDraftEdits.resolve(
-                    parsed.draftEdits, parsed.withdrawnDrafts, protocol.draftIdByRef, working
+                    parsed.draftEdits, parsed.withdrawnDrafts, protocol.draftIdByRef,
+                    working.drafts.map { it.id }.toSet(), WorkingDraftEdits.samePlacement(working)
                 ) { problems ->
                     ArchivistRequestExecutor.draftEditRepair(
                         systemPrompt = requestSystemPrompt,

@@ -34,8 +34,8 @@ class ArchivistWorkingDraftsTest {
 
     private fun section(n: Int) = listOf(ref("m$n"))
 
-    private fun edit(vararg refs: String, content: String, type: String? = null, typeGiven: Boolean = false) =
-        RawDraftEdit(refs.toList(), content, type, typeGiven, null)
+    private fun edit(vararg refs: String, content: String, type: String? = null, tags: List<String>? = null) =
+        RawDraftEdit(refs.toList(), content, type, tags)
 
     /** Every draft shown, as a request built from the collection would. */
     private fun shown(drafts: WorkingDrafts) = drafts.drafts.associate { "D${it.id}" to it.id }
@@ -52,7 +52,10 @@ class ArchivistWorkingDraftsTest {
         sources: List<PassageRef> = emptyList(),
         repair: suspend (List<String>) -> Pair<List<RawDraftEdit>, List<String>>? = noRepair
     ): SectionDraftChanges = runBlocking {
-        val (ops, unresolved) = WorkingDraftEdits.resolve(edits, withdrawals, shown(drafts), drafts, repair)
+        val (ops, unresolved) = WorkingDraftEdits.resolve(
+            edits, withdrawals, shown(drafts), drafts.drafts.map { it.id }.toSet(),
+            WorkingDraftEdits.samePlacement(drafts), repair
+        )
         SectionDraftChanges(ops, unresolved.first, newDrafts, sources, unresolved.second)
     }
 
@@ -139,7 +142,8 @@ class ArchivistWorkingDraftsTest {
         val drafts = start("Likes oolong", "Lives in Leeds")
         val (ops, unresolved) = runBlocking {
             WorkingDraftEdits.resolve(
-                listOf(edit("D2", content = "Lives in York")), emptyList(), mapOf("D1" to 1), drafts, noRepair
+                listOf(edit("D2", content = "Lives in York")), emptyList(), mapOf("D1" to 1), setOf(1, 2),
+                WorkingDraftEdits.samePlacement(drafts), noRepair
             )
         }
         assertTrue(ops.isEmpty())
@@ -226,12 +230,27 @@ class ArchivistWorkingDraftsTest {
         assertEquals(listOf("Garden plan", "Garden plan v2"), drafts.applying(result).drafts.take(2).map { it.memory.content })
     }
 
-    @Test fun anEditCanSetNoTypeOrKeepTheType() {
-        val drafts = start("Likes oolong")
+    @Test fun anEditKeepsTheDraftsTypeAndTagsUnlessItGivesNewOnes() {
+        val drafts = WorkingDrafts().applying(SectionDraftChanges(newDrafts = listOf(memory("Likes oolong", tags = listOf("tea")))))
         val kept = drafts.applying(changes(drafts, edits = listOf(edit("D1", content = "Likes oolong a lot"))))
         assertEquals("type-fact", kept.drafts.single().memory.typeIdSuggestion)
-        val cleared = drafts.applying(changes(drafts, edits = listOf(edit("D1", content = "x", type = null, typeGiven = true))))
-        assertEquals(null, cleared.drafts.single().memory.typeIdSuggestion)
+        assertEquals(listOf("tea"), kept.drafts.single().memory.tags)
+        val changed = drafts.applying(
+            changes(drafts, edits = listOf(edit("D1", content = "x", type = "type-habit", tags = listOf("drinks"))))
+        )
+        assertEquals("type-habit", changed.drafts.single().memory.typeIdSuggestion)
+        assertEquals(listOf("drinks"), changed.drafts.single().memory.tags)
+    }
+
+    @Test fun theCombiningRuleIsSuppliedByTheCaller() {
+        val ids = setOf(1, 2)
+        val refs = mapOf("D1" to 1, "D2" to 2)
+        val combine = listOf(RawDraftEdit(listOf("D1", "D2"), "both", null, null))
+        val open = WorkingDraftEdits.validate(combine, emptyList(), refs, ids)
+        assertEquals(1, open.valid.size)
+        val closed = WorkingDraftEdits.validate(combine, emptyList(), refs, ids, { _, label -> "$label differ." })
+        assertTrue(closed.valid.isEmpty())
+        assertEquals(listOf("D1 and D2 differ."), closed.problems)
     }
 
     @Test fun anExactRepeatMergesIntoTheExistingDraft() {
@@ -253,7 +272,7 @@ class ArchivistWorkingDraftsTest {
         // A paused scan resumed from the saved collection continues exactly
         // as an uninterrupted one.
         val next = SectionDraftChanges(
-            operations = listOf(DraftOperation.Edit(listOf(3), "April, then June", null, false, null)),
+            operations = listOf(DraftOperation.Edit(listOf(3), "April, then June", null, null)),
             newDrafts = listOf(memory("Bought boxes")), sources = section(5)
         )
         assertEquals(withAlternative.applying(next), restored.applying(next))

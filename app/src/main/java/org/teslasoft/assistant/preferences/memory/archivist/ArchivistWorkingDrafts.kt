@@ -43,7 +43,6 @@ sealed class DraftOperation {
         override val ids: List<Int>,
         val content: String,
         val typeId: String?,
-        val typeGiven: Boolean,
         val tags: List<String>?
     ) : DraftOperation()
 
@@ -57,7 +56,6 @@ data class DraftAlternative(
     val alternativeOf: List<Int>,
     val content: String,
     val typeId: String?,
-    val typeGiven: Boolean,
     val tags: List<String>?
 )
 
@@ -98,7 +96,7 @@ data class WorkingDrafts(
                     if (named.size != op.ids.distinct().size) continue
                     val base = named.first()
                     val edited = base.copy(
-                        memory = edit(base.memory, named.map { it.memory }, op.content, op.typeId, op.typeGiven, op.tags),
+                        memory = edit(base.memory, named.map { it.memory }, op.content, op.typeId, op.tags),
                         sources = boundedSources(named.flatMap { it.sources } + changes.sources)
                     )
                     list.removeAll { it.id in op.ids && it.id != base.id }
@@ -110,7 +108,7 @@ data class WorkingDrafts(
             val base = list.firstOrNull { it.id in alternative.alternativeOf } ?: continue
             val memory = base.memory.copy(
                 content = alternative.content,
-                typeIdSuggestion = if (alternative.typeGiven) alternative.typeId else base.memory.typeIdSuggestion,
+                typeIdSuggestion = alternative.typeId ?: base.memory.typeIdSuggestion,
                 tags = alternative.tags ?: base.memory.tags
             )
             next = add(list, memory, changes.sources, next, alternative.alternativeOf.filter { id -> list.any { it.id == id } })
@@ -164,11 +162,10 @@ data class WorkingDrafts(
             named: List<ArchivistResponseParser.DraftMemory>,
             content: String,
             typeId: String?,
-            typeGiven: Boolean,
             tags: List<String>?
         ): ArchivistResponseParser.DraftMemory = base.copy(
             content = content,
-            typeIdSuggestion = if (typeGiven) typeId else base.typeIdSuggestion,
+            typeIdSuggestion = typeId ?: base.typeIdSuggestion,
             tags = tags ?: base.tags,
             relatedExistingMemoryIds = named.flatMap { it.relatedExistingMemoryIds }.distinct().take(10),
             unresolvedTargetReference = named.any { it.unresolvedTargetReference }
@@ -227,12 +224,15 @@ data class WorkingDrafts(
 }
 
 /**
- * Validation and targeted repair of the working-draft operations in one
- * response. An operation changes a draft only when every reference it names
- * was shown in that request, its content is usable, its drafts share one
- * placement, and no other operation names the same draft. Anything else is
- * isolated: the valid operations still apply, and the failed ones get one
- * narrow repair request that may touch only the drafts they named.
+ * Validation and targeted repair of the edit operations in one response,
+ * against app-issued IDs. Nothing here knows what the IDs stand for: the
+ * caller says which IDs exist and supplies its own rule for which items may
+ * be combined ([combineProblem]). An operation applies only when every
+ * reference it names was shown in that request, its content is usable, the
+ * caller's rule allows the combination, and no other operation names the same
+ * item. Anything else is isolated: the valid operations still apply, and the
+ * failed ones get one narrow repair request that may touch only the items
+ * they named.
  */
 object WorkingDraftEdits {
 
@@ -254,18 +254,31 @@ object WorkingDraftEdits {
     internal fun describeRef(ref: String): String =
         if (Regex("D\\d{1,7}").matches(ref)) ref else "An unrecognized reference"
 
+    /** The memory scanner's combining rule: drafts are combined only when
+     *  they share one placement (scope plus targets). */
+    fun samePlacement(drafts: WorkingDrafts): (ids: List<Int>, label: String) -> String? {
+        val byId = drafts.drafts.associateBy { it.id }
+        return { ids, label ->
+            if (ids.mapNotNull { byId[it] }.map { WorkingDrafts.placement(it.memory) }.distinct().size > 1)
+                "$label have different scopes or targets and cannot be combined." else null
+        }
+    }
+
     /**
-     * @param exposed the request's references ("D4") to stable draft IDs.
-     * @param allowed when given, only these drafts may be named (a repair).
+     * @param exposed the request's references ("D4") to stable IDs.
+     * @param present the IDs that currently exist.
+     * @param combineProblem the caller's rule: a problem line when the named
+     *  items may not be combined, else null.
+     * @param allowed when given, only these items may be named (a repair).
      */
     fun validate(
         edits: List<ArchivistResponseParser.RawDraftEdit>,
         withdrawals: List<String>,
         exposed: Map<String, Int>,
-        drafts: WorkingDrafts,
+        present: Set<Int>,
+        combineProblem: (ids: List<Int>, label: String) -> String? = { _, _ -> null },
         allowed: Set<Int>? = null
     ): Validation {
-        val present = drafts.drafts.associateBy { it.id }
         val problems = LinkedHashSet<String>()
         val failed = ArrayList<Failed>()
         val candidates = ArrayList<Pair<DraftOperation, ArchivistResponseParser.RawDraftEdit?>>()
@@ -287,11 +300,10 @@ object WorkingDraftEdits {
                     problems.add("${describeRef(it.trim().uppercase(Locale.ROOT))} is not a supplied working draft.")
                 }
                 edit.content.isBlank() -> problems.add("The edit to $label has no content.")
-                ids.map { WorkingDrafts.placement(present.getValue(it).memory) }.distinct().size > 1 ->
-                    problems.add("$label have different scopes or targets and cannot be combined.")
+                ids.size > 1 && combineProblem(ids, label) != null -> problems.add(combineProblem(ids, label)!!)
                 else -> {
                     candidates.add(
-                        DraftOperation.Edit(ids, edit.content, edit.typeId, edit.typeGiven, edit.tags) to edit
+                        DraftOperation.Edit(ids, edit.content, edit.typeId, edit.tags) to edit
                     )
                     continue
                 }
@@ -319,7 +331,7 @@ object WorkingDraftEdits {
             if (clash.isEmpty()) {
                 valid.add(op)
             } else {
-                clash.forEach { problems.add("${drafts.ref(it)} was named by more than one edit or withdrawal.") }
+                clash.forEach { problems.add("D$it was named by more than one edit or withdrawal.") }
                 failed.add(Failed(raw, op.ids))
             }
         }
@@ -337,12 +349,13 @@ object WorkingDraftEdits {
         edits: List<ArchivistResponseParser.RawDraftEdit>,
         withdrawals: List<String>,
         exposed: Map<String, Int>,
-        drafts: WorkingDrafts,
+        present: Set<Int>,
+        combineProblem: (ids: List<Int>, label: String) -> String?,
         /** One repair request: the operations it returned, or null when it
          *  could not be read. */
         repair: suspend (problems: List<String>) -> Pair<List<ArchivistResponseParser.RawDraftEdit>, List<String>>?
     ): Pair<List<DraftOperation>, Pair<List<DraftAlternative>, Int>> {
-        val first = validate(edits, withdrawals, exposed, drafts)
+        val first = validate(edits, withdrawals, exposed, present, combineProblem)
         if (first.failed.isEmpty()) return first.valid to (emptyList<DraftAlternative>() to 0)
 
         val touched = first.valid.flatMap { it.ids }.toSet()
@@ -356,7 +369,7 @@ object WorkingDraftEdits {
                 null
             }
             answer?.let { (repairEdits, repairWithdrawals) ->
-                validate(repairEdits, repairWithdrawals, exposed, drafts, allowed = repairable).valid
+                validate(repairEdits, repairWithdrawals, exposed, present, combineProblem, allowed = repairable).valid
             }.orEmpty()
         }
         val resolvedIds = repaired.flatMap { it.ids }.toSet()
@@ -364,7 +377,7 @@ object WorkingDraftEdits {
         val alternatives = remaining.mapNotNull { f ->
             val edit = f.edit ?: return@mapNotNull null
             if (f.knownIds.isEmpty() || edit.content.isBlank()) return@mapNotNull null
-            DraftAlternative(f.knownIds, edit.content, edit.typeId, edit.typeGiven, edit.tags)
+            DraftAlternative(f.knownIds, edit.content, edit.typeId, edit.tags)
         }
         return (first.valid + repaired) to (alternatives to remaining.size)
     }

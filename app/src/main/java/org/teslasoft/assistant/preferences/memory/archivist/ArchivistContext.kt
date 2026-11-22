@@ -308,7 +308,7 @@ Return exactly one JSON object with this Associative Memory shape:
       "replaces": ["supplied D reference"],
       "content": "complete corrected memory prose",
       "type_id": "optional supplied Memory Type id",
-      "tags": []
+      "tags": ["optional"]
     }
   ],
   "withdrawn_drafts": ["supplied D reference"]
@@ -318,7 +318,7 @@ Every array may be empty or omitted.
 
 Use only target_refs supplied below and only when each target kind matches the proposal scope. Do not return target names as references. If no supplied target is correct, leave target_refs empty. Use related_existing_memory_refs when a new proposal updates, contradicts, narrows, extends, or meaningfully continues a supplied existing memory. Emit no proposal when the information is already adequately represented by an existing memory.
 
-Working drafts are this scan's own unsaved proposals from earlier sections of this conversation, each with a D reference. Do not propose a working draft again. When the new messages correct, complete, or change the meaning of a working draft, return a draft edit instead of a new proposal: name the draft in replaces and write the complete new prose, keeping everything in it that is still true and worth remembering. A draft you do not name keeps its current text. Name more than one draft in one edit only when the messages show they describe the same thing and belong in one memory. An edit keeps the draft's scope and targets; if those are wrong, leave the draft unchanged. Withdraw a draft only when the messages show it was a mistake and nothing in it is worth keeping. Name each draft in at most one edit or withdrawal. Use only D references supplied below; never invent one. Do not create a new proposal from earlier messages alone.
+Working drafts are this scan's own unsaved proposals from earlier sections of this conversation, each with a D reference. Do not propose a working draft again. When the new messages correct, complete, or change the meaning of a working draft, return a draft edit instead of a new proposal: name the draft in replaces and write the complete new prose, keeping everything in it that is still true and worth remembering. A draft you do not name keeps its current text. Name more than one draft in one edit only when the messages show they describe the same thing and belong in one memory. An edit keeps the draft's scope and targets; if those are wrong, leave the draft unchanged. Omit type_id and tags in an edit to keep the draft's own. Withdraw a draft only when the messages show it was a mistake and nothing in it is worth keeping. Name each draft in at most one edit or withdrawal. Use only D references supplied below; never invent one. Do not create a new proposal from earlier messages alone.
 
 The already-proposed model rules were proposed earlier in this scan. Do not repeat them.
 

@@ -113,11 +113,9 @@ object ArchivistResponseParser {
     data class RawDraftEdit(
         val refs: List<String>,
         val content: String,
+        /** A new Type id, or null to keep the draft's Type. */
         val typeId: String?,
-        /** True when the edit carried "type_id" at all; an absent field keeps
-         *  the draft's Type, while a present empty one means No Type. */
-        val typeGiven: Boolean,
-        /** Null when the edit carried no "tags": the draft keeps its tags. */
+        /** New tags, or null (absent or empty) to keep the draft's tags. */
         val tags: List<String>?
     )
 
@@ -248,9 +246,10 @@ object ArchivistResponseParser {
                     RawDraftEdit(
                         refs = refs,
                         content = o.optString("content").trim(),
+                        // A copied example's blank Type or empty tags never
+                        // clear what the draft already has.
                         typeId = o.optString("type_id").trim().ifEmpty { null }?.takeIf { it != "null" },
-                        typeGiven = o.has("type_id"),
-                        tags = readTags(o)
+                        tags = readTags(o)?.takeIf { it.isNotEmpty() }
                     )
                 )
             }
