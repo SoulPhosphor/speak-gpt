@@ -611,7 +611,7 @@
     <string name="tile_personas_title">Companions</string>
     <string name="tile_personas_subtitle">Manage companions</string>
     <string name="tile_personas_desc">Define personalities for your AI companions to use. One must be active in every chat.</string>
-    <string name="tile_characters_title">Characters</string>
+    <string name="tile_characters_title">Personas &amp; Prompts</string>
     <string name="tile_characters_desc">Companions, activation prompts and your system message — all in one place.</string>
     <string name="title_characters">Characters</string>
     <string name="tile_activation_prompts_title">Activation Prompts</string>
@@ -4017,6 +4017,8 @@
     <string name="chat_behaviors_title">Chat Behaviors</string>
     <string name="chat_behaviors_allow_message_visibility">Allow Message Visibility</string>
     <string name="chat_behaviors_allow_message_visibility_hint">Allows you to hide messages from you or the AI from the AI. They will still be visible in your chat history and this is reversible.</string>
+    <string name="chat_behaviors_auto_insert_second_asterisk">Automatically Insert Second Asterisk</string>
+    <string name="chat_behaviors_auto_insert_second_asterisk_hint">After typing an * a second one will appear after your cursor.</string>
     <!-- Message menu actions for hiding a message from the AI (owner wording, Nov 2 2026). -->
     <string name="message_make_hidden">Make Hidden</string>
     <string name="message_make_visible">Make Visible</string>
@@ -4587,6 +4589,7 @@
     <string name="memory_search_save_failed">The numbers could not be saved: %1$s</string>
     <string name="model_rule_choose_ai_model">Choose AI Model</string>
     <string name="model_rule_add_another_ai">Add Another AI</string>
+    <string name="model_rule_current_chat_model">Current Chat Model</string>
     <string name="chat_usage_alert_toggle">Show Chat Usage Alert</string>
     <string name="chat_usage_alert_amount_label">Combined Usage Alert Amount</string>
     <string name="chat_usage_alert_amount_hint">If the estimated cost of the conversation gets to this amount, a pop-up alert will show.</string>

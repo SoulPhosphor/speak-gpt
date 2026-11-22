@@ -806,6 +806,14 @@ class Preferences internal constructor(
         putGlobalBoolean("memory_browser_show_text", state, true)
     }
 
+    /** Chat Behaviors: Automatically Insert Second Asterisk (off by default). */
+    fun getAutoInsertSecondAsterisk(): Boolean =
+        getGlobalBoolean("chat_auto_insert_second_asterisk", false)
+
+    fun setAutoInsertSecondAsterisk(state: Boolean) {
+        putGlobalBoolean("chat_auto_insert_second_asterisk", state, false)
+    }
+
     fun getAllowMessageVisibility(): Boolean =
         getGlobalBoolean("chat_allow_message_visibility", false)
 

@@ -36,7 +36,9 @@ internal class SavedModelPickerAdapter(
     /** Optional multi-select ownership; ordinary callers keep the existing single selection. */
     private val isSelected: ((ModelIdentity) -> Boolean)? = null,
     private val onParameters: ((ModelIdentity) -> Unit)? = null,
-    private val onReasoning: ((ModelIdentity) -> Unit)? = null
+    private val onReasoning: ((ModelIdentity) -> Unit)? = null,
+    /** False where only the model is chosen: no provider label, dropdown or routing gear. */
+    private val providerControls: Boolean = true
 ) : BaseAdapter() {
 
     enum class Source { FAVORITES, RECENT, CATALOG }
@@ -101,8 +103,8 @@ internal class SavedModelPickerAdapter(
         holder.profile.text = if (catalog) null
             else context.getString(R.string.model_picker_profile_prefix, row.profileName)
         // The provider part is a dropdown when the row has providers to pick.
-        val hasProviderChoice = !catalog && row.providerOptions.isNotEmpty()
-        holder.route.isVisible = !catalog && !hasProviderChoice
+        val hasProviderChoice = providerControls && !catalog && row.providerOptions.isNotEmpty()
+        holder.route.isVisible = providerControls && !catalog && !hasProviderChoice
         holder.route.text = row.routingLabel
         holder.providerDropdown.isVisible = hasProviderChoice
         holder.providerDropdown.text = row.routingLabel
@@ -133,7 +135,7 @@ internal class SavedModelPickerAdapter(
             else context.startActivity(ReasoningSettingsActivity.createIntent(context, target.modelId, target.endpointId))
         }
 
-        holder.routing.isVisible = row.supportsRouting
+        holder.routing.isVisible = providerControls && row.supportsRouting
         holder.routing.contentDescription = context.getString(R.string.favorite_routing_settings_desc, target.modelId)
         holder.routing.setImageResource(if (routingConfigured) R.drawable.ic_settings else R.drawable.ic_settings_outline)
         holder.routing.setOnClickListener { onRoute(target) }

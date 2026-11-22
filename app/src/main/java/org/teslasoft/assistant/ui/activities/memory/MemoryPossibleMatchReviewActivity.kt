@@ -210,7 +210,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         meter.bind(record)
         val inlineContent = card.findViewById<TextInputEditText>(R.id.review_edit_content)
         inlineContent.doAfterTextChanged {
-            meter.bind(MemoryTokenBudget.Input.forEdit(record, it?.toString().orEmpty(), record.tagsJson))
+            meter.refresh(MemoryTokenBudget.Input.forEdit(record, it?.toString().orEmpty(), record.tagsJson))
         }
         card.findViewById<ImageView>(R.id.review_icon).setImageResource(iconForScope(record.scope))
         // Titles are retired (§3.1): the review card shows content, not a title.

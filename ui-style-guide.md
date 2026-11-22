@@ -1125,6 +1125,16 @@ message, `dialog_dropdown_line_gap` above it) holding
 `Widget.App.Dropdown.CanonicalValue.Fill`. Current users: Chat Outline's
 Outline Prompt line and its Redo This Outline pop-up.
 
+#### Selected model picker card
+
+`Widget.App.ModelPicker.Card` draws `bg_saved_model_card`. Every card, selected
+or not, uses the `colorSurfaceContainerHigh` fill. The selected (activated)
+card adds only a dashed outline, like a coupon's cut line, in the Quick Settings
+outline color (`colorOutlineVariant`). Its thickness, dash and gap are the chat Selection Mode outline's
+(`chat_selection_outline_width`, `chat_selection_outline_dash_length` and
+`chat_selection_outline_dash_gap`, owner direction), so both cut lines share one
+pattern.
+
 #### Compact provider dropdown in a model picker card
 
 `Widget.App.ModelPicker.SubtitleLine` holds a saved model card's subtitle:
@@ -1150,7 +1160,9 @@ menu), `Widget.App.SearchPill.Divider` (a thin vertical line), then
 `Widget.App.SearchPill.Icon` and `Widget.App.SearchPill.Field`. When there is
 no scope to choose, the code hides the scope and the divider together and the
 pill holds only the search. Sizes live in `search_pill_*`. Current user: the
-full model list's Model/Provider search (`view_model_browser_controls.xml`).
+full model list's Model/Provider search (`view_model_browser_controls.xml`). The scope opens with
+`AppDropdown.show(..., outlineAnchor = false)` so opening and closing never
+replace its background with a dropdown box.
 
 #### Font previews in a dropdown
 
@@ -1675,7 +1687,12 @@ Sizes live in `segmented_pill_*` and the slide time in
 `segmented_pill_animation_ms`. Layouts declare the words; code only calls
 `select(word, animate)` and shows or hides words. Each word is announced as a
 radio choice. Current user: the full model list's All / New / Free filter
-(`Widget.App.ModelPicker.FilterPill`, `view_model_browser_controls.xml`).
+(`Widget.App.ModelPicker.FilterPill`, `view_model_browser_controls.xml`). On
+the model picker the capsule and chosen word match the chosen Favorites /
+Recent / View All tab (owner direction): `FilterPill` sets `segmentThumbColor`
+to `colorPrimaryContainer`, and its words use `Widget.App.ModelPicker.FilterOption`
+(`color/model_picker_filter_text`: chosen `colorOnPrimaryContainer`, others
+`colorOnSurfaceVariant`).
 
 ## Text link
 
@@ -2147,6 +2164,9 @@ the existing far-right header button.
 The model-rule editor uses `Page.Content`, existing field/section/dropdown and
 primary-button families, with `Widget.App.ModelRuleEditor.*` and
 `AppButton.Primary.ModelRule*` only for its form spacing and alignments.
+`ModelRuleEditor.RuleText` owns the rule box's minimum height, and
+`ModelRuleEditor.Counter` takes the error color from the shared field-counter
+color when code sets it activated at the size warning.
 `Widget.App.Chip.Group` supplies a wrapping chip group's full width and top gap;
 individual chips still use `Widget.App.Chip.Removable`.
 
@@ -2154,12 +2174,20 @@ individual chips still use `Widget.App.Chip.Removable`.
 `AppButton.Primary.TagEntry`. The frame inherits the standard `Field.Box`
 outline; its `TagEntry.Input` child has no background, retains the normal field
 padding, and grows with font size above its minimum height. Keeping the outline
-on the frame prevents the editable text's scroll from moving the border. Place
-the selected chip group below the entry row. Other tag editors have different
+on the frame prevents the editable text's scroll from moving the border. The
+row supplies the gap above the entry (`tag_entry_row_gap`); the frame and the
+Add button have no top margin, because a vertically centered row adds a child's
+top margin after centering and would push the frame's bottom edge outside the
+row. Place the selected chip group below the entry row. Other tag editors have different
 compositions and do not yet use this family.
 
-The model-rule editor places `AppButton.Primary.ModelRuleChoice` and its
-`Trailing` variant in `ModelRuleEditor.ModelRow` for equal-width actions.
+Below the Applied Models hint, `ModelRuleEditor.CurrentModel` holds the
+Current Chat Model label (`ModelRuleEditor.CurrentModelLabel`, the field label
+with the editor's control gap) and a `RemovableList.Row` with the model's
+`Row.Title`, its connection's `Row.Subtitle`, and a trailing
+`AppButton.Primary.ModelRuleCurrentAdd`. The section is hidden when there is no
+current chat model, and Add is disabled once that model is on the rule. The
+full-width `AppButton.Primary.ModelRuleChoose` follows it.
 `view_model_rule_target_row.xml` composes `RemovableList.Row`, a weighted
 `Row.TextColumn` with `Row.Title` and `Row.Subtitle`, and `RemovableList.Remove`.
 `ModelRuleEditor.TargetList` stacks these rows vertically. Model names and

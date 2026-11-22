@@ -3,10 +3,17 @@
     android:color="?attr/colorControlHighlight">
     <item>
         <selector>
+            <!-- Selected: the same fill as every card, marked only by a
+                 dashed outline in the Quick Settings outline color. -->
             <item android:state_activated="true">
                 <shape>
                     <corners android:radius="@dimen/model_picker_card_radius" />
-                    <solid android:color="?attr/colorSecondaryContainer" />
+                    <solid android:color="?attr/colorSurfaceContainerHigh" />
+                    <stroke
+                        android:width="@dimen/chat_selection_outline_width"
+                        android:color="?attr/colorOutlineVariant"
+                        android:dashWidth="@dimen/chat_selection_outline_dash_length"
+                        android:dashGap="@dimen/chat_selection_outline_dash_gap" />
                 </shape>
             </item>
             <item>

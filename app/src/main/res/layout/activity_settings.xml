@@ -114,7 +114,7 @@
                     <ImageView
                         style="@style/Widget.App.Row.Icon"
                         android:contentDescription="@null"
-                        android:src="@drawable/ic_user"
+                        android:src="@drawable/ic_sparkles"
                         android:tint="?attr/colorPrimary" />
 
                     <LinearLayout style="@style/Widget.App.Row.TextColumn">
