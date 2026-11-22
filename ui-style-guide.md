@@ -2147,6 +2147,9 @@ the existing far-right header button.
 The model-rule editor uses `Page.Content`, existing field/section/dropdown and
 primary-button families, with `Widget.App.ModelRuleEditor.*` and
 `AppButton.Primary.ModelRule*` only for its form spacing and alignments.
+`ModelRuleEditor.RuleText` owns the rule box's minimum height, and
+`ModelRuleEditor.Counter` takes the error color from the shared field-counter
+color when code sets it activated at the size warning.
 `Widget.App.Chip.Group` supplies a wrapping chip group's full width and top gap;
 individual chips still use `Widget.App.Chip.Removable`.
 
@@ -2154,8 +2157,11 @@ individual chips still use `Widget.App.Chip.Removable`.
 `AppButton.Primary.TagEntry`. The frame inherits the standard `Field.Box`
 outline; its `TagEntry.Input` child has no background, retains the normal field
 padding, and grows with font size above its minimum height. Keeping the outline
-on the frame prevents the editable text's scroll from moving the border. Place
-the selected chip group below the entry row. Other tag editors have different
+on the frame prevents the editable text's scroll from moving the border. The
+row supplies the gap above the entry (`tag_entry_row_gap`); the frame and the
+Add button have no top margin, because a vertically centered row adds a child's
+top margin after centering and would push the frame's bottom edge outside the
+row. Place the selected chip group below the entry row. Other tag editors have different
 compositions and do not yet use this family.
 
 The model-rule editor places `AppButton.Primary.ModelRuleChoice` and its

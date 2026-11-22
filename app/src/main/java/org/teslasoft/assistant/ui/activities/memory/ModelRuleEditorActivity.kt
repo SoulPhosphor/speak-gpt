@@ -39,7 +39,6 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.ChipGroup
-import com.google.android.material.color.MaterialColors
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
@@ -282,13 +281,9 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
     private fun refreshSize() {
         val len = fieldText?.text?.toString()?.length ?: 0
         val tv = textSize ?: return
-        if (len >= SIZE_WARN_CHARS) {
-            tv.text = getString(R.string.model_rule_size_warn, len)
-            tv.setTextColor(MaterialColors.getColor(tv, androidx.appcompat.R.attr.colorError))
-        } else {
-            tv.text = getString(R.string.model_rule_size_count, len)
-            tv.setTextColor(MaterialColors.getColor(tv, R.attr.appSubtleTextColor))
-        }
+        val warn = len >= SIZE_WARN_CHARS
+        tv.text = getString(if (warn) R.string.model_rule_size_warn else R.string.model_rule_size_count, len)
+        tv.isActivated = warn
     }
 
     /* ------------------------------ save ------------------------------ */
