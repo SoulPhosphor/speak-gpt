@@ -144,6 +144,17 @@ internal class ParallelRequestCoordinator(
         job.join()
     }
 
+    /** Join the whole owned chain, including tool continuations and late usage observers, before mutation. */
+    suspend fun cancelOwned(target: ResponseGroupTarget? = null, slotId: String? = null, versionId: String? = null) {
+        val jobs = requests.values.filter { running ->
+            (target == null || running.request.target == target) &&
+                (slotId == null || running.request.slotId == slotId) &&
+                (versionId == null || running.request.versionId == versionId)
+        }.map { it.registered.await() }.distinct()
+        jobs.forEach { it.cancel(ParallelUserStop()) }
+        jobs.joinAll()
+    }
+
     /** Save retry only. Never executes a transport, reloads prices, or mints another request ID. */
     suspend fun flush(): Set<String> = withContext(worker) {
         requests.values.forEach { running -> running.lock.withLock {

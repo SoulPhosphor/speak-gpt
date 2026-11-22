@@ -141,6 +141,139 @@ class ParallelControllerInstrumentedTest {
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
+    @Test fun deletingAnActiveGroupJoinsFinalUsageAndAllowsTheNextTurn() = fixture { activity, host ->
+        val started = Channel<Unit>(Channel.UNLIMITED)
+        val requests = CopyOnWriteArrayList<ParallelRequest>()
+        var hold = true
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { request, out ->
+                    requests += request
+                    request.usage.beginObservation()
+                    try {
+                        out.text("owned partial")
+                        started.send(Unit)
+                        if (hold) awaitCancellation()
+                    } finally {
+                        request.usage.noteTypedUsage(13, 5, 18)
+                        request.usage.finishObservation()
+                    }
+                } }, { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            repeat(4) { started.receive() }
+            val ids = host.stored().slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId }.toSet()
+            withContext(Dispatchers.Main.immediate) {
+                assertTrue(controller.withRequestsStopped {
+                    val settledGroup = host.group()
+                    assertFalse(ParallelResponseSelection.running(settledGroup))
+                    val receipts = ResponseGroupEdits.usage(settledGroup)
+                    assertEquals(ids, receipts.map { it.requestId }.toSet())
+                    assertTrue(receipts.all { it.inputTokens == 13 && it.outputTokens == 5 })
+                    assertTrue(settledGroup.slots.all { it.versions.single().fields["state"] == "stopped" })
+                    host.messages.clear()
+                    assertTrue(host.save())
+                })
+                assertFalse(controller.busy)
+                assertFalse(controller.unsaved(1))
+                hold = false
+                host.rawInput = "next message"
+                assertTrue(controller.send("next message"))
+            }
+            repeat(4) { started.receive() }
+            host.finished.await()
+            assertEquals(8, requests.size)
+            assertTrue(host.stored().slots.flatMap { it.versions }.flatMap { it.attempts }.none { it.requestId in ids })
+            assertFalse(withContext(Dispatchers.Main.immediate) { controller.busy })
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
+    }
+
+    @Test fun deletionWaitsForSaveRetryWithoutRemovingRowsOrResendingRequests() = fixture { activity, host ->
+        val started = Channel<Unit>(Channel.UNLIMITED)
+        var calls = 0
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { _, out ->
+                    synchronized(host) { calls++ }
+                    out.text("retained evidence")
+                    started.send(Unit)
+                    awaitCancellation()
+                } }, { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            repeat(4) { started.receive() }
+            val original = host.stored()
+            var removed = false
+            withContext(Dispatchers.Main.immediate) {
+                host.failSave = true
+                assertFalse(controller.withRequestsStopped { removed = true; host.messages.clear() })
+                assertFalse(removed)
+                assertEquals(2, host.messages.size)
+                assertTrue(controller.busy)
+                assertTrue(controller.unsaved(1))
+                host.failSave = false
+                controller.retrySave()
+            }
+            host.finished.await()
+            assertFalse(withContext(Dispatchers.Main.immediate) { controller.busy })
+            assertEquals(4, calls)
+            val saved = host.stored()
+            assertFalse(ParallelResponseSelection.running(saved))
+            assertEquals(original.slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId },
+                saved.slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId })
+            assertEquals(4, ResponseGroupEdits.usage(saved).size)
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
+    }
+
+    @Test fun editingAnActiveAlternativeStopsOnlyThatVersionAndKeepsItsDialogTarget() = fixture { activity, host ->
+        val started = Channel<Unit>(Channel.UNLIMITED)
+        val gates = List(4) { CompletableDeferred<Unit>() }
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { request, out ->
+                    val index = request.assignment.modelId.substringAfterLast('-').toInt()
+                    out.text("provider-$index")
+                    started.send(Unit)
+                    gates[index].await()
+                } }, { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            repeat(4) { started.receive() }
+            val original = host.stored()
+            withContext(Dispatchers.Main.immediate) {
+                val selected = original.slots[3]
+                controller.browse(1, selected.slotId, selected.foregroundVersionId)
+                val target = ParallelReplyEditing.target(host.group())
+                controller.browse(1, original.slots[1].slotId, original.slots[1].foregroundVersionId)
+                controller.editReply(target, "edited alternative")
+            }
+            while (withContext(Dispatchers.Main.immediate) { host.group().slots[3].versions.single().fields["message"] != "edited alternative" }) delay(20)
+            val edited = host.stored()
+            assertEquals("provider-0", host.storedRow()["message"])
+            assertEquals(original.slots[1].slotId, edited.foregroundSlotId)
+            assertEquals("stopped", edited.slots[3].versions.single().fields["state"])
+            assertEquals("provider-3", edited.slots[3].versions.single().attempts.single().partialFields["message"])
+            assertEquals(0, host.canonicalEdits)
+            assertTrue(edited.slots.take(3).all { it.versions.single().fields["state"] == "streaming" })
+            (0 until 3).forEach { gates[it].complete(Unit) }
+            host.finished.await()
+            withContext(Dispatchers.Main.immediate) {
+                val settledGroup = host.group()
+                val primary = settledGroup.slots.single { it.slotId == settledGroup.primarySlotId }
+                controller.browse(1, primary.slotId, primary.canonicalVersionId)
+                controller.editReply(ParallelReplyEditing.target(host.group()), "edited canonical")
+            }
+            while (withContext(Dispatchers.Main.immediate) { host.canonicalEdits == 0 }) delay(20)
+            assertEquals(1, host.canonicalEdits)
+            assertEquals("edited canonical", host.storedRow()["message"])
+            assertTrue(ResponseGroupCodec.read(host.storedRow()) is ResponseGroupRead.Valid)
+            assertEquals(4, ResponseGroupEdits.usage(host.stored()).size)
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
+    }
+
     private inner class Host(override val chatId: String) : ParallelChatController.Host {
         override val messages = arrayListOf<HashMap<String, Any>>()
         override var rawInput = "current message"
@@ -150,6 +283,8 @@ class ParallelControllerInstrumentedTest {
         var preparations = 0
         var contextCommits = 0
         var failCommit = false
+        var canonicalEdits = 0
+        var failSave = false
         var finished = CompletableDeferred<Unit>()
         override suspend fun prepareBase(raw: String, setup: ExperimentalSetup): ParallelTurnBase {
             preparations++
@@ -165,11 +300,12 @@ class ParallelControllerInstrumentedTest {
             rawInput = ""
             return true
         }
-        override fun save() = ChatPreferences.getChatPreferences().saveChatHistory(context, chatId, messages, synchronous = true) == ChatStorageHealth.WriteOutcome.OK
+        override fun save() = !failSave && ChatPreferences.getChatPreferences().saveChatHistory(context, chatId, messages, synchronous = true) == ChatStorageHealth.WriteOutcome.OK
         override fun changed(position: Int, canonical: Boolean) {}
         override fun busy(value: Boolean) {}
         override suspend fun adopt(position: Int, discardDescendants: Boolean) = false
         override suspend fun beforeRegenerate(position: Int, action: suspend () -> Unit) = action()
+        override fun canonicalEdited() { canonicalEdits++ }
         override fun settled() { finished.complete(Unit) }
         fun group() = (ResponseGroupCodec.read(messages.last()) as ResponseGroupRead.Valid).group
         fun storedRow() = ChatPreferences.getChatPreferences().getChatByIdResult(context, chatId, DamagedChatOperation.OPENING_A_CHAT).messages.last()

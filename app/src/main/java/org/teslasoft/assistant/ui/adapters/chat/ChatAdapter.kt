@@ -97,6 +97,8 @@ import java.text.DateFormat
 import java.text.NumberFormat
 import java.util.Date
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.chat.parallel.ParallelReplyEditing
+import org.teslasoft.assistant.ui.chat.parallel.ParallelReplyEditTarget
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
@@ -3540,8 +3542,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun openEditDialog(chatMessage: HashMap<String, Any>, position: Int) {
-            val dialog = EditMessageDialogFragment.newInstance(chatMessage["message"].toString(), position)
-            dialog.setStateChangedListener(this@ChatAdapter)
+            val read = org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.read(chatMessage)
+            val group = (read as? org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Valid)?.group
+            if (group == null && read != org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Absent) return
+            val target = group?.let(ParallelReplyEditing::target)
+            val text = group?.let(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupEdits::foregroundFields)?.get("message")
+                ?: chatMessage["message"].toString()
+            val dialog = EditMessageDialogFragment.newInstance(text, position)
+            dialog.setStateChangedListener(if (target == null) this@ChatAdapter else object : EditMessageDialogFragment.StateChangesListener {
+                override fun onEdit(prompt: String, position: Int) { listener?.onParallelEdit(target, prompt) }
+                override fun onDelete(position: Int) {
+                    val current = dataArray.indexOfFirst { it["message_id"] == target.assistantMessageId }
+                    if (current >= 0) this@ChatAdapter.onDelete(current)
+                }
+            })
             dialog.show(context.supportFragmentManager, "EditMessageDialogFragment")
         }
 
@@ -3568,6 +3582,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Mirror onDelete's guard: a stale dialog position (the list changed
         // while the edit dialog was open) must not index past the array.
         if (position < 0 || position >= dataArray.size) return
+        if (dataArray[position].containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY)) return
         // Editing only changes this message's stored text (owner spec, Aug 16
         // 2026). It never truncates later messages — that is what Regenerate
         // and Make Current do. Attachments on the message are kept.
@@ -3614,6 +3629,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onParallelRetrySave() {}
         fun onParallelBrowse(position: Int, slotId: String, versionId: String) {}
         fun onParallelStop(position: Int, slotId: String?) {}
+        fun onParallelEdit(target: ParallelReplyEditTarget, text: String) {}
         fun onRetryClick()
 
         /** Regenerate the assistant turn at [position]. On the latest turn this

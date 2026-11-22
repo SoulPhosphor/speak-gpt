@@ -104,6 +104,48 @@ class ParallelResponseSelectionTest {
         assertEquals(ResponseGroupEdits.usage(original), ResponseGroupEdits.usage(decoded))
     }
 
+    @Test fun editingTheDialogTargetKeepsBrowseSelectionDescendantsAndEveryReceipt() {
+        val rows = history()
+        val row = rows[2]
+        val original = group(row)
+        val slot = original.slots[3]
+        val selected = ResponseGroupEdits.browse(original, slot.slotId, slot.versions.last().versionId)
+        val target = ParallelReplyEditing.target(selected)
+        val browsedElsewhere = ResponseGroupEdits.browse(selected, original.slots[1].slotId, original.slots[1].canonicalVersionId)
+        val edited = ParallelReplyEditing.apply(browsedElsewhere, target, "edited alternative")
+        assertFalse(ParallelReplyEditing.canonical(edited, target))
+        assertEquals(browsedElsewhere.foregroundSlotId, edited.foregroundSlotId)
+        assertEquals("edited alternative", edited.slots[3].versions.last().fields["message"])
+        assertEquals(original.slots.take(3), edited.slots.take(3))
+        assertEquals(original.slots[3].versions.last().attempts, edited.slots[3].versions.last().attempts)
+        val saved = ResponseGroupEdits.install(row, edited)
+        assertTrue(ResponseGroupCodec.read(saved) is ResponseGroupRead.Valid)
+        assertEquals(row["message"], saved["message"])
+        val after = rows.mapIndexed { index, value -> if (index == 2) saved else value }
+        ResponseGroupHistory.validateSavedTransition(rows, after)
+        assertEquals(rows.takeLast(2), after.takeLast(2))
+        assertEquals(ResponseGroupEdits.usage(original), ResponseGroupEdits.usage(group(saved)))
+    }
+
+    @Test fun editingCanonicalTextUpdatesItsMirrorWithoutReplacingHistoryOrRequestEvidence() {
+        val rows = history()
+        val row = rows[2]
+        val original = group(row)
+        val primary = original.slots.single { it.slotId == original.primarySlotId }
+        val selected = ResponseGroupEdits.browse(original, primary.slotId, primary.canonicalVersionId)
+        val target = ParallelReplyEditing.target(selected)
+        assertTrue(ParallelReplyEditing.canonical(selected, target))
+        val edited = ParallelReplyEditing.apply(selected, target, "edited canonical")
+        val saved = ResponseGroupEdits.install(row, edited)
+        val after = rows.mapIndexed { index, value -> if (index == 2) saved else value }
+        ResponseGroupHistory.validateSavedTransition(rows, after)
+        assertEquals("edited canonical", saved["message"])
+        assertEquals(rows.takeLast(2), after.takeLast(2))
+        assertEquals(original.input, edited.input)
+        assertEquals(original.slots.flatMap { it.versions }.flatMap { it.attempts },
+            edited.slots.flatMap { it.versions }.flatMap { it.attempts })
+    }
+
     @Test fun ordinarySingleResponseRowsKeepTheirExistingProjection() {
         val ordinary = history().first()
         assertNull(ParallelResponseSelection.pending(listOf(ordinary)))

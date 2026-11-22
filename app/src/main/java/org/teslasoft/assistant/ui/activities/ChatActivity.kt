@@ -897,18 +897,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         override suspend fun beforeRegenerate(position: Int, action: suspend () -> Unit) {
             if (regenerateLockKind(position) != null) return
             if (position < messages.lastIndex && !parallelChat.confirm(getString(R.string.branch_regenerate_body), R.string.branch_regenerate_confirm)) return
+            var boundary = 0
             kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
                 withResummarizeDecision(position) {
-                    val boundary = preferences?.getManualCompactionBoundary() ?: 0
-                    if (position < boundary) preferences?.setCompactionStale(true)
-                    if (position < messages.lastIndex) truncateAfter(position)
-                    lifecycleScope.launch { try { action() } finally {
-                        if (position < boundary) askToRecompactAfterDelete(boundary, sourceChanged = true)
-                        if (continuation.isActive) continuation.resume(Unit)
-                    } }
+                    if (continuation.isActive) {
+                        boundary = preferences?.getManualCompactionBoundary() ?: 0
+                        if (position < boundary) preferences?.setCompactionStale(true)
+                        if (position < messages.lastIndex) truncateAfter(position)
+                        continuation.resume(Unit)
+                    }
                 }
             }
+            try { action() } finally {
+                if (position < boundary) askToRecompactAfterDelete(boundary, sourceChanged = true)
+            }
         }
+        override fun canonicalEdited() = onMessageEdited()
         override fun settled() {
             syncChatProjection(); summarizerCycle(); showPendingContextHelperFailure()
             val persona = messages.lastOrNull()?.let(org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope::read)?.companionPersonaId
@@ -15117,6 +15121,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         parallelChat.browse(position, slotId, versionId)
     }
     override fun onParallelStop(position: Int, slotId: String?) = parallelChat.stop(position, slotId)
+    override fun onParallelEdit(target: org.teslasoft.assistant.ui.chat.parallel.ParallelReplyEditTarget, text: String) = parallelChat.editReply(target, text)
 
     override fun onRetryClick() {
         if (parallelChat.regenerate(messages.lastIndex)) return
@@ -15561,41 +15566,44 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun deleteMessageRange(target: HashMap<String, Any>, deleteFollowing: Boolean) {
+        val targetId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(target)
         lifecycleScope.launch {
-            val imageJob = ImageGenerationJobRegistry.activeJob(chatId)
-            val generationJobs = listOfNotNull(
-                parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),
-                onSpeechResultsScope?.coroutineContext?.get(kotlinx.coroutines.Job)
-            )
-            generationJobs.forEach { it.cancel() }
-            stopReadback()
-            if (chatId.isNotBlank()) ImageGenerationJobRegistry.cancel(chatId)
-            generationJobs.forEach { it.join() }
-            // The registry completes only after its terminal callback has saved
-            // the final row. Include that row in the deletion, not after it.
-            imageJob?.await()
-            // Deleting stops a running summary update before the bookmark is
-            // realigned; its unfinished batch is discarded.
-            summarizerController?.cancelSummarizingAndWait()
-            val compactedBefore = preferences?.getManualCompactionBoundary() ?: 0
-            val currentPosition = messages.indexOfFirst { it === target }
-            if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@launch
-            val end = if (deleteFollowing) messages.size else currentPosition + 1
-            reconcileUsageBeforeRemoving()
-            val removed = ArrayList(messages.subList(currentPosition, end))
-            messages.subList(currentPosition, end).clear()
-            // Gallery records and generated image files have independent lifetimes.
-            if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
-                messages.addAll(currentPosition, removed)
-                Toast.makeText(this@ChatActivity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
-            } else {
-                realignCondensedBoundaries(currentPosition, end)
+            parallelChat.withRequestsStopped {
+                val imageJob = ImageGenerationJobRegistry.activeJob(chatId)
+                val generationJobs = listOfNotNull(
+                    parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),
+                    onSpeechResultsScope?.coroutineContext?.get(kotlinx.coroutines.Job)
+                )
+                generationJobs.forEach { it.cancel() }
+                stopReadback()
+                if (chatId.isNotBlank()) ImageGenerationJobRegistry.cancel(chatId)
+                generationJobs.forEach { it.join() }
+                // The registry completes only after its terminal callback has saved
+                // the final row. Include that row in the deletion, not after it.
+                imageJob?.await()
+                // Deleting stops a running summary update before the bookmark is
+                // realigned; its unfinished batch is discarded.
+                summarizerController?.cancelSummarizingAndWait()
+                val compactedBefore = preferences?.getManualCompactionBoundary() ?: 0
+                val currentPosition = messages.indexOfFirst { if (targetId.isBlank()) it === target else org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == targetId }
+                if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@withRequestsStopped
+                val end = if (deleteFollowing) messages.size else currentPosition + 1
+                reconcileUsageBeforeRemoving()
+                val removed = ArrayList(messages.subList(currentPosition, end))
+                messages.subList(currentPosition, end).clear()
+                // Gallery records and generated image files have independent lifetimes.
+                if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
+                    messages.addAll(currentPosition, removed)
+                    Toast.makeText(this@ChatActivity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                } else {
+                    realignCondensedBoundaries(currentPosition, end)
+                }
+                syncChatProjection()
+                selectionMode.exit()
+                askToRecompactAfterDelete(compactedBefore)
             }
-            syncChatProjection()
-            selectionMode.exit()
-            // Resume summarizing from the corrected bookmark.
+            // Resume only after the parallel mutation gate has reopened.
             summarizerCycle()
-            askToRecompactAfterDelete(compactedBefore)
         }
     }
 
@@ -15811,8 +15819,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 lifecycleScope.launch {
                     // Deleting stops a running summary update first (see
                     // deleteMessageRange), then removes and realigns.
-                    summarizerController?.cancelSummarizingAndWait()
-                    deleteBulkSelection()
+                    parallelChat.withRequestsStopped {
+                        summarizerController?.cancelSummarizingAndWait()
+                        deleteBulkSelection()
+                    }
                     summarizerCycle()
                 }
             }
@@ -15823,6 +15833,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @SuppressLint("NotifyDataSetChanged")
     private fun deleteBulkSelection() {
         reconcileUsageBeforeRemoving()
+        val beforeRemoval = ArrayList(messages)
         val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
         val manualBoundaryBefore =
             preferences?.getManualCompactionBoundary() ?: 0
@@ -15862,6 +15873,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             pos++
         }
+        if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
+            messages.clear(); messages.addAll(beforeRemoval)
+            Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+            return
+        }
         if (removedBeforeBookmark > 0) {
             preferences?.setSummarizerFoldedCount(foldedBefore - removedBeforeBookmark)
         }
@@ -15883,7 +15899,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         realignCompactionVersions(removedPositions)
 
         syncChatProjection()
-        saveSettings()
         if (deletedImageHashes.isNotEmpty()) {
             GeneratedImageFiles.deleteIfUnreferenced(this, deletedImageHashes)
         }

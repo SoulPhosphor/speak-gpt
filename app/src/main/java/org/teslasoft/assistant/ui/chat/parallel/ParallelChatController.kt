@@ -35,6 +35,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         fun busy(value: Boolean)
         suspend fun adopt(position: Int, discardDescendants: Boolean): Boolean
         suspend fun beforeRegenerate(position: Int, action: suspend () -> Unit)
+        fun canonicalEdited() {}
         fun settled()
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -45,8 +46,10 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     private data class PendingTurn(val raw: String, val base: ParallelTurnBase, val groupId: String)
     private var pendingTurn: PendingTurn? = null
     private var preparing = false
-    private var sendJob: Job? = null
-    val busy get() = active || pendingSave
+    private var operationJob: Job? = null
+    private var branchJob: Job? = null
+    private var mutating = false
+    val busy get() = active || pendingSave || mutating
     private val prefs get() = Preferences.getPreferences(activity, host.chatId)
     private val chatScope by lazy { ParallelChatScope(host.chatId) }
     private val detachedPersistence by lazy { StoredParallelGroups(activity.applicationContext, chatScope) {} }
@@ -99,7 +102,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         if (busy || selectingBranch) return true
         val pending = ParallelResponseSelection.pending(host.messages) ?: return false
         selectingBranch = true
-        scope.launch {
+        branchJob = scope.launch {
             var adopted = false
             try {
                 if (!pending.hasDescendants || confirm(activity.getString(R.string.make_current_body), R.string.make_current_confirm))
@@ -129,7 +132,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         val inputIncludes = host.includes.toList()
         val manual = host.manualMemoryIds.toList()
         active = true; preparing = true; host.busy(true)
-        sendJob = scope.launch {
+        operationJob = scope.launch {
             try {
                 val base = host.prepareBase(raw, setup)
                 val prepared = ParallelTurnPreparation.prepare(activity, host.chatId, setup, base) { confirm(it) }
@@ -155,7 +158,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 pendingTurn = null
                 preparing = false
                 active = false
-                if (!closed) { host.busy(false); host.settled() }
+                if (!closed) { host.busy(busy); if (!mutating) host.settled() }
             }
         }
         return true
@@ -188,7 +191,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     }
 
     fun stopAll() {
-        if (preparing) sendJob?.cancel(ParallelUserStop())
+        if (preparing) operationJob?.cancel(ParallelUserStop())
         else host.messages.indices.toList().forEach { stop(it, null) }
     }
 
@@ -210,7 +213,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         }
         if (busy || selectingBranch || host.unavailable) return true
         selectingBranch = true
-        scope.launch {
+        operationJob = scope.launch {
             try { host.beforeRegenerate(position) {
                 active = true; host.busy(true)
                 try {
@@ -218,10 +221,61 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                     offerSaveRetry()
                 } catch (e: CancellationException) { throw e }
                 catch (_: Exception) { notice(activity.getString(R.string.parallel_prepare_failed)) }
-                finally { active = false; if (!closed) { host.busy(false); host.settled() } }
+                finally { active = false; if (!closed) { host.busy(busy); if (!mutating) host.settled() } }
             } } finally { selectingBranch = false }
         }
         return true
+    }
+
+    /** Keep requests' final evidence durable before deletion or usage reconciliation. */
+    suspend fun withRequestsStopped(action: suspend () -> Unit): Boolean {
+        if (closed || mutating) return false
+        mutating = true
+        host.busy(true)
+        try {
+            branchJob?.cancelAndJoin()
+            operationJob?.cancelAndJoin()
+            coordinator.cancelOwned()
+            coordinator.flush()
+            refreshSaveState()
+            if (pendingSave) return false
+            action()
+            return true
+        } finally {
+            mutating = false
+            if (!closed) host.busy(busy)
+        }
+    }
+
+    fun editReply(target: ParallelReplyEditTarget, text: String) {
+        if (closed || mutating || host.unavailable) return
+        mutating = true
+        host.busy(true)
+        scope.launch {
+            try {
+                coordinator.cancelOwned(ResponseGroupTarget(host.chatId, target.assistantMessageId, target.groupId),
+                    target.slotId, target.versionId)
+                coordinator.flush()
+                refreshSaveState()
+                if (pendingSave) return@launch
+                val index = host.messages.indexOfFirst { it["message_id"] == target.assistantMessageId }
+                val row = host.messages.getOrNull(index) ?: return@launch
+                val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return@launch
+                val edited = ParallelReplyEditing.apply(group, target, text)
+                host.messages[index] = ResponseGroupEdits.install(row, edited)
+                if (!host.save()) {
+                    host.messages[index] = row; host.save()
+                    notice(activity.getString(R.string.message_save_failed))
+                    return@launch
+                }
+                val canonical = ParallelReplyEditing.canonical(group, target)
+                if (canonical) host.canonicalEdited()
+                host.changed(index, canonical)
+            } finally {
+                mutating = false
+                if (!closed) { host.busy(busy); if (!active && !pendingSave) host.settled() }
+            }
+        }
     }
 
     private fun owned(target: ResponseGroupTarget): Pair<Int, ResponseGroup> {
@@ -239,7 +293,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     }
 
     fun retrySave() {
-        if (active || closed || !pendingSave) return
+        if (active || closed || mutating || !pendingSave) return
         scope.launch {
             active = true; host.busy(true)
             try { coordinator.flush(); refreshSaveState() }
