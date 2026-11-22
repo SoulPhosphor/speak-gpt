@@ -218,3 +218,5 @@ preserving the existing search-field appearance and using existing toggle styles
 style definitions were introduced. Other memory-list layouts are unchanged.
 
 Parallel-model Allow Image Generation control: `view_parallel_model_image_policy.xml` uses `Widget.App.ParallelModels.AllowImages` (shared Row.Toggle alias), Row.TextColumn/Title/Subtitle/Switch. Prepared, unexposed component only; no setup/settings page or device visual audit is claimed.
+
+Parallel response group controls: `view_parallel_response_controls.xml` uses `Widget.App.ParallelResponse.Controls` / `.Tab`, Row.Subtitle status, subtitle-color primary star, and shared destructive inline stop buttons. The selected answer retains the ordinary text, reasoning, image and action rendering. Source inspection only; instrumentation and device acceptance pending.

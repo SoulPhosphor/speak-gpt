@@ -68,6 +68,11 @@
                  reply. GONE (a zero-height point) whenever nothing is enabled or
                  available, so the reply keeps its original position. Its color is
                  set in code to the bubble foreground so it follows the theme. -->
+            <include layout="@layout/view_parallel_response_controls"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/bubble_name" />
+
             <org.teslasoft.assistant.ui.chat.MessageMetadataView
                 android:id="@+id/message_meta"
                 android:layout_width="0dp"
@@ -78,7 +83,7 @@
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/bubble_name" />
+                app:layout_constraintTop_toBottomOf="@id/parallel_response_controls" />
 
             <!-- Provider-supplied reasoning disclosure (chat-redesign-plan.md
                  §7.1): sits between the identity/metadata line and the final

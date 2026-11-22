@@ -19,10 +19,11 @@ import java.io.File
 internal object ParallelRuntime {
     fun forChat(context: Context, chatId: String, owner: CoroutineScope,
         canonicalSourcesChanged: (ResponseGroupHistory.Change) -> Unit,
-        confirmImage: suspend (ParallelRequest, String) -> Boolean): ParallelRequestCoordinator {
+        confirmImage: suspend (ParallelRequest, String) -> Boolean,
+        persistence: ParallelGroupPersistence? = null): ParallelRequestCoordinator {
         val app = context.applicationContext
         val chat = ParallelChatScope(chatId)
-        val store = StoredParallelGroups(app, chat, canonicalSourcesChanged)
+        val store = persistence ?: StoredParallelGroups(app, chat, canonicalSourcesChanged)
         val images = ParallelRegisteredImages(app, chat)
         fun endpoint(assignment: ResponseModelAssignment): ApiEndpointObject {
             val current = ApiEndpointPreferences.getApiEndpointPreferences(app).getApiEndpoint(app, assignment.endpointProfileId)

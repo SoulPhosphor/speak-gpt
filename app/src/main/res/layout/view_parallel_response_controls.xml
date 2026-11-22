@@ -1,0 +1,14 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/parallel_response_controls" style="@style/Widget.App.ParallelResponse.Controls" android:visibility="gone">
+    <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content">
+        <LinearLayout android:id="@+id/parallel_response_tabs" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" />
+    </HorizontalScrollView>
+    <TextView android:id="@+id/parallel_response_status" style="@style/Widget.App.Row.Subtitle" />
+    <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content">
+        <LinearLayout android:id="@+id/parallel_response_versions" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" />
+    </HorizontalScrollView>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <com.google.android.material.button.MaterialButton android:id="@+id/parallel_stop_slot" style="@style/AppButton.Destructive.Inline" android:text="@string/parallel_stop_slot" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/parallel_stop_all" style="@style/AppButton.Destructive.Inline" android:text="@string/parallel_stop_all" />
+    </LinearLayout>
+</LinearLayout>

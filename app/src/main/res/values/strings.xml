@@ -4673,4 +4673,23 @@
     <string name="mem_cannot_save_token_limit">This memory exceeds the embedding model\'s reading limit.</string>
     <string name="parallel_allow_image_generation">Allow Image Generation</string>
     <string name="parallel_allow_image_generation_description">When turned on, models will follow global image generation rules.</string>
+    <string name="parallel_primary">Primary</string>
+    <string name="parallel_tab_description">%1$s, %2$s, %3$s. %4$s</string>
+    <string name="parallel_generating">Generating…</string>
+    <string name="parallel_failed">Response failed. Your other responses are preserved. Regenerate this model to try again.</string>
+    <string name="parallel_cancelled">Stopped</string>
+    <string name="parallel_interrupted">Interrupted. Regenerate this model to try again.</string>
+    <string name="parallel_complete">Complete</string>
+    <string name="parallel_stop_slot">Stop This Model</string>
+    <string name="parallel_stop_all">Stop All</string>
+    <string name="parallel_single_required">Use Single Response for /imagine commands and legacy Completions models. Your message and attachments are preserved.</string>
+    <string name="parallel_prepare_failed">The parallel turn could not be prepared or saved. Your message and attachments are preserved. Check the selected models and try again.</string>
+    <string name="parallel_save_failed">Some response updates could not be saved. Keep this chat open and retry saving; no model requests will be resent.</string>
+    <string name="parallel_retry_save">Retry Saving</string>
+    <string name="parallel_attachment_unsupported">%1$s cannot accept the selected images. Your message and attachments are preserved.</string>
+    <string name="parallel_attachment_unknown">Image support is unknown for: %1$s. Send the images anyway?</string>
+    <string name="parallel_context_block">The prepared request exceeds the context window for %1$s. Your message and attachments are preserved.</string>
+    <string name="parallel_context_warning">The prepared request may exceed the context window for %1$s. Send anyway?</string>
+    <string name="parallel_tab_failed">Failed</string>
+    <string name="parallel_tab_interrupted">Interrupted</string>
 </resources>

@@ -1,0 +1,23 @@
+<resources>
+    <style name="Widget.App.ParallelResponse.Controls" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+    <style name="Widget.App.ParallelResponse.Tab" parent="Widget.App.Row.Subtitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:minHeight">@dimen/parallel_response_tab_touch_target</item>
+        <item name="android:maxWidth">@dimen/parallel_response_tab_max_width</item>
+        <item name="android:padding">@dimen/parallel_response_tab_padding</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:textColor">@color/parallel_response_tab_text</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+    <dimen name="parallel_response_tab_touch_target">48dp</dimen>
+    <dimen name="parallel_response_tab_max_width">180dp</dimen>
+    <dimen name="parallel_response_tab_padding">8dp</dimen>
+</resources>

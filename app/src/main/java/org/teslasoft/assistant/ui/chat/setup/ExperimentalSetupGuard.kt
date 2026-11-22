@@ -19,7 +19,7 @@ internal object ExperimentalSetupGuard {
                 val unavailable = SetupModelResolver.unavailable(context, setup)
                 if (unavailable.isNotEmpty()) context.getString(R.string.experimental_setup_unavailable,
                     unavailable.joinToString { "${it.modelId} (${it.endpointLabel})" })
-                else context.getString(R.string.experimental_parallel_not_ready)
+                else return false
             }
         }
         MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)

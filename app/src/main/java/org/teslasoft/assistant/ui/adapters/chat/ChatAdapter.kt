@@ -891,7 +891,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
             boundDisplayedVariantIndex = displayedVariantIndex(chatMessage)
 
-            val isGeneratedImage = display["message"].toString().startsWith("~file:")
+            val parallelImage = chatMessage.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY) &&
+                GeneratedImageMetadata.fromJson(display[GeneratedImageMetadata.KEY]?.toString())?.fileHash != null
+            val isGeneratedImage = parallelImage || display["message"].toString().startsWith("~file:")
             btnEdit.visibility = if (isGeneratedImage) View.GONE else if (chatMessage["isBot"] == true) View.GONE else View.VISIBLE
             btnMore?.visibility = View.VISIBLE
             if (isGeneratedImage) btnShare.isEnabled = false
@@ -912,7 +914,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateReasoning(display, position)
             updateReasoningIndicator(display, isGeneratedImage)
             updateActiveMemories(display)
-            updateVersionNav(chatMessage, position)
+            val parallel = org.teslasoft.assistant.ui.chat.parallel.ParallelResponseTabs.bind(itemView, chatMessage, !bulkActionMode,
+                browse = { slot, version -> keepingActionBarInPlace { listener?.onParallelBrowse(bindingAdapterPosition.takeUnless { it == RecyclerView.NO_POSITION } ?: position, slot, version) } },
+                stop = { slot -> listener?.onParallelStop(position, slot) })
+            if (parallel) versionNav?.visibility = View.GONE else updateVersionNav(chatMessage, position)
 
             btnDetails.setOnClickListener { anchor ->
                 if (!bulkActionMode) showMessageDetailsPopup(anchor, display, chatMessage)
@@ -992,9 +997,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnImageCopy.setOnClickListener { btnCopy.callOnClick() }
 
             if (isGeneratedImage) {
-                if (chatMessage["isBot"] == true) {
-                    message.visibility = View.GONE
-                }
+                if (parallelImage && display["message"]?.toString()?.isNotBlank() == true) {
+                    message.visibility = View.VISIBLE
+                    applyMarkdown(display)
+                } else if (chatMessage["isBot"] == true) message.visibility = View.GONE
                 // Share and Copy move onto the image's own action row, so hide
                 // the action-bar copies. Share visibility for a bot message was
                 // already set VISIBLE by updateShareButton above.
@@ -1259,6 +1265,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             expectedText: String,
             count: Int
         ): Boolean {
+            org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.storeEstimate(sourceMessage, displayMessage, variantIndex, expectedText, count)?.let {
+                if (it) listener?.onTokenEstimateStored()
+                return it
+            }
             val variants = parseVariants(sourceMessage[KEY_VARIANTS]?.toString())
             if (variants.size >= 2) {
                 val variant = variants.getOrNull(variantIndex) ?: return false
@@ -1441,6 +1451,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * fields the conversation and saving use.
          */
         private fun displayVariantMap(chatMessage: HashMap<String, Any>): HashMap<String, Any> {
+            if (chatMessage.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY))
+                return org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.display(chatMessage)
             val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
             if (variants.size < 2) return chatMessage
             val canonical = canonicalIndexOf(chatMessage, variants.size)
@@ -1452,6 +1464,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun displayedVariantIndex(chatMessage: Map<String, Any>): Int {
+            org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.displayIndex(chatMessage)?.let { return it }
             val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
             if (variants.size < 2) return 0
             val canonical = canonicalIndexOf(chatMessage, variants.size)
@@ -1574,7 +1587,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * guarantee.
          */
         private fun keepingActionBarInPlace(action: () -> Unit) {
-            val nav = versionNav
+            val nav = itemView.findViewById<View>(R.id.parallel_response_controls)?.takeIf { it.visibility == View.VISIBLE } ?: versionNav
             val recyclerView = itemView.parent as? RecyclerView
             if (nav == null || recyclerView == null) {
                 action()
@@ -3584,6 +3597,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     interface OnUpdateListener {
+        fun onParallelBrowse(position: Int, slotId: String, versionId: String) {}
+        fun onParallelStop(position: Int, slotId: String?) {}
         fun onRetryClick()
 
         /** Regenerate the assistant turn at [position]. On the latest turn this
