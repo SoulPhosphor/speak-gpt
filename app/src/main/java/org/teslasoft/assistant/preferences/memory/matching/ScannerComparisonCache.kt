@@ -24,7 +24,11 @@ import net.zetetic.database.sqlcipher.SQLiteDatabase
  * Chat retrieval never reads either table, so nothing here can make an
  * Archived or Pending memory reach a chat. Both tables together hold at most
  * [MAX_ENTRIES] rows, least recently used removed first. Neither is part of
- * any export or portable backup, and everything can be rebuilt.
+ * any export or portable backup. The automatic encrypted whole-database
+ * memory backup copies the database file, so it carries both tables, and a
+ * restore of that copy brings them back (owner decision, 2026-11-22); a
+ * restored row is reused only while its memory, embedding model and text
+ * fingerprint still match. Everything can be rebuilt.
  */
 object ScannerComparisonCache {
 
