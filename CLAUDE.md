@@ -69,6 +69,7 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 - Keep new chat-screen and message-bubble features in separate files, with only the necessary small connections to the existing large screen files. Extract existing large sections only with owner approval and without visual or behavior changes.
 - Add or update meaningful tests for changed behavior. Fix production code when a test legitimately fails. Never disable, weaken, or delete a test just to obtain a passing result. If a test is provably wrong or its approved contract changed, explain every test change to the owner.
 - Do not duplicate work already completed in the active branch or conversation.
+- **Changes during waits.** Before opening a PR for code that waits on a model request, a pause, or background work, list each decision made from stored data, how a change to that data during the wait is detected, and the test that proves it. Fix any gap before review.
 
 ### External services and costs
 
