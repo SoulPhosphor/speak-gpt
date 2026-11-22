@@ -69,10 +69,25 @@
             android:text="@string/label_view_all" />
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/parallel_picker_actions"
+        style="@style/Widget.App.Page.ControlRow"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/model_picker_tabs"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+        <TextView android:id="@+id/parallel_picker_count"
+            style="@style/Widget.App.ExperimentalSetup.WeightedSubtitle" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/parallel_picker_done"
+            style="@style/AppButton.Primary.Inline.Trailing"
+            android:text="@string/parallel_picker_done" />
+    </LinearLayout>
+
     <ListView
         android:id="@id/voices_list"
         style="@style/Widget.App.ModelPicker.List"
-        app:layout_constraintTop_toBottomOf="@id/model_picker_tabs"
+        app:layout_constraintTop_toBottomOf="@id/parallel_picker_actions"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />

@@ -2,6 +2,16 @@
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <LinearLayout android:id="@+id/experimental_parallel_summary"
+        style="@style/Widget.App.QuickSettings.Segment.Standalone"
+        android:clickable="true" android:focusable="true" android:visibility="gone">
+        <LinearLayout style="@style/Widget.App.Row.TextColumn">
+            <TextView style="@style/Widget.App.QuickSettings.ToggleRow.Title" android:text="@string/experimental_setup_parallel" />
+            <TextView android:id="@+id/experimental_parallel_model_count" style="@style/Widget.App.Row.Subtitle" />
+        </LinearLayout>
+        <ImageView style="@style/Widget.App.Row.Chevron" />
+    </LinearLayout>
+
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/btn_select_model"
         style="@style/Widget.App.QuickSettings.Segment.Top"

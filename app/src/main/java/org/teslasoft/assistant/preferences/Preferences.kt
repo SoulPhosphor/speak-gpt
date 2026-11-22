@@ -3451,10 +3451,47 @@ class Preferences internal constructor(
 
     /** This chat's Experimental Mode. Off in every new chat; stays on in a
      *  chat until turned off there. */
-    fun getChatExperimentalMode(): Boolean = getBoolean("experimental_mode", false)
+    fun getChatExperimentalMode(): Boolean = readExperimentalSetup()?.enabled
+        ?: getBoolean("experimental_mode", false)
+
+    fun getExperimentalSetupRaw(): String = getString("experimental_setup", "")
+
+    /** Null means unreadable saved setup, never an automatic replacement. */
+    fun readExperimentalSetup(): org.teslasoft.assistant.conversation.setup.ExperimentalSetup? {
+        val raw = getExperimentalSetupRaw()
+        return if (raw.isBlank()) {
+            org.teslasoft.assistant.conversation.setup.ExperimentalSetup.legacy(getBoolean("experimental_mode", false))
+        } else runCatching {
+            org.teslasoft.assistant.conversation.setup.ExperimentalSetupCodec.decode(raw)
+        }.getOrNull()
+    }
+
+    fun saveExperimentalSetup(setup: org.teslasoft.assistant.conversation.setup.ExperimentalSetup): Boolean {
+        val raw = org.teslasoft.assistant.conversation.setup.ExperimentalSetupCodec.encode(setup)
+        val previousRaw = preferences.getString("experimental_setup", null)
+        val hadLegacy = preferences.contains("experimental_mode")
+        val previousLegacy = getBoolean("experimental_mode", false)
+        if (preferences.edit().putString("experimental_setup", raw)
+                .putBoolean("experimental_mode", setup.enabled).commit()) return true
+        // SharedPreferences updates memory before a failed disk commit; restore both old values.
+        preferences.edit().apply {
+            if (previousRaw == null) remove("experimental_setup") else putString("experimental_setup", previousRaw)
+            if (hadLegacy) putBoolean("experimental_mode", previousLegacy) else remove("experimental_mode")
+        }.commit()
+        return false
+    }
+
+    fun getChatLastMessageOnly(): Boolean = readExperimentalSetup()?.usesLastMessageOnly
+        ?: getBoolean("experimental_mode", false)
 
     fun setChatExperimentalMode(enabled: Boolean) {
-        putBoolean("experimental_mode", enabled)
+        if (getExperimentalSetupRaw().isBlank()) putBoolean("experimental_mode", enabled)
+        else readExperimentalSetup()?.let {
+            saveExperimentalSetup(it.copy(mode = if (enabled) {
+                if (it.mode == org.teslasoft.assistant.conversation.setup.ExperimentalSetup.Mode.PARALLEL) it.mode
+                else org.teslasoft.assistant.conversation.setup.ExperimentalSetup.Mode.SINGLE
+            } else org.teslasoft.assistant.conversation.setup.ExperimentalSetup.Mode.OFF))
+        }
     }
 
     fun setChatUseSummarizer(enabled: Boolean) {

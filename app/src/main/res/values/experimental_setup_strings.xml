@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="experimental_setup_title">Experimental Mode Setup</string>
+    <string name="experimental_setup_action">Setup</string>
+    <string name="experimental_setup_off">Off</string>
+    <string name="experimental_setup_single">Single Response</string>
+    <string name="experimental_setup_parallel">Parallel Responses</string>
+    <string name="experimental_last_message_only">Last Message Only</string>
+    <string name="experimental_choose_models">Select Models</string>
+    <string name="experimental_primary_model">Primary Model</string>
+    <string name="parallel_picker_count">%1$d of 4 models selected (choose 2–4)</string>
+    <string name="parallel_picker_done">Done</string>
+    <string name="experimental_setup_models">%1$d Models</string>
+    <string name="experimental_setup_invalid">Saved Experimental Mode settings could not be read. Your selections and messages have been preserved. Restore the settings from a backup before using this setup.</string>
+    <string name="experimental_setup_selection_required">Choose 2–4 models and select a primary model before saving Parallel Responses. Your saved settings have not changed.</string>
+    <string name="experimental_setup_hands_free">Turn off hands-free before activating Parallel Responses. Your recorded and transcribed input has been preserved.</string>
+    <string name="experimental_setup_unavailable">These model selections need attention: %1$s. Their model or API profile is unavailable, has changed, or has no API key. Your selections and primary model have been preserved. Fix the API profile or reselect the affected models in Setup before sending.</string>
+    <string name="experimental_parallel_not_ready">Parallel Responses is not available yet. Your message and attachments have been preserved.</string>
+    <string name="experimental_parallel_hands_free">Hands-free is unavailable while Parallel Responses is active. Change Experimental Mode in Setup before starting hands-free. Your recorded and transcribed input has been preserved.</string>
+</resources>
