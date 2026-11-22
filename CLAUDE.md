@@ -69,6 +69,7 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 - Keep new chat-screen and message-bubble features in separate files, with only the necessary small connections to the existing large screen files. Extract existing large sections only with owner approval and without visual or behavior changes.
 - Add or update meaningful tests for changed behavior. Fix production code when a test legitimately fails. Never disable, weaken, or delete a test just to obtain a passing result. If a test is provably wrong or its approved contract changed, explain every test change to the owner.
 - Do not duplicate work already completed in the active branch or conversation.
+- **Changes during waits.** Before opening a PR for code that waits on a model request, a pause, or background work, list each decision made from stored data, how a change to that data during the wait is detected, and the test that proves it. Fix any gap before review.
 
 ### External services and costs
 
@@ -147,6 +148,8 @@ If a GitHub HTTPS remote has no usable credentials, do not waste task time retry
 Coding conversations stay private. Do not put private chats, health or emotional information, account details, private prompts, session IDs, AI conversation links, model attribution, or AI co-author trailers in commits, PRs, issues, source, documentation, release notes, or tags.
 
 Commit and PR text should describe the technical change and validation only. Inspect changed files and metadata before publishing.
+
+Never write an attribution footer or AI link into GitHub text. If a tool appends one automatically and it cannot be removed, ignore it: do not report it to the owner, and never delay a review, check or merge over it.
 
 ## 10. Task-specific documentation
 

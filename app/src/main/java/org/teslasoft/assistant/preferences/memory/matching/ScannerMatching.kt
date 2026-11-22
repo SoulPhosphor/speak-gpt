@@ -104,6 +104,23 @@ class ScannerMatching(
         return after.copy(drafts = drafts)
     }
 
+    /**
+     * [working] with every deferred draft lookup run (Stage 6B.3: a draft
+     * whose own lookup is missing or out of date has not been compared and
+     * is never treated as "no match"). Bounded passes of [afterSection].
+     */
+    fun completeLookups(working: WorkingDrafts, checkActive: () -> Unit): WorkingDrafts {
+        var current = working
+        repeat(MAX_COMPLETION_PASSES) {
+            val modelKey = librarian.scannerEmbedder()?.modelKey
+            if (current.drafts.none { (it.evidence ?: DraftMatchEvidence()).needsLookup(lookupKey(it), modelKey) }) {
+                return current
+            }
+            current = afterSection(current, current, null, checkActive)
+        }
+        return current
+    }
+
     private fun filedRecords(scope: RetrievalScope): List<ComparisonRecord> =
         store.scannerComparableMemories(scope).mapNotNull { (m, status) ->
             val matchStatus = MatchStatus.ofMemoryStatus(status) ?: return@mapNotNull null
@@ -190,6 +207,17 @@ class ScannerMatching(
     companion object {
         /** Draft lookups after one section; the rest are deferred. */
         const val MAX_PROPOSAL_LOOKUPS_PER_SECTION = 20
+
+        /** Passes of deferred lookups before filing (20 drafts each). */
+        const val MAX_COMPLETION_PASSES = 10
+
+        /** [working] with every draft's own lookup marked out of date, so
+         *  [completeLookups] compares each one with the current memories. */
+        fun withoutProposalEvidence(working: WorkingDrafts): WorkingDrafts = working.copy(
+            drafts = working.drafts.map { d ->
+                d.copy(evidence = d.evidence?.copy(proposal = null)?.takeIf { it.sections.isNotEmpty() })
+            }
+        )
 
         /** A working draft as a comparison record: its own wording and tags,
          *  as a filed memory's document would be. */

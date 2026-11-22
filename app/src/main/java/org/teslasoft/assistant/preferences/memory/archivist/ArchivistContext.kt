@@ -109,14 +109,23 @@ object ArchivistTargetCatalog {
     }
 }
 
-/** The complete Active memory data the Archivist is allowed to reason about. */
+/** The complete memory data the Archivist is allowed to reason about. */
 data class ArchivistExistingMemory(
     val stableId: String,
     val content: String,
     val scope: String,
     val targetNames: List<String>,
-    val typeName: String?
-)
+    val typeName: String?,
+    /** The status label the scanner AI sees (Stage 6B.3, owner-approved):
+     *  [STATUS_ACTIVE], [STATUS_PENDING] or [STATUS_ARCHIVED]. */
+    val status: String = STATUS_ACTIVE
+) {
+    companion object {
+        const val STATUS_ACTIVE = "active"
+        const val STATUS_PENDING = "pending"
+        const val STATUS_ARCHIVED = "archived"
+    }
+}
 
 data class ReferencedArchivistTarget(
     val alias: String,
@@ -163,6 +172,26 @@ data class ArchivistRequestProtocol(
 }
 
 object ArchivistRuntimeProtocol {
+    /** Owner-approved AI-facing wording (Stage 6B.3, 2026-11-22): what the
+     *  status of each supplied existing memory means. */
+    const val EXISTING_STATUS_INSTRUCTION =
+        "Each existing memory has a status. \"active\" memories are in use. \"pending\" memories are " +
+            "earlier suggestions waiting for the user's review. \"archived\" memories are past information " +
+            "the user kept but no longer uses. Emit no proposal when the information is already adequately " +
+            "represented by an existing memory of any status, even if your Type or tags would differ. A " +
+            "passing mention of something an archived memory already records needs no proposal. When the " +
+            "messages add a new detail, a correction, a change, or a return to a situation an archived memory " +
+            "describes, emit the new proposal and include that memory's reference in " +
+            "related_existing_memory_refs."
+
+    /** Owner-approved AI-facing wording (Stage 6B.3, 2026-11-22) for the
+     *  compact "already covered" entries. */
+    const val ALREADY_COVERED_INSTRUCTION =
+        "When the new messages repeat something an existing memory already covers and you therefore emit " +
+            "no proposal for it, add an already_covered entry with the message numbers where it was repeated " +
+            "and that memory's M reference. Use only message numbers from the new messages and only supplied " +
+            "M references. Do not add an entry for information you proposed."
+
     /** Revision 26 initial prompt target and hard local union ceiling. */
     const val MAX_MEMORIES_IN_PROMPT = 10
     const val MAX_RETRIEVAL_CANDIDATES = 15
@@ -238,6 +267,7 @@ object ArchivistRuntimeProtocol {
                 put("scope", entry.memory.scope)
                 put("targets", JSONArray(entry.memory.targetNames))
                 put("type", entry.memory.typeName ?: "No Type")
+                put("status", entry.memory.status)
             })
         }
 
@@ -311,12 +341,15 @@ Return exactly one JSON object with this Associative Memory shape:
       "tags": ["optional"]
     }
   ],
-  "withdrawn_drafts": ["supplied D reference"]
+  "withdrawn_drafts": ["supplied D reference"],
+  "already_covered": [{ "messages": [12, 14], "memory_ref": "M3" }]
 }
 
 Every array may be empty or omitted.
 
-Use only target_refs supplied below and only when each target kind matches the proposal scope. Do not return target names as references. If no supplied target is correct, leave target_refs empty. Use related_existing_memory_refs when a new proposal updates, contradicts, narrows, extends, or meaningfully continues a supplied existing memory. Emit no proposal when the information is already adequately represented by an existing memory.
+Use only target_refs supplied below and only when each target kind matches the proposal scope. Do not return target names as references. If no supplied target is correct, leave target_refs empty. Use related_existing_memory_refs when a new proposal updates, contradicts, narrows, extends, or meaningfully continues a supplied existing memory. ${EXISTING_STATUS_INSTRUCTION}
+
+${ALREADY_COVERED_INSTRUCTION}
 
 Working drafts are this scan's own unsaved proposals from earlier sections of this conversation, each with a D reference. Do not propose a working draft again. When the new messages correct, complete, or change the meaning of a working draft, return a draft edit instead of a new proposal: name the draft in replaces and write the complete new prose, keeping everything in it that is still true and worth remembering. A draft you do not name keeps its current text. Name more than one draft in one edit only when the messages show they describe the same thing and belong in one memory. An edit keeps the draft's scope and targets; if those are wrong, leave the draft unchanged. Omit type_id and tags in an edit to keep the draft's own. Withdraw a draft only when the messages show it was a mistake and nothing in it is worth keeping. Name each draft in at most one edit or withdrawal. Use only D references supplied below; never invent one. Do not create a new proposal from earlier messages alone.
 

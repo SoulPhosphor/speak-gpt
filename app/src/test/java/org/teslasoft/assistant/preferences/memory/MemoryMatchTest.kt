@@ -54,6 +54,19 @@ class MemoryMatchTest {
     }
 
     @Test
+    fun theMemoryAnExactRepeatIsLeftOutForIsNamed() {
+        // Stage 6B.3: the filing recheck depends on that memory, so its
+        // identity must be known; a non-identical library names none.
+        val c = candidate("Her birthday is in May.")
+        val lib = listOf(
+            existing("m0", "Her birthday is in June."),
+            existing("m1", "Her birthday is in May.", status = "draft")
+        )
+        assertEquals("m1", MemoryMatch.alreadyPresentIn(c, lib))
+        assertEquals(null, MemoryMatch.alreadyPresentIn(c, lib.take(1)))
+    }
+
+    @Test
     fun titleIsExcludedFromIdentity() {
         // Candidate has no title at all; content match alone suppresses.
         val c = candidate("Prefers tea to coffee.")

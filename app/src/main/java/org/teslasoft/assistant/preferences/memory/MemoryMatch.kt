@@ -166,6 +166,11 @@ object MemoryMatch {
      * otherwise every exact [Relation] other than [Relation.NONE] becomes a
      * Possible Match.
      */
+    /** The memory in [library] that [candidate] would repeat exactly
+     *  ([Outcome.AlreadyPresent]), or null. */
+    fun alreadyPresentIn(candidate: Candidate, library: List<Existing>): String? =
+        library.firstOrNull { relate(candidate, it) == Relation.ALREADY_PRESENT }?.memoryId
+
     fun classify(candidate: Candidate, library: List<Existing>): Outcome {
         val matches = ArrayList<Match>()
         for (e in library) {

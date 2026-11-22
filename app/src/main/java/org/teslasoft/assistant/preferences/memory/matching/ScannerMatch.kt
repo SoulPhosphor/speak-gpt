@@ -13,8 +13,8 @@ import org.json.JSONObject
  * Pending and Archived memories and this scan's own working drafts. The
  * evidence says which record, its status, how it was found and the
  * similarity score when one was actually computed. It decides nothing:
- * Stage 6B.3 reconciles and files. None of it is ever sent to the scanner
- * AI in 6B.2 (owner decision, 2026-11-22: the AI request stays Active-only).
+ * Stage 6B.3 reconciles and files, and shows a section's Pending and
+ * Archived matches to the scanner AI ([org.teslasoft.assistant.preferences.memory.archivist.ScannerPromptMatches]).
  */
 
 /** The status of a matched record when it was matched. */

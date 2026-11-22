@@ -38,7 +38,13 @@ data class WorkingDraft(
     val alternativeOf: List<Int> = emptyList(),
     /** Stage 6B.2 match evidence, saved with the checkpoint. Out of date
      *  once the draft's wording changes (see [DraftMatchEvidence.needsLookup]). */
-    val evidence: DraftMatchEvidence? = null
+    val evidence: DraftMatchEvidence? = null,
+    /** Filed memories the scanner AI was shown when it wrote or last changed
+     *  this draft (Stage 6B.3): a match among them was already judged. */
+    val shownMemoryIds: List<String> = emptyList(),
+    /** An edit or withdrawal naming this draft could not be applied, even
+     *  after repair (Stage 6B.3 reports it in the scan outcome). */
+    val unresolvedEdit: Boolean = false
 )
 
 /** A validated operation, in stable draft IDs. */
@@ -73,7 +79,11 @@ data class SectionDraftChanges(
     /** The passages the request read as its new section. */
     val sources: List<PassageRef> = emptyList(),
     /** Edits and withdrawals that were finally not applied. */
-    val failedEdits: Int = 0
+    val failedEdits: Int = 0,
+    /** The drafts those failed operations named. */
+    val unresolvedIds: Set<Int> = emptySet(),
+    /** Filed memories the request showed the scanner AI. */
+    val shownMemoryIds: List<String> = emptyList()
 )
 
 data class WorkingDrafts(
@@ -103,11 +113,19 @@ data class WorkingDrafts(
                     val base = named.first()
                     val edited = base.copy(
                         memory = edit(base.memory, named.map { it.memory }, op.content, op.typeId, op.tags),
-                        sources = boundedSources(named.flatMap { it.sources } + changes.sources)
+                        sources = boundedSources(named.flatMap { it.sources } + changes.sources),
+                        shownMemoryIds = boundedShown(named.flatMap { it.shownMemoryIds } + changes.shownMemoryIds),
+                        // A later edit that applies settles the draft.
+                        unresolvedEdit = false
                     )
                     list.removeAll { it.id in op.ids && it.id != base.id }
                     list[list.indexOfFirst { it.id == base.id }] = edited
                 }
+            }
+        }
+        if (changes.unresolvedIds.isNotEmpty()) {
+            for (i in list.indices) {
+                if (list[i].id in changes.unresolvedIds) list[i] = list[i].copy(unresolvedEdit = true)
             }
         }
         for (alternative in changes.alternatives) {
@@ -117,10 +135,13 @@ data class WorkingDrafts(
                 typeIdSuggestion = alternative.typeId ?: base.memory.typeIdSuggestion,
                 tags = alternative.tags ?: base.memory.tags
             )
-            next = add(list, memory, changes.sources, next, alternative.alternativeOf.filter { id -> list.any { it.id == id } })
+            next = add(
+                list, memory, changes.sources, next,
+                alternative.alternativeOf.filter { id -> list.any { it.id == id } }, changes.shownMemoryIds
+            )
         }
         for (memory in changes.newDrafts) {
-            next = add(list, memory, changes.sources, next, emptyList())
+            next = add(list, memory, changes.sources, next, emptyList(), changes.shownMemoryIds)
         }
         return WorkingDrafts(list, next)
     }
@@ -130,7 +151,8 @@ data class WorkingDrafts(
         memory: ArchivistResponseParser.DraftMemory,
         sources: List<PassageRef>,
         next: Int,
-        alternativeOf: List<Int>
+        alternativeOf: List<Int>,
+        shown: List<String>
     ): Int {
         val key = ArchivistCandidateBoundary.identityKey(memory)
         val at = list.indexOfFirst { ArchivistCandidateBoundary.identityKey(it.memory) == key }
@@ -140,11 +162,12 @@ data class WorkingDrafts(
             list[at] = prior.copy(
                 memory = merged,
                 sources = boundedSources(prior.sources + sources),
-                alternativeOf = (prior.alternativeOf + alternativeOf).distinct().filter { it != prior.id }
+                alternativeOf = (prior.alternativeOf + alternativeOf).distinct().filter { it != prior.id },
+                shownMemoryIds = boundedShown(prior.shownMemoryIds + shown)
             )
             return next
         }
-        list.add(WorkingDraft(next, memory, boundedSources(sources), alternativeOf))
+        list.add(WorkingDraft(next, memory, boundedSources(sources), alternativeOf, shownMemoryIds = boundedShown(shown)))
         return next + 1
     }
 
@@ -152,6 +175,12 @@ data class WorkingDrafts(
         /** Passage references kept per draft: its first and its latest. */
         const val MAX_SOURCES_PER_DRAFT = 32
         private const val FIRST_SOURCES_KEPT = 8
+
+        /** Shown memories remembered per draft, newest kept. */
+        const val MAX_SHOWN_PER_DRAFT = 40
+
+        fun boundedShown(ids: List<String>): List<String> =
+            ids.asReversed().distinct().take(MAX_SHOWN_PER_DRAFT).asReversed()
 
         fun boundedSources(sources: List<PassageRef>): List<PassageRef> {
             val distinct = sources.distinct()
@@ -194,6 +223,8 @@ data class WorkingDrafts(
                 })
                 if (draft.alternativeOf.isNotEmpty()) put("alternative_of", JSONArray(draft.alternativeOf))
                 draft.evidence?.let { put("match_evidence", MatchEvidenceCodec.encode(it)) }
+                if (draft.shownMemoryIds.isNotEmpty()) put("shown", JSONArray(draft.shownMemoryIds))
+                if (draft.unresolvedEdit) put("unresolved_edit", true)
             }.toString()
 
         /**
@@ -218,16 +249,34 @@ data class WorkingDrafts(
                     for (i in 0 until arr.length()) arr.optInt(i, 0).takeIf { it > 0 }?.let(alternativeOf::add)
                 }
                 val evidence = MatchEvidenceCodec.decode(o.optJSONObject("match_evidence"))
-                Triple(o.optInt("draft_id", 0).takeIf { it > 0 }, memory, Triple(sources, alternativeOf, evidence))
+                val shown = ArrayList<String>()
+                o.optJSONArray("shown")?.let { arr ->
+                    for (i in 0 until arr.length()) arr.optString(i).takeIf { it.isNotBlank() }?.let(shown::add)
+                }
+                Triple(
+                    o.optInt("draft_id", 0).takeIf { it > 0 }, memory,
+                    Restored(sources, alternativeOf, evidence, shown, o.optBoolean("unresolved_edit", false))
+                )
             }
             var next = maxOf(savedNextId, (parsed.mapNotNull { it.first }.maxOrNull() ?: 0) + 1)
             val used = HashSet<Int>()
             val drafts = parsed.map { (id, memory, extra) ->
                 val stable = id?.takeIf { used.add(it) } ?: next++.also { used.add(it) }
-                WorkingDraft(stable, memory, extra.first, extra.second, extra.third)
+                WorkingDraft(
+                    stable, memory, extra.sources, extra.alternativeOf, extra.evidence,
+                    extra.shown, extra.unresolvedEdit
+                )
             }
             return WorkingDrafts(drafts, next)
         }
+
+        private class Restored(
+            val sources: List<PassageRef>,
+            val alternativeOf: List<Int>,
+            val evidence: DraftMatchEvidence?,
+            val shown: List<String>,
+            val unresolvedEdit: Boolean
+        )
     }
 }
 
@@ -332,7 +381,10 @@ object WorkingDraftEdits {
         combineProblem: (ids: List<Int>, label: String) -> String?,
         /** One repair request: the operations it returned, or null when it
          *  could not be read. */
-        repair: suspend (problems: List<String>) -> Pair<List<ArchivistResponseParser.RawDraftEdit>, List<String>>?
+        repair: suspend (problems: List<String>) -> Pair<List<ArchivistResponseParser.RawDraftEdit>, List<String>>?,
+        /** When given, receives the drafts named by operations that were
+         *  finally not applied. */
+        unresolvedIds: MutableSet<Int>? = null
     ): Pair<List<DraftOperation>, Pair<List<DraftAlternative>, Int>> {
         val first = validate(edits, withdrawals, exposed, present, combineProblem)
         if (first.failed.isEmpty()) return first.valid to (emptyList<DraftAlternative>() to 0)
@@ -353,6 +405,7 @@ object WorkingDraftEdits {
         }
         val resolvedIds = repaired.flatMap { it.ids }.toSet()
         val remaining = first.failed.filter { f -> f.knownIds.none { it in resolvedIds } }
+        remaining.forEach { f -> unresolvedIds?.addAll(f.knownIds) }
         val alternatives = remaining.mapNotNull { f ->
             val edit = f.edit ?: return@mapNotNull null
             if (f.knownIds.isEmpty() || edit.content.isBlank()) return@mapNotNull null

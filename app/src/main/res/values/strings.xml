@@ -1637,6 +1637,8 @@
     <string name="mem_arch_nonew_msg">Archivist finished the run, but no new memories were added.</string>
     <string name="mem_arch_nonew_nothing">Archivist did not find anything new to save.</string>
     <string name="mem_arch_nonew_dupes">Archivist found only memories that already exist.</string>
+    <!-- Scan outcome when a filed suggestion's draft edits could not be reconciled (owner-approved, Stage 6B.3). -->
+    <string name="mem_arch_kept_for_review">Some memory suggestions could not be reconciled and were kept for review.</string>
     <string name="mem_arch_interrupted_label">Run Interrupted</string>
     <string name="mem_arch_interrupted_msg">Memory extraction was interrupted before it could finish.</string>
     <string name="mem_arch_interrupted_saved">Saved memories were kept. Some conversations may not have been processed.</string>

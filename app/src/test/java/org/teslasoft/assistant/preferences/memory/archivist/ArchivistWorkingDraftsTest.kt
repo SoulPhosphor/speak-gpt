@@ -329,4 +329,32 @@ class ArchivistWorkingDraftsTest {
         assertEquals(1, withUnknown.failedEdits)
         assertEquals(11, drafts.applying(withUnknown).drafts.count { it.alternativeOf.isEmpty() })
     }
+
+    @Test fun anEditThatCouldNotBeAppliedMarksItsDraftForTheScanOutcomeAndSurvivesACheckpoint() {
+        val drafts = start("Moving in spring", "Likes oolong")
+        val unresolved = HashSet<Int>()
+        val (ops, kept) = runBlocking {
+            WorkingDraftEdits.resolve(
+                listOf(edit("D1", content = "Moving in April"), edit("D1", content = "Moving in June")),
+                emptyList(), shown(drafts), drafts.drafts.map { it.id }.toSet(),
+                WorkingDraftEdits.samePlacement(drafts), repair = { null }, unresolvedIds = unresolved
+            )
+        }
+        assertEquals(setOf(1), unresolved)
+        val after = drafts.applying(
+            SectionDraftChanges(ops, kept.first, failedEdits = kept.second, unresolvedIds = unresolved,
+                shownMemoryIds = listOf("m-shown"))
+        )
+        assertTrue(after.drafts.first { it.id == 1 }.unresolvedEdit)
+        assertFalse(after.drafts.first { it.id == 2 }.unresolvedEdit)
+        // Alternatives written in that request remember what it showed.
+        assertTrue(after.drafts.filter { it.alternativeOf == listOf(1) }.all { it.shownMemoryIds == listOf("m-shown") })
+        val restored = WorkingDrafts.restore(after.drafts.map(WorkingDrafts::payload), after.nextId)
+        assertEquals(after, restored)
+        // A later edit that applies settles the draft.
+        val settled = restored.applying(
+            SectionDraftChanges(listOf(DraftOperation.Edit(listOf(1), "Moving in May", null, null)))
+        )
+        assertFalse(settled.drafts.first { it.id == 1 }.unresolvedEdit)
+    }
 }

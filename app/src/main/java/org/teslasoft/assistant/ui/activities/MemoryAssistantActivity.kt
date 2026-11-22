@@ -533,7 +533,7 @@ class MemoryAssistantActivity : SettingsPageActivity() {
                     showStatus(null, getString(R.string.memory_assistant_lore_found, o.memoriesFound), null, null, null)
                     linkViewPending?.text = getString(R.string.memory_assistant_view_lore_pending)
                 } else {
-                    showStatus(null, getString(R.string.memory_assistant_done_found, o.memoriesFound), null, null, null)
+                    showStatus(null, getString(R.string.memory_assistant_done_found, o.memoriesFound), keptForReviewLine(o), null, null)
                     linkViewPending?.text = getString(R.string.memory_assistant_view_pending)
                 }
                 linkViewPending?.visibility = View.VISIBLE
@@ -608,7 +608,7 @@ class MemoryAssistantActivity : SettingsPageActivity() {
                     showStatus(
                         getString(R.string.mem_arch_partial_label),
                         getString(R.string.mem_arch_partial_msg),
-                        counts + "\n\n" + reason,
+                        listOfNotNull(counts, reason, keptForReviewLine(o)).joinToString("\n\n"),
                         getString(R.string.mem_arch_btn_try_again),
                         MaterialColors.getColor(statusLabel!!, com.google.android.material.R.attr.colorTertiary)
                     ) { startRun(null) }
@@ -971,6 +971,11 @@ class MemoryAssistantActivity : SettingsPageActivity() {
             btnStatusAction?.setOnClickListener { if (!running) action?.invoke() }
         }
     }
+
+    /** The owner-approved line for suggestions kept for review because
+     *  their draft edits could not be reconciled; null when none were. */
+    private fun keptForReviewLine(o: Archivist.RunOutcome): String? =
+        if (o.keptForReview > 0) getString(R.string.mem_arch_kept_for_review) else null
 
     private fun fullReason(r: ArchivistFailure): String = getString(
         when (r) {
