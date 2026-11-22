@@ -2180,9 +2180,19 @@ object Archivist {
 
     /** The existing memory [candidate] repeats exactly, as a dependency, or
      *  null when it repeats none. */
-    private fun exactRepeatOf(store: MemoryStore, candidate: MemoryMatch.Candidate): MemoryDependency? =
-        store.alreadyPresentMemoryId(candidate)?.let { id -> store.getMemory(id) }
-            ?.let { MemoryDependencies.of(it, MemoryStore.draftRejectionHash(it.content)) }
+    private fun exactRepeatOf(store: MemoryStore, candidate: MemoryMatch.Candidate): MemoryDependency? {
+        val record = store.alreadyPresentMemoryId(candidate)?.let { store.getMemory(it) } ?: return null
+        // The dependency is taken from the very record that is confirmed to
+        // repeat the proposal, so an edit in between can never be recorded
+        // as the reason something was left out.
+        val existing = MemoryMatch.Existing(
+            record.memoryId, record.content, record.scope, record.typeId, record.status,
+            record.worldIds + record.roleplayCharacterIds + record.campaignIds + record.projectIds +
+                record.companionIds
+        )
+        if (MemoryMatch.alreadyPresentIn(candidate, listOf(existing)) == null) return null
+        return MemoryDependencies.of(record, MemoryStore.draftRejectionHash(record.content))
+    }
 
     /** Returns how many candidates were skipped as duplicates of memories
      *  that already exist ("Archivist found only memories that already
