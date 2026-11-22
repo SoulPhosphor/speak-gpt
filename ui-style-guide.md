@@ -2175,8 +2175,13 @@ top margin after centering and would push the frame's bottom edge outside the
 row. Place the selected chip group below the entry row. Other tag editors have different
 compositions and do not yet use this family.
 
-The model-rule editor places `AppButton.Primary.ModelRuleChoice` and its
-`Trailing` variant in `ModelRuleEditor.ModelRow` for equal-width actions.
+Below the Applied Models hint, `ModelRuleEditor.CurrentModel` holds the
+Current Chat Model label (`ModelRuleEditor.CurrentModelLabel`, the field label
+with the editor's control gap) and a `RemovableList.Row` with the model's
+`Row.Title`, its connection's `Row.Subtitle`, and a trailing
+`AppButton.Primary.ModelRuleCurrentAdd`. The section is hidden when there is no
+current chat model, and Add is disabled once that model is on the rule. The
+full-width `AppButton.Primary.ModelRuleChoose` follows it.
 `view_model_rule_target_row.xml` composes `RemovableList.Row`, a weighted
 `Row.TextColumn` with `Row.Title` and `Row.Subtitle`, and `RemovableList.Remove`.
 `ModelRuleEditor.TargetList` stacks these rows vertically. Model names and

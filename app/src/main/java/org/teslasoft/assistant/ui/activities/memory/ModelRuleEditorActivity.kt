@@ -134,7 +134,11 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
 
         tagChips = ModelRuleTagChips(this, chipsTags!!, fieldTagInput!!)
         unavailableTargets = ModelCleanupReportStore.get(this).load().unavailable
-        btnUseCurrentModel?.isEnabled = currentChatTarget() != null
+        currentChatTarget()?.let { current ->
+            findViewById<View>(R.id.current_model_section).visibility = View.VISIBLE
+            findViewById<TextView>(R.id.current_model_name).text = current.modelId
+            findViewById<TextView>(R.id.current_model_endpoint).text = endpointLabel(current.endpointId)
+        }
         btnChooseModel?.isEnabled = endpointProfiles().isNotEmpty()
         supportFragmentManager.setFragmentResultListener(
             AdvancedModelSelectorDialogFragment.MODEL_RULE_SELECTION_RESULT, this
@@ -218,6 +222,8 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
             if (targets.isEmpty()) R.string.model_rule_choose_ai_model
             else R.string.model_rule_add_another_ai
         )
+        // Add stays available until the current chat model is on the rule.
+        btnUseCurrentModel?.isEnabled = currentChatTarget()?.let { it !in targets } ?: false
         for (target in targets.toList()) {
             val row = layoutInflater.inflate(R.layout.view_model_rule_target_row, group, false)
             row.findViewById<TextView>(R.id.model_rule_target_name).text = target.modelId

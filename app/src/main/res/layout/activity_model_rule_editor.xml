@@ -78,16 +78,35 @@
                 style="@style/Widget.App.Section.Hint"
                 android:text="@string/model_rule_edit_models_hint" />
 
-            <LinearLayout style="@style/Widget.App.ModelRuleEditor.ModelRow">
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_use_current_model"
-                    style="@style/AppButton.Primary.ModelRuleChoice"
-                    android:text="@string/model_rule_use_current_chat_model" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_choose_model"
-                    style="@style/AppButton.Primary.ModelRuleChoice.Trailing"
-                    android:text="@string/model_rule_choose_ai_model" />
+            <LinearLayout
+                android:id="@+id/current_model_section"
+                style="@style/Widget.App.ModelRuleEditor.CurrentModel"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.ModelRuleEditor.CurrentModelLabel"
+                    android:text="@string/model_rule_current_chat_model" />
+
+                <LinearLayout style="@style/Widget.App.RemovableList.Row">
+                    <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                        <TextView
+                            android:id="@+id/current_model_name"
+                            style="@style/Widget.App.Row.Title" />
+                        <TextView
+                            android:id="@+id/current_model_endpoint"
+                            style="@style/Widget.App.Row.Subtitle" />
+                    </LinearLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_use_current_model"
+                        style="@style/AppButton.Primary.ModelRuleCurrentAdd"
+                        android:text="@string/btn_add" />
+                </LinearLayout>
             </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_choose_model"
+                style="@style/AppButton.Primary.ModelRuleChoose"
+                android:text="@string/model_rule_choose_ai_model" />
 
             <LinearLayout
                 android:id="@+id/model_rule_targets"
