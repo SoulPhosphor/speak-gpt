@@ -164,6 +164,41 @@ class ParallelControllerInstrumentedTest {
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
+    @Test fun ordinaryRegenerationCannotFallThroughAndTruncateLiveParallelRequests() = fixture { activity, host ->
+        val started = Channel<Unit>(Channel.UNLIMITED)
+        var calls = 0
+        val ordinary = hashMapOf<String, Any>("message_id" to id(), "isBot" to true, "message" to "ordinary reply", "state" to "done")
+        withContext(Dispatchers.Main.immediate) {
+            host.messages += hashMapOf<String, Any>("message_id" to id(), "isBot" to false, "message" to "earlier user")
+            host.messages += ordinary
+            assertTrue(host.save())
+        }
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { _, out ->
+                    synchronized(host) { calls++ }
+                    out.text("live parallel")
+                    started.send(Unit)
+                    awaitCancellation()
+                } }, { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            repeat(4) { started.receive() }
+            withContext(Dispatchers.Main.immediate) {
+                assertTrue(controller.regenerate(1))
+                assertEquals(4, host.messages.size)
+                assertSame(ordinary, host.messages[1])
+                assertTrue(ParallelResponseSelection.running(host.group()))
+                controller.stop(3, null)
+            }
+            host.finished.await()
+            assertEquals(4, calls)
+            assertFalse(ParallelResponseSelection.running(host.stored()))
+            withContext(Dispatchers.Main.immediate) { assertFalse(controller.regenerate(1)) }
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
+    }
+
     @Test fun failedInitialCommitLeavesTheDraftAndLaunchesNoProviderRequests() = fixture { activity, host ->
         host.failCommit = true
         var calls = 0
@@ -292,7 +327,7 @@ class ParallelControllerInstrumentedTest {
             }
             while (withContext(Dispatchers.Main.immediate) { host.group().slots[3].versions.single().fields["message"] != "edited alternative" }) delay(20)
             val edited = host.stored()
-            assertEquals("provider-0", host.storedRow()["message"])
+            assertEquals(ResponseGroupEdits.canonicalFields(original)["message"], host.storedRow()["message"])
             assertEquals(original.slots[1].slotId, edited.foregroundSlotId)
             assertEquals("stopped", edited.slots[3].versions.single().fields["state"])
             assertEquals("provider-3", edited.slots[3].versions.single().attempts.single().partialFields["message"])
@@ -300,6 +335,7 @@ class ParallelControllerInstrumentedTest {
             assertTrue(edited.slots.take(3).all { it.versions.single().fields["state"] == "streaming" })
             (0 until 3).forEach { gates[it].complete(Unit) }
             host.finished.await()
+            assertEquals("provider-0", host.storedRow()["message"])
             withContext(Dispatchers.Main.immediate) {
                 val settledGroup = host.group()
                 val primary = settledGroup.slots.single { it.slotId == settledGroup.primarySlotId }

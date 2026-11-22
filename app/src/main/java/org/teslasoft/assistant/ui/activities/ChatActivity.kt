@@ -15199,6 +15199,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // this position is the last one, so the normal regenerate path
                 // applies and keeps this turn's version history.
                 withResummarizeDecision(position) {
+                    if (parallelChat.busy) return@withResummarizeDecision
                     val boundary = preferences?.getManualCompactionBoundary() ?: 0
                     if (position < boundary) {
                         preferences?.setCompactionStale(true)
@@ -15240,6 +15241,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * every message after that turn.
      */
     override fun onMakeVersionCurrent(position: Int) {
+        if (parallelChat.busy) return
         if (position < 0 || position >= messages.size) return
         if (condensedRegenerationLockKind(position) == CondensedRegenerationLock.Kind.COMPACTION) return
         val msg = messages[position]
@@ -15273,6 +15275,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         summarySourceChangePending = true
         lifecycleScope.launch {
             summarizerController?.cancelSummarizingAndWait()
+            if (parallelChat.busy) { summarySourceChangePending = false; return@launch }
             val boundary = preferences?.getManualCompactionBoundary() ?: 0
             promoteVersionAt(position, display)
             if (discardFollowing) truncateAfter(position)

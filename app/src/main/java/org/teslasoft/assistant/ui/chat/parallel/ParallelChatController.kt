@@ -202,10 +202,14 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         scope.launch {
             group.slots.filter { slotId == null || it.slotId == slotId }.flatMap { it.versions }.flatMap { it.attempts }
                 .filter { it.state == MessageCompletionState.STREAMING }.map { it.requestId }.forEach { coordinator.cancel(it) }
+            // A terminal tool response can still own a live continuation/usage chain.
+            coordinator.cancelOwned(ResponseGroupTarget(host.chatId, group.assistantMessageId, group.groupId), slotId)
         }
     }
 
     fun regenerate(position: Int): Boolean {
+        // The ordinary fallback may truncate this owner's live group too.
+        if (busy || selectingBranch || host.unavailable) return true
         val row = host.messages.getOrNull(position) ?: return false
         val read = ResponseGroupCodec.read(row)
         val group = (read as? ResponseGroupRead.Valid)?.group ?: run {
@@ -213,7 +217,6 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
             notice(activity.getString(if (read is ResponseGroupRead.Unsupported) R.string.parallel_responses_unsupported else R.string.parallel_responses_unreadable))
             return true
         }
-        if (busy || selectingBranch || host.unavailable) return true
         selectingBranch = true
         operationJob = scope.launch {
             try { host.beforeRegenerate(position) {

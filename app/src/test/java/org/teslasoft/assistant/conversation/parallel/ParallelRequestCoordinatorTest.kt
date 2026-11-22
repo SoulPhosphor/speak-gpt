@@ -155,6 +155,27 @@ class ParallelRequestCoordinatorTest {
         }
     }
 
+    @Test fun cancelOwnedJoinsATerminalCheckpointWithoutCancellingItsSibling() = runBlocking {
+        withTimeout(10_000) {
+            val f = Fixture(group(2), this)
+            val run = f.start()
+            val selected = f.g.slots.first()
+            f.lanes.getValue(selected.slotId).done(23)
+            while (f.store.commits.receive().slots.first().versions.single().fields["state"] != "done") { }
+            // The transport has finished, but the owned job still waits for its pricing observer.
+            f.engine.cancelOwned(f.target, selected.slotId)
+            assertEquals("done", f.version(0).fields["state"])
+            assertEquals("streaming", f.version(1).fields["state"])
+            f.prices.getValue(f.g.slots[1].slotId).complete(TokenPricingCatalog("same-model"))
+            f.lanes.getValue(f.g.slots[1].slotId).done()
+            run.await()
+            assertEquals(23, ResponseGroupEdits.usage(f.saved()).first().inputTokens)
+            assertEquals(run.requestIds, ResponseGroupEdits.usage(f.saved()).map { it.requestId })
+            assertTrue(f.engine.unsavedRequestIds().isEmpty())
+            assertEquals(2, f.calls)
+        }
+    }
+
     @Test fun failureCancellationAndSlowSiblingHaveIndependentOutcomesAndCharges() = runBlocking {
         withTimeout(10_000) {
             val f = Fixture(group(), this)
