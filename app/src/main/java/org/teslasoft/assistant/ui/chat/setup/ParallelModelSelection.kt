@@ -21,5 +21,11 @@ internal class ParallelModelSelection(raw: String) {
         return true
     }
 
+    fun update(model: SetupModel): Boolean {
+        val existing = models.firstOrNull { it.identity == model.identity } ?: return toggle(model)
+        models = models.map { if (it.id == existing.id) model.copy(id = existing.id) else it }
+        return true
+    }
+
     fun raw(): String = ExperimentalSetupCodec.encode(ExperimentalSetup(models = models))
 }

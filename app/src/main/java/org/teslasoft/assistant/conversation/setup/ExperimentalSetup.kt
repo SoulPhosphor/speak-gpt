@@ -22,6 +22,10 @@ data class ExperimentalSetup(
     val enabled get() = mode != Mode.OFF
     val usesLastMessageOnly get() = enabled && lastMessageOnly
 
+    fun withoutModel(id: String): ExperimentalSetup = copy(
+        models = models.filterNot { it.id == id }, primaryId = primaryId?.takeUnless { it == id }
+    )
+
     fun validate() {
         require(models.size <= MAX_MODELS)
         require(models.map { it.id }.distinct().size == models.size)

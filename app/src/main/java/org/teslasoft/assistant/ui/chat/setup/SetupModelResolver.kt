@@ -26,7 +26,12 @@ internal object SetupModelResolver {
             frequencyPenalty = chat.getFrequencyPenalty()
             presencePenalty = chat.getPresencePenalty()
         }
-        parameters.copySamplingTo(settings)
+        val defaults = FavoriteModelParameters.apiDefaults(context, chosen.modelId, chosen.endpointId)
+        settings.streaming = parameters.streaming ?: defaults.streaming
+        settings.temperature = parameters.temperature ?: defaults.temperature
+        settings.topP = parameters.topP ?: defaults.topP
+        settings.frequencyPenalty = parameters.frequencyPenalty ?: defaults.frequencyPenalty
+        settings.presencePenalty = parameters.presencePenalty ?: defaults.presencePenalty
         return SetupModel(UUID.randomUUID().toString(), chosen.endpointId, chosen.modelId,
             endpoint.host, endpoint.chatEndpoint, endpoint.authType, endpoint.identity, Gson().toJson(settings), endpoint.label.ifBlank { endpoint.host })
             .also { it.validate() }

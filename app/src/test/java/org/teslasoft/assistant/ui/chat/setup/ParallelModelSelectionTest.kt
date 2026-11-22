@@ -30,4 +30,14 @@ class ParallelModelSelectionTest {
         assertEquals(setup, ExperimentalSetupCodec.decode(raw))
         assertEquals("b", setup.primaryId)
     }
+    @Test fun providerChangeReplacesOnlyThatDraftAssignmentAndKeepsItsIdAndOrder() {
+        val a = model("a")
+        val b = model("b")
+        val draft = ParallelModelSelection(ExperimentalSetupCodec.encode(ExperimentalSetup(models = listOf(a, b))))
+        assertTrue(draft.update(model("new-id", "profile-b").copy(endpointLabel = "Changed label")))
+        assertEquals(listOf("a", "b"), draft.models.map { it.id })
+        assertEquals(a, draft.models.first())
+        assertEquals("Changed label", draft.models.last().endpointLabel)
+    }
+
 }

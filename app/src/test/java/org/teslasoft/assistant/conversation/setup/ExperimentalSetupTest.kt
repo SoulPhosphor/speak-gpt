@@ -60,4 +60,14 @@ class ExperimentalSetupTest {
             raw.replace("\"models\":[]", "\"models\":[null]"))
             .forEach { assertTrue(it, runCatching { ExperimentalSetupCodec.decode(it) }.isFailure) }
     }
+    @Test fun removingADeadPrimaryRequiresExplicitReplacementAndRetainsOtherChoices() {
+        val setup = ExperimentalSetup(ExperimentalSetup.Mode.PARALLEL, models = listOf(model("a"), model("b"), model("c")), primaryId = "b")
+        val remaining = setup.withoutModel("b")
+        assertNull(remaining.primaryId)
+        assertEquals(listOf("a", "c"), remaining.models.map { it.id })
+        assertTrue(runCatching { remaining.validate() }.isFailure)
+        remaining.copy(primaryId = "c").validate()
+        assertEquals("b", setup.primaryId)
+    }
+
 }

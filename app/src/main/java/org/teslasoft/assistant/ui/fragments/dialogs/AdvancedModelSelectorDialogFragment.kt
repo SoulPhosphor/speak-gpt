@@ -341,7 +341,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             val savedModel = result.data?.getStringExtra(ChooseProviderActivity.EXTRA_MODEL)
                 ?.takeIf { it.isNotBlank() }
                 ?: pendingModel.modelId
-            finishModelSelection(savedModel, pendingModel.endpointId, RoutingChoice.Keep)
+            finishModelSelection(savedModel, pendingModel.endpointId, RoutingChoice.Keep, updateParallelSelection = true)
         }
         // Cancel/back leaves the selector open on purpose. The not-yet-applied
         // bad model never reached the chat, so choosing another model is a valid
@@ -383,7 +383,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private fun finishModelSelection(
         model: String,
         endpointId: String = resolvedEndpointId,
-        choice: RoutingChoice = RoutingChoice.Saved
+        choice: RoutingChoice = RoutingChoice.Saved,
+        updateParallelSelection: Boolean = false
     ) {
         if (parallelPicker) {
             val settings = when (choice) {
@@ -398,7 +399,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                     getString(R.string.experimental_setup_unavailable, "$model ($endpointId)")
                 return
             }
-            parallelSelection?.toggle(selected)
+            if (updateParallelSelection) parallelSelection?.update(selected) else parallelSelection?.toggle(selected)
             render()
             return
         } else if (modelRulePicker) {
@@ -897,7 +898,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             }
         }
         if (chatPicker) {
-            configureSavedModelAdapter(ctx, chatId)
+            configureSavedModelAdapter(ctx, if (parallelPicker) "" else chatId)
             configureCatalog(savedInstanceState?.getString(STATE_CATALOG_PROFILE))
         }
 
@@ -1145,7 +1146,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 routingType = FavoriteModelObject.ROUTING_ONLY
                 selectedProvider = slug
             }
-            finishModelSelection(target.modelId, target.endpointId, RoutingChoice.Use(routing))
+            finishModelSelection(target.modelId, target.endpointId, RoutingChoice.Use(routing), updateParallelSelection = true)
             return
         }
         if (modelRulePicker) {

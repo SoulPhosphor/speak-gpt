@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.TextView
@@ -93,16 +94,20 @@ class ExperimentalSetupDialogFragment : DialogFragment() {
         root.findViewById<View>(R.id.experimental_last_message_row).isVisible = draft.enabled
         root.findViewById<View>(R.id.experimental_parallel_controls).isVisible = draft.mode == ExperimentalSetup.Mode.PARALLEL
         root.findViewById<View>(R.id.experimental_setup_save).isEnabled = !unreadable
-        val group = root.findViewById<RadioGroup>(R.id.experimental_primary_models)
+        val group = root.findViewById<LinearLayout>(R.id.experimental_primary_models)
         group.removeAllViews()
         draft.models.forEach { model ->
-            val radio = layoutInflater.inflate(R.layout.view_experimental_primary_model, group, false) as RadioButton
-            radio.id = View.generateViewId()
+            val row = layoutInflater.inflate(R.layout.view_experimental_primary_model, group, false)
+            val radio = row.findViewById<RadioButton>(R.id.experimental_model_primary)
             radio.text = "${model.modelId}\n${model.endpointLabel}"
             radio.contentDescription = "${model.modelId}, ${model.endpointLabel}, ${model.endpointId}"
             radio.isChecked = model.id == draft.primaryId
-            radio.setOnCheckedChangeListener { _, checked -> if (checked) draft = draft.copy(primaryId = model.id) }
-            group.addView(radio)
+            radio.setOnClickListener { draft = draft.copy(primaryId = model.id); render() }
+            row.findViewById<View>(R.id.experimental_model_remove).apply {
+                contentDescription = getString(R.string.provider_remove_desc, model.modelId)
+                setOnClickListener { draft = draft.withoutModel(model.id); render() }
+            }
+            group.addView(row)
         }
         error(if (unreadable) getString(R.string.experimental_setup_invalid) else null)
     }
