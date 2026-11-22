@@ -92,6 +92,38 @@ class ParallelControllerInstrumentedTest {
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
+    @Test fun screenTeardownReconcilesOwnedPartialsWithoutResendingAndKeepsTheBrowsedTab() = fixture { activity, host ->
+        val started = Channel<Unit>(Channel.UNLIMITED)
+        val requests = CopyOnWriteArrayList<ParallelRequest>()
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { request, out ->
+                    requests += request
+                    out.text("retained partial ${request.assignment.modelId}")
+                    started.send(Unit)
+                    awaitCancellation()
+                } }, { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        repeat(4) { started.receive() }
+        val before = host.stored()
+        withContext(Dispatchers.Main.immediate) {
+            controller.browse(1, before.slots[3].slotId, before.slots[3].foregroundVersionId)
+            controller.close()
+        }
+        var reopened = host.stored()
+        while (ParallelResponseSelection.running(reopened)) { delay(20); reopened = host.stored() }
+        assertEquals(4, requests.size)
+        assertEquals(before.slots[3].slotId, reopened.foregroundSlotId)
+        assertEquals(before.slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId },
+            reopened.slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId })
+        assertTrue(reopened.slots.all { it.versions.single().fields["state"] == "interrupted" })
+        assertTrue(reopened.slots.all { it.versions.single().fields["message"]!!.startsWith("retained partial") })
+        val row = host.storedRow()
+        assertFalse(ResponseGroupRecovery.reconcile(row))
+        assertEquals(reopened.foregroundSlotId, (ResponseGroupCodec.read(row) as ResponseGroupRead.Valid).group.foregroundSlotId)
+    }
+
     @Test fun failedInitialCommitLeavesTheDraftAndLaunchesNoProviderRequests() = fixture { activity, host ->
         host.failCommit = true
         var calls = 0

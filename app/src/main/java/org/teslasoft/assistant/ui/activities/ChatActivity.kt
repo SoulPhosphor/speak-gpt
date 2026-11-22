@@ -819,7 +819,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     val frozen = buildFrozenRegularRequest(projection, stored, selected.modelId, preferences!!.getMaxTokens(),
                         memoryAttachments.ids(), includeModelRules = false)
                     check(RequestCapacity.canAssemble(RequestCapacity.measure(frozen.payload), RequestHeapState.current()))
-                    ParallelTurnBase(frozen.payload, frozen.nativePdfs, eligible.flatMap { it.includes },
+                    ParallelTurnBase(frozen.payload.copy(logitBias = if (preferences?.getLogitBiasesConfigId().isNullOrEmpty() ||
+                        preferences?.getLogitBiasesConfigId() == "null") logitBiasPreferences?.getLogitBiasesMap()?.toMap() else null),
+                        frozen.nativePdfs, eligible.flatMap { it.includes },
                         frozen.stablePrefixCount,
                         ActiveMemoryAttribution.encode(frozen.activeMemoryReferences)?.let { mapOf(ActiveMemoryAttribution.MESSAGE_KEY to it) }.orEmpty() +
                             mapOf(org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY to
@@ -858,6 +860,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         override fun changed(position: Int, canonical: Boolean) {
             if (canonical) rebuildModelProjection()
             adapter?.notifyItemChanged(position)
+            if (position == messages.lastIndex) scroll(false)
         }
         override fun busy(value: Boolean) {
             if (value) disableTurnControlsUnlessTheyAreStops() else restoreUIState()
@@ -866,7 +869,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         override suspend fun adopt(position: Int, discardDescendants: Boolean): Boolean {
             val row = messages.getOrNull(position) ?: return false
             val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return false
-            if (condensedRegenerationLockKind(position) == CondensedRegenerationLock.Kind.COMPACTION) return false
+            if (condensedRegenerationLockKind(position) == CondensedRegenerationLock.Kind.COMPACTION) {
+                MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
+                    .setMessage(R.string.regenerate_unavailable_compaction).setPositiveButton(R.string.okay, null).show()
+                return false
+            }
             val before = org.teslasoft.assistant.util.summarizer.SummarySections.fromJson(preferences?.getSummarySections().orEmpty())
             summarySourceChangePending = true
             summarizerController?.cancelSummarizingAndWait()
@@ -890,13 +897,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (position < messages.lastIndex && !parallelChat.confirm(getString(R.string.branch_regenerate_body), R.string.branch_regenerate_confirm)) return
             kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
                 withResummarizeDecision(position) {
+                    val boundary = preferences?.getManualCompactionBoundary() ?: 0
+                    if (position < boundary) preferences?.setCompactionStale(true)
                     if (position < messages.lastIndex) truncateAfter(position)
-                    lifecycleScope.launch { try { action() } finally { if (continuation.isActive) continuation.resume(Unit) } }
+                    lifecycleScope.launch { try { action() } finally {
+                        if (position < boundary) askToRecompactAfterDelete(boundary, sourceChanged = true)
+                        if (continuation.isActive) continuation.resume(Unit)
+                    } }
                 }
             }
         }
         override fun settled() {
-            syncChatProjection(); summarizerCycle()
+            syncChatProjection(); summarizerCycle(); showPendingContextHelperFailure()
             val persona = messages.lastOrNull()?.let(org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope::read)?.companionPersonaId
             memoryWriteQueue.execute {
                 org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.ensureCompanion(applicationContext, persona)
@@ -6939,6 +6951,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the message's record so it becomes both what the box shows and what the
      *  model receives instead of the full prompt. */
     override fun onImageSummaryEdited(position: Int, editedSummary: String?) {
+        if (parallelChat.editImageSummary(position, editedSummary)) return
         if (position < 0 || position >= messages.size) return
         val meta = GeneratedImageMetadata.fromJson(
             messages[position][GeneratedImageMetadata.KEY]?.toString()
@@ -13947,7 +13960,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             logitBias = logitBias,
             nativeDocuments = conversationProjection.nativePdfs.map { pdf ->
                 FrozenNativeDocumentPayload(
-                    base64Characters = pdf.base64Data.length.toLong(),
+                    base64Characters = pdf.base64Data.length.toLong().takeIf { it > 0 } ?: ((pdf.originalByteSize + 2L) / 3L * 4L),
                     // Native providers tokenize extracted text and page imagery,
                     // not the transport base64. Use a conservative estimate
                     // from both page count and uncompressed source size.
@@ -15095,7 +15108,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         speak(toSpokenText(message))
     }
 
-    override fun onParallelBrowse(position: Int, slotId: String, versionId: String) = parallelChat.browse(position, slotId, versionId)
+    override fun hasParallelUnsaved(position: Int) = parallelChat.unsaved(position)
+    override fun onParallelRetrySave() = parallelChat.retrySave()
+    override fun onParallelBrowse(position: Int, slotId: String, versionId: String) {
+        disableAutoScroll = true
+        parallelChat.browse(position, slotId, versionId)
+    }
     override fun onParallelStop(position: Int, slotId: String?) = parallelChat.stop(position, slotId)
 
     override fun onRetryClick() {

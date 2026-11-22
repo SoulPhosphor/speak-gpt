@@ -27,7 +27,7 @@ internal object ParallelRuntime {
         val images = ParallelRegisteredImages(app, chat)
         fun endpoint(assignment: ResponseModelAssignment): ApiEndpointObject {
             val current = ApiEndpointPreferences.getApiEndpointPreferences(app).getApiEndpoint(app, assignment.endpointProfileId)
-            if (current.id != assignment.endpointProfileId || current.host != assignment.endpoint ||
+            if (current.id != assignment.endpointProfileId || current.host != assignment.endpoint || current.apiKey.isBlank() ||
                 current.authType != assignment.capabilities["parallel_auth_type"])
                 throw ParallelTransportFailure("endpoint_configuration_changed")
             // Only credentials are live. A later settings edit cannot change this request's path/timeouts/routing.

@@ -4692,4 +4692,6 @@
     <string name="parallel_context_warning">The prepared request may exceed the context window for %1$s. Send anyway?</string>
     <string name="parallel_tab_failed">Failed</string>
     <string name="parallel_tab_interrupted">Interrupted</string>
+    <string name="parallel_responses_unreadable">The stored model responses could not be read. The saved data and current answer are preserved. Regeneration is unavailable for this turn.</string>
+    <string name="parallel_responses_unsupported">This version cannot open the stored model responses. The saved data and current answer are preserved. Regeneration is unavailable for this turn.</string>
 </resources>

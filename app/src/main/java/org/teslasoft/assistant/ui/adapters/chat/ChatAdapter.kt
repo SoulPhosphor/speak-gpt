@@ -785,6 +785,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val bubbleName: TextView? = itemView.findViewById(R.id.bubble_name)
         private var boundGeneratedImagePath: String? = null
         private var boundGeneratedImageKey: String? = null
+        private var boundParallelImageText: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
         private val btnMore: ImageButton? = itemView.findViewById(R.id.btn_more)
@@ -894,6 +895,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val parallelImage = chatMessage.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY) &&
                 GeneratedImageMetadata.fromJson(display[GeneratedImageMetadata.KEY]?.toString())?.fileHash != null
             val isGeneratedImage = parallelImage || display["message"].toString().startsWith("~file:")
+            boundParallelImageText = display["message"]?.toString()?.takeIf { parallelImage && it.isNotBlank() }
+            val imageOnly = isGeneratedImage && boundParallelImageText == null
             btnEdit.visibility = if (isGeneratedImage) View.GONE else if (chatMessage["isBot"] == true) View.GONE else View.VISIBLE
             btnMore?.visibility = View.VISIBLE
             if (isGeneratedImage) btnShare.isEnabled = false
@@ -910,13 +913,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateShareButton(chatMessage)
             updateSpeakButton(display, position)
             updateStatusMarker(display)
-            updateMessageMeta(display, isGeneratedImage, chatMessage)
+            updateMessageMeta(display, imageOnly, chatMessage)
             updateReasoning(display, position)
-            updateReasoningIndicator(display, isGeneratedImage)
+            updateReasoningIndicator(display, imageOnly)
             updateActiveMemories(display)
             val parallel = org.teslasoft.assistant.ui.chat.parallel.ParallelResponseTabs.bind(itemView, chatMessage, !bulkActionMode,
                 browse = { slot, version -> keepingActionBarInPlace { listener?.onParallelBrowse(bindingAdapterPosition.takeUnless { it == RecyclerView.NO_POSITION } ?: position, slot, version) } },
-                stop = { slot -> listener?.onParallelStop(position, slot) })
+                stop = { slot -> listener?.onParallelStop(position, slot) },
+                savePending = listener?.hasParallelUnsaved(position) == true,
+                retrySave = { listener?.onParallelRetrySave() })
             if (parallel) versionNav?.visibility = View.GONE else updateVersionNav(chatMessage, position)
 
             btnDetails.setOnClickListener { anchor ->
@@ -1004,8 +1009,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 // Share and Copy move onto the image's own action row, so hide
                 // the action-bar copies. Share visibility for a bot message was
                 // already set VISIBLE by updateShareButton above.
-                btnShare.visibility = View.GONE
-                btnCopy.visibility = View.GONE
+                btnShare.visibility = if (imageOnly) View.GONE else View.VISIBLE
+                btnCopy.visibility = if (imageOnly) View.GONE else View.VISIBLE
+                if (!imageOnly) {
+                    btnShare.isEnabled = true
+                    btnShare.setOnClickListener { sharePlainText(context, display["message"].toString()) }
+                }
                 processGeneratedImageFile(display)
             } else {
                 boundGeneratedImagePath = null
@@ -3367,10 +3376,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 })
                 .into(generatedImage)
 
-            btnShare.setOnClickListener {
+            val imageShare = View.OnClickListener {
                 val imageType = url.substringAfter("data:image/").substringBefore(";")
                 shareBase64Image(context, url, imageType)
             }
+            if (boundParallelImageText != null) btnImageShare.setOnClickListener(imageShare)
+            else btnShare.setOnClickListener(imageShare)
             btnShare.isEnabled = true
         }
 
@@ -3597,6 +3608,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     interface OnUpdateListener {
+        fun hasParallelUnsaved(position: Int): Boolean = false
+        fun onParallelRetrySave() {}
         fun onParallelBrowse(position: Int, slotId: String, versionId: String) {}
         fun onParallelStop(position: Int, slotId: String?) {}
         fun onRetryClick()

@@ -74,6 +74,21 @@ class ParallelResponseUiInstrumentedTest {
         }
     }
 
+    @Test fun unreadableAlternativesAndSaveFailuresStayVisibleWithoutChangingStoredData() = onMain {
+        val root = LayoutInflater.from(themed()).inflate(R.layout.view_parallel_response_controls, null)
+        val unsupported = mapOf<String, Any>("isBot" to true, "message" to "preserved canonical", "responseGroup" to "{\"schemaVersion\":2}")
+        assertTrue(ParallelResponseTabs.bind(root, unsupported, true, { _, _ -> fail("No unknown slot may be selected") }, {}))
+        assertTrue(root.findViewById<TextView>(R.id.parallel_response_status).text.contains("cannot open"))
+        assertEquals(0, root.findViewById<LinearLayout>(R.id.parallel_response_tabs).childCount)
+        assertEquals("preserved canonical", unsupported["message"])
+        var retries = 0
+        assertTrue(ParallelResponseTabs.bind(root, row(), true, { _, _ -> }, {}, true, { retries++ }))
+        assertEquals(View.VISIBLE, root.findViewById<View>(R.id.parallel_retry_save).visibility)
+        assertTrue(root.findViewById<TextView>(R.id.parallel_response_status).text.contains("could not be saved"))
+        root.findViewById<View>(R.id.parallel_retry_save).performClick()
+        assertEquals(1, retries)
+    }
+
     @Test fun generatingComposerShowsAnUnpressablePaperAirplane() = onMain {
         val send = ImageButton(themed())
         val progress = View(themed())

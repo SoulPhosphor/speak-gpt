@@ -39,9 +39,12 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var active = false
     private var selectingBranch = false
+    private var pendingSave = false
     private var closed = false
     private var pendingTurn: Pair<String, String>? = null
-    val busy get() = active
+    private var preparing = false
+    private var sendJob: Job? = null
+    val busy get() = active || pendingSave
     private val prefs get() = Preferences.getPreferences(activity, host.chatId)
     private val chatScope by lazy { ParallelChatScope(host.chatId) }
     private val detachedPersistence by lazy { StoredParallelGroups(activity.applicationContext, chatScope) {} }
@@ -62,6 +65,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                     check(host.messages.none { it["message_id"] == group.userMessageId || it["message_id"] == group.assistantMessageId })
                     if (!host.commitTurn(pending.first, group)) throw ParallelPersistenceException("turn_commit_failed")
                     pendingTurn = null
+                    preparing = false
                     return@runBlocking group
                 }
                 val row = host.messages[index]
@@ -90,7 +94,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
 
     /** Also runs for a subsequent ordinary send after switching Parallel Responses off. */
     fun beforeSend(continueSend: () -> Unit): Boolean {
-        if (active || selectingBranch) return true
+        if (busy || selectingBranch) return true
         val pending = ParallelResponseSelection.pending(host.messages) ?: return false
         selectingBranch = true
         scope.launch {
@@ -109,7 +113,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
 
     fun send(raw: String): Boolean {
         if (!configured()) return false
-        if (active || host.unavailable || raw.isEmpty()) return true
+        if (busy || host.unavailable || raw.isEmpty()) return true
         val setup = prefs.readExperimentalSetup() ?: return true
         if (SetupModelResolver.unavailable(activity, setup).isNotEmpty()) {
             notice(activity.getString(R.string.experimental_setup_unavailable,
@@ -122,8 +126,8 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         if (beforeSend { send(raw) }) return true
         val inputIncludes = host.includes.toList()
         val manual = host.manualMemoryIds.toList()
-        active = true; host.busy(true)
-        scope.launch {
+        active = true; preparing = true; host.busy(true)
+        sendJob = scope.launch {
             try {
                 val base = host.prepareBase(raw, setup)
                 val prepared = ParallelTurnPreparation.prepare(activity, host.chatId, setup, base) { confirm(it) }
@@ -145,6 +149,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 notice(activity.getString(R.string.parallel_prepare_failed))
             } finally {
                 pendingTurn = null
+                preparing = false
                 active = false
                 if (!closed) { host.busy(false); host.settled() }
             }
@@ -163,7 +168,25 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         host.changed(position, false)
     }
 
-    fun stopAll() { host.messages.indices.toList().forEach { stop(it, null) } }
+    fun editImageSummary(position: Int, text: String?): Boolean {
+        val row = host.messages.getOrNull(position) ?: return false
+        val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return false
+        val selected = group.slots.single { it.slotId == group.foregroundSlotId }
+        val after = group.copy(slots = group.slots.map { slot ->
+            if (slot.slotId != selected.slotId) slot else slot.copy(versions = slot.versions.map { version ->
+                if (version.versionId != slot.foregroundVersionId) version else version.copy(imageSummaryEdited = text)
+            })
+        })
+        host.messages[position] = ResponseGroupEdits.install(row, after)
+        if (!host.save()) { host.messages[position] = row; host.save(); notice(activity.getString(R.string.message_save_failed)) }
+        host.changed(position, group.primarySlotId == selected.slotId && selected.canonicalVersionId == selected.foregroundVersionId)
+        return true
+    }
+
+    fun stopAll() {
+        if (preparing) sendJob?.cancel(ParallelUserStop())
+        else host.messages.indices.toList().forEach { stop(it, null) }
+    }
 
     fun stop(position: Int, slotId: String?) {
         val group = (host.messages.getOrNull(position)?.let(ResponseGroupCodec::read) as? ResponseGroupRead.Valid)?.group ?: return
@@ -174,10 +197,17 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     }
 
     fun regenerate(position: Int): Boolean {
-        val group = (host.messages.getOrNull(position)?.let(ResponseGroupCodec::read) as? ResponseGroupRead.Valid)?.group ?: return false
-        if (active || host.unavailable) return true
+        val row = host.messages.getOrNull(position) ?: return false
+        val read = ResponseGroupCodec.read(row)
+        val group = (read as? ResponseGroupRead.Valid)?.group ?: run {
+            if (read == ResponseGroupRead.Absent) return false
+            notice(activity.getString(if (read is ResponseGroupRead.Unsupported) R.string.parallel_responses_unsupported else R.string.parallel_responses_unreadable))
+            return true
+        }
+        if (busy || selectingBranch || host.unavailable) return true
+        selectingBranch = true
         scope.launch {
-            host.beforeRegenerate(position) {
+            try { host.beforeRegenerate(position) {
                 active = true; host.busy(true)
                 try {
                     coordinator.regenerate(ResponseGroupTarget(host.chatId, group.assistantMessageId, group.groupId), group.foregroundSlotId).await()
@@ -185,7 +215,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 } catch (e: CancellationException) { throw e }
                 catch (_: Exception) { notice(activity.getString(R.string.parallel_prepare_failed)) }
                 finally { active = false; if (!closed) { host.busy(false); host.settled() } }
-            }
+            } } finally { selectingBranch = false }
         }
         return true
     }
@@ -198,11 +228,34 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         return index to group
     }
 
+    fun unsaved(position: Int): Boolean {
+        if (!pendingSave) return false
+        val group = (host.messages.getOrNull(position)?.let(ResponseGroupCodec::read) as? ResponseGroupRead.Valid)?.group ?: return false
+        return group.slots.flatMap { it.versions }.flatMap { it.attempts }.any { it.requestId in coordinator.unsavedRequestIds() }
+    }
+
+    fun retrySave() {
+        if (active || closed || !pendingSave) return
+        scope.launch {
+            active = true; host.busy(true)
+            try { coordinator.flush(); refreshSaveState() }
+            finally { active = false; host.busy(false); if (!pendingSave) host.settled() }
+        }
+    }
+
+    private fun refreshSaveState() {
+        pendingSave = coordinator.unsavedRequestIds().isNotEmpty()
+        host.messages.indices.forEach { position ->
+            if (host.messages[position].containsKey(ResponseGroupCodec.KEY)) host.changed(position, false)
+        }
+    }
+
     private suspend fun offerSaveRetry() {
-        if (coordinator.unsavedRequestIds().isEmpty() || closed) return
+        refreshSaveState()
+        if (!pendingSave || closed) return
         if (confirm(activity.getString(R.string.parallel_save_failed), R.string.parallel_retry_save)) {
             coordinator.flush()
-            if (coordinator.unsavedRequestIds().isNotEmpty()) offerSaveRetry()
+            refreshSaveState()
         }
     }
 

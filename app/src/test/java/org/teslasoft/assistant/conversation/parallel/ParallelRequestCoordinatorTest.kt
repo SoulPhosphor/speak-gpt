@@ -100,6 +100,27 @@ class ParallelRequestCoordinatorTest {
         }
     }
 
+    @Test fun stopBetweenDurableReservationAndRegistrationCannotLaunchThatRequest() = runBlocking {
+        withTimeout(10_000) {
+            val g = group(2)
+            val store = Store(g.userMessageId, g.assistantMessageId)
+            val seen = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val engine = ParallelRequestCoordinator(this, store, { _, _ -> null }, { request -> ParallelTransport { _, output ->
+                seen += request.slotId
+                output.text("retained sibling")
+            } }, { TokenPricingCatalog(it.assignment.modelId) })
+            val stopped = g.slots.first().versions.single().attempts.single().requestId
+            engine.cancel(stopped)
+            engine.dispatch("chat", g) {}.await()
+            val saved = store.read(ResponseGroupTarget("chat", g.assistantMessageId, g.groupId))
+            assertEquals(listOf(g.slots[1].slotId), seen)
+            assertEquals("stopped", saved.slots[0].versions.single().fields["state"])
+            assertEquals("done", saved.slots[1].versions.single().fields["state"])
+            assertEquals(stopped, saved.slots[0].versions.single().attempts.single().requestId)
+            assertTrue(engine.unsavedRequestIds().isEmpty())
+        }
+    }
+
     @Test fun fourEndpointsCompleteOutOfOrderWithoutTextReasoningOrPromptLeakage() = runBlocking {
         withTimeout(10_000) {
             val f = Fixture(group(), this)

@@ -79,6 +79,31 @@ class ParallelResponseSelectionTest {
         assertEquals(ResponseGroupEdits.usage(group), TokenUsageAccounting.durableRecordsOf(browsed))
     }
 
+    @Test fun imageRemindersAreVersionLocalWhileOriginalReceiptsAndFileReferencesRemainIntact() {
+        val row = history()[2]
+        val original = group(row)
+        val slot = original.slots[3]
+        val version = slot.versions.last()
+        val imageId = java.util.UUID.randomUUID().toString()
+        val image = org.teslasoft.assistant.imagegen.GeneratedImageMetadata(imageId, "a".repeat(64), "image/png", 32, 32,
+            "fixture-endpoint", "fixture-model", "original image prompt", "fixture description", 100L, "complete", null).toJson()
+        val imaged = original.copy(slots = original.slots.map { selected ->
+            if (selected.slotId != slot.slotId) selected else selected.copy(versions = selected.versions.map { saved ->
+                if (saved.versionId != version.versionId) saved else saved.copy(imageSummaryEdited = "edited reminder", attempts = saved.attempts.mapIndexed { index, attempt ->
+                    if (index != saved.attempts.lastIndex) attempt else attempt.copy(imageJobId = imageId, imageResult = image)
+                })
+            })
+        })
+        val displayRow = ResponseGroupEdits.install(row, ResponseGroupEdits.browse(imaged, slot.slotId, version.versionId))
+        val decoded = group(displayRow)
+        assertEquals("edited reminder", org.teslasoft.assistant.imagegen.GeneratedImageMetadata.fromJson(
+            ParallelResponseSelection.display(displayRow)[org.teslasoft.assistant.imagegen.GeneratedImageMetadata.KEY] as String)?.effectiveSummary())
+        assertNull(ParallelResponseSelection.canonicalImage(displayRow))
+        assertEquals(image, decoded.slots[3].versions.last().attempts.last().imageResult)
+        assertEquals(setOf("a".repeat(64)), org.teslasoft.assistant.imagegen.GeneratedImageFiles.referencedHashes(listOf(displayRow)))
+        assertEquals(ResponseGroupEdits.usage(original), ResponseGroupEdits.usage(decoded))
+    }
+
     @Test fun ordinarySingleResponseRowsKeepTheirExistingProjection() {
         val ordinary = history().first()
         assertNull(ParallelResponseSelection.pending(listOf(ordinary)))

@@ -48,6 +48,12 @@ internal object ParallelTurnPreparation {
         val unknown = ArrayList<String>()
         val bodies = ArrayList<Pair<ResponseModelAssignment, List<ParallelInputPart>>>()
         val slotInputs = ArrayList<ParallelSlotInput>()
+        val pdfReferences = HashMap<String, ResponseAttachment>()
+        val pdfFallbacks = HashMap<String, String>()
+        val commonMeasurement = RequestCapacity.measure(base.payload)
+        check(RequestCapacity.canAssemble(SerializedRequestMeasurement(
+            commonMeasurement.requestCharacters * setup.models.size,
+            commonMeasurement.serializedUtf8Bytes * setup.models.size), RequestHeapState.current()))
         for (selection in setup.models) {
             val endpoint = endpoints.getValue(selection.endpointId)
             val settings = selection.settings()
@@ -97,7 +103,7 @@ internal object ParallelTurnPreparation {
             val attachmentParts = ArrayList<ParallelInputPart>()
             val pdfRouting = PdfRoutingConfig.from(endpoint, settings)
             var pdfCapability = PdfCapabilityResolver.resolve(endpoint, selection.modelId, pdfRouting)
-            if (pdfCapability == PdfCapability.UNKNOWN && pdfRouting.provider in setOf(PdfCapabilityProvider.OPENROUTER, PdfCapabilityProvider.NANOGPT)) {
+            if (base.nativePdfs.isNotEmpty() && pdfCapability == PdfCapability.UNKNOWN && pdfRouting.provider in setOf(PdfCapabilityProvider.OPENROUTER, PdfCapabilityProvider.NANOGPT)) {
                 val live = PdfCapabilityMetadataClient.resolve(endpoint, selection.modelId, pdfRouting)
                 pdfCapability = PdfCapabilityResolver.resolve(endpoint, selection.modelId, pdfRouting, live.model, live.pinnedProvider)
             }
@@ -110,13 +116,16 @@ internal object ParallelTurnPreparation {
                     addProperty("content", rules.joinToString("\n", context.getString(R.string.model_rules_injection_header) + "\n") { "- " + it.text })
                 })
             }
+            val nativeDocuments = ArrayList<FrozenNativeDocumentPayload>()
             for (pdf in base.nativePdfs) {
                 val include = base.includes.first { it.id == pdf.includeId }
                 val file = PdfAttachmentStore.pdfFile(context, chatId, include)?.takeIf { it.isFile }
                     ?: throw ParallelPreparationRefused(context.getString(R.string.parallel_prepare_failed))
-                val ref = descriptor("pdf", file, "application/pdf")
+                val ref = pdfReferences.getOrPut(pdf.includeId) { descriptor("pdf", file, "application/pdf") }
                 val useNative = PdfDeliveryPolicy.useNative(pdfRouting.provider, pdfCapability, file.length())
                 val replacement = if (useNative) {
+                    nativeDocuments += FrozenNativeDocumentPayload((pdf.originalByteSize + 2L) / 3L * 4L,
+                        maxOf(pdf.pageCount.toLong().coerceAtLeast(1) * 1_500L, (pdf.originalByteSize + 3L) / 4L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
                     attachmentParts += ParallelInputPart.Attachment(ref)
                     val filePart = if (PdfDeliveryPolicy.usesUploadedFile(pdfRouting.provider)) {
                         ParallelChatSnapshot.uploadedFile(XaiPdfFiles.fileIdFor(context, chatId, endpoint, include, file), ref)
@@ -127,7 +136,7 @@ internal object ParallelTurnPreparation {
                     JsonObject().apply { addProperty("type", "file"); add("file", filePart) }
                 } else JsonObject().apply {
                     addProperty("type", "text")
-                    addProperty("text", IncludeRenderer.renderLocalPdf(include, PdfFallbackExtractor.extract(context, chatId, include).text))
+                    addProperty("text", pdfFallbacks.getOrPut(pdf.includeId) { IncludeRenderer.renderLocalPdf(include, PdfFallbackExtractor.extract(context, chatId, include).text) })
                 }
                 var found = false
                 messages.forEach { msg -> msg.get("content")?.takeIf { it.isJsonArray }?.asJsonArray?.let { parts ->
@@ -157,7 +166,7 @@ internal object ParallelTurnPreparation {
             slotInputs += ParallelSlotInput(assignment, prompt, base.attribution +
                 mapOf("responseModel" to selection.modelId) + (indicator?.let { mapOf("reasoningLevel" to it) } ?: emptyMap()))
             val capacity = ModelContextCapacity.decide(endpoint.contextWindowTokens.takeIf { endpoint.contextWindowModelId == selection.modelId },
-                RequestCapacity.approximateInputTokens(base.payload), base.payload.maximumResponseTokens)
+                RequestCapacity.approximateInputTokens(measurementPayload(base.payload, selection.modelId, messages, nativeDocuments)), base.payload.maximumResponseTokens)
             when (capacity) {
                 is ModelContextDecision.Block -> throw ParallelPreparationRefused(context.getString(R.string.parallel_context_block, selection.modelId))
                 is ModelContextDecision.WarnRange, is ModelContextDecision.WarnApproximate -> if (!confirm(context.getString(R.string.parallel_context_warning, selection.modelId))) throw kotlinx.coroutines.CancellationException()
@@ -166,12 +175,33 @@ internal object ParallelTurnPreparation {
         }
         if (unknown.isNotEmpty() && !confirm(context.getString(R.string.parallel_attachment_unknown, unknown.distinct().joinToString())))
             throw kotlinx.coroutines.CancellationException()
-        val common = bodies.first().second.filter { part -> bodies.all { part in it.second } }
-        val lastUser = common.filterIsInstance<ParallelInputPart.Text>().last { JsonParser.parseString(it.value).asJsonObject.get("role").asString == "user" }
-        // Pool stores every exact per-model frame. Shared eligibility is their common ordered prefix/current words.
-        val prefix = bodies.first().second.takeWhile { it != lastUser }.filter { it in common }
-        PreparedParallelTurn(slotInputs, prefix, listOf(lastUser), base.commitContext)
+        val promptSets = bodies.map { it.second.toHashSet() }
+        val common = bodies.first().second.filter { part -> promptSets.all { part in it } }.toHashSet()
+        val lastUser = bodies.first().second.filterIsInstance<ParallelInputPart.Text>().last {
+            it in common && JsonParser.parseString(it.value).asJsonObject.get("role").asString == "user"
+        }
+        // Every exact per-model frame is pooled. Common frames and binary dependencies are shared.
+        val currentIndex = bodies.first().second.indexOfLast { it == lastUser }
+        val prefix = bodies.first().second.take(currentIndex).filter { it in common }
+        val binary = bodies.first().second.filterIsInstance<ParallelInputPart.Attachment>().filter { it in common }
+        PreparedParallelTurn(slotInputs, prefix, listOf(lastUser) + binary, base.commitContext)
     }
+
+    private fun measurementPayload(base: FrozenChatPayload, model: String, messages: List<JsonObject>,
+        documents: List<FrozenNativeDocumentPayload>): FrozenChatPayload = base.copy(model = model,
+        messages = messages.map { frame ->
+            val content = frame.get("content")
+            if (content.isJsonPrimitive) FrozenPayloadMessage(frame.get("role").asString, content.asString)
+            else FrozenPayloadMessage(frame.get("role").asString, "", content.asJsonArray.mapNotNull { element ->
+                val part = element.asJsonObject
+                when (part.get("type").asString) {
+                    "text" -> FrozenTextPayloadPart(part.get("text").asString)
+                    "image_url" -> FrozenImagePayloadPart(part.getAsJsonObject("image_url").get("url").asString)
+                    "file" -> null // Accounted with its bytes/page estimate in nativeDocuments.
+                    else -> error("unsupported_frozen_part")
+                }
+            })
+        }, nativeDocuments = documents)
 
     private fun descriptor(store: String, file: File, mime: String): ResponseAttachment =
         ResponseAttachment(store, file.name, mime, file.length(), ResponseAttachment.digest(file.readBytes()))

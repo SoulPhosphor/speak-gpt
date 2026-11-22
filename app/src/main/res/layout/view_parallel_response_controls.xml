@@ -1,5 +1,6 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/parallel_response_controls" style="@style/Widget.App.ParallelResponse.Controls" android:visibility="gone">
+    <com.google.android.material.button.MaterialButton android:id="@+id/parallel_retry_save" style="@style/AppButton.Primary.Inline" android:text="@string/parallel_retry_save" android:visibility="gone" />
     <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content">
         <LinearLayout android:id="@+id/parallel_response_tabs" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" />
     </HorizontalScrollView>

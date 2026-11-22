@@ -58,6 +58,7 @@ internal class ParallelRequestCoordinator(
     private val keepAlive: (ResponseGroupTarget) -> AutoCloseable = { AutoCloseable {} }
 ) {
     private val requests = ConcurrentHashMap<String, Running>()
+    private val pendingStops = ConcurrentHashMap.newKeySet<String>()
     private val checkpointLock = Mutex()
     private val checkpointTimes = ConcurrentHashMap<ResponseGroupTarget, Long>()
     private data class Checkpoint(val running: Running, val change: (ResponseGroup?) -> ResponseGroup)
@@ -130,11 +131,16 @@ internal class ParallelRequestCoordinator(
         launch(prepared)
     }
 
-    /** An explicit per-request cancellation primitive; later UI decides which requests Stop targets. */
+    /** Stops also cover the interval between durable reservation and live job registration. */
     suspend fun cancel(requestId: String) {
-        val running = requests[requestId] ?: return
+        val running = requests[requestId] ?: run {
+            pendingStops.add(requestId)
+            // Registration may have raced the first lookup.
+            requests[requestId] ?: return
+        }
         val job = running.registered.await()
         job.cancel(ParallelUserStop())
+        pendingStops.remove(requestId)
         job.join()
     }
 
@@ -201,6 +207,8 @@ internal class ParallelRequestCoordinator(
                 var running = first
                 try {
                     yield()
+                    first.registered.await()
+                    if (pendingStops.remove(first.request.requestId)) throw ParallelUserStop()
                     coroutineScope {
                         while (true) {
                             val attempt = running
@@ -240,6 +248,8 @@ internal class ParallelRequestCoordinator(
                             require(requests.putIfAbsent(request.requestId, next) == null)
                             owned.add(next)
                             running = next
+                            if (pendingStops.remove(request.requestId)) next.job!!.cancel(ParallelUserStop())
+                            currentCoroutineContext().ensureActive()
                             if (!retryWithoutTools) {
                                 val extra = tools!!.execute(request, attempt.toolMessage!!,
                                     reserveImage = {
@@ -280,8 +290,10 @@ internal class ParallelRequestCoordinator(
             }.also { job ->
                 first.job = job
                 first.registered.complete(job)
+                if (pendingStops.contains(first.request.requestId)) job.cancel(ParallelUserStop())
                 job.invokeOnCompletion {
                     owned.forEach { running ->
+                        pendingStops.remove(running.request.requestId)
                         if (!running.unsaved) requests.remove(running.request.requestId, running)
                         else running.request = running.request.copy(prompt = emptyList(), attachmentBytes = emptyMap())
                     }

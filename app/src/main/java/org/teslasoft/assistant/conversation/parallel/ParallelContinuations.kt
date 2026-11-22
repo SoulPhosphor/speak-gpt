@@ -22,7 +22,8 @@ internal class ParallelContinuations(private val store: ParallelGroupPersistence
                         reserved = ResponseAttempt.pending(nowMs).copy(parentRequestId = old.requestId, withoutTools = withoutTools)
                         val prefix = if (withoutTools) version.fields + mapOf("message" to "", "reasoningText" to "") else version.fields
                         pendingVersion = version.copy(fields = prefix.filterKeys {
-                            it in setOf("message", "reasoningText", "activeMemoryAttribution")
+                            it in setOf("message", "reasoningText", "activeMemoryAttribution", "reasoningLevel",
+                                org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY)
                         } + ("state" to MessageCompletionState.STREAMING), attempts = version.attempts + reserved!!)
                         pendingVersion!!
                     }

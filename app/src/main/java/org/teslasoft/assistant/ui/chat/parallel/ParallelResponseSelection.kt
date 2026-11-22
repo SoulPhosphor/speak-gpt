@@ -39,7 +39,7 @@ internal object ParallelResponseSelection {
         val slot = group.slots.single { it.slotId == group.primarySlotId }
         return image(slot.versions.single { it.versionId == slot.canonicalVersionId })
     }
-    private fun image(version: ResponseVersion): String? = version.attempts.asReversed().firstNotNullOfOrNull { it.imageResult }
+    private fun image(version: ResponseVersion): String? = ResponseGroupImages.image(version)
 
     fun displayIndex(row: Map<String, Any>): Int? {
         val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return null
@@ -48,7 +48,8 @@ internal object ParallelResponseSelection {
     }
 
     fun storeEstimate(row: HashMap<String, Any>, display: HashMap<String, Any>, index: Int, text: String, count: Int): Boolean? {
-        val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return null
+        val read = ResponseGroupCodec.read(row)
+        val group = (read as? ResponseGroupRead.Valid)?.group ?: return if (read == ResponseGroupRead.Absent) null else false
         if (displayIndex(row) != index || ResponseGroupEdits.foregroundFields(group)["message"] != text) return false
         val slot = group.slots.single { it.slotId == group.foregroundSlotId }
         val after = group.copy(slots = group.slots.map { selected ->
