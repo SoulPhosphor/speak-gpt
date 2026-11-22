@@ -3709,7 +3709,7 @@
          errors addendum and must not be reworded without owner approval.
          ================================================================== -->
     <string name="title_summarizer_settings">Summarizer Settings</string>
-    <string name="ai_settings_summarizer_row_title">Summarizer, Outline &amp; Compaction Settings</string>
+    <string name="title_summarizer_outline_compaction_settings">Summarizer, Outline &amp; Compaction Settings</string>
     <string name="tile_summarizer_settings_subtitle">Settings related to the summarizer feature.</string>
     <string name="summarizer_intro">The summarizer sends the specified number of messages to the model each turn. Anything beyond that amount is summarized using the AI model selected in these settings. At any time, the summarizer can be turned off in Quick settings, which will allow all messages to be sent to the AI again.\n\nThe summarizer is also used for image prompt summaries, backup chat titles, and compaction.</string>
 
