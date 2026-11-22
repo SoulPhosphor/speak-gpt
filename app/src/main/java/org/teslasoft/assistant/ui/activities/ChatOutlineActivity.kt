@@ -355,6 +355,7 @@ class ChatOutlineActivity : FragmentActivity() {
             this,
             promptLabels(),
             promptPosition(redoPromptId),
+            onSelect = { position -> redoPromptId = promptVariants.getOrNull(position)?.id },
             onGear = { position ->
                 redoPromptId = promptVariants.getOrNull(position)?.id
                 openPrompt(redoPromptId, ORIGIN_REDO)

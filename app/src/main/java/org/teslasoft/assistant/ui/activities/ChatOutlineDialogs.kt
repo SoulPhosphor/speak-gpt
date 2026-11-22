@@ -69,13 +69,16 @@ object ChatOutlineDialogs {
 
     /**
      * "Redo This Outline?" with a dropdown of [labels] (the outline prompts,
-     * then New Prompt) opened on [selectedIndex]. The gear and Okay report
-     * the chosen index; Cancel, Back or a tap outside call [onCancel].
+     * then New Prompt) opened on [selectedIndex]. [onSelect] reports each
+     * change of choice as it happens, so the caller can keep it if the
+     * screen is rebuilt; the gear and Okay report the chosen index; Cancel,
+     * Back or a tap outside call [onCancel].
      */
     fun showRedo(
         activity: Activity,
         labels: List<String>,
         selectedIndex: Int,
+        onSelect: (Int) -> Unit,
         onGear: (Int) -> Unit,
         onOkay: (Int) -> Unit,
         onCancel: () -> Unit
@@ -94,6 +97,7 @@ object ChatOutlineDialogs {
             AppDropdown.show(dropdown, labels, chosen) { picked ->
                 chosen = picked
                 dropdown.text = labels[picked]
+                onSelect(picked)
             }
         }
         view.findViewById<ImageButton>(R.id.btn_redo_prompt_gear).setOnClickListener {
