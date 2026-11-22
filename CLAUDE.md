@@ -119,7 +119,7 @@ Before requesting more crash reports, backup files, or diagnostic artifacts, ver
 For code work, use this sequence:
 
 1. Fetch `main`, confirm its current commit, and branch from that commit unless the owner explicitly names a different target. Inspect relevant code, finish the assigned changes, and review the full diff yourself.
-2. Run the local checks and fix failures: `./gradlew testDebugUnitTest`, `./gradlew assembleBeta`, and `./gradlew assembleDebugAndroidTest`. Do not open a code PR with known failed local checks.
+2. Run the local checks and fix failures: `./gradlew testDebugUnitTest assembleBeta assembleDebugAndroidTest` (one invocation, so build outputs are shared). Do not open a code PR with known failed local checks.
 3. Open one pull request once the work is complete, required owner decisions are resolved, and local checks pass. The first Codex review begins automatically; do not request a duplicate first review.
 4. Android Checks runs while Codex reviews. Validate each finding against the actual code and owner-approved behavior. Fix valid findings, and reply with the reason for any finding not being fixed. Rerun local checks, push the fixes together, and request `@codex review` for a subsequent review.
 5. Repeat until Codex has no outstanding actionable findings and Android Checks is green on **the final commit**. Codex is the final code-review gate: do not push further code after it passes. If a later correction is unavoidable, repeat checks and obtain a fresh Codex review of that commit. Do not merge work that is still running, failed, or unreviewed.
@@ -130,6 +130,10 @@ For code work, use this sequence:
 **Codex review is required only for pull requests that change application or test code.** A PR changing only `CLAUDE.md` or other documentation needs no Codex review or re-review. **Do not run local checks or Android builds when every change is documentation**; inspect the complete replacement text, links, scope, and diff instead, and never claim tests were executed when they were not. Wait for any required repository checks, then merge without a Codex approval gate. A PR containing both documentation and code follows the code workflow above.
 
 After opening a PR, do not trigger a duplicate first Codex review, run repetitive status checks, or schedule watchers. Check while CI or review action is pending, then stop. If only the owner can decide the remaining blocker, ask once and leave the PR intact.
+
+**Testing during development:** run focused tests for the code you changed; widen them when a change touches shared code. Do not rerun unchanged tests against unchanged code or rebuild the whole app after every small edit. The full local checks above run once the work is complete and again after code changes; required GitHub checks must pass on the final commit, never on a different commit's run.
+
+**CI efficiency and reliability:** Android Checks runs once per pull-request commit and on `main`. Avoid redundant builds and runs while preserving all required coverage. Distinguish infrastructure failures (runner, emulator, network, rate limits) from application and test failures using the run's logs and diagnostics. Record each infrastructure failure in the open GitHub issue **CI Reliability Log** (run link, commit, job and step, exact error, diagnosis, resolution), adding to an existing failure signature instead of duplicating it. Investigate recurring failures before rerunning; rerun a job at most once. Never remove, disable or weaken a test to get a passing result.
 
 **Completion reporting:** Separate what was changed, which tests actually ran, the GitHub/CI/review status, and any behavior that still needs on-device confirmation. Green CI alone does not prove an observed runtime symptom is fixed; the owner verifies the real device behavior.
 
