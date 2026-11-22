@@ -91,7 +91,9 @@ internal class ModelPickerCatalog(
             AppDropdown.show(
                 searchScope,
                 listOf(text(R.string.model_browser_ai_models), text(R.string.provider_col_provider)),
-                if (searchProviders) 1 else 0
+                if (searchProviders) 1 else 0,
+                // The search pill's outline is this label's border; it has no box to swap.
+                outlineAnchor = false
             ) { index ->
                 searchProviders = index == 1
                 searchChanged()

@@ -64,17 +64,17 @@
 
         <TextView
             android:id="@+id/model_browser_all"
-            style="@style/Widget.App.SegmentedPill.Option"
+            style="@style/Widget.App.ModelPicker.FilterOption"
             android:text="@string/cat_all" />
 
         <TextView
             android:id="@+id/model_browser_new"
-            style="@style/Widget.App.SegmentedPill.Option"
+            style="@style/Widget.App.ModelPicker.FilterOption"
             android:text="@string/model_browser_new" />
 
         <TextView
             android:id="@+id/model_browser_free"
-            style="@style/Widget.App.SegmentedPill.Option"
+            style="@style/Widget.App.ModelPicker.FilterOption"
             android:text="@string/model_browser_free" />
     </org.teslasoft.assistant.ui.widgets.SegmentedPill>
 

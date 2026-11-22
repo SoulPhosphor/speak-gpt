@@ -39,7 +39,6 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.ChipGroup
-import com.google.android.material.color.MaterialColors
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
 import org.teslasoft.assistant.ui.activities.SettingsPageActivity
@@ -135,7 +134,11 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
 
         tagChips = ModelRuleTagChips(this, chipsTags!!, fieldTagInput!!)
         unavailableTargets = ModelCleanupReportStore.get(this).load().unavailable
-        btnUseCurrentModel?.isEnabled = currentChatTarget() != null
+        currentChatTarget()?.let { current ->
+            findViewById<View>(R.id.current_model_section).visibility = View.VISIBLE
+            findViewById<TextView>(R.id.current_model_name).text = current.modelId
+            findViewById<TextView>(R.id.current_model_endpoint).text = endpointLabel(current.endpointId)
+        }
         btnChooseModel?.isEnabled = endpointProfiles().isNotEmpty()
         supportFragmentManager.setFragmentResultListener(
             AdvancedModelSelectorDialogFragment.MODEL_RULE_SELECTION_RESULT, this
@@ -219,6 +222,8 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
             if (targets.isEmpty()) R.string.model_rule_choose_ai_model
             else R.string.model_rule_add_another_ai
         )
+        // Add stays available until the current chat model is on the rule.
+        btnUseCurrentModel?.isEnabled = currentChatTarget()?.let { it !in targets } ?: false
         for (target in targets.toList()) {
             val row = layoutInflater.inflate(R.layout.view_model_rule_target_row, group, false)
             row.findViewById<TextView>(R.id.model_rule_target_name).text = target.modelId
@@ -282,13 +287,9 @@ class ModelRuleEditorActivity : SettingsPageActivity() {
     private fun refreshSize() {
         val len = fieldText?.text?.toString()?.length ?: 0
         val tv = textSize ?: return
-        if (len >= SIZE_WARN_CHARS) {
-            tv.text = getString(R.string.model_rule_size_warn, len)
-            tv.setTextColor(MaterialColors.getColor(tv, androidx.appcompat.R.attr.colorError))
-        } else {
-            tv.text = getString(R.string.model_rule_size_count, len)
-            tv.setTextColor(MaterialColors.getColor(tv, R.attr.appSubtleTextColor))
-        }
+        val warn = len >= SIZE_WARN_CHARS
+        tv.text = getString(if (warn) R.string.model_rule_size_warn else R.string.model_rule_size_count, len)
+        tv.isActivated = warn
     }
 
     /* ------------------------------ save ------------------------------ */

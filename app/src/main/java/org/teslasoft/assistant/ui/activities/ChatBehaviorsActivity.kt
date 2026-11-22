@@ -55,5 +55,11 @@ class ChatBehaviorsActivity : SettingsPageActivity() {
                 preferences.setAllowMessageVisibility(checked)
             }
         }
+        findViewById<MaterialSwitch>(R.id.switch_auto_insert_second_asterisk).apply {
+            isChecked = preferences.getAutoInsertSecondAsterisk()
+            setOnCheckedChangeListener { _, checked ->
+                preferences.setAutoInsertSecondAsterisk(checked)
+            }
+        }
     }
 }

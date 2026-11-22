@@ -93,4 +93,31 @@ class MemoryTokenMeterTest {
         assertEquals(View.GONE, meter.findViewById<View>(R.id.memory_token_progress).visibility)
         assertEquals("2 Words", meter.findViewById<TextView>(R.id.memory_word_count).text.toString())
     }
+
+    @Test fun typingIntoTheSameMemoryNeverFlashesOrMovesTheMeter() = withMeter { meter ->
+        val release = CountDownLatch(1)
+        measure(meter) {
+            if (it.content == "one two three") release.await(5, TimeUnit.SECONDS)
+            null
+        }
+        val tokens = meter.findViewById<TextView>(R.id.memory_token_count)
+        val words = meter.findViewById<TextView>(R.id.memory_word_count)
+        val bar = meter.findViewById<View>(R.id.memory_token_progress)
+        onUi { meter.bind(MemoryTokenBudget.Input("one two")) }
+        waitFor { words.text.toString() == "2 Words" }
+        assertEquals(View.GONE, bar.visibility)
+        var height = 0
+        onUi { height = meter.height }
+        onUi { meter.refresh(MemoryTokenBudget.Input("one two three")) }
+        Thread.sleep(300)
+        onUi {
+            assertEquals("2 Words", words.text.toString())
+            assertEquals("— / — Tokens", tokens.text.toString())
+            assertEquals(View.GONE, bar.visibility)
+            assertEquals(height, meter.height)
+        }
+        release.countDown()
+        waitFor { words.text.toString() == "3 Words" }
+        assertEquals(View.GONE, bar.visibility)
+    }
 }
