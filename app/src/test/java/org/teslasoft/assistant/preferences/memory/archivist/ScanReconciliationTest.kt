@@ -334,6 +334,24 @@ class ScanReconciliationTest {
         assertFalse(plan.rankingFailed)
     }
 
+    @Test fun aRankingIsNotReusedOnceAProposalsWordingChanged() {
+        val memo = ScanFilingPlanner.Memo()
+        val calls = Calls()
+        val before = listOf(draft(1, "First topic"), draft(2, "Second topic"), draft(3, "Third topic"))
+        val first = runBlocking { planner(emptyMap(), calls, memo, rank = { _, _ -> listOf(0) }).plan(before, cap = 1) }
+        assertEquals(listOf(1), first.units.first())
+        // The same proposals with unchanged wording reuse the answer.
+        val again = runBlocking { planner(emptyMap(), calls, memo).plan(before, cap = 1) }
+        assertEquals(listOf(1), again.units.first())
+        // A reply finished meanwhile and changed draft 1 into a repeat of
+        // draft 2: the old answer no longer applies, no second request is
+        // sent, and the device ranks by topic.
+        val edited = listOf(draft(1, "Second topic again"), draft(2, "Second topic"), draft(3, "Third topic"))
+        val after = runBlocking { planner(emptyMap(), calls, memo).plan(edited, cap = 1) }
+        assertEquals(1, calls.rankings.size)
+        assertEquals(listOf(listOf(1), listOf(3), listOf(2)), after.units)
+    }
+
     @Test fun aFailedRankingRanksOnTheDeviceByTopicCoverage() {
         val drafts = listOf(
             draft(1, "Training schedule for the autumn marathon"),

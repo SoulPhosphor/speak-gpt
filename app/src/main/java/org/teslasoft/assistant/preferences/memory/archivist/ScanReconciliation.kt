@@ -409,7 +409,8 @@ class ScanFilingPlanner(
         /** (draft content hash, memory ID, memory fingerprint) to covered. */
         internal val decisions = HashMap<Triple<String, String, String>, Boolean>()
         internal var rankingSent = false
-        internal var ranking: Pair<List<List<Int>>, List<Int>>? = null
+        /** The ranking answer, keyed by the exact units and their wording. */
+        internal var ranking: Pair<String, List<Int>>? = null
 
         /** After the chat changed and the scan restarted: earlier answers
          *  no longer apply, and no request is sent again, so affected
@@ -523,7 +524,13 @@ class ScanFilingPlanner(
         var rankingFailed = false
         val ordered: List<List<Int>> = if (cap <= 0 || units.size <= cap) units else {
             val texts = units.map { unit -> unit.joinToString("\n") { byId.getValue(it).content } }
-            val cached = memo.ranking?.takeIf { it.first == units }?.second
+            // An answer is about these units with this wording; once any
+            // wording changes it no longer applies (no second request is
+            // sent, so the rest is ranked on the device).
+            val rankingKey = Hash.hash(units.joinToString("\u0001") { unit ->
+                unit.joinToString("\u0002") { "$it\u0003" + byId.getValue(it).content }
+            })
+            val cached = memo.ranking?.takeIf { it.first == rankingKey }?.second
             val kept: List<Int> = cached ?: if (memo.rankingSent) emptyList() else {
                 memo.rankingSent = true
                 val unitsForModel = units.map { unit -> RankUnit(unit, unit.map { byId.getValue(it).content }) }
@@ -534,7 +541,7 @@ class ScanFilingPlanner(
                 } catch (_: Exception) {
                     rankingFailed = true
                     emptyList()
-                }.also { memo.ranking = units to it }
+                }.also { memo.ranking = rankingKey to it }
             }
             LocalRanking.order(texts, kept).map { units[it] }
         }
