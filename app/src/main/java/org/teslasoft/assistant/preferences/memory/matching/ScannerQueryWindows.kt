@@ -11,7 +11,12 @@ package org.teslasoft.assistant.preferences.memory.matching
  * overlap, and the last window always ends at the end of the text, so the end
  * of a long turn is searched too. Windows break between words; a "word"
  * longer than [MAX_PIECE_CHARS] (text without spaces) is cut into pieces at
- * code-point boundaries so it cannot hide the rest of the text.
+ * code-point boundaries so it cannot hide the rest of the text, and a piece
+ * that alone exceeds the allowance is halved again at a code-point boundary.
+ * Joining a window's pieces with spaces adds a space between pieces of one
+ * unbroken word; only the search query sees it, never the saved text.
+ * Code-point boundaries can fall inside a multi-code-point emoji or an
+ * accented letter written with a combining mark.
  */
 object ScannerQueryWindows {
 
@@ -25,11 +30,23 @@ object ScannerQueryWindows {
         if (tokenLimit <= 0) return emptyList()
         if (countTokens(trimmed) <= tokenLimit) return listOf(trimmed)
 
-        val pieces = pieces(trimmed)
+        val pieces = ArrayList(pieces(trimmed))
         val windows = ArrayList<String>()
         var start = 0
         while (start < pieces.size) {
             var end = longestFitting(pieces, start, tokenLimit, countTokens)
+            if (end <= start + 1 && countTokens(pieces[start]) > tokenLimit) {
+                // One piece alone is over the allowance (dense text without
+                // spaces): halve it at a code-point boundary and try again,
+                // so no window is cut short by the model. A single code
+                // point that still does not fit is sent as it is.
+                val halves = halve(pieces[start])
+                if (halves != null) {
+                    pieces.removeAt(start)
+                    pieces.addAll(start, halves)
+                    continue
+                }
+            }
             if (end <= start) end = start + 1 // a single piece always makes progress
             windows.add(join(pieces, start, end))
             if (end >= pieces.size) break
@@ -61,6 +78,15 @@ object ScannerQueryWindows {
 
     private fun join(pieces: List<String>, from: Int, to: Int): String =
         pieces.subList(from, to).joinToString(" ")
+
+    /** [piece] split into two at the code-point boundary nearest its middle,
+     *  or null when it is a single code point. */
+    private fun halve(piece: String): List<String>? {
+        val codePoints = piece.codePointCount(0, piece.length)
+        if (codePoints < 2) return null
+        val middle = piece.offsetByCodePoints(0, codePoints / 2)
+        return listOf(piece.substring(0, middle), piece.substring(middle))
+    }
 
     internal fun pieces(text: String): List<String> {
         val out = ArrayList<String>()
