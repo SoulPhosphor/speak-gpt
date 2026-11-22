@@ -116,7 +116,7 @@ class ParallelResponseSelectionTest {
         assertFalse(ParallelReplyEditing.canonical(edited, target))
         assertEquals(browsedElsewhere.foregroundSlotId, edited.foregroundSlotId)
         assertEquals("edited alternative", edited.slots[3].versions.last().fields["message"])
-        assertEquals(original.slots.take(3), edited.slots.take(3))
+        assertEquals(browsedElsewhere.slots.take(3), edited.slots.take(3))
         assertEquals(original.slots[3].versions.last().attempts, edited.slots[3].versions.last().attempts)
         val saved = ResponseGroupEdits.install(row, edited)
         assertTrue(ResponseGroupCodec.read(saved) is ResponseGroupRead.Valid)

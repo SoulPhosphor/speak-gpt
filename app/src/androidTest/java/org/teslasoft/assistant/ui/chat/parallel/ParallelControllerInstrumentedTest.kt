@@ -72,6 +72,7 @@ class ParallelControllerInstrumentedTest {
             assertEquals(4, ResponseGroupEdits.usage(settled).map { it.requestId }.distinct().size)
             assertEquals(1, host.preparations)
             assertEquals(1, host.contextCommits)
+            assertSame(host.committedUserRow, withContext(Dispatchers.Main.immediate) { host.messages.first() })
             withContext(Dispatchers.Main.immediate) {
                 host.finished = CompletableDeferred()
                 assertTrue(controller.regenerate(1))
@@ -87,6 +88,7 @@ class ParallelControllerInstrumentedTest {
             assertEquals(settled.slots.take(3), after.slots.take(3))
             assertEquals(2, after.slots[3].versions.size)
             assertEquals(5, ResponseGroupEdits.usage(after).size)
+            assertSame(host.committedUserRow, withContext(Dispatchers.Main.immediate) { host.messages.first() })
             assertEquals(1, host.preparations)
             assertEquals(1, host.contextCommits)
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
@@ -122,6 +124,44 @@ class ParallelControllerInstrumentedTest {
         val row = host.storedRow()
         assertFalse(ResponseGroupRecovery.reconcile(row))
         assertEquals(reopened.foregroundSlotId, (ResponseGroupCodec.read(row) as ResponseGroupRead.Valid).group.foregroundSlotId)
+    }
+
+    @Test fun deletingOnlyTheVisibleUserKeepsRegenerationAndTheNextTurnUsable() = fixture { activity, host ->
+        val requests = CopyOnWriteArrayList<ParallelRequest>()
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { request, out ->
+                    requests += request
+                    out.text("owned answer")
+                } }, { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            host.finished.await()
+            val original = host.stored()
+            withContext(Dispatchers.Main.immediate) {
+                assertTrue(controller.withRequestsStopped {
+                    host.messages.removeAt(0)
+                    assertTrue(host.save())
+                })
+                host.finished = CompletableDeferred()
+                assertTrue(controller.regenerate(0))
+            }
+            host.finished.await()
+            val regenerated = host.stored()
+            assertEquals(original.userMessageId, regenerated.userMessageId)
+            assertEquals(original.input, regenerated.input)
+            assertEquals(5, requests.size)
+            assertEquals(requests.first().prompt, requests.last().prompt)
+            withContext(Dispatchers.Main.immediate) {
+                host.finished = CompletableDeferred()
+                host.rawInput = "next message"
+                assertTrue(controller.send("next message"))
+            }
+            host.finished.await()
+            assertEquals(9, requests.size)
+            assertEquals(3, withContext(Dispatchers.Main.immediate) { host.messages.size })
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
     @Test fun failedInitialCommitLeavesTheDraftAndLaunchesNoProviderRequests() = fixture { activity, host ->
@@ -284,6 +324,7 @@ class ParallelControllerInstrumentedTest {
         var contextCommits = 0
         var failCommit = false
         var canonicalEdits = 0
+        var committedUserRow: HashMap<String, Any>? = null
         var failSave = false
         var finished = CompletableDeferred<Unit>()
         override suspend fun prepareBase(raw: String, setup: ExperimentalSetup): ParallelTurnBase {
@@ -294,7 +335,9 @@ class ParallelControllerInstrumentedTest {
         }
         override fun commitTurn(raw: String, base: ParallelTurnBase, group: ResponseGroup): Boolean {
             if (failCommit) return false
-            messages.add(hashMapOf("message_id" to group.userMessageId, "isBot" to false, "message" to (base.storedMessage ?: raw)))
+            val user = hashMapOf<String, Any>("message_id" to group.userMessageId, "isBot" to false, "message" to (base.storedMessage ?: raw))
+            committedUserRow = user
+            messages.add(user)
             messages.add(ResponseGroupEdits.install(mapOf("message_id" to group.assistantMessageId, "isBot" to true), group))
             if (!save()) return false
             rawInput = ""

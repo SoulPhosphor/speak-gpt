@@ -80,7 +80,9 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 val change = ResponseGroupHistory.replace(host.chatId, host.messages, actual,
                     row[ResponseGroupCodec.KEY] as? String, after)
                 val original = host.messages.toList()
-                host.messages.clear(); host.messages.addAll(change.messages)
+                // Only this owned assistant row changed. Bound controls on every other row
+                // must keep their live source object until their own notification/rebind.
+                host.messages[index] = HashMap(change.after)
                 if (!host.save()) {
                     host.messages.clear(); host.messages.addAll(original)
                     host.save() // Restore a failed SharedPreferences process-local write, without resending.
