@@ -80,7 +80,8 @@ class ScannerMatching(
                 evidence = evidence.copy(sections = mergeSection(evidence.sections, section.matches, draft.id))
             }
             val self = draftRecord(draft)
-            if (evidence.needsLookup(self.fingerprint, vectors?.modelKey) &&
+            val key = lookupKey(draft, self)
+            if (evidence.needsLookup(key, vectors?.modelKey) &&
                 lookups < MAX_PROPOSAL_LOOKUPS_PER_SECTION
             ) {
                 lookups++
@@ -95,7 +96,7 @@ class ScannerMatching(
                         vectors = vectors,
                         limits = limits,
                         checkActive = checkActive
-                    )
+                    ).copy(fingerprint = key)
                 )
             }
             draft.copy(evidence = evidence.takeIf { it.proposal != null || it.sections.isNotEmpty() })
@@ -199,6 +200,16 @@ class ScannerMatching(
                 content = draft.memory.content, document = document, fingerprint = Hash.hash(document)
             )
         }
+
+        /** What a draft's own lookup depends on: its comparison document and
+         *  the links it carries (AI-named related memories and alternative
+         *  drafts), so a new link alone also brings a fresh lookup. */
+        fun lookupKey(draft: WorkingDraft, self: ComparisonRecord = draftRecord(draft)): String =
+            Hash.hash(
+                self.fingerprint + "\u0000" +
+                    draft.memory.relatedExistingMemoryIds.sorted().joinToString(",") + "\u0000" +
+                    draft.alternativeOf.sorted().joinToString(",")
+            )
 
         /** The newest section's evidence first, one entry per record, never
          *  the draft itself, bounded. */

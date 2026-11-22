@@ -138,6 +138,19 @@ class ScannerMatchingRulesTest {
         assertTrue(before.fingerprint != ScannerMatching.draftRecord(edited).fingerprint)
     }
 
+    @Test fun aNewLinkAloneBringsAFreshLookup() {
+        val d = WorkingDraft(1, draft("real_life", content = "Same wording"))
+        val key = ScannerMatching.lookupKey(d)
+        val stored = DraftMatchEvidence(proposal = evidence.proposal!!.copy(fingerprint = key))
+        assertFalse(stored.needsLookup(ScannerMatching.lookupKey(d), "gemma-256|doc-2"))
+        val related = d.copy(memory = d.memory.copy(relatedExistingMemoryIds = listOf("mem-9")))
+        assertTrue(stored.needsLookup(ScannerMatching.lookupKey(related), "gemma-256|doc-2"))
+        val alternative = d.copy(alternativeOf = listOf(4))
+        assertTrue(stored.needsLookup(ScannerMatching.lookupKey(alternative), "gemma-256|doc-2"))
+        // The vector fingerprint itself is unchanged: the cached vector is still reused.
+        assertEquals(ScannerMatching.draftRecord(d).fingerprint, ScannerMatching.draftRecord(related).fingerprint)
+    }
+
     @Test fun sectionEvidenceKeepsTheNewestFirstWithoutTheDraftItself() {
         val older = listOf(
             ScannerMatch("m1", null, MatchStatus.ACTIVE, MatchMethod.KEYWORD),

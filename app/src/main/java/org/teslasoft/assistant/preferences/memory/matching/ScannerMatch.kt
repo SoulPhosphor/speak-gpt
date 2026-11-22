@@ -76,8 +76,9 @@ data class ScannerMatch(
 /**
  * The result of one lookup.
  *
- * @param fingerprint what was looked up (a draft's comparison document or a
- *  section's text), so a later change is recognised as needing a new lookup.
+ * @param fingerprint what was looked up (a section's text, or a draft's
+ *  comparison document together with its links), so a later change is
+ *  recognised as needing a new lookup.
  * @param modelKey the embedding model and document version used, or null when
  *  no embedding model was usable (keyword and exact evidence only).
  * @param matches the strongest evidence, bounded.
