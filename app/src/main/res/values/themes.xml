@@ -3741,6 +3741,39 @@
     <style name="Widget.App.MemoryBrowser.PendingAction.Last" parent="Widget.App.MemoryBrowser.PendingAction">
         <item name="android:paddingEnd">0dp</item>
     </style>
+    <!-- Stage 6C: a Pending card's related-memory preview (tap opens the exact
+         pair in Possible Match Review) and the match detail line shared with
+         the review cards. -->
+    <style name="Widget.App.MemoryMatch.Related" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">@dimen/memory_match_related_gap</item>
+        <item name="android:paddingVertical">@dimen/memory_match_related_vertical_padding</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+    <style name="Widget.App.MemoryMatch.Heading" parent="Widget.App.Field.Label">
+        <item name="android:textSize">@dimen/memory_match_heading_text_size</item>
+    </style>
+    <style name="Widget.App.MemoryMatch.Preview" parent="Widget.App.Field.Hint">
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">2</item>
+    </style>
+    <style name="Widget.App.MemoryMatch.Detail" parent="Widget.App.Field.Hint">
+        <item name="android:layout_marginTop">@dimen/memory_match_detail_gap</item>
+        <item name="android:textSize">@dimen/memory_match_detail_text_size</item>
+    </style>
+    <style name="Widget.App.MemoryMatch.Additional" parent="Widget.App.Field.Label">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:minHeight">@dimen/memory_match_additional_min_height</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:textSize">@dimen/memory_match_detail_text_size</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
     <style name="Widget.App.MemoryBrowser.ImageHint" parent="Widget.App.Row.Icon">
         <item name="android:layout_width">@dimen/memory_browser_hint_size</item>
         <item name="android:layout_height">@dimen/memory_browser_hint_size</item>

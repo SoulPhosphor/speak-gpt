@@ -164,6 +164,9 @@ abstract class MemoryScreenActivity : SettingsPageActivity(), MemoryRowAdapter.O
      *  chrome that depends on the data (e.g. the browser's Pending banner). */
     protected open fun onRowsRendered() {}
 
+    /** The memory list, for a screen that restores its scroll position. */
+    protected fun memoryListView(): ListView? = listView
+
     /** One view offered by the view dropdown on the tools line. */
     protected data class ScreenView(val key: String, val label: String)
 

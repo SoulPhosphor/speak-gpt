@@ -360,6 +360,13 @@
     <dimen name="memory_browser_open_padding">4dp</dimen>
     <dimen name="memory_browser_open_margin_end">12dp</dimen>
     <dimen name="memory_browser_hint_action_gap">12dp</dimen>
+    <!-- Stage 6C related-memory preview and match details (Widget.App.MemoryMatch.*). -->
+    <dimen name="memory_match_related_gap">10dp</dimen>
+    <dimen name="memory_match_related_vertical_padding">4dp</dimen>
+    <dimen name="memory_match_heading_text_size">13sp</dimen>
+    <dimen name="memory_match_detail_text_size">11sp</dimen>
+    <dimen name="memory_match_detail_gap">4dp</dimen>
+    <dimen name="memory_match_additional_min_height">40dp</dimen>
     <dimen name="memory_attachment_strip_horizontal_margin">12dp</dimen>
     <dimen name="memory_attachment_strip_bottom_gap">8dp</dimen>
     <dimen name="memory_attachment_strip_elevation">10dp</dimen>

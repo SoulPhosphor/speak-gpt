@@ -158,7 +158,11 @@ object MemoryMatch {
         object Unique : Outcome()
     }
 
-    data class Match(val memoryId: String, val relation: Relation)
+    /** One Possible Match. [score] is the meaning similarity (cosine) the
+     *  embedding model measured for a [Relation.SEMANTIC_NEAR] match, carried
+     *  through so the review screens can show it; null for every other
+     *  relation, which has no score. */
+    data class Match(val memoryId: String, val relation: Relation, val score: Float? = null)
 
     /**
      * Classify a candidate against the whole comparable [library] on exact

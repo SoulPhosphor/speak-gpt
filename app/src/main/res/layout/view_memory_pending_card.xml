@@ -146,6 +146,8 @@
             </LinearLayout>
         </LinearLayout>
 
+        <include layout="@layout/view_pending_related_match" />
+
         <!-- Bottom action row, aligned bottom-right. Ordinary: discard X then
              save. Conflict: Review only. Failed check: Retry. -->
         <LinearLayout

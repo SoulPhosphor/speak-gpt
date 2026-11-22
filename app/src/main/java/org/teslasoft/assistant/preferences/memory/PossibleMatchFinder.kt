@@ -125,8 +125,9 @@ object PossibleMatchFinder {
         val activeIds = store.comparableActiveMemoryIds(draftId).filter { it !in alreadyMatched }
         val activeVectors = store.embeddingsForMemories(activeIds, RetrievalDocument.effectiveKey(tag))
         for ((id, blob) in activeVectors) {
-            if (VectorMath.cosine(queryVec, VectorMath.fromBlob(blob)) >= SEMANTIC_COSINE_THRESHOLD) {
-                semantic.add(MemoryMatch.Match(id, MemoryMatch.Relation.SEMANTIC_NEAR))
+            val score = VectorMath.cosine(queryVec, VectorMath.fromBlob(blob))
+            if (score >= SEMANTIC_COSINE_THRESHOLD) {
+                semantic.add(MemoryMatch.Match(id, MemoryMatch.Relation.SEMANTIC_NEAR, score))
             }
         }
 
@@ -137,8 +138,9 @@ object PossibleMatchFinder {
             if (cmp.memoryId in alreadyMatched) continue
             val text = RetrievalDocument.semanticDocument(cmp.content, cmp.embeddingText, parseTags(cmp.tagsJson))
             val vec = librarian.embedComparisonCached(text) ?: continue
-            if (VectorMath.cosine(queryVec, vec) >= SEMANTIC_COSINE_THRESHOLD) {
-                semantic.add(MemoryMatch.Match(cmp.memoryId, MemoryMatch.Relation.SEMANTIC_NEAR))
+            val score = VectorMath.cosine(queryVec, vec)
+            if (score >= SEMANTIC_COSINE_THRESHOLD) {
+                semantic.add(MemoryMatch.Match(cmp.memoryId, MemoryMatch.Relation.SEMANTIC_NEAR, score))
             }
         }
         // Local deterministic/semantic evidence wins for an id that also has

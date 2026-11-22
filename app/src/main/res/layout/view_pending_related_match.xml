@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- Stage 6C: a Pending card's closest related memory (owner design,
+     2026-11-22). Tapping the preview opens that exact pair in Possible Match
+     Review; tapping Additional Matches opens Review at its additional matches.
+     Hidden unless the suggestion has a Possible Match. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pending_related"
+    style="@style/Widget.App.MemoryMatch.Related"
+    android:visibility="gone">
+
+    <TextView
+        style="@style/Widget.App.MemoryMatch.Heading"
+        android:text="@string/mem_match_related_header" />
+
+    <TextView
+        android:id="@+id/pending_related_preview"
+        style="@style/Widget.App.MemoryMatch.Preview" />
+
+    <TextView
+        android:id="@+id/pending_related_detail"
+        style="@style/Widget.App.MemoryMatch.Detail" />
+
+    <TextView
+        android:id="@+id/pending_related_additional"
+        style="@style/Widget.App.MemoryMatch.Additional"
+        android:visibility="gone" />
+</LinearLayout>

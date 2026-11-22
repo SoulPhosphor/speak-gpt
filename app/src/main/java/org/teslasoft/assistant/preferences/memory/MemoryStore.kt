@@ -7696,7 +7696,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         /** The proposal no longer exists or was already resolved since the user
          *  opened Review — nothing was changed. The caller re-reads Pending. */
         object StaleProposal : ResolutionResult()
+
+        /** The proposal or a selected memory changed (or a selected memory
+         *  was removed) after the user saw it in Review (Stage 6C) — nothing
+         *  was changed. The caller shows the current state again. */
+        object StaleSelection : ResolutionResult()
     }
+
+    /** Inside an open transaction: whether every memory in [expected] still
+     *  has the [PendingMatchPresentation.reviewFingerprint] the user saw. */
+    private fun reviewSnapshotHolds(expected: Map<String, String>): Boolean =
+        expected.all { (id, fingerprint) ->
+            getMemory(id)?.let { PendingMatchPresentation.reviewFingerprint(it) } == fingerprint
+        }
 
     /** Flip a still-pending proposal to active inside an open transaction.
      *  Returns false (leaving the transaction to be rolled back) when the
@@ -7754,10 +7766,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      * edited old memory in [editedOld]; pass null to keep it unchanged. Both
      * writes happen in one transaction.
      */
-    fun resolveSaveAndEditOld(proposalId: String, editedOld: MemoryRecord?): ResolutionResult {
+    fun resolveSaveAndEditOld(
+        proposalId: String,
+        editedOld: MemoryRecord?,
+        expected: Map<String, String> = emptyMap()
+    ): ResolutionResult {
         val db = writableDatabase
         db.beginTransaction()
         try {
+            if (!reviewSnapshotHolds(expected)) return ResolutionResult.StaleSelection
             if (!activateProposalTx(db, proposalId)) return ResolutionResult.StaleProposal
             val reindex = arrayListOf(proposalId)
             if (editedOld != null) {
@@ -7799,10 +7816,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      * checked old memories. One or several olds; all in one transaction. An old
      * memory that vanished since Review opened is skipped, never resurrected.
      */
-    fun resolveReplace(proposalId: String, oldMemoryIds: List<String>): ResolutionResult {
+    fun resolveReplace(
+        proposalId: String,
+        oldMemoryIds: List<String>,
+        expected: Map<String, String> = emptyMap()
+    ): ResolutionResult {
         val db = writableDatabase
         db.beginTransaction()
         try {
+            if (!reviewSnapshotHolds(expected)) return ResolutionResult.StaleSelection
             if (!activateProposalTx(db, proposalId)) return ResolutionResult.StaleProposal
             for (oldId in oldMemoryIds.distinct()) {
                 if (oldId == proposalId) continue
@@ -7824,10 +7846,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      * (best-effort for existing single-pointer readers); the join table is the
      * source of truth for the multiple case.
      */
-    fun resolveSupersede(proposalId: String, oldMemoryIds: List<String>): ResolutionResult {
+    fun resolveSupersede(
+        proposalId: String,
+        oldMemoryIds: List<String>,
+        expected: Map<String, String> = emptyMap()
+    ): ResolutionResult {
         val db = writableDatabase
         db.beginTransaction()
         try {
+            if (!reviewSnapshotHolds(expected)) return ResolutionResult.StaleSelection
             if (!activateProposalTx(db, proposalId)) return ResolutionResult.StaleProposal
             val superseded = ArrayList<String>()
             for (oldId in oldMemoryIds.distinct()) {
